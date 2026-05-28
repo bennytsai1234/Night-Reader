@@ -1,11 +1,11 @@
-# 墨頁 Inkpage Reader Codebase Atlas
+# 夜讀 Night Reader Codebase Atlas
 
 這是 Codebase Atlas agent 的通用入口文件。在這個專案中執行任何操作前，請遵循以下步驟。
 
 ## 使用方式
 
 1. 保留使用者的原始請求。
-2. 開啟 `inkpage_reader_main_workflow.md` 並遵循工作流程。
+2. 開啟 `night_reader_main_workflow.md` 並遵循工作流程。
 3. 在任何操作開始之前，先閱讀 atlas 索引。
 4. 以平易近人的語言回報所有使用者面向的報告。不要在報告中暴露模組名稱、檔案路徑或程式碼片段，除非報告詳細度設定為 Technical。
 5. 對任何涉及編輯檔案的操作，提供「之前 / 之後」並等待使用者確認後再編輯。
