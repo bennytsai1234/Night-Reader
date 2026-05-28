@@ -2,7 +2,7 @@
 
 - 日期：2026-05-23
 - 範圍：墨頁 Inkpage（Android）App 內自動檢查更新並下載安裝。
-- 模組路由：[Settings Backup And Release](../../inkpage_reader_legado/settings_backup_and_release.md)。
+- 模組路由：[Settings Backup And Release](../../night_reader/settings_backup.md)。
 
 ## 1. 背景
 
@@ -40,7 +40,7 @@
 
 ### 2.4 下載與安裝（階段二）
 
-- 用 Dio 串流下載到 `getExternalCacheDir()/updates/inkpage-vX.Y.Z.apk`。
+- 用 Dio 串流下載到 `getExternalCacheDir()/updates/night-reader-vX.Y.Z.apk`。
 - Dialog 內顯示 0~100% 進度。
 - 下載完用 `permission_handler` 取 `Permission.requestInstallPackages`，再呼叫 `open_filex` 跳系統安裝器。
 - **同版本重複下載**：先檢查 cache dir 是否已有 APK 且檔案大小與 GitHub asset `size` 欄位相符；相符直接跳安裝。

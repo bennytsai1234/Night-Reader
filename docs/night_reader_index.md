@@ -15,7 +15,7 @@
 - 參考範本模式：無參考，僅從本專案建立 atlas
 - 工作交付策略：建立 commit 並 push
 - 報告詳細度：技術詳情（報告可包含模組名稱、檔案路徑與相關程式脈絡）
-- 工作入口：通用 adapter（`night_reader_adapter.md`）、Claude Code adapter（`.claude/skills/inkpage-reader-atlas.md`）、Codex adapter（`.agents/skills/inkpage-reader/SKILL.md`）
+- 工作入口：通用 adapter（`night_reader_adapter.md`）、Claude Code adapter（`.claude/skills/night-reader-atlas/SKILL.md`）、Codex adapter（`.agents/skills/night-reader/SKILL.md`）
 
 ## 專案操作限制
 
