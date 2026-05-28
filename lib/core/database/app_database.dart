@@ -248,6 +248,13 @@ LazyDatabase _openConnection() {
       dbDir.createSync(recursive: true);
     }
     final file = File(p.join(dbDir.path, 'night_reader.db'));
+    // 從 inkpage_reader 品牌改名後的一次性遷移：舊裝置上 DB 仍叫 inkpage_reader.db
+    if (!file.existsSync()) {
+      final legacy = File(p.join(dbDir.path, 'inkpage_reader.db'));
+      if (legacy.existsSync()) {
+        legacy.renameSync(file.path);
+      }
+    }
     return NativeDatabase.createInBackground(file);
   });
 }
