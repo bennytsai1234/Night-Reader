@@ -1,0 +1,83 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-apk:
+    name: Build signed arm64-v8a release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.0"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Run critical regression checks
+        run: |
+          flutter analyze lib/features/reader_v2 lib/features/source_manager test/features/reader_v2 test/features/source_manager
+          flutter test test/features/reader_v2 \
+            test/features/source_manager/source_manager_provider_test.dart \
+            test/features/source_manager/source_manager_page_smoke_test.dart \
+            test/features/source_manager/source_login_test.dart
+
+      - name: Decode Android release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/inkpage-release.jks"
+
+      - name: Build release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/inkpage-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64
+
+      - name: Verify release APK manifest
+        run: |
+          set -euo pipefail
+          apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          test -s "$apk_path"
+          manifest_path="$(find build/app/intermediates/merged_manifests/release -name AndroidManifest.xml | head -n 1)"
+          test -n "$manifest_path"
+          grep -q 'android.permission.INTERNET' "$manifest_path"
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          asset_name="inkpage-reader-${TAG_NAME}-arm64-v8a.apk"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "$apk_path#$asset_name" --clobber
+          else
+            gh release create "$TAG_NAME" "$apk_path#$asset_name" \
+              --title "$TAG_NAME" \
+              --generate-notes
+          fi
