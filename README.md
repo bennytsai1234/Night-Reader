@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/bennytsai1234/Reader/releases">
-    <img src="https://img.shields.io/github/v/release/bennytsai1234/Reader?style=flat-square&color=blue" alt="Latest Release">
+  <a href="https://github.com/bennytsai1234/night-reader/releases">
+    <img src="https://img.shields.io/github/v/release/bennytsai1234/night-reader?style=flat-square&color=blue" alt="Latest Release">
   </a>
   <img src="https://img.shields.io/badge/Platform-Android-green?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Framework-Flutter-blue?style=flat-square" alt="Flutter">
@@ -41,7 +41,7 @@
 
 ## 下載安裝
 
-前往 [GitHub Releases](https://github.com/bennytsai1234/Reader/releases) 下載最新版本的 `inkpage-reader-vX.Y.Z-arm64-v8a.apk`，於 Android 設備上安裝即可。
+前往 [GitHub Releases](https://github.com/bennytsai1234/night-reader/releases) 下載最新版本的 `night-reader-vX.Y.Z-arm64-v8a.apk`，於 Android 設備上安裝即可。
 
 ---
 

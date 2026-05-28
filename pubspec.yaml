@@ -2,9 +2,9 @@ name: reader
 description: "夜讀 - Night Reader, a Flutter novel reader app"
 publish_to: 'none'
 version: 0.2.91+105
-homepage: https://github.com/bennytsai1234/Reader
-repository: https://github.com/bennytsai1234/Reader
-issue_tracker: https://github.com/bennytsai1234/Reader/issues
+homepage: https://github.com/bennytsai1234/night-reader
+repository: https://github.com/bennytsai1234/night-reader
+issue_tracker: https://github.com/bennytsai1234/night-reader/issues
 
 environment:
   sdk: ^3.7.0

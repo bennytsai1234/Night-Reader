@@ -14,7 +14,7 @@ class AppUpdateService {
       _currentVersionLoader = currentVersionLoader ?? _defaultCurrentVersion;
 
   static const _latestReleaseUrl =
-      'https://api.github.com/repos/bennytsai1234/Reader/releases/latest';
+      'https://api.github.com/repos/bennytsai1234/night-reader/releases/latest';
 
   final Dio _dio;
   final Future<String> Function() _currentVersionLoader;

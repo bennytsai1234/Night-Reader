@@ -73,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
-          asset_name="inkpage-reader-${TAG_NAME}-arm64-v8a.apk"
+          asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" "$apk_path#$asset_name" --clobber
           else
