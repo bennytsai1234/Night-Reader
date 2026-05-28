@@ -510,9 +510,6 @@ class BookDetailProvider extends ChangeNotifier {
         _initializeProgressForBookshelf();
         await _bookDao.upsert(_book);
         await _saveChapterMetadataIfPossible();
-        if (_allChapters.isNotEmpty && supportsBackgroundDownload) {
-          _resolvedDownloadService.addDownloadTask(_book, _allChapters);
-        }
       } catch (e) {
         AppLog.e('加入書架失敗: $e', error: e);
         _isInBookshelf = previous;
