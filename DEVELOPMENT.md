@@ -6,7 +6,7 @@
 
 ## 專案定位
 
-- **專案名稱**：`inkpage_reader`
+- **專案名稱**：`night_reader`
 - **App 顯示名稱**：`夜讀`（Night Reader）
 - **技術棧**：Flutter、Dart、Provider、Drift、Dio、WebView
 - **產品方向**：受 Legado 啟發的小說閱讀器
@@ -187,17 +187,17 @@ git push origin vX.Y.Z
 
 `docs/` 目錄包含專案的模組導覽與設計地圖，適合在修改功能前先閱讀。
 
-- [Atlas 索引](docs/inkpage_reader_index.md)
-- [主工作流程](docs/inkpage_reader_main_workflow.md)
-- [規則引擎](docs/inkpage_reader/rule_engine.md)
-- [書源管理](docs/inkpage_reader/source_manager.md)
-- [閱讀器 V2](docs/inkpage_reader/reader_v2.md)
-- [書架與書籍](docs/inkpage_reader/bookshelf.md)
-- [搜尋與探索](docs/inkpage_reader/search_explore.md)
-- [下載與快取](docs/inkpage_reader/download_cache.md)
-- [瀏覽器驗證](docs/inkpage_reader/browser.md)
-- [設定與備份](docs/inkpage_reader/settings_backup.md)
-- [應用基礎設施](docs/inkpage_reader/infrastructure.md)
+- [Atlas 索引](docs/night_reader_index.md)
+- [主工作流程](docs/night_reader_main_workflow.md)
+- [規則引擎](docs/night_reader/rule_engine.md)
+- [書源管理](docs/night_reader/source_manager.md)
+- [閱讀器 V2](docs/night_reader/reader_v2.md)
+- [書架與書籍](docs/night_reader/bookshelf.md)
+- [搜尋與探索](docs/night_reader/search_explore.md)
+- [下載與快取](docs/night_reader/download_cache.md)
+- [瀏覽器驗證](docs/night_reader/browser.md)
+- [設定與備份](docs/night_reader/settings_backup.md)
+- [應用基礎設施](docs/night_reader/infrastructure.md)
 
 ---
 

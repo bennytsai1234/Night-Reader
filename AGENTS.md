@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-- This is the Flutter/Dart project `inkpage_reader`.
+- This is the Flutter/Dart project `night_reader`.
 - The app display name is `墨頁`.
 - The product is a novel reader inspired by Legado.
 
