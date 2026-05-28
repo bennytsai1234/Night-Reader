@@ -98,8 +98,8 @@
 **下載與快取** (`lib/core/services/download*.dart`, `features/cache_manager/`, `lib/core/local_book/`, `chapter_content_*.dart`, `reader_chapter_content*.dart`)
 章節批次下載、快取清理、本地書籍（TXT/EPUB/UMD）匯入解析、章節內容排程預備。修改離線功能或本地書籍支援，從這裡開始。
 
-**瀏覽器驗證** (`lib/features/browser/` + `headless_webview_service.dart`, `webview_data_service.dart`)
-WebView 互動驗證流程（書源登入、驗證碼、Cookie 寫入）與後台 headless WebView。修改 WebView 驗證行為，從這裡開始。
+**瀏覽器驗證** (`lib/core/engine/web_book/headless_webview_service.dart`, `lib/core/services/webview_data_service.dart`, `backstage_webview.dart`)
+後台 headless WebView，供規則引擎靜默執行 JS 重型書源。互動式瀏覽器驗證（登入、驗證碼）尚未實作，此類書源直接回報錯誤。修改 headless WebView 行為，從這裡開始。
 
 **設定與備份** (`lib/features/settings/` + `backup_service.dart`, `restore_service.dart`, `export_book_service.dart`, `chinese_utils.dart`)
 應用設定、TTS 設定、備份匯出、還原匯入、繁簡轉換。修改設定頁面或備份格式，從這裡開始。

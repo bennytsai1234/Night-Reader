@@ -7,7 +7,7 @@
 ## 專案定位
 
 - **專案名稱**：`inkpage_reader`
-- **App 顯示名稱**：`墨頁`
+- **App 顯示名稱**：`夜讀`（Night Reader）
 - **技術棧**：Flutter、Dart、Provider、Drift、Dio、WebView
 - **產品方向**：受 Legado 啟發的小說閱讀器
 - **主要支援場景**：Android 小說閱讀與書源管理
@@ -49,14 +49,18 @@
 ├── lib/
 │   ├── core/                  # 核心模型、資料庫、規則引擎、服務、工具
 │   ├── features/              # 各功能模組
-│   │   ├── bookshelf/         # 書架
+│   │   ├── about/             # 關於頁面、更新檢查
+│   │   ├── association/       # 檔案關聯與深連結處理
 │   │   ├── book_detail/       # 書籍詳情
-│   │   ├── browser/           # 書源驗證 / WebView 流程
+│   │   ├── bookshelf/         # 書架
+│   │   ├── cache_manager/     # 下載管理頁面
 │   │   ├── explore/           # 探索
 │   │   ├── reader_v2/         # 閱讀器主流程
+│   │   ├── replace_rule/      # 全域替換規則
 │   │   ├── search/            # 搜尋
 │   │   ├── settings/          # 設定
-│   │   └── source_manager/    # 書源管理
+│   │   ├── source_manager/    # 書源管理
+│   │   └── welcome/           # 啟動畫面
 │   ├── app_providers.dart
 │   └── main.dart
 ├── test/                      # 單元測試、Widget 測試、重點回歸測試
@@ -163,17 +167,19 @@ git push origin vX.Y.Z
 
 完整依賴請參考 [pubspec.yaml](file:///home/benny/projects/reader/pubspec.yaml)。關鍵依賴如下：
 
-- `provider`
-- `dio`
-- `drift`
-- `flutter_js`
-- `webview_flutter`
-- `flutter_tts`
-- `audio_service`
-- `just_audio`
-- `cached_network_image`
-- `shared_preferences`
-- `workmanager`
+- `provider`、`event_bus`（狀態管理與事件通訊）
+- `dio`、`cookie_jar`、`dio_cookie_manager`（網路請求）
+- `drift`、`drift_flutter`（SQLite 資料庫）
+- `flutter_js`（JS 規則引擎）
+- `webview_flutter`（headless WebView）
+- `flutter_tts`、`audio_service`、`just_audio`（語音朗讀）
+- `cached_network_image`、`flutter_cache_manager`（圖片快取）
+- `shared_preferences`（使用者偏好）
+- `workmanager`（背景任務）
+- `app_links`、`receive_sharing_intent`（深連結與分享接收）
+- `shelf`、`shelf_router`、`shelf_static`、`network_info_plus`（區域網路傳書伺服器）
+- `home_widget`（桌面小工具）
+- `fast_gbk`（GB 編碼支援）
 
 ---
 
