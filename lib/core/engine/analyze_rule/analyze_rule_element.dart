@@ -4,7 +4,7 @@ import 'analyze_rule_regex_helper.dart';
 import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
-import 'package:reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 
 /// AnalyzeRule 的元素解析擴展
 mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {

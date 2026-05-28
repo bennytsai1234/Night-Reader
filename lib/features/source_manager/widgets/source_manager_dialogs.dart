@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/services/check_source_service.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
 import '../source_manager_provider.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import '../source_debug_page.dart';
 
 class SourceManagerDialogs {

@@ -4,9 +4,9 @@ import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/features/settings/other_settings_page.dart';
-import 'package:reader/features/settings/settings_provider.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/settings/other_settings_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 
 void main() {
   setUp(() async {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/app_permission_service.dart';
+import 'package:night_reader/core/services/app_permission_service.dart';
 
 void main() {
   test('loadSnapshot exposes feature-oriented permission rows', () async {

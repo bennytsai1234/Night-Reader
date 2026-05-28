@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/rule_analyzer.dart';
+import 'package:night_reader/core/engine/rule_analyzer.dart';
 
 void main() {
   group('RuleAnalyzer Tests', () {

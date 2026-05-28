@@ -1,7 +1,7 @@
-import 'package:reader/core/models/rule_data_interface.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/models/rule_data_interface.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 // 導入拆分後的模組
 import 'analyze_rule/analyze_rule_base.dart';

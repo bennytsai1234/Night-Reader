@@ -1,11 +1,11 @@
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/bookmark_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/database/dao/download_dao.dart';
-import 'package:reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
 
 class BookStorageService {
   BookStorageService({

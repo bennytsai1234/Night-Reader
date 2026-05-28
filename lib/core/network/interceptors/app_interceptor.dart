@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 /// AppInterceptor - 全域網路攔截器 (對標 Android HttpHelper.kt 內建攔截器)
 class AppInterceptor extends Interceptor {

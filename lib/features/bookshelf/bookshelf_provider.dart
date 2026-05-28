@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:reader/core/engine/app_event_bus.dart';
-import 'package:reader/core/models/book.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/models/book.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';

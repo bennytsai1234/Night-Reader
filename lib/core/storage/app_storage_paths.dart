@@ -99,6 +99,6 @@ class AppStoragePaths {
   }
 
   static Directory _fallbackRoot() {
-    return Directory(p.join(Directory.systemTemp.path, 'inkpage_reader'));
+    return Directory(p.join(Directory.systemTemp.path, 'night_reader'));
   }
 }

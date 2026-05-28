@@ -1,8 +1,8 @@
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
 
 /// 目錄解析結果
 class ChapterListResult {

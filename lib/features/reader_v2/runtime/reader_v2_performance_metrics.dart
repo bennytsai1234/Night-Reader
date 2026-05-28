@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 
 class ReaderV2PerformanceSnapshot {
   const ReaderV2PerformanceSnapshot({

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/download_task.dart';
-import 'package:reader/core/services/download/download_executor.dart';
+import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/download/download_executor.dart';
 
 /// Tests for DownloadExecutor retry logic.
 ///

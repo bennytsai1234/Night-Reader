@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/features/search/search_model.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/search/search_model.dart';
 
 void main() {
   group('matchesPrecisionSearch', () {

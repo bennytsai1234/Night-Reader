@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'http_client.dart';

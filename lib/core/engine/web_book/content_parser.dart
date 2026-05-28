@@ -1,9 +1,9 @@
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/utils/html_formatter.dart';
-import 'package:reader/core/utils/network_utils.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/utils/html_formatter.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 /// 正文解析結果
 class ContentResult {

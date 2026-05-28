@@ -2,12 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
 
 void main() {
   test('LocalBookService imports UMD chapters with readable content', () async {
     final file = File(
-      '${Directory.systemTemp.path}/inkpage_test_${DateTime.now().microsecondsSinceEpoch}.umd',
+      '${Directory.systemTemp.path}/night_reader_test_${DateTime.now().microsecondsSinceEpoch}.umd',
     );
     await file.writeAsBytes(_buildSimpleUmd());
 

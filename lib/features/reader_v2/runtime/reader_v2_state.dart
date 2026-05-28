@@ -1,5 +1,5 @@
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 import 'reader_v2_location.dart';
 import 'reader_v2_page_window.dart';

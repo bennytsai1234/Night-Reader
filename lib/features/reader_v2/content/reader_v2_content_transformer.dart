@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/constant/app_pattern.dart';
-import 'package:reader/core/engine/reader/chinese_text_converter.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/constant/app_pattern.dart';
+import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 
 import 'reader_v2_processed_chapter.dart';
 

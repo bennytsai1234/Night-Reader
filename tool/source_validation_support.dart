@@ -4,24 +4,24 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/engine/analyze_url.dart';
-import 'package:reader/core/engine/explore_url_parser.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/services/book_source_service.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 import '../test/test_helper.dart';
 
 const String sourceListUrl =
     'https://shuyuan.nyasama.net/shuyuan/382015f6ff010d7fee368c6daabd5081.json';
 const String _sourceListCacheRelativePath =
-    '.cache/inkpage_reader/source_lists/382015f6ff010d7fee368c6daabd5081.json';
+    '.cache/night_reader/source_lists/382015f6ff010d7fee368c6daabd5081.json';
 const String legadoValidationDefaultKeyword = '我的';
 const int sourceValidationChapterLimit = 128;
 const int validationPageConcurrency = 1;

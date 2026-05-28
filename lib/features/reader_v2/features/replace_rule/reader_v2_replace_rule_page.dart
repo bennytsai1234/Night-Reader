@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/database/dao/replace_rule_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/replace_rule.dart';
-import 'package:reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});

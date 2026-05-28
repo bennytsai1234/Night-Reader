@@ -1,8 +1,8 @@
 import 'package:html/parser.dart' as html_parser;
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/utils/network_utils.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/utils/network_utils.dart';
 
 class BookInfoParser {
   static Future<Book> parse({

@@ -9,7 +9,7 @@ class SourceValidationContext {
   SourceValidationContext._();
 
   static const Object _nonInteractiveKey =
-      #inkpageReaderNonInteractiveSourceValidation;
+      #nightReaderNonInteractiveSourceValidation;
 
   static bool get isNonInteractive => Zone.current[_nonInteractiveKey] == true;
 

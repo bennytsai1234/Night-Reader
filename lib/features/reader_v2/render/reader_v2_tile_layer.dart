@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_page_cache.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_tile_key.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_tile_key.dart';
 
 import 'reader_v2_tile_painter.dart';
 

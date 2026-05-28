@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/search_book.dart';
 
 void main() {
   test('sourceLabels 會保留各來源的名稱', () {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 
 void main() {
   group('ReplaceRule', () {

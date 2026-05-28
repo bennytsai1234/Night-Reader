@@ -2,17 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/reader_chapter_content.dart';
-import 'package:reader/core/services/network_service.dart';
-import 'package:reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BookshelfImportResult {
@@ -41,7 +41,7 @@ class BookshelfExchangeService {
 
   Future<File> exportBookshelf({
     List<Book>? books,
-    String fileName = 'bookshelf-export.inkpage.json',
+    String fileName = 'bookshelf-export.night_reader.json',
   }) async {
     final shelfBooks = books ?? await _bookDao.getInBookshelf();
     final chapters = <BookChapter>[];
@@ -59,7 +59,7 @@ class BookshelfExchangeService {
     }
 
     final payload = {
-      'kind': 'inkpage.bookshelf',
+      'kind': 'night_reader.bookshelf',
       'version': 1,
       'exportedAt': DateTime.now().toIso8601String(),
       'books': shelfBooks.map((e) => e.toJson()).toList(),
@@ -83,7 +83,7 @@ class BookshelfExchangeService {
   Future<void> shareBookshelf({List<Book>? books, String? fileName}) async {
     final file = await exportBookshelf(
       books: books,
-      fileName: fileName ?? 'bookshelf-export.inkpage.json',
+      fileName: fileName ?? 'bookshelf-export.night_reader.json',
     );
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], text: '夜讀書架匯出'),

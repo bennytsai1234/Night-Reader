@@ -1,7 +1,7 @@
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/explore_url_parser.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import '../../test_helper.dart';
 
 void main() {

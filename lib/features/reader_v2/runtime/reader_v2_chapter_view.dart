@@ -1,8 +1,8 @@
 import 'dart:ui';
 
-import 'package:reader/features/reader_v2/layout/reader_v2_layout.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_text_adapter.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_text_adapter.dart';
 
 class ReaderV2ChapterView {
   ReaderV2ChapterView(

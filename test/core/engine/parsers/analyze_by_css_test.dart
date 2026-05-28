@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:reader/core/engine/parsers/analyze_by_css.dart';
-import 'package:reader/core/engine/parsers/css/analyze_by_css_support.dart';
+import 'package:night_reader/core/engine/parsers/analyze_by_css.dart';
+import 'package:night_reader/core/engine/parsers/css/analyze_by_css_support.dart';
 
 void main() {
   group('AnalyzeByCss Tests', () {

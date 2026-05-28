@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/source/explore_kind.dart';
-import 'package:reader/features/explore/widgets/legado_explore_kind_flow.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/features/explore/widgets/legado_explore_kind_flow.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

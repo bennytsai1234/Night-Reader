@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/database/app_database.dart';
-import 'package:reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:sqlite3/open.dart';
 
 void main() {

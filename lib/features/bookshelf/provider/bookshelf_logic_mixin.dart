@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/core/di/injection.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'bookshelf_provider_base.dart';
 
 /// BookshelfProvider 的 UI 狀態與分組邏輯擴展

@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/default_data.dart';
-import 'package:reader/features/about/update_check_runner.dart';
-import 'package:reader/features/bookshelf/bookshelf_page.dart';
-import 'package:reader/features/explore/explore_page.dart';
-import 'package:reader/features/settings/settings_page.dart';
-import 'package:reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/default_data.dart';
+import 'package:night_reader/features/about/update_check_runner.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/features/explore/explore_page.dart';
+import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(

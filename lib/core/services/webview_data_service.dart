@@ -1,5 +1,5 @@
-import 'package:reader/core/services/cookie_store.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/network_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class WebViewDataService {

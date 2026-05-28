@@ -1,10 +1,10 @@
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/book_source_service.dart';
-import 'package:reader/core/services/chapter_content_preparation_pipeline.dart';
-import 'package:reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 typedef ChapterContentMaterializer =
     Future<ChapterContentPreparationResult> Function({

@@ -3,11 +3,11 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/features/settings/settings_provider.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/services/default_data.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/services/default_data.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'main_page.dart';
 import 'startup_failure_panel.dart';
 

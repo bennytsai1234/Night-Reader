@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:reader/core/config/app_config.dart';
-import 'package:reader/core/constant/page_anim.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
-import 'package:reader/shared/theme/app_theme.dart';
+import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/shared/theme/app_theme.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
   ReaderV2SettingsController({

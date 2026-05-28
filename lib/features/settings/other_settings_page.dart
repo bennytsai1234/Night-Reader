@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:provider/provider.dart';
 import 'data_privacy_settings_page.dart';
 import 'settings_provider.dart';

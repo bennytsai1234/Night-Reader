@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/update_service.dart';
+import 'package:night_reader/core/services/update_service.dart';
 
 void main() {
   group('AppUpdateService.isNewer', () {
@@ -44,7 +44,7 @@ void main() {
             'html_url': 'https://github.com/x/y/releases/tag/v0.3.0',
             'assets': [
               {
-                'name': 'inkpage-v0.3.0.apk',
+                'name': 'night-reader-v0.3.0.apk',
                 'browser_download_url': 'https://example.com/app.apk',
                 'size': 12345,
               },

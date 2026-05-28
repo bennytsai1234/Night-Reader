@@ -2,18 +2,18 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/local_book/local_book_formats.dart';
-import 'package:reader/core/services/bookshelf_exchange_service.dart';
-import 'package:reader/core/services/restore_service.dart';
-import 'package:reader/core/widgets/book_cover_widget.dart';
-import 'package:reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:reader/shared/navigation/book_open_route.dart';
-import 'package:reader/features/search/search_page.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/services/restore_service.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/features/search/search_page.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});

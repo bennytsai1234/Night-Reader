@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/replace_rule.dart';
-import 'package:reader/features/replace_rule/widgets/replace_edit_form.dart';
-import 'package:reader/features/replace_rule/widgets/replace_edit_options.dart';
-import 'package:reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
-import 'package:reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
+import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
+import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({

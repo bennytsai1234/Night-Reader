@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/explore_url_parser.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/models/source/explore_kind.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 import 'source_validation_support.dart';
 import '../test/test_helper.dart';

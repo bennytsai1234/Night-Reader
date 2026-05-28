@@ -4,8 +4,8 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'app_permission_service.dart';
 import 'audio_handler.dart';
 
@@ -78,7 +78,7 @@ class TTSService extends ChangeNotifier {
       _audioHandler = await AudioService.init(
         builder: () => ReaderAudioHandler(),
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.inkpage.reader.tts',
+          androidNotificationChannelId: 'com.night_reader.tts',
           androidNotificationChannelName: '夜讀朗讀',
           androidNotificationOngoing: true,
         ),

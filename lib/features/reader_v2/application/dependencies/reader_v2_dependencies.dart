@@ -1,14 +1,14 @@
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/bookmark_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/database/dao/replace_rule_dao.dart';
-import 'package:reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/book_source_service.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
 
 class ReaderV2Dependencies {
   ReaderV2Dependencies({

@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/cookie.dart';
-import 'package:reader/core/models/search_keyword.dart';
-import 'package:reader/core/models/server.dart';
-import 'package:reader/core/models/keyboard_assist.dart';
-import 'package:reader/core/models/cache.dart';
+import 'package:night_reader/core/models/cookie.dart';
+import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/core/models/server.dart';
+import 'package:night_reader/core/models/keyboard_assist.dart';
+import 'package:night_reader/core/models/cache.dart';
 
 void main() {
   group('System and Utility Models Tests', () {

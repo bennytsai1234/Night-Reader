@@ -2,10 +2,10 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:get_it/get_it.dart';
-import 'package:reader/core/database/dao/cookie_dao.dart';
-import 'package:reader/core/database/dao/cache_dao.dart';
-import 'package:reader/core/models/cookie.dart';
-import 'package:reader/core/models/cache.dart';
+import 'package:night_reader/core/database/dao/cookie_dao.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
+import 'package:night_reader/core/models/cookie.dart';
+import 'package:night_reader/core/models/cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class FakeCookieDao extends Fake implements CookieDao {

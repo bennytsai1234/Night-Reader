@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/source_check_js_worker_probe.dart';
+import 'package:night_reader/core/services/source_check_js_worker_probe.dart';
 
 void main() {
   test('JS worker probe completes with a concrete runtime decision', () async {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'book.dart';
-import 'package:reader/core/models/rule_data_interface.dart';
-import 'package:reader/core/engine/book/book_help.dart';
+import 'package:night_reader/core/models/rule_data_interface.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
 
 /// SearchBook - 搜尋結果模型
 /// (原 Android data/entities/SearchBook.kt)

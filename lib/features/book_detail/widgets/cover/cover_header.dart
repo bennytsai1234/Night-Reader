@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../../change_cover_provider.dart';
 
 class CoverHeader extends StatelessWidget {

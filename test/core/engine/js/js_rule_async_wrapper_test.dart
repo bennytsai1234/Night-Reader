@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/js/async_js_rewriter.dart';
-import 'package:reader/core/engine/js/js_rule_async_wrapper.dart';
+import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/js/js_rule_async_wrapper.dart';
 
 void main() {
   group('JsRuleAsyncWrapper', () {

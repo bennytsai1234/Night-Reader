@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reader/features/about/crash_log_page.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/features/about/crash_log_page.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class StartupFailurePanel extends StatelessWidget {
   const StartupFailurePanel({

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book_source_part.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/models/source/book_source_logic.dart';
-import 'package:reader/core/services/check_source_service.dart';
-import 'package:reader/shared/theme/context_ext.dart';
+import 'package:night_reader/core/models/book_source_part.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/models/source/book_source_logic.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 
 import '../source_manager_provider.dart';
 

@@ -1,6 +1,6 @@
-import 'package:reader/core/constant/page_anim.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2PrefsSnapshot {

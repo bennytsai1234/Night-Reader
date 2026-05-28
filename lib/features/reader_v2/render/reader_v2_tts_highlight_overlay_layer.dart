@@ -1,9 +1,9 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_page_cache.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 
 typedef ReaderV2TtsHighlightPaintObserver =
     void Function(ReaderV2PageCache tile, List<Rect> rects);

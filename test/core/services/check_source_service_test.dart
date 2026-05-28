@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/services/check_source_service.dart';
-import 'package:reader/core/services/event_bus.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/event_bus.dart';
 
 class _FakeBookSourceDao extends Fake implements BookSourceDao {}
 

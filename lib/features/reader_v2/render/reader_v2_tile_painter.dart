@@ -1,10 +1,10 @@
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_page_cache.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_typography.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
 
 typedef ReaderV2TilePaintObserver = void Function(ReaderV2PageCache tile);
 

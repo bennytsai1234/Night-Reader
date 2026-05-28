@@ -1,15 +1,15 @@
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import '../js_extensions.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/engine/analyze_url.dart';
-import 'package:reader/core/services/http_client.dart';
-import 'package:reader/core/services/backstage_webview.dart';
-import 'package:reader/core/services/source_validation_context.dart';
-import 'package:reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/services/http_client.dart';
+import 'package:night_reader/core/services/backstage_webview.dart';
+import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 
 /// 網路/WebView/I/O 相關 `java.*` 方法的 Dart 側 handler
 ///

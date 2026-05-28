@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
-import 'package:reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
 
 class ReaderV2PageShell extends StatelessWidget {
   const ReaderV2PageShell({

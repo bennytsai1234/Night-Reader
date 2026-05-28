@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 import 'source_validation_support.dart';
 

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/features/book_detail/book_detail_provider.dart';
-import 'package:reader/features/book_detail/source/book_detail_change_source_provider.dart';
-import 'package:reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
-import 'package:reader/features/book_detail/widgets/book_detail_change_source_item.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/features/book_detail/book_detail_provider.dart';
+import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
+import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
+import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_item.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class ChangeSourceSheet extends StatelessWidget {
   final Book book;

@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/analyze_url.dart';
-import 'package:reader/core/services/http_client.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/services/http_client.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 import '../../test_helper.dart';
 

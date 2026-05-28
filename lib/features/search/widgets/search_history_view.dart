@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../search_provider.dart';
 
 /// SearchHistoryView - 搜尋歷史顯示元件

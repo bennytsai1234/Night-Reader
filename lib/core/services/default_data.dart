@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/search_history_dao.dart';
-import 'package:reader/core/database/dao/cache_dao.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/search_history_dao.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'chinese_utils.dart';
-import 'package:reader/shared/theme/app_theme.dart';
-import 'package:reader/core/di/injection.dart';
+import 'package:night_reader/shared/theme/app_theme.dart';
+import 'package:night_reader/core/di/injection.dart';
 
 /// DefaultData - 預設資料初始化
 /// (原 Android help/DefaultData.kt)

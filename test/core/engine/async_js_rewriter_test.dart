@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
 
 void main() {
   group('AsyncJsRewriter.normalizeLegacyTemplateEscapes', () {

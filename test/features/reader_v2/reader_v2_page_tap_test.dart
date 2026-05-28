@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/constant/page_anim.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_tile_layer.dart';
-import 'package:reader/features/reader_v2/shell/reader_v2_page.dart';
-import 'package:reader/features/reader_v2/viewport/scroll_reader_v2_viewport.dart';
-import 'package:reader/features/reader_v2/viewport/slide_reader_v2_viewport.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_tile_layer.dart';
+import 'package:night_reader/features/reader_v2/shell/reader_v2_page.dart';
+import 'package:night_reader/features/reader_v2/viewport/scroll_reader_v2_viewport.dart';
+import 'package:night_reader/features/reader_v2/viewport/slide_reader_v2_viewport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

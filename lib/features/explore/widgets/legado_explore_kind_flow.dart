@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import 'package:reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
 
 /// A Flutter-side flexbox approximation for Legado discover categories.
 ///

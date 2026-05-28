@@ -1,24 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/book_storage_service.dart';
-import 'package:reader/features/reader_v2/application/dependencies/reader_v2_dependencies.dart';
-import 'package:reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
-import 'package:reader/features/reader_v2/features/bookmark/reader_v2_bookmark_controller.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_state.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/features/reader_v2/application/dependencies/reader_v2_dependencies.dart';
+import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
+import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmark_controller.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
 class ReaderV2ControllerHost {
   ReaderV2ControllerHost({

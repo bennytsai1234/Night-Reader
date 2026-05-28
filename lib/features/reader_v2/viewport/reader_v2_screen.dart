@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:ui' show FrameTiming;
 
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 
 import 'scroll_reader_v2_viewport.dart';
 import 'slide_reader_v2_viewport.dart';

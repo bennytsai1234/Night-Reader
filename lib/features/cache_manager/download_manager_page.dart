@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/core/services/download_service.dart';
-import 'package:reader/core/models/download_task.dart';
-import 'package:reader/shared/theme/context_ext.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 /// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {

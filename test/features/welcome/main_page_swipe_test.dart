@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/features/welcome/main_page.dart';
+import 'package:night_reader/features/welcome/main_page.dart';
 
 MainDestination _fake(String label) => MainDestination(
   icon: Icons.circle_outlined,

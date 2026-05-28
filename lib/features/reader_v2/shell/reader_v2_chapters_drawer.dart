@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/chapter.dart';
 
 class ReaderV2ChaptersDrawer extends StatefulWidget {
   const ReaderV2ChaptersDrawer({

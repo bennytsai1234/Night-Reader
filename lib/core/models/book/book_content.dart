@@ -1,4 +1,4 @@
-import 'package:reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 
 /// BookContent - 處理後的正文內容 (對標 Android help/book/BookContent.kt)
 class BookContent {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
 
 import 'reader_v2_layout.dart';
 import 'reader_v2_layout_spec.dart';

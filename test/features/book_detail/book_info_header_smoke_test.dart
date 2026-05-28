@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/features/book_detail/book_detail_provider.dart';
-import 'package:reader/features/book_detail/widgets/book_info_header.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/book_detail/book_detail_provider.dart';
+import 'package:night_reader/features/book_detail/widgets/book_info_header.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override

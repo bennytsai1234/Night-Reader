@@ -1,8 +1,8 @@
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/js/async_js_rewriter.dart';
-import 'package:reader/core/engine/js/js_extensions.dart';
-import 'package:reader/core/engine/js/js_rule_async_wrapper.dart';
+import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/js/js_extensions.dart';
+import 'package:night_reader/core/engine/js/js_rule_async_wrapper.dart';
 
 import '../../../test_helper.dart';
 

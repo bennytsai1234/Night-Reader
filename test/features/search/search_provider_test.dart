@@ -1,15 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/engine/app_event_bus.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/database/dao/search_keyword_dao.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/search_keyword.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/features/search/search_model.dart';
-import 'package:reader/features/search/search_provider.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_keyword.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/search/search_model.dart';
+import 'package:night_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ---------------------------------------------------------------------------

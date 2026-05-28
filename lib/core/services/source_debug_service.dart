@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'book_source_service.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/utils/html_formatter.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/utils/html_formatter.dart';
 
 class DebugLog {
   final int

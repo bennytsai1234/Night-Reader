@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/epub_service.dart';
+import 'package:night_reader/core/services/epub_service.dart';
 
 Future<File> _createMinimalEpub({
   required String filePath,

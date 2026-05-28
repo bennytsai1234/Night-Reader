@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 
 class HeadlessWebViewService {
   static final HeadlessWebViewService _instance =

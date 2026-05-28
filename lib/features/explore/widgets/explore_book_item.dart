@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/core/widgets/book_cover_widget.dart';
-import 'package:reader/shared/theme/context_ext.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import '../../book_detail/book_detail_page.dart';
 
 /// ExploreBookItem - 探索結果書籍項目

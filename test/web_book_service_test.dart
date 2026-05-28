@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/exception/app_exception.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/models/book_source.dart';
 
 void main() {
   group('WebBook guard logic', () {

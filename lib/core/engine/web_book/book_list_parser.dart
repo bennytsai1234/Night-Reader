@@ -1,12 +1,12 @@
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/engine/js/async_js_rewriter.dart';
-import 'package:reader/core/engine/book/book_help.dart';
-import 'package:reader/core/engine/web_book/book_info_parser.dart';
-import 'package:reader/core/utils/string_utils.dart';
-import 'package:reader/core/utils/html_formatter.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/book/book_help.dart';
+import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
+import 'package:night_reader/core/utils/html_formatter.dart';
 
 class BookListParser {
   static Future<List<SearchBook>> parse({

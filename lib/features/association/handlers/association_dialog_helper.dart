@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'association_base.dart';
-import 'package:reader/features/source_manager/source_manager_provider.dart';
-import 'package:reader/features/replace_rule/replace_rule_provider.dart';
-import 'package:reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/features/replace_rule/replace_rule_provider.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
 mixin AssociationDialogHelper on AssociationBase {

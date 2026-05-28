@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 import 'source_validation_support.dart';
 

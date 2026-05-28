@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/bookshelf_state_tracker.dart';
-import 'package:reader/core/engine/web_book/web_book_service.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 
 typedef ExploreBookLoader =
     Future<List<SearchBook>> Function(

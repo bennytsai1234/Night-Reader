@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/js/js_engine.dart';
+import 'package:night_reader/core/engine/js/js_engine.dart';
 
 import '../../../test_helper.dart';
 

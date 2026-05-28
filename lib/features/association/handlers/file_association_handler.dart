@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:reader/core/local_book/local_book_formats.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'association_base.dart';
-import 'package:reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的檔案分享與解析邏輯擴展
 mixin FileAssociationHandler on AssociationBase {

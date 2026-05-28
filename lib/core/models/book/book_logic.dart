@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import '../book.dart';
 
 /// Book 業務邏輯擴展

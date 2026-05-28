@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/core/services/tts_service.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ReaderV2TtsEngine extends ChangeNotifier {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../widgets/rule_text_field.dart';
 
 class SourceEditBookInfo extends StatelessWidget {

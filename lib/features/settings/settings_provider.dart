@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/config/app_config.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/services/tts_service.dart';
+import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/tts_service.dart';
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/services/app_permission_service.dart';
-import 'package:reader/core/services/webview_data_service.dart';
-import 'package:reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/services/app_permission_service.dart';
+import 'package:night_reader/core/services/webview_data_service.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 
 class DataPrivacySettingsPage extends StatefulWidget {
   const DataPrivacySettingsPage({super.key});

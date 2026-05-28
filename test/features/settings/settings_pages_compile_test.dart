@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:reader/features/about/about_page.dart';
-import 'package:reader/features/settings/data_privacy_settings_page.dart';
-import 'package:reader/features/settings/other_settings_page.dart';
-import 'package:reader/features/settings/settings_page.dart';
-import 'package:reader/features/settings/tts_settings_page.dart';
+import 'package:night_reader/features/about/about_page.dart';
+import 'package:night_reader/features/settings/data_privacy_settings_page.dart';
+import 'package:night_reader/features/settings/other_settings_page.dart';
+import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/features/settings/tts_settings_page.dart';
 
 void main() {
   test('Settings pages can be constructed', () {

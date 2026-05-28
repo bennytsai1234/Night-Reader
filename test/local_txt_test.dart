@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/local_book/txt_parser.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
 
 void main() {
   test('Local TXT Parsing and Reading Test', () async {

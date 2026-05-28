@@ -3,15 +3,15 @@ import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
-import 'package:reader/core/engine/explore_url_parser.dart';
-import 'package:reader/core/exception/app_exception.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/book_source_service.dart';
-import 'package:reader/core/services/crash_handler.dart';
-import 'package:reader/core/services/network_service.dart';
-import 'package:reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/source_validation_context.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 //  Public types

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/source/explore_kind.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/storage/app_cache.dart';
-import 'package:reader/core/utils/encoder_utils.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/storage/app_cache.dart';
+import 'package:night_reader/core/utils/encoder_utils.dart';
 
 /// ExploreUrlParser - 發現規則解析器 (對標 Android BookSource.getExploreKinds)
 class ExploreUrlParser {

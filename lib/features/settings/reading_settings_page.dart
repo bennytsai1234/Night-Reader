@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/constant/page_anim.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
 
 import 'click_action_config_page.dart';
 

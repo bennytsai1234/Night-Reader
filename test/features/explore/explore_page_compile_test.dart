@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/features/explore/explore_page.dart';
-import 'package:reader/features/explore/explore_provider.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/features/explore/explore_page.dart';
+import 'package:night_reader/features/explore/explore_provider.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
   final List<BookSource> sources;

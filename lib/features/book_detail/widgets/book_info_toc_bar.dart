@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../book_detail_provider.dart';
 
 class BookInfoTocBar extends StatelessWidget {

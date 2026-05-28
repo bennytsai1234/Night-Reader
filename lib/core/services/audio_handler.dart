@@ -39,7 +39,7 @@ class ReaderAudioHandler extends BaseAudioHandler {
   }) {
     mediaItem.add(
       MediaItem(
-        id: 'inkpage_tts',
+        id: 'night_reader_tts',
         album: '夜讀朗讀',
         title: title,
         artist: author,

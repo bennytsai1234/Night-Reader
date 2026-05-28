@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/constant/source_type.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/constant/source_type.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 import '../../tool/source_validation_support.dart';
 

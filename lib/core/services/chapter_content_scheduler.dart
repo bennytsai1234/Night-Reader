@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/chapter_content_preparation_pipeline.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 
 typedef ScheduledChapterContentReader =
     Future<ChapterContentPreparationResult> Function(

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/features/settings/click_action_config_page.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/settings/click_action_config_page.dart';
 
 void main() {
   setUp(() {

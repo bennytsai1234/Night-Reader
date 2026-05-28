@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/parsers/analyze_by_xpath.dart';
+import 'package:night_reader/core/engine/parsers/analyze_by_xpath.dart';
 
 void main() {
   group('AnalyzeByXPath Tests', () {

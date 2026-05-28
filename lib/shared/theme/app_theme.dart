@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'app_tokens.dart';
 

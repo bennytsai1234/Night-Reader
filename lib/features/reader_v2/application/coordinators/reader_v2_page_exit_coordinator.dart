@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book.dart';
+import 'package:night_reader/core/models/book.dart';
 
 typedef ReaderV2ExitPrompt =
     Future<bool?> Function(BuildContext context, Book book);

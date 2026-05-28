@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/update_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 結果類型：呼叫端用來決定是否寫入「忽略此版」。

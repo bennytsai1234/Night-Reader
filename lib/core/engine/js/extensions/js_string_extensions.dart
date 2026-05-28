@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html_parser;
 import 'package:fast_gbk/fast_gbk.dart';
 import '../js_extensions.dart';
-import 'package:reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 
 extension JsStringExtensions on JsExtensions {
   void injectStringExtensions() {

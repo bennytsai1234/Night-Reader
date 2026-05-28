@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 
 void main() {
   group('AppException hierarchy', () {

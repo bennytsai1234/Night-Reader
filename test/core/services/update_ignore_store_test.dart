@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/services/update_ignore_store.dart';
+import 'package:night_reader/core/services/update_ignore_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

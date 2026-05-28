@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import '../models/search_scope.dart';
 
 /// SearchScopeSheet - 搜尋範圍選擇底部彈窗

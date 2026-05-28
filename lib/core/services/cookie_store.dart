@@ -1,6 +1,6 @@
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/database/dao/cookie_dao.dart';
-import 'package:reader/core/models/cookie.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/database/dao/cookie_dao.dart';
+import 'package:night_reader/core/models/cookie.dart';
 
 /// CookieStore - Cookie 管理服務
 /// (原 Android help/http/CookieStore.kt)

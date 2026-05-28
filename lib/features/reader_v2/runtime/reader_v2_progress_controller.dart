@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
 
 import 'reader_v2_location.dart';
 

@@ -1,12 +1,12 @@
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/bookshelf_exchange_service.dart';
-import 'package:reader/core/services/download_service.dart';
-import 'package:reader/core/services/event_bus.dart';
-import 'package:reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/event_bus.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'bookshelf_provider_base.dart';
 
 class BookshelfBatchDownloadResult {

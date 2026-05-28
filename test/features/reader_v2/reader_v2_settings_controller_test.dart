@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
-import 'package:reader/shared/theme/app_theme.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/shared/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

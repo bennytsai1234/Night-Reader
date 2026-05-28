@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'download_base.dart';
 import 'download_scheduler.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/download_task.dart';
-import 'package:reader/core/engine/app_event_bus.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/reader_chapter_content_store.dart';
-import 'package:reader/core/services/reader_chapter_content_storage.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 
 bool downloadTaskCountsPreStoredChapters({
   required DownloadTask task,

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 
 void main() {
   group('AppInterceptor', () {

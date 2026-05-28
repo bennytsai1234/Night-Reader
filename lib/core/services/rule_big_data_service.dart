@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
-import 'package:reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 /// RuleBigDataService - 大數據規則變數持久化服務 (原 Android help/RuleBigDataHelp.kt)
 /// 當變數過大時，將其存儲為本地檔案而非資料庫欄位

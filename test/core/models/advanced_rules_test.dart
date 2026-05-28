@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/models/dict_rule.dart';
-import 'package:reader/core/models/http_tts.dart';
-import 'package:reader/core/models/txt_toc_rule.dart';
-import 'package:reader/core/models/book_chapter_review.dart';
+import 'package:night_reader/core/models/dict_rule.dart';
+import 'package:night_reader/core/models/http_tts.dart';
+import 'package:night_reader/core/models/txt_toc_rule.dart';
+import 'package:night_reader/core/models/book_chapter_review.dart';
 
 void main() {
   group('Advanced Rules and TTS Models Tests', () {

@@ -5,9 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
 
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/features/explore/explore_provider.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/features/explore/explore_provider.dart';
 
 class _RecordingSourceDao extends Fake implements BookSourceDao {
   int watchCallCount = 0;

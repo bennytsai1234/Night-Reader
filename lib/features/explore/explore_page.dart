@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/core/models/source/explore_kind.dart';
-import 'package:reader/features/search/search_page.dart';
-import 'package:reader/features/source_manager/source_editor_page.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/features/source_manager/source_editor_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';

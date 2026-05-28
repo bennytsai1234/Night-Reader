@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
-import 'package:reader/core/network/interceptors/app_interceptor.dart';
-import 'package:reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 
 /// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
 /// 封裝全域 Dio 實例並支持 Cookie 持久化與書源併發控制
@@ -64,7 +64,7 @@ class NetworkService {
       return await getApplicationDocumentsDirectory();
     } on MissingPluginException {
       final fallbackDir = Directory(
-        p.join(Directory.systemTemp.path, 'inkpage_reader'),
+        p.join(Directory.systemTemp.path, 'night_reader'),
       );
       if (!await fallbackDir.exists()) {
         await fallbackDir.create(recursive: true);

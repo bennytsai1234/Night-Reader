@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/engine/js/query_ttf.dart';
+import 'package:night_reader/core/engine/js/query_ttf.dart';
 
 // ─── 輔助：建立只含 cmap (Format 0) 的最小 TTF binary ─────────────────────────
 //

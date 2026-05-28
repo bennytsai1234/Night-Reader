@@ -4,17 +4,17 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/constant/prefer_key.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/crash_handler.dart';
-import 'package:reader/core/services/event_bus.dart';
-import 'package:reader/core/services/source_check_isolate.dart';
-import 'package:reader/core/services/source_validation_context.dart';
-import 'package:reader/core/engine/js/js_engine.dart';
-import 'package:reader/core/engine/js/js_extensions_base.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/services/event_bus.dart';
+import 'package:night_reader/core/services/source_check_isolate.dart';
+import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:night_reader/core/engine/js/js_engine.dart';
+import 'package:night_reader/core/engine/js/js_extensions_base.dart';
 
 Map<String, bool> _classifySourceExecutionTraitsForIsolate(
   List<Map<String, dynamic>> sourcePayloads,

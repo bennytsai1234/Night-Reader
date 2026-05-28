@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:ui' show FrameTiming;
 
 import 'package:flutter/widgets.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_content.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
 
 import 'reader_v2_location.dart';
 import 'reader_v2_page_window.dart';

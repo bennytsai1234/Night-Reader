@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/widgets/book_cover_widget.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/context_ext.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
 import '../book_detail_provider.dart';
 
 class BookInfoHeader extends StatelessWidget {

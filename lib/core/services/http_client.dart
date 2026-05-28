@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:reader/core/network/interceptors/lenient_cookie_manager.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 /// HttpClient - 全域 HTTP 客戶端 (專業升級版)
 /// 整合 NetworkService 以支援持久化 Cookie 與反爬蟲攔截

@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/features/reader_v2/content/reader_v2_content.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

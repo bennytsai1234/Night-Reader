@@ -1,8 +1,8 @@
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/reader_chapter_content.dart';
 
 class ReaderChapterContentStore {
   ReaderChapterContentStore({

@@ -2,15 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:reader/core/engine/analyze_rule.dart' as rule_engine;
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/engine/analyze_url.dart';
-import 'package:reader/core/engine/explore_url_parser.dart';
-import 'package:reader/core/engine/web_book/book_list_parser.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/engine/web_book/content_parser.dart';
-import 'package:reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart' as rule_engine;
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/engine/web_book/content_parser.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 
 import 'source_validation_support.dart';
 

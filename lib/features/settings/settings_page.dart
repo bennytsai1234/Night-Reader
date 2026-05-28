@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/features/source_manager/source_manager_page.dart';
-import 'package:reader/features/cache_manager/download_manager_page.dart';
-import 'package:reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
+import 'package:night_reader/features/cache_manager/download_manager_page.dart';
+import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
-import 'package:reader/features/about/about_page.dart';
+import 'package:night_reader/features/about/about_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});

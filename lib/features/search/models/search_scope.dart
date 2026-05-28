@@ -1,6 +1,6 @@
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/models/book_source.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// SearchScope - 搜尋範圍管理

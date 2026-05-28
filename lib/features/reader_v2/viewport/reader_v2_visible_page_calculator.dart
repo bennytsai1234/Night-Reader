@@ -1,7 +1,7 @@
-import 'package:reader/features/reader_v2/render/reader_v2_page_cache.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_chapter_view.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_infinite_segment_strip.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_chapter_view.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_infinite_segment_strip.dart';
 
 class ReaderV2VisiblePage {
   const ReaderV2VisiblePage({

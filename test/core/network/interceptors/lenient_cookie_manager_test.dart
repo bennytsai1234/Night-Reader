@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/network/interceptors/lenient_cookie_manager.dart';
+import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 
 void main() {
   group('LenientCookieManager', () {

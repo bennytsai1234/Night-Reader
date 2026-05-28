@@ -1,4 +1,4 @@
-import 'package:reader/shared/widgets/source_option_tile.dart';
+import 'package:night_reader/shared/widgets/source_option_tile.dart';
 
 class BookDetailChangeSourceItem extends SourceOptionTile {
   const BookDetailChangeSourceItem({

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class SourceEditBasic extends StatelessWidget {
   final BookSource source;

@@ -1,10 +1,10 @@
-import 'package:reader/core/di/injection.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'dart:io';
 import 'dart:collection';
 import 'package:path/path.dart' as p;
-import 'package:reader/core/database/dao/cache_dao.dart';
-import 'package:reader/core/models/cache.dart';
-import 'package:reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/database/dao/cache_dao.dart';
+import 'package:night_reader/core/models/cache.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
 
 /// LruMemoryCache - 簡易 LRU 記憶體快取
 /// (原 Android LruCache) (String, Any)

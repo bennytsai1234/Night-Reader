@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/application/coordinators/reader_v2_chapter_navigation_resolver.dart';
-import 'package:reader/features/reader_v2/application/reader_v2_controller_host.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
-import 'package:reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/application/coordinators/reader_v2_chapter_navigation_resolver.dart';
+import 'package:night_reader/features/reader_v2/application/reader_v2_controller_host.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 
 typedef ReaderV2NoticeSink = void Function(String message);
 

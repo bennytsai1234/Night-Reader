@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:reader/features/reader_v2/shell/reader_v2_page.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/shell/reader_v2_page.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// Custom page route that provides a polished book-opening transition.
 ///

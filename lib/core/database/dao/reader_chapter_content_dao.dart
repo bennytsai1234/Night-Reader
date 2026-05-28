@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
-import 'package:reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/models/reader_chapter_content.dart';
 import '../app_database.dart';
 import '../tables/app_tables.dart';
 

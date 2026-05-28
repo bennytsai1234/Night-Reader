@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_js/flutter_js.dart';
-import 'package:reader/core/models/base_source.dart';
-import 'package:reader/core/services/cookie_store.dart';
-import 'package:reader/core/services/cache_manager.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'query_ttf.dart';
 
 /// JsExtensions 的基礎狀態與共用緩存

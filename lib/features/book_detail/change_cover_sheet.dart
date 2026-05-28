@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:reader/core/services/app_permission_service.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/services/app_permission_service.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'change_cover_provider.dart';
 import 'book_detail_provider.dart';
 import 'widgets/cover/cover_header.dart';

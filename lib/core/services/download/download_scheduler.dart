@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'download_base.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/download_task.dart';
-import 'package:reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 
 /// DownloadService 的調度與任務管理邏輯擴展
 mixin DownloadScheduler on DownloadBase {

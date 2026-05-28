@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
-import 'package:reader/core/services/http_client.dart';
+import 'package:night_reader/core/services/http_client.dart';
 
 /// JsExtensions 的字體處理擴展
 extension JsFontExtensions on JsExtensionsBase {

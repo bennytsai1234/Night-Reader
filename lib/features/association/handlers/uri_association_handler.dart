@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'association_base.dart';
 
 /// AssociationHandlerService 的 URI 解析邏輯擴展

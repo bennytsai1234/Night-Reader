@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/local_book/txt_parser.dart';
 
 void main() {
   group('TxtParser Tests', () {

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/services/book_source_service.dart';
-import 'package:reader/core/di/injection.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/di/injection.dart';
 
 enum BookshelfSortMode {
   custom,

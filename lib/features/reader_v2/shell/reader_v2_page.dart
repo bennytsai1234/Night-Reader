@@ -2,26 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/features/reader_v2/application/reader_v2_controller_host.dart';
-import 'package:reader/features/reader_v2/application/reader_v2_page_coordinator.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:reader/features/reader_v2/application/coordinators/reader_v2_display_coordinator.dart';
-import 'package:reader/features/reader_v2/application/coordinators/reader_v2_page_exit_coordinator.dart';
-import 'package:reader/features/reader_v2/application/session/reader_v2_session_facade.dart';
-import 'package:reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
-import 'package:reader/features/reader_v2/shell/reader_v2_page_shell.dart';
-import 'package:reader/features/settings/settings_page.dart';
-import 'package:reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_state.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_screen.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/application/reader_v2_controller_host.dart';
+import 'package:night_reader/features/reader_v2/application/reader_v2_page_coordinator.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/application/coordinators/reader_v2_display_coordinator.dart';
+import 'package:night_reader/features/reader_v2/application/coordinators/reader_v2_page_exit_coordinator.dart';
+import 'package:night_reader/features/reader_v2/application/session/reader_v2_session_facade.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
+import 'package:night_reader/features/reader_v2/shell/reader_v2_page_shell.dart';
+import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_screen.dart';
 
 class ReaderV2Page extends StatefulWidget {
   const ReaderV2Page({

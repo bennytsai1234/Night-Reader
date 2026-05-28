@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

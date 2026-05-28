@@ -1,5 +1,5 @@
 import 'package:html/dom.dart';
-import 'package:reader/core/engine/rule_analyzer.dart';
+import 'package:night_reader/core/engine/rule_analyzer.dart';
 import 'analyze_by_css_base.dart';
 import 'analyze_by_css_support.dart';
 import 'analyze_by_css_helper.dart';

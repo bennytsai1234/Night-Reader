@@ -1,5 +1,5 @@
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:reader/features/reader_v2/layout/reader_v2_layout.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout.dart';
 
 ReaderV2RenderLine readerV2TextLineToRenderLine(ReaderV2TextLine line) {
   return ReaderV2RenderLine(

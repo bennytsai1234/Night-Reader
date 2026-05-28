@@ -1,5 +1,5 @@
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/bookmark.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/bookmark.dart';
 
 import 'reader_v2_location.dart';
 

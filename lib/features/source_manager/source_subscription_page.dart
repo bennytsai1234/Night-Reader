@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:reader/shared/theme/app_text_styles.dart';
-import 'package:reader/core/models/source_subscription.dart';
-import 'package:reader/core/database/dao/source_subscription_dao.dart';
-import 'package:reader/core/services/source_update_service.dart';
-import 'package:reader/core/di/injection.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/models/source_subscription.dart';
+import 'package:night_reader/core/database/dao/source_subscription_dao.dart';
+import 'package:night_reader/core/services/source_update_service.dart';
+import 'package:night_reader/core/di/injection.dart';
 
 class SourceSubscriptionProvider extends ChangeNotifier {
   final SourceSubscriptionDao _dao = getIt<SourceSubscriptionDao>();

@@ -1,9 +1,9 @@
-import 'package:reader/features/reader_v2/layout/reader_v2_style.dart';
-import 'package:reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_infinite_segment_strip.dart';
-import 'package:reader/features/reader_v2/viewport/reader_v2_visible_page_calculator.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_infinite_segment_strip.dart';
+import 'package:night_reader/features/reader_v2/viewport/reader_v2_visible_page_calculator.dart';
 
 class ReaderV2PositionTracker {
   const ReaderV2PositionTracker();

@@ -5,12 +5,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reader/core/constant/source_type.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/services/check_source_service.dart';
-import 'package:reader/core/services/network_service.dart';
-import 'package:reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/core/constant/source_type.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 
 final String _importFromUrlTestJson = jsonEncode(<Map<String, dynamic>>[
   {

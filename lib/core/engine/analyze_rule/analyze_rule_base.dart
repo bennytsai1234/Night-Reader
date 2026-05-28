@@ -4,9 +4,9 @@ import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';
 import '../js/js_engine.dart';
-import 'package:reader/core/models/rule_data_interface.dart';
-import 'package:reader/core/services/rule_big_data_service.dart';
-import 'package:reader/core/utils/lru_map.dart';
+import 'package:night_reader/core/models/rule_data_interface.dart';
+import 'package:night_reader/core/services/rule_big_data_service.dart';
+import 'package:night_reader/core/utils/lru_map.dart';
 
 // 導入同目錄下的其它部分
 import 'analyze_rule_support.dart';

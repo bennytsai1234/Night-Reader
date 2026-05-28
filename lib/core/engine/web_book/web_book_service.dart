@@ -1,21 +1,21 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:dio/dio.dart';
-import 'package:reader/core/exception/app_exception.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/engine/analyze_url.dart';
-import 'package:reader/core/engine/analyze_rule.dart';
-import 'package:reader/core/engine/web_book/book_list_parser.dart';
-import 'package:reader/core/engine/web_book/book_info_parser.dart';
-import 'package:reader/core/engine/web_book/chapter_list_parser.dart';
-import 'package:reader/core/engine/web_book/content_parser.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/network/str_response.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
+import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
+import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
+import 'package:night_reader/core/engine/web_book/content_parser.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/network/str_response.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
 ///

@@ -2,7 +2,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:xpath_selector/xpath_selector.dart';
 import 'package:xpath_selector_html_parser/xpath_selector_html_parser.dart';
-import 'package:reader/core/engine/rule_analyzer.dart';
+import 'package:night_reader/core/engine/rule_analyzer.dart';
 
 /// AnalyzeByXPath - XPath 解析器
 /// (原 Android model/analyzeRule/AnalyzeByXPath.kt) (5KB)

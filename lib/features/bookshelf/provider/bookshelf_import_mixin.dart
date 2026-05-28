@@ -1,6 +1,6 @@
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/book_cover_storage_service.dart';
-import 'package:reader/core/services/local_book_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/local_book_service.dart';
 import 'bookshelf_provider_base.dart';
 
 /// BookshelfProvider 的本地書籍匯入邏輯擴展

@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/di/injection.dart';
-import 'package:reader/core/engine/app_event_bus.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/search_book.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/search_book.dart';
 
 class BookshelfStateTracker {
   final BookDao _bookDao;

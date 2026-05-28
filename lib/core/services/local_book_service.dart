@@ -3,16 +3,16 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/local_book/local_book_formats.dart';
-import 'package:reader/core/local_book/txt_parser.dart';
-import 'package:reader/core/local_book/umd_parser.dart';
-import 'package:reader/core/services/epub_service.dart';
-import 'package:reader/core/services/resource_service.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
+import 'package:night_reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/local_book/umd_parser.dart';
+import 'package:night_reader/core/services/epub_service.dart';
+import 'package:night_reader/core/services/resource_service.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 
 /// 本地書籍匯入結果

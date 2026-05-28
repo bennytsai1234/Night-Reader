@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/update_ignore_store.dart';
-import 'package:reader/core/services/update_service.dart';
-import 'package:reader/features/about/update_dialog.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/update_ignore_store.dart';
+import 'package:night_reader/core/services/update_service.dart';
+import 'package:night_reader/features/about/update_dialog.dart';
 
 /// 自動 / 手動 更新檢查的入口。集中處理「呼叫 service → 看忽略 → 顯示 Dialog → 寫忽略」。
 class UpdateCheckRunner {

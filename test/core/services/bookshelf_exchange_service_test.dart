@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:reader/core/database/dao/book_dao.dart';
-import 'package:reader/core/database/dao/book_source_dao.dart';
-import 'package:reader/core/database/dao/chapter_dao.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/models/book_source.dart';
-import 'package:reader/core/models/chapter.dart';
-import 'package:reader/core/services/bookshelf_exchange_service.dart';
-import 'package:reader/core/services/network_service.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   final List<Book> storedBooks = [];
@@ -68,7 +68,7 @@ void main() {
     () async {
       final service = BookshelfExchangeService();
       final payload = jsonEncode({
-        'kind': 'inkpage.bookshelf',
+        'kind': 'night_reader.bookshelf',
         'version': 1,
         'books': [
           {

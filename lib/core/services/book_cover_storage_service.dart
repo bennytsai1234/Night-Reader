@@ -4,11 +4,11 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:reader/core/models/book.dart';
-import 'package:reader/core/services/app_log_service.dart';
-import 'package:reader/core/services/resource_service.dart';
-import 'package:reader/core/storage/app_storage_paths.dart';
-import 'package:reader/core/storage/storage_metrics.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/resource_service.dart';
+import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:night_reader/core/storage/storage_metrics.dart';
 import 'package:path/path.dart' as p;
 
 class BookCoverStorageService {

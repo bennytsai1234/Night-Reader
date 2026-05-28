@@ -1,4 +1,4 @@
-import 'package:reader/core/constant/page_anim.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
 
 enum ReaderV2PageMode {
   scroll,

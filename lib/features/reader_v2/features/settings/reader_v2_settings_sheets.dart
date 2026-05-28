@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:reader/core/constant/page_anim.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:reader/shared/theme/app_theme.dart';
-import 'package:reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/core/constant/page_anim.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/shared/theme/app_theme.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ReaderV2SettingsSheets {
   const ReaderV2SettingsSheets._();

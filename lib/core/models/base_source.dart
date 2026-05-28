@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:reader/core/services/cache_manager.dart';
-import 'package:reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/services/cookie_store.dart';
 
 /// BaseSource - 資源來源基礎介面
 /// (原 Android data/entities/BaseSource.kt)

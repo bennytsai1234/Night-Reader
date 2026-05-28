@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
-import 'package:reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;

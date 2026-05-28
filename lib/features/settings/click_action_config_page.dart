@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
-import 'package:reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
-import 'package:reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 
 class ClickActionConfigPage extends StatefulWidget {
   const ClickActionConfigPage({super.key});

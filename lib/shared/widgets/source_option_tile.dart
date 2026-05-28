@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:reader/core/models/search_book.dart';
-import 'package:reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class SourceOptionTile extends StatelessWidget {
   final SearchBook searchBook;
