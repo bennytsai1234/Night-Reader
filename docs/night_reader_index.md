@@ -1,4 +1,4 @@
-# 墨頁 Inkpage Reader Atlas Index
+# 夜讀 Night Reader Atlas Index
 
 ## 用途與使用方式
 
@@ -15,7 +15,7 @@
 - 參考範本模式：無參考，僅從本專案建立 atlas
 - 工作交付策略：建立 commit 並 push
 - 報告詳細度：技術詳情（報告可包含模組名稱、檔案路徑與相關程式脈絡）
-- 工作入口：通用 adapter（`inkpage_reader_adapter.md`）、Claude Code adapter（`.claude/skills/inkpage-reader-atlas.md`）、Codex adapter（`.agents/skills/inkpage-reader/SKILL.md`）
+- 工作入口：通用 adapter（`night_reader_adapter.md`）、Claude Code adapter（`.claude/skills/inkpage-reader-atlas.md`）、Codex adapter（`.agents/skills/inkpage-reader/SKILL.md`）
 
 ## 專案操作限制
 
@@ -61,22 +61,22 @@
 
 ## 工作流程文件
 
-- 主工作流程：[inkpage_reader_main_workflow.md](inkpage_reader_main_workflow.md)
-- 理解工作流程：[inkpage_reader_understand_workflow.md](inkpage_reader_understand_workflow.md)
-- 修改工作流程：[inkpage_reader_change_workflow.md](inkpage_reader_change_workflow.md)
-- 驗證工作流程：[inkpage_reader_validate_workflow.md](inkpage_reader_validate_workflow.md)
+- 主工作流程：[night_reader_main_workflow.md](night_reader_main_workflow.md)
+- 理解工作流程：[night_reader_understand_workflow.md](night_reader_understand_workflow.md)
+- 修改工作流程：[night_reader_change_workflow.md](night_reader_change_workflow.md)
+- 驗證工作流程：[night_reader_validate_workflow.md](night_reader_validate_workflow.md)
 
 ## 模組列表
 
-- [規則引擎](inkpage_reader/rule_engine.md)
-- [書源管理](inkpage_reader/source_manager.md)
-- [閱讀器 V2](inkpage_reader/reader_v2.md)
-- [書架與書籍](inkpage_reader/bookshelf.md)
-- [搜尋與探索](inkpage_reader/search_explore.md)
-- [下載與快取](inkpage_reader/download_cache.md)
-- [瀏覽器驗證](inkpage_reader/browser.md)
-- [設定與備份](inkpage_reader/settings_backup.md)
-- [應用基礎設施](inkpage_reader/infrastructure.md)
+- [規則引擎](night_reader/rule_engine.md)
+- [書源管理](night_reader/source_manager.md)
+- [閱讀器 V2](night_reader/reader_v2.md)
+- [書架與書籍](night_reader/bookshelf.md)
+- [搜尋與探索](night_reader/search_explore.md)
+- [下載與快取](night_reader/download_cache.md)
+- [瀏覽器驗證](night_reader/browser.md)
+- [設定與備份](night_reader/settings_backup.md)
+- [應用基礎設施](night_reader/infrastructure.md)
 
 ## 模組摘要
 
