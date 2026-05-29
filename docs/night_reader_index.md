@@ -78,6 +78,10 @@
 - [設定與備份](night_reader/settings_backup.md)
 - [應用基礎設施](night_reader/infrastructure.md)
 
+## 跨模組參考
+
+- [事件匯流排 event_bus](night_reader/event_bus.md) — 字串命名事件的發送/監聽對照（靜態工具看不見，需人工維護）
+
 ## 模組摘要
 
 **規則引擎** (`lib/core/engine/`)
