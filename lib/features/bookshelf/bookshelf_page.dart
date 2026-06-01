@@ -67,6 +67,14 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               : () => _batchDownload(context, provider),
                     ),
                     IconButton(
+                      icon: const Icon(Icons.cloud_download_outlined),
+                      tooltip: '整本書補下載',
+                      onPressed:
+                          _selectedUrls.isEmpty
+                              ? null
+                              : () => _batchEnsureComplete(context, provider),
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.update),
                       tooltip: '批次檢查更新',
                       onPressed:
@@ -427,6 +435,34 @@ class _BookshelfPageState extends State<BookshelfPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
+    }
+  }
+
+  Future<void> _batchEnsureComplete(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    try {
+      final result = await provider.batchEnsureComplete(_selectedUrls);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.queuedBooks > 0
+                ? '已加入 ${result.queuedBooks} 本、${result.queuedChapters} 章補下載；略過 ${result.skippedBooks} 本'
+                : '所有選取書籍已下載完整',
+          ),
+        ),
+      );
+      setState(() {
+        _isMultiSelect = false;
+        _selectedUrls.clear();
+      });
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('整本書補下載失敗: $e')));
     }
   }
 

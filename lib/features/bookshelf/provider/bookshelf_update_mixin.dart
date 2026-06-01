@@ -1,5 +1,6 @@
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -203,6 +204,80 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         skippedBooks++;
         continue;
       }
+      await downloadService.addDownloadTask(book, toDownload);
+      queuedBooks++;
+      queuedChapters += toDownload.length;
+    }
+
+    return BookshelfBatchDownloadResult(
+      queuedBooks: queuedBooks,
+      queuedChapters: queuedChapters,
+      skippedBooks: skippedBooks,
+    );
+  }
+
+  Future<BookshelfBatchDownloadResult> batchEnsureComplete(
+    Set<String> urls,
+  ) async {
+    final selected = await _booksForUrls(urls);
+    final contentDao =
+        getIt.isRegistered<ReaderChapterContentDao>()
+            ? getIt<ReaderChapterContentDao>()
+            : null;
+    final downloadService = DownloadService();
+    var queuedBooks = 0;
+    var queuedChapters = 0;
+    var skippedBooks = 0;
+
+    for (final book in selected) {
+      if (book.isLocal) {
+        skippedBooks++;
+        continue;
+      }
+      final source = await sourceDao.getByUrl(book.origin);
+      if (source == null || !source.isReadingEnabledByRuntime) {
+        skippedBooks++;
+        continue;
+      }
+
+      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取
+      List<BookChapter> chapters;
+      try {
+        final fetched = await service.getChapterList(source, book);
+        for (var i = 0; i < fetched.length; i++) {
+          fetched[i].index = i;
+          fetched[i].bookUrl = book.bookUrl;
+        }
+        if (fetched.isNotEmpty) {
+          await chapterDao.insertChapters(fetched);
+        }
+        chapters = fetched;
+      } catch (e) {
+        AppLog.w('整本書補下載：取得章節目錄失敗 ${book.name}: $e');
+        chapters = await chapterDao.getByBook(book.bookUrl);
+      }
+
+      if (chapters.isEmpty) {
+        skippedBooks++;
+        continue;
+      }
+
+      var toDownload = chapters;
+      if (contentDao != null) {
+        final stored = await ReaderChapterContentStore(
+          chapterDao: chapterDao,
+          contentDao: contentDao,
+        ).storedChapterIndices(book: book);
+        toDownload =
+            chapters
+                .where((chapter) => !stored.contains(chapter.index))
+                .toList();
+      }
+      if (toDownload.isEmpty) {
+        skippedBooks++;
+        continue;
+      }
+
       await downloadService.addDownloadTask(book, toDownload);
       queuedBooks++;
       queuedChapters += toDownload.length;

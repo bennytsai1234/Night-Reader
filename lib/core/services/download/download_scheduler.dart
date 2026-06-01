@@ -68,6 +68,8 @@ mixin DownloadScheduler on DownloadBase {
     await downloadDao.upsert(task);
     final existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
     if (existingIndex != -1) {
+      final existing = tasks[existingIndex];
+      if (existing.isWaiting || existing.isDownloading) return;
       tasks[existingIndex] = task;
     } else {
       tasks.add(task);
