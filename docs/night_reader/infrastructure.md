@@ -1,65 +1,114 @@
 # 應用基礎設施
 
-## 現有責任
+## 目前職責
 
-Drift 資料庫定義與所有 DAO、HTTP client（Dio）、Cookie 管理、DI 容器（get_it）、儲存路徑管理、應用常數與偏好 key、應用啟動（Splash → Main）、底部導覽、主題、版本更新檢查、深連結處理、崩潰日誌。所有其他模組均依賴此層。
+所有模組的底層依賴：Drift 資料庫（21 tables、20 DAOs）、HTTP client（Dio + cookie）、GetIt DI 容器、儲存路徑管理、應用啟動（main.dart）、導覽（GoRouter 或 Navigator）、主題、版本更新、深連結、本地網路伺服器（shelf）、桌面小工具（home_widget）。修改 DB schema、新增 DAO、修改啟動流程，從這裡開始。
 
 ## 範圍
 
-- **資料庫**：`lib/core/database/`（`app_database.dart`、`tables/app_tables.dart`、全部 DAO）
-- **網路**：`lib/core/network/`（`interceptors/`）、`lib/core/services/http_client.dart`、`network_service.dart`
-- **DI**：`lib/core/di/injection.dart`（get_it 注入）
-- **儲存路徑**：`lib/core/storage/app_storage_paths.dart`、`file_doc.dart`、`storage_metrics.dart`、`app_cache.dart`
-- **常數與設定**：`lib/core/config/app_config.dart`、`lib/core/constant/`（`app_const.dart`、`prefer_key.dart`、`book_type.dart`、`page_anim.dart`、`source_type.dart`、`app_pattern.dart`）
-- **模型基礎**：`lib/core/models/`（非書籍專屬：`base_source.dart`、`cookie.dart`、`server.dart`、`keyboard_assist.dart` 等）
-- **服務基礎**：`lib/core/services/event_bus.dart`、`cookie_store.dart`、`app_log_service.dart`、`crash_handler.dart`、`app_permission_service.dart`、`resource_service.dart`、`rate_limiter.dart`
-- **版本更新**：`lib/core/services/update_service.dart`、`app_version.dart`、`update_ignore_store.dart`
-- **應用入口**：`lib/main.dart`、`lib/app_providers.dart`
-- **啟動 / 導覽**：`lib/features/welcome/`（`splash_page.dart`、`main_page.dart`）
-- **關於頁面**：`lib/features/about/`（`about_page.dart`、`update_dialog.dart`、`update_check_runner.dart`、`crash_log_page.dart`）
-- **深連結**：`lib/features/association/association_handler_service.dart`
-- **共用主題 / 元件**：`lib/shared/`（主題、文字樣式、token、底部 sheet、navigation）
-- **測試**：`test/core/database/`、`test/core/network/`、`test/core/services/`（update、permission、app_interceptor 等）、`test/features/welcome/`
+| 路徑 | 職責 |
+|---|---|
+| `lib/main.dart` | App 進入點、全域錯誤處理（Flutter & zone）、WorkManager 初始化、啟動後清理舊 artifacts |
+| `lib/app_providers.dart` | MultiProvider 全局配置（BookshelfProvider、SettingsProvider、ChangeCoverProvider、DownloadService、TTSService、ExploreProvider）|
+| `lib/core/database/app_database.dart` | Drift DB singleton、21 tables、20 DAOs、schema migration（v2+）|
+| `lib/core/database/tables/app_tables.dart` | Drift table definitions + TypeConverters（SearchRule、ExploreRule、BookInfoRule、TocRule、ContentRule、ReadConfig）|
+| `lib/core/database/dao/` | 20 DAO 檔案（BookDao、ChapterDao、BookSourceDao、BookmarkDao、ReplaceRuleDao、SearchBookDao、ReadRecordDao、CacheDao、CookieDao 等）|
+| `lib/core/di/injection.dart` | GetIt singleton 設定（Logger、AppDatabase、全部 DAO、NetworkService、TtsService、CrashHandler）|
+| `lib/core/network/` | StrResponse wrapper、AppInterceptor（User-Agent、logging）、LenientCookieManager |
+| `lib/core/storage/app_storage_paths.dart` | 集中式路徑管理（documentsDir、temporaryDir、ruleDataDir、imageCacheDir 等）|
+| `lib/core/storage/` | AppCache（記憶體快取）、StorageMetrics（儲存用量）、FileDoc（檔案抽象）|
+| `lib/core/config/app_config.dart` | 靜態設定鏡像（replaceEnableDefault、readerPageAnim）|
+| `lib/core/constant/` | AppConst（全局常數）、AppPattern（regex patterns）、PreferKey（SharedPreferences 鍵名）、BookType、PageAnim、SourceType 枚舉 |
+| `lib/core/models/` | 所有 domain model（Book、Chapter、BookSource、Bookmark、ReplaceRule、DownloadTask 等）|
+| `lib/core/base/base_provider.dart` | ChangeNotifier 基礎類（統一 loading/error 狀態管理）|
+| `lib/core/exception/app_exception.dart` | 自訂異常類層次（AppException 及子類）|
+| `lib/core/services/event_bus.dart` | AppEventBus 全域事件流（見 [event_bus](event_bus.md)）|
+| `lib/core/services/cookie_store.dart` | Cookie 持久化（Dio + DB）|
+| `lib/core/services/http_client.dart` | HTTP 工具函式 |
+| `lib/core/services/network_service.dart` | Dio singleton（含 cookie jar、source concurrency locks）|
+| `lib/core/services/app_log_service.dart` | 日誌服務 |
+| `lib/core/services/crash_handler.dart` | 錯誤回報 |
+| `lib/core/services/app_version.dart` | 版本資訊 |
+| `lib/core/services/app_permission_service.dart` | 平台權限管理 |
+| `lib/core/services/update_service.dart` + `update_ignore_store.dart` | App 更新檢查 |
+| `lib/core/services/rate_limiter.dart` | 請求節流 |
+| `lib/core/services/default_data.dart` | 內建預設書源 |
+| `lib/core/services/resource_service.dart` | Asset 載入 |
+| `lib/core/utils/` | 工具函式（string_utils、html_utils、url_util、file_utils、color_utils、time_utils、logger、archive_utils、lru_map 等）|
+| `lib/core/widgets/book_cover_widget.dart` | 可重用書籍封面 widget |
+| `lib/features/welcome/` | 啟動頁（SplashPage、MainPage 含底部 tab 導覽、ErrorPanel）|
+| `lib/features/about/` | 關於頁面、崩潰日誌檢視、更新檢查 |
+| `lib/features/association/` | 深連結與檔案關聯處理（AssociationHandlerService）|
+| `lib/shared/` | 導覽設定（Navigation）、AppTheme（主題）、可重用 UI widget |
 
-## 依賴與下游影響
+測試：`test/core/database/`、`test/core/models/`、`test/core/network/`、`test/core/services/`（update、permission、cache 等）、`test/features/welcome/`
 
-- 上游：Flutter SDK、Android SDK、所有 pub.dev 套件
-- 下游：**所有模組**均依賴此層的 DAO、DI、常數、儲存路徑
-- 資料庫 schema 變更（新增欄位或 table）會影響所有使用該 DAO 的模組
-- DI 容器（injection.dart）是服務的單一注入點；新增服務時需要在此登錄
+## 依賴與影響
+
+- 所有模組的底層依賴；這個模組的修改通常會影響所有其他模組
+- **重要**：DB schema 變更需要 Drift migration；DAO 介面變更影響所有使用者服務
+- **事件**：AppEventBus 是全域 singleton，所有模組都透過它通訊（見 [event_bus](event_bus.md)）
 
 ## 關鍵流程
 
-1. 應用啟動：`main.dart` → Provider MultiProvider 掛載 → `SplashPage` 初始化資料庫與服務 → `MainPage`（底部導覽）
-2. HTTP 請求：Dio instance（`http_client.dart`）→ `AppInterceptor`（請求 header、重試、error 處理）→ `LenientCookieManager`（Cookie 注入）
-3. 深連結：`app_links` 接收 URI → `AssociationHandlerService` 路由至對應頁面
-4. 版本更新：`UpdateCheckRunner` 在啟動時查詢 GitHub Releases API → `UpdateDialog` 提示使用者
+**App 啟動流程**：
+```
+main() → runZonedGuarded() → _startApp()
+  → configureDependencies()（GetIt 注入所有 singleton）
+  → runApp(MultiProvider(...))
+  → SplashPage → MainPage（底部 tab：書架 / 搜尋 / 探索 / 設定）
+  → WidgetsBinding.addPostFrameCallback()
+    → WorkManagerService.initialize()
+    → 清理舊 artifacts（inkpage_reader.db → night_reader.db 遷移）
+```
 
-## 變更入口
+**DB 存取流程**：
+```
+服務/Provider → GetIt.I<AppDatabase>()
+  → 對應 DAO（lazy singleton）
+    → Drift 生成的查詢（.g.dart）
+    → SQLite（sqlite3_flutter_libs）
+```
 
-- 新增 DB table 或欄位：`lib/core/database/tables/app_tables.dart` → 新增/修改對應 DAO → `app_database.dart` 加 schema migration
-- 新增全域 Provider：`lib/app_providers.dart`
-- 修改 HTTP 行為（header、retry）：`lib/core/network/interceptors/app_interceptor.dart`
-- 修改啟動流程：`lib/features/welcome/splash_page.dart`
+**HTTP 請求流程**：
+```
+服務 → NetworkService.dio
+  → AppInterceptor（User-Agent、logging）
+  → LenientCookieManager（cookie 讀寫）
+  → Dio → HTTP
+  → CookieDao（持久化 cookie）
+```
 
-## 變更路由
+## 常見修改入口
 
-- 資料庫 schema 遷移：`app_tables.dart` 修改 → `app_database.dart` 加 `schemaVersion` 遞增與 migration callback → 執行 `build_runner` 重新生成 `.g.dart` → 回歸 `test/core/database/`
-- 修改 DI：`injection.dart` → 確認所有受影響模組的 Provider 正確取得新服務
+- 新增 DB table / DAO → `lib/core/database/tables/app_tables.dart`（table 定義）→ `app_database.dart`（加到 @DriftDatabase）→ 新建 DAO → `injection.dart`（DI 注册）→ **必須新增 schema migration**
+- 修改啟動流程 → `lib/main.dart`
+- 修改全局 Provider → `lib/app_providers.dart`
+- 新增 DI singleton → `lib/core/di/injection.dart`
+- 修改路徑管理 → `lib/core/storage/app_storage_paths.dart`
 
-## 已知風險
+## 修改路線
 
-- Drift 的 schema migration 是手動撰寫的 SQL；遺漏 migration step 會導致舊版升級後資料庫損壞
-- `injection.dart` 是全局單例；循環依賴或注入順序錯誤可能導致 runtime 崩潰且難以追蹤
-- `workmanager` 背景任務需要在 Android 原生端（`MainActivity`）登錄；純 Flutter 層的改動不夠
-- 深連結 URI scheme 需要在 `AndroidManifest.xml` 宣告；`AssociationHandlerService` 改動需同步確認
+- **DB schema 變更**（T2 Migration 強制）：table 定義 → DAO → migration（`AppDatabase.schemaVersion++` + `MigrationStrategy.onUpgrade`）→ build_runner 重新生成 `.g.dart` → 執行 `flutter test test/core/database/`
+- **新增 DAO**：定義 DAO 類 → `@DriftDatabase(daos: [...])` 加入 → `injection.dart` 注册 lazy singleton → 重新 build_runner
+- **修改導覽**：`lib/shared/navigation/` 或 `lib/features/welcome/main_page.dart`
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- **build_runner 生成的 `.g.dart`** 不在版本控制中（依 .gitignore），每次 `flutter pub get` 後需 `flutter pub run build_runner build`；CI 需包含這個步驟
+- Drift migration 沒有版本鎖，下降版本（降版 App）會觸發未定義行為
+- GetIt 的 lazy singleton 在首次 `getIt<T>()` 時初始化；順序依賴（A 需要 B 存在）需確保 `injection.dart` 的注册順序
+- `app_storage_paths.dart` 的路徑在 Android 分區儲存規則變更後可能需要調整（targetSdk 升級時）
+- main.dart 的 zone 錯誤處理捕捉了所有未處理異常，若 crash_handler 本身出錯會靜默失敗
+- `night_reader.db` 有一次性從 `inkpage_reader.db` 的遷移（已實作）；若使用者跳過版本可能需要額外處理
 
-## 禁止事項
+## Reference Notes
 
-- 不要在 DAO 層加入業務邏輯；DAO 只做 CRUD
-- 不要在 `app_providers.dart` 之外建立額外的全局 Provider 掛載點
-- 不要跳過 schema migration；每次 table 或欄位變更都需要遞增 `schemaVersion` 並撰寫 migration
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要在 DAO 中加業務邏輯（DAO 只做資料存取）
+- 不要繞過 GetIt 直接 new Service（破壞 DI 隔離，無法測試）
+- 不要修改 `.g.dart` 生成的檔案（每次 build_runner 都會覆蓋）
+- 不要在 AppConfig 中存複雜物件（只放靜態基本型別的設定鏡像）

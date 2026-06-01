@@ -1,55 +1,90 @@
 # 書架與書籍
 
-## 現有責任
+## 目前職責
 
-書架的顯示與管理、書籍加入/移除/分組、書籍詳情（封面、簡介、章節列表、換書源）、閱讀紀錄、書籤（跨書架）、全域替換規則管理。是使用者與書籍資料互動的主要入口。
+書架顯示（書籍列表、分組、排序）、書籍詳情（元資料、封面修改、書源切換）、閱讀紀錄、書籤管理、全域替換規則。修改書架 UI、書籍資料結構、閱讀進度，從這裡開始。
 
 ## 範圍
 
-- **書架**：`lib/features/bookshelf/`（書架頁、provider）
-- **書籍詳情**：`lib/features/book_detail/`（詳情頁、provider、換封面）
-- **書籤**：`lib/features/bookmark/`（書籤頁、provider）
-- **閱讀紀錄**：`lib/features/read_record/`
-- **全域替換規則**：`lib/features/replace_rule/replace_rule_provider.dart`
-- **書籍模型**：`lib/core/models/book.dart`、`book/`、`bookmark.dart`、`read_record.dart`、`replace_rule.dart`、`book_group.dart`、`book_progress.dart`
-- **書籍服務**：`lib/core/services/book_storage_service.dart`、`bookshelf_state_tracker.dart`、`bookshelf_exchange_service.dart`、`book_cover_storage_service.dart`
-- **DAO**：`lib/core/database/dao/book_dao.dart`、`bookmark_dao.dart`、`read_record_dao.dart`、`replace_rule_dao.dart`、`book_group_dao.dart`
-- **測試**：`test/features/bookshelf/`、`test/features/book_detail/`、`test/core/models/book_mgmt_test.dart`
+| 路徑 | 職責 |
+|---|---|
+| `lib/features/bookshelf/` | 書架主頁（BookshelfPage）、BookshelfProvider |
+| `lib/features/book_detail/` | 書籍詳情頁（BookDetailPage）、ChangeCoverProvider、書源選擇 |
+| `lib/features/replace_rule/` | 全域替換規則 UI（ReplaceRulePage）、ReplaceRuleProvider |
+| `lib/core/services/book_storage_service.dart` | 書籍元資料持久化（Book 的 CRUD） |
+| `lib/core/services/book_cover_storage_service.dart` | 封面圖片下載與快取 |
+| `lib/core/services/bookshelf_state_tracker.dart` | 書架同步狀態追蹤（記錄哪些書籍的章節資料是最新的） |
+| `lib/core/services/replace_rule.dart` | 替換規則業務邏輯 |
+| `lib/core/database/dao/book_dao.dart` | Book DAO |
+| `lib/core/database/dao/bookmark_dao.dart` | Bookmark DAO |
+| `lib/core/database/dao/read_record_dao.dart` | ReadRecord DAO |
+| `lib/core/database/dao/replace_rule_dao.dart` | ReplaceRule DAO |
+| `lib/core/models/book.dart` + `book/` | Book 模型（BookBase、BookContent、BookExtensions、BookLogic、BookSerialization） |
+| `lib/core/models/bookmark.dart` | Bookmark 模型 |
+| `lib/core/models/read_record.dart` | ReadRecord 模型 |
+| `lib/core/models/replace_rule.dart` | ReplaceRule 模型 |
 
-## 依賴與下游影響
+測試：`test/features/bookshelf/`、`test/features/book_detail/`、`test/core/models/book_mgmt_test.dart`、`test/core/database/read_record_dao_test.dart`、`test/core/database/replace_rule_dao_test.dart`
 
-- 上游：**應用基礎設施**（資料庫 DAO）、**書源管理**（書籍綁定書源）、**規則引擎**（換書源時需重新抓取書籍資訊）
-- 下游：**閱讀器 V2**（從書架打開書籍）、**搜尋與探索**（加入書架操作）、**下載與快取**（離線下載依賴書架書籍）
-- `bookshelf_state_tracker` 透過 event_bus 廣播書籍狀態變更，影響多個畫面
+## 依賴與影響
+
+- **上游**：書源管理（SourceSwitchService 切換書籍書源）、下載與快取（取得章節列表與內容）
+- **下游**：閱讀器 V2（讀取書籍和閱讀進度；回寫進度）
+- **事件**：監聽 `upBookshelf`、`bookshelfRefreshStart`、`bookshelfRefreshEnd`；發出 `upBookshelf`（見 [event_bus](event_bus.md)）
+- **注意**：BookGroup（書架分組）目前用 DB 持久化，但 UI 尚不完整
 
 ## 關鍵流程
 
-1. 加入書架：書籍詳情頁 → `BookshelfExchangeService.addBook()` → 寫入資料庫 → event_bus 通知 → 書架重新載入
-2. 換書源：書籍詳情頁選擇新書源 → 呼叫規則引擎重取書籍資訊 → 更新資料庫
-3. 書籤管理：閱讀器 V2 新增書籤 → 寫入 `bookmark_dao` → 書籤頁顯示
+**書架載入流程**：
+```
+BookshelfPage → BookshelfProvider
+  → BookDao.getAll()（Drift stream，自動 reactive）
+  → BookshelfPage 重建列表
+```
 
-## 變更入口
+**書籍詳情流程**：
+```
+BookshelfPage → BookDetailPage
+  → BookDetailProvider（載入書籍元資料、章節列表）
+    → BookStorageService（書籍資料）
+    → BookSourceService（書源驗證狀態）
+  → 使用者操作：更新書源（SourceSwitchService）、換封面（ChangeCoverProvider）、加書籤
+```
 
-- 書架 UI 或排序：`bookshelf_page.dart`、`bookshelf_provider.dart`
-- 書籍資料結構（欄位增減）：`lib/core/models/book/`、`book_dao.dart`
-- 書架 exchange 邏輯（加入、移除）：`bookshelf_exchange_service.dart`
+**閱讀進度回寫**：
+```
+閱讀器 V2（runtime/）→ 讀取/寫入 ReadRecord
+  → ReadRecordDao.upsert()
+  → 發 upBookshelf 事件 → BookshelfProvider 更新書架顯示
+```
 
-## 變更路由
+## 常見修改入口
 
-- 書籍模型加欄位：`book_base.dart` → `book_serialization.dart` → `book_dao.dart`（schema 遷移）→ 確認 `bookshelf_exchange_service_test.dart`
-- 書架狀態變更：`bookshelf_state_tracker.dart` → 確認 event_bus 訂閱者（閱讀器 V2、下載）未因此出現問題
+- 書架 UI（排序、分組、顯示樣式）→ `lib/features/bookshelf/bookshelf_page.dart`
+- 書架狀態管理 → `lib/features/bookshelf/provider/bookshelf_provider.dart`
+- 書籍詳情 → `lib/features/book_detail/`
+- 全域替換規則 → `lib/features/replace_rule/` + `lib/core/services/replace_rule.dart`
+- Book 模型欄位 → `lib/core/models/book/book_base.dart`（新增欄位需同步 DB schema）
 
-## 已知風險
+## 修改路線
 
-- `bookshelf_state_tracker` 的 event_bus 廣播是非同步的；若多個畫面同時監聽，競態條件較難追蹤
-- 書籍封面快取存放在本地檔案系統，清除快取後封面需要重新下載
-- 換書源後章節對應關係（閱讀進度）可能失效
+- 新增 Book 模型欄位：需同步 `BookBase`、`BookSerialization`（fromJson/toJson）、`Books` Drift table（schema migration）、`BookDao`
+- 修改書架排序/分組：BookshelfProvider 控制查詢邏輯，Drift stream 自動 reactive
+- 修改替換規則：ReplaceRule 同時被 Reader V2（content 層）和 replace_rule feature 使用；修改後確認閱讀器側行為
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- Book 模型的 `fromJson`/`toJson` 需維持 Legado 格式相容性（備份還原時使用）
+- BookDao 的 Drift stream 會在書架有任何變更時觸發全量重建；書架很大時有效能問題
+- 閱讀進度（ReadRecord）與 Chapter 的同步依賴 `durChapterIndex`；書源切換後 index 可能失效
+- BookshelfStateTracker 的同步邏輯尚未完整文件化
 
-## 禁止事項
+## Reference Notes
 
-- 不要在書架層直接執行網路抓取；換書源的網路操作應透過規則引擎的 web_book_service
-- 不要在書架模組管理章節快取；那是下載與快取模組的責任
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要在 BookshelfProvider 中做網路請求（只能讀取 DB）
+- 不要直接修改 Book 的持久化欄位而不同步 DB schema migration
+- 不要把書架分組（BookGroup）相關的 UI 做到不可逆（功能尚未完整）

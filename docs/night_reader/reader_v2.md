@@ -1,64 +1,92 @@
 # 閱讀器 V2
 
-## 現有責任
+## 目前職責
 
-閱讀頁面的全部功能：自製排版引擎（分頁計算、字型度量、行距段距）、Canvas 渲染、viewport（捲動 / 左右滑動）、runtime（閱讀狀態機、位置追蹤、預載排程）、TTS 朗讀（highlight、音訊控制）、設定面板、書籤、章節替換規則、自動翻頁、選單（上下選單列）。是專案中最複雜的模組，也是 release 的重點回歸區域。
+閱讀頁面的全部功能：排版引擎（Typography）、Canvas 渲染（Tile-based rendering）、viewport（捲動/滑動）、runtime 狀態機（位置、進度、預讀排程、效能追蹤）、TTS 朗讀、設定面板、書籤、章節替換規則。最複雜的模組，release 重點回歸區域。
 
 ## 範圍
 
-- **Application 層**：`lib/features/reader_v2/application/`（controller host、coordinators、session facade、dependencies）
-- **排版引擎**：`lib/features/reader_v2/layout/`（layout engine、spec、style、typography、constants）
-- **渲染層**：`lib/features/reader_v2/render/`（render page、tile layer/painter、line box、TTS highlight overlay、page cache）
-- **Viewport**：`lib/features/reader_v2/viewport/`（scroll / slide viewport、screen、position tracker、infinite segment strip、pointer tap layer、visible page calculator、chapter page cache manager）
-- **Runtime**：`lib/features/reader_v2/runtime/`（runtime、state、location、resolver、open target、page window、preload scheduler、progress controller、performance metrics）
-- **Content**：`lib/features/reader_v2/content/`（chapter repository、content、content transformer、processed chapter）
-- **功能面板**：`lib/features/reader_v2/features/`（auto_page、bookmark、menu、replace_rule、settings、tts）
-- **Shell**：`lib/features/reader_v2/shell/`（reader page、page shell、chapters drawer）
-- **Settings 持久化**：`lib/features/reader_v2/features/settings/reader_v2_prefs_repository.dart`
-- **測試**：`test/features/reader_v2/`
+主路徑：`lib/features/reader_v2/`（50+ 檔案，8 層架構）
 
-## 依賴與下游影響
+| 層 | 路徑 | 職責 |
+|---|---|---|
+| **content** | `lib/features/reader_v2/content/` | 章節資料載入與轉換；呼叫 ChapterContentPreparationPipeline |
+| **runtime** | `lib/features/reader_v2/runtime/` | 狀態追蹤（位置、進度、預讀排程、效能指標） |
+| **layout** | `lib/features/reader_v2/layout/` | 排版引擎（字體、行距、段落、styles、specs 計算） |
+| **render** | `lib/features/reader_v2/render/` | 低層渲染（tile painter、page cache、line boxes、text adapters） |
+| **viewport** | `lib/features/reader_v2/viewport/` | viewport 管理與捲動/滑動控制 |
+| **shell** | `lib/features/reader_v2/shell/` | 頂層 Widget 容器（ReaderV2Page） |
+| **application** | `lib/features/reader_v2/application/` | Coordinator 模式（feature 協調）、Session facade（狀態隔離）、依賴裝配 |
+| **features** | `lib/features/reader_v2/features/` | Reader 功能 UI：menu（頂/底欄）、settings（設定面板）、tts（TTS 控制）、bookmark（書籤）、auto_page（自動翻頁）、replace_rule（替換規則） |
 
-- 上游：**應用基礎設施**（DAO：chapter、bookmark、read_record）、**下載與快取**（chapter content pipeline，提供已快取章節內容）、**規則引擎**（網路書源章節正文抓取）
-- 下游：`audio_service` / `flutter_tts`（TTS 播放）、`shared_preferences`（閱讀設定持久化）
-- 排版引擎改動（layout constants、typography）需在多種字型與螢幕尺寸下確認不破版
-- viewport 改動可能影響捲動與滑動兩種模式的觸控行為
+測試：`test/features/reader_v2/`（8 個測試檔案，涵蓋 content_transformer、layout_engine、page_shell、runtime、viewport、settings_controller）
+
+## 依賴與影響
+
+- **上游**：下載與快取（ChapterContentPreparationPipeline、ReaderChapterContentStorage 提供章節內容）、書架（書籍資料與閱讀進度）、設定（SettingsProvider 提供字體/主題/TTS 設定）
+- **下游**：書架（更新閱讀進度、書籤）、設定與備份（讀取 TTS 設定）
+- **事件**：監聽 `ttsProgress`、`aloudState`、`updateReadActionBar`、`upConfig`；發出 `upBookshelf`（進度更新）（見 [event_bus](event_bus.md)）
+- **服務**：TTSService（GetIt singleton）、AppEventBus、SettingsProvider、ReplaceRule
 
 ## 關鍵流程
 
-1. 開書：`ReaderV2Page` 接收 `ReaderV2OpenTarget` → `ReaderV2SessionFacade` 初始化 runtime → 載入首章內容 → layout engine 分頁 → tile layer 渲染
-2. 翻頁（滑動）：`SlideReaderV2Viewport` 手勢 → `ReaderV2ViewportController` → `ReaderV2Runtime` 更新位置 → 觸發預載
-3. TTS 朗讀：`ReaderV2TtsController` 驅動 `TtsService` → 逐句朗讀 → `ReaderV2TtsHighlight` 更新 highlight overlay
-4. 設定變更：`ReaderV2SettingsController` 更新 prefs → 觸發 layout 重算 → 重新渲染
+**章節載入流程**：
+```
+ReaderV2Page（shell）→ Application Coordinator
+  → content/ → ChapterContentPreparationPipeline（跨模組）
+    → ReaderChapterContentStorage（磁碟快取）
+    → 或 WebBookService（從書源抓取）
+  → 轉換後交給 layout/（排版計算）
+  → render/（渲染到 Canvas tile）
+```
 
-## 變更入口
+**使用者翻頁流程**：
+```
+使用者手勢（viewport/）
+  → runtime/（更新位置狀態）
+  → render/（觸發重繪或 tile swap）
+  → 預讀排程（runtime/）→ content/ 預取下一章
+```
 
-- 排版/字型問題：`lib/features/reader_v2/layout/reader_v2_layout_engine.dart`、`reader_v2_typography.dart`
-- 翻頁/手勢問題：`lib/features/reader_v2/viewport/`
-- TTS 問題：`lib/features/reader_v2/features/tts/`
-- 章節切換/預載問題：`lib/features/reader_v2/runtime/`、`content/`
-- UI 選單/設定面板：`lib/features/reader_v2/features/menu/`、`features/settings/`
+**TTS 流程**：
+```
+features/tts/ UI
+  → TTSService（core/services/tts_service.dart）
+  → flutter_tts / audio_service / just_audio
+  → 發 ttsProgress 事件 → runtime/ 高亮對應文字
+```
 
-## 變更路由
+## 常見修改入口
 
-- 修改排版規格：`reader_v2_layout_spec.dart` → `reader_v2_layout_engine.dart` → `test/features/reader_v2/reader_v2_layout_engine_test.dart`
-- 修改 viewport/滑動行為：對應 viewport 檔案 → `test/features/reader_v2/reader_v2_viewport_test.dart`、`reader_v2_viewport_stress_test.dart`
-- 修改 runtime 狀態機：`reader_v2_runtime.dart` → `test/features/reader_v2/reader_v2_runtime_test.dart`
-- 修改 content 轉換：`reader_v2_content_transformer.dart` → `test/features/reader_v2/reader_v2_content_transformer_test.dart`
+- 排版問題（行距、字體、頁邊距）→ `lib/features/reader_v2/layout/`
+- 渲染效能問題 → `lib/features/reader_v2/render/`
+- 翻頁/捲動行為 → `lib/features/reader_v2/viewport/`
+- 閱讀器設定 UI → `lib/features/reader_v2/features/settings/`
+- TTS 控制 → `lib/features/reader_v2/features/tts/` + `lib/core/services/tts_service.dart`
+- 章節內容轉換（清洗、替換規則）→ `lib/features/reader_v2/content/`
 
-## 已知風險
+## 修改路線
 
-- Canvas tile 渲染依賴字型度量，不同 Android 裝置的字型可能有細微差異，難以在測試中全面覆蓋
-- 捲動與滑動兩種 viewport 維護的狀態有差異，切換模式時需要小心位置同步
-- TTS highlight 與渲染 overlay 的同步依賴 stream 與 post-frame callback，有輕微的 async 時序風險
-- `ReaderV2InfiniteSegmentStrip` 的無限滾動段落管理在極長書籍時的記憶體上限未完整測試
+- 修改 layout 計算：render/ 依賴 layout 輸出（PageSpec、LineBox）；修改後必須執行 `test/features/reader_v2/reader_v2_layout_engine_test.dart` 和 `reader_v2_viewport_test.dart`
+- 修改 runtime 狀態機：Coordinator 和 Session facade 依賴 runtime；進度更新會同步到書架（ReadRecord）
+- 修改 content 載入：涉及 ChapterContentPreparationPipeline（下載與快取模組）和 ReaderChapterContentStorage；修改後測試 `reader_v2_content_transformer_test.dart`
+- 修改 TTS：TTSService 在 GetIt 中是 singleton，同時供 audio_service 使用；修改需同步 `tts_service.dart` 和 `audio_handler.dart`
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- Tile-based rendering 的 page cache 有記憶體壓力；大字體或超長章節可能觸發 OOM
+- 捲動/滑動的手勢識別與 Flutter 手勢系統有衝突點，邊界情況（快速連點、多指）容易出現問題
+- TTS 的 `audio_service` 需要系統音訊焦點；背景音樂衝突只有在真機上才能可靠重現
+- `runtime/` 的預讀排程與網路請求非同步；章節內容快取失效 + 網路慢時容易出現空白頁閃爍
+- ReaderV2 的 Session facade 隔離了閱讀狀態，但關閉閱讀器時的狀態持久化（ReadRecord 寫入）有延遲，可能丟失最後幾頁的進度
 
-## 禁止事項
+## Reference Notes
 
-- 不要在 reader_v2 內直接呼叫書源服務；章節內容應透過 content repository 取得
-- 不要在排版引擎層做 I/O；layout 是純計算層
-- 不要將 TTS 狀態洩漏到 runtime state；TTS 有獨立的 controller
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要在 layout/ 或 render/ 中直接呼叫網路 API（只能透過 content/ 層）
+- 不要把 Legado 的漫畫翻頁器（翻頁動畫 > 2 種）移植進來
+- 不要跳過 Session facade 直接操作 runtime 狀態（破壞狀態隔離）
+- 不要在 tile painter 中做同步 I/O

@@ -1,50 +1,79 @@
 # 搜尋與探索
 
-## 現有責任
+## 目前職責
 
-多書源並行搜尋（依關鍵字跨所有啟用書源搜尋書籍）與探索功能（依書源 Explore 規則分類瀏覽書目）。搜尋結果可直接加入書架。
+多書源並行搜尋與書源探索分類。Search 模組接受關鍵字，並行呼叫所有啟用書源的搜尋規則，聚合結果；Explore 模組載入書源的探索分類（ExploreKind），顯示對應的書籍列表。修改搜尋行為或探索頁，從這裡開始。
 
 ## 範圍
 
-- **搜尋**：`lib/features/search/`（搜尋頁、provider、model）
-- **探索**：`lib/features/explore/`（探索頁、探索展示頁、provider）
-- **資料模型**：`lib/core/models/search_book.dart`、`search_keyword.dart`
-- **DAO**：`lib/core/database/dao/search_book_dao.dart`、`search_history_dao.dart`、`search_keyword_dao.dart`
-- **測試**：`test/features/search/`、`test/features/explore/`
+| 路徑 | 職責 |
+|---|---|
+| `lib/features/search/` | 搜尋 UI（SearchPage）、SearchProvider、SearchBook 模型、搜尋結果 widget |
+| `lib/features/search/models/` | SearchBook（搜尋結果條目）、SearchHistory（歷史） |
+| `lib/features/search/widgets/` | 搜尋結果列表項目 widget |
+| `lib/features/explore/` | 探索 UI（ExplorePage、ExploreShowPage）、ExploreProvider、ExploreShowProvider |
+| `lib/features/explore/widgets/` | 探索分類 UI widget |
+| `lib/core/database/dao/search_book_dao.dart` | SearchBook 結果快取 DAO |
+| `lib/core/database/dao/search_history_dao.dart` | 搜尋歷史 DAO |
+| `lib/core/database/dao/search_keyword_dao.dart` | 搜尋關鍵字建議 DAO |
+| `lib/core/models/search_book.dart` | SearchBook 模型 |
 
-## 依賴與下游影響
+測試：`test/features/search/`、`test/features/explore/`
 
-- 上游：**規則引擎**（書源搜尋規則、explore URL 解析與抓取）、**書源管理**（取得啟用書源列表）、**應用基礎設施**（搜尋歷史 DAO）
-- 下游：**書架與書籍**（從搜尋結果加入書架）
-- 搜尋結果的品質完全取決於書源規則品質與規則引擎的解析正確性
+## 依賴與影響
+
+- **上游**：書源管理（取得啟用的書源列表）、規則引擎（WebBookService.searchBookAwait / getContentAwait 執行搜尋規則）
+- **下游**：書架（使用者從搜尋結果新增書籍到書架）
+- **事件**：監聽 `searchResult`（見 [event_bus](event_bus.md)）
+- **注意**：搜尋結果（SearchBook）快取到 DB，但快取策略較簡單（不清理舊結果）
 
 ## 關鍵流程
 
-1. 多書源搜尋：使用者輸入關鍵字 → `SearchProvider` 取得啟用書源 → 並行呼叫規則引擎的 `BookListParser` → 匯整結果顯示
-2. 探索分類：`ExploreProvider` 載入書源 explore kinds → 使用者選分類 → `ExploreUrlParser` 建構 URL → 規則引擎抓取書目列表
-3. 搜尋歷史：搜尋後寫入 `search_history_dao`；`search_keyword_dao` 儲存搜尋關鍵字統計
+**多書源並行搜尋**：
+```
+SearchPage → SearchProvider.search(keyword)
+  → 取得所有啟用的 BookSource
+  → 並行呼叫 WebBookService.searchBookAwait(source, keyword)（每個書源一個 Future）
+  → 聚合結果 → SearchBookDao.insertOrReplace()（快取）
+  → SearchProvider 通知 UI 更新
+  → 使用者選取搜尋結果 → 書籍詳情 / 加入書架
+```
 
-## 變更入口
+**探索分類載入**：
+```
+ExplorePage → ExploreProvider
+  → 取得書源的 ExploreKind 列表（來自 BookSource.exploreUrl）
+  → 使用者選取分類 → ExploreShowPage
+    → ExploreShowProvider.load()
+      → explore_url_parser.dart（展開分頁 URL）
+      → WebBookService.getContentAwait（執行探索規則）
+    → 顯示書籍列表
+```
 
-- 搜尋 UI 或排序邏輯：`search_page.dart`、`search_provider.dart`
-- 搜尋結果模型：`search_book.dart`、`search_book_dao.dart`
-- 探索分類 UI：`explore_page.dart`、`explore_show_page.dart`
+## 常見修改入口
 
-## 變更路由
+- 搜尋 UI（結果排序、去重、顯示格式）→ `lib/features/search/search_page.dart`、`SearchProvider`
+- 搜尋並發控制 → `SearchProvider`（控制並行 Future 數量）
+- 探索分類展示 → `lib/features/explore/explore_page.dart`
+- 探索規則分頁 URL 展開 → `lib/core/engine/explore_url_parser.dart`
+- 搜尋歷史 → `lib/core/database/dao/search_history_dao.dart`
 
-- 修改搜尋並行邏輯：`search_provider.dart` → `test/features/search/search_provider_test.dart`
-- 修改探索抓取：`explore_provider.dart`、`explore_show_provider.dart` → `test/features/explore/`
+## 修改路線
 
-## 已知風險
+- 修改搜尋並發策略：SearchProvider 直接控制 Future 並行數；注意書源的 `concurrentRate` 限制（在 NetworkService 中）
+- 修改探索分頁邏輯：ExploreShowProvider 的分頁依賴 `explore_url_parser.dart` 展開的 URL 序列
 
-- 並行多書源搜尋沒有統一的 timeout 機制；慢速書源可能導致 UI 長時間等待
-- 搜尋結果依賴書源規則，書源失效或規則變動時結果為空不易與 bug 區分
+## Known Risks
 
-## 參考備註
+- 多書源並行搜尋沒有全局超時；慢書源會讓結果延遲出現（但不阻塞其他書源）
+- SearchBook 結果快取（SearchBookDao）沒有 TTL，舊結果可能和書源規則變更後的新結果並存
+- 探索分類的 ExploreKind 來自書源 JSON，若書源更新了分類但 App 未重新載入書源，UI 會顯示舊分類
 
-無（Standalone 模式）
+## Reference Notes
 
-## 禁止事項
+None（standalone 模式）
 
-- 不要在搜尋模組直接解析 HTML；應透過規則引擎
-- 不要在搜尋模組管理書源的啟用/停用狀態；那是書源管理的責任
+## Do Not Do
+
+- 不要把 RSS 訂閱、漫畫分類或 WebDAV 探索功能加入這個模組（超出產品範圍）
+- 不要在搜尋結果中做同步渲染（搜尋是非同步的，結果逐步呈現）

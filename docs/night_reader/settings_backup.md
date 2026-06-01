@@ -1,52 +1,86 @@
 # 設定與備份
 
-## 現有責任
+## 目前職責
 
-應用設定（閱讀偏好、TTS 設定、點擊區域設定、其他設定）、備份匯出（書架、書源、設定、閱讀紀錄打包為 zip）、還原匯入、繁簡轉換（OpenCC）設定、書籍匯出。
+應用設定（閱讀器外觀、字體、TTS 參數、隱私、其他偏好）、備份匯出（書架+書源+規則打包為 JSON/ZIP）、還原匯入、書架交換（Legado 格式相容）、繁簡轉換。修改設定頁面或備份格式，從這裡開始。
 
 ## 範圍
 
-- **設定 UI**：`lib/features/settings/`（`settings_page.dart`、`settings_provider.dart`、`reading_settings_page.dart`、`tts_settings_page.dart`、`click_action_config_page.dart`、`other_settings_page.dart`、`backup_settings_page.dart`、`data_privacy_settings_page.dart`）
-- **備份服務**：`lib/core/services/backup_service.dart`
-- **還原服務**：`lib/core/services/restore_service.dart`
-- **書籍匯出**：`lib/core/services/export_book_service.dart`
-- **繁簡轉換**：`lib/core/services/chinese_utils.dart`（opencc 資料在 `assets/opencc/`）
-- **更新忽略清單**：`lib/core/services/update_ignore_store.dart`
-- **測試**：`test/features/settings/`、`test/backup_service_test.dart`
+| 路徑 | 職責 |
+|---|---|
+| `lib/features/settings/` | 設定主頁（SettingsPage）、SettingsProvider（全局設定狀態） |
+| `lib/features/settings/provider/` | SettingsProvider（SharedPreferences 讀寫，通知全局）|
+| `lib/features/settings/` pages | ReadingSettingsPage（字體、字色、背景、行距）、TtsSettingsPage（語速、音調）、BackupSettingsPage（備份/還原 UI）、PrivacySettingsPage、OtherSettingsPage 等 |
+| `lib/core/services/backup_service.dart` | 備份：將 Book + BookSource + ReplaceRule + Bookmark 等打包 |
+| `lib/core/services/restore_service.dart` | 還原：從備份檔解壓並寫回 DB |
+| `lib/core/services/export_book_service.dart` | 匯出書籍為 TXT |
+| `lib/core/services/bookshelf_exchange_service.dart` | 書架交換（Legado 格式書架 JSON 匯入/匯出）|
+| `lib/core/services/chinese_utils.dart` | 繁簡轉換（OpenCC 資料）|
+| `lib/core/config/app_config.dart` | 靜態設定鏡像（SettingsProvider 的部分設定同步到這裡，供 core 層使用）|
+| `lib/core/constant/prefer_key.dart` | SharedPreferences 鍵名常數 |
 
-## 依賴與下游影響
+測試：`test/features/settings/`、`test/core/services/backup_service_test.dart`（含 `test/backup_service_test.dart`）、`test/core/services/chinese_utils_test.dart`、`test/core/services/bookshelf_exchange_service_test.dart`
 
-- 上游：**應用基礎設施**（`shared_preferences` 儲存設定、資料庫所有 DAO 供備份用）
-- 下游：**閱讀器 V2**（閱讀設定影響排版參數）、**書架與書籍**（備份包含書架資料）
-- 備份格式（zip 結構與 JSON schema）變更需確保向後相容，已有備份的使用者才能正常還原
+## 依賴與影響
+
+- **上游**：應用基礎設施（SharedPreferences、AppDatabase）
+- **下游**：閱讀器 V2（讀取 SettingsProvider 的字體/主題/TTS 設定）、書架（備份還原後更新書架）、規則引擎（AppConfig.replaceEnableDefault、readerPageAnim）
+- **事件**：發出 `upConfig`（設定變更，供 Reader V2 重新載入設定）（見 [event_bus](event_bus.md)）
+- **外部**：`assets/opencc/`（繁簡轉換資料）、`file_picker`（選取備份檔）
 
 ## 關鍵流程
 
-1. 備份：使用者觸發備份 → `BackupService` 從資料庫讀取全部資料 → 序列化為 JSON → 打包為 zip → 儲存至本地或分享
-2. 還原：使用者選擇備份 zip → `RestoreService` 解壓縮 → 驗證格式 → 逐步匯入資料庫
-3. 繁簡轉換：`ChineseUtils` 載入 opencc 資料（`assets/opencc/`）→ 在需要時轉換文字
+**設定讀寫流程**：
+```
+SettingsPage（任一設定頁）→ SettingsProvider
+  → SharedPreferences.set*(key, value)
+  → notifyListeners()（所有依賴 SettingsProvider 的 widget 重建）
+  → AppConfig 靜態欄位更新（供 core 層同步使用）
+  → 發 upConfig 事件（供 Reader V2 熱更新設定）
+```
 
-## 變更入口
+**備份流程**：
+```
+BackupSettingsPage → BackupService.backup()
+  → 從 AppDatabase 讀取 Book + BookSource + ReplaceRule + Bookmark + ReadRecord
+  → 序列化為 JSON（Legado 格式相容）
+  → 打包為 ZIP → 寫入 shareExportDir()
+  → 使用者分享或儲存
+```
 
-- 新增設定項目：`settings_provider.dart` + 對應的設定頁面 + `shared_preferences` key（`lib/core/constant/prefer_key.dart`）
-- 備份格式擴充：`backup_service.dart`、`restore_service.dart`（需同時維護向後相容）
-- TTS 設定：`tts_settings_page.dart`、`settings_provider.dart`
+**還原流程**：
+```
+BackupSettingsPage → RestoreService.restore(file)
+  → 解壓 ZIP → 解析各 JSON 檔案
+  → DB upsert（不覆蓋，以 URL 為主鍵 merge）
+  → 發 upBookshelf 事件 → 書架重新載入
+```
 
-## 變更路由
+## 常見修改入口
 
-- 新增備份欄位：`backup_service.dart` 加入序列化 → `restore_service.dart` 加入反序列化（預設值處理舊備份）→ `test/backup_service_test.dart`
-- 修改設定 key：`prefer_key.dart` → 確認所有讀取該 key 的地方同步更新（grep `prefer_key`）
+- 新增設定項目 → `SettingsProvider`（新增 SharedPreferences key）+ 對應設定頁
+- 修改備份格式（新增/移除欄位）→ `backup_service.dart` + `restore_service.dart`（需同步）
+- 繁簡轉換 → `chinese_utils.dart`（替換 OpenCC 資料）
+- 書架交換格式 → `bookshelf_exchange_service.dart`（Legado JSON 格式相容）
 
-## 已知風險
+## 修改路線
 
-- 備份還原沒有版本號機制；備份格式變更後，舊備份若缺少新欄位可能還原失敗或靜默遺漏資料
-- OpenCC 資料放在 `assets/opencc/`，體積較大，修改時需確認 `pubspec.yaml` 資源宣告正確
+- 新增設定項：SettingsProvider（持久化）→ 設定頁 UI →（若需要）AppConfig 靜態欄位 → 消費方（Reader V2 等）監聽 upConfig
+- 修改備份格式：BackupService 和 RestoreService 必須同步修改；備份版本號控制（如有）需要 migration 邏輯
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- AppConfig 是靜態欄位（非響應式）；只有 Reader V2 通過 upConfig 事件熱更新，其他使用 AppConfig 的地方只在啟動時讀取
+- 備份格式與 Legado JSON 相容，但 Legado 格式本身沒有版本鎖定，書源規則欄位可能隨版本變化
+- RestoreService 的 merge 策略（以 URL 為主鍵）在書源 URL 變更時可能建立重複書源
+- 繁簡轉換的 OpenCC 資料是靜態資產，更新需要重新打包 App
 
-## 禁止事項
+## Reference Notes
 
-- 不要在備份中包含 Cookie 或認證 token；備份是可分享的，不應包含帳號敏感資料
-- 不要直接修改 opencc 二進位資料；若需更新 opencc 版本，需要完整測試繁簡轉換輸出
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要把 WebDAV 同步或雲端備份功能加入這個模組（超出產品範圍）
+- 不要讓備份格式破壞 Legado JSON 相容性（使用者可能同時在用 Legado）
+- 不要在 SettingsProvider 中做網路請求（只能讀寫 SharedPreferences）

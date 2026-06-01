@@ -1,57 +1,86 @@
 # 規則引擎
 
-## 現有責任
+## 目前職責
 
-所有書源規則的解析與執行。包含多格式解析器（HTML/CSS/XPath/JSONPath/Regex）、JS 引擎、AnalyzeRule 規則評估、AnalyzeUrl 請求建構、web_book 服務（章節列表、正文、書籍資訊抓取）。這是所有網路書源內容抓取的底層，與書源無關但被書源管理和搜尋廣泛呼叫。
+所有書源規則的解析與執行底層。接收書源定義的規則字串，對 HTML/JSON/XML 頁面執行 CSS、XPath、JSONPath、Regex、JS 選取，輸出文字或元素清單。規則解析失敗、JS 執行錯誤、書源抓取行為異常，從這裡開始。
 
 ## 範圍
 
-- **規則解析核心**：`lib/core/engine/analyze_rule.dart`、`analyze_rule/`、`rule_analyzer/`
-- **URL 建構**：`lib/core/engine/analyze_url.dart`、`explore_url_parser.dart`
-- **多格式解析器**：`lib/core/engine/parsers/`（CSS、XPath、JSONPath、Regex）
-- **JS 引擎**：`lib/core/engine/js/`（flutter_js 封裝、擴充、TTF 解析、加密工具）
-- **Web Book 服務**：`lib/core/engine/web_book/`（書單、章節列表、正文、書籍資訊解析）
-- **書籍輔助**：`lib/core/engine/book/book_help.dart`
-- **測試**：`test/core/engine/`、`test/core/models/advanced_rules_test.dart`
+主要路徑：`lib/core/engine/`
 
-## 依賴與下游影響
+| 子目錄 / 檔案 | 職責 |
+|---|---|
+| `analyze_rule.dart` + `analyze_rule/` (8 files) | 核心規則解析：AnalyzeRule 組合所有 mixin，支援 CSS/XPath/JSONPath/Regex/JS 多模式；AnalyzeRuleBase 儲存狀態（ruleData、source、content、baseUrl、page、transientVariables、caches） |
+| `analyze_url.dart` | URL 變數替換與分析；書源 URL 樣板展開 |
+| `rule_analyzer/` (5 files) | 規則字串 tokenizer：RuleAnalyzerBase、Match、Range、Split |
+| `parsers/` (8 files) | AnalyzeByCss（html/csslib）、AnalyzeByXPath（xpath_selector）、AnalyzeByJsonPath、AnalyzeByRegex |
+| `js/` (26 files) | JsEngine（flutter_js wrapper）、async_js_rewriter、js_rule_async_wrapper（Promise bridge）、encode/（Base64、Hash、Crypto）、extensions/（Network、Crypto、String、Font、File、Java 物件模擬） |
+| `web_book/` (5 files) | WebBookService（搜尋/書籍資訊/目錄/章節內容的總協調者）、BookListParser、BookInfoParser、ChapterListParser、ContentParser |
+| `explore_url_parser.dart` | 探索規則 URL 生成 |
+| `book/book_help.dart` | 書籍工具函式 |
+| `reader/chinese_text_converter.dart` | 繁簡轉換（不依賴 JS） |
+| `app_event_bus.dart` | 全域事件流 singleton（見 [event_bus](event_bus.md)） |
 
-- 上游：`lib/core/models/book_source.dart`（書源規則定義）、`lib/core/services/http_client.dart`（網路請求）、`lib/core/services/cookie_store.dart`（Cookie）
-- 下游：**書源管理**（驗證、偵錯）、**搜尋與探索**（並行搜尋）、**下載與快取**（章節抓取）、**閱讀器 V2**（間接透過 chapter content pipeline）
-- 修改解析器或 JS 擴充會影響所有依賴書源解析的功能
+測試：`test/core/engine/`（30+ 測試檔案，覆蓋各解析器、JS 引擎、integration）
+
+## 依賴與影響
+
+- **上游輸入**：BookSource 模型中的規則字串（JSON 格式）、NetworkService 取得的 HTML/JSON 頁面
+- **下游影響**：書源管理（CheckSourceService 呼叫 WebBookService）、閱讀器 V2（ChapterContentPreparationPipeline 呼叫 WebBookService）、下載與快取、搜尋、探索
+- **外部依賴**：`flutter_js`（JS 執行）、`html`/`csslib`/`xpath_selector`/`json_path`（解析）
 
 ## 關鍵流程
 
-1. 書源抓取：`AnalyzeUrl.getRequestParam()` → HTTP 請求 → 回應傳入對應解析器 → `AnalyzeRule.getString/getList()` 提取目標欄位
-2. JS 規則執行：`JsEngine.evaluate()` → `JsExtensions` 注入 Java 物件橋接（網路、加密、字串工具）
-3. 探索 URL 建構：`ExploreUrlParser` 解析書源 exploreUrl 欄位並產生分頁 URL
+**規則執行流程**：
+```
+BookSource 規則字串
+  → RuleAnalyzer（tokenize 規則字串）
+  → AnalyzeRule（依前綴分派：CSS/XPath/JSONPath/Regex/JS）
+    → AnalyzeByCss / AnalyzeByXPath / AnalyzeByJsonPath / AnalyzeByRegex
+    → JsEngine.evalJSAsync（JS 規則，含 async rewriter）
+  → 輸出：字串 / 元素清單
+```
 
-## 變更入口
+**書源抓取流程**（WebBookService）：
+```
+呼叫方（書源管理/閱讀器/下載）
+  → WebBookService.searchBookAwait / getBookInfoAwait / getChapterListAwait / getContentAwait
+    → AnalyzeUrl（展開 URL 樣板）
+    → NetworkService.dio（發 HTTP 請求）
+    → Parser（BookListParser / BookInfoParser / ChapterListParser / ContentParser）
+      → AnalyzeRule（套用規則）
+```
 
-- 新增/修改解析語法：`lib/core/engine/analyze_rule/analyze_rule_*.dart`
-- JS 擴充功能：`lib/core/engine/js/extensions/`
-- Web 書籍抓取邏輯：`lib/core/engine/web_book/`
-- 加密/編碼工具：`lib/core/engine/js/encode/`
+**JS async 橋接**：sync 規則字串由 AsyncJsRewriter 自動改寫為 async；使用 `__ruleDone` sentinel 橋接 Promise 結果。
 
-## 變更路由
+## 常見修改入口
 
-- 修改 CSS/XPath/JSONPath/Regex 解析：對應解析器檔案 → 確認 `test/core/engine/parsers/` 測試通過
-- 修改 AnalyzeRule 核心語義：`analyze_rule_base.dart` + `analyze_rule_element.dart` → 回歸 `test/core/engine/analyze_rule_test.dart`、`engine_integration_test.dart`
-- 修改 JS 引擎或擴充：`js_engine.dart`、對應 extension 檔案 → `test/core/engine/js/`
+- 修改規則解析邏輯 → `lib/core/engine/analyze_rule/analyze_rule.dart`（主類）或對應 mixin
+- 新增 JS 原生擴充（如新的加解密方法）→ `lib/core/engine/js/extensions/`
+- 修改 URL 展開邏輯 → `lib/core/engine/analyze_url.dart`
+- 修改書源抓取協調 → `lib/core/engine/web_book/web_book_service.dart`
+- 新增解析器（如新的選擇器類型）→ `lib/core/engine/parsers/`
 
-## 已知風險
+## 修改路線
 
-- flutter_js 是 Dart 橋接層，效能受 flutter_js 版本影響；JS 執行為同步阻塞，複雜腳本可能卡 UI
-- CSS 選擇器透過 `html` + `csslib`，與瀏覽器行為有細微差異
-- TTF 字型反混淆邏輯（`query_ttf.dart`）依賴字型二進位格式，易受字型版本影響
-- `async_js_rewriter.dart` 將同步 JS 改寫為 async，改寫規則有邊界情形
+- 修改 AnalyzeRule：所有呼叫端（WebBookService 的四個方法）都依賴它；修改後執行 `test/core/engine/analyze_rule_test.dart` 與 `test/core/engine/engine_integration_test.dart`
+- 修改 JS 引擎：JS 擴充的 Dart 側與 JS 側必須同步；執行 `test/core/engine/js/` 下所有測試
+- 修改 WebBookService：書源管理、閱讀器的 ChapterContentPreparationPipeline、下載服務都呼叫它；修改後執行 `test/core/engine/web_book_service_test.dart`
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- JS 引擎（flutter_js）的 async rewriter 需維護 `__ruleDone` sentinel 協議；JS 規則若使用非預期的全域變數名稱可能衝突
+- XPath 和 CSS 解析依賴第三方套件，書源若使用進階選擇器可能靜默失敗
+- JS 擴充的 Java 物件模擬（`lib/core/engine/js/extensions/java.dart`）對 Legado 書源相容性至關重要，不能輕易修改
+- 規則執行沒有全域超時保護；JS 無限迴圈的書源會卡住抓取
+- `AnalyzeRuleBase.transientVariables` 和 `caches` 的生命週期與一次抓取請求繫結，多執行緒下注意 shared state
 
-## 禁止事項
+## Reference Notes
 
-- 不要在規則引擎層快取書源業務狀態（如書源啟用/停用）；那是書源管理的責任
-- 不要直接在引擎層發起 UI 更新；引擎層為純計算與 I/O 層
-- 不要引入 Legado 特有的漫畫、RSS 解析格式
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要把 Legado 不支援的規則語法加入解析器（會破壞書源相容性）
+- 不要在 JS 擴充中使用平台特定 API（必須在 Dart 側橋接）
+- 不要讓規則執行結果快取跨請求共用（每次抓取應是獨立狀態）

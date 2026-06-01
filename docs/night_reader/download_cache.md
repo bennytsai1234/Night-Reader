@@ -1,59 +1,100 @@
 # 下載與快取
 
-## 現有責任
+## 目前職責
 
-章節批次離線下載、下載進度管理、章節內容快取（包含網路書籍與本地書籍的章節內容儲存）、本地書籍格式匯入與解析（TXT/EPUB/UMD）、章節內容排程與預備（供閱讀器 V2 使用）。
+章節批次下載（離線閱讀）、下載任務管理 UI、快取清理、本地書籍（TXT/EPUB/UMD）匯入解析、章節內容排程預備（預讀管線）。修改離線功能、本地書籍支援或章節預讀行為，從這裡開始。
 
 ## 範圍
 
-- **下載服務**：`lib/core/services/download_service.dart`、`download/`（executor、scheduler、base）
-- **下載管理頁**：`lib/features/cache_manager/download_manager_page.dart`
-- **章節內容排程**：`lib/core/services/chapter_content_preparation_pipeline.dart`、`chapter_content_scheduler.dart`
-- **章節內容儲存**：`lib/core/services/reader_chapter_content_storage.dart`、`reader_chapter_content_store.dart`
-- **本地書籍解析**：`lib/core/local_book/`（`txt_parser.dart`、`umd_parser.dart`、`local_book_formats.dart`）
-- **本地書籍服務**：`lib/core/services/local_book_service.dart`、`epub_service.dart`
-- **快取管理**：`lib/core/services/cache_manager.dart`（封面快取清理）
-- **資料模型**：`lib/core/models/download_task.dart`、`reader_chapter_content.dart`、`cache.dart`
-- **DAO**：`lib/core/database/dao/download_dao.dart`、`reader_chapter_content_dao.dart`、`cache_dao.dart`、`chapter_dao.dart`
-- **測試**：`test/download_executor_test.dart`、`test/features/reader_v2/`（reader_v2_content_transformer 涵蓋 content pipeline）、`test/core/local_book/`
+| 路徑 | 職責 |
+|---|---|
+| `lib/core/services/download_service.dart` | 下載服務 facade（啟動/暫停/取消下載任務） |
+| `lib/core/services/download/` | DownloadExecutor（任務執行）、DownloadQueue（任務隊列）、DownloadWorker（單章節抓取） |
+| `lib/features/cache_manager/` | 下載管理 UI（CacheManagerPage）；顯示下載進度、已快取章節數 |
+| `lib/core/local_book/` | TxtParser（高效能 TXT 解析，byte offset 追蹤）、UmdParser（UMD 格式）、LocalBookFormats（格式偵測） |
+| `lib/core/services/epub_service.dart` | EPUB 解析（epub_x 套件封裝） |
+| `lib/core/services/local_book_service.dart` | 本地書籍（TXT/UMD/EPUB）匯入、章節提取 |
+| `lib/core/services/chapter_content_scheduler.dart` | 章節預取排程（Reader V2 呼叫，背景預讀） |
+| `lib/core/services/chapter_content_preparation_pipeline.dart` | 章節內容取得與清洗管線（書源抓取 → 替換規則 → 磁碟快取） |
+| `lib/core/services/reader_chapter_content_storage.dart` | 章節內容磁碟快取（壓縮儲存） |
+| `lib/core/services/reader_chapter_content_store.dart` | 章節內容記憶體快取 |
+| `lib/core/database/dao/download_dao.dart` | DownloadTask DAO |
+| `lib/core/database/dao/reader_chapter_content_dao.dart` | ReaderChapterContent DAO（章節內容的 DB 索引）|
+| `lib/core/models/download_task.dart` | DownloadTask 模型 |
+| `lib/core/database/dao/chapter_dao.dart` | Chapter DAO（章節列表）|
 
-## 依賴與下游影響
+測試：`test/download_executor_test.dart`、`test/core/local_book/`（TXT parser、UMD import）、`test/core/services/epub_service_test.dart`
 
-- 上游：**規則引擎**（章節正文抓取）、**書源管理**（取得書源規則）、**書架與書籍**（取得要下載的書籍/章節列表）、**應用基礎設施**（儲存路徑、DAO、workmanager 背景任務）
-- 下游：**閱讀器 V2**（透過 `chapter_content_preparation_pipeline` 提供即時章節內容）
-- 修改快取格式或 DAO 結構會影響閱讀器 V2 的章節載入
+## 依賴與影響
+
+- **上游**：規則引擎（ChapterContentPreparationPipeline → WebBookService 抓取章節）、書源管理（取得書源規則）
+- **下游**：閱讀器 V2（content/ 層透過 ChapterContentPreparationPipeline 取得章節內容）、書架（更新已快取章節數的顯示）
+- **事件**：發出 `upDownload`、`upDownloadState`、`saveContent`（見 [event_bus](event_bus.md)）
+- **背景任務**：DownloadService 使用 workmanager 在背景執行（需 Android 電池優化豁免）
 
 ## 關鍵流程
 
-1. 批次下載：使用者選擇章節範圍 → `DownloadService` 建立 `DownloadTask` → `DownloadScheduler` 排程 → `DownloadExecutor` 並行抓取 → 儲存至 `ReaderChapterContentStorage`
-2. 閱讀時預載：`ChapterContentPreparationPipeline` 偵測閱讀位置 → 預先抓取前後章節 → 存入 `ReaderChapterContentStore`
-3. 本地 TXT 匯入：`LocalBookService` 識別格式 → `TxtParser` 分析目錄結構 → 寫入資料庫章節列表
-4. 本地 EPUB 匯入：`EpubService` 解析 epubx → 提取章節與封面 → 寫入資料庫
+**章節批次下載**：
+```
+使用者發起下載（CacheManagerPage / BookDetailPage）
+  → DownloadService.startDownload(book)
+    → DownloadQueue.enqueue(chapters)
+    → DownloadExecutor.run()
+      → 按書源 concurrentRate 並行 DownloadWorker
+        → ChapterContentPreparationPipeline.prepare()
+          → WebBookService.getContentAwait（書源抓取）
+          → 替換規則清洗
+          → ReaderChapterContentStorage.save()（壓縮寫入磁碟）
+    → 發 upDownload 事件 → CacheManagerPage 更新進度
+```
 
-## 變更入口
+**Reader V2 章節預讀**：
+```
+Reader V2 runtime/（預讀排程器）
+  → ChapterContentScheduler.scheduleNext()
+    → ChapterContentPreparationPipeline.prepare(chapter)
+      → ReaderChapterContentStore（記憶體快取）→ 命中直接返回
+      → ReaderChapterContentStorage（磁碟快取）→ 命中解壓返回
+      → WebBookService（書源抓取）→ 快取後返回
+```
 
-- 下載並行邏輯：`lib/core/services/download/download_executor.dart`
-- 章節預載排程：`chapter_content_preparation_pipeline.dart`
-- 本地書籍解析格式：`lib/core/local_book/`
+**本地書籍匯入**：
+```
+使用者選取檔案（file_picker）
+  → LocalBookService.importLocalBook(file)
+    → LocalBookFormats.detect()
+    → TxtParser / UmdParser / EpubService（依格式解析）
+    → 建立 Book 紀錄 + Chapter 列表 → BookDao / ChapterDao
+```
 
-## 變更路由
+## 常見修改入口
 
-- 修改 TXT 解析：`txt_parser.dart` → `test/core/local_book/txt_parser_test.dart`
-- 修改 UMD 解析：`umd_parser.dart` → `test/core/local_book/umd_import_test.dart`
-- 修改下載排程：`download_scheduler.dart`、`download_executor.dart` → `test/download_executor_test.dart`
+- 下載執行邏輯（並發數、重試策略）→ `lib/core/services/download/download_executor.dart`
+- 下載 UI → `lib/features/cache_manager/download_manager_page.dart`
+- TXT 解析（章節分割規則）→ `lib/core/local_book/txt_parser.dart` + TxtTocRuleDao
+- EPUB 解析 → `lib/core/services/epub_service.dart`
+- 章節內容快取策略 → `lib/core/services/reader_chapter_content_storage.dart`
 
-## 已知風險
+## 修改路線
 
-- `workmanager` 背景任務在 Android 的執行時機受系統電池優化影響，難以在測試中穩定模擬
-- TXT 目錄解析使用 Regex 模式匹配，不規則格式書籍可能解析失敗或產生錯誤章節數
-- 大量並行下載可能造成 Drift 資料庫寫入瓶頸
-- EPUB 解析依賴 `epubx`，非標準 EPUB 檔案可能解析不完整
+- 修改 ChapterContentPreparationPipeline：Reader V2 和 DownloadService 共用這條管線；快取邏輯、替換規則套用、磁碟格式變更都在這裡
+- 修改 ReaderChapterContentStorage 的儲存格式：需要遷移舊快取（不可逆，升級到決策門）
+- 修改 DownloadExecutor 的並發控制：注意 NetworkService 的 concurrentRate per source
 
-## 參考備註
+## Known Risks
 
-無（Standalone 模式）
+- 背景下載依賴 workmanager，Android 電池優化可能殺死背景任務；部分裝置必須手動豁免
+- ReaderChapterContentStorage 使用壓縮（dart:io compress）；格式變更需要遷移舊資料
+- TXT 解析的章節分割使用 TxtTocRule，規則錯誤會導致整本書無法正常分章
+- 本地書籍（EPUB）在 App 更新後路徑可能失效（沒有重新解析機制）
+- DownloadQueue 不持久化（App 重啟後下載進度清零），只有 DB 中的 DownloadTask 紀錄存活
 
-## 禁止事項
+## Reference Notes
 
-- 不要在下載模組直接修改閱讀器 V2 的 runtime 狀態；透過 content pipeline 介面溝通
-- 不要加入 Mobi/PDF 格式支援
+None（standalone 模式）
+
+## Do Not Do
+
+- 不要在主執行緒上執行 TXT/UMD/EPUB 解析（改用 compute / isolate）
+- 不要引入 Mobi 或 PDF 格式支援（超出產品範圍）
+- 不要讓 ChapterContentPreparationPipeline 有副作用之外的長時間同步阻塞
