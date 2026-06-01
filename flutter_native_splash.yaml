@@ -1,0 +1,18 @@
+flutter_native_splash:
+  # Light mode: AppPalette.paper200 (#F4EFE3)
+  color: "#F4EFE3"
+  # Dark mode: AppPalette.ink600 (#1A1612)
+  color_dark: "#1A1612"
+
+  # 不放 icon，避免原生 splash icon 消失後 Flutter 進場動畫 opacity=0 的跳躍感
+
+  android: true
+  ios: false
+  web: false
+
+  # Android 12+ SplashScreen API：背景色對齊，系統自動使用 ic_launcher 自適應圖示
+  android_12:
+    color: "#F4EFE3"
+    color_dark: "#1A1612"
+    icon_background_color: "#F4EFE3"
+    icon_background_color_dark: "#1A1612"

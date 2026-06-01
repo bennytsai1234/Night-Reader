@@ -18,6 +18,7 @@ import 'features/welcome/splash_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -54,7 +55,8 @@ void main() {
 }
 
 Future<void> _startApp() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
 
   // 自定義錯誤畫面，避免黑屏
