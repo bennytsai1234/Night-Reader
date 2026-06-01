@@ -13,7 +13,7 @@ Future<File> _createMinimalEpub({
 
   void add(String name, String content) {
     final bytes = utf8.encode(content);
-    archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    archive.add(ArchiveFile(name, bytes.length, bytes));
   }
 
   add('mimetype', 'application/epub+zip');
@@ -67,7 +67,7 @@ Future<File> _createMinimalEpub({
   <body><h1>第一章</h1><p>$chapterBody</p></body>
 </html>''');
 
-  final zipBytes = ZipEncoder().encode(archive)!;
+  final zipBytes = ZipEncoder().encode(archive);
   final file = File(filePath);
   await file.writeAsBytes(zipBytes, flush: true);
   return file;

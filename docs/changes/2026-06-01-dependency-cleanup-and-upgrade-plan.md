@@ -1,7 +1,57 @@
 # 依賴版本總清算與逐批升級計畫
 
-> 本文件為**工程計畫草稿**，只規劃、不執行；建立時不修改任何程式碼、不 commit。
-> 每個批次實際動手前，請再走一次 before/after 確認。
+> 本文件為**工程計畫草稿**。下方「執行進度與現況」記錄已實際執行的部分。
+
+---
+
+## ⚠️ 執行進度與現況（更新於 2026-06-02）
+
+### 已 commit/push 的兩個版本（但 CI build 皆失敗）
+
+| 版本 | commit | 內容 | CI build |
+|---|---|---|---|
+| v0.2.98 | `e01898cf` | Gradle 8.14 修復 + 批次1 + 本文件 | ❌ 卡 flutter_native_splash 2.2.16 編譯錯誤 |
+| v0.2.99 | `46371e2e` | flutter_native_splash → 2.4.4（試修 splash） | ❌ 2.4.4 仍未修同一錯誤 |
+
+**working tree 目前停在 v0.2.99（`46371e2e`），乾淨可編譯。批次4 已開始（升好依賴）但應使用者要求回退。**
+
+### 已驗證生效的修復（CI 的 analyze/test 步驟已全綠）
+- ✅ **Gradle wrapper `8.14.0` → `8.14`**：修好前 v0.2.95~97 連續 404 的根因（8.14.0 版本不存在）。
+- ✅ **批次1**：drift/drift_dev 2.31→2.33、drift_flutter 0.2→0.3，移除**直接依賴** `sqlite3_flutter_libs`，SQLite 改由 `sqlite3` 3.3.2 native assets 自動 bundle。本地 analyze + 655 test 全過。
+  - 連帶修 3 個 DB 測試（`test/core/database/{database_optimization,read_record_dao,replace_rule_dao}_test.dart`）：sqlite3 3.x 移除了 `package:sqlite3/open.dart`，刪掉各檔 `setUpAll` 內的 `open.overrideFor` 區塊與相關 import 即可（native assets 會自動載入）。
+  - ⚠️ `sqlite3_flutter_libs` 仍以 `0.6.0+eol` 空殼被 drift_flutter 間接依賴（無害），另冒出 `sqlcipher_flutter_libs 0.7.0+eol` 空殼。要完全消除須等 drift_flutter 上游清理。
+
+### 🔑 關鍵發現（修正原計畫「四條鏈獨立」的錯誤）
+原計畫判斷 splash 鏈與 archive/xml 鏈獨立，**實測是錯的**，真正耦合鏈：
+```
+flutter_native_splash 2.4.6+  →  image ^4.5.4  →  archive ^4.0.2 + xml ^7.0.1
+```
+- flutter_native_splash **2.2.16 與 2.4.4 在新 AGP 8.11.1 下都編譯失敗**（`android.os.Build does not exist`）。根因：plugin 的 `build.gradle` 用條件式 namespace + 舊 AGP 7.1.2 + compileSdk 31。
+- **2.4.6 才修**（changelog：「Sets Android namespace. Fixes #755」），但 2.4.6+ 綁 image 4.5.4 → 強制 archive 4.x + xml 7.x。
+- **結論：修 splash 編譯錯誤與批次4（archive/xml 升級）綁死，無法分開做。** 這是 v0.2.95 起 release 一直失敗的最終根因。
+
+### ▶️ 接續批次4 的完整步驟（已選定此路線）
+
+依賴方向已本地驗證可解析：splash 2.4.8 + archive 4.0.9 + xml 7.0.1 + image 4.9.1（`flutter pub get` 成功）。
+
+1. **改 pubspec 3 行**：`archive: ^3.4.0`→`^4.0.9`；`xml: ^6.5.0`→`^7.0.1`；`flutter_native_splash: ">=2.4.4 <2.4.6"`（含註解）→`^2.4.8`（移除該註解）。
+2. **改 archive 4.x API**。已知 breaking：`decodeBuffer`→`decodeStream`、`InputStream`→`InputMemoryStream`、`OutputStream`→`OutputMemoryStream`、`ZipEncoder.encode` autoClose 預設改 false。專案實際用法與位置：
+   - `ZipDecoder().decodeBytes(bytes)`：`restore_service.dart:44`、`epub_service.dart:89`、`archive_utils.dart:39/68/145/161`、`js_file_extensions.dart:110`、`js_network_extensions.dart:444`
+   - `GZipEncoder().encode(data)!`：`archive_utils.dart:82`
+   - `GZipDecoder().decodeBytes(data)`：`archive_utils.dart:87`
+   - `Archive()` + `archive.addFile(ArchiveFile(name, len, data))`：`archive_utils.dart:92-94/99-103/109-124`
+   - `ZipEncoder().encode(archive)!`：`archive_utils.dart:94/103/129`
+   - `ArchiveFile?` / `ArchiveFile f`：`epub_service.dart:91/103`
+   - ⚠️ 先查證 archive 4.0.9 的 `ZipDecoder.decodeBytes` 是否保留、`ZipEncoder.encode` 回傳型別（能否續用 `!`）、`ArchiveFile(name, length, content)` 建構子是否改變，再動手。
+   - 受影響檔（共 5 個有實際 archive 呼叫）：`lib/core/utils/archive_utils.dart`（最多）、`lib/core/services/epub_service.dart`、`lib/core/services/restore_service.dart`、`lib/core/engine/js/extensions/js_file_extensions.dart`、`lib/core/engine/js/extensions/js_network_extensions.dart`。`backup_service.dart`、`encode_utils_hash.dart` grep 未見 archive 呼叫，執行時確認。
+3. **xml 7.x**：主要 breaking 是移除 `XmlOwned`/`XmlParent` 改用 mixins；`epub_service.dart` 用的 `XmlDocument.parse`/`findAllElements` 等常用 API 大概率不受影響，靠 analyze 驗證。
+4. **本地驗證**：`flutter analyze` + `flutter test`，**重點回歸 EPUB 匯入、備份匯出/還原往返、JS 引擎 zip 擴充**。
+5. **重發**：bump 0.2.99 → **0.2.100**，commit + push + tag。
+
+### 失敗 tag 處理
+v0.2.98、v0.2.99 的 GitHub release 未成功發布（build 失敗，Publish 步驟沒執行）。完成批次4 後用新版本號重發即可；失敗的 tag 可保留作記錄，或 `gh release delete vX.Y.Z --cleanup-tag` 清除。
+
+---
 
 ## 任務類型
 

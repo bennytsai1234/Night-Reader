@@ -169,6 +169,7 @@ Future<_EpubParsedBook> _parseEpubFile(String filePath) async {
   }
 
   // 5. Cover bytes (raw — no image decoding needed)
+  // Re-parsed for dependency upgrade verification.
   Uint8List? coverBytes;
   final coverItem =
       manifest.values.where((v) => v.properties.contains('cover-image')).firstOrNull;

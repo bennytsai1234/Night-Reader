@@ -79,7 +79,7 @@ class ArchiveUtils {
 
   /// GZIP 壓縮
   static List<int> gzip(List<int> data) {
-    return GZipEncoder().encode(data)!;
+    return GZipEncoder().encode(data);
   }
 
   /// GZIP 解壓
@@ -90,17 +90,17 @@ class ArchiveUtils {
   /// 將位元組陣列包裝成單個檔案的 ZIP
   static List<int> zipByteArray(List<int> data, String fileName) {
     final archive = Archive();
-    archive.addFile(ArchiveFile(fileName, data.length, data));
-    return ZipEncoder().encode(archive)!;
+    archive.add(ArchiveFile(fileName, data.length, data));
+    return ZipEncoder().encode(archive);
   }
 
   /// 將多個位元組陣列包裝成 ZIP
   static List<int> byteArraysToZip(Map<String, List<int>> files) {
     final archive = Archive();
     files.forEach((name, data) {
-      archive.addFile(ArchiveFile(name, data.length, data));
+      archive.add(ArchiveFile(name, data.length, data));
     });
-    return ZipEncoder().encode(archive)!;
+    return ZipEncoder().encode(archive);
   }
 
   /// 壓縮多個檔案/資料夾為 ZIP
@@ -111,7 +111,7 @@ class ArchiveUtils {
         final file = File(path);
         if (file.existsSync()) {
           final bytes = await file.readAsBytes();
-          archive.addFile(ArchiveFile(p.basename(path), bytes.length, bytes));
+          archive.add(ArchiveFile(p.basename(path), bytes.length, bytes));
         } else if (Directory(path).existsSync()) {
           final dir = Directory(path);
           await for (final entity in dir.list(recursive: true)) {
@@ -121,13 +121,12 @@ class ArchiveUtils {
                 entity.path,
                 from: dir.parent.path,
               );
-              archive.addFile(ArchiveFile(relativePath, bytes.length, bytes));
+              archive.add(ArchiveFile(relativePath, bytes.length, bytes));
             }
           }
         }
       }
       final zipData = ZipEncoder().encode(archive);
-      if (zipData == null) return false;
       await File(zipPath).writeAsBytes(zipData);
       return true;
     } catch (e) {
