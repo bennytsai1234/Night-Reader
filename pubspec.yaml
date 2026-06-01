@@ -1,7 +1,7 @@
 name: night_reader
 description: "夜讀 - Night Reader, a Flutter novel reader app"
 publish_to: 'none'
-version: 0.2.98+112
+version: 0.2.99+113
 homepage: https://github.com/bennytsai1234/night-reader
 repository: https://github.com/bennytsai1234/night-reader
 issue_tracker: https://github.com/bennytsai1234/night-reader/issues
@@ -106,7 +106,8 @@ dependencies:
   archive: ^3.4.0
   webview_flutter_wkwebview: ^3.23.0
   webview_flutter_android: ^4.10.1
-  flutter_native_splash: ^2.2.16
+  # 鎖 <2.4.6:2.4.6+ 依賴 image ^4.5.4，會連帶要求 archive 4.x / xml 7.x；升級前須先完成 archive/xml 遷移
+  flutter_native_splash: ">=2.4.4 <2.4.6"
   synchronized: ^3.3.1
   get_it: ^9.2.1
   logger: ^2.6.2
