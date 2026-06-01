@@ -8,7 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 import 'main_page.dart';
 import 'startup_failure_panel.dart';
 
@@ -128,7 +128,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 3600),
     )..repeat(reverse: true);
 
-    FlutterNativeSplash.remove();
+
     _entranceController.forward();
     _initApp();
   }
