@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -78,12 +79,7 @@ class ChapterContentPreparationPipeline {
     final store = contentStore;
     if (!forceRefresh && store != null) {
       final entry = await store.getContentEntry(book: book, chapter: chapter);
-      if (entry != null && entry.hasDisplayContent) {
-        if (entry.isFailed) {
-          return ChapterContentPreparationResult.failed(
-            entry.failureMessage ?? entry.content!,
-          );
-        }
+      if (entry != null && entry.hasDisplayContent && !entry.isFailed) {
         return ChapterContentPreparationResult.ready(entry.content!);
       }
     }
@@ -190,8 +186,24 @@ class ChapterContentPreparationPipeline {
       }
       return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
     } catch (e) {
-      return ChapterContentPreparationResult.failed('加載章節失敗: $e');
+      return ChapterContentPreparationResult.failed(_toFailureMessage(e));
     }
+  }
+
+  static String _toFailureMessage(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code != null) return '加載章節失敗: 伺服器回應 $code';
+      return switch (e.type) {
+        DioExceptionType.connectionTimeout ||
+        DioExceptionType.receiveTimeout ||
+        DioExceptionType.sendTimeout =>
+          '加載章節失敗: 連線逾時',
+        DioExceptionType.connectionError => '加載章節失敗: 網路連線失敗',
+        _ => '加載章節失敗: 網路錯誤',
+      };
+    }
+    return '加載章節失敗: $e';
   }
 
   Future<void> _storeResult({

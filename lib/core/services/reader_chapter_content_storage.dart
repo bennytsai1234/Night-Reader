@@ -140,12 +140,7 @@ class ReaderChapterContentStorage {
       book: book,
       chapter: chapter,
     );
-    if (entry == null || !entry.hasDisplayContent) return null;
-    if (entry.isFailed) {
-      return ChapterContentPreparationResult.failed(
-        entry.failureMessage ?? entry.content!,
-      );
-    }
+    if (entry == null || !entry.hasDisplayContent || entry.isFailed) return null;
     return ChapterContentPreparationResult.ready(entry.content!);
   }
 }
