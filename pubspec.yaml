@@ -1,7 +1,7 @@
 name: night_reader
 description: "夜讀 - Night Reader, a Flutter novel reader app"
 publish_to: 'none'
-version: 0.2.96+110
+version: 0.2.97+111
 homepage: https://github.com/bennytsai1234/night-reader
 repository: https://github.com/bennytsai1234/night-reader
 issue_tracker: https://github.com/bennytsai1234/night-reader/issues
@@ -43,7 +43,7 @@ dependencies:
   characters: ^1.3.0
 
   # === JSON Path ===
-  json_path: ^0.7.4
+  json_path: ^0.9.0
 
   # === XPath ===
   xpath_selector: ^3.0.2
@@ -107,7 +107,7 @@ dependencies:
   archive: ^3.4.0
   webview_flutter_wkwebview: ^3.23.0
   webview_flutter_android: ^4.10.1
-  epubx: ^4.0.0
+  flutter_native_splash: ^2.2.16
   synchronized: ^3.3.1
   get_it: ^9.2.1
   logger: ^2.6.2
