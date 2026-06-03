@@ -1344,7 +1344,12 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     if (!mounted || _isDragging || _pausedFlingAtArtificialBoundary) return;
     try {
       _captureAndReportVisibleLocation();
-      final saved = await widget.runtime.saveProgress(immediate: false);
+      // Persist immediately on settle so the DB always reflects the latest
+      // position. Relying on the (unawaited) background flush at app pause is
+      // unreliable: Android can reclaim a backgrounded app before the async
+      // write lands, leaving a stale position that restores to the chapter
+      // start (or an earlier point) on cold restart.
+      final saved = await widget.runtime.saveProgress(immediate: true);
       if (saved != null) _lastReportedLocation = saved;
     } finally {
       _clearWindowBoost();

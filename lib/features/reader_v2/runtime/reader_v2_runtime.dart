@@ -1004,7 +1004,9 @@ class ReaderV2Runtime extends ChangeNotifier {
       _saveVisibleAnchorAfterViewportSettled(
         fallbackLocation: location,
         isCurrent: () => _isCurrentSlidePage(pageAddress),
-        immediateSave: false,
+        // Persist immediately on page settle (mirrors scroll mode) so a lost
+        // background flush can't leave a stale position on cold restart.
+        immediateSave: true,
       ),
     );
   }
