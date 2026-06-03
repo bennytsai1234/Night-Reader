@@ -47,9 +47,11 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
+    this.onChangeSource,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.showChangeSource = true,
   });
 
   final Book book;
@@ -91,9 +93,11 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onScrubStart;
   final ValueChanged<int> onScrubbing;
   final ValueChanged<int> onScrubEnd;
+  final VoidCallback? onChangeSource;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
+  final bool showChangeSource;
 
   @override
   Widget build(BuildContext context) {
@@ -181,9 +185,11 @@ class ReaderV2PageShell extends StatelessWidget {
                 onScrubStart: onScrubStart,
                 onScrubbing: onScrubbing,
                 onScrubEnd: onScrubEnd,
+                onChangeSource: onChangeSource,
                 showTts: showTts,
                 showAutoPage: showAutoPage,
                 showReplaceRule: showReplaceRule,
+                showChangeSource: showChangeSource,
               ),
             ],
           ),

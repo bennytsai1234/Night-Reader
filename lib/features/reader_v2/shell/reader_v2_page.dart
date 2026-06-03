@@ -2,8 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/features/reader_v2/application/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/application/reader_v2_page_coordinator.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
@@ -44,6 +49,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   static const ReaderV2DisplayCoordinator _displayCoordinator =
       ReaderV2DisplayCoordinator();
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
+
+  final SourceSwitchService _sourceSwitchService = SourceSwitchService();
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ReaderV2PageExitCoordinator _exitCoordinator =
@@ -180,9 +187,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           menu.onScrubEnd(index);
           unawaited(_coordinator.jumpToChapter(index));
         },
+        onChangeSource: _showChangeSource,
         showTts: true,
         showAutoPage: true,
         showReplaceRule: true,
+        showChangeSource: !widget.book.isLocal,
       ),
     );
   }
@@ -275,6 +284,64 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final tts = _host.tts;
     if (tts == null) return;
     ReaderV2TtsSheet.show(context, tts: tts);
+  }
+
+  void _showChangeSource() {
+    if (widget.book.isLocal) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (sheetContext) => ChangeSourceSheet(
+            book: widget.book,
+            onSelectSource: _handleChangeSourceSelected,
+          ),
+    );
+  }
+
+  /// 閱讀器情境的換源回呼。
+  ///
+  /// 成功:對齊目前章節 → 持久化 → flush 進度 → pushReplacement 以新書重開整頁。
+  /// 失敗:回傳失敗訊息,**不 pop、不動 runtime**,完整停留在原源。
+  Future<ChangeSourceOutcome> _handleChangeSourceSelected(
+    SearchBook candidate,
+  ) async {
+    final runtime = _host.runtime;
+    final currentIndex = _currentChapterIndex(runtime);
+    final currentTitle = _chapterTitleAt(currentIndex);
+    try {
+      final resolution = await _sourceSwitchService.resolveSwitch(
+        widget.book,
+        candidate,
+        targetChapterIndex: currentIndex,
+        targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
+        validateTargetContent: true,
+      );
+      await _sourceSwitchService.persistSwitch(
+        widget.book,
+        resolution,
+        bookDao: _host.dependencies.bookDao,
+        chapterDao: _host.dependencies.chapterDao,
+      );
+      // 持久化成功後再 flush 舊源進度,避免換源失敗時污染原書狀態。
+      await _host.flushProgress();
+      AppEventBus().fire(AppEventBus.upBookshelf);
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          BookOpenRoute(
+            book: resolution.migratedBook,
+            openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
+            initialChapters: resolution.chapters,
+            heroTag: 'book_cover_${resolution.migratedBook.bookUrl}',
+          ),
+        );
+      }
+      return (success: true, message: '已切換到 ${resolution.source.bookSourceName}');
+    } catch (e) {
+      return (success: false, message: '換源失敗: $e');
+    }
   }
 
   @override

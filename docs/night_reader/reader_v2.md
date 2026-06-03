@@ -56,6 +56,22 @@ features/tts/ UI
   → 發 ttsProgress 事件 → runtime/ 高亮對應文字
 ```
 
+**閱讀器換源流程**（書架的書，2026-06）：
+```
+底部選單「換源」（reader_v2_bottom_menu.dart，僅網路書 !book.isLocal）
+  → ReaderV2Page._showChangeSource → showModalBottomSheet
+    → ChangeSourceSheet（複用詳情頁清單 UI；參數化 onSelectSource 回呼）
+      → BookDetailChangeSourceProvider 並行 preciseSearch 其他源
+  → 使用者選源 → SourceSwitchService.resolveSwitch（對齊目前章節 + clamp + 驗證目標可讀）
+    → persistSwitch（遷移到新 bookUrl 時刪舊 row/章節，upsert 新 book + 章節）
+    → flushProgress → AppEventBus.upBookshelf
+    → Navigator.pushReplacement(BookOpenRoute(migratedBook, chapters, resume))
+       以新源在「對齊後章節」完整重建 runtime
+失敗（任何 StateError/例外）→ 提示「換源失敗」，不 pop、不動 runtime，完整停留原源。
+```
+- ReaderV2 的 `book`/runtime 為深度不可變（final），換源採 pushReplacement 整頁重開，而非 live-swap runtime（最低風險）。
+- 詳情頁換源行為不變：`ChangeSourceSheet` 不傳 `onSelectSource` 時沿用 `BookDetailProvider.changeSource`。
+
 ## 常見修改入口
 
 - 排版問題（行距、字體、頁邊距）→ `lib/features/reader_v2/layout/`
@@ -64,6 +80,7 @@ features/tts/ UI
 - 閱讀器設定 UI → `lib/features/reader_v2/features/settings/`
 - TTS 控制 → `lib/features/reader_v2/features/tts/` + `lib/core/services/tts_service.dart`
 - 章節內容轉換（清洗、替換規則）→ `lib/features/reader_v2/content/`
+- 換源入口（底部選單「換源」）→ `lib/features/reader_v2/features/menu/reader_v2_bottom_menu.dart`（選單項） + `lib/features/reader_v2/shell/reader_v2_page.dart`（`_showChangeSource` 流程）
 
 ## 修改路線
 

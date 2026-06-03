@@ -65,6 +65,7 @@ BookshelfPage → BookDetailPage
 - 書籍詳情 → `lib/features/book_detail/`
 - 全域替換規則 → `lib/features/replace_rule/` + `lib/core/services/replace_rule.dart`
 - Book 模型欄位 → `lib/core/models/book/book_base.dart`（新增欄位需同步 DB schema）
+- 換源面板 UI（共用詳情頁與閱讀器）→ `lib/features/book_detail/widgets/change_source_sheet.dart`（`onSelectSource` 回呼參數化：不傳 = 詳情頁 `changeSource`；傳入 = 閱讀器走 `SourceSwitchService`）
 
 ## 修改路線
 
@@ -78,6 +79,7 @@ BookshelfPage → BookDetailPage
 - BookDao 的 Drift stream 會在書架有任何變更時觸發全量重建；書架很大時有效能問題
 - 閱讀進度（ReadRecord）與 Chapter 的同步依賴 `durChapterIndex`；書源切換後 index 可能失效
 - BookshelfStateTracker 的同步邏輯尚未完整文件化
+- 換源儲存為「每源獨立」：一本書始終只有一個當前來源（origin + bookUrl）。換源 = 把這本書遷移到另一個當前源；`SourceSwitchService.persistSwitch` 在遷移到不同 `bookUrl` 時刪除舊 row + 舊章節，避免書架出現重複項。此模型不因「閱讀器新增換源入口」而改變（2026-06：詳情頁與閱讀器共用同一遷移語意，閱讀器側透過 `SourceSwitchService.resolveSwitch`/`persistSwitch` + pushReplacement 重載；詳情頁側維持 `BookDetailProvider.changeSource`）。
 
 ## Reference Notes
 

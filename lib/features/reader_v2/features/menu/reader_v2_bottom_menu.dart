@@ -50,9 +50,11 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
+    this.onChangeSource,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.showChangeSource = true,
   });
 
   final bool controlsVisible;
@@ -76,9 +78,11 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final VoidCallback onScrubStart;
   final ValueChanged<int> onScrubbing;
   final ValueChanged<int> onScrubEnd;
+  final VoidCallback? onChangeSource;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
+  final bool showChangeSource;
 
   @override
   Widget build(BuildContext context) {
@@ -343,9 +347,12 @@ class ReaderV2BottomMenu extends StatelessWidget {
   }
 
   Widget _buildMainActions(ReaderV2MenuStyle menuStyle) {
+    final changeSource = onChangeSource;
     final actions = <Widget>[
       _menuIcon(Icons.list, '目錄', onOpenDrawer, menuStyle),
       if (showTts) _menuIcon(Icons.record_voice_over, '朗讀', onTts, menuStyle),
+      if (showChangeSource && changeSource != null)
+        _menuIcon(Icons.swap_horiz, '換源', changeSource, menuStyle),
       _menuIcon(Icons.color_lens, '介面', onInterface, menuStyle),
       _menuIcon(Icons.settings, '設定', onSettings, menuStyle),
     ];
