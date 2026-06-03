@@ -55,20 +55,20 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1400),
     );
 
-    _iconOpacity = CurvedAnimation(
-      parent: _entranceController,
-      curve: const Interval(0.00, 0.24, curve: Curves.easeOut),
-    );
-    _iconScale = Tween<double>(begin: 0.55, end: 1.0).animate(
+    // 接住「點擊放大」：品牌圖第一幀即完全可見（不從 0 淡入），
+    // 由接近畫面中央處（放大結束的位置）平滑上滑歸位，scale 由略大收到 1.0。
+    _iconOpacity = const AlwaysStoppedAnimation<double>(1.0);
+    _iconScale = Tween<double>(begin: 1.12, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.00, 0.36, curve: Curves.easeOutBack),
+        curve: const Interval(0.00, 0.42, curve: Curves.easeOutCubic),
       ),
     );
-    _iconTranslateY = Tween<double>(begin: 32.0, end: 0.0).animate(
+    // 1→0 進度；實際歸位距離在 build 以螢幕高度推導（見 _buildContent 的 iconRise）。
+    _iconTranslateY = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.00, 0.30, curve: Curves.easeOutCubic),
+        curve: const Interval(0.00, 0.46, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -286,6 +286,9 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     required Color muted,
     required double breath,
   }) {
+    // 品牌圖起始位置：自靜止點（版面上半部）下移約 16% 螢幕高，貼近放大結束的中央，
+    // 再隨進場上滑歸位。此係數可依實機觀感微調。
+    final double iconRise = MediaQuery.sizeOf(context).height * 0.16;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -302,7 +305,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
               if (showIcon)
                 Transform.translate(
-                  offset: Offset(0, _iconTranslateY.value),
+                  offset: Offset(0, _iconTranslateY.value * iconRise),
                   child: Opacity(
                     opacity: _iconOpacity.value,
                     child: Transform.scale(

@@ -8,6 +8,7 @@ import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/features/search/search_page.dart';
@@ -546,10 +547,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
 
     return InkWell(
       onLongPress:
-          () => setState(() {
-            _isMultiSelect = true;
-            _selectedUrls.add(book.bookUrl);
-          }),
+          _isMultiSelect ? null : () => _openDetail(context, book),
       onTap: () {
         if (_isMultiSelect) {
           setState(() {
@@ -660,10 +658,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
 
     return InkWell(
       onLongPress:
-          () => setState(() {
-            _isMultiSelect = true;
-            _selectedUrls.add(book.bookUrl);
-          }),
+          _isMultiSelect ? null : () => _openDetail(context, book),
       onTap: () {
         if (_isMultiSelect) {
           setState(() {
@@ -788,6 +783,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
     );
   }
 
+  void _openDetail(BuildContext context, Book book) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
+    );
+  }
+
   void _openBook(BuildContext context, Book book) {
     if (book.type == 2) {
       ScaffoldMessenger.of(
@@ -800,7 +802,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
       BookOpenRoute(
         book: book,
         openTarget: ReaderV2OpenTarget.resume(book),
-        heroTag: 'book_cover_${book.bookUrl}',
       ),
     );
   }

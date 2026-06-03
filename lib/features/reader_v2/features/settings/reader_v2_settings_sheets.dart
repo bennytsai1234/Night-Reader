@@ -88,14 +88,24 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           title: '界面設定',
           icon: Icons.format_paint_outlined,
           children: [
-            const SheetSection(title: '閱讀主題'),
-            const SizedBox(height: 4),
+            const SheetSection(
+              title: '閱讀主題',
+              trailing: Text(
+                '正文背景與文字',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
             _ReaderThemeSelector(
               selectedIndex: settings.themeIndex,
               onSelected: settings.setTheme,
             ),
-            const SheetSection(title: '選單樣式'),
-            const SizedBox(height: 4),
+            const SheetSection(
+              title: '選單樣式',
+              trailing: Text(
+                '選單與工具列配色',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
             _ReaderThemeSelector(
               selectedIndex: settings.menuThemeIndex,
               onSelected: settings.setMenuTheme,
@@ -173,9 +183,9 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
             ),
             Row(
               children: [
-                const Text(
-                  '首行縮排',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                const SizedBox(
+                  width: 65,
+                  child: Text('首行縮排', style: TextStyle(fontSize: 12)),
                 ),
                 const Spacer(),
                 DropdownButton<int>(
@@ -194,16 +204,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
                 ),
               ],
             ),
-            const SheetSection(title: '翻頁與背景'),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '自動速度',
-              value: settings.autoPageSpeed,
-              min: ReaderV2SettingsController.minAutoPageSpeed,
-              max: ReaderV2SettingsController.maxAutoPageSpeed,
-              divisions: 41,
-              onChanged: settings.setAutoPageSpeed,
-              valueFormatter: (value) => '${(value * 100).round()}%',
-            ),
+            const SheetSection(title: '翻頁方式'),
             Wrap(
               spacing: 12,
               children: [
@@ -226,6 +227,16 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
                               : null,
                 ),
               ],
+            ),
+            const SheetSection(title: '自動翻頁'),
+            ReaderV2SettingComponents.buildSliderRow(
+              label: '速度',
+              value: settings.autoPageSpeed,
+              min: ReaderV2SettingsController.minAutoPageSpeed,
+              max: ReaderV2SettingsController.maxAutoPageSpeed,
+              divisions: 41,
+              onChanged: settings.setAutoPageSpeed,
+              valueFormatter: (value) => '${(value * 100).round()}%',
             ),
           ],
         );

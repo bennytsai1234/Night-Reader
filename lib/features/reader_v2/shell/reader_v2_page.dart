@@ -334,7 +334,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             book: resolution.migratedBook,
             openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
             initialChapters: resolution.chapters,
-            heroTag: 'book_cover_${resolution.migratedBook.bookUrl}',
           ),
         );
       }
