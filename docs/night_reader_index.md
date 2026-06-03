@@ -109,7 +109,7 @@
 多書源並行搜尋與書源探索分類。依賴規則引擎和書源管理。修改搜尋行為或探索頁，從這裡開始。
 
 **下載與快取** (`lib/core/services/download*.dart`, `features/cache_manager/`, `lib/core/local_book/`, `chapter_content*.dart`, `reader_chapter_content*.dart`)
-章節批次下載（DownloadService、DownloadExecutor）、快取清理、本地書籍（TXT/EPUB/UMD）匯入解析、章節內容排程預備（ChapterContentPreparationPipeline）。修改離線功能或本地書籍支援，從這裡開始。
+章節批次下載（DownloadService、DownloadExecutor）、快取清理、本地書籍（TXT/EPUB）匯入解析、章節內容排程預備（ChapterContentPreparationPipeline）。修改離線功能或本地書籍支援，從這裡開始。
 
 **瀏覽器驗證** (`lib/core/engine/web_book/headless_webview_service.dart`, `lib/core/services/webview_data_service.dart`, `backstage_webview.dart`)
 後台 headless WebView，供規則引擎靜默執行 JS 重型書源。互動式瀏覽器驗證（登入、驗證碼）尚未實作，此類書源直接回報錯誤。修改 headless WebView 行為，從這裡開始。

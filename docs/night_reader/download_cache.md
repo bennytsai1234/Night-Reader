@@ -2,7 +2,7 @@
 
 ## 目前職責
 
-章節批次下載（離線閱讀）、下載任務管理 UI、快取清理、本地書籍（TXT/EPUB/UMD）匯入解析、章節內容排程預備（預讀管線）。修改離線功能、本地書籍支援或章節預讀行為，從這裡開始。
+章節批次下載（離線閱讀）、下載任務管理 UI、快取清理、本地書籍（TXT/EPUB）匯入解析、章節內容排程預備（預讀管線）。修改離線功能、本地書籍支援或章節預讀行為，從這裡開始。
 
 ## 範圍
 
@@ -11,9 +11,9 @@
 | `lib/core/services/download_service.dart` | 下載服務 facade（啟動/暫停/取消下載任務） |
 | `lib/core/services/download/` | DownloadExecutor（任務執行）、DownloadQueue（任務隊列）、DownloadWorker（單章節抓取） |
 | `lib/features/cache_manager/` | 下載管理 UI（CacheManagerPage）；顯示下載進度、已快取章節數 |
-| `lib/core/local_book/` | TxtParser（高效能 TXT 解析，byte offset 追蹤）、UmdParser（UMD 格式）、LocalBookFormats（格式偵測） |
+| `lib/core/local_book/` | TxtParser（高效能 TXT 解析，byte offset 追蹤）、LocalBookFormats（格式偵測） |
 | `lib/core/services/epub_service.dart` | EPUB 解析（epub_x 套件封裝） |
-| `lib/core/services/local_book_service.dart` | 本地書籍（TXT/UMD/EPUB）匯入、章節提取 |
+| `lib/core/services/local_book_service.dart` | 本地書籍（TXT/EPUB）匯入、章節提取 |
 | `lib/core/services/chapter_content_scheduler.dart` | 章節預取排程（Reader V2 呼叫，背景預讀） |
 | `lib/core/services/chapter_content_preparation_pipeline.dart` | 章節內容取得與清洗管線（書源抓取 → 替換規則 → 磁碟快取） |
 | `lib/core/services/reader_chapter_content_storage.dart` | 章節內容磁碟快取（壓縮儲存） |
@@ -23,7 +23,7 @@
 | `lib/core/models/download_task.dart` | DownloadTask 模型 |
 | `lib/core/database/dao/chapter_dao.dart` | Chapter DAO（章節列表）|
 
-測試：`test/download_executor_test.dart`、`test/core/local_book/`（TXT parser、UMD import）、`test/core/services/epub_service_test.dart`
+測試：`test/download_executor_test.dart`、`test/core/local_book/`（TXT parser）、`test/core/services/epub_service_test.dart`
 
 ## 依賴與影響
 
@@ -63,7 +63,7 @@ Reader V2 runtime/（預讀排程器）
 使用者選取檔案（file_picker）
   → LocalBookService.importLocalBook(file)
     → LocalBookFormats.detect()
-    → TxtParser / UmdParser / EpubService（依格式解析）
+    → TxtParser / EpubService（依格式解析）
     → 建立 Book 紀錄 + Chapter 列表 → BookDao / ChapterDao
 ```
 
@@ -95,6 +95,6 @@ None（standalone 模式）
 
 ## Do Not Do
 
-- 不要在主執行緒上執行 TXT/UMD/EPUB 解析（改用 compute / isolate）
+- 不要在主執行緒上執行 TXT/EPUB 解析（改用 compute / isolate）
 - 不要引入 Mobi 或 PDF 格式支援（超出產品範圍）
 - 不要讓 ChapterContentPreparationPipeline 有副作用之外的長時間同步阻塞

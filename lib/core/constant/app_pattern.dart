@@ -34,7 +34,7 @@ class AppPattern {
 
   // 本地書籍支援類型
   static final RegExp bookFileRegex = RegExp(
-    r'.*\.(txt|epub|umd|pdf|mobi|azw3|azw)',
+    r'.*\.(txt|epub|pdf|mobi|azw3|azw)',
     caseSensitive: false,
   );
   // 壓縮文件支援類型
