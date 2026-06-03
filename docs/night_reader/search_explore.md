@@ -34,10 +34,18 @@
 SearchPage → SearchProvider.search(keyword)
   → 取得所有啟用的 BookSource
   → 並行呼叫 WebBookService.searchBookAwait(source, keyword)（每個書源一個 Future）
-  → 聚合結果 → SearchBookDao.insertOrReplace()（快取）
+  → 每源回傳 append 進 SearchModel._rawBooks（同源去重）→ 從頭重建 _searchBooks
+    （重算式跨源合併，僅呈現層）→ SearchBookDao.insertList()（快取，仍每源獨立）
   → SearchProvider 通知 UI 更新
   → 使用者選取搜尋結果 → 書籍詳情 / 加入書架
 ```
+
+**搜尋結果跨源合併（僅呈現層）**：同名（正規化書名 + 作者）的書在多書源各自命中時，
+`SearchModel._rebuild` 把它們合併成一張卡並顯示「N 個書源」badge；書架的儲存模型仍是
+「每源獨立」，合併不持久化。representative（決定卡片封面 / 最新章 / `.origin`）取群組內
+`originOrder` 最前、優先有封面者。作者缺失時依「書名的相異作者數」三分支安置：唯一作者
+→ 併入該作者群組；完全無作者 → 併成一張「作者不詳」卡；≥2 作者 → 退出單獨成「作者不詳」
+卡。每次有源回傳都從 `_rawBooks` 從頭重算，搜尋過程中卡片可能跳動 / 拆併，完成後即穩定。
 
 **探索分類載入**：
 ```

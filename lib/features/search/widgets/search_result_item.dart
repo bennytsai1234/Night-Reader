@@ -83,7 +83,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                 borderRadius: AppRadius.cardMd,
               ),
               child: Text(
-                '$sourceCount 源',
+                '$sourceCount 個書源',
                 style: TextStyle(
                   fontSize: 10,
                   color: Theme.of(context).colorScheme.onPrimaryContainer,

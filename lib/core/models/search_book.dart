@@ -42,6 +42,71 @@ class SearchBook implements RuleDataInterface {
   List<String> get sourceLabels =>
       origins.map((originUrl) => _originNames[originUrl] ?? originUrl).toList();
 
+  bool get _hasCover => (coverUrl ?? '').trim().isNotEmpty;
+
+  /// 從同一群組（同名 + 同作者 / 安置後的缺作者）建立一張「合併卡」。
+  ///
+  /// 僅用於呈現層：書架儲存模型仍是「每源獨立」，此方法不會改動傳入的原始
+  /// [SearchBook]（[origins] 為 `late final`，於原物件上呼叫 [addOrigin] 會
+  /// 永久污染，故這裡複製出全新的 representative 物件再累計 origins）。
+  ///
+  /// representative 選擇規則（決策 2）：
+  /// 群組內 [originOrder] 最前者；**優先有封面**者；若皆無封面，退回
+  /// [originOrder] 最前者。決定卡片封面 / 最新章與 [origin]。
+  static SearchBook aggregate(List<SearchBook> group) {
+    assert(group.isNotEmpty, 'aggregate 需要非空群組');
+    final representative = _pickRepresentative(group);
+    final card = representative._cloneForCard();
+    for (final book in group) {
+      card.addOrigin(book.origin, name: book.originName);
+    }
+    return card;
+  }
+
+  static SearchBook _pickRepresentative(List<SearchBook> group) {
+    SearchBook? best;
+    for (final candidate in group) {
+      if (best == null) {
+        best = candidate;
+        continue;
+      }
+      final bestHasCover = best._hasCover;
+      final candidateHasCover = candidate._hasCover;
+      if (candidateHasCover != bestHasCover) {
+        // 優先有封面者
+        if (candidateHasCover) best = candidate;
+        continue;
+      }
+      // 封面有無相同 → 取 originOrder 最前者
+      if (candidate.originOrder < best.originOrder) {
+        best = candidate;
+      }
+    }
+    return best!;
+  }
+
+  /// 複製出一張全新的呈現卡，origins 重置為只含自身來源。
+  SearchBook _cloneForCard() {
+    return SearchBook(
+      bookUrl: bookUrl,
+      name: name,
+      author: author,
+      kind: kind,
+      coverUrl: coverUrl,
+      intro: intro,
+      wordCount: wordCount,
+      latestChapterTitle: latestChapterTitle,
+      origin: origin,
+      originName: originName,
+      originOrder: originOrder,
+      type: type,
+      addTime: addTime,
+      variable: variable,
+      tocUrl: tocUrl,
+      respondTime: respondTime,
+    );
+  }
+
   // 核心業務方法
   String getRealAuthor() => BookHelp.formatBookAuthor(author ?? '');
   String get latestChapter => latestChapterTitle ?? '無最新章節';
