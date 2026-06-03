@@ -216,7 +216,6 @@ class ReaderV2ControllerHost {
     autoPage?.removeListener(_onControllerChanged);
     tts?.removeListener(_onControllerChanged);
     runtime?.removeListener(_onControllerChanged);
-    unawaited(runtime?.flushProgress());
     autoPage?.dispose();
     tts?.dispose();
     runtime?.dispose();
