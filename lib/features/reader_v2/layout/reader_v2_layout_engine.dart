@@ -390,13 +390,19 @@ class ReaderV2LayoutEngine {
     if (_measureLineWidth(candidate, style) <= maxWidth + 0.5) {
       return preferred;
     }
-    return _maxFittingPrefix(text: text, style: style, maxWidth: maxWidth);
+    return _maxFittingPrefix(
+      text: text,
+      style: style,
+      maxWidth: maxWidth,
+      preferredChars: preferred,
+    );
   }
 
   int _maxFittingPrefix({
     required String text,
     required TextStyle style,
     required double maxWidth,
+    int? preferredChars,
   }) {
     _fittingFallbacks += 1;
     final clusterEndOffsets = <int>[];
@@ -409,6 +415,37 @@ class ReaderV2LayoutEngine {
     var low = 1;
     var high = clusterEndOffsets.length;
     var best = 1;
+
+    if (preferredChars != null && preferredChars > 0) {
+      var preferredIndex = clusterEndOffsets.indexOf(preferredChars);
+      if (preferredIndex == -1) {
+        preferredIndex = 0;
+        for (var i = 0; i < clusterEndOffsets.length; i++) {
+          if (clusterEndOffsets[i] <= preferredChars) {
+            preferredIndex = i;
+          } else {
+            break;
+          }
+        }
+      }
+
+      final int candidateLowIndex = (preferredIndex - 12).clamp(0, clusterEndOffsets.length - 1);
+      final int candidateHighIndex = preferredIndex.clamp(candidateLowIndex, clusterEndOffsets.length - 1);
+
+      final checkOffset = clusterEndOffsets[candidateLowIndex];
+      final checkText = text.substring(0, checkOffset);
+      _fitPainter.text = TextSpan(text: checkText, style: style);
+      _fittingBinarySearchPasses += 1;
+      _fitPainter.layout(maxWidth: double.infinity);
+
+      if (_fitPainter.width <= maxWidth) {
+        low = candidateLowIndex + 1;
+        high = candidateHighIndex + 1;
+        best = candidateLowIndex + 1;
+      } else {
+        high = preferredIndex + 1;
+      }
+    }
 
     while (low <= high) {
       final mid = (low + high) >> 1;
@@ -425,6 +462,7 @@ class ReaderV2LayoutEngine {
     }
     return clusterEndOffsets[best - 1];
   }
+
 
   double _measureLineWidth(String text, TextStyle style) {
     if (text.isEmpty) return 0;
