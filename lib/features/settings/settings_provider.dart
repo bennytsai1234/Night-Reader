@@ -16,7 +16,6 @@ const String _systemTtsSourceKey = 'system';
 /// (原 Android help/config/AppConfig.kt)
 class SettingsProvider extends SettingsProviderBase {
   bool appCrash = false;
-  String localPassword = '';
   int lastBackup = 0;
   int lastVersionCode = 0;
   bool privacyAgreed = false;

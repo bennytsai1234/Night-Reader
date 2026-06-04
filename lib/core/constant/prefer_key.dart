@@ -207,7 +207,6 @@ class PreferKey {
   static const String exploreLastKind = 'explore_last_kind';
 
   // 兼容性舊鍵名
-  static const String localPassword = 'local_password';
   static const String appCrash = 'app_crash';
   static const String lastVersionCode = 'last_version_code';
 
