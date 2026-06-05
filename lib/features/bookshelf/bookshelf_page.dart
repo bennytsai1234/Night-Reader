@@ -502,7 +502,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
       return ReorderableListView.builder(
         padding: const EdgeInsets.all(AppSpacing.md),
         itemCount: provider.books.length,
-        onReorderItem: provider.reorderBooks,
+        onReorder: provider.reorderBooks,
         itemBuilder:
             (context, index) => Padding(
               key: ValueKey(provider.books[index].bookUrl),

@@ -220,7 +220,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     if (canReorder) {
       return ReorderableListView.builder(
         itemCount: list.length,
-        onReorderItem:
+        onReorder:
             (oldIndex, newIndex) => p.reorderSource(oldIndex, newIndex),
         itemBuilder:
             (ctx, i) => _buildItem(
