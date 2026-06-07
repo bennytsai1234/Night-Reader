@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>夜讀 · Night Reader — 專注長篇閱讀體驗</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Design Tokens ===== */
+    :root {
+      --bg-primary: #0d0b09;
+      --bg-secondary: #12100d;
+      --bg-card: #1a1612;
+      --bg-card-hover: #1f1a15;
+      --border-subtle: #2a231d;
+      --border-hover: #4a3f38;
+      --text-primary: #f0ebe4;
+      --text-secondary: #b0a498;
+      --text-tertiary: #7a6e62;
+      --accent: #c9a87c;
+      --accent-hover: #e8cba3;
+      --accent-dim: rgba(201,168,124,0.12);
+      --accent-glow: rgba(201,168,124,0.25);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-tc: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      --radius-sm: 8px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --radius-full: 9999px;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --duration-fast: 200ms;
+      --duration-normal: 350ms;
+      --duration-slow: 600ms;
+    }
+
+    /* ===== Reset ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-tc);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; transition: color var(--duration-fast) ease; }
+    a:hover { color: var(--accent-hover); }
+    img { max-width: 100%; display: block; }
+    svg { display: block; flex-shrink: 0; }
+
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* ===== Scrollbar ===== */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+    /* ===== Typography ===== */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.25; font-family: var(--font-sans); }
+    h1 { font-size: clamp(2.2rem, 6vw, 3.8rem); letter-spacing: -0.02em; }
+    h2 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      text-align: center;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+    .section-label {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      margin-bottom: 12px;
+      font-family: var(--font-tc);
+    }
+    .section-desc {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      max-width: 580px;
+      margin: 0 auto 56px;
+      font-family: var(--font-tc);
+    }
+    h3 { font-size: 1.1rem; color: var(--text-primary); margin-bottom: 8px; font-family: var(--font-tc); }
+
+    /* ===== Navbar ===== */
+    .navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      transition: background var(--duration-normal) var(--ease-in-out), padding var(--duration-normal) var(--ease-in-out);
+    }
+    .navbar.scrolled {
+      background: rgba(13,11,9,0.85);
+      backdrop-filter: blur(16px) saturate(1.2);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .navbar .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text-primary);
+    }
+    .nav-brand img {
+      width: 32px; height: 32px;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      transition: color var(--duration-fast) ease;
+      font-weight: 500;
+    }
+    .nav-links a:hover { color: var(--accent); }
+    .nav-cta {
+      padding: 8px 20px;
+      border-radius: var(--radius-full);
+      background: var(--accent);
+      color: var(--bg-primary) !important;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: transform var(--duration-fast) var(--ease-out-expo), box-shadow var(--duration-fast) ease;
+    }
+    .nav-cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .nav-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    /* ===== Hero ===== */
+    header {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 20%, rgba(201,168,124,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 70%, rgba(201,168,124,0.04) 0%, transparent 50%),
+        radial-gradient(ellipse 50% 40% at 20% 80%, rgba(201,168,124,0.03) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    /* Decorative grain */
+    header::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+      pointer-events: none;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 700px;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      border-radius: var(--radius-full);
+      background: var(--accent-dim);
+      border: 1px solid rgba(201,168,124,0.2);
+      font-size: 0.8rem;
+      color: var(--accent);
+      font-weight: 500;
+      margin-bottom: 28px;
+      animation: fadeInDown 0.6s var(--ease-out-expo) both;
+    }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero-icon-wrap {
+      width: 104px; height: 104px;
+      margin: 0 auto 32px;
+      border-radius: 24px;
+      padding: 4px;
+      background: linear-gradient(135deg, var(--accent), rgba(201,168,124,0.3));
+      box-shadow: 0 0 0 1px rgba(201,168,124,0.15), 0 12px 48px rgba(0,0,0,0.5);
+      animation: floatIn 0.8s var(--ease-out-expo) both 0.1s;
+    }
+    .hero-icon-wrap img {
+      width: 100%; height: 100%;
+      border-radius: 20px;
+      object-fit: cover;
+      background: var(--bg-primary);
+    }
+    @keyframes floatIn {
+      from { opacity: 0; transform: scale(0.85) translateY(16px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    header h1 {
+      margin-bottom: 20px;
+      animation: fadeUp 0.6s var(--ease-out-expo) both 0.2s;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero-sub {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      line-height: 1.8;
+      margin: 0 auto 28px;
+      animation: fadeUp 0.6s var(--ease-out-expo) both 0.3s;
+    }
+    .hero-version {
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+      margin-bottom: 36px;
+      font-family: var(--font-sans);
+      animation: fadeUp 0.6s var(--ease-out-expo) both 0.35s;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      animation: fadeUp 0.6s var(--ease-out-expo) both 0.4s;
+    }
+    .hero-scroll {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--text-tertiary);
+      animation: bounceY 2s ease-in-out infinite;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+    }
+    @keyframes bounceY {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(8px); }
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 32px;
+      border-radius: var(--radius-full);
+      font-size: 1rem;
+      font-weight: 600;
+      transition: transform var(--duration-fast) var(--ease-out-expo), box-shadow var(--duration-fast) ease, background var(--duration-fast) ease;
+      cursor: pointer;
+      border: none;
+      font-family: var(--font-tc);
+    }
+    .btn:active {
+      transform: scale(0.97);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #b8925e);
+      color: var(--bg-primary);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--accent-glow);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1.5px solid var(--border-hover);
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* ===== Sections ===== */
+    section { padding: 100px 0; position: relative; }
+    section:nth-child(even) { background: var(--bg-secondary); }
+
+    /* ===== Features ===== */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: 28px 24px;
+      border: 1px solid var(--border-subtle);
+      transition: border-color var(--duration-normal) ease, background var(--duration-normal) ease, transform var(--duration-normal) var(--ease-out-expo), box-shadow var(--duration-normal) ease;
+      position: relative;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    .feature-card.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .feature-card:hover {
+      border-color: var(--accent);
+      background: var(--bg-card-hover);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(201,168,124,0.08);
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity var(--duration-normal) ease;
+    }
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+    .feature-icon {
+      width: 44px; height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      background: var(--accent-dim);
+      color: var(--accent);
+      margin-bottom: 16px;
+      transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+    }
+    .feature-card:hover .feature-icon {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 0.92rem;
+      line-height: 1.7;
+    }
+
+    /* ===== Tech Stack ===== */
+    .tech-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .tech-tag {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      padding: 8px 20px;
+      border-radius: var(--radius-full);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      transition: border-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-out-expo);
+      cursor: default;
+    }
+    .tech-tag:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* ===== CTA ===== */
+    .cta-section {
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,168,124,0.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .cta-section .cta-content {
+      position: relative;
+      z-index: 1;
+    }
+    .cta-section p {
+      color: var(--text-secondary);
+      margin-bottom: 36px;
+      font-size: 1.05rem;
+    }
+    .cta-section .btn-primary {
+      font-size: 1.1rem;
+      padding: 16px 44px;
+    }
+    .cta-secondary-wrap {
+      margin-top: 20px;
+    }
+
+    /* ===== Stats ===== */
+    .stats-row {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: var(--font-sans);
+      line-height: 1.2;
+    }
+    .stat-number span {
+      font-size: 1rem;
+      font-weight: 400;
+      color: var(--text-tertiary);
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    /* ===== Footer ===== */
+    footer {
+      padding: 48px 24px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-tertiary);
+      border-top: 1px solid var(--border-subtle);
+    }
+    footer .footer-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    footer .footer-brand img {
+      width: 24px; height: 24px;
+      border-radius: 6px;
+    }
+    footer .footer-brand span {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    footer .license {
+      margin-top: 6px;
+      font-size: 0.8rem;
+    }
+    footer .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+    }
+    footer .footer-links a {
+      font-size: 0.8rem;
+      color: var(--text-tertiary);
+    }
+    footer .footer-links a:hover { color: var(--accent); }
+
+    /* ===== Reduced Motion ===== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-toggle { display: block; }
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 100%; left: 0; right: 0;
+        background: rgba(13,11,9,0.95);
+        backdrop-filter: blur(16px);
+        padding: 16px 24px;
+        gap: 12px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      header { min-height: 90vh; padding: 100px 20px 60px; }
+      section { padding: 64px 0; }
+      .features-grid { grid-template-columns: 1fr; }
+      .stats-row { gap: 24px; }
+      .stat-number { font-size: 1.8rem; }
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 0 16px; }
+      .hero-icon-wrap { width: 80px; height: 80px; border-radius: 20px; }
+      .hero-icon-wrap img { border-radius: 16px; }
+      .btn { padding: 12px 24px; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Navbar ===== -->
+  <nav class="navbar" id="navbar">
+    <div class="container">
+      <a href="#" class="nav-brand">
+        <img src="../assets/app-icon.png" alt="夜讀" onerror="this.style.display='none'" />
+        <span>夜讀</span>
+      </a>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#features">功能</a></li>
+        <li><a href="#tech">技術</a></li>
+        <li><a href="#download" class="nav-cta">下載</a></li>
+      </ul>
+      <button class="nav-toggle" id="navToggle" aria-label="選單">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ===== Hero ===== -->
+  <header>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> v0.2.104 · Open Source
+      </div>
+      <div class="hero-icon-wrap">
+        <img src="../assets/app-icon.png" alt="夜讀 Night Reader" onerror="this.parentElement.style.display='none'" />
+      </div>
+      <h1>夜讀 <span style="color: var(--accent);">·</span> Night Reader</h1>
+      <p class="hero-sub">
+        一款專注於長篇閱讀體驗的自主小說閱讀器。<br />
+        由您自行管理書源、排版與離線內容。
+      </p>
+      <p class="hero-version">Android arm64-v8a · GPL-3.0</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/bennytsai1234/night-reader/releases" target="_blank">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下載 APK
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/bennytsai1234/night-reader" target="_blank">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg> GitHub 原始碼
+        </a>
+      </div>
+    </div>
+    <div class="hero-scroll">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+      <span>探索功能</span>
+    </div>
+  </header>
+
+  <!-- ===== Features ===== -->
+  <section id="features">
+    <div class="container">
+      <p class="section-label">功能總覽</p>
+      <h2>為深度閱讀而生</h2>
+      <p class="section-desc">
+        從排版引擎到語音朗讀，每個細節都為長篇中文閱讀細心打磨。
+      </p>
+      <div class="features-grid" id="featuresGrid">
+        
+        <div class="feature-card" data-delay="0">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></div>
+          <h3>精細排版引擎</h3>
+          <p>字號、行高、字距、段距、首行縮排、左右邊距皆可獨立調整。針對中文長篇閱讀最佳化，標點符號避頭尾，版面乾淨整齊。</p>
+        </div>
+        <div class="feature-card" data-delay="40">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+          <h3>雙翻頁模式</h3>
+          <p>支援「平移翻頁」（左右滑動）與「上下滾動」（連續捲動）兩種閱讀模式，自由切換，隨心閱讀。</p>
+        </div>
+        <div class="feature-card" data-delay="80">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></div>
+          <h3>語音朗讀 TTS</h3>
+          <p>逐詞高亮、續讀、自動接章。可調整語速、音調、音量與音色，選擇不同的語音引擎。</p>
+        </div>
+        <div class="feature-card" data-delay="120">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+          <h3>多書源並行搜尋</h3>
+          <p>在所有已匯入的來源中同時搜尋，快速找到想看的內容。支援探索分類瀏覽。</p>
+        </div>
+        <div class="feature-card" data-delay="160">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+          <h3>書源管理</h3>
+          <p>網路／本地匯入、匯出、批次有效性校驗、訂閱自動更新、規則偵錯工具，一應俱全。</p>
+        </div>
+        <div class="feature-card" data-delay="200">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+          <h3>書架與書籤</h3>
+          <p>書架統一管理在讀書籍，顯示封面、閱讀進度與快取狀態。書籤標記段落，隨時跳回。</p>
+        </div>
+        <div class="feature-card" data-delay="240">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+          <h3>離線快取</h3>
+          <p>手動預下載章節以供離線閱讀。背景下載佇列可查看、暫停、重試與刪除任務。</p>
+        </div>
+        <div class="feature-card" data-delay="280">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <h3>一鍵備份還原</h3>
+          <p>書架、書源、替換規則、書籤、閱讀進度與 App 設定一次備份，換機或重裝後完整還原。</p>
+        </div>
+        <div class="feature-card" data-delay="320">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
+          <h3>本地電子書</h3>
+          <p>支援匯入並閱讀 TXT 與 EPUB 格式的本地檔案，無需網路即可閱讀。</p>
+        </div>
+        <div class="feature-card" data-delay="360">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg></div>
+          <h3>自訂主題外觀</h3>
+          <p>切換閱讀背景、字體與配色。點擊區域自訂（打點區），貼合個人操作習慣。</p>
+        </div>
+        <div class="feature-card" data-delay="400">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
+          <h3>替換規則</h3>
+          <p>支援全域與章內替換規則，自訂淨化或修正內文，打造純淨閱讀體驗。</p>
+        </div>
+        <div class="feature-card" data-delay="440">
+          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+          <h3>繁簡轉換</h3>
+          <p>可選擇不轉換、簡轉繁或繁轉簡，滿足不同語言習慣與閱讀偏好。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Tech Stack ===== -->
+  <section id="tech">
+    <div class="container">
+      <p class="section-label">技術架構</p>
+      <h2>設計與工程</h2>
+      <p class="section-desc">
+        以 Flutter 為基底，自製排版渲染引擎與通用網頁規則解析器。
+      </p>
+      <div class="tech-list">
+        <span class="tech-tag">Flutter</span>
+        <span class="tech-tag">Dart</span>
+        <span class="tech-tag">Drift (SQLite)</span>
+        <span class="tech-tag">Dio 網路層</span>
+        <span class="tech-tag">QuickJS 引擎</span>
+        <span class="tech-tag">HTML / CSS / XPath 解析</span>
+        <span class="tech-tag">自製排版渲染引擎</span>
+        <span class="tech-tag">Provider 狀態管理</span>
+        <span class="tech-tag">flutter_tts</span>
+        <span class="tech-tag">WorkManager 背景任務</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CTA ===== -->
+  <section class="cta-section" id="download">
+    <div class="cta-content container">
+      <p class="section-label">立即使用</p>
+      <h2>開始閱讀</h2>
+      <p>
+        夜讀為純工具型應用，不內建任何書籍內容。<br />
+        匯入您信任的書源，立即享受專屬的閱讀體驗。
+      </p>
+      <a class="btn btn-primary" href="https://github.com/bennytsai1234/night-reader/releases" target="_blank">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下載最新版本
+      </a>
+      <div class="cta-secondary-wrap">
+        <a class="btn btn-secondary" href="https://github.com/bennytsai1234/night-reader" target="_blank">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg> 檢視原始碼 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Footer ===== -->
+  <footer>
+    <div class="container">
+      <div class="footer-brand">
+        <img src="../assets/app-icon.png" alt="夜讀" onerror="this.style.display='none'" />
+        <span>夜讀 · Night Reader</span>
+      </div>
+      <p>專注長篇閱讀體驗</p>
+      <p class="license">以 GPL-3.0 授權釋出</p>
+      <div class="footer-links">
+        <a href="https://github.com/bennytsai1234/night-reader" target="_blank">GitHub</a>
+        <a href="https://github.com/bennytsai1234/night-reader/releases" target="_blank">Releases</a>
+        <a href="https://github.com/bennytsai1234/night-reader/issues" target="_blank">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ===== Scripts ===== -->
+  <script>
+    // --- Navbar scroll effect ---
+    const navbar = document.getElementById('navbar');
+    let lastScroll = 0;
+    window.addEventListener('scroll', () => {
+      const y = window.scrollY;
+      navbar.classList.toggle('scrolled', y > 60);
+      lastScroll = y;
+    }, { passive: true });
+
+    // --- Mobile nav toggle ---
+    const toggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    toggle?.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+    });
+
+    // --- Intersection Observer: reveal feature cards ---
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const delay = parseInt(entry.target.dataset.delay) || 0;
+          setTimeout(() => entry.target.classList.add('revealed'), delay);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -60px 0px', threshold: 0.1 });
+
+    document.querySelectorAll('.feature-card').forEach(el => observer.observe(el));
+
+    // --- Smooth scroll offset for fixed navbar ---
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        const href = this.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          const offset = 72;
+          window.scrollTo({
+            top: target.offsetTop - offset,
+            behavior: 'smooth'
+          });
+        }
+        // Close mobile nav
+        navLinks.classList.remove('open');
+      });
+    });
+  </script>
+</body>
+</html>

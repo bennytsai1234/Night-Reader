@@ -53,3 +53,7 @@ app.*.map.json
 actionlint
 .codex
 android/.kotlin/
+
+# Reasonix
+.reasonix/
+reasonix.toml
