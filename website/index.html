@@ -3,507 +3,898 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>夜讀 · Night Reader — 專注長篇閱讀體驗</title>
+  <title>夜讀 Night Reader — 把長夜，留給長篇｜開源小說閱讀器</title>
+  <meta name="description" content="夜讀是一款開源的 Android 小說閱讀器：自主書源、精細中文排版、TTS 語音朗讀、離線快取與一鍵備份。無廣告、無追蹤，GPL-3.0 釋出。" />
+  <link rel="canonical" href="https://bennytsai1234.github.io/Night-Reader/" />
+  <link rel="icon" type="image/png" href="app-icon.png" />
+  <meta name="theme-color" content="#0b0e16" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="夜讀 Night Reader — 把長夜，留給長篇" />
+  <meta property="og:description" content="開源、無廣告的自主小說閱讀器。書源自己掌握，排版隨心調校，內容離線同行。" />
+  <meta property="og:url" content="https://bennytsai1234.github.io/Night-Reader/" />
+  <meta property="og:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="夜讀 Night Reader — 把長夜，留給長篇" />
+  <meta name="twitter:description" content="開源、無廣告的自主小說閱讀器。書源自己掌握，排版隨心調校，內容離線同行。" />
+  <meta name="twitter:image" content="https://bennytsai1234.github.io/Night-Reader/app-icon.png" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700;900&amp;family=Noto+Sans+TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "夜讀 Night Reader",
+    "operatingSystem": "Android",
+    "applicationCategory": "Books & Reference",
+    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "url": "https://bennytsai1234.github.io/Night-Reader/",
+    "downloadUrl": "https://github.com/bennytsai1234/Night-Reader/releases/latest",
+    "image": "https://bennytsai1234.github.io/Night-Reader/app-icon.png",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" }
+  }
+  </script>
+
   <style>
-    /* ===== Design Tokens ===== */
+    /* ============================================================
+       夜讀 Night Reader — 「夜讀者的書房」
+       深墨夜空 × 暖燈光金 × 月白 × 硃砂印
+       ============================================================ */
+
     :root {
-      --bg-primary: #0d0b09;
-      --bg-secondary: #12100d;
-      --bg-card: #1a1612;
-      --bg-card-hover: #1f1a15;
-      --border-subtle: #2a231d;
-      --border-hover: #4a3f38;
-      --text-primary: #f0ebe4;
-      --text-secondary: #b0a498;
-      --text-tertiary: #7a6e62;
-      --accent: #c9a87c;
-      --accent-hover: #e8cba3;
-      --accent-dim: rgba(201,168,124,0.12);
-      --accent-glow: rgba(201,168,124,0.25);
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-tc: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      /* 夜空墨色 */
+      --ink-0: #06080e;
+      --ink-1: #0b0e16;
+      --ink-2: #0f131d;
+      --ink-3: #151a27;
+      --ink-4: #1b2132;
+      --line-1: #222a3c;
+      --line-2: #3a445e;
+
+      /* 燈下紙色 */
+      --text-1: #ede8dd;
+      --text-2: #a9a294;
+      --text-3: #7d7768;
+
+      /* 燈光金 */
+      --lamp: #d9ab6e;
+      --lamp-bright: #f0cb91;
+      --lamp-deep: #b88a50;
+      --lamp-dim: rgba(217, 171, 110, 0.12);
+      --lamp-glow: rgba(217, 171, 110, 0.22);
+
+      /* 月白 */
+      --moon: #a3b8d4;
+      --moon-dim: rgba(163, 184, 212, 0.10);
+
+      /* 硃砂印 */
+      --seal: #c64a33;
+
+      --font-display: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
+      --font-body: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+
       --radius-sm: 8px;
       --radius-md: 16px;
       --radius-lg: 24px;
       --radius-full: 9999px;
-      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-      --duration-fast: 200ms;
-      --duration-normal: 350ms;
-      --duration-slow: 600ms;
+
+      --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --dur-fast: 200ms;
+      --dur-mid: 400ms;
+      --dur-slow: 700ms;
+
+      --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
 
-    /* ===== Reset ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 84px;
+    }
     body {
-      font-family: var(--font-tc);
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      line-height: 1.7;
+      font-family: var(--font-body);
+      background: var(--ink-1);
+      color: var(--text-1);
+      line-height: 1.75;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       overflow-x: hidden;
     }
-    a { color: var(--accent); text-decoration: none; transition: color var(--duration-fast) ease; }
-    a:hover { color: var(--accent-hover); }
+    a { color: var(--lamp); text-decoration: none; transition: color var(--dur-fast) ease; }
+    a:hover { color: var(--lamp-bright); }
     img { max-width: 100%; display: block; }
     svg { display: block; flex-shrink: 0; }
+    button { font-family: inherit; }
 
     .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
-    /* ===== Scrollbar ===== */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+
+    ::selection { background: var(--lamp-glow); color: var(--text-1); }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+    ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
-    /* ===== Typography ===== */
-    h1, h2, h3, h4 { font-weight: 700; line-height: 1.25; font-family: var(--font-sans); }
-    h1 { font-size: clamp(2.2rem, 6vw, 3.8rem); letter-spacing: -0.02em; }
+    /* ===== 字級 ===== */
+    h1, h2, h3 { font-family: var(--font-display); line-height: 1.3; }
+    h1 {
+      font-size: clamp(2.3rem, 6.5vw, 4rem);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-wrap: balance;
+    }
     h2 {
-      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-size: clamp(1.7rem, 4vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: 0.05em;
       text-align: center;
-      margin-bottom: 16px;
-      letter-spacing: -0.01em;
+      text-wrap: balance;
     }
-    .section-label {
-      display: inline-block;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: var(--accent);
-      margin-bottom: 12px;
-      font-family: var(--font-tc);
-    }
-    .section-desc {
-      text-align: center;
-      color: var(--text-secondary);
-      font-size: 1.05rem;
-      max-width: 580px;
-      margin: 0 auto 56px;
-      font-family: var(--font-tc);
-    }
-    h3 { font-size: 1.1rem; color: var(--text-primary); margin-bottom: 8px; font-family: var(--font-tc); }
+    h3 { font-size: 1.12rem; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 8px; }
 
-    /* ===== Navbar ===== */
+    /* ===== 章節標頭：── 卷一 ── ===== */
+    .sec-head { text-align: center; margin-bottom: 56px; }
+    .sec-vol {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      letter-spacing: 0.35em;
+      text-indent: 0.35em;
+      color: var(--lamp);
+      margin-bottom: 18px;
+    }
+    .sec-vol::before, .sec-vol::after {
+      content: '';
+      width: 56px; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--lamp-deep));
+    }
+    .sec-vol::after { background: linear-gradient(90deg, var(--lamp-deep), transparent); }
+    .sec-sub {
+      color: var(--text-2);
+      font-size: 1.02rem;
+      max-width: 600px;
+      margin: 14px auto 0;
+    }
+
+    /* ===== 進場 reveal ===== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(26px);
+      transition: opacity var(--dur-slow) var(--ease-expo), transform var(--dur-slow) var(--ease-expo);
+      transition-delay: var(--rd, 0ms);
+    }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+
+    /* ===== 導覽列 ===== */
     .navbar {
       position: fixed;
       top: 0; left: 0; right: 0;
       z-index: 100;
-      padding: 16px 0;
-      transition: background var(--duration-normal) var(--ease-in-out), padding var(--duration-normal) var(--ease-in-out);
+      padding: 18px 0;
+      transition: background var(--dur-mid) ease, padding var(--dur-mid) ease, border-color var(--dur-mid) ease;
+      border-bottom: 1px solid transparent;
     }
     .navbar.scrolled {
-      background: rgba(13,11,9,0.85);
-      backdrop-filter: blur(16px) saturate(1.2);
-      -webkit-backdrop-filter: blur(16px) saturate(1.2);
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(11, 14, 22, 0.82);
+      backdrop-filter: blur(18px) saturate(1.3);
+      -webkit-backdrop-filter: blur(18px) saturate(1.3);
+      padding: 11px 0;
+      border-bottom-color: var(--line-1);
     }
-    .navbar .container {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+    .navbar .container { display: flex; align-items: center; justify-content: space-between; }
     .nav-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 1.1rem;
-      color: var(--text-primary);
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-display);
+      font-weight: 700; font-size: 1.15rem; letter-spacing: 0.1em;
+      color: var(--text-1);
     }
-    .nav-brand img {
-      width: 32px; height: 32px;
-      border-radius: var(--radius-sm);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-    }
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      list-style: none;
-    }
-    .nav-links a {
-      font-size: 0.9rem;
-      color: var(--text-secondary);
-      transition: color var(--duration-fast) ease;
-      font-weight: 500;
-    }
-    .nav-links a:hover { color: var(--accent); }
+    .nav-brand img { width: 30px; height: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+    .nav-links a { font-size: 0.92rem; font-weight: 500; color: var(--text-2); }
+    .nav-links a:hover { color: var(--lamp); }
     .nav-cta {
-      padding: 8px 20px;
+      padding: 8px 22px;
       border-radius: var(--radius-full);
-      background: var(--accent);
-      color: var(--bg-primary) !important;
-      font-weight: 600;
-      font-size: 0.85rem;
-      transition: transform var(--duration-fast) var(--ease-out-expo), box-shadow var(--duration-fast) ease;
+      background: var(--lamp);
+      color: var(--ink-0) !important;
+      font-weight: 700;
+      transition: transform var(--dur-fast) var(--ease-expo), box-shadow var(--dur-fast) ease;
     }
-    .nav-cta:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 16px var(--accent-glow);
-    }
-    .nav-toggle {
-      display: none;
-      background: none;
-      border: none;
-      color: var(--text-primary);
-      cursor: pointer;
-      padding: 4px;
-    }
+    .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 18px var(--lamp-glow); }
+    .nav-toggle { display: none; background: none; border: none; color: var(--text-1); cursor: pointer; padding: 4px; }
 
-    /* ===== Hero ===== */
-    header {
-      min-height: 100vh;
+    /* ===== Hero：夜空 ===== */
+    .hero {
+      min-height: 100svh;
       display: flex;
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 120px 24px 80px;
       position: relative;
       overflow: hidden;
-    }
-    header::before {
-      content: '';
-      position: absolute;
-      inset: 0;
+      padding: 130px 24px 90px;
       background:
-        radial-gradient(ellipse 80% 60% at 50% 20%, rgba(201,168,124,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 80% 70%, rgba(201,168,124,0.04) 0%, transparent 50%),
-        radial-gradient(ellipse 50% 40% at 20% 80%, rgba(201,168,124,0.03) 0%, transparent 50%);
-      pointer-events: none;
+        radial-gradient(ellipse 90% 65% at 50% -10%, #131a2c 0%, transparent 65%),
+        radial-gradient(ellipse 55% 45% at 82% 16%, rgba(163,184,212,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 70% 55% at 50% 110%, rgba(217,171,110,0.06) 0%, transparent 60%),
+        var(--ink-0);
     }
-    /* Decorative grain */
-    header::after {
+    .hero::after {
       content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.03;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      background-repeat: repeat;
+      position: absolute; inset: 0;
+      opacity: 0.028;
+      background-image: var(--grain);
       background-size: 256px 256px;
       pointer-events: none;
     }
-    .hero-content {
-      position: relative;
-      z-index: 1;
-      max-width: 700px;
+    .sky { position: absolute; inset: 0; pointer-events: none; }
+    .star {
+      position: absolute;
+      border-radius: 50%;
+      background: #dfe7f2;
+      animation: twinkle var(--tw, 4s) ease-in-out infinite;
+      animation-delay: var(--td, 0s);
     }
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 16px;
-      border-radius: var(--radius-full);
-      background: var(--accent-dim);
-      border: 1px solid rgba(201,168,124,0.2);
-      font-size: 0.8rem;
-      color: var(--accent);
-      font-weight: 500;
-      margin-bottom: 28px;
-      animation: fadeInDown 0.6s var(--ease-out-expo) both;
+    .star.warm { background: var(--lamp-bright); }
+    .star.big { box-shadow: 0 0 6px rgba(223, 231, 242, 0.8); }
+    @keyframes twinkle {
+      0%, 100% { opacity: var(--so, 0.7); transform: scale(1); }
+      50% { opacity: 0.15; transform: scale(0.82); }
     }
-    @keyframes fadeInDown {
-      from { opacity: 0; transform: translateY(-12px); }
-      to { opacity: 1; transform: translateY(0); }
+    .moon {
+      position: absolute;
+      top: 14%; right: 11%;
+      width: 84px; height: 84px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 36% 34%, #f2f5f9 0%, #d7e0ec 45%, #aebfd6 100%);
+      box-shadow:
+        0 0 50px 14px rgba(180, 200, 226, 0.16),
+        0 0 140px 50px rgba(163, 184, 212, 0.08),
+        inset -14px -10px 26px rgba(108, 130, 162, 0.45);
+      opacity: 0.9;
+      animation: moonDrift 26s ease-in-out infinite alternate;
     }
-    .hero-icon-wrap {
-      width: 104px; height: 104px;
-      margin: 0 auto 32px;
-      border-radius: 24px;
-      padding: 4px;
-      background: linear-gradient(135deg, var(--accent), rgba(201,168,124,0.3));
-      box-shadow: 0 0 0 1px rgba(201,168,124,0.15), 0 12px 48px rgba(0,0,0,0.5);
-      animation: floatIn 0.8s var(--ease-out-expo) both 0.1s;
+    @keyframes moonDrift {
+      from { transform: translateY(0); }
+      to { transform: translateY(-14px); }
     }
-    .hero-icon-wrap img {
-      width: 100%; height: 100%;
-      border-radius: 20px;
-      object-fit: cover;
-      background: var(--bg-primary);
+    .meteor {
+      position: absolute;
+      top: 16%; left: -12%;
+      width: 130px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(223,231,242,0.85));
+      transform: rotate(16deg);
+      opacity: 0;
+      animation: meteor 11s linear infinite;
+      animation-delay: 4s;
     }
-    @keyframes floatIn {
-      from { opacity: 0; transform: scale(0.85) translateY(16px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
+    @keyframes meteor {
+      0%, 92% { opacity: 0; transform: translate(0, 0) rotate(16deg); }
+      93% { opacity: 0.85; }
+      97.5% { opacity: 0; transform: translate(56vw, 17vw) rotate(16deg); }
+      100% { opacity: 0; }
     }
-    header h1 {
-      margin-bottom: 20px;
-      animation: fadeUp 0.6s var(--ease-out-expo) both 0.2s;
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .hero-sub {
-      font-size: 1.1rem;
-      color: var(--text-secondary);
-      line-height: 1.8;
-      margin: 0 auto 28px;
-      animation: fadeUp 0.6s var(--ease-out-expo) both 0.3s;
-    }
-    .hero-version {
-      font-size: 0.85rem;
-      color: var(--text-tertiary);
-      margin-bottom: 36px;
-      font-family: var(--font-sans);
-      animation: fadeUp 0.6s var(--ease-out-expo) both 0.35s;
-    }
-    .hero-actions {
+
+    /* 直排題字 */
+    .hero-inscription {
+      position: absolute;
+      left: max(28px, 4vw);
+      top: 50%;
+      transform: translateY(-50%);
+      writing-mode: vertical-rl;
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      letter-spacing: 0.55em;
+      color: var(--text-3);
       display: flex;
-      gap: 16px;
-      justify-content: center;
-      flex-wrap: wrap;
-      animation: fadeUp 0.6s var(--ease-out-expo) both 0.4s;
+      align-items: center;
+      gap: 14px;
+      pointer-events: none;
+    }
+    .hero-inscription::before {
+      content: '';
+      width: 1px; height: 64px;
+      background: linear-gradient(180deg, transparent, var(--line-2));
+    }
+
+    .hero-content { position: relative; z-index: 1; max-width: 720px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 18px;
+      border-radius: var(--radius-full);
+      background: var(--lamp-dim);
+      border: 1px solid rgba(217, 171, 110, 0.22);
+      font-size: 0.8rem; font-weight: 500;
+      color: var(--lamp);
+      margin-bottom: 30px;
+      animation: fadeDown 0.7s var(--ease-expo) both;
+    }
+    @keyframes fadeDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+
+    .hero-icon {
+      width: 100px; height: 100px;
+      margin: 0 auto 34px;
+      border-radius: 26px;
+      padding: 3px;
+      background: linear-gradient(140deg, var(--lamp), rgba(217,171,110,0.15) 60%, rgba(163,184,212,0.3));
+      box-shadow: 0 0 0 1px rgba(217,171,110,0.12), 0 18px 60px rgba(0,0,0,0.6);
+      animation: fadeUp 0.8s var(--ease-expo) both 0.1s;
+    }
+    .hero-icon img { width: 100%; height: 100%; border-radius: 23px; object-fit: cover; background: var(--ink-0); }
+
+    .hero h1 { margin-bottom: 22px; animation: fadeUp 0.8s var(--ease-expo) both 0.2s; }
+    .hero h1 em { font-style: normal; color: var(--lamp); }
+    .hero-sub {
+      font-size: 1.08rem;
+      color: var(--text-2);
+      line-height: 2;
+      margin-bottom: 16px;
+      animation: fadeUp 0.8s var(--ease-expo) both 0.32s;
+    }
+    .hero-meta {
+      font-size: 0.85rem;
+      color: var(--text-3);
+      letter-spacing: 0.04em;
+      margin-bottom: 38px;
+      animation: fadeUp 0.8s var(--ease-expo) both 0.4s;
+    }
+    .hero-meta .dot { margin: 0 8px; color: var(--line-2); }
+    .hero-actions {
+      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+      animation: fadeUp 0.8s var(--ease-expo) both 0.48s;
     }
     .hero-scroll {
       position: absolute;
-      bottom: 36px;
-      left: 50%;
+      bottom: 34px; left: 50%;
       transform: translateX(-50%);
-      color: var(--text-tertiary);
-      animation: bounceY 2s ease-in-out infinite;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
+      color: var(--text-3);
       font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      animation: bob 2.4s ease-in-out infinite;
     }
-    @keyframes bounceY {
+    @keyframes bob {
       0%, 100% { transform: translateX(-50%) translateY(0); }
       50% { transform: translateX(-50%) translateY(8px); }
     }
 
-    /* ===== Buttons ===== */
+    /* ===== 按鈕 ===== */
     .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
+      display: inline-flex; align-items: center; gap: 10px;
       padding: 14px 32px;
       border-radius: var(--radius-full);
-      font-size: 1rem;
-      font-weight: 600;
-      transition: transform var(--duration-fast) var(--ease-out-expo), box-shadow var(--duration-fast) ease, background var(--duration-fast) ease;
-      cursor: pointer;
-      border: none;
-      font-family: var(--font-tc);
+      font-size: 1rem; font-weight: 700;
+      cursor: pointer; border: none;
+      transition: transform var(--dur-fast) var(--ease-expo), box-shadow var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease;
     }
-    .btn:active {
-      transform: scale(0.97);
-    }
+    .btn:active { transform: scale(0.97); }
     .btn-primary {
-      background: linear-gradient(135deg, var(--accent), #b8925e);
-      color: var(--bg-primary);
+      background: linear-gradient(135deg, var(--lamp-bright), var(--lamp-deep));
+      color: var(--ink-0);
     }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px var(--accent-glow);
-    }
-    .btn-secondary {
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 36px var(--lamp-glow); }
+    .btn-ghost {
       background: transparent;
-      color: var(--text-primary);
-      border: 1.5px solid var(--border-hover);
+      color: var(--text-1);
+      border: 1.5px solid var(--line-2);
     }
-    .btn-secondary:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      transform: translateY(-2px);
-    }
+    .btn-ghost:hover { border-color: var(--lamp); color: var(--lamp); transform: translateY(-2px); }
 
-    /* ===== Sections ===== */
-    section { padding: 100px 0; position: relative; }
-    section:nth-child(even) { background: var(--bg-secondary); }
+    /* ===== 區段 ===== */
+    section { padding: 110px 0; position: relative; }
+    section.alt { background: var(--ink-2); }
 
-    /* ===== Features ===== */
-    .features-grid {
+    /* ===== 卷一：排版示範 ===== */
+    .demo-wrap {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
-    }
-    .feature-card {
-      background: var(--bg-card);
-      border-radius: var(--radius-md);
-      padding: 28px 24px;
-      border: 1px solid var(--border-subtle);
-      transition: border-color var(--duration-normal) ease, background var(--duration-normal) ease, transform var(--duration-normal) var(--ease-out-expo), box-shadow var(--duration-normal) ease;
-      position: relative;
-      overflow: hidden;
-      opacity: 0;
-      transform: translateY(24px);
-    }
-    .feature-card.revealed {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .feature-card:hover {
-      border-color: var(--accent);
-      background: var(--bg-card-hover);
-      transform: translateY(-4px);
-      box-shadow: 0 16px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(201,168,124,0.08);
-    }
-    .feature-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--accent), transparent);
-      opacity: 0;
-      transition: opacity var(--duration-normal) ease;
-    }
-    .feature-card:hover::before {
-      opacity: 1;
-    }
-    .feature-icon {
-      width: 44px; height: 44px;
-      display: flex;
+      grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+      gap: 64px;
       align-items: center;
       justify-content: center;
-      border-radius: var(--radius-sm);
-      background: var(--accent-dim);
-      color: var(--accent);
-      margin-bottom: 16px;
-      transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
     }
-    .feature-card:hover .feature-icon {
-      background: var(--accent);
-      color: var(--bg-primary);
+    .demo-stage {
+      position: relative;
+      display: flex;
+      justify-content: center;
     }
-    .feature-card p {
-      color: var(--text-secondary);
-      font-size: 0.92rem;
-      line-height: 1.7;
+    .demo-stage::before {
+      content: '';
+      position: absolute;
+      inset: 8% -6%;
+      background: radial-gradient(ellipse 60% 55% at 50% 50%, var(--lamp-dim) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .phone-tag {
+      position: absolute;
+      left: -46px; top: 50%;
+      transform: translateY(-50%);
+      writing-mode: vertical-rl;
+      font-family: var(--font-display);
+      font-size: 0.8rem;
+      letter-spacing: 0.45em;
+      color: var(--text-3);
+    }
+    .phone {
+      position: relative;
+      width: 312px;
+      border-radius: 38px;
+      border: 1px solid var(--line-2);
+      background: var(--ink-0);
+      padding: 12px;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(217,171,110,0.06);
+
+      /* 閱讀主題變數（預設：夜間） */
+      --d-bg: #10141d;
+      --d-ink: #cfc8ba;
+      --d-sub: #6f7585;
+      --d-line: rgba(237, 232, 221, 0.08);
+    }
+    .phone.theme-paper { --d-bg: #ebe1cb; --d-ink: #41372a; --d-sub: #8d7e64; --d-line: rgba(65, 55, 42, 0.14); }
+    .phone.theme-pine { --d-bg: #131f1a; --d-ink: #c2cdc2; --d-sub: #5f7468; --d-line: rgba(194, 205, 194, 0.09); }
+
+    .phone-screen {
+      border-radius: 28px;
+      background: var(--d-bg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 596px;
+      transition: background var(--dur-mid) ease;
+    }
+    .demo-status {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 20px 6px;
+      font-size: 0.68rem;
+      color: var(--d-sub);
+      font-variant-numeric: tabular-nums;
+    }
+    .demo-batt { display: inline-flex; align-items: center; gap: 5px; }
+    .demo-batt i {
+      width: 17px; height: 9px;
+      border: 1px solid var(--d-sub);
+      border-radius: 2.5px;
+      position: relative;
+      display: inline-block;
+    }
+    .demo-batt i::before {
+      content: '';
+      position: absolute; inset: 1.5px;
+      right: 35%;
+      background: var(--d-sub);
+      border-radius: 1px;
+    }
+    .demo-batt i::after {
+      content: '';
+      position: absolute;
+      right: -3px; top: 2px;
+      width: 1.5px; height: 3.5px;
+      background: var(--d-sub);
+      border-radius: 1px;
     }
 
-    /* ===== Tech Stack ===== */
-    .tech-list {
+    .demo-page {
+      flex: 1;
+      padding: 14px 22px 10px;
+      overflow: hidden;
+      font-family: var(--d-font, var(--font-display));
+      font-size: var(--d-fs, 17px);
+      line-height: var(--d-lh, 1.95);
+      color: var(--d-ink);
+      text-align: justify;
+      transition: color var(--dur-mid) ease;
+      -webkit-mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
+      mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
+    }
+    .demo-page.f-sans { --d-font: var(--font-body); }
+    .demo-title {
+      font-family: var(--font-display);
+      font-size: 1.25em;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    .demo-author {
+      font-size: 0.72em;
+      color: var(--d-sub);
+      letter-spacing: 0.08em;
+      margin-bottom: 1.2em;
+    }
+    .demo-page p { text-indent: 2em; margin-bottom: 0.9em; }
+    .demo-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 20px 14px;
+      font-size: 0.68rem;
+      color: var(--d-sub);
+      border-top: 1px solid var(--d-line);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 控制面板 */
+    .demo-controls { max-width: 460px; }
+    .demo-controls .lead {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
+    }
+    .demo-controls .lead-sub {
+      color: var(--text-2);
+      font-size: 0.95rem;
+      margin-bottom: 30px;
+    }
+    .ctrl-row { margin-bottom: 24px; }
+    .ctrl-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 0.88rem; font-weight: 500;
+      color: var(--text-2);
+      margin-bottom: 10px;
+    }
+    .ctrl-label output {
+      font-variant-numeric: tabular-nums;
+      color: var(--lamp);
+      font-weight: 700;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--lamp);
+      cursor: pointer;
+      background: transparent;
+    }
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--line-1);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      background: var(--ink-3);
+    }
+    .seg button {
+      padding: 8px 24px;
+      background: transparent;
+      border: none;
+      color: var(--text-2);
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .seg button.active { background: var(--lamp); color: var(--ink-0); font-weight: 700; }
+    .swatches { display: flex; gap: 14px; }
+    .swatch {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 2px solid var(--line-1);
+      cursor: pointer;
+      position: relative;
+      transition: border-color var(--dur-fast) ease, transform var(--dur-fast) var(--ease-expo);
+    }
+    .swatch:hover { transform: translateY(-2px); }
+    .swatch.active { border-color: var(--lamp); box-shadow: 0 0 0 3px var(--lamp-dim); }
+    .swatch span {
+      position: absolute;
+      top: calc(100% + 7px); left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      color: var(--text-3);
+      white-space: nowrap;
+    }
+    .swatch.sw-night { background: linear-gradient(135deg, #10141d 50%, #1a2030 50%); }
+    .swatch.sw-paper { background: linear-gradient(135deg, #ebe1cb 50%, #d9cdb2 50%); }
+    .swatch.sw-pine  { background: linear-gradient(135deg, #131f1a 50%, #1d2f26 50%); }
+    .ctrl-row.themes { margin-bottom: 40px; }
+    .demo-note {
+      font-size: 0.78rem;
+      color: var(--text-3);
+      line-height: 1.7;
+      border-left: 2px solid var(--line-1);
+      padding-left: 14px;
+    }
+
+    /* ===== 卷二：功能 bento ===== */
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 18px;
+    }
+    .cell {
+      background: var(--ink-3);
+      border: 1px solid var(--line-1);
+      border-radius: var(--radius-md);
+      padding: 26px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color var(--dur-mid) ease, transform var(--dur-mid) var(--ease-expo), box-shadow var(--dur-mid) ease, background var(--dur-mid) ease;
+      grid-column: span 2;
+    }
+    .cell:hover {
+      border-color: rgba(217, 171, 110, 0.45);
+      background: var(--ink-4);
+      transform: translateY(-4px);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+    .cell-lg { grid-column: span 3; }
+    .cell h3 { color: var(--text-1); }
+    .cell p { color: var(--text-2); font-size: 0.92rem; line-height: 1.75; }
+    .cell-icon {
+      width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      background: var(--lamp-dim);
+      color: var(--lamp);
+      margin-bottom: 16px;
+      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .cell:hover .cell-icon { background: var(--lamp); color: var(--ink-0); }
+
+    /* TTS 卡內飾 */
+    .tts-stage {
+      margin-top: 22px;
+      padding: 18px;
+      border-radius: 12px;
+      background: var(--ink-1);
+      border: 1px solid var(--line-1);
+    }
+    .tts-line {
+      font-family: var(--font-display);
+      font-size: 1.02rem;
+      line-height: 2;
+      color: var(--text-2);
+      margin-bottom: 14px;
+    }
+    .tts-line span {
+      border-radius: 4px;
+      padding: 1px 2px;
+      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .tts-line span.lit { background: var(--lamp); color: var(--ink-0); }
+    .tts-bar { display: flex; align-items: center; gap: 12px; }
+    .tts-play {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--lamp-dim);
+      color: var(--lamp);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+    .wave i {
+      width: 3px;
+      border-radius: 2px;
+      background: var(--lamp);
+      height: 30%;
+      animation: wave 1.1s ease-in-out infinite;
+      animation-delay: calc(var(--wi) * 0.12s);
+    }
+    @keyframes wave {
+      0%, 100% { height: 25%; opacity: 0.55; }
+      50% { height: 100%; opacity: 1; }
+    }
+    .tts-time { font-size: 0.72rem; color: var(--text-3); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+    /* 搜尋卡內飾 */
+    .search-stage { margin-top: 22px; }
+    .search-box {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--ink-1);
+      border: 1px solid var(--line-1);
+      color: var(--text-2);
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+    .search-box .q::after {
+      content: '';
+      display: inline-block;
+      width: 1.5px; height: 1em;
+      background: var(--lamp);
+      margin-left: 2px;
+      vertical-align: -0.15em;
+      animation: caret 1.1s steps(1) infinite;
+    }
+    @keyframes caret { 50% { opacity: 0; } }
+    .search-hit {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 14px;
+      border-radius: 10px;
+      background: var(--ink-1);
+      border: 1px solid var(--line-1);
+      font-size: 0.85rem;
+      color: var(--text-2);
+    }
+    .search-hit + .search-hit { margin-top: 8px; }
+    .search-hit .src {
+      margin-left: auto;
+      font-size: 0.7rem;
+      color: var(--lamp);
+      background: var(--lamp-dim);
+      padding: 2px 10px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+    .search-hit svg { color: var(--moon); }
+
+    /* ===== 卷三：書源自主 ===== */
+    .creed {
+      text-align: center;
+      max-width: 680px;
+      margin: 0 auto 72px;
+    }
+    .creed .big {
+      font-family: var(--font-display);
+      font-size: clamp(1.45rem, 3.4vw, 2.05rem);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.75;
+      margin-bottom: 22px;
+    }
+    .creed .big em { font-style: normal; color: var(--lamp); }
+    .creed p { color: var(--text-2); font-size: 1rem; }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      position: relative;
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 33px; left: 16%; right: 16%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line-2) 18%, var(--line-2) 82%, transparent);
+    }
+    .step { text-align: center; padding: 0 14px; position: relative; }
+    .step-no {
+      width: 66px; height: 66px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      border: 1px solid var(--line-2);
+      background: var(--ink-1);
+      color: var(--lamp);
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 1;
+      transition: border-color var(--dur-mid) ease, box-shadow var(--dur-mid) ease;
+    }
+    .step:hover .step-no { border-color: var(--lamp); box-shadow: 0 0 28px var(--lamp-dim); }
+    .step h3 { margin-bottom: 6px; }
+    .step p { color: var(--text-2); font-size: 0.9rem; }
+
+    /* ===== 卷四：開源工藝 ===== */
+    .stats {
       display: flex;
-      flex-wrap: wrap;
       justify-content: center;
+      gap: clamp(28px, 6vw, 72px);
+      flex-wrap: wrap;
+      margin-bottom: 64px;
+    }
+    .stat { text-align: center; }
+    .stat b {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 2.3rem;
+      font-weight: 900;
+      color: var(--lamp);
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat span { font-size: 0.85rem; color: var(--text-3); letter-spacing: 0.08em; }
+    .craft-note {
+      text-align: center;
+      color: var(--text-2);
+      max-width: 640px;
+      margin: 0 auto 40px;
+      font-size: 0.98rem;
+    }
+    .tech-list {
+      display: flex; flex-wrap: wrap; justify-content: center;
       gap: 10px;
-      max-width: 700px;
+      max-width: 760px;
       margin: 0 auto;
     }
     .tech-tag {
-      background: var(--bg-card);
-      border: 1px solid var(--border-subtle);
+      background: var(--ink-3);
+      border: 1px solid var(--line-1);
       padding: 8px 20px;
       border-radius: var(--radius-full);
       font-size: 0.85rem;
-      color: var(--text-secondary);
-      font-weight: 500;
-      transition: border-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-out-expo);
+      color: var(--text-2);
+      transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) var(--ease-expo);
       cursor: default;
     }
-    .tech-tag:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      transform: translateY(-2px);
-    }
+    .tech-tag:hover { border-color: var(--lamp); color: var(--lamp); transform: translateY(-2px); }
 
-    /* ===== CTA ===== */
-    .cta-section {
+    /* ===== 終卷：下載 ===== */
+    .dl {
       text-align: center;
-      position: relative;
       overflow: hidden;
     }
-    .cta-section::before {
+    .dl::before {
       content: '';
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,168,124,0.06) 0%, transparent 60%);
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 55% 60% at 50% 100%, rgba(217, 171, 110, 0.09) 0%, transparent 65%);
       pointer-events: none;
     }
-    .cta-section .cta-content {
-      position: relative;
-      z-index: 1;
+    .dl::after {
+      content: '';
+      position: absolute; inset: 0;
+      opacity: 0.025;
+      background-image: var(--grain);
+      background-size: 256px 256px;
+      pointer-events: none;
     }
-    .cta-section p {
-      color: var(--text-secondary);
-      margin-bottom: 36px;
-      font-size: 1.05rem;
-    }
-    .cta-section .btn-primary {
-      font-size: 1.1rem;
-      padding: 16px 44px;
-    }
-    .cta-secondary-wrap {
-      margin-top: 20px;
-    }
-
-    /* ===== Stats ===== */
-    .stats-row {
-      display: flex;
-      justify-content: center;
-      gap: 48px;
-      flex-wrap: wrap;
-      margin-bottom: 56px;
-    }
-    .stat-item {
-      text-align: center;
-    }
-    .stat-number {
-      font-size: 2.2rem;
-      font-weight: 800;
-      color: var(--accent);
-      font-family: var(--font-sans);
-      line-height: 1.2;
-    }
-    .stat-number span {
-      font-size: 1rem;
-      font-weight: 400;
-      color: var(--text-tertiary);
-    }
-    .stat-label {
+    .dl .container { position: relative; z-index: 1; }
+    .dl h2 { margin-bottom: 18px; }
+    .dl-sub { color: var(--text-2); font-size: 1.05rem; margin-bottom: 10px; }
+    .dl-meta {
       font-size: 0.85rem;
-      color: var(--text-tertiary);
-      margin-top: 4px;
+      color: var(--text-3);
+      margin-bottom: 40px;
+      font-variant-numeric: tabular-nums;
     }
+    .dl-meta .dot { margin: 0 8px; color: var(--line-2); }
+    .dl-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 26px; }
+    .dl .btn-primary { font-size: 1.08rem; padding: 16px 44px; }
+    .dl-hint { font-size: 0.78rem; color: var(--text-3); max-width: 460px; margin: 0 auto; line-height: 1.8; }
 
-    /* ===== Footer ===== */
+    /* ===== 頁尾 ===== */
     footer {
-      padding: 48px 24px;
+      padding: 64px 24px 48px;
+      border-top: 1px solid var(--line-1);
       text-align: center;
       font-size: 0.85rem;
-      color: var(--text-tertiary);
-      border-top: 1px solid var(--border-subtle);
+      color: var(--text-3);
+      background: var(--ink-0);
     }
-    footer .footer-brand {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    footer .footer-brand img {
-      width: 24px; height: 24px;
+    .seal {
+      width: 54px; height: 54px;
+      margin: 0 auto 22px;
       border-radius: 6px;
+      background: var(--seal);
+      color: #f5efe4;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 1.05rem;
+      letter-spacing: 0.1em;
+      writing-mode: vertical-rl;
+      display: flex; align-items: center; justify-content: center;
+      transform: rotate(-3deg);
+      box-shadow: inset 0 0 0 2px rgba(245, 239, 228, 0.85), inset 0 0 0 3.5px var(--seal), 0 4px 18px rgba(198, 74, 51, 0.3);
+      user-select: none;
     }
-    footer .footer-brand span {
-      font-weight: 600;
-      color: var(--text-secondary);
+    .footer-brand {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--text-2);
+      margin-bottom: 6px;
     }
-    footer .license {
-      margin-top: 6px;
-      font-size: 0.8rem;
+    .footer-tagline { margin-bottom: 22px; letter-spacing: 0.06em; }
+    .footer-links {
+      display: flex; justify-content: center; flex-wrap: wrap;
+      gap: 26px;
+      margin-bottom: 22px;
     }
-    footer .footer-links {
-      display: flex;
-      justify-content: center;
-      gap: 24px;
-      margin-top: 16px;
-    }
-    footer .footer-links a {
-      font-size: 0.8rem;
-      color: var(--text-tertiary);
-    }
-    footer .footer-links a:hover { color: var(--accent); }
+    .footer-links a { font-size: 0.85rem; color: var(--text-3); }
+    .footer-links a:hover { color: var(--lamp); }
+    .footer-fine { font-size: 0.78rem; line-height: 1.9; }
 
-    /* ===== Reduced Motion ===== */
+    /* ===== 動態縮減 ===== */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -511,290 +902,589 @@
         transition-duration: 0.01ms !important;
       }
       html { scroll-behavior: auto; }
+      .meteor { display: none; }
     }
 
-    /* ===== Responsive ===== */
+    /* ===== 響應式 ===== */
+    @media (max-width: 1024px) {
+      .hero-inscription { display: none; }
+      .phone-tag { display: none; }
+    }
+    @media (max-width: 900px) {
+      .demo-wrap { grid-template-columns: 1fr; gap: 56px; justify-items: center; }
+      .demo-controls { width: 100%; max-width: 480px; }
+      .cell-lg { grid-column: span 6; }
+      .cell { grid-column: span 3; }
+    }
     @media (max-width: 768px) {
       .nav-links { display: none; }
       .nav-toggle { display: block; }
       .nav-links.open {
         display: flex;
         flex-direction: column;
+        align-items: flex-start;
         position: absolute;
         top: 100%; left: 0; right: 0;
-        background: rgba(13,11,9,0.95);
-        backdrop-filter: blur(16px);
-        padding: 16px 24px;
-        gap: 12px;
-        border-bottom: 1px solid var(--border-subtle);
+        background: rgba(8, 10, 16, 0.96);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        padding: 18px 24px 22px;
+        gap: 14px;
+        border-bottom: 1px solid var(--line-1);
       }
-      header { min-height: 90vh; padding: 100px 20px 60px; }
-      section { padding: 64px 0; }
-      .features-grid { grid-template-columns: 1fr; }
-      .stats-row { gap: 24px; }
-      .stat-number { font-size: 1.8rem; }
+      section { padding: 76px 0; }
+      .sec-head { margin-bottom: 40px; }
+      .moon { width: 60px; height: 60px; right: 8%; top: 10%; opacity: 0.7; }
+      .steps { grid-template-columns: 1fr; gap: 36px; max-width: 380px; }
+      .steps::before { display: none; }
+      .stats { gap: 28px; }
+      .stat b { font-size: 1.8rem; }
     }
-
+    @media (max-width: 640px) {
+      .cell, .cell-lg { grid-column: span 6; }
+      .phone { width: 290px; }
+      .phone-screen { height: 560px; }
+    }
     @media (max-width: 480px) {
-      .container { padding: 0 16px; }
-      .hero-icon-wrap { width: 80px; height: 80px; border-radius: 20px; }
-      .hero-icon-wrap img { border-radius: 16px; }
-      .btn { padding: 12px 24px; font-size: 0.9rem; }
+      .container { padding: 0 18px; }
+      .hero-sub br { display: none; }
+      .hero-icon { width: 84px; height: 84px; }
+      .btn { padding: 13px 26px; font-size: 0.92rem; }
+      .swatches { gap: 10px; }
+      .swatch { width: 40px; height: 40px; }
+    }
+    @media (max-width: 360px) {
+      .phone { width: 256px; }
+      .phone-screen { height: 520px; }
     }
   </style>
+  <noscript>
+    <style>.reveal { opacity: 1; transform: none; }</style>
+  </noscript>
 </head>
 <body>
 
-  <!-- ===== Navbar ===== -->
+  <!-- ===== 導覽列 ===== -->
   <nav class="navbar" id="navbar">
     <div class="container">
       <a href="#" class="nav-brand">
-        <img src="app-icon.png" alt="夜讀" onerror="this.style.display='none'" />
+        <img src="app-icon.png" alt="" onerror="this.style.display='none'" />
         <span>夜讀</span>
       </a>
       <ul class="nav-links" id="navLinks">
+        <li><a href="#typeset">排版</a></li>
         <li><a href="#features">功能</a></li>
-        <li><a href="#tech">技術</a></li>
+        <li><a href="#sources">書源</a></li>
+        <li><a href="#craft">開源</a></li>
         <li><a href="#download" class="nav-cta">下載</a></li>
       </ul>
-      <button class="nav-toggle" id="navToggle" aria-label="選單">
+      <button class="nav-toggle" id="navToggle" aria-label="開啟選單" aria-expanded="false">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
     </div>
   </nav>
 
-  <!-- ===== Hero ===== -->
-  <header>
+  <!-- ===== Hero：夜空 ===== -->
+  <header class="hero">
+    <div class="sky" id="stars" aria-hidden="true"></div>
+    <div class="moon" aria-hidden="true"></div>
+    <div class="meteor" aria-hidden="true"></div>
+    <div class="hero-inscription" aria-hidden="true">夜深人靜・正好讀書</div>
+
     <div class="hero-content">
       <div class="hero-badge">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg> v0.2.104 · Open Source
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        開源・GPL-3.0・無廣告
       </div>
-      <div class="hero-icon-wrap">
-        <img src="app-icon.png" alt="夜讀 Night Reader" onerror="this.parentElement.style.display='none'" />
+      <div class="hero-icon">
+        <img src="app-icon.png" alt="夜讀 Night Reader App 圖示" onerror="this.parentElement.style.display='none'" />
       </div>
-      <h1>夜讀 <span style="color: var(--accent);">·</span> Night Reader</h1>
+      <h1><span class="sr-only">夜讀 Night Reader — </span>把<em>長夜</em>，留給<em>長篇</em>。</h1>
       <p class="hero-sub">
-        一款專注於長篇閱讀體驗的自主小說閱讀器。<br />
-        由您自行管理書源、排版與離線內容。
+        夜讀是一款開源的自主小說閱讀器。<br />
+        書源自己掌握，排版隨心調校，內容離線同行。
       </p>
-      <p class="hero-version"><span id="versionDisplay">讀取中…</span> · Android arm64-v8a · GPL-3.0</p>
+      <p class="hero-meta">
+        <span id="ver">最新版本</span><span class="dot">·</span>Android 7.0+<span class="dot">·</span>arm64-v8a
+      </p>
       <div class="hero-actions">
-        <a class="btn btn-primary" id="downloadBtn" href="https://github.com/bennytsai1234/Night-Reader/releases/latest" target="_blank">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下載 APK
+        <a class="btn btn-primary js-apk" href="https://github.com/bennytsai1234/Night-Reader/releases/latest" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          下載 APK
         </a>
-        <a class="btn btn-secondary" href="https://github.com/bennytsai1234/Night-Reader" target="_blank">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg> GitHub 原始碼
+        <a class="btn btn-ghost" href="https://github.com/bennytsai1234/Night-Reader" target="_blank" rel="noopener">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub 原始碼
         </a>
       </div>
     </div>
-    <div class="hero-scroll">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-      <span>探索功能</span>
+
+    <div class="hero-scroll" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+      <span>往下翻頁</span>
     </div>
   </header>
 
-  <!-- ===== Features ===== -->
-  <section id="features">
-    <div class="container">
-      <p class="section-label">功能總覽</p>
-      <h2>為深度閱讀而生</h2>
-      <p class="section-desc">
-        從排版引擎到語音朗讀，每個細節都為長篇中文閱讀細心打磨。
-      </p>
-      <div class="features-grid" id="featuresGrid">
-        
-        <div class="feature-card" data-delay="0">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></div>
-          <h3>精細排版引擎</h3>
-          <p>字號、行高、字距、段距、首行縮排、左右邊距皆可獨立調整。針對中文長篇閱讀最佳化，標點符號避頭尾，版面乾淨整齊。</p>
+  <main>
+
+    <!-- ===== 卷一：排版自由 ===== -->
+    <section id="typeset">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">卷一</p>
+          <h2>一字一句，都聽你的</h2>
+          <p class="sec-sub">自製排版引擎，字號、行高、字距、段距、縮排、邊距皆可獨立調校，標點避頭尾。下面這一頁是活的 — 動手調調看。</p>
         </div>
-        <div class="feature-card" data-delay="40">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
-          <h3>雙翻頁模式</h3>
-          <p>支援「平移翻頁」（左右滑動）與「上下滾動」（連續捲動）兩種閱讀模式，自由切換，隨心閱讀。</p>
-        </div>
-        <div class="feature-card" data-delay="80">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></div>
-          <h3>語音朗讀 TTS</h3>
-          <p>逐詞高亮、續讀、自動接章。可調整語速、音調、音量與音色，選擇不同的語音引擎。</p>
-        </div>
-        <div class="feature-card" data-delay="120">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-          <h3>多書源並行搜尋</h3>
-          <p>在所有已匯入的來源中同時搜尋，快速找到想看的內容。支援探索分類瀏覽。</p>
-        </div>
-        <div class="feature-card" data-delay="160">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
-          <h3>書源管理</h3>
-          <p>網路／本地匯入、匯出、批次有效性校驗、訂閱自動更新、規則偵錯工具，一應俱全。</p>
-        </div>
-        <div class="feature-card" data-delay="200">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
-          <h3>書架與書籤</h3>
-          <p>書架統一管理在讀書籍，顯示封面、閱讀進度與快取狀態。書籤標記段落，隨時跳回。</p>
-        </div>
-        <div class="feature-card" data-delay="240">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-          <h3>離線快取</h3>
-          <p>手動預下載章節以供離線閱讀。背景下載佇列可查看、暫停、重試與刪除任務。</p>
-        </div>
-        <div class="feature-card" data-delay="280">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-          <h3>一鍵備份還原</h3>
-          <p>書架、書源、替換規則、書籤、閱讀進度與 App 設定一次備份，換機或重裝後完整還原。</p>
-        </div>
-        <div class="feature-card" data-delay="320">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-          <h3>本地電子書</h3>
-          <p>支援匯入並閱讀 TXT 與 EPUB 格式的本地檔案，無需網路即可閱讀。</p>
-        </div>
-        <div class="feature-card" data-delay="360">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg></div>
-          <h3>自訂主題外觀</h3>
-          <p>切換閱讀背景、字體與配色。點擊區域自訂（打點區），貼合個人操作習慣。</p>
-        </div>
-        <div class="feature-card" data-delay="400">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
-          <h3>替換規則</h3>
-          <p>支援全域與章內替換規則，自訂淨化或修正內文，打造純淨閱讀體驗。</p>
-        </div>
-        <div class="feature-card" data-delay="440">
-          <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-          <h3>繁簡轉換</h3>
-          <p>可選擇不轉換、簡轉繁或繁轉簡，滿足不同語言習慣與閱讀偏好。</p>
+
+        <div class="demo-wrap">
+          <div class="demo-stage reveal">
+            <span class="phone-tag" aria-hidden="true">自製排版引擎・所見即所讀</span>
+            <div class="phone" id="phone">
+              <div class="phone-screen">
+                <div class="demo-status" aria-hidden="true">
+                  <span>23:47</span>
+                  <span class="demo-batt">86%<i></i></span>
+                </div>
+                <div class="demo-page" id="demoPage">
+                  <p class="demo-title">秋夜</p>
+                  <p class="demo-author">魯迅・一九二四（公有領域）</p>
+                  <p>在我的後園，可以看見牆外有兩株樹，一株是棗樹，還有一株也是棗樹。</p>
+                  <p>這上面的夜的天空，奇怪而高，我生平沒有見過這樣奇怪而高的天空。他彷彿要離開人間而去，使人們仰面不再看見。然而現在卻非常之藍，閃閃地眨著幾十個星星的眼，冷眼。他的口角上現出微笑，似乎自以為大有深意，而將繁霜灑在我的園裡的野花草上。</p>
+                  <p>我不知道那些花草真叫什麼名字，人們叫他們什麼名字。我記得有一種開過極細小的粉紅花，現在還開著，但是更極細小了，她在冷的夜氣中，瑟縮地做夢……</p>
+                </div>
+                <div class="demo-foot" aria-hidden="true">
+                  <span>秋夜・第 1 / 24 頁</span>
+                  <span>4%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="demo-controls reveal" style="--rd: 120ms">
+            <p class="lead">這不是截圖，是排版。</p>
+            <p class="lead-sub">拖動滑桿、切換字體與主題，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
+
+            <div class="ctrl-row">
+              <label class="ctrl-label" for="fsRange">字號<output id="fsVal">17 px</output></label>
+              <input type="range" id="fsRange" min="14" max="22" step="1" value="17" />
+            </div>
+            <div class="ctrl-row">
+              <label class="ctrl-label" for="lhRange">行高<output id="lhVal">1.95</output></label>
+              <input type="range" id="lhRange" min="150" max="240" step="5" value="195" />
+            </div>
+            <div class="ctrl-row">
+              <p class="ctrl-label" id="fontSegLabel">字體</p>
+              <div class="seg" role="group" aria-labelledby="fontSegLabel" id="fontSeg">
+                <button type="button" class="active" data-font="serif">明體</button>
+                <button type="button" data-font="sans">黑體</button>
+              </div>
+            </div>
+            <div class="ctrl-row themes">
+              <p class="ctrl-label" id="themeLabel">閱讀主題</p>
+              <div class="swatches" role="group" aria-labelledby="themeLabel" id="themeSwatches">
+                <button type="button" class="swatch sw-night active" data-theme="" aria-label="夜間主題"><span>夜間</span></button>
+                <button type="button" class="swatch sw-paper" data-theme="theme-paper" aria-label="羊皮主題"><span>羊皮</span></button>
+                <button type="button" class="swatch sw-pine" data-theme="theme-pine" aria-label="松煙主題"><span>松煙</span></button>
+              </div>
+            </div>
+
+            <p class="demo-note">※ 此為網頁模擬示意。實際 App 由自製 Canvas 排版引擎渲染，另支援字距、段距、邊距、首行縮排與平移／捲動雙翻頁模式。</p>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ===== Tech Stack ===== -->
-  <section id="tech">
-    <div class="container">
-      <p class="section-label">技術架構</p>
-      <h2>設計與工程</h2>
-      <p class="section-desc">
-        以 Flutter 為基底，自製排版渲染引擎與通用網頁規則解析器。
-      </p>
-      <div class="tech-list">
-        <span class="tech-tag">Flutter</span>
-        <span class="tech-tag">Dart</span>
-        <span class="tech-tag">Drift (SQLite)</span>
-        <span class="tech-tag">Dio 網路層</span>
-        <span class="tech-tag">QuickJS 引擎</span>
-        <span class="tech-tag">HTML / CSS / XPath 解析</span>
-        <span class="tech-tag">自製排版渲染引擎</span>
-        <span class="tech-tag">Provider 狀態管理</span>
-        <span class="tech-tag">flutter_tts</span>
-        <span class="tech-tag">WorkManager 背景任務</span>
+    <!-- ===== 卷二：功能全覽 ===== -->
+    <section id="features" class="alt">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">卷二</p>
+          <h2>深夜書房的全部家當</h2>
+          <p class="sec-sub">從找書、聽書到離線帶著走 — 長篇閱讀需要的一切，都在一個 App 裡。</p>
+        </div>
+
+        <div class="bento">
+
+          <div class="cell cell-lg reveal">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </div>
+            <h3>語音朗讀 TTS</h3>
+            <p>逐詞高亮跟讀、斷點續讀、自動接章。語速、音調、音量與音色皆可調，並支援切換系統語音引擎 — 眼睛累了，就讓耳朵接手。</p>
+            <div class="tts-stage" aria-hidden="true">
+              <p class="tts-line" id="ttsLine"><span>月光</span><span>如</span><span>流水</span><span>一般，</span><span>靜靜地</span><span>瀉在</span><span>這一片</span><span>葉子</span><span>和</span><span>花上。</span></p>
+              <div class="tts-bar">
+                <span class="tts-play">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </span>
+                <span class="wave"><i style="--wi:0"></i><i style="--wi:1"></i><i style="--wi:2"></i><i style="--wi:3"></i><i style="--wi:4"></i></span>
+                <span class="tts-time">朱自清《荷塘月色》・1.2x</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cell cell-lg reveal" style="--rd: 80ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <h3>多書源並行搜尋</h3>
+            <p>一次搜遍所有已匯入的書源，結果即時聚合；同一本書多個來源，讀到一半也能無縫換源續讀。</p>
+            <div class="search-stage" aria-hidden="true">
+              <div class="search-box">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span class="q">西遊記</span>
+              </div>
+              <div class="search-hit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                西遊記 <span class="src">書源・甲</span>
+              </div>
+              <div class="search-hit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                西遊記（校注本） <span class="src">書源・乙</span>
+              </div>
+              <div class="search-hit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                西遊補 <span class="src">書源・丙</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cell reveal">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </div>
+            <h3>雙翻頁模式</h3>
+            <p>平移翻頁與上下捲動自由切換，點擊翻頁區域亦可自訂，貼合單手操作習慣。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 60ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </div>
+            <h3>書源管理</h3>
+            <p>匯入、匯出、批次有效性校驗、訂閱自動更新與規則偵錯工具，一應俱全。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 120ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </div>
+            <h3>書架與書籤</h3>
+            <p>封面、閱讀進度與快取狀態一目了然；書籤標記段落，隨時跳回那一行。</p>
+          </div>
+
+          <div class="cell reveal">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <h3>離線快取</h3>
+            <p>批次預下載章節，飛航模式照樣讀。背景佇列可查看、暫停、重試與刪除。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 60ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>一鍵備份還原</h3>
+            <p>書架、書源、替換規則、書籤、進度與設定一次打包，換機重裝完整還原。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 120ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <h3>本地電子書</h3>
+            <p>匯入 TXT 與 EPUB 檔案，自動解析章節，沒有網路也能讀完整本。</p>
+          </div>
+
+          <div class="cell reveal">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg>
+            </div>
+            <h3>自訂主題外觀</h3>
+            <p>閱讀背景、字體與配色隨心切換，深夜讀書也不刺眼。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 60ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </div>
+            <h3>替換規則</h3>
+            <p>全域與章內替換，淨化內文、修正錯字，還你一個乾淨版面。</p>
+          </div>
+
+          <div class="cell reveal" style="--rd: 120ms">
+            <div class="cell-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <h3>繁簡轉換</h3>
+            <p>不轉換、簡轉繁、繁轉簡三種模式，貼合你的閱讀習慣。</p>
+          </div>
+
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ===== CTA ===== -->
-  <section class="cta-section" id="download">
-    <div class="cta-content container">
-      <p class="section-label">立即使用</p>
-      <h2>開始閱讀</h2>
-      <p>
-        夜讀為純工具型應用，不內建任何書籍內容。<br />
-        匯入您信任的書源，立即享受專屬的閱讀體驗。
-      </p>
-      <a class="btn btn-primary" id="downloadBtn2" href="https://github.com/bennytsai1234/Night-Reader/releases/latest" target="_blank">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下載最新版本
-      </a>
-      <div class="cta-secondary-wrap">
-        <a class="btn btn-secondary" href="https://github.com/bennytsai1234/Night-Reader" target="_blank">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg> 檢視原始碼 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </a>
+    <!-- ===== 卷三：書源自主 ===== -->
+    <section id="sources">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">卷三</p>
+          <h2>你的書，你的來源</h2>
+        </div>
+
+        <div class="creed reveal">
+          <p class="big">夜讀不內建任何書籍內容。<br />它是一把<em>鑰匙</em>，而不是一座圖書館。</p>
+          <p>書源由你匯入、校驗、訂閱更新 — 讀什麼、從哪裡讀，選擇權完全在你手上。</p>
+        </div>
+
+        <div class="steps">
+          <div class="step reveal">
+            <div class="step-no">一</div>
+            <h3>匯入書源</h3>
+            <p>從網路連結或本地檔案匯入，批次校驗有效性，失效來源一眼看出。</p>
+          </div>
+          <div class="step reveal" style="--rd: 100ms">
+            <div class="step-no">二</div>
+            <h3>搜尋全網</h3>
+            <p>多書源並行搜尋、探索分類瀏覽，幾秒內聚合所有結果。</p>
+          </div>
+          <div class="step reveal" style="--rd: 200ms">
+            <div class="step-no">三</div>
+            <h3>離線同行</h3>
+            <p>預下載整本章節，通勤、飛行、深山 — 沒有訊號的地方照樣讀。</p>
+          </div>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ===== Footer ===== -->
+    <!-- ===== 卷四：開源工藝 ===== -->
+    <section id="craft" class="alt">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">卷四</p>
+          <h2>燈下的工藝</h2>
+          <p class="sec-sub">全部原始碼公開於 GitHub，以 GPL-3.0 釋出。沒有廣告、沒有追蹤 SDK — 深夜只有你與故事，沒有別人。</p>
+        </div>
+
+        <div class="stats reveal">
+          <div class="stat"><b>0</b><span>廣告</span></div>
+          <div class="stat"><b>0</b><span>追蹤 SDK</span></div>
+          <div class="stat"><b>100%</b><span>開源</span></div>
+          <div class="stat"><b>GPL-3.0</b><span>授權</span></div>
+        </div>
+
+        <p class="craft-note reveal">
+          以 Flutter 打造，核心是自製 Canvas 排版渲染引擎，與一套通用書源規則解析器 — CSS、XPath、JSONPath、Regex 與 JavaScript 規則都讀得懂。
+        </p>
+
+        <div class="tech-list reveal">
+          <span class="tech-tag">Flutter</span>
+          <span class="tech-tag">Dart</span>
+          <span class="tech-tag">自製 Canvas 排版引擎</span>
+          <span class="tech-tag">Drift（SQLite）</span>
+          <span class="tech-tag">Dio 網路層</span>
+          <span class="tech-tag">flutter_js（QuickJS）</span>
+          <span class="tech-tag">CSS / XPath / JSONPath 解析</span>
+          <span class="tech-tag">flutter_tts + audio_service</span>
+          <span class="tech-tag">Headless WebView</span>
+          <span class="tech-tag">Provider 狀態管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 終卷：下載 ===== -->
+    <section id="download" class="dl">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">終卷</p>
+          <h2>今晚，就開始夜讀</h2>
+        </div>
+        <p class="dl-sub reveal">免費、開源、無廣告。下載 APK，匯入你信任的書源。</p>
+        <p class="dl-meta reveal"><span id="verDl">最新版本</span><span class="dot">·</span>Android 7.0+<span class="dot">·</span>arm64-v8a</p>
+        <div class="dl-actions reveal">
+          <a class="btn btn-primary js-apk" href="https://github.com/bennytsai1234/Night-Reader/releases/latest" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下載最新版 APK
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/bennytsai1234/Night-Reader/releases" target="_blank" rel="noopener">所有版本</a>
+        </div>
+        <p class="dl-hint reveal">
+          APK 由 GitHub Actions 自動建置並發佈於 Releases。<br />
+          初次安裝時，系統可能要求允許「安裝未知的應用程式」。
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== 頁尾 ===== -->
   <footer>
     <div class="container">
-      <div class="footer-brand">
-        <img src="app-icon.png" alt="夜讀" onerror="this.style.display='none'" />
-        <span>夜讀 · Night Reader</span>
-      </div>
-      <p>專注長篇閱讀體驗</p>
-      <p class="license">以 GPL-3.0 授權釋出</p>
+      <div class="seal" aria-hidden="true">夜讀</div>
+      <p class="footer-brand">夜讀・Night Reader</p>
+      <p class="footer-tagline">把長夜，留給長篇。</p>
       <div class="footer-links">
-        <a href="https://github.com/bennytsai1234/Night-Reader" target="_blank">GitHub</a>
-        <a href="https://github.com/bennytsai1234/Night-Reader/releases" target="_blank">Releases</a>
-        <a href="https://github.com/bennytsai1234/Night-Reader/issues" target="_blank">Issues</a>
+        <a href="https://github.com/bennytsai1234/Night-Reader" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/bennytsai1234/Night-Reader/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/bennytsai1234/Night-Reader/issues" target="_blank" rel="noopener">問題回報</a>
       </div>
+      <p class="footer-fine">
+        © <span id="year">2026</span> 夜讀 Night Reader・以 GPL-3.0 授權釋出<br />
+        以 Flutter 與許多個長夜打造。示範文本《秋夜》《荷塘月色》屬公有領域。
+      </p>
     </div>
   </footer>
 
   <!-- ===== Scripts ===== -->
   <script>
-    // --- Navbar scroll effect ---
-    const navbar = document.getElementById('navbar');
-    let lastScroll = 0;
-    window.addEventListener('scroll', () => {
-      const y = window.scrollY;
-      navbar.classList.toggle('scrolled', y > 60);
-      lastScroll = y;
-    }, { passive: true });
+    (function () {
+      'use strict';
 
-    // --- Mobile nav toggle ---
-    const toggle = document.getElementById('navToggle');
-    const navLinks = document.getElementById('navLinks');
-    toggle?.addEventListener('click', () => {
-      navLinks.classList.toggle('open');
-    });
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // --- Intersection Observer: reveal feature cards ---
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const delay = parseInt(entry.target.dataset.delay) || 0;
-          setTimeout(() => entry.target.classList.add('revealed'), delay);
-          observer.unobserve(entry.target);
+      /* ---- 星空 ---- */
+      (function buildStars() {
+        var sky = document.getElementById('stars');
+        if (!sky) return;
+        var count = window.innerWidth < 768 ? 45 : 90;
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < count; i++) {
+          var s = document.createElement('i');
+          var size = Math.random() * 1.8 + 0.8;
+          s.className = 'star' + (size > 2.1 ? ' big' : '') + (Math.random() < 0.18 ? ' warm' : '');
+          s.style.width = size + 'px';
+          s.style.height = size + 'px';
+          s.style.left = (Math.random() * 100).toFixed(2) + '%';
+          s.style.top = (Math.random() * 78).toFixed(2) + '%';
+          s.style.setProperty('--so', (Math.random() * 0.55 + 0.3).toFixed(2));
+          s.style.setProperty('--tw', (Math.random() * 4 + 2.5).toFixed(2) + 's');
+          s.style.setProperty('--td', (Math.random() * 5).toFixed(2) + 's');
+          frag.appendChild(s);
+        }
+        sky.appendChild(frag);
+      })();
+
+      /* ---- 導覽列 ---- */
+      var navbar = document.getElementById('navbar');
+      window.addEventListener('scroll', function () {
+        navbar.classList.toggle('scrolled', window.scrollY > 50);
+      }, { passive: true });
+
+      var toggle = document.getElementById('navToggle');
+      var navLinks = document.getElementById('navLinks');
+      toggle.addEventListener('click', function () {
+        var open = navLinks.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      navLinks.addEventListener('click', function (e) {
+        if (e.target.tagName === 'A') {
+          navLinks.classList.remove('open');
+          toggle.setAttribute('aria-expanded', 'false');
         }
       });
-    }, { rootMargin: '0px 0px -60px 0px', threshold: 0.1 });
 
-    document.querySelectorAll('.feature-card').forEach(el => observer.observe(el));
-
-    // --- Smooth scroll offset for fixed navbar ---
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-      anchor.addEventListener('click', function(e) {
-        const href = this.getAttribute('href');
-        if (href === '#') return;
-        e.preventDefault();
-        const target = document.querySelector(href);
-        if (target) {
-          const offset = 72;
-          window.scrollTo({
-            top: target.offsetTop - offset,
-            behavior: 'smooth'
+      /* ---- 捲動進場 ---- */
+      var revealEls = document.querySelectorAll('.reveal');
+      if ('IntersectionObserver' in window && !reduced) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('in');
+              io.unobserve(entry.target);
+            }
           });
-        }
-        // Close mobile nav
-        navLinks.classList.remove('open');
-      });
-    });
-
-    // --- Fetch latest release from GitHub API ---
-    (async function fetchLatestRelease() {
-      try {
-        const res = await fetch('https://api.github.com/repos/bennytsai1234/Night-Reader/releases/latest');
-        if (!res.ok) throw new Error('API error');
-        const data = await res.json();
-        const tag = data.tag_name; // e.g. "v0.2.104"
-        document.getElementById('versionDisplay').textContent = tag;
-
-        // Update download buttons to point directly to the APK
-        const apkAsset = data.assets?.find(a => a.name.includes('arm64-v8a'));
-        if (apkAsset) {
-          document.getElementById('downloadBtn').href = apkAsset.browser_download_url;
-          document.getElementById('downloadBtn2').href = apkAsset.browser_download_url;
-        }
-      } catch {
-        document.getElementById('versionDisplay').textContent = '最新版本';
+        }, { rootMargin: '0px 0px -48px 0px', threshold: 0.1 });
+        revealEls.forEach(function (el) { io.observe(el); });
+      } else {
+        revealEls.forEach(function (el) { el.classList.add('in'); });
       }
+
+      /* ---- 排版示範 ---- */
+      var page = document.getElementById('demoPage');
+      var phone = document.getElementById('phone');
+
+      var fsRange = document.getElementById('fsRange');
+      var fsVal = document.getElementById('fsVal');
+      fsRange.addEventListener('input', function () {
+        page.style.setProperty('--d-fs', fsRange.value + 'px');
+        fsVal.textContent = fsRange.value + ' px';
+      });
+
+      var lhRange = document.getElementById('lhRange');
+      var lhVal = document.getElementById('lhVal');
+      lhRange.addEventListener('input', function () {
+        var lh = (lhRange.value / 100).toFixed(2);
+        page.style.setProperty('--d-lh', lh);
+        lhVal.textContent = lh;
+      });
+
+      document.getElementById('fontSeg').addEventListener('click', function (e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        this.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        page.classList.toggle('f-sans', btn.dataset.font === 'sans');
+      });
+
+      document.getElementById('themeSwatches').addEventListener('click', function (e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        this.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        phone.className = 'phone' + (btn.dataset.theme ? ' ' + btn.dataset.theme : '');
+      });
+
+      /* ---- TTS 逐詞高亮 ---- */
+      (function ttsDemo() {
+        var line = document.getElementById('ttsLine');
+        if (!line) return;
+        var words = line.querySelectorAll('span');
+        var idx = 0;
+        words[0].classList.add('lit');
+        if (reduced || !('IntersectionObserver' in window)) return;
+        var timer = null;
+        var ttsIo = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting && !timer) {
+              timer = setInterval(function () {
+                words[idx].classList.remove('lit');
+                idx = (idx + 1) % words.length;
+                words[idx].classList.add('lit');
+              }, 680);
+            } else if (!entry.isIntersecting && timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          });
+        }, { threshold: 0.3 });
+        ttsIo.observe(line);
+      })();
+
+      /* ---- GitHub 最新版本 ---- */
+      (function fetchLatest() {
+        fetch('https://api.github.com/repos/bennytsai1234/Night-Reader/releases/latest')
+          .then(function (res) {
+            if (!res.ok) throw new Error('API error');
+            return res.json();
+          })
+          .then(function (data) {
+            if (data.tag_name) {
+              document.getElementById('ver').textContent = data.tag_name;
+              document.getElementById('verDl').textContent = data.tag_name;
+            }
+            var apk = (data.assets || []).find(function (a) { return a.name.indexOf('arm64-v8a') !== -1; });
+            if (apk) {
+              document.querySelectorAll('.js-apk').forEach(function (el) {
+                el.href = apk.browser_download_url;
+              });
+            }
+          })
+          .catch(function () { /* 維持 Releases 頁連結 */ });
+      })();
+
+      /* ---- 年份 ---- */
+      document.getElementById('year').textContent = new Date().getFullYear();
     })();
   </script>
 </body>
