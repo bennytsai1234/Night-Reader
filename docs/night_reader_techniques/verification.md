@@ -1,7 +1,8 @@
 # Technique: Verification Before Completion
 
 A self-contained discipline for proving work is done before claiming it is. The
-Change workflow pulls this in after edits, before reporting completion.
+atlas adapter's change path pulls this in after edits, before reporting
+completion.
 
 **Iron law: no completion claim without fresh verification evidence.** If you
 have not run the verifying command in this round of work, you cannot say it

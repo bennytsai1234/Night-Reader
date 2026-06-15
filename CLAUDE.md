@@ -1,3 +1,1 @@
-## 每次對話開始
-
-在任何操作之前，先執行 `/night-reader-atlas` skill。
+本專案的導航地圖位於 `docs/night_reader_index.md`。

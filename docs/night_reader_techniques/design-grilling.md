@@ -1,9 +1,9 @@
 # Technique: Design Grilling
 
 A self-contained discipline for resolving an ambiguous design or decision before
-acting. Pulled in by the change workflow's Decision Gate when a change has
-several interdependent unresolved decisions or unclear requirements, and by the
-investigate workflow for feasibility or approach questions ("should we do X",
+acting. Pulled in by the adapter's Decision Gate when a change has several
+interdependent unresolved decisions or unclear requirements, and by its
+investigate path for feasibility or approach questions ("should we do X",
 "how should we design Y").
 
 **Use it only for genuine ambiguity.** It interviews the user, which cuts

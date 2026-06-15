@@ -1,7 +1,8 @@
 # Technique: Debugging
 
 A self-contained discipline for finding the **root cause** of a bug before
-changing anything. The Change and Investigate workflows pull this in on demand.
+changing anything. The atlas adapter's change and investigate paths pull this in
+on demand.
 
 **Iron law: no fix without root-cause evidence first.** A fix that only removes
 the nearest symptom is a failure — it leaves the real cause to resurface.

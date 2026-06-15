@@ -1,7 +1,7 @@
 # Technique: Code Review
 
 A self-contained discipline for two situations: **reviewing** a change (the
-Investigate workflow's review question) and **receiving** review feedback before
+adapter's investigate review question) and **receiving** review feedback before
 acting on it. Both demand technical evaluation, not performative agreement.
 
 ## Reviewing a change

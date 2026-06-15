@@ -1,8 +1,8 @@
 # Technique: Test-Driven Development
 
 A self-contained discipline for writing the test first, watching it fail, then
-writing the minimal code to pass. The Change workflow pulls this in when a task
-adds or fixes behaviour and a cheap test seam exists.
+writing the minimal code to pass. The atlas adapter's change path pulls this in
+when a task adds or fixes behaviour and a cheap test seam exists.
 
 **Iron law: no production code without a failing test first.** If you write the
 code first, you never see the test fail, so you never learn whether it tests the
