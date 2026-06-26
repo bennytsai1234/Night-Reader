@@ -1178,6 +1178,67 @@ void main() {
     runtime.dispose();
   });
 
+  testWidgets('slide viewport accepts page commands after manual drag settles', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.slide,
+      chapterCount: 1,
+      paragraphsPerChapter: 80,
+    );
+    final layout = await runtime.debugResolver.ensureLayout(0);
+    expect(layout.pages.length, greaterThan(2));
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: SlideReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final center = tester.getCenter(find.byType(SlideReaderV2Viewport));
+    final dragGesture = await tester.startGesture(center);
+    await dragGesture.moveBy(const Offset(-120, 0));
+    await tester.pump();
+    await dragGesture.up();
+    await _pumpViewportCommand(tester);
+
+    expect(runtime.state.pageWindow?.current.pageIndex, 1);
+
+    var commandCompleted = false;
+    bool? commandResult;
+    unawaited(
+      controller.moveToNextPage!().then((result) {
+        commandCompleted = true;
+        commandResult = result;
+      }),
+    );
+    await _pumpViewportCommand(tester);
+    await _flushMicrotasks();
+
+    expect(commandCompleted, isTrue);
+    expect(commandResult, isTrue);
+    expect(runtime.state.pageWindow?.current.pageIndex, 2);
+    expect(tester.takeException(), isNull);
+
+    runtime.dispose();
+  });
+
   testWidgets('slide viewport suppresses tap while page animation is active', (
     tester,
   ) async {
