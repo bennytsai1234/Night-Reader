@@ -312,7 +312,7 @@ class ReaderV2ChapterPageCacheManager {
       (chapterIndex, _) => !effectiveRetained.contains(chapterIndex),
     );
     if (hadEvictions) _bumpRevision();
-    runtime.debugResolver.retainLayoutsFor(effectiveRetained);
+    runtime.resolver.retainLayoutsFor(effectiveRetained);
   }
 
   void retainChapters(Set<int> retained) {
@@ -399,7 +399,7 @@ class ReaderV2ChapterPageCacheManager {
     late final Future<ReaderV2CachedChapterPages> task;
     task = () async {
       try {
-        final layout = await runtime.debugResolver.ensureLayout(
+        final layout = await runtime.resolver.ensureLayout(
           safeIndex,
           retryOnStale: false,
         );

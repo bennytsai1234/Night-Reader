@@ -411,7 +411,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   String _displayPageLabel(ReaderV2Runtime? runtime, ReaderV2RenderPage? page) {
-    if (runtime == null) return '0/0';
+    if (runtime == null) return '...';
     if (runtime.state.mode == ReaderV2Mode.scroll) {
       final visiblePage = _visiblePageForScroll(runtime);
       if (visiblePage != null && visiblePage.pageSize > 0) {
@@ -420,9 +420,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           visiblePage.pageSize,
         );
       }
-      return '0/0';
+      return '...';
     }
-    if (page == null || page.pageSize <= 0) return '0/0';
+    if (page == null || page.pageSize <= 0) return '...';
     return _displayCoordinator.formatPageLabel(page.pageIndex, page.pageSize);
   }
 
@@ -430,11 +430,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2Runtime? runtime,
     ReaderV2RenderPage? page,
   ) {
-    if (runtime == null) return '0.0%';
+    if (runtime == null) return '...%';
     if (runtime.state.mode == ReaderV2Mode.scroll) {
-      return _visiblePageForScroll(runtime)?.readProgress ?? '0.0%';
+      return _visiblePageForScroll(runtime)?.readProgress ?? '...%';
     }
-    if (page == null) return '0.0%';
+    if (page == null) return '...%';
     return page.readProgress;
   }
 
@@ -442,7 +442,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final location = runtime.state.visibleLocation.normalized(
       chapterCount: runtime.chapterCount,
     );
-    final layout = runtime.debugResolver.cachedLayout(location.chapterIndex);
+    final layout = runtime.resolver.cachedLayout(location.chapterIndex);
     if (layout == null || layout.pages.isEmpty) return null;
     return layout.pageForCharOffset(location.charOffset);
   }

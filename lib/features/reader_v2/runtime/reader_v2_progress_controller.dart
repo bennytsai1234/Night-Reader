@@ -64,11 +64,6 @@ class ReaderV2ProgressController {
       chapterCount: repository.chapterCount,
     );
     final title = repository.titleFor(normalized.chapterIndex);
-    book.chapterIndex = normalized.chapterIndex;
-    book.charOffset = normalized.charOffset;
-    book.visualOffsetPx = normalized.visualOffsetPx;
-    book.durChapterTitle = title;
-    book.readerAnchorJson = jsonEncode(normalized.toJson());
     await bookDao.updateProgress(
       book.bookUrl,
       normalized.chapterIndex,

@@ -94,6 +94,6 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
 
   double _normalizeVisualOffsetPx(double value) {
     if (!value.isFinite || value.isNaN) return 0.0;
-    return value.clamp(-80.0, 120.0).toDouble();
+    return value.clamp(-120.0, 120.0).toDouble();
   }
 }

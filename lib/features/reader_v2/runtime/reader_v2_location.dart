@@ -1,5 +1,5 @@
 class ReaderV2Location {
-  static const double minVisualOffsetPx = -80.0;
+  static const double minVisualOffsetPx = -120.0;
   static const double maxVisualOffsetPx = 120.0;
 
   const ReaderV2Location({

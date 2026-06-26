@@ -531,7 +531,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     return mounted && _captureVisibleLocation() != null;
   }
 
-  void _captureAndReportVisibleLocation() {
+  ReaderV2Location? _captureAndReportVisibleLocation() {
     _capturingVisibleLocation = true;
     final ReaderV2Location? location;
     try {
@@ -540,6 +540,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       _capturingVisibleLocation = false;
     }
     if (location != null) _lastReportedLocation = location;
+    return location;
   }
 
   bool _applyReadingDelta(
@@ -1345,14 +1346,19 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   Future<void> _handleScrollSettled() async {
     if (!mounted || _isDragging || _pausedFlingAtArtificialBoundary) return;
     try {
-      _captureAndReportVisibleLocation();
-      // Persist immediately on settle so the DB always reflects the latest
-      // position. Relying on the (unawaited) background flush at app pause is
-      // unreliable: Android can reclaim a backgrounded app before the async
-      // write lands, leaving a stale position that restores to the chapter
-      // start (or an earlier point) on cold restart.
-      final saved = await widget.runtime.saveProgress(immediate: true);
-      if (saved != null) _lastReportedLocation = saved;
+      final location = _captureAndReportVisibleLocation();
+      if (location != null) {
+        // Persist immediately on settle so the DB always reflects the latest
+        // position. Relying on the (unawaited) background flush at app pause is
+        // unreliable: Android can reclaim a backgrounded app before the async
+        // write lands, leaving a stale position that restores to the chapter
+        // start (or an earlier point) on cold restart.
+        final saved = await widget.runtime.saveProgress(
+          location: location,
+          immediate: true,
+        );
+        if (saved != null) _lastReportedLocation = saved;
+      }
     } finally {
       _clearWindowBoost();
       _endInteractivePreloadPause();

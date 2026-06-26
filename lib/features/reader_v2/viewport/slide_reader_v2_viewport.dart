@@ -568,7 +568,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     final page = ReaderV2PageCacheFactory.fromRenderPage(current);
     if (page.lines.isEmpty) return null;
     final anchorLineY = _anchorOffsetInViewport();
-    final anchorContentY = anchorLineY - widget.style.paddingTop;
+    final anchorContentY = anchorLineY - widget.runtime.state.layoutSpec.style.paddingTop;
     final contentY = anchorContentY.clamp(0.0, page.contentHeight).toDouble();
     final nearest = page.lineAtOrNearLocalY(page.localStartY + contentY);
     if (nearest == null) return null;

@@ -101,7 +101,9 @@ class ReaderV2Runtime extends ChangeNotifier {
   String? _pendingUserNotice;
   ReaderV2Location? _pendingChapterJumpTarget;
 
+  @deprecated
   ReaderV2Resolver get debugResolver => _resolver;
+  ReaderV2Resolver get resolver => _resolver;
   ReaderV2PerformanceSnapshot get performanceSnapshot =>
       _performanceMetrics.snapshot();
   String get performanceProfilingSignal =>
@@ -744,11 +746,15 @@ class ReaderV2Runtime extends ChangeNotifier {
   ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
       _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
 
-  Future<ReaderV2Location?> saveProgress({bool immediate = true}) async {
+  Future<ReaderV2Location?> saveProgress({
+    ReaderV2Location? location,
+    bool immediate = true,
+  }) async {
     if (_restoreInProgress) return null;
-    final location = captureVisibleLocation(notifyIfChanged: false);
-    if (location == null) return null;
-    return _saveProgressLocation(location, immediate: immediate);
+    final targetLocation =
+        location ?? captureVisibleLocation(notifyIfChanged: false);
+    if (targetLocation == null) return null;
+    return _saveProgressLocation(targetLocation, immediate: immediate);
   }
 
   Future<ReaderV2Location?> flushProgress() {
