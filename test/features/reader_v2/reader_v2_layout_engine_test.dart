@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -11,13 +10,14 @@ void main() {
   ReaderV2LayoutSpec spec({
     Size viewport = const Size(220, 180),
     double fontSize = 18,
+    double letterSpacing = 0,
   }) {
     return ReaderV2LayoutSpec.fromViewport(
       viewportSize: viewport,
       style: ReaderV2LayoutStyle(
         fontSize: fontSize,
         lineHeight: 1.5,
-        letterSpacing: 0,
+        letterSpacing: letterSpacing,
         paragraphSpacing: 0.8,
         paddingTop: 12,
         paddingBottom: 12,
@@ -83,9 +83,10 @@ void main() {
         expect(small.layoutSignature, isNot(large.layoutSignature));
         expect(small.contentWidth, large.contentWidth);
         expect(small.contentHeight, large.contentHeight);
+        expect(small.layoutSignature, isA<int>());
         expect(
-          small.layoutSignature,
-          contains(kReaderV2CjkTypographyFeatureSignature),
+          spec(letterSpacing: 1).layoutSignature,
+          isNot(small.layoutSignature),
         );
       },
     );

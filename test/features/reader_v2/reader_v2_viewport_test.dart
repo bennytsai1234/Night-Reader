@@ -1213,7 +1213,9 @@ void main() {
 
     final center = tester.getCenter(find.byType(SlideReaderV2Viewport));
     final dragGesture = await tester.startGesture(center);
-    await dragGesture.moveBy(const Offset(-120, 0));
+    await dragGesture.moveBy(const Offset(-24, 0));
+    await tester.pump();
+    await dragGesture.moveBy(const Offset(-96, 0));
     await tester.pump();
     await dragGesture.up();
     await _pumpViewportCommand(tester);

@@ -699,7 +699,11 @@ class ReaderV2Runtime extends ChangeNotifier {
           charOffset: current.startCharOffset,
         );
     _setState(
-      state.copyWith(currentSlidePage: current, visibleLocation: location),
+      state.copyWith(
+        currentSlidePage: current,
+        committedLocation: location,
+        visibleLocation: location,
+      ),
     );
     unawaited(
       _saveVisibleAnchorAfterViewportSettled(
