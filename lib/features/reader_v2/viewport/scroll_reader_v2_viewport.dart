@@ -525,7 +525,9 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _lastSyncedLocation = location;
     _lastReportedLocation = location;
     if (mounted) setState(() {});
-    await Future<void>.delayed(Duration.zero);
+    if (WidgetsBinding.instance.hasScheduledFrame) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
     return mounted && _captureVisibleLocation() != null;
   }
 

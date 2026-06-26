@@ -38,6 +38,7 @@ class ReaderV2Resolver {
   final ReaderV2LayoutEngine layoutEngine;
   ReaderV2LayoutSpec layoutSpec;
 
+  static const int _maxLayoutCacheSize = 50;
   final Map<int, ReaderV2ChapterView> _layouts = <int, ReaderV2ChapterView>{};
   final Map<String, _InFlightLayout> _inFlight = <String, _InFlightLayout>{};
   final Set<int> _invalidatedInFlightTaskIds = <int>{};
@@ -45,12 +46,23 @@ class ReaderV2Resolver {
   int _cacheGeneration = 0;
   int _nextInFlightTaskId = 0;
 
+  void _writeToLayoutCache(int chapterIndex, ReaderV2ChapterView view) {
+    _layouts.remove(chapterIndex);
+    if (_layouts.length >= _maxLayoutCacheSize) {
+      _layouts.remove(_layouts.keys.first);
+    }
+    _layouts[chapterIndex] = view;
+  }
+
   int get chapterCount => repository.chapterCount;
 
   void updateLayoutSpec(ReaderV2LayoutSpec spec) {
     if (layoutSpec.layoutSignature == spec.layoutSignature) return;
     layoutSpec = spec;
     _cacheGeneration += 1;
+    for (final inFlight in _inFlight.values) {
+      _invalidatedInFlightTaskIds.add(inFlight.id);
+    }
     _layouts.clear();
   }
 
@@ -58,6 +70,9 @@ class ReaderV2Resolver {
 
   void clearCachedLayouts() {
     _cacheGeneration += 1;
+    for (final inFlight in _inFlight.values) {
+      _invalidatedInFlightTaskIds.add(inFlight.id);
+    }
     _layouts.clear();
     _inFlight.clear();
     _layoutErrors.clear();
@@ -81,9 +96,10 @@ class ReaderV2Resolver {
   ) async {
     await repository.ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
-    final cached = _layouts[safeIndex];
+    final cached = _layouts.remove(safeIndex);
     if (cached != null &&
         cached.layoutSignature == layoutSpec.layoutSignature) {
+      _layouts[safeIndex] = cached;
       return cached;
     }
     final spec = layoutSpec;
@@ -104,7 +120,7 @@ class ReaderV2Resolver {
           chapterSize: repository.chapterCount,
           title: repository.titleFor(safeIndex),
         );
-        _layouts[safeIndex] = view;
+        _writeToLayoutCache(safeIndex, view);
         _layoutErrors.remove(safeIndex);
         return view;
       } catch (e) {

@@ -91,7 +91,7 @@ class ReaderV2ChapterLayout {
   final int chapterIndex;
   final String displayText;
   final String contentHash;
-  final String layoutSignature;
+  final int layoutSignature;
   final List<ReaderV2TextLine> lines;
   final List<ReaderV2PageSlice> pages;
   final double contentHeight;

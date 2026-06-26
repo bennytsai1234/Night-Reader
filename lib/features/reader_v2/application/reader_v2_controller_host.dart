@@ -66,7 +66,7 @@ class ReaderV2ControllerHost {
   ReaderV2BookmarkController? bookmark;
 
   Size? _lastViewportSize;
-  String? _lastLayoutSignature;
+  int? _lastLayoutSignature;
   int _lastContentSettingsGeneration = 0;
   bool _opening = false;
 

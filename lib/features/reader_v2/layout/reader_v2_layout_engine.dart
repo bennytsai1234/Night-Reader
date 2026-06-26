@@ -54,6 +54,13 @@ class ReaderV2LayoutEngine {
   int _widthMeasurePasses = 0;
   int _fittingFallbacks = 0;
   int _fittingBinarySearchPasses = 0;
+  TextPainter? _blockPainter;
+
+  bool _isEnglishLetter(String char) {
+    if (char.isEmpty) return false;
+    final code = char.codeUnitAt(0);
+    return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+  }
 
   ReaderV2ChapterLayout layout(
     ReaderV2Content content,
@@ -254,12 +261,12 @@ class ReaderV2LayoutEngine {
         !isTitle && textIndent > 0 ? '　' * textIndent.clamp(0, 8) : '';
     final laidOutText = indentText.isEmpty ? text : '$indentText$text';
     final indentLength = indentText.length;
-    final painter = TextPainter(
-      text: const TextSpan(text: ''),
+    _blockPainter ??= TextPainter(
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
       maxLines: null,
     );
+    final painter = _blockPainter!;
     final lines = <ReaderV2TextLine>[];
     var localStart = 0;
     var lineTop = top;
@@ -283,6 +290,20 @@ class ReaderV2LayoutEngine {
         maxWidth: maxWidth,
         preferredChars: charsConsumed,
       );
+      // C7: 避免英文單字被從中切斷
+      if (charsConsumed > 0 && charsConsumed < remaining.length) {
+        final lastChar = remaining.substring(charsConsumed - 1, charsConsumed);
+        final nextChar = remaining.substring(charsConsumed, charsConsumed + 1);
+        if (_isEnglishLetter(lastChar) && _isEnglishLetter(nextChar)) {
+          var temp = charsConsumed;
+          while (temp > 0 && _isEnglishLetter(remaining.substring(temp - 1, temp))) {
+            temp--;
+          }
+          if (temp > 0) {
+            charsConsumed = temp;
+          }
+        }
+      }
       if (charsConsumed <= 0) break;
 
       final localEnd =

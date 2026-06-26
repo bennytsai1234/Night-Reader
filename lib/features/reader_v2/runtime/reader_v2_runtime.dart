@@ -9,6 +9,7 @@ import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_tile_painter.dart';
 
 import 'reader_v2_location.dart';
 import 'reader_v2_page_window.dart';
@@ -781,7 +782,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     bool Function()? isCurrent,
     bool immediateSave = true,
   }) async {
-    await Future<void>.delayed(Duration.zero);
     if (WidgetsBinding.instance.hasScheduledFrame) {
       await WidgetsBinding.instance.endOfFrame;
     }
@@ -1162,6 +1162,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     _detachPerformanceLayoutObserver();
     _preloadScheduler.dispose();
     _progressController.dispose();
+    ReaderV2TilePainter.invalidateCache();
     super.dispose();
   }
 }

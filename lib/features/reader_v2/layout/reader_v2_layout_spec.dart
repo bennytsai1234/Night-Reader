@@ -56,7 +56,7 @@ class ReaderV2LayoutSpec {
   final double contentWidth;
   final double contentHeight;
   final ReaderV2LayoutStyle style;
-  final String layoutSignature;
+  final int layoutSignature;
 
   /// Shared anchor offset calculation — the vertical position in the viewport
   /// used as the reference point for location capture and restore.
@@ -88,29 +88,28 @@ class ReaderV2LayoutSpec {
     );
   }
 
-  static String _buildSignature({
+  static int _buildSignature({
     required Size viewportSize,
     required double contentWidth,
     required double contentHeight,
     required ReaderV2LayoutStyle style,
   }) {
-    String f(double value) => value.toStringAsFixed(3);
-    return <String>[
-      f(viewportSize.width),
-      f(viewportSize.height),
-      f(contentWidth),
-      f(contentHeight),
-      f(style.fontSize),
-      f(style.lineHeight),
-      f(style.letterSpacing),
-      f(style.paragraphSpacing),
-      f(style.paddingTop),
-      f(style.paddingBottom),
-      f(style.paddingLeft),
-      f(style.paddingRight),
-      style.textIndent.toString(),
-      style.bold ? 'b' : 'r',
+    return Object.hash(
+      viewportSize.width,
+      viewportSize.height,
+      contentWidth,
+      contentHeight,
+      style.fontSize,
+      style.lineHeight,
+      style.letterSpacing,
+      style.paragraphSpacing,
+      style.paddingTop,
+      style.paddingBottom,
+      style.paddingLeft,
+      style.paddingRight,
+      style.textIndent,
+      style.bold,
       kReaderV2CjkTypographyFeatureSignature,
-    ].join('|');
+    );
   }
 }

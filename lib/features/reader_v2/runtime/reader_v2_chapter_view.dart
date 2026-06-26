@@ -55,7 +55,7 @@ class ReaderV2ChapterView {
   int get chapterIndex => layout.chapterIndex;
   String get displayText => layout.displayText;
   String get contentHash => layout.contentHash;
-  String get layoutSignature => layout.layoutSignature;
+  int get layoutSignature => layout.layoutSignature;
   double get contentHeight => layout.contentHeight;
 
   ReaderV2RenderPage pageForCharOffset(int charOffset) {
@@ -68,19 +68,7 @@ class ReaderV2ChapterView {
       );
     }
     final pageIndex = _lastIndexWhereIntAtMost(_pageStartOffsets, charOffset);
-    if (pageIndex < 0) return pages.first;
-    final candidate = pages[pageIndex];
-    if (candidate.containsCharOffset(charOffset)) return candidate;
-    if (pageIndex + 1 < pages.length) {
-      final next = pages[pageIndex + 1];
-      if (next.containsCharOffset(charOffset)) return next;
-    }
-    final line = lineForCharOffset(charOffset);
-    if (line != null) {
-      final page = pageForLocalY(line.top);
-      if (page != null) return page;
-    }
-    return candidate;
+    return pages[pageIndex.clamp(0, pages.length - 1)];
   }
 
   ReaderV2RenderLine? lineForCharOffset(int charOffset) {

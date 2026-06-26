@@ -66,6 +66,7 @@ class ReaderV2ChapterRepository {
 
   List<BookChapter> _chapters;
   BookSource? _source;
+  static const int _maxContentCacheSize = 20;
   final Map<int, ReaderV2Content> _contentCache = <int, ReaderV2Content>{};
   final Map<int, Future<ReaderV2Content>> _contentInFlight =
       <int, Future<ReaderV2Content>>{};
@@ -112,8 +113,11 @@ class ReaderV2ChapterRepository {
   Future<ReaderV2Content> loadContent(int chapterIndex) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
-    final cached = _contentCache[safeIndex];
-    if (cached != null) return cached;
+    final cached = _contentCache.remove(safeIndex);
+    if (cached != null) {
+      _contentCache[safeIndex] = cached;
+      return cached;
+    }
     final inFlight = _contentInFlight[safeIndex];
     if (inFlight != null) return inFlight;
     late final Future<ReaderV2Content> task;
@@ -166,7 +170,7 @@ class ReaderV2ChapterRepository {
         rawText: loaded.content,
       );
       if (cacheGeneration == _contentCacheGeneration) {
-        _contentCache[chapterIndex] = content;
+        _writeToContentCache(chapterIndex, content);
       }
       return content;
     }
@@ -177,9 +181,17 @@ class ReaderV2ChapterRepository {
       rawText: (chapter.content ?? '').trim(),
     );
     if (cacheGeneration == _contentCacheGeneration) {
-      _contentCache[chapterIndex] = content;
+      _writeToContentCache(chapterIndex, content);
     }
     return content;
+  }
+
+  void _writeToContentCache(int chapterIndex, ReaderV2Content content) {
+    _contentCache.remove(chapterIndex);
+    if (_contentCache.length >= _maxContentCacheSize) {
+      _contentCache.remove(_contentCache.keys.first);
+    }
+    _contentCache[chapterIndex] = content;
   }
 
   Future<List<ReplaceRule>> _ensureEnabledReplaceRules() {

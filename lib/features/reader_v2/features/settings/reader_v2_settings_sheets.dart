@@ -81,166 +81,176 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) {
-        return AppBottomSheet(
-          title: '界面設定',
-          icon: Icons.format_paint_outlined,
-          children: [
-            const SheetSection(
-              title: '閱讀主題',
-              trailing: Text(
-                '正文背景與文字',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+    return AppBottomSheet(
+      title: '界面設定',
+      icon: Icons.format_paint_outlined,
+      children: [
+        const SheetSection(
+          title: '閱讀主題',
+          trailing: Text(
+            '正文背景與文字',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ),
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => _ReaderThemeSelector(
+            selectedIndex: settings.themeIndex,
+            onSelected: settings.setTheme,
+          ),
+        ),
+        const SheetSection(
+          title: '選單樣式',
+          trailing: Text(
+            '選單與工具列配色',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ),
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => _ReaderThemeSelector(
+            selectedIndex: settings.menuThemeIndex,
+            onSelected: settings.setMenuTheme,
+          ),
+        ),
+        const SheetSection(title: '排版精修'),
+        ReaderV2SettingComponents.buildSliderRow(
+          label: '字號',
+          value: _fontSize,
+          min: 14,
+          max: 40,
+          onChanged: (value) {
+            setState(() => _fontSize = value);
+            _scheduleCommit(
+              'fontSize',
+              () => settings.setFontSize(_fontSize),
+            );
+          },
+          onChangeEnd: (value) {
+            _commitNow('fontSize', () => settings.setFontSize(value));
+          },
+        ),
+        ReaderV2SettingComponents.buildSliderRow(
+          label: '行高',
+          value: _lineHeight,
+          min: ReaderV2SettingsController.minReadableLineHeight,
+          max: 3.0,
+          onChanged: (value) {
+            setState(() => _lineHeight = value);
+            _scheduleCommit(
+              'lineHeight',
+              () => settings.setLineHeight(_lineHeight),
+            );
+          },
+          onChangeEnd: (value) {
+            _commitNow('lineHeight', () => settings.setLineHeight(value));
+          },
+        ),
+        ReaderV2SettingComponents.buildSliderRow(
+          label: '字距',
+          value: _letterSpacing,
+          min: 0.0,
+          max: 4.0,
+          onChanged: (value) {
+            setState(() => _letterSpacing = value);
+            _scheduleCommit(
+              'letterSpacing',
+              () => settings.setLetterSpacing(_letterSpacing),
+            );
+          },
+          onChangeEnd: (value) {
+            _commitNow(
+              'letterSpacing',
+              () => settings.setLetterSpacing(value),
+            );
+          },
+        ),
+        ReaderV2SettingComponents.buildSliderRow(
+          label: '段距',
+          value: _paragraphSpacing,
+          min: 0.0,
+          max: 3.0,
+          onChanged: (value) {
+            setState(() => _paragraphSpacing = value);
+            _scheduleCommit(
+              'paragraphSpacing',
+              () => settings.setParagraphSpacing(_paragraphSpacing),
+            );
+          },
+          onChangeEnd: (value) {
+            _commitNow(
+              'paragraphSpacing',
+              () => settings.setParagraphSpacing(value),
+            );
+          },
+        ),
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => Row(
+            children: [
+              const SizedBox(
+                width: 65,
+                child: Text('首行縮排', style: TextStyle(fontSize: 12)),
               ),
-            ),
-            _ReaderThemeSelector(
-              selectedIndex: settings.themeIndex,
-              onSelected: settings.setTheme,
-            ),
-            const SheetSection(
-              title: '選單樣式',
-              trailing: Text(
-                '選單與工具列配色',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+              const Spacer(),
+              DropdownButton<int>(
+                value: settings.textIndent,
+                underline: const SizedBox.shrink(),
+                items:
+                    [0, 1, 2, 4]
+                        .map(
+                          (i) =>
+                              DropdownMenuItem(value: i, child: Text('$i 字')),
+                        )
+                        .toList(),
+                onChanged: (value) {
+                  if (value != null) settings.setTextIndent(value);
+                },
               ),
-            ),
-            _ReaderThemeSelector(
-              selectedIndex: settings.menuThemeIndex,
-              onSelected: settings.setMenuTheme,
-            ),
-            const SheetSection(title: '排版精修'),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '字號',
-              value: _fontSize,
-              min: 14,
-              max: 40,
-              onChanged: (value) {
-                setState(() => _fontSize = value);
-                _scheduleCommit(
-                  'fontSize',
-                  () => settings.setFontSize(_fontSize),
-                );
-              },
-              onChangeEnd: (value) {
-                _commitNow('fontSize', () => settings.setFontSize(value));
-              },
-            ),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '行高',
-              value: _lineHeight,
-              min: ReaderV2SettingsController.minReadableLineHeight,
-              max: 3.0,
-              onChanged: (value) {
-                setState(() => _lineHeight = value);
-                _scheduleCommit(
-                  'lineHeight',
-                  () => settings.setLineHeight(_lineHeight),
-                );
-              },
-              onChangeEnd: (value) {
-                _commitNow('lineHeight', () => settings.setLineHeight(value));
-              },
-            ),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '字距',
-              value: _letterSpacing,
-              min: 0.0,
-              max: 4.0,
-              onChanged: (value) {
-                setState(() => _letterSpacing = value);
-                _scheduleCommit(
-                  'letterSpacing',
-                  () => settings.setLetterSpacing(_letterSpacing),
-                );
-              },
-              onChangeEnd: (value) {
-                _commitNow(
-                  'letterSpacing',
-                  () => settings.setLetterSpacing(value),
-                );
-              },
-            ),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '段距',
-              value: _paragraphSpacing,
-              min: 0.0,
-              max: 3.0,
-              onChanged: (value) {
-                setState(() => _paragraphSpacing = value);
-                _scheduleCommit(
-                  'paragraphSpacing',
-                  () => settings.setParagraphSpacing(_paragraphSpacing),
-                );
-              },
-              onChangeEnd: (value) {
-                _commitNow(
-                  'paragraphSpacing',
-                  () => settings.setParagraphSpacing(value),
-                );
-              },
-            ),
-            Row(
-              children: [
-                const SizedBox(
-                  width: 65,
-                  child: Text('首行縮排', style: TextStyle(fontSize: 12)),
-                ),
-                const Spacer(),
-                DropdownButton<int>(
-                  value: settings.textIndent,
-                  underline: const SizedBox.shrink(),
-                  items:
-                      [0, 1, 2, 4]
-                          .map(
-                            (i) =>
-                                DropdownMenuItem(value: i, child: Text('$i 字')),
-                          )
-                          .toList(),
-                  onChanged: (value) {
-                    if (value != null) settings.setTextIndent(value);
-                  },
-                ),
-              ],
-            ),
-            const SheetSection(title: '翻頁方式'),
-            Wrap(
-              spacing: 12,
-              children: [
-                ChoiceChip(
-                  label: const Text('平移翻頁'),
-                  selected: settings.pageTurnMode == PageAnim.slide,
-                  onSelected:
-                      (selected) =>
-                          selected
-                              ? settings.setPageTurnMode(PageAnim.slide)
-                              : null,
-                ),
-                ChoiceChip(
-                  label: const Text('上下滾動'),
-                  selected: settings.pageTurnMode == PageAnim.scroll,
-                  onSelected:
-                      (selected) =>
-                          selected
-                              ? settings.setPageTurnMode(PageAnim.scroll)
-                              : null,
-                ),
-              ],
-            ),
-            const SheetSection(title: '自動翻頁'),
-            ReaderV2SettingComponents.buildSliderRow(
-              label: '速度',
-              value: settings.autoPageSpeed,
-              min: ReaderV2SettingsController.minAutoPageSpeed,
-              max: ReaderV2SettingsController.maxAutoPageSpeed,
-              divisions: 41,
-              onChanged: settings.setAutoPageSpeed,
-              valueFormatter: (value) => '${(value * 100).round()}%',
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+        const SheetSection(title: '翻頁方式'),
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => Wrap(
+            spacing: 12,
+            children: [
+              ChoiceChip(
+                label: const Text('平移翻頁'),
+                selected: settings.pageTurnMode == PageAnim.slide,
+                onSelected:
+                    (selected) =>
+                        selected
+                            ? settings.setPageTurnMode(PageAnim.slide)
+                            : null,
+              ),
+              ChoiceChip(
+                label: const Text('上下滾動'),
+                selected: settings.pageTurnMode == PageAnim.scroll,
+                onSelected:
+                    (selected) =>
+                        selected
+                            ? settings.setPageTurnMode(PageAnim.scroll)
+                            : null,
+              ),
+            ],
+          ),
+        ),
+        const SheetSection(title: '自動翻頁'),
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => ReaderV2SettingComponents.buildSliderRow(
+            label: '速度',
+            value: settings.autoPageSpeed,
+            min: ReaderV2SettingsController.minAutoPageSpeed,
+            max: ReaderV2SettingsController.maxAutoPageSpeed,
+            divisions: 41,
+            onChanged: settings.setAutoPageSpeed,
+            valueFormatter: (value) => '${(value * 100).round()}%',
+          ),
+        ),
+      ],
     );
   }
 }

@@ -64,6 +64,16 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   Offset? _dragDownGlobalPosition;
   final ValueNotifier<double> _dragOffset = ValueNotifier<double>(0.0);
   Future<void> _pageCommandTail = Future<void>.value();
+  Completer<void> _pageTurnCompleter = Completer<void>()..complete();
+
+  void _checkCompleter() {
+    final isIdle = !_dragActive && !_pageTurnInProgress && !_slideController.isAnimating;
+    if (isIdle && !_pageTurnCompleter.isCompleted) {
+      _pageTurnCompleter.complete();
+    } else if (!isIdle && _pageTurnCompleter.isCompleted) {
+      _pageTurnCompleter = Completer<void>();
+    }
+  }
 
   @override
   void initState() {
@@ -189,6 +199,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     _dragDx = 0;
     _rawDragDx = 0;
     _dragOffset.value = 0;
+    _checkCompleter();
   }
 
   bool _canMoveBackward(ReaderV2PageWindow window) {
@@ -249,6 +260,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     _slideController.stop();
     _lastAnimationValue = 0;
     _slideController.value = 0;
+    _checkCompleter();
     try {
       await _slideController
           .animateTo(
@@ -259,6 +271,8 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
           .orCancel;
     } on TickerCanceled {
       return false;
+    } finally {
+      _checkCompleter();
     }
     if (!mounted) return false;
     _finalizeAnimation(target);
@@ -291,11 +305,9 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     return completer.future;
   }
 
-  Future<void> _waitForSlideIdle() async {
-    while (mounted &&
-        (_dragActive || _pageTurnInProgress || _slideController.isAnimating)) {
-      await Future<void>.delayed(const Duration(milliseconds: 16));
-    }
+  Future<void> _waitForSlideIdle() {
+    _checkCompleter();
+    return _pageTurnCompleter.future;
   }
 
   Future<bool> _animateToAdjacentPage({
@@ -329,6 +341,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
       }
     }
     _pageTurnInProgress = true;
+    _checkCompleter();
     try {
       _pendingDirection = forward ? 1 : -1;
       _pendingSettledLocation = settledLocation;
@@ -336,6 +349,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     } finally {
       if (mounted) {
         _pageTurnInProgress = false;
+        _checkCompleter();
       }
     }
   }
@@ -374,6 +388,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
       return;
     }
     _dragActive = true;
+    _checkCompleter();
     _queueingBusyDrag = false;
     _rejectingVerticalIntent = false;
     _horizontalIntentAccepted = false;
@@ -423,6 +438,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
       _rejectingVerticalIntent = false;
       _horizontalIntentAccepted = false;
       _dragActive = false;
+      _checkCompleter();
       _queueingBusyDrag = false;
       _queuedBusyDragDx = 0;
       _setDragOffsets(0, rawDx: 0);
@@ -446,6 +462,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     }
     if (_pageTurnInProgress) return;
     _dragActive = false;
+    _checkCompleter();
     if (width <= 0) {
       _resetViewport();
       return;
@@ -461,18 +478,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
         window != null &&
         neighbor != null &&
         neighbor.isPlaceholder) {
-      _pendingDirection = 0;
-      if (forward) {
-        widget.runtime.moveToNextTile();
-      } else {
-        widget.runtime.moveToPrevTile();
-      }
-      _pageTurnInProgress = true;
-      _animateTo(0.0).whenComplete(() {
-        if (mounted) {
-          _pageTurnInProgress = false;
-        }
-      });
+      unawaited(_animateToAdjacentPage(forward: forward));
       return;
     }
     final shouldAdvance =
@@ -746,7 +752,9 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
       return false;
     }
     _resetViewport();
-    await Future<void>.delayed(Duration.zero);
+    if (WidgetsBinding.instance.hasScheduledFrame) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
     return mounted && _captureVisibleLocation() != null;
   }
 
@@ -762,21 +770,6 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
 
   double _anchorOffsetInViewport() =>
       widget.runtime.state.layoutSpec.anchorOffsetInViewport;
-
-  Widget _buildEdgePlaceholder({required String message}) {
-    return ColoredBox(
-      color: widget.backgroundColor,
-      child: Center(
-        child: Text(
-          message,
-          style: TextStyle(
-            color: widget.textColor.withValues(alpha: 0.7),
-            fontSize: widget.style.fontSize,
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -813,36 +806,6 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
             constraints.maxHeight.isFinite && constraints.maxHeight > 0
                 ? constraints.maxHeight
                 : widget.runtime.state.layoutSpec.viewportSize.height;
-        final prevPlacement =
-            window.prev == null
-                ? null
-                : _placementForPage(
-                  page: window.prev!,
-                  pageSlot: -1,
-                  width: width,
-                );
-        final currentPlacement = _placementForPage(
-          page: window.current,
-          pageSlot: 0,
-          width: width,
-        );
-        final nextPlacement =
-            window.next == null
-                ? null
-                : _placementForPage(
-                  page: window.next!,
-                  pageSlot: 1,
-                  width: width,
-                );
-        final prev =
-            window.prev == null
-                ? _buildEdgePlaceholder(message: '已經是第一頁')
-                : _buildTile(prevPlacement!);
-        final current = _buildTile(currentPlacement);
-        final next =
-            window.next == null
-                ? _buildEdgePlaceholder(message: '已經是最後一頁')
-                : _buildTile(nextPlacement!);
 
         return ReaderV2PointerTapLayer(
           onTapUp: widget.onTapUp,
@@ -855,66 +818,19 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
             onHorizontalDragUpdate: _handleDragUpdate,
             onHorizontalDragEnd: (details) => _handleDragEnd(details, width),
             onHorizontalDragCancel: _handleDragCancel,
-            child: ColoredBox(
-              color: widget.backgroundColor,
-              child: ClipRect(
-                child: ValueListenableBuilder<double>(
-                  valueListenable: _dragOffset,
-                  builder: (context, dragDx, _) {
-                    return Stack(
-                      children: [
-                        Transform.translate(
-                          offset: Offset(
-                            _screenXFor(
-                              pageSlot: -1,
-                              width: width,
-                              dragDx: dragDx,
-                              placement: prevPlacement,
-                            ),
-                            0,
-                          ),
-                          child: SizedBox(
-                            width: width,
-                            height: height,
-                            child: prev,
-                          ),
-                        ),
-                        Transform.translate(
-                          offset: Offset(
-                            _screenXFor(
-                              pageSlot: 0,
-                              width: width,
-                              dragDx: dragDx,
-                              placement: currentPlacement,
-                            ),
-                            0,
-                          ),
-                          child: SizedBox(
-                            width: width,
-                            height: height,
-                            child: current,
-                          ),
-                        ),
-                        Transform.translate(
-                          offset: Offset(
-                            _screenXFor(
-                              pageSlot: 1,
-                              width: width,
-                              dragDx: dragDx,
-                              placement: nextPlacement,
-                            ),
-                            0,
-                          ),
-                          child: SizedBox(
-                            width: width,
-                            height: height,
-                            child: next,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+            child: CustomPaint(
+              size: Size(width, height),
+              painter: _ReaderV2SlidePainter(
+                prevPage: window.prev,
+                currentPage: window.current,
+                nextPage: window.next,
+                style: widget.style,
+                backgroundColor: widget.backgroundColor,
+                textColor: widget.textColor,
+                ttsHighlight: widget.ttsHighlight,
+                layoutGeneration: widget.runtime.state.layoutGeneration,
+                dragDx: _dragOffset,
+                width: width,
               ),
             ),
           ),
@@ -929,5 +845,148 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     if (window.current.isPlaceholder) count += 1;
     if (window.next?.isPlaceholder == true) count += 1;
     return count;
+  }
+}
+
+class _ReaderV2SlidePainter extends CustomPainter {
+  _ReaderV2SlidePainter({
+    required this.prevPage,
+    required this.currentPage,
+    required this.nextPage,
+    required this.style,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.ttsHighlight,
+    required this.layoutGeneration,
+    required this.dragDx,
+    required this.width,
+  }) : super(repaint: dragDx);
+
+  final ReaderV2RenderPage? prevPage;
+  final ReaderV2RenderPage currentPage;
+  final ReaderV2RenderPage? nextPage;
+  final ReaderV2Style style;
+  final Color backgroundColor;
+  final Color textColor;
+  final ReaderV2TtsHighlight? ttsHighlight;
+  final int layoutGeneration;
+  final ValueNotifier<double> dragDx;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = backgroundColor;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
+
+    final dx = dragDx.value;
+
+    // 1. Draw prevPage (slot -1)
+    _paintPage(
+      canvas: canvas,
+      size: size,
+      page: prevPage,
+      offsetX: -width + dx,
+      placeholderMessage: '已經是第一頁',
+    );
+
+    // 2. Draw currentPage (slot 0)
+    _paintPage(
+      canvas: canvas,
+      size: size,
+      page: currentPage,
+      offsetX: dx,
+    );
+
+    // 3. Draw nextPage (slot 1)
+    _paintPage(
+      canvas: canvas,
+      size: size,
+      page: nextPage,
+      offsetX: width + dx,
+      placeholderMessage: '已經是最後一頁',
+    );
+  }
+
+  void _paintPage({
+    required Canvas canvas,
+    required Size size,
+    required ReaderV2RenderPage? page,
+    required double offsetX,
+    String? placeholderMessage,
+  }) {
+    if (offsetX + width <= 0 || offsetX >= size.width) {
+      return;
+    }
+
+    canvas.save();
+    canvas.translate(offsetX, 0);
+    canvas.clipRect(Rect.fromLTWH(0, 0, width, size.height));
+
+    if (page == null) {
+      if (placeholderMessage != null) {
+        _paintPlaceholderText(canvas, size, placeholderMessage);
+      }
+    } else if (page.isPlaceholder) {
+      _paintPlaceholderText(canvas, size, '載入中...');
+    } else {
+      final pageCache = ReaderV2PageCacheFactory.fromRenderPage(page);
+      final tilePainter = ReaderV2TilePainter(
+        tile: pageCache,
+        backgroundColor: backgroundColor,
+        textColor: textColor,
+        style: style,
+        paintBackground: false,
+      );
+      tilePainter.paint(canvas, Size(width, size.height));
+
+      final highlight = ttsHighlight;
+      if (highlight != null &&
+          highlight.isValid &&
+          highlight.chapterIndex == pageCache.chapterIndex &&
+          pageCache.intersectsCharRange(
+            highlight.highlightStart,
+            highlight.highlightEnd,
+          )) {
+        final ttsPainter = ReaderV2TtsHighlightOverlayPainter(
+          tile: pageCache,
+          style: style,
+          textColor: textColor,
+          highlight: highlight,
+        );
+        ttsPainter.paint(canvas, Size(width, size.height));
+      }
+    }
+
+    canvas.restore();
+  }
+
+  void _paintPlaceholderText(Canvas canvas, Size size, String message) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: message,
+        style: TextStyle(
+          color: textColor.withValues(alpha: 0.7),
+          fontSize: style.fontSize,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: width);
+
+    final textX = (width - textPainter.width) / 2;
+    final textY = (size.height - textPainter.height) / 2;
+    textPainter.paint(canvas, Offset(textX, textY));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReaderV2SlidePainter oldDelegate) {
+    return oldDelegate.prevPage != prevPage ||
+        oldDelegate.currentPage != currentPage ||
+        oldDelegate.nextPage != nextPage ||
+        oldDelegate.style != style ||
+        oldDelegate.backgroundColor != backgroundColor ||
+        oldDelegate.textColor != textColor ||
+        oldDelegate.ttsHighlight != ttsHighlight ||
+        oldDelegate.layoutGeneration != layoutGeneration ||
+        oldDelegate.width != width;
   }
 }

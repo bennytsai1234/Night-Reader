@@ -295,7 +295,19 @@ class ReaderV2RenderPage {
 
   int get lineSize => lines.length;
 
+  String? _readProgressCache;
+  int? _progressCacheVersion;
+
   String get readProgress {
+    final v = Object.hash(chapterIndex, pageIndex, chapterSize, pageSize);
+    if (v == _progressCacheVersion && _readProgressCache != null) {
+      return _readProgressCache!;
+    }
+    _progressCacheVersion = v;
+    return _readProgressCache = _computeReadProgress();
+  }
+
+  String _computeReadProgress() {
     if (chapterSize == 0 || (pageSize == 0 && chapterIndex == 0)) {
       return '0.0%';
     } else if (pageSize == 0) {
@@ -303,10 +315,10 @@ class ReaderV2RenderPage {
     }
     final percent =
         (chapterIndex / chapterSize) +
-        (1.0 / chapterSize) * (index + 1) / pageSize;
+        (1.0 / chapterSize) * (pageIndex + 1) / pageSize;
     var formatted = '${(percent * 100).toStringAsFixed(1)}%';
     if (formatted == '100.0%' &&
-        (chapterIndex + 1 != chapterSize || index + 1 != pageSize)) {
+        (chapterIndex + 1 != chapterSize || pageIndex + 1 != pageSize)) {
       formatted = '99.9%';
     }
     return formatted;

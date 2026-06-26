@@ -10,6 +10,19 @@ import 'reader_v2_processed_chapter.dart';
 class ReaderV2ContentTransformer {
   const ReaderV2ContentTransformer();
 
+  static final Map<String, RegExp> _regexCache = {};
+
+  static RegExp _getOrCreateRegex(String pattern, {bool unicode = false}) {
+    final key = '$pattern|$unicode';
+    if (_regexCache.length > 500) {
+      _regexCache.clear();
+    }
+    return _regexCache.putIfAbsent(
+      key,
+      () => RegExp(pattern, unicode: unicode),
+    );
+  }
+
   Future<ReaderV2ProcessedChapter> process({
     required Book book,
     required BookChapter chapter,
@@ -116,7 +129,7 @@ class ReaderV2ContentTransformer {
     final titleRegex = RegExp.escape(
       chapterTitle,
     ).replaceAll(AppPattern.spaceRegex, r'\s*');
-    final duplicateTitlePattern = RegExp(
+    final duplicateTitlePattern = _getOrCreateRegex(
       '^(\\s|\\p{P}|$nameRegex)*$titleRegex(\\s)*',
       unicode: true,
     );
@@ -134,7 +147,7 @@ class ReaderV2ContentTransformer {
         final displayTitleRegex = RegExp.escape(
           displayTitle,
         ).replaceAll(AppPattern.spaceRegex, r'\s*');
-        final displayDuplicateTitlePattern = RegExp(
+        final displayDuplicateTitlePattern = _getOrCreateRegex(
           '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex(\\s)*',
           unicode: true,
         );
@@ -152,7 +165,13 @@ class ReaderV2ContentTransformer {
     }
 
     if (useReplaceRules) {
-      content = content.split('\n').map((line) => line.trim()).join('\n');
+      final buffer = StringBuffer();
+      final lines = content.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        if (i > 0) buffer.write('\n');
+        buffer.write(lines[i].trim());
+      }
+      content = buffer.toString();
       for (final rule in rules) {
         if (!rule.appliesToContent(
           bookName: bookName,

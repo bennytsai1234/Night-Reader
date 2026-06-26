@@ -196,19 +196,24 @@ class ReaderV2TtsController extends ChangeNotifier
     ReaderV2Location location, {
     required int generation,
   }) async {
-    final content = await runtime.loadContentForTts(location);
-    final safeOffset =
-        location.charOffset.clamp(0, content.displayText.length).toInt();
-    final segments = _segmentsFor(
-      text: content.displayText,
-      chapterIndex: location.chapterIndex,
-      startOffset: safeOffset,
-    );
-    if (!_isActiveGeneration(generation)) return false;
-    _segments = segments;
-    _segmentIndex = segments.isEmpty ? -1 : 0;
-    if (segments.isEmpty) return _clearSpeechState(generation);
-    return _speakCurrentSegment(generation);
+    try {
+      final content = await runtime.loadContentForTts(location);
+      final safeOffset =
+          location.charOffset.clamp(0, content.displayText.length).toInt();
+      final segments = _segmentsFor(
+        text: content.displayText,
+        chapterIndex: location.chapterIndex,
+        startOffset: safeOffset,
+      );
+      if (!_isActiveGeneration(generation)) return false;
+      _segments = segments;
+      _segmentIndex = segments.isEmpty ? -1 : 0;
+      if (segments.isEmpty) return false;
+      return _speakCurrentSegment(generation);
+    } catch (_) {
+      if (!_isActiveGeneration(generation)) return false;
+      return false;
+    }
   }
 
   @override
@@ -277,16 +282,28 @@ class ReaderV2TtsController extends ChangeNotifier
         await _speakCurrentSegment(generation);
         return;
       }
+      var failCount = 0;
       for (
         var chapterIndex = completedSegment.chapterIndex + 1;
         _isActiveGeneration(generation) && chapterIndex < runtime.chapterCount;
         chapterIndex += 1
       ) {
         final started = await _startFromLocation(
-          ReaderV2Location(chapterIndex: chapterIndex, charOffset: 0),
+          ReaderV2Location(
+            chapterIndex: chapterIndex,
+            charOffset: 0,
+            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+          ),
           generation: generation,
         );
-        if (started) return;
+        if (started) {
+          return;
+        } else {
+          failCount++;
+          if (failCount >= 3) {
+            break;
+          }
+        }
       }
       if (_isActiveGeneration(generation)) {
         _clearSpeechStateWithoutNotify();
