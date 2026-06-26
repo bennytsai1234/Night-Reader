@@ -14,6 +14,7 @@ import 'package:night_reader/features/reader_v2/runtime/reader_v2_page_window.da
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_pointer_tap_layer.dart';
+import 'package:night_reader/features/reader_v2/render/reader_v2_tile_painter.dart';
 
 class SlideReaderV2Viewport extends StatefulWidget {
   const SlideReaderV2Viewport({
@@ -520,42 +521,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     );
   }
 
-  ReaderV2SlidePagePlacement _placementForPage({
-    required ReaderV2RenderPage page,
-    required int pageSlot,
-    required double width,
-  }) {
-    return ReaderV2SlidePagePlacement(
-      page: ReaderV2PageCacheFactory.fromRenderPage(page),
-      virtualLeft: width * pageSlot,
-      pageSlot: pageSlot,
-    );
-  }
 
-  Widget _buildTile(ReaderV2SlidePagePlacement placement) {
-    final pageCache = placement.page;
-    return Stack(
-      key: ValueKey<ReaderV2TileKey>(_tileKey(pageCache)),
-      fit: StackFit.expand,
-      children: [
-        ReaderV2TileLayer(
-          tile: pageCache,
-          tileKey: _tileKey(pageCache),
-          style: widget.style,
-          backgroundColor: widget.backgroundColor,
-          textColor: widget.textColor,
-          expand: true,
-          paintBackground: false,
-        ),
-        ReaderV2TtsHighlightOverlayLayer(
-          tile: pageCache,
-          style: widget.style,
-          textColor: widget.textColor,
-          highlight: widget.ttsHighlight,
-        ),
-      ],
-    );
-  }
 
   ReaderV2Location? _captureVisibleLocation() {
     if (_dragDx.abs() > 0.5 ||
@@ -758,15 +724,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     return mounted && _captureVisibleLocation() != null;
   }
 
-  double _screenXFor({
-    required int pageSlot,
-    required double width,
-    required double dragDx,
-    ReaderV2SlidePagePlacement? placement,
-  }) {
-    final pageOffsetX = -dragDx;
-    return placement?.screenX(pageOffsetX) ?? width * pageSlot - pageOffsetX;
-  }
+
 
   double _anchorOffsetInViewport() =>
       widget.runtime.state.layoutSpec.anchorOffsetInViewport;
