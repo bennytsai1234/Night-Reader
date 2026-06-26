@@ -1223,19 +1223,12 @@ void main() {
     final pageAfterDrag = runtime.state.pageWindow?.current.pageIndex;
     expect(pageAfterDrag, isNotNull);
 
-    var commandCompleted = false;
-    bool? commandResult;
-    unawaited(
-      controller.moveToNextPage!().then((result) {
-        commandCompleted = true;
-        commandResult = result;
-      }),
-    );
+    final commandResult = controller
+        .moveToNextPage!()
+        .timeout(const Duration(seconds: 1));
     await _pumpViewportCommand(tester);
-    await _flushMicrotasks();
 
-    expect(commandCompleted, isTrue);
-    expect(commandResult, isTrue);
+    expect(await commandResult, isTrue);
     expect(runtime.state.pageWindow?.current.pageIndex, pageAfterDrag! + 1);
     expect(tester.takeException(), isNull);
 
