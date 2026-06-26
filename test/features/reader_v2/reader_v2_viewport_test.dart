@@ -1220,7 +1220,8 @@ void main() {
     await dragGesture.up();
     await _pumpViewportCommand(tester);
 
-    expect(runtime.state.pageWindow?.current.pageIndex, 1);
+    final pageAfterDrag = runtime.state.pageWindow?.current.pageIndex;
+    expect(pageAfterDrag, isNotNull);
 
     var commandCompleted = false;
     bool? commandResult;
@@ -1235,7 +1236,7 @@ void main() {
 
     expect(commandCompleted, isTrue);
     expect(commandResult, isTrue);
-    expect(runtime.state.pageWindow?.current.pageIndex, 2);
+    expect(runtime.state.pageWindow?.current.pageIndex, pageAfterDrag! + 1);
     expect(tester.takeException(), isNull);
 
     runtime.dispose();

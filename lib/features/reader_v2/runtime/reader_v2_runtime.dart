@@ -962,7 +962,13 @@ class ReaderV2Runtime extends ChangeNotifier {
     final captured = _normalizeCapturedLocation(capture());
     if (captured == null) return null;
     if (captured == state.visibleLocation) return captured;
-    final next = state.copyWith(visibleLocation: captured);
+    final next =
+        state.mode == ReaderV2Mode.slide
+            ? state.copyWith(
+              visibleLocation: captured,
+              committedLocation: captured,
+            )
+            : state.copyWith(visibleLocation: captured);
     if (notifyIfChanged) {
       _setState(next);
     } else {
