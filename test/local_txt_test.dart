@@ -7,8 +7,11 @@ import 'package:night_reader/core/services/local_book_service.dart';
 
 void main() {
   test('Local TXT Parsing and Reading Test', () async {
-    // 1. 建立測試檔案
-    final testFile = File('test_book.txt');
+    // 1. 建立測試檔案（寫入系統暫存目錄，避免污染專案根目錄）
+    final tempDir = await Directory.systemTemp.createTemp(
+      'night_reader_txt_test',
+    );
+    final testFile = File('${tempDir.path}/test_book.txt');
     const content = '''
 前言內容在此。
 第1章 起始
@@ -56,8 +59,12 @@ void main() {
       final readContent2 = await service.getContent(book, ch2);
       expect(readContent2.trim(), equals('第2章 發展\n這是第二章的內容。\n更加詳細的描述。'));
     } finally {
-      // 4. 清理
-      if (await testFile.exists()) await testFile.delete();
+      // 4. 清理：盡力移除暫存目錄。
+      //    Windows 上解析後檔案 handle 可能尚未釋放，刪除會擲出 errno 32；
+      //    因寫入的是 OS 暫存目錄，殘留無害（系統會自行回收），故清理採盡力而為。
+      try {
+        if (await tempDir.exists()) await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
   });
 }
