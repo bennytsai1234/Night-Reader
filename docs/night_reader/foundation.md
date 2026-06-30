@@ -44,11 +44,11 @@
 ## Known Risks
 
 - `main.dart` 的 `callbackDispatcher` 在後台 Isolate 重新初始化 DI；JS 引擎因 FFI 無法跨 isolate，後台任務不可呼叫 JS 規則（見 engine 模組）。
-- `AppConfig` 與 `SettingsProvider` 雙向同步，改其中一方需檢查另一方的鏡像是 否一致，否則 Model 層讀到舊值。
+- `AppConfig` 與 `SettingsProvider` 雙向同步，改其中一方需檢查另一方的鏡像是否一致，否則 Model 層讀到舊值。
 - `AppInterceptor` 手動 redirect 上限 10，變更需留意循環重導向。
 
 ## Do Not Do
 
 - 不要在啟動路徑做同步或長耗時操作。
 - 不要把新產品線功能塞進 `main_page.dart` 導航（feature freeze）。
-- 不要在 `network` 攔截器加入書源規則解析邏解析邏輯（屬 engine）。
+- 不要在 `network` 攔截器加入書源規則解析邏輯（屬 engine）。

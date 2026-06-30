@@ -30,7 +30,7 @@
 
 ## Known Risks
 
-- `upBookshelf` 事件与 `BookshelfProvider` 生命週期需對齊，頁面關閉後未解訂會漏更新或洩漏。
+- `upBookshelf` 事件與 `BookshelfProvider` 生命週期需對齊，頁面關閉後未解訂會漏更新或洩漏。
 - 批次下載與 `downloads` 模組的佇列共用 `DownloadService`，需避免重複入隊。
 
 ## Do Not Do

@@ -38,7 +38,7 @@
 - P1：`flutter analyze` 0 issues、`flutter test` 通過
 - P2：`flutter analyze` 0 issues、`flutter test` 通過
 - P3：尚未執行
-- P3 後需真機/模擬器驗證：上下滾動、TTS 逐詞高亮、自動翻頁、設定頁無「翻頁方式」、書籤、換源
+- P3 後需真機/模擬器驗證：上下滾動、TTS 逐段高亮、自動翻頁、設定頁無「翻頁方式」、書籤、換源
 
 ## Risks（持續有效）
 

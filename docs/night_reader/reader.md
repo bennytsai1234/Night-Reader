@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-- Reader V2 閱讀器主流程：八層架構（shell / application / runtime / content / layout / render / viewport / features 子面板），負責章節載入、排版、渲染、翻頁（僅 scroll）、預載、進度、TTS 逐詞高亮、閱讀設定、點擊區、書籤、章內替換、換源。release 重點回歸區。
+- Reader V2 閱讀器主流程：八層架構（shell / application / runtime / content / layout / render / viewport / features 子面板），負責章節載入、排版、渲染、翻頁（僅 scroll）、預載、進度、TTS 逐段高亮、閱讀設定、點擊區、書籤、章內替換、換源。release 重點回歸區。
 - 未來工作從這裡開始：排版/渲染、章節預載與進度、TTS 高亮、閱讀設定、點擊區、書籤、章內替換、換源 sheet。
 
 ## Scope
@@ -43,7 +43,7 @@
 
 - `ReaderV2Runtime`（392 行）與 `NavigationController`（519 行）為核心，狀態機 `ReaderV2Phase` 翻轉敏感，改動易引入 ready/error 來回閃爍或卡 cold。
 - 排版引擎反覆量測 line layout（`ReaderV2LayoutEngineStats`），效能迴歸風險高。
-- TTS 逐詞高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
+- TTS 逐段高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
 - `ScrollReaderV2Viewport`（1575 行）仍為單一巨型 StatefulWidget，尚未拆分。
 - 預載門檻與背景任務互動需驗；過度預載會吃記憶。
 

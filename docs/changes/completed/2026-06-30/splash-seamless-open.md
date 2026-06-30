@@ -18,7 +18,7 @@
 ## 實作內容（逐檔）
 
 ### `lib/features/welcome/splash_page.dart`
-- **圖示一致化**：`_IconWithArc` 由「`app-icon.png`＋圓角矩形 r24＋恆顯陰影」改為「**圓形遮罩＋`#1A1612`(AppPalette.ink600) 不透明底板＋`assets/app_icon/ic_foreground.png`(inset 16%)**」，與 adaptive icon / 系統 splash 圖示同源同形同底板。底板直徑 `_plate=120`（對齊系統 splash 視覺尺寸的初值，可實機微調）。
+- **圖示一致化**：`_IconWithArc` 由「`app-icon.png`＋圓角矩形 r24＋恆顯陰影」改為「**圓形遮罩＋`#1A1612` (AppPalette.ink600) 不透明底板＋`assets/app_icon/ic_foreground.png` (inset 16%)**」，與 adaptive icon / 系統 splash 圖示同源同形同底板。底板直徑 `_plate=120`（對齊系統 splash 視覺尺寸的初值，可實機微調）。
 - **去除重複 zoom**：移除 `_iconScale`(1.12→1.0) 與 `_iconOpacity`；圖示第一幀 scale 固定 1.0、置中（接住系統收尾），僅保留 breath 微縮放。
 - **陰影淡入**：新增 `_shadowOpacity`，第一幀無陰影、隨定格結束淡入（系統 splash 圖示無投影，避免接力跳階）。
 - **動線改「中央展開」**：`iconRise` 由螢幕高 16% 降到 **8.5%**，使第一幀落在螢幕中央、再上滑歸位；arc 環在約 120ms 定格後才掃出。

@@ -80,7 +80,7 @@
 │       ├── settings/           # 設定頁群
 │       ├── source_manager/     # 書源管理、校驗、偵錯、編輯
 │       └── welcome/            # 啟動閃屏、底部導航殼
-├── test/                        # 單元測試、Widget 測試、重點回歸回歸測試
+├── test/                        # 單元測試、Widget 測試、重點回歸測試
 ├── tool/                        # 書源驗證/偵錯腳本（真實書源回歸用）
 ├── docs/                        # Codebase Atlas 導航地圖與變更紀錄
 │   ├── night_reader_index.md    # atlas 索引（入口）

@@ -12,7 +12,7 @@
 
 ## Investigate (read-only)
 
-從 atlas 加最少必要作碼回答；區分確認事實與假設/未知。絕不編輯——若需修正，在使用者同意後交給 Change。依問題性質套紀律：除錯=重現→排序假設→二分；review=對著 owning/boundary 模組讀 diff；開放設計問題=一次一題訪談、各附推薦答案，比對索引與 Architecture Decisions 表——標記任何與已記責任/邊界衝突或重開已錄決策的提案。
+從 atlas 加最少必要程式碼回答；區分確認事實與假設/未知。絕不編輯——若需修正，在使用者同意後交給 Change。依問題性質套紀律：除錯=重現→排序假設→二分；review=對著 owning/boundary 模組讀 diff；開放設計問題=一次一題訪談、各附推薦答案，比對索引與 Architecture Decisions 表——標記任何與已記責任/邊界衝突或重開已錄決策的提案。
 
 注意本專案特性：閱讀器 Reader V2 與 Source Manager 為重點回歸區；書源驗證涉 WebView/Cookie，易只真機復現，優先用 `tool/` 腳本重現；後台 Isolate 不可執行 JS 規則。
 

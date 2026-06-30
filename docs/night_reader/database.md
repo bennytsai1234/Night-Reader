@@ -9,7 +9,7 @@
 
 - `lib/core/database/app_database.dart` + `app_database.g.dart` — `class AppDatabase extends GeneratedDatabase`，匯入所有 tables/DAO。
 - `lib/core/database/tables/app_tables.dart` — 所有 Drift table（`Books`、`BookSources`、`Chapters`、`Bookmarks`、`BookGroups`、`Cache`、`Cookie`、`DictRule`、`Download`、`HttpTts`、`KeyboardAssist`、`ReadRecord`、`ReaderChapterContent`、`ReplaceRule`、`RuleSub`、`SearchBook`、`SearchHistory`、`SearchKeyword`、`Server`、`SourceSubscription`、`TxtTocRule`）+ TypeConverters（`EmptyStringConverter` 等，605 行）。
-- `lib/core/database/dao/` — 20 個 `@DriftAccessor` DAO，各附 `.g.dart` 生成檔：`book_dao.dart`（`BookDao`）、`book_source_dao.dart`（`BookSourceDao`，含 part 查詢）、`chapter_dao.dart`、`bookmark_dao.dart`、`book_group_dao.dart`、`cache_dao.dart`、`cookie_dao.dart`、`dict_rule_dao.dart`、`download_dao.dart`、`http_tts_dao.dart`、`keyboard_assist_dao.dart`、`read_record_dao.dart`、`reader_chapter_content_dao.dart`、`replace_rule_dao.dart`、`rule_sub_dao.dart`、`search_book_dao.dart`、`search_history_dao.dart`、`search_keyword_dao.dart`、`server_dao.dart`、`source_subscription_dao.dart`、`txt_toc_rule_dao.dart`。
+- `lib/core/database/dao/` — 21 個 `@DriftAccessor` DAO，各附 `.g.dart` 生成檔：`book_dao.dart`（`BookDao`）、`book_source_dao.dart`（`BookSourceDao`，含 part 查詢）、`chapter_dao.dart`、`bookmark_dao.dart`、`book_group_dao.dart`、`cache_dao.dart`、`cookie_dao.dart`、`dict_rule_dao.dart`、`download_dao.dart`、`http_tts_dao.dart`、`keyboard_assist_dao.dart`、`read_record_dao.dart`、`reader_chapter_content_dao.dart`、`replace_rule_dao.dart`、`rule_sub_dao.dart`、`search_book_dao.dart`、`search_history_dao.dart`、`search_keyword_dao.dart`、`server_dao.dart`、`source_subscription_dao.dart`、`txt_toc_rule_dao.dart`。
 
 ## Dependencies & Impact
 

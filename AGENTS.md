@@ -28,4 +28,5 @@ git push origin vX.Y.Z
 - Always push the release commit branch before creating or pushing the release tag. Do not tag unpublished local commits.
 - After pushing the release tag, check GitHub Actions once and confirm the Android Release workflow has started building.
 - Once the remote workflow is visibly building, it is acceptable to close the task without waiting for the build to finish.
+
 本專案的導航地圖位於 `docs/night_reader_index.md`。
