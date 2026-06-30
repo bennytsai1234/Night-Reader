@@ -630,7 +630,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Future<void> _importFromFile(BuildContext context) async {
     try {
-      final res = await FilePicker.platform.pickFiles(
+      final res = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json', 'txt', 'legado'],
       );

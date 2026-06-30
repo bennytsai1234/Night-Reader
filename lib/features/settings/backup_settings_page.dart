@@ -92,7 +92,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   }
 
   Future<void> _handleManualRestore() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['zip'],
     );

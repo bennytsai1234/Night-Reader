@@ -59,42 +59,42 @@ dependencies:
   # === Image Loading ===
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
-  flutter_widget_from_html: ^0.16.1
+  flutter_widget_from_html: ^0.17.2
 
   # === Image Picker ===
   image_picker: ^1.1.2
 
   # === Deep Link & Sharing ===
-  app_links: ^6.4.1
+  app_links: ^7.2.0
   receive_sharing_intent: ^1.1.1
 
   # === Web Server (replaces Android NanoHTTPD) ===
   shelf: ^1.4.1
   shelf_router: ^1.1.4
   shelf_static: ^1.1.2
-  network_info_plus: ^7.0.0
+  network_info_plus: ^8.2.0
 
   # === Background Tasks ===
 
-  workmanager: ^0.7.0
+  workmanager: ^0.9.0+3
   pool: ^1.5.2
 
   # === Local File Support ===
-  file_picker: ^10.3.10
+  file_picker: ^11.0.2
 
   # === URL Launcher ===
   url_launcher: ^6.3.1
 
 
   # === Share ===
-  share_plus: ^12.0.1
+  share_plus: ^13.2.0
 
   # === WebView (for WebView book sources) ===
   webview_flutter: ^4.13.0
 
   # === Local Storage (key-value) ===
   shared_preferences: ^2.3.4
-  package_info_plus: ^9.0.0
+  package_info_plus: ^10.2.0
   home_widget: ^0.9.0
 
   # === UUID ===
@@ -113,12 +113,19 @@ dependencies:
   permission_handler: ^12.0.1
 
 dependency_overrides:
-  meta: 1.18.0
+  # Flutter SDK 把 meta 精確釘在 1.18.0,但升級後的 analyzer(^1.18.3,build_runner/
+  # drift_dev 帶入)用到 1.18.0 沒有的 TargetKind.importDirective。meta 純註解、
+  # 向後相容,以 override 統一到 1.18.3 同時滿足 SDK 與 analyzer。
+  meta: 1.18.3
+  # win32 僅供 Windows 桌面使用,本專案只出 Android/iOS,實機不會編譯或執行。
+  # file_picker 穩定版仍鎖 win32 ^5.9.0,package_info_plus 10.x 需要 win32 ^6;
+  # 兩者僅在解析器層衝突,以 override 統一到 6.x 讓雙方都能用最新穩定版。
+  win32: ^6.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
   build_runner: ^2.4.13
   drift_dev: ^2.33.0

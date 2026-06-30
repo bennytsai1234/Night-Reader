@@ -185,10 +185,7 @@ Future<void> _runPostFirstFrameStartupTasks() async {
 
   try {
     AppLog.i('Initializing Workmanager...');
-    await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: kDebugMode,
-    );
+    await Workmanager().initialize(callbackDispatcher);
   } catch (e, stack) {
     AppLog.e('Workmanager init failed: $e', error: e, stackTrace: stack);
   }

@@ -200,7 +200,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             provider.setGridView(!provider.isGridView);
                             break;
                           case 'add_local':
-                            final result = await FilePicker.platform.pickFiles(
+                            final result = await FilePicker.pickFiles(
                               type: FileType.custom,
                               allowedExtensions:
                                   kSupportedLocalBookExtensions.toList()
@@ -325,7 +325,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
   }
 
   Future<void> _handleBookshelfImport(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'zip'],
     );
