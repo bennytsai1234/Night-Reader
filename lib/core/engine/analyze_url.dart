@@ -581,7 +581,7 @@ class AnalyzeUrl {
 
   /// 判斷 Dio 錯誤是否屬於可重試的暫時性網路故障
   /// (connectionTimeout / sendTimeout / receiveTimeout / connectionError / 未知 SocketException)
-  /// 不重試: cancel、badResponse (HTTP 4xx/5xx)、badCertificate
+  /// 不重試: cancel、badResponse (HTTP 4xx/5xx)、badCertificate、transformTimeout (回應轉換逾時)
   bool _isRetryable(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
@@ -595,6 +595,8 @@ class AnalyzeUrl {
       case DioExceptionType.cancel:
       case DioExceptionType.badCertificate:
       case DioExceptionType.badResponse:
+      case DioExceptionType.transformTimeout:
+        // 用戶端資料轉換逾時,非網路層暫時性故障,重試只會重跑請求再次逾時
         return false;
     }
   }
