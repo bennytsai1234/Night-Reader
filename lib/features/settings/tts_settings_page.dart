@@ -170,12 +170,3 @@ class TtsSettingsPage extends StatelessWidget {
     );
   }
 }
-
-class TtsSettingsPageWidget extends StatelessWidget {
-  const TtsSettingsPageWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const TtsSettingsPage();
-  }
-}
