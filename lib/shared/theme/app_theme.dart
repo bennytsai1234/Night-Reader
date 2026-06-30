@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'app_tokens.dart';
@@ -137,18 +136,6 @@ class AppTheme {
     }
 
     if (readingThemes.isEmpty) {
-      await _loadDefaultConfigs();
-    }
-  }
-
-  static Future<void> _loadDefaultConfigs() async {
-    try {
-      final jsonStr = await rootBundle.loadString(
-        'assets/default_sources/readConfig.json',
-      );
-      final List<dynamic> list = jsonDecode(jsonStr);
-      readingThemes = list.map((e) => ReadingTheme.fromJson(e)).toList();
-    } catch (e) {
       readingThemes = _fallbackThemes;
     }
   }

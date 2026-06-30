@@ -10,7 +10,7 @@
 - `lib/features/source_manager/source_manager_page.dart`、`source_manager_provider.dart`（913 行，isolate 批次匯入、校驗、分享、啟停）。
 - `lib/features/source_manager/source_editor_page.dart`（Tab 編輯器）+ `views/`：`source_edit_basic.dart`、`source_edit_book_info.dart`、`source_edit_search.dart`、`source_edit_explore.dart`、`source_edit_toc.dart`、`source_edit_content.dart`。
 - `lib/features/source_manager/source_debug_page.dart` + `source_debug_provider.dart` — `SourceDebugProvider extends BaseProvider`（逐階段搜尋/詳情/目錄/正文除錯，接 `SourceDebugService` logStream）。
-- `lib/features/source_manager/source_group_manage_page.dart`、`explore_sources_page.dart`、`source_subscription_page.dart`。
+- `lib/features/source_manager/source_group_manage_page.dart`、`source_subscription_page.dart`。
 - `lib/features/source_manager/widgets/` — `source_item_tile.dart`、`source_manager_menus.dart`、`source_manager_dialogs.dart`、`source_batch_toolbar.dart`、`source_check_status_bar.dart`、`rule_text_field.dart`、`import_preview_dialog.dart`。
 - `lib/features/replace_rule/` — `replace_rule_provider.dart`（`ReplaceRuleProvider`，CRUD+分組）、`widgets/`（`replace_edit_form.dart`、`replace_edit_options.dart`、`replace_edit_test_panel.dart`）。
 
