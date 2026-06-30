@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/default_data.dart';
@@ -50,6 +51,11 @@ class _MainPageState extends State<MainPage> {
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
+  // 原生 splash 撤除狀態:撐到書架首批書本載完才撤,避免開機看到空白轉圈。
+  bool _nativeSplashRemoved = false;
+  BookshelfProvider? _splashShelfProvider;
+  VoidCallback? _splashShelfListener;
+
   late final PageController _pageController = PageController(
     initialPage: _currentIndex,
   );
@@ -63,6 +69,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    _detachSplashShelfListener();
     _pageController.dispose();
     super.dispose();
   }
@@ -73,6 +80,8 @@ class _MainPageState extends State<MainPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initDeferredStartupData());
       if (widget.destinations == null) {
+        // 僅真實 app 路徑;測試注入 destinations 時不觸碰 platform channel。
+        _removeNativeSplashWhenShelfReady();
         unawaited(_runAutomaticUpdateCheck());
       }
     });
@@ -140,6 +149,41 @@ class _MainPageState extends State<MainPage> {
     if (index == 0) {
       context.read<BookshelfProvider>().loadBooks();
     }
+  }
+
+  // 原生 splash（系統圖示）撐住,直到書架首批書本查完才撤,讓使用者一看到書架
+  // 就是填好的清單,不經過場頁、也不閃轉圈。加 2 秒逾時,避免查詢異常卡住開機。
+  void _removeNativeSplashWhenShelfReady() {
+    final shelf = context.read<BookshelfProvider>();
+    if (!shelf.isLoading) {
+      _removeNativeSplashOnce();
+      return;
+    }
+    void listener() {
+      if (!shelf.isLoading) _removeNativeSplashOnce();
+    }
+
+    _splashShelfProvider = shelf;
+    _splashShelfListener = listener;
+    shelf.addListener(listener);
+    Future<void>.delayed(const Duration(seconds: 2), _removeNativeSplashOnce);
+  }
+
+  void _removeNativeSplashOnce() {
+    if (_nativeSplashRemoved) return;
+    _nativeSplashRemoved = true;
+    _detachSplashShelfListener();
+    FlutterNativeSplash.remove();
+  }
+
+  void _detachSplashShelfListener() {
+    final provider = _splashShelfProvider;
+    final listener = _splashShelfListener;
+    if (provider != null && listener != null) {
+      provider.removeListener(listener);
+    }
+    _splashShelfProvider = null;
+    _splashShelfListener = null;
   }
 
   Future<void> _initDeferredStartupData() async {

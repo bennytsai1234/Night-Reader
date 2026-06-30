@@ -14,7 +14,7 @@ import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
 import 'shared/theme/app_theme.dart';
 import 'features/settings/settings_provider.dart';
-import 'features/welcome/splash_page.dart';
+import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
@@ -241,7 +241,7 @@ class _ReaderAppState extends State<ReaderApp> {
           themeMode: settings.themeMode,
           locale: settings.locale,
           builder: (context, child) => child ?? const SizedBox.shrink(),
-          home: const SplashPage(),
+          home: const MainPage(),
         );
       },
     );

@@ -68,12 +68,6 @@ class SettingsProvider extends SettingsProviderBase {
   double speechVolume = 1.0;
   String ttsSourceKey = _systemTtsSourceKey;
 
-  // --- 歡迎介面與圖標 ---
-  String welcomeImage = '';
-  String welcomeImageDark = '';
-  bool welcomeShowText = true;
-  bool welcomeShowIcon = true;
-
   // 其他
   bool recordLog = false;
 
@@ -105,9 +99,6 @@ class SettingsProvider extends SettingsProviderBase {
     update();
   }
 
-  bool welcomeShowTextDark = true;
-  bool welcomeShowIconDark = true;
-
   SettingsProvider() {
     _loadFromPrefs(getIt<SharedPreferences>());
     unawaited(_migrateLegacySettings());
@@ -132,13 +123,6 @@ class SettingsProvider extends SettingsProviderBase {
     coverTimeout = prefs.getInt(PreferKey.coverTimeout) ?? 5000;
     globalCoverRule = prefs.getString(PreferKey.globalCoverRule) ?? '';
 
-    // --- 歡迎與介面 ---
-    welcomeImage = prefs.getString(PreferKey.welcomeImage) ?? '';
-    welcomeImageDark = prefs.getString(PreferKey.welcomeImageDark) ?? '';
-    welcomeShowText = prefs.getBool(PreferKey.welcomeShowText) ?? true;
-    welcomeShowTextDark = prefs.getBool(PreferKey.welcomeShowTextDark) ?? true;
-    welcomeShowIcon = prefs.getBool(PreferKey.welcomeShowIcon) ?? true;
-    welcomeShowIconDark = prefs.getBool(PreferKey.welcomeShowIconDark) ?? true;
     lastBackup = prefs.getInt(PreferKey.lastBackup) ?? 0;
 
     // --- 主題與顯示 ---

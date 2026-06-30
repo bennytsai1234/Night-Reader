@@ -124,14 +124,6 @@ class PreferKey {
   static const String tocCountWords = 'tocCountWords';
   static const String localBookImportSort = 'localBookImportSort';
 
-  static const String customWelcome = 'customWelcome';
-  static const String welcomeImage = 'welcomeImagePath';
-  static const String welcomeImageDark = 'welcomeImagePathDark';
-  static const String welcomeShowText = 'welcomeShowText';
-  static const String welcomeShowTextDark = 'welcomeShowTextDark';
-  static const String welcomeShowIcon = 'welcomeShowIcon';
-  static const String welcomeShowIconDark = 'welcomeShowIconDark';
-
   static const String pageTouchSlop = 'pageTouchSlop';
   static const String showAddToShelfAlert = 'showAddToShelfAlert';
   static const String ignoreAudioFocus = 'ignoreAudioFocus';

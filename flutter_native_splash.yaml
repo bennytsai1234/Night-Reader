@@ -4,15 +4,15 @@ flutter_native_splash:
   # Dark mode: AppPalette.ink600 (#1A1612)
   color_dark: "#1A1612"
 
-  # 不放 icon，避免原生 splash icon 消失後 Flutter 進場動畫 opacity=0 的跳躍感
+  # 背景色對齊書架底色（scaffoldBackground），原生 splash 撤除後直接交棒到書架，
+  # 中間不經任何過場頁、也不露白底。
 
   android: true
   ios: false
   web: false
 
   # Android 12+ SplashScreen API：背景色對齊，系統自動使用 ic_launcher 自適應圖示。
-  # icon 底板統一用 #1A1612（與 adaptive icon 不透明底板同色），消除圓遮罩邊緣的奶白殘邊，
-  # 並與 Flutter 品牌頁的圓形深棕底板一致，使系統 → 品牌頁圖示零換圖。
+  # icon 底板統一用 #1A1612（與 adaptive icon 不透明底板同色），消除圓遮罩邊緣的奶白殘邊。
   android_12:
     color: "#F4EFE3"
     color_dark: "#1A1612"
