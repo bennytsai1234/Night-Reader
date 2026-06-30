@@ -3,14 +3,6 @@ allprojects {
         google()
         mavenCentral()
     }
-    configurations.all {
-        resolutionStrategy {
-            // home_widget uses "glance-appwidget:1.+" which resolves to alpha versions
-            // requiring AGP 9.1.0+ and compileSdk 37. Pin to the latest stable.
-            force("androidx.glance:glance-appwidget:1.1.1")
-            force("androidx.glance:glance-preview:1.1.1")
-        }
-    }
 }
 
 val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()

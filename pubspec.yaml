@@ -32,14 +32,11 @@ dependencies:
   # === Media / TTS ===
   flutter_tts: ^4.2.5
   audio_service: ^0.18.18
-  just_audio: ^0.10.5
 
   # === HTML Parsing (replaces Android Jsoup) ===
   html: ^0.15.5
   html_unescape: ^2.0.0
-  csslib: ^1.0.0
   xml: ^7.0.1
-  characters: ^1.3.0
 
   # === JSON Path ===
   json_path: ^0.9.0
@@ -58,8 +55,6 @@ dependencies:
 
   # === Image Loading ===
   cached_network_image: ^3.4.1
-  flutter_cache_manager: ^3.4.1
-  flutter_widget_from_html: ^0.17.2
 
   # === Image Picker ===
   image_picker: ^1.1.2
@@ -67,12 +62,6 @@ dependencies:
   # === Deep Link & Sharing ===
   app_links: ^7.2.0
   receive_sharing_intent: ^1.1.1
-
-  # === Web Server (replaces Android NanoHTTPD) ===
-  shelf: ^1.4.1
-  shelf_router: ^1.1.4
-  shelf_static: ^1.1.2
-  network_info_plus: ^8.2.0
 
   # === Background Tasks ===
 
@@ -95,7 +84,6 @@ dependencies:
   # === Local Storage (key-value) ===
   shared_preferences: ^2.3.4
   package_info_plus: ^10.2.0
-  home_widget: ^0.9.0
 
   # === UUID ===
   uuid: ^4.5.1
