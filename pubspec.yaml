@@ -138,5 +138,6 @@ flutter:
 
   assets:
     - assets/
+    - assets/app_icon/ic_foreground.png
     - assets/default_sources/
     - assets/opencc/

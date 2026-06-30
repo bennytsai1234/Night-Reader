@@ -29,13 +29,11 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   bool _isExiting = false;
 
   late final AnimationController _entranceController;
-  late final AnimationController _exitController;
   late final AnimationController _breathController;
 
-  late final Animation<double> _iconOpacity;
-  late final Animation<double> _iconScale;
   late final Animation<double> _iconTranslateY;
   late final Animation<double> _arcSweep;
+  late final Animation<double> _shadowOpacity;
   late final Animation<double> _titleOpacity;
   late final Animation<double> _titleTranslateY;
   late final Animation<double> _ruleScaleX;
@@ -43,85 +41,71 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   late final Animation<double> _statusOpacity;
   late final Animation<double> _statusTranslateY;
 
-  late final Animation<double> _exitFade;
-  late final Animation<double> _exitScale;
-
   @override
   void initState() {
     super.initState();
 
+    // 進場總長壓短到 ~1050ms（原 1400ms），讓熱啟動不被動畫綁架。
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1050),
     );
 
-    // 接住「點擊放大」：品牌圖第一幀即完全可見（不從 0 淡入），
-    // 由接近畫面中央處（放大結束的位置）平滑上滑歸位，scale 由略大收到 1.0。
-    _iconOpacity = const AlwaysStoppedAnimation<double>(1.0);
-    _iconScale = Tween<double>(begin: 1.12, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _entranceController,
-        curve: const Interval(0.00, 0.42, curve: Curves.easeOutCubic),
-      ),
-    );
-    // 1→0 進度；實際歸位距離在 build 以螢幕高度推導（見 _buildContent 的 iconRise）。
+    // 圖示第一幀＝系統 splash 收尾的定格：scale 固定 1.0、置中、不重複 zoom
+    // （系統已做過點擊放大）。先定格約 120ms 接住手感，再由螢幕中央上滑歸位
+    // 到最終構圖；實際歸位距離在 build 以螢幕高度推導（見 iconRise）。
     _iconTranslateY = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.00, 0.46, curve: Curves.easeOutCubic),
+        curve: const Interval(0.12, 0.56, curve: Curves.easeOutCubic),
       ),
     );
 
     _arcSweep = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.14, 0.52, curve: Curves.easeOutCubic),
+        curve: const Interval(0.12, 0.46, curve: Curves.easeOutCubic),
       ),
+    );
+
+    // 底板陰影第一幀不顯示，隨定格結束淡入；系統 splash 圖示沒有投影，
+    // 從無到有淡入可避免接力瞬間的陰影跳階。
+    _shadowOpacity = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0.12, 0.42, curve: Curves.easeOut),
     );
 
     _titleOpacity = CurvedAnimation(
       parent: _entranceController,
-      curve: const Interval(0.28, 0.50, curve: Curves.easeOut),
+      curve: const Interval(0.34, 0.56, curve: Curves.easeOut),
     );
     _titleTranslateY = Tween<double>(begin: 14.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.28, 0.50, curve: Curves.easeOutCubic),
+        curve: const Interval(0.34, 0.56, curve: Curves.easeOutCubic),
       ),
     );
 
     _ruleScaleX = CurvedAnimation(
       parent: _entranceController,
-      curve: const Interval(0.40, 0.58, curve: Curves.easeOut),
+      curve: const Interval(0.48, 0.66, curve: Curves.easeOut),
     );
 
     _taglineOpacity = CurvedAnimation(
       parent: _entranceController,
-      curve: const Interval(0.48, 0.68, curve: Curves.easeOut),
+      curve: const Interval(0.58, 0.78, curve: Curves.easeOut),
     );
 
     _statusOpacity = CurvedAnimation(
       parent: _entranceController,
-      curve: const Interval(0.62, 0.82, curve: Curves.easeOut),
+      curve: const Interval(0.72, 0.92, curve: Curves.easeOut),
     );
     _statusTranslateY = Tween<double>(begin: 10.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _entranceController,
-        curve: const Interval(0.62, 0.82, curve: Curves.easeOutCubic),
+        curve: const Interval(0.72, 0.92, curve: Curves.easeOutCubic),
       ),
     );
-
-    _exitController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 480),
-    );
-    _exitFade = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
-    );
-    _exitScale = Tween<double>(
-      begin: 1.0,
-      end: 0.93,
-    ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
 
     _breathController = AnimationController(
       vsync: this,
@@ -136,7 +120,6 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _entranceController.dispose();
-    _exitController.dispose();
     _breathController.dispose();
     super.dispose();
   }
@@ -176,6 +159,8 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     }
   }
 
+  // 退場時機＝max(進場動畫播完, initEssential 完成)：兩者皆備才離場，
+  // 既不會在資料未就緒時提前露白，也不會在熱啟動時被動畫綁架。
   void _triggerExitWhenReady() {
     if (_isExiting || !mounted) return;
     if (_entranceController.isAnimating) {
@@ -195,28 +180,21 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   void _startExit() {
     if (_isExiting || !mounted) return;
     _isExiting = true;
-    Future.delayed(const Duration(milliseconds: 180), () {
-      if (!mounted) return;
-      _exitController.forward().then((_) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const MainPage(),
-            transitionDuration: const Duration(milliseconds: 350),
-            reverseTransitionDuration: const Duration(milliseconds: 250),
-            transitionsBuilder: (_, animation, __, child) {
-              return FadeTransition(
-                opacity: CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOut,
-                ),
-                child: child,
-              );
-            },
-          ),
-        );
-      });
-    });
+    // 單一連續轉場：品牌頁與書架底色同為 scaffoldBackground，書架於同底色上
+    // 純淡入蓋過品牌頁，不再經過「淡出 → 純底色 → 淡入」的空白幀、也不縮放。
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const MainPage(),
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 220),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _resolveWelcomeImage(String path) async {
@@ -245,31 +223,18 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: base,
       body: AnimatedBuilder(
-        animation: Listenable.merge([
-          _entranceController,
-          _exitController,
-          _breathController,
-        ]),
+        animation: Listenable.merge([_entranceController, _breathController]),
         builder: (context, _) {
-          final exitOpacity = _isExiting ? _exitFade.value : 1.0;
-          final exitScale = _isExiting ? _exitScale.value : 1.0;
           final breath = math.sin(_breathController.value * math.pi);
-
-          return Opacity(
-            opacity: exitOpacity,
-            child: Transform.scale(
-              scale: exitScale,
-              child: _buildContent(
-                context,
-                isDarkMode: isDarkMode,
-                showIcon: showIcon,
-                showText: showText,
-                accent: accent,
-                accentStrong: accentStrong,
-                muted: muted,
-                breath: breath,
-              ),
-            ),
+          return _buildContent(
+            context,
+            isDarkMode: isDarkMode,
+            showIcon: showIcon,
+            showText: showText,
+            accent: accent,
+            accentStrong: accentStrong,
+            muted: muted,
+            breath: breath,
           );
         },
       ),
@@ -286,9 +251,10 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     required Color muted,
     required double breath,
   }) {
-    // 品牌圖起始位置：自靜止點（版面上半部）下移約 16% 螢幕高，貼近放大結束的中央，
-    // 再隨進場上滑歸位。此係數可依實機觀感微調。
-    final double iconRise = MediaQuery.sizeOf(context).height * 0.16;
+    // 圖示第一幀置於螢幕中央（接住系統 splash 收尾），再上滑約 8.5% 螢幕高
+    // 歸位到版面上半的最終構圖。此係數依「最終靜止點到螢幕中央的距離」推導，
+    // 可依實機觀感微調。
+    final double iconRise = MediaQuery.sizeOf(context).height * 0.085;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -306,15 +272,13 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
               if (showIcon)
                 Transform.translate(
                   offset: Offset(0, _iconTranslateY.value * iconRise),
-                  child: Opacity(
-                    opacity: _iconOpacity.value,
-                    child: Transform.scale(
-                      scale: _iconScale.value + breath * 0.013,
-                      child: _IconWithArc(
-                        arcSweep: _arcSweep.value,
-                        accent: accent,
-                        isDarkMode: isDarkMode,
-                      ),
+                  child: Transform.scale(
+                    scale: 1.0 + breath * 0.013,
+                    child: _IconWithArc(
+                      arcSweep: _arcSweep.value,
+                      shadowOpacity: _shadowOpacity.value,
+                      accent: accent,
+                      isDarkMode: isDarkMode,
                     ),
                   ),
                 ),
@@ -398,42 +362,59 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 class _IconWithArc extends StatelessWidget {
   const _IconWithArc({
     required this.arcSweep,
+    required this.shadowOpacity,
     required this.accent,
     required this.isDarkMode,
   });
 
   final double arcSweep;
+  final double shadowOpacity;
   final Color accent;
   final bool isDarkMode;
 
+  // 圓形底板直徑與外圈 arc 框；底板與遮罩刻意對齊 Android 自適應/系統 splash
+  // 圖示（圓遮罩 + 深棕底板 + 前景 inset 16%），讓系統→品牌頁圖示零換圖。
+  // _plate 為對齊系統 splash 圖示視覺尺寸的初值，可依實機微調。
+  static const double _plate = 120.0;
+  static const double _ring = 156.0;
+  static const double _foregroundInset = 0.16;
+
   @override
   Widget build(BuildContext context) {
-    final shadowColor =
-        isDarkMode
-            ? Colors.black.withValues(alpha: 0.5)
-            : const Color(0x1A14110D);
+    final baseShadow = isDarkMode ? Colors.black : const Color(0xFF14110D);
+    final shadowAlpha = (isDarkMode ? 0.5 : 0.10) * shadowOpacity;
 
     return SizedBox(
-      width: 156,
-      height: 156,
+      width: _ring,
+      height: _ring,
       child: CustomPaint(
         painter: _ArcRingPainter(sweep: arcSweep, color: accent),
         child: Center(
           child: Container(
-            width: 108,
-            height: 108,
+            width: _plate,
+            height: _plate,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              shape: BoxShape.circle,
+              // 深棕底板對齊 adaptive icon 背景（colors.xml ic_launcher_background）。
+              color: AppPalette.ink600,
               boxShadow: [
-                BoxShadow(
-                  color: shadowColor,
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                ),
+                if (shadowAlpha > 0.001)
+                  BoxShadow(
+                    color: baseShadow.withValues(alpha: shadowAlpha),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.asset('assets/app-icon.png', fit: BoxFit.cover),
+            child: Padding(
+              // 前景 inset 16%，對齊 mipmap-anydpi-v26/ic_launcher.xml 的 inset。
+              padding: const EdgeInsets.all(_plate * _foregroundInset),
+              child: Image.asset(
+                'assets/app_icon/ic_foreground.png',
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
         ),
       ),

@@ -10,9 +10,11 @@ flutter_native_splash:
   ios: false
   web: false
 
-  # Android 12+ SplashScreen API：背景色對齊，系統自動使用 ic_launcher 自適應圖示
+  # Android 12+ SplashScreen API：背景色對齊，系統自動使用 ic_launcher 自適應圖示。
+  # icon 底板統一用 #1A1612（與 adaptive icon 不透明底板同色），消除圓遮罩邊緣的奶白殘邊，
+  # 並與 Flutter 品牌頁的圓形深棕底板一致，使系統 → 品牌頁圖示零換圖。
   android_12:
     color: "#F4EFE3"
     color_dark: "#1A1612"
-    icon_background_color: "#F4EFE3"
+    icon_background_color: "#1A1612"
     icon_background_color_dark: "#1A1612"
