@@ -19,7 +19,6 @@ import '../database/dao/search_history_dao.dart';
 import '../database/dao/search_keyword_dao.dart';
 import '../database/dao/keyboard_assist_dao.dart';
 import '../database/dao/server_dao.dart';
-import '../database/dao/source_subscription_dao.dart';
 import '../database/dao/reader_chapter_content_dao.dart';
 import '../services/tts_service.dart';
 import '../services/crash_handler.dart';
@@ -89,9 +88,6 @@ Future<void> configureDependencies() async {
     () => KeyboardAssistDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<ServerDao>(() => ServerDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<SourceSubscriptionDao>(
-    () => SourceSubscriptionDao(getIt<AppDatabase>()),
-  );
   getIt.registerLazySingleton<ReaderChapterContentDao>(
     () => ReaderChapterContentDao(getIt<AppDatabase>()),
   );

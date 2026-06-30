@@ -20,7 +20,6 @@ import '../models/txt_toc_rule.dart';
 import '../models/cache.dart';
 import '../models/keyboard_assist.dart';
 import '../models/rule_sub.dart';
-import '../models/source_subscription.dart';
 import '../models/search_book.dart';
 import '../models/download_task.dart';
 import '../models/search_keyword.dart';
@@ -40,7 +39,6 @@ import 'dao/txt_toc_rule_dao.dart';
 import 'dao/cache_dao.dart';
 import 'dao/keyboard_assist_dao.dart';
 import 'dao/rule_sub_dao.dart';
-import 'dao/source_subscription_dao.dart';
 import 'dao/search_book_dao.dart';
 import 'dao/download_dao.dart';
 import 'dao/search_keyword_dao.dart';
@@ -67,7 +65,6 @@ part 'app_database.g.dart';
     CacheTable,
     KeyboardAssists,
     RuleSubs,
-    SourceSubscriptions,
     SearchBooks,
     DownloadTasks,
     SearchKeywords,
@@ -89,7 +86,6 @@ part 'app_database.g.dart';
     CacheDao,
     KeyboardAssistDao,
     RuleSubDao,
-    SourceSubscriptionDao,
     SearchBookDao,
     DownloadDao,
     SearchKeywordDao,
@@ -199,10 +195,6 @@ class AppDatabase extends _$AppDatabase {
     '''
     CREATE INDEX IF NOT EXISTS idx_rule_subs_order
     ON rule_subs ("order")
-    ''',
-    '''
-    CREATE INDEX IF NOT EXISTS idx_source_subscriptions_order
-    ON source_subscriptions ("order")
     ''',
     '''
     CREATE INDEX IF NOT EXISTS idx_search_books_name_author_order

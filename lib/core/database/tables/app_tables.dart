@@ -15,7 +15,6 @@ import '../../models/txt_toc_rule.dart';
 import '../../models/cache.dart';
 import '../../models/keyboard_assist.dart';
 import '../../models/rule_sub.dart';
-import '../../models/source_subscription.dart';
 import '../../models/search_book.dart';
 import '../../models/download_task.dart';
 import '../../models/search_keyword.dart';
@@ -524,20 +523,6 @@ class RuleSubs extends Table {
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
   IntColumn get order =>
       integer().named('order').withDefault(const Constant(0))();
-}
-
-// ───────────── SourceSubscriptions ─────────────
-@UseRowClass(SourceSubscription, generateInsertable: true)
-class SourceSubscriptions extends Table {
-  TextColumn get url => text()();
-  TextColumn get name => text()();
-  IntColumn get type => integer().withDefault(const Constant(0))();
-  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
-  IntColumn get order =>
-      integer().named('order').withDefault(const Constant(0))();
-
-  @override
-  Set<Column> get primaryKey => {url};
 }
 
 // ───────────── SearchBooks ─────────────
