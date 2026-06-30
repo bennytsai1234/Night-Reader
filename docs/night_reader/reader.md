@@ -13,7 +13,7 @@
 - `content/` — `reader_v2_chapter_repository.dart`（288 行，取章節/正文/書源/replace rule）、`reader_v2_content.dart`、`reader_v2_content_transformer.dart`（套用 replace rule+簡繁轉換）、`reader_v2_processed_chapter.dart`。
 - `layout/` — `reader_v2_layout_engine.dart`（599 行，`ReaderV2LayoutEngine`+`ReaderV2LayoutEngineStats`）、`reader_v2_layout.dart`、`reader_v2_layout_spec.dart`、`reader_v2_typography.dart`、`reader_v2_style.dart`（`ReaderV2Style`，`minReadableLineHeight`）、`reader_v2_layout_constants.dart`。
 - `render/` — `reader_v2_render_page.dart`（`ReaderV2RenderLine extends ReaderV2LineBox`，548 行）、`reader_v2_tile_layer.dart`、`reader_v2_tile_painter.dart`、`reader_v2_tile_key.dart`、`reader_v2_line_box.dart`、`reader_v2_text_adapter.dart`、`reader_v2_page_cache.dart`、`reader_v2_tts_highlight_overlay_layer.dart`。
-- `viewport/` — `reader_v2_viewport_controller.dart`（`ReaderV2ViewportController`：scrollBy/animateBy/moveToNextPage/ensureCharRangeVisible）、`scroll_reader_v2_viewport.dart`（1575 行，單一 StatefulWidget，尚未拆分）、`reader_v2_screen.dart`、`reader_v2_position_tracker.dart`、`reader_v2_visible_page_calculator.dart`、`reader_v2_pointer_tap_layer.dart`、`reader_v2_infinite_segment_strip.dart`、`reader_v2_chapter_page_cache_manager.dart`。
+- `viewport/` — `reader_v2_viewport_controller.dart`（`ReaderV2ViewportController`：scrollBy/animateBy/moveToNextPage/ensureCharRangeVisible）、`scroll_reader_v2_viewport.dart`（viewport lifecycle/runtime wiring/build 決策）、`scroll_reader_v2_viewport_model.dart`（章節 window/cache/strip/座標計算）、`scroll_reader_v2_motion_controller.dart`（reading offset、drag/fling、overscroll、動畫）、`scroll_reader_v2_command_queue.dart`、`scroll_reader_v2_canvas.dart`（loading/canvas/tile/TTS overlay widgets）、`scroll_reader_v2_visible_line.dart`、`reader_v2_screen.dart`、`reader_v2_position_tracker.dart`、`reader_v2_visible_page_calculator.dart`、`reader_v2_pointer_tap_layer.dart`、`reader_v2_infinite_segment_strip.dart`、`reader_v2_chapter_page_cache_manager.dart`。
 - `features/` — `tts/`（`reader_v2_tts_controller.dart` 494 行，`abstract ReaderV2TtsEngine`+實作、`reader_v2_tts_sheet.dart`、`reader_v2_tts_highlight.dart`）、`settings/`（`reader_v2_settings_controller.dart`、`reader_v2_prefs_repository.dart`、`reader_v2_settings_sheets.dart`）、`menu/`（`reader_v2_menu_controller.dart`、`reader_v2_bottom_menu.dart`、`reader_v2_top_menu.dart`、`reader_v2_tap_action.dart`）、`auto_page/`、`bookmark/`、`replace_rule/`（`reader_v2_replace_rule_sheet.dart`、`reader_v2_replace_rule_page.dart`、`reader_v2_replace_rule_editor_sheet.dart`）。
 
 ## Dependencies & Impact
@@ -44,7 +44,7 @@
 - `ReaderV2Runtime`（392 行）與 `NavigationController`（519 行）為核心，狀態機 `ReaderV2Phase` 翻轉敏感，改動易引入 ready/error 來回閃爍或卡 cold。
 - 排版引擎反覆量測 line layout（`ReaderV2LayoutEngineStats`），效能迴歸風險高。
 - TTS 逐段高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
-- `ScrollReaderV2Viewport`（1575 行）仍為單一巨型 StatefulWidget，尚未拆分。
+- `ScrollReaderV2Viewport` 已拆為 viewport model、motion controller、command queue 與 canvas widgets；後續改動仍需留意 reading offset、人工 window 邊界續滑與 progress settle 的呼叫順序。
 - 預載門檻與背景任務互動需驗；過度預載會吃記憶。
 
 ## Do Not Do

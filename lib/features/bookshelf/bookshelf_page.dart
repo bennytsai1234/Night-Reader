@@ -502,7 +502,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
       return ReorderableListView.builder(
         padding: const EdgeInsets.all(AppSpacing.md),
         itemCount: provider.books.length,
-        onReorder: provider.reorderBooks,
+        onReorderItem: provider.reorderBooks,
         itemBuilder:
             (context, index) => Padding(
               key: ValueKey(provider.books[index].bookUrl),
@@ -539,15 +539,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    final borderColor = isSelected 
-        ? theme.colorScheme.primary 
-        : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
+
+    final borderColor =
+        isSelected
+            ? theme.colorScheme.primary
+            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
     final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
 
     return InkWell(
-      onLongPress:
-          _isMultiSelect ? null : () => _openDetail(context, book),
+      onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
       onTap: () {
         if (_isMultiSelect) {
           setState(() {
@@ -570,15 +570,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   tag: 'book_cover_${book.bookUrl}',
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
+                      border: Border.all(
+                        color: borderColor,
+                        width: isSelected ? 2 : 1,
+                      ),
                       borderRadius: AppRadius.cardXs,
-                      boxShadow: theme.cardTheme.shadowColor != null ? [
-                        BoxShadow(
-                          color: theme.cardTheme.shadowColor!,
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
-                        )
-                      ] : [],
+                      boxShadow:
+                          theme.cardTheme.shadowColor != null
+                              ? [
+                                BoxShadow(
+                                  color: theme.cardTheme.shadowColor!,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                              : [],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadius.xs - 1),
@@ -616,9 +622,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
-                    widthFactor: book.totalChapterNum > 0 
-                        ? (book.chapterIndex / book.totalChapterNum).clamp(0.0, 1.0)
-                        : 0.0,
+                    widthFactor:
+                        book.totalChapterNum > 0
+                            ? (book.chapterIndex / book.totalChapterNum).clamp(
+                              0.0,
+                              1.0,
+                            )
+                            : 0.0,
                     child: Container(
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
@@ -648,17 +658,17 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
-    final borderColor = isSelected 
-        ? theme.colorScheme.primary 
-        : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
+
+    final borderColor =
+        isSelected
+            ? theme.colorScheme.primary
+            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
     final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
     final fgSecondary = isDark ? AppPalette.ink200 : AppPalette.ink300;
     final fgTertiary = isDark ? const Color(0xFF847B68) : AppPalette.ink200;
 
     return InkWell(
-      onLongPress:
-          _isMultiSelect ? null : () => _openDetail(context, book),
+      onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
       onTap: () {
         if (_isMultiSelect) {
           setState(() {
@@ -677,13 +687,16 @@ class _BookshelfPageState extends State<BookshelfPage> {
           color: theme.cardTheme.color,
           borderRadius: AppRadius.cardLg,
           border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
-          boxShadow: theme.cardTheme.shadowColor != null ? [
-            BoxShadow(
-              color: theme.cardTheme.shadowColor!,
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            )
-          ] : [],
+          boxShadow:
+              theme.cardTheme.shadowColor != null
+                  ? [
+                    BoxShadow(
+                      color: theme.cardTheme.shadowColor!,
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                  : [],
         ),
         child: Row(
           children: [
@@ -716,29 +729,20 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   const SizedBox(height: 2),
                   Text(
                     book.author,
-                    style: TextStyle(
-                      fontSize: 11, 
-                      color: fgTertiary,
-                    ),
+                    style: TextStyle(fontSize: 11, color: fgTertiary),
                     maxLines: 1,
                   ),
                   const Spacer(),
                   Text(
                     '讀至: ${book.durChapterTitle}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: fgSecondary,
-                    ),
+                    style: TextStyle(fontSize: 11, color: fgSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '最新: ${book.latestChapterTitle}',
-                    style: TextStyle(
-                      fontSize: 10, 
-                      color: fgTertiary,
-                    ),
+                    style: TextStyle(fontSize: 10, color: fgTertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -752,9 +756,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor: book.totalChapterNum > 0 
-                            ? (book.chapterIndex / book.totalChapterNum).clamp(0.0, 1.0)
-                            : 0.0,
+                        widthFactor:
+                            book.totalChapterNum > 0
+                                ? (book.chapterIndex / book.totalChapterNum)
+                                    .clamp(0.0, 1.0)
+                                : 0.0,
                         child: Container(
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
@@ -799,10 +805,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     Navigator.push(
       context,
-      BookOpenRoute(
-        book: book,
-        openTarget: ReaderV2OpenTarget.resume(book),
-      ),
+      BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
   }
 

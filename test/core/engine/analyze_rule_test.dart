@@ -448,8 +448,9 @@ void main() {
 
         try {
           final analyzer = AnalyzeRule().setContent(htmlStr);
+          final scriptPath = scriptFile.path.replaceAll(r'\', r'\\');
           final value = await analyzer.getStringAsync(
-            '@js:{{java.importScript("${scriptFile.path}")}}\nHelper.value("ok")',
+            '@js:{{java.importScript("$scriptPath")}}\nHelper.value("ok")',
           );
 
           expect(value, 'ok!');
