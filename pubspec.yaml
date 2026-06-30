@@ -83,7 +83,10 @@ dependencies:
 
   # === Local Storage (key-value) ===
   shared_preferences: ^2.3.4
-  package_info_plus: ^10.2.0
+  # 鎖 9.x:10.x 要 win32 ^6,會與 file_picker(鎖 win32 ^5.9.0)衝突,
+  # 害 flutter test 在 host 編譯 file_picker 桌面實作時爆掉。本 App 只出
+  # Android/iOS,9.x 的版本資訊 API 與 10.x 完全相同,留在 5.x 線最單純。
+  package_info_plus: ^9.0.1
 
   # === UUID ===
   uuid: ^4.5.1
@@ -105,10 +108,10 @@ dependency_overrides:
   # drift_dev 帶入)用到 1.18.0 沒有的 TargetKind.importDirective。meta 純註解、
   # 向後相容,以 override 統一到 1.18.3 同時滿足 SDK 與 analyzer。
   meta: 1.18.3
-  # win32 僅供 Windows 桌面使用,本專案只出 Android/iOS,實機不會編譯或執行。
-  # file_picker 穩定版仍鎖 win32 ^5.9.0,package_info_plus 10.x 需要 win32 ^6;
-  # 兩者僅在解析器層衝突,以 override 統一到 6.x 讓雙方都能用最新穩定版。
-  win32: ^6.0.1
+  # win32 僅供 Windows 桌面使用,本專案只出 Android/iOS,實機不會執行;但
+  # flutter test 在 host 上會把 file_picker 的桌面實作一併編譯。file_picker
+  # 最新版仍鎖 win32 ^5.9.0,故統一壓在 5.x,讓該編譯對得上預期 API。
+  win32: ^5.9.0
 
 dev_dependencies:
   flutter_test:
