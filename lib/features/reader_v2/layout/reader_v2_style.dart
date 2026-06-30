@@ -1,19 +1,3 @@
-import 'package:night_reader/core/constant/page_anim.dart';
-
-enum ReaderV2PageMode {
-  scroll,
-  slide;
-
-  static ReaderV2PageMode fromPageAnim(int pageAnim) {
-    return pageAnim == PageAnim.scroll ? ReaderV2PageMode.scroll : slide;
-  }
-
-  int get pageAnim => switch (this) {
-    ReaderV2PageMode.scroll => PageAnim.scroll,
-    ReaderV2PageMode.slide => PageAnim.slide,
-  };
-}
-
 class ReaderV2Style {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;
@@ -30,7 +14,6 @@ class ReaderV2Style {
     required this.paddingRight,
     this.bold = false,
     this.textIndent = 0,
-    required this.pageMode,
   });
 
   final double fontSize;
@@ -43,7 +26,6 @@ class ReaderV2Style {
   final double paddingRight;
   final bool bold;
   final int textIndent;
-  final ReaderV2PageMode pageMode;
 
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
@@ -63,7 +45,6 @@ class ReaderV2Style {
     double? paddingRight,
     bool? bold,
     int? textIndent,
-    ReaderV2PageMode? pageMode,
   }) {
     return ReaderV2Style(
       fontSize: fontSize ?? this.fontSize,
@@ -76,7 +57,6 @@ class ReaderV2Style {
       paddingRight: paddingRight ?? this.paddingRight,
       bold: bold ?? this.bold,
       textIndent: textIndent ?? this.textIndent,
-      pageMode: pageMode ?? this.pageMode,
     );
   }
 
@@ -92,8 +72,7 @@ class ReaderV2Style {
         other.paddingLeft == paddingLeft &&
         other.paddingRight == paddingRight &&
         other.bold == bold &&
-        other.textIndent == textIndent &&
-        other.pageMode == pageMode;
+        other.textIndent == textIndent;
   }
 
   @override
@@ -108,6 +87,5 @@ class ReaderV2Style {
     paddingRight,
     bold,
     textIndent,
-    pageMode,
   );
 }

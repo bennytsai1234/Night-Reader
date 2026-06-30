@@ -34,7 +34,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2LayoutEngine layoutEngine,
     required ReaderV2ProgressController progressController,
     required ReaderV2LayoutSpec initialLayoutSpec,
-    required ReaderV2Mode initialMode,
     ReaderV2Location? initialLocation,
   }) : _repository = repository,
        _progressController = progressController,
@@ -52,7 +51,6 @@ class ReaderV2Runtime extends ChangeNotifier {
          layoutSpec: initialLayoutSpec,
        ),
        state = ReaderV2State(
-         mode: initialMode,
          phase: ReaderV2Phase.cold,
          committedLocation:
              (initialLocation ??
@@ -148,11 +146,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     _performanceMetrics.recordOverlayLoadingSample();
   }
 
-  void recordSlidePlaceholderExposure(int placeholderCount) {
-    if (_disposed || placeholderCount <= 0) return;
-    _performanceMetrics.recordSlidePlaceholderExposure(placeholderCount);
-  }
-
   void registerVisibleLocationCapture(
     Object owner,
     ReaderV2VisibleLocationCapture capture,
@@ -206,79 +199,43 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   Future<void> applyPresentation({
     required ReaderV2LayoutSpec spec,
-    required ReaderV2Mode mode,
   }) async {
     final needLayout = state.layoutSpec.layoutSignature != spec.layoutSignature;
-    final needMode = state.mode != mode;
-    if (!needLayout && !needMode) return;
+    if (!needLayout) return;
 
     final requestId = ++_presentationRequestId;
-    final previousMode = state.mode;
     _clearPendingNeighborAdvance();
     final location =
         _pendingChapterJumpTarget ??
         captureVisibleLocation() ??
         state.visibleLocation;
 
-    var generation = state.layoutGeneration;
-    if (needLayout) {
-      generation = _preloadScheduler.bumpGeneration();
-      _resolver.updateLayoutSpec(spec);
-      _setState(
-        state.copyWith(
-          phase: ReaderV2Phase.switchingMode,
-          mode: mode,
-          layoutSpec: spec,
-          layoutGeneration: generation,
-          clearError: true,
-          clearPageWindow: true,
-          clearCurrentSlidePage: true,
-        ),
-      );
-    } else {
-      _setState(
-        state.copyWith(
-          phase: ReaderV2Phase.switchingMode,
-          mode: mode,
-          clearError: true,
-        ),
-      );
-    }
+    final generation = _preloadScheduler.bumpGeneration();
+    _resolver.updateLayoutSpec(spec);
+    _setState(
+      state.copyWith(
+        phase: ReaderV2Phase.switchingMode,
+        layoutSpec: spec,
+        layoutGeneration: generation,
+        clearError: true,
+        clearPageWindow: true,
+      ),
+    );
     await jumpToLocation(location, immediateSave: false);
 
     bool stillCurrentPresentation() {
       return !_disposed &&
           requestId == _presentationRequestId &&
           state.layoutGeneration == generation &&
-          state.layoutSpec.layoutSignature == spec.layoutSignature &&
-          state.mode == mode;
+          state.layoutSpec.layoutSignature == spec.layoutSignature;
     }
 
-    void restoreStaleModeSwitch() {
-      if (!needMode || _disposed || state.mode != mode) return;
-      _setState(state.copyWith(mode: previousMode));
-    }
+    if (!stillCurrentPresentation()) return;
 
-    if (!stillCurrentPresentation()) {
-      restoreStaleModeSwitch();
-      return;
-    }
-    if (needMode) {
-      await _saveVisibleAnchorAfterViewportSettled(
-        fallbackLocation: location,
-        restoreLocation: location,
-        isCurrent: stillCurrentPresentation,
-      );
-      if (!stillCurrentPresentation()) {
-        restoreStaleModeSwitch();
-        return;
-      }
-    }
     if (!_disposed &&
         requestId == _presentationRequestId &&
         state.layoutGeneration == generation &&
         state.layoutSpec.layoutSignature == spec.layoutSignature &&
-        state.mode == mode &&
         state.phase != ReaderV2Phase.error &&
         state.phase != ReaderV2Phase.ready) {
       _setState(state.copyWith(phase: ReaderV2Phase.ready));
@@ -300,7 +257,6 @@ class ReaderV2Runtime extends ChangeNotifier {
         layoutGeneration: generation,
         clearError: true,
         clearPageWindow: true,
-        clearCurrentSlidePage: true,
       ),
     );
     await jumpToLocation(location, immediateSave: false);
@@ -362,7 +318,6 @@ class ReaderV2Runtime extends ChangeNotifier {
         phase: ReaderV2Phase.layingOut,
         clearError: true,
         clearPageWindow: true,
-        clearCurrentSlidePage: true,
       ),
     );
     try {
@@ -390,7 +345,6 @@ class ReaderV2Runtime extends ChangeNotifier {
           phase: ReaderV2Phase.ready,
           visibleLocation: resolvedLocation,
           pageWindow: window,
-          currentSlidePage: page,
           clearError: true,
         ),
       );
@@ -422,13 +376,12 @@ class ReaderV2Runtime extends ChangeNotifier {
         phase: ReaderV2Phase.restoring,
         clearError: true,
         clearPageWindow: true,
-        clearCurrentSlidePage: true,
       ),
     );
     try {
       await _repository.ensureChapters();
       final normalized = await _normalizeRestoreLocation(location);
-      final page = await _pageForRestoreLocation(normalized);
+      final page = await _resolver.pageForLocation(normalized);
       if (_disposed || generation != state.layoutGeneration) return false;
       final window = await _windowAroundPage(page);
       if (_disposed || generation != state.layoutGeneration) return false;
@@ -438,7 +391,6 @@ class ReaderV2Runtime extends ChangeNotifier {
         state.copyWith(
           phase: ReaderV2Phase.ready,
           pageWindow: window,
-          currentSlidePage: page,
           clearError: true,
         ),
       );
@@ -503,15 +455,11 @@ class ReaderV2Runtime extends ChangeNotifier {
     _setState(
       state.copyWith(
         pageWindow: newWindow,
-        currentSlidePage: next,
         visibleLocation: location,
         phase: ReaderV2Phase.ready,
       ),
     );
     unawaited(_preloadScheduler.scheduleScrollSettled(next));
-    if (saveSettledProgress) {
-      _saveSettledSlideProgress(location);
-    }
     return true;
   }
 
@@ -552,15 +500,11 @@ class ReaderV2Runtime extends ChangeNotifier {
     _setState(
       state.copyWith(
         pageWindow: newWindow,
-        currentSlidePage: prev,
         visibleLocation: location,
         phase: ReaderV2Phase.ready,
       ),
     );
     unawaited(_preloadScheduler.scheduleScrollSettled(prev));
-    if (saveSettledProgress) {
-      _saveSettledSlideProgress(location);
-    }
     return true;
   }
 
@@ -570,49 +514,6 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   bool moveToPrevTile({bool saveSettledProgress = true}) {
     return moveToPrevPage(saveSettledProgress: saveSettledProgress);
-  }
-
-  bool moveSlidePageAndSettle({
-    required bool forward,
-    ReaderV2Location? settledLocation,
-  }) {
-    if (state.mode != ReaderV2Mode.slide) return false;
-    final moved =
-        forward
-            ? moveToNextPage(saveSettledProgress: false)
-            : moveToPrevPage(saveSettledProgress: false);
-    if (!moved) return false;
-    settleCurrentSlidePage(settledLocation: settledLocation);
-    return true;
-  }
-
-  void preloadSlideNeighbor({required bool forward}) {
-    if (state.mode != ReaderV2Mode.slide) return;
-    final window = state.pageWindow;
-    if (window == null) return;
-    final current = window.current;
-    if (current.isPlaceholder) return;
-    final neighbor = forward ? window.next : window.prev;
-    if (neighbor == null) return;
-    if (neighbor.isPlaceholder) {
-      unawaited(ensureSlideNeighborReady(forward: forward));
-      return;
-    }
-    final nearCurrentBoundary = _isNearChapterBoundary(
-      current,
-      forward: forward,
-    );
-    final nearNeighborBoundary = _isNearChapterBoundary(
-      neighbor,
-      forward: forward,
-    );
-    if (!nearCurrentBoundary && !nearNeighborBoundary) return;
-    unawaited(
-      _scheduleNeighborPreloadFrom(
-        chapterIndex: current.chapterIndex,
-        forward: forward,
-      ),
-    );
   }
 
   void beginInteractivePreloadPause() {
@@ -650,68 +551,6 @@ class ReaderV2Runtime extends ChangeNotifier {
       forward: forward,
       chapterSpan: span,
     );
-  }
-
-  Future<bool> ensureSlideNeighborReady({required bool forward}) async {
-    if (state.mode != ReaderV2Mode.slide) return false;
-    final window = state.pageWindow;
-    if (window == null) return false;
-    final current = window.current;
-    if (current.isPlaceholder) return false;
-    final neighbor = forward ? window.next : window.prev;
-    if (neighbor == null) return false;
-    if (!neighbor.isPlaceholder) return true;
-
-    final origin = _resolver.addressOf(current);
-    await _scheduleNeighborPreloadFrom(
-      chapterIndex: current.chapterIndex,
-      forward: forward,
-    );
-    if (_disposed || state.mode != ReaderV2Mode.slide) return false;
-    final latestWindow = state.pageWindow;
-    if (latestWindow == null ||
-        !_samePageAddress(_resolver.addressOf(latestWindow.current), origin)) {
-      return false;
-    }
-    await refreshNeighbors();
-    if (_disposed || state.mode != ReaderV2Mode.slide) return false;
-    final refreshedWindow = state.pageWindow;
-    if (refreshedWindow == null ||
-        !_samePageAddress(
-          _resolver.addressOf(refreshedWindow.current),
-          origin,
-        )) {
-      return false;
-    }
-    final refreshedNeighbor =
-        forward ? refreshedWindow.next : refreshedWindow.prev;
-    return refreshedNeighbor != null && !refreshedNeighbor.isPlaceholder;
-  }
-
-  void settleCurrentSlidePage({ReaderV2Location? settledLocation}) {
-    if (state.mode != ReaderV2Mode.slide) return;
-    final current = state.pageWindow?.current;
-    if (current == null || current.isPlaceholder) return;
-    final location =
-        settledLocation ??
-        ReaderV2Location(
-          chapterIndex: current.chapterIndex,
-          charOffset: current.startCharOffset,
-        );
-    _setState(
-      state.copyWith(
-        currentSlidePage: current,
-        committedLocation: location,
-        visibleLocation: location,
-      ),
-    );
-    unawaited(
-      _saveVisibleAnchorAfterViewportSettled(
-        fallbackLocation: location,
-        isCurrent: () => _isCurrentSlidePage(_resolver.addressOf(current)),
-      ),
-    );
-    unawaited(_preloadScheduler.scheduleSlidePageSettled(current));
   }
 
   Future<void> refreshNeighbors() async {
@@ -831,74 +670,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
   }
 
-  Future<ReaderV2RenderPage> _pageForRestoreLocation(
-    ReaderV2Location location,
-  ) async {
-    if (state.mode == ReaderV2Mode.slide) {
-      return _slidePageForRestoreLocation(location);
-    }
-    return _resolver.pageForLocation(location);
-  }
-
-  Future<ReaderV2RenderPage> _slidePageForRestoreLocation(
-    ReaderV2Location location,
-  ) async {
-    final layout = await _resolver.ensureLayout(location.chapterIndex);
-    if (layout.pages.isEmpty) return layout.pageForCharOffset(0);
-    final basePage = layout.pageForCharOffset(location.charOffset);
-    final anchorY = _anchorOffsetInViewport();
-    final desiredLineTopOnPage =
-        anchorY - state.layoutSpec.style.paddingTop - location.visualOffsetPx;
-    ReaderV2RenderPage? bestPage;
-    int? bestCharDistance;
-    double? bestVisualDistance;
-    for (
-      var index = basePage.pageIndex - 1;
-      index <= basePage.pageIndex + 1;
-      index++
-    ) {
-      if (index < 0 || index >= layout.pages.length) continue;
-      final page = layout.pages[index];
-      final nearestLine = _nearestLineOnPage(page, desiredLineTopOnPage);
-      final charDistance =
-          ((nearestLine?.startCharOffset ?? page.startCharOffset) -
-                  location.charOffset)
-              .abs();
-      final visualDistance =
-          nearestLine == null
-              ? double.infinity
-              : (nearestLine.top - desiredLineTopOnPage).abs();
-      if (bestPage == null ||
-          charDistance < bestCharDistance! ||
-          (charDistance == bestCharDistance &&
-              visualDistance < bestVisualDistance!)) {
-        bestPage = page;
-        bestCharDistance = charDistance;
-        bestVisualDistance = visualDistance;
-      }
-    }
-    return bestPage ?? basePage;
-  }
-
-  ReaderV2RenderLine? _nearestLineOnPage(
-    ReaderV2RenderPage page,
-    double pageY,
-  ) {
-    ReaderV2RenderLine? nearest;
-    var nearestDistance = double.infinity;
-    for (final line in page.lines) {
-      if (line.text.isEmpty) continue;
-      if (pageY >= line.top && pageY <= line.bottom) return line;
-      final distance =
-          pageY < line.top ? line.top - pageY : pageY - line.bottom;
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = line;
-      }
-    }
-    return nearest;
-  }
-
   Future<ReaderV2PageWindow> _windowAroundPage(ReaderV2RenderPage page) async {
     final prev = _resolver.prevPageOrPlaceholder(page);
     final next = _resolver.nextPageOrPlaceholder(page);
@@ -943,14 +714,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     return a.chapterIndex == b.chapterIndex && a.pageIndex == b.pageIndex;
   }
 
-  bool _isCurrentSlidePage(ReaderV2PageAddress address) {
-    if (_disposed || state.mode != ReaderV2Mode.slide) return false;
-    final current = state.pageWindow?.current;
-    if (current == null || current.isPlaceholder) return false;
-    return current.chapterIndex == address.chapterIndex &&
-        current.pageIndex == address.pageIndex;
-  }
-
   ReaderV2Location? _captureVisibleLocation({
     bool allowDuringRestore = false,
     bool notifyIfChanged = true,
@@ -962,13 +725,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     final captured = _normalizeCapturedLocation(capture());
     if (captured == null) return null;
     if (captured == state.visibleLocation) return captured;
-    final next =
-        state.mode == ReaderV2Mode.slide
-            ? state.copyWith(
-              visibleLocation: captured,
-              committedLocation: captured,
-            )
-            : state.copyWith(visibleLocation: captured);
+    final next = state.copyWith(visibleLocation: captured);
     if (notifyIfChanged) {
       _setState(next);
     } else {
@@ -1006,25 +763,6 @@ class ReaderV2Runtime extends ChangeNotifier {
       _progressController.schedule(normalized);
     }
     return normalized;
-  }
-
-  void _saveSettledSlideProgress(ReaderV2Location location) {
-    if (state.mode != ReaderV2Mode.slide) return;
-    final current = state.pageWindow?.current;
-    if (current == null || current.isPlaceholder) return;
-    final pageAddress = ReaderV2PageAddress(
-      chapterIndex: current.chapterIndex,
-      pageIndex: current.pageIndex,
-    );
-    unawaited(
-      _saveVisibleAnchorAfterViewportSettled(
-        fallbackLocation: location,
-        isCurrent: () => _isCurrentSlidePage(pageAddress),
-        // Persist immediately on page settle (mirrors scroll mode) so a lost
-        // background flush can't leave a stale position on cold restart.
-        immediateSave: true,
-      ),
-    );
   }
 
   ReaderV2Location? _normalizeCapturedLocation(ReaderV2Location? location) {
@@ -1068,19 +806,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     });
   }
 
-  bool _isNearChapterBoundary(
-    ReaderV2RenderPage page, {
-    required bool forward,
-  }) {
-    if (page.isPlaceholder || page.pageSize <= 0) return false;
-    if (forward) {
-      return page.pageIndex >=
-          page.pageSize - ReaderV2PreloadScheduler.boundaryPreloadPageDistance;
-    }
-    return page.pageIndex <
-        ReaderV2PreloadScheduler.boundaryPreloadPageDistance;
-  }
-
   void _rememberPendingNeighborAdvance({
     required ReaderV2RenderPage current,
     required bool forward,
@@ -1115,10 +840,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (neighbor.errorMessage != null) {
       _clearPendingNeighborAdvance();
       _emitUserNotice(forward ? '下一章載入失敗，請再試一次或返回目錄' : '上一章載入失敗，請再試一次或返回目錄');
-      return;
-    }
-    if (state.mode == ReaderV2Mode.slide) {
-      moveSlidePageAndSettle(forward: forward);
       return;
     }
     if (forward) {

@@ -174,17 +174,3 @@ class ReaderV2PageCacheFactory {
         .toList(growable: false);
   }
 }
-
-class ReaderV2SlidePagePlacement {
-  const ReaderV2SlidePagePlacement({
-    required this.page,
-    required this.virtualLeft,
-    required this.pageSlot,
-  });
-
-  final ReaderV2PageCache page;
-  final double virtualLeft;
-  final int pageSlot;
-
-  double screenX(double pageOffsetX) => virtualLeft - pageOffsetX;
-}

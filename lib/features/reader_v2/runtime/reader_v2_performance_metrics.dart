@@ -15,8 +15,6 @@ class ReaderV2PerformanceSnapshot {
     required this.worstLayoutMs,
     required this.fullScreenLoadingSampleCount,
     required this.overlayLoadingSampleCount,
-    required this.slidePlaceholderSampleCount,
-    required this.slidePlaceholderExposureCount,
   });
 
   final int frameSampleCount;
@@ -30,24 +28,16 @@ class ReaderV2PerformanceSnapshot {
   final double worstLayoutMs;
   final int fullScreenLoadingSampleCount;
   final int overlayLoadingSampleCount;
-  final int slidePlaceholderSampleCount;
-  final int slidePlaceholderExposureCount;
 
   String toProfilingSignal() {
     final jankRatio =
         frameSampleCount == 0 ? 0.0 : jankyFrameCount / frameSampleCount * 100;
-    final avgPlaceholders =
-        slidePlaceholderSampleCount == 0
-            ? 0.0
-            : slidePlaceholderExposureCount / slidePlaceholderSampleCount;
     return 'frame(avg=${averageFrameTotalMs.toStringAsFixed(2)}ms, '
         'worst=${worstFrameTotalMs.toStringAsFixed(2)}ms, '
         'jank=${jankyFrameCount}/${frameSampleCount} ${jankRatio.toStringAsFixed(1)}%), '
         'layout(avg=${averageLayoutMs.toStringAsFixed(2)}ms, '
         'worst=${worstLayoutMs.toStringAsFixed(2)}ms, n=$layoutSampleCount), '
-        'loading(full=$fullScreenLoadingSampleCount, overlay=$overlayLoadingSampleCount), '
-        'placeholder(avg=${avgPlaceholders.toStringAsFixed(2)}, '
-        'samples=$slidePlaceholderSampleCount)';
+        'loading(full=$fullScreenLoadingSampleCount, overlay=$overlayLoadingSampleCount)';
   }
 }
 
@@ -67,8 +57,6 @@ class ReaderV2PerformanceMetricsRecorder {
 
   int _fullScreenLoadingSampleCount = 0;
   int _overlayLoadingSampleCount = 0;
-  int _slidePlaceholderSampleCount = 0;
-  int _slidePlaceholderExposureCount = 0;
 
   void clear() {
     _frameSampleCount = 0;
@@ -82,8 +70,6 @@ class ReaderV2PerformanceMetricsRecorder {
     _layoutWorstMs = 0;
     _fullScreenLoadingSampleCount = 0;
     _overlayLoadingSampleCount = 0;
-    _slidePlaceholderSampleCount = 0;
-    _slidePlaceholderExposureCount = 0;
   }
 
   void recordFrameTimings(List<FrameTiming> timings) {
@@ -129,12 +115,6 @@ class ReaderV2PerformanceMetricsRecorder {
     _overlayLoadingSampleCount += 1;
   }
 
-  void recordSlidePlaceholderExposure(int placeholderCount) {
-    if (placeholderCount <= 0) return;
-    _slidePlaceholderSampleCount += 1;
-    _slidePlaceholderExposureCount += placeholderCount;
-  }
-
   ReaderV2PerformanceSnapshot snapshot() {
     double avg(double sum, int count) {
       if (count <= 0) return 0;
@@ -153,8 +133,6 @@ class ReaderV2PerformanceMetricsRecorder {
       worstLayoutMs: _layoutWorstMs,
       fullScreenLoadingSampleCount: _fullScreenLoadingSampleCount,
       overlayLoadingSampleCount: _overlayLoadingSampleCount,
-      slidePlaceholderSampleCount: _slidePlaceholderSampleCount,
-      slidePlaceholderExposureCount: _slidePlaceholderExposureCount,
     );
   }
 }

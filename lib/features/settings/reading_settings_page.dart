@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/core/constant/page_anim.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
@@ -129,32 +128,6 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                         _updatePrefs(prefs.copyWith(textIndent: value));
                         _prefsRepository.saveTextIndent(value);
                       },
-                    ),
-                  ),
-                  ListTile(
-                    title: const Text('翻頁模式'),
-                    subtitle: Wrap(
-                      spacing: 8,
-                      children: [
-                        ReaderV2SettingComponents.buildChoiceChip(
-                          label: '平移翻頁',
-                          value: PageAnim.slide,
-                          groupValue: prefs.pageTurnMode,
-                          onSelected: (value) {
-                            _updatePrefs(prefs.copyWith(pageTurnMode: value));
-                            _prefsRepository.savePageTurnMode(value);
-                          },
-                        ),
-                        ReaderV2SettingComponents.buildChoiceChip(
-                          label: '上下滾動',
-                          value: PageAnim.scroll,
-                          groupValue: prefs.pageTurnMode,
-                          onSelected: (value) {
-                            _updatePrefs(prefs.copyWith(pageTurnMode: value));
-                            _prefsRepository.savePageTurnMode(value);
-                          },
-                        ),
-                      ],
                     ),
                   ),
                   ReaderV2SettingComponents.buildSliderRow(

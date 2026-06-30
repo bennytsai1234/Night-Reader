@@ -112,10 +112,6 @@ class ReaderV2PreloadScheduler {
     return scheduleContent(page.chapterIndex);
   }
 
-  Future<void> scheduleSlidePageSettled(ReaderV2RenderPage page) {
-    return scheduleScrollSettled(page);
-  }
-
   Future<void> scheduleDirectional({
     required int fromChapterIndex,
     required bool forward,

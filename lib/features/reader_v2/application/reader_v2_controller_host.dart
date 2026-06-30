@@ -17,7 +17,6 @@ import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
 class ReaderV2ControllerHost {
@@ -98,7 +97,6 @@ class ReaderV2ControllerHost {
       layoutEngine: ReaderV2LayoutEngine(),
       progressController: progressController,
       initialLayoutSpec: spec,
-      initialMode: modeFor(settings.pageTurnMode),
       initialLocation: initialLocation,
     )..addListener(_onControllerChanged);
     final nextTts = ReaderV2TtsController(runtime: nextRuntime)
@@ -137,14 +135,12 @@ class ReaderV2ControllerHost {
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
-    final targetMode = modeFor(settings.pageTurnMode);
     final needsLayout = _lastLayoutSignature != spec.layoutSignature;
-    final needsMode = runtime.state.mode != targetMode;
-    if (needsLayout || needsMode) {
+    if (needsLayout) {
       _lastLayoutSignature = spec.layoutSignature;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_isMounted()) return;
-        unawaited(runtime.applyPresentation(spec: spec, mode: targetMode));
+        unawaited(runtime.applyPresentation(spec: spec));
       });
     }
     if (_lastContentSettingsGeneration != settings.contentSettingsGeneration) {
@@ -156,11 +152,7 @@ class ReaderV2ControllerHost {
     }
   }
 
-  ReaderV2Mode modeFor(int pageTurnMode) {
-    return pageTurnMode == ReaderV2PageMode.scroll.pageAnim
-        ? ReaderV2Mode.scroll
-        : ReaderV2Mode.slide;
-  }
+
 
   ReaderV2Location _initialLocationFor(ReaderV2LayoutSpec spec) {
     final target = openTarget;
@@ -196,6 +188,7 @@ class ReaderV2ControllerHost {
       ),
     );
   }
+
 
   Future<void> flushProgress() async {
     await runtime?.flushProgress();

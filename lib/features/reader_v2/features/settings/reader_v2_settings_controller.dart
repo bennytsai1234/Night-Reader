@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/config/app_config.dart';
-import 'package:night_reader/core/constant/page_anim.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
@@ -33,7 +31,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int lastNightThemeIndex = 1;
   int menuThemeIndex = 0;
   int chineseConvert = 0;
-  int pageTurnMode = PageAnim.slide;
   double autoPageSpeed = ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
   bool showAddToShelfAlert = true;
   List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
@@ -56,8 +53,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
-    pageTurnMode = snapshot.pageTurnMode;
-    AppConfig.readerPageAnim = pageTurnMode;
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
@@ -89,7 +84,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingRight: textPadding,
       bold: false,
       textIndent: textIndent,
-      pageMode: ReaderV2PageMode.fromPageAnim(pageTurnMode),
     );
   }
 
@@ -142,12 +136,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPageTurnMode(int value) {
-    pageTurnMode = value;
-    AppConfig.readerPageAnim = value;
-    unawaited(_prefsRepository.savePageTurnMode(value));
-    notifyListeners();
-  }
+
 
   void setAutoPageSpeed(double value) {
     final normalized = _normalizeAutoPageSpeed(value);

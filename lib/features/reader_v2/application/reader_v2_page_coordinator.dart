@@ -6,7 +6,6 @@ import 'package:night_reader/features/reader_v2/application/reader_v2_controller
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 
 typedef ReaderV2NoticeSink = void Function(String message);
 
@@ -162,31 +161,17 @@ class ReaderV2PageCoordinator {
     final runtime = _host.runtime;
     final viewportSize = _host.runtime?.state.layoutSpec.viewportSize;
     if (runtime == null || viewportSize == null) return;
-    if (runtime.state.mode == ReaderV2Mode.scroll) {
-      final command =
-          forward
-              ? _host.viewportController.moveToNextPage
-              : _host.viewportController.moveToPrevPage;
-      if (command != null) {
-        unawaited(command());
-        return;
-      }
-      final animateBy = _host.viewportController.animateBy;
-      if (animateBy != null) {
-        unawaited(animateBy(viewportSize.height * (forward ? 0.9 : -0.9)));
-        return;
-      }
+    final command =
+        forward
+            ? _host.viewportController.moveToNextPage
+            : _host.viewportController.moveToPrevPage;
+    if (command != null) {
+      unawaited(command());
+      return;
     }
-    if (runtime.state.mode == ReaderV2Mode.slide) {
-      final command =
-          forward
-              ? _host.viewportController.moveToNextPage
-              : _host.viewportController.moveToPrevPage;
-      if (command != null) {
-        unawaited(command());
-        return;
-      }
-      runtime.moveSlidePageAndSettle(forward: forward);
+    final animateBy = _host.viewportController.animateBy;
+    if (animateBy != null) {
+      unawaited(animateBy(viewportSize.height * (forward ? 0.9 : -0.9)));
       return;
     }
     if (forward) {

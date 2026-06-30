@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
 
 typedef ReaderV2AutoPageTimerFactory =
     Timer Function(Duration interval, void Function(Timer timer) onTick);
@@ -15,17 +14,12 @@ class ReaderV2AutoPageController extends ChangeNotifier {
     double Function()? viewportExtent,
     double Function()? autoPageSpeed,
     Duration scrollInterval = const Duration(milliseconds: 16),
-    Duration pageInterval = const Duration(seconds: 8),
     ReaderV2AutoPageTimerFactory? timerFactory,
   }) : _viewportController = viewportController,
        _viewportExtent = viewportExtent,
        _autoPageSpeed = autoPageSpeed,
        _scrollInterval = scrollInterval,
-       _pageInterval = pageInterval,
-       _timerFactory = timerFactory ?? Timer.periodic {
-    _lastMode = runtime.state.mode;
-    runtime.addListener(_handleRuntimeChanged);
-  }
+       _timerFactory = timerFactory ?? Timer.periodic;
 
   static const double _minAutoPageSpeed = 0.04;
   static const double _maxAutoPageSpeed = 0.45;
@@ -36,10 +30,8 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   final double Function()? _viewportExtent;
   final double Function()? _autoPageSpeed;
   final Duration _scrollInterval;
-  final Duration _pageInterval;
   final ReaderV2AutoPageTimerFactory _timerFactory;
   Timer? _timer;
-  late ReaderV2Mode _lastMode;
   bool _stepping = false;
   DateTime? _lastScrollTick;
 
@@ -55,7 +47,6 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   void start() {
     if (isRunning) return;
-    _lastMode = runtime.state.mode;
     _lastScrollTick = null;
     _timer = _createTimerForCurrentMode();
     notifyListeners();
@@ -74,46 +65,25 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   }
 
   Future<bool> _step() async {
-    if (runtime.state.mode == ReaderV2Mode.scroll) {
-      final delta = _scrollStepDeltaForElapsed();
-      if (delta > 0) {
-        final continuousScrollBy = _viewportController?.continuousScrollBy;
-        if (continuousScrollBy != null && await continuousScrollBy(delta)) {
-          return true;
-        }
-        final scrollBy = _viewportController?.scrollBy;
-        if (scrollBy != null && await scrollBy(delta)) return true;
-        final animateBy = _viewportController?.animateBy;
-        if (animateBy != null && await animateBy(delta)) return true;
+    final delta = _scrollStepDeltaForElapsed();
+    if (delta > 0) {
+      final continuousScrollBy = _viewportController?.continuousScrollBy;
+      if (continuousScrollBy != null && await continuousScrollBy(delta)) {
+        return true;
       }
-      final moveToNextPage = _viewportController?.moveToNextPage;
-      if (moveToNextPage != null && await moveToNextPage()) return true;
-      final moved = runtime.moveToNextPage();
-      return Future<bool>.value(moved);
+      final scrollBy = _viewportController?.scrollBy;
+      if (scrollBy != null && await scrollBy(delta)) return true;
+      final animateBy = _viewportController?.animateBy;
+      if (animateBy != null && await animateBy(delta)) return true;
     }
     final moveToNextPage = _viewportController?.moveToNextPage;
     if (moveToNextPage != null && await moveToNextPage()) return true;
-    final moved = runtime.moveSlidePageAndSettle(forward: true);
+    final moved = runtime.moveToNextPage();
     return Future<bool>.value(moved);
   }
 
   Duration _intervalForCurrentMode() {
-    if (runtime.state.mode == ReaderV2Mode.scroll) return _scrollInterval;
-    final millis = _pageInterval.inMilliseconds.toDouble();
-    final speed = _speed;
-    final fastest = millis * 0.5;
-    final slowest = millis * 3.0;
-    final normalized =
-        speed <= _defaultAutoPageSpeed
-            ? (speed - _minAutoPageSpeed) /
-                (_defaultAutoPageSpeed - _minAutoPageSpeed)
-            : (speed - _defaultAutoPageSpeed) /
-                (_maxAutoPageSpeed - _defaultAutoPageSpeed);
-    final targetMillis =
-        speed <= _defaultAutoPageSpeed
-            ? slowest - (slowest - millis) * normalized
-            : millis - (millis - fastest) * normalized;
-    return Duration(milliseconds: targetMillis.round());
+    return _scrollInterval;
   }
 
   Timer _createTimerForCurrentMode() {
@@ -122,18 +92,8 @@ class ReaderV2AutoPageController extends ChangeNotifier {
     });
   }
 
-  void _handleRuntimeChanged() {
-    final mode = runtime.state.mode;
-    if (mode == _lastMode) return;
-    _lastMode = mode;
-    if (!isRunning) return;
-    _timer?.cancel();
-    _lastScrollTick = null;
-    _timer = _createTimerForCurrentMode();
-  }
-
   void refreshConfiguration() {
-    if (!isRunning || runtime.state.mode == ReaderV2Mode.scroll) return;
+    if (!isRunning) return;
     _timer?.cancel();
     _timer = _createTimerForCurrentMode();
   }
@@ -175,7 +135,6 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   @override
   void dispose() {
-    runtime.removeListener(_handleRuntimeChanged);
     _timer?.cancel();
     super.dispose();
   }

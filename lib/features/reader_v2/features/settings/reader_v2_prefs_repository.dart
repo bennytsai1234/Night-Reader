@@ -1,4 +1,3 @@
-import 'package:night_reader/core/constant/page_anim.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +12,6 @@ class ReaderV2PrefsSnapshot {
   final int lastDayThemeIndex;
   final int lastNightThemeIndex;
   final int menuThemeIndex;
-  final int pageTurnMode;
   final double autoPageSpeed;
   final int chineseConvert;
   final bool showAddToShelfAlert;
@@ -29,7 +27,6 @@ class ReaderV2PrefsSnapshot {
     required this.lastDayThemeIndex,
     required this.lastNightThemeIndex,
     required this.menuThemeIndex,
-    required this.pageTurnMode,
     required this.autoPageSpeed,
     required this.chineseConvert,
     required this.showAddToShelfAlert,
@@ -47,7 +44,6 @@ class ReaderV2PrefsSnapshot {
       lastDayThemeIndex: 0,
       lastNightThemeIndex: 1,
       menuThemeIndex: 0,
-      pageTurnMode: PageAnim.slide,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
       showAddToShelfAlert: true,
@@ -65,7 +61,6 @@ class ReaderV2PrefsSnapshot {
     int? lastDayThemeIndex,
     int? lastNightThemeIndex,
     int? menuThemeIndex,
-    int? pageTurnMode,
     double? autoPageSpeed,
     int? chineseConvert,
     bool? showAddToShelfAlert,
@@ -81,7 +76,6 @@ class ReaderV2PrefsSnapshot {
       lastDayThemeIndex: lastDayThemeIndex ?? this.lastDayThemeIndex,
       lastNightThemeIndex: lastNightThemeIndex ?? this.lastNightThemeIndex,
       menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
-      pageTurnMode: pageTurnMode ?? this.pageTurnMode,
       autoPageSpeed: autoPageSpeed ?? this.autoPageSpeed,
       chineseConvert: chineseConvert ?? this.chineseConvert,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
@@ -124,8 +118,6 @@ class ReaderV2PrefsRepository {
           defaults.lastNightThemeIndex,
       menuThemeIndex:
           prefs.getInt(PreferKey.readerMenuThemeIndex) ?? themeIndex,
-      pageTurnMode:
-          prefs.getInt(PreferKey.readerPageTurnMode) ?? defaults.pageTurnMode,
       autoPageSpeed: _normalizeAutoPageSpeed(
         prefs.getDouble(PreferKey.readerAutoPageSpeed) ??
             prefs.getInt(PreferKey.autoReadSpeed)?.toDouble(),
@@ -178,10 +170,6 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveMenuThemeIndex(int value) {
     return _setInt(PreferKey.readerMenuThemeIndex, value);
-  }
-
-  Future<void> savePageTurnMode(int value) {
-    return _setInt(PreferKey.readerPageTurnMode, value);
   }
 
   Future<void> saveAutoPageSpeed(double value) {

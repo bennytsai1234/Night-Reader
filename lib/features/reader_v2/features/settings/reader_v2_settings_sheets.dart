@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/constant/page_anim.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -206,33 +205,6 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
                 onChanged: (value) {
                   if (value != null) settings.setTextIndent(value);
                 },
-              ),
-            ],
-          ),
-        ),
-        const SheetSection(title: '翻頁方式'),
-        ListenableBuilder(
-          listenable: settings,
-          builder: (context, _) => Wrap(
-            spacing: 12,
-            children: [
-              ChoiceChip(
-                label: const Text('平移翻頁'),
-                selected: settings.pageTurnMode == PageAnim.slide,
-                onSelected:
-                    (selected) =>
-                        selected
-                            ? settings.setPageTurnMode(PageAnim.slide)
-                            : null,
-              ),
-              ChoiceChip(
-                label: const Text('上下滾動'),
-                selected: settings.pageTurnMode == PageAnim.scroll,
-                onSelected:
-                    (selected) =>
-                        selected
-                            ? settings.setPageTurnMode(PageAnim.scroll)
-                            : null,
               ),
             ],
           ),

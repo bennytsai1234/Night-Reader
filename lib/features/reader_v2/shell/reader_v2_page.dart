@@ -393,7 +393,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   ReaderV2RenderPage? _currentPage(ReaderV2Runtime? runtime) {
     if (runtime == null) return null;
-    return runtime.state.pageWindow?.current ?? runtime.state.currentSlidePage;
+    return runtime.state.pageWindow?.current;
   }
 
   String _chapterTitleAt(int index) {
@@ -412,18 +412,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   String _displayPageLabel(ReaderV2Runtime? runtime, ReaderV2RenderPage? page) {
     if (runtime == null) return '...';
-    if (runtime.state.mode == ReaderV2Mode.scroll) {
-      final visiblePage = _visiblePageForScroll(runtime);
-      if (visiblePage != null && visiblePage.pageSize > 0) {
-        return _displayCoordinator.formatPageLabel(
-          visiblePage.pageIndex,
-          visiblePage.pageSize,
-        );
-      }
-      return '...';
+    final visiblePage = _visiblePageForScroll(runtime);
+    if (visiblePage != null && visiblePage.pageSize > 0) {
+      return _displayCoordinator.formatPageLabel(
+        visiblePage.pageIndex,
+        visiblePage.pageSize,
+      );
     }
-    if (page == null || page.pageSize <= 0) return '...';
-    return _displayCoordinator.formatPageLabel(page.pageIndex, page.pageSize);
+    return '...';
   }
 
   String _displayChapterPercentLabel(
@@ -431,11 +427,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2RenderPage? page,
   ) {
     if (runtime == null) return '...%';
-    if (runtime.state.mode == ReaderV2Mode.scroll) {
-      return _visiblePageForScroll(runtime)?.readProgress ?? '...%';
-    }
-    if (page == null) return '...%';
-    return page.readProgress;
+    return _visiblePageForScroll(runtime)?.readProgress ?? '...%';
   }
 
   ReaderV2RenderPage? _visiblePageForScroll(ReaderV2Runtime runtime) {
