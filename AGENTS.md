@@ -4,7 +4,6 @@
 
 - This is the Flutter/Dart project `night_reader`.
 - The app display name is `夜讀`.
-- The product is a novel reader inspired by Legado.
 
 ## Language
 
