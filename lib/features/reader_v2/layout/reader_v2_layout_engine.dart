@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
 
@@ -56,16 +58,21 @@ class ReaderV2LayoutEngine {
   int _fittingBinarySearchPasses = 0;
   TextPainter? _blockPainter;
 
+  /// 單一段落排版的預算：超過這個累積耗時就在段落邊界讓出一次主執行緒，
+  /// 避免超長章節的排版一次性佔滿一整個（或連續多個）frame 造成卡頓。
+  /// 短章節通常整章都排不到這個門檻，行為與讓出前完全一致。
+  static const Duration _layoutYieldBudget = Duration(milliseconds: 8);
+
   bool _isEnglishLetter(String char) {
     if (char.isEmpty) return false;
     final code = char.codeUnitAt(0);
     return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
   }
 
-  ReaderV2ChapterLayout layout(
+  Future<ReaderV2ChapterLayout> layout(
     ReaderV2Content content,
     ReaderV2LayoutSpec spec,
-  ) {
+  ) async {
     _resetStats();
     final stopwatch = Stopwatch()..start();
     final lines = <ReaderV2TextLine>[];
@@ -90,6 +97,7 @@ class ReaderV2LayoutEngine {
     }
 
     var paragraphOffset = content.bodyStartOffset;
+    var elapsedSinceYield = stopwatch.elapsed;
     for (
       var paragraphIndex = 0;
       paragraphIndex < content.paragraphs.length;
@@ -112,6 +120,11 @@ class ReaderV2LayoutEngine {
         y = paragraphLines.last.bottom + _paragraphSpacingPixels(spec);
       }
       paragraphOffset += paragraph.length + 2;
+
+      if (stopwatch.elapsed - elapsedSinceYield >= _layoutYieldBudget) {
+        await Future<void>.delayed(Duration.zero);
+        elapsedSinceYield = stopwatch.elapsed;
+      }
     }
 
     final pages = _paginate(lines: lines, spec: spec, content: content);

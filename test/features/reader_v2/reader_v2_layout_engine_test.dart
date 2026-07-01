@@ -29,7 +29,7 @@ void main() {
   }
 
   group('ReaderV2LayoutEngine', () {
-    test('cuts text into monotonic lines and paginates long chapters', () {
+    test('cuts text into monotonic lines and paginates long chapters', () async {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,
         title: '第一章 測試',
@@ -38,7 +38,7 @@ void main() {
           '這是一段用來測試排版切行與分頁的中文內容，包含標點符號與足夠長度。',
         ).join('\n\n'),
       );
-      final layout = ReaderV2LayoutEngine().layout(content, spec());
+      final layout = await ReaderV2LayoutEngine().layout(content, spec());
 
       expect(layout.lines, isNotEmpty);
       expect(layout.pages.length, greaterThan(1));
@@ -59,13 +59,13 @@ void main() {
       expect(middle.pageIndex, inInclusiveRange(0, layout.pages.length - 1));
     });
 
-    test('keeps an empty chapter renderable with a fallback page', () {
+    test('keeps an empty chapter renderable with a fallback page', () async {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 2,
         title: '',
         rawText: '',
       );
-      final layout = ReaderV2LayoutEngine().layout(content, spec());
+      final layout = await ReaderV2LayoutEngine().layout(content, spec());
 
       expect(layout.lines, isEmpty);
       expect(layout.pages, hasLength(1));
@@ -91,7 +91,7 @@ void main() {
       },
     );
 
-    test('publishes fitting stats for profile validation', () {
+    test('publishes fitting stats for profile validation', () async {
       final observed = <ReaderV2LayoutEngineStats>[];
       ReaderV2LayoutEngine.debugLastStats = null;
       ReaderV2LayoutEngine.debugOnStats = observed.add;
@@ -105,7 +105,7 @@ void main() {
           '這是一段用來觸發排版統計的長文字，包含中文、punctuation，以及 emoji 😀 測試。',
         ).join('\n\n'),
       );
-      final layout = ReaderV2LayoutEngine().layout(content, spec());
+      final layout = await ReaderV2LayoutEngine().layout(content, spec());
       final stats = ReaderV2LayoutEngine.debugLastStats;
 
       expect(observed, hasLength(1));

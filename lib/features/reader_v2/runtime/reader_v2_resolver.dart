@@ -113,7 +113,7 @@ class ReaderV2Resolver {
       try {
         final content = await repository.loadContent(safeIndex);
         _throwIfStale(spec, cacheGeneration, taskId);
-        final layout = layoutEngine.layout(content, spec);
+        final layout = await layoutEngine.layout(content, spec);
         _throwIfStale(spec, cacheGeneration, taskId);
         final view = ReaderV2ChapterView(
           layout,
