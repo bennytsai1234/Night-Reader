@@ -75,13 +75,11 @@ class ScrollReaderV2ViewportModel {
     return style.copyWith(paddingTop: 0, paddingBottom: 0);
   }
 
+  /// 一律用最大提前量擴張視窗：不論拖曳中（速度來源本來就恆為 0）、甩動減速
+  /// 尾聲、或靜止，都不再依當下速度縮小門檻，用記憶體/CPU 換取滑動時不再
+  /// 因臨時排版而卡頓。
   double shiftThreshold({required double scrollVelocity}) {
-    final base = math.min(120.0, viewportHeight() * 0.2);
-    final dynamicLookahead = math.min(
-      viewportHeight() * 1.5,
-      scrollVelocity.abs() * 0.18,
-    );
-    return math.max(base, dynamicLookahead);
+    return viewportHeight() * 1.5;
   }
 
   double forwardWindowExtent() {
