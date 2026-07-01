@@ -34,14 +34,50 @@ String? _quickJsUnavailableReasonCache;
 DynamicLibrary? _quickJsPreloadedLibrary;
 String? _quickJsResolvedPathCache;
 
-const _quickJsLibraryFileName = 'libquickjs_c_bridge_plugin.so';
+/// 描述某個桌面平台上，QuickJS 原生橋接函式庫的檔名/在 pub cache 內的子目錄，
+/// 以及該平台的動態函式庫搜尋路徑環境變數——讓值測邏輯不必為每個平台各寫一份。
+class _QuickJsPlatformInfo {
+  const _QuickJsPlatformInfo({
+    required this.libraryFileName,
+    required this.pubCacheSharedDirSegment,
+    required this.pathEnvVar,
+    required this.pathSeparator,
+  });
 
-String? _linuxQuickJsPubCachePath() {
+  final String libraryFileName;
+  final String pubCacheSharedDirSegment;
+  final String pathEnvVar;
+  final String pathSeparator;
+}
+
+_QuickJsPlatformInfo? _currentQuickJsPlatformInfo() {
+  if (Platform.isLinux) {
+    return const _QuickJsPlatformInfo(
+      libraryFileName: 'libquickjs_c_bridge_plugin.so',
+      pubCacheSharedDirSegment: '/linux/shared/',
+      pathEnvVar: 'LD_LIBRARY_PATH',
+      pathSeparator: ':',
+    );
+  }
+  if (Platform.isWindows) {
+    return const _QuickJsPlatformInfo(
+      libraryFileName: 'quickjs_c_bridge.dll',
+      pubCacheSharedDirSegment: '/windows/shared/',
+      pathEnvVar: 'PATH',
+      pathSeparator: ';',
+    );
+  }
+  return null;
+}
+
+String? _quickJsPubCachePath(_QuickJsPlatformInfo info) {
   final candidates = <String>{
     if ((Platform.environment['PUB_CACHE'] ?? '').trim().isNotEmpty)
       Platform.environment['PUB_CACHE']!.trim(),
     if ((Platform.environment['HOME'] ?? '').trim().isNotEmpty)
       '${Platform.environment['HOME']!.trim()}/.pub-cache',
+    if ((Platform.environment['LOCALAPPDATA'] ?? '').trim().isNotEmpty)
+      '${Platform.environment['LOCALAPPDATA']!.trim()}/Pub/Cache',
   };
 
   final matches = <String>[];
@@ -52,9 +88,9 @@ String? _linuxQuickJsPubCachePath() {
       for (final entity in root.listSync(recursive: true, followLinks: false)) {
         if (entity is! File) continue;
         final normalizedPath = entity.path.replaceAll('\\', '/');
-        if (!normalizedPath.endsWith('/$_quickJsLibraryFileName')) continue;
+        if (!normalizedPath.endsWith('/${info.libraryFileName}')) continue;
         if (!normalizedPath.contains('/flutter_js-')) continue;
-        if (!normalizedPath.contains('/linux/shared/')) continue;
+        if (!normalizedPath.contains(info.pubCacheSharedDirSegment)) continue;
         matches.add(entity.path);
       }
     } on FileSystemException {
@@ -67,21 +103,20 @@ String? _linuxQuickJsPubCachePath() {
   return matches.last;
 }
 
-bool _hasQuickJsLibraryInLdPath() {
-  final ldLibraryPath = Platform.environment['LD_LIBRARY_PATH']?.trim();
-  if (ldLibraryPath == null || ldLibraryPath.isEmpty) return false;
-  return ldLibraryPath
-      .split(':')
+bool _hasQuickJsLibraryInPathEnv(_QuickJsPlatformInfo info) {
+  final pathEnv = Platform.environment[info.pathEnvVar]?.trim();
+  if (pathEnv == null || pathEnv.isEmpty) return false;
+  return pathEnv
+      .split(info.pathSeparator)
       .where((part) => part.isNotEmpty)
-      .any((dir) => File('$dir/$_quickJsLibraryFileName').existsSync());
+      .any((dir) => File('$dir/${info.libraryFileName}').existsSync());
 }
 
-String? _preloadQuickJsFromPubCache() {
-  if (!Platform.isLinux) return null;
+String? _preloadQuickJsFromPubCache(_QuickJsPlatformInfo info) {
   if (_quickJsPreloadedLibrary != null) {
     return _quickJsResolvedPathCache;
   }
-  final path = _linuxQuickJsPubCachePath();
+  final path = _quickJsPubCachePath(info);
   if (path == null) return null;
   try {
     _quickJsPreloadedLibrary = DynamicLibrary.open(path);
@@ -110,24 +145,28 @@ String? quickJsUnavailableReason() {
     return reason;
   }
 
-  if (_hasQuickJsLibraryInLdPath()) {
+  final platformInfo = _currentQuickJsPlatformInfo();
+  if (platformInfo == null) {
+    // 未知平台（例如 macOS）：沒有對應的值測邏輯，維持原本「假設可用」的保守行為，
+    // 避免在沒把握的平台上誤判導致測試被跳過。
     _quickJsUnavailableReasonCache = '';
     return null;
   }
 
-  if (!Platform.isLinux) {
+  if (_hasQuickJsLibraryInPathEnv(platformInfo)) {
     _quickJsUnavailableReasonCache = '';
     return null;
   }
 
-  final preloadedPath = _preloadQuickJsFromPubCache();
+  final preloadedPath = _preloadQuickJsFromPubCache(platformInfo);
   if (preloadedPath != null) {
     _quickJsUnavailableReasonCache = '';
     return null;
   }
 
-  const reason =
-      'QuickJS runtime unavailable: set LIBQUICKJSC_TEST_PATH or use tool/flutter_test_with_quickjs.sh';
+  final reason =
+      'QuickJS runtime unavailable: set LIBQUICKJSC_TEST_PATH or use tool/flutter_test_with_quickjs.sh '
+      '(looked for ${platformInfo.libraryFileName})';
   _quickJsUnavailableReasonCache = reason;
   return reason;
 }
