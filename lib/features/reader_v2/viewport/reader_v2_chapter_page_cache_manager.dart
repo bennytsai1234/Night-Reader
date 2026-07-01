@@ -312,7 +312,7 @@ class ReaderV2ChapterPageCacheManager {
       (chapterIndex, _) => !effectiveRetained.contains(chapterIndex),
     );
     if (hadEvictions) _bumpRevision();
-    runtime.resolver.retainLayoutsFor(effectiveRetained);
+    // 刻意不砍 resolver 的排版快取——讓它用自己的 50 章 LRU，不跟著窗口窄範圍驅逐。
   }
 
   void retainChapters(Set<int> retained) {
