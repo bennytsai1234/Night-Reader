@@ -146,6 +146,11 @@ class ReaderV2ChapterPageCacheManager {
   final ReaderV2Runtime runtime;
   final ReaderV2ScrollPageExtentResolver _pageExtent;
 
+  /// 已放進視窗的章節因背景排版推進而重新包裝後呼叫，讓 viewport 端能
+  /// 重錨 strip 佔位並觸發重繪——沒有這條通知鏈，背景長出來的內容要等
+  /// 使用者再滑動才會出現。
+  void Function(int chapterIndex)? onChapterCacheUpdated;
+
   final Map<int, ReaderV2CachedChapterPages> _chapters =
       <int, ReaderV2CachedChapterPages>{};
   final Map<int, Future<ReaderV2CachedChapterPages>> _inFlightLoads =
@@ -496,5 +501,18 @@ class ReaderV2ChapterPageCacheManager {
     if (layout == null) return;
     _chapters[chapterIndex] = _wrapChapterView(layout);
     _bumpRevision();
+    onChapterCacheUpdated?.call(chapterIndex);
+  }
+
+  /// 解除掛在 resolver 上的進度回呼。viewport 汰換 runtime 或 dispose 時
+  /// 必須呼叫，否則 resolver 會一直持有舊 cache manager（連同整組頁面
+  /// 快取）的參照。
+  void dispose() {
+    // tear-off 每次取用都是新物件，不能用 identical；同實例同方法的
+    // tear-off 用 == 比較保證相等。
+    if (runtime.resolver.onChapterProgressed == _handleChapterProgressed) {
+      runtime.resolver.onChapterProgressed = null;
+    }
+    onChapterCacheUpdated = null;
   }
 }

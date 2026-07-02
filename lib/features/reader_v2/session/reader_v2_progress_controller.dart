@@ -23,8 +23,10 @@ class ReaderV2ProgressController {
   Timer? _timer;
   ReaderV2Location? _pendingLocation;
   Future<void>? _activeFlush;
+  bool _disposed = false;
 
   void schedule(ReaderV2Location location) {
+    if (_disposed) return;
     _pendingLocation = location.normalized();
     _timer?.cancel();
     _timer = Timer(debounce, () {
@@ -33,6 +35,7 @@ class ReaderV2ProgressController {
   }
 
   Future<void> saveImmediately(ReaderV2Location location) async {
+    if (_disposed) return;
     _pendingLocation = location.normalized();
     await flush();
   }
@@ -80,6 +83,13 @@ class ReaderV2ProgressController {
   }
 
   void dispose() {
+    _disposed = true;
     _timer?.cancel();
+    _timer = null;
+    // debounce 中的進度不能跟著 dispose 一起丟——閱讀器關閉時把最後一筆
+    // 位置寫完（DAO 是 App 級單例，寫入不依賴本控制器存活）。
+    if (_pendingLocation != null) {
+      unawaited(flush());
+    }
   }
 }

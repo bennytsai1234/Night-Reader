@@ -71,6 +71,7 @@ class ReaderV2NavigationController {
       visibleLocation: location,
       pageWindow: newWindow,
     );
+    _saveSettledProgressIfRequested(location, save: saveSettledProgress);
     unawaited(_runtime.preloadScheduler.scheduleScrollSettled(next));
     return true;
   }
@@ -113,16 +114,21 @@ class ReaderV2NavigationController {
       visibleLocation: location,
       pageWindow: newWindow,
     );
+    _saveSettledProgressIfRequested(location, save: saveSettledProgress);
     unawaited(_runtime.preloadScheduler.scheduleScrollSettled(prev));
     return true;
   }
 
-  bool moveToNextTile({bool saveSettledProgress = true}) {
-    return moveToNextPage(saveSettledProgress: saveSettledProgress);
-  }
-
-  bool moveToPrevTile({bool saveSettledProgress = true}) {
-    return moveToPrevPage(saveSettledProgress: saveSettledProgress);
+  /// runtime 級翻頁（無 viewport command 的 fallback 路徑）完成後保存進度。
+  /// 用 debounce（immediate: false）寫入，連續翻頁只落一次 DB。
+  void _saveSettledProgressIfRequested(
+    ReaderV2Location location, {
+    required bool save,
+  }) {
+    if (!save) return;
+    unawaited(
+      _runtime.viewportBridge.saveProgressLocation(location, immediate: false),
+    );
   }
 
   void beginInteractivePreloadPause() {
@@ -181,7 +187,11 @@ class ReaderV2NavigationController {
       }
       await _runtime.viewportBridge.saveProgressLocation(normalized);
     } finally {
-      _runtime.pendingChapterJumpTarget = null;
+      // 只清掉自己設定的目標——兩個 jumpToChapter 交錯時，先結束的不可
+      // 把後到者剛設定的 pending target 蓋成 null。
+      if (identical(_runtime.pendingChapterJumpTarget, location)) {
+        _runtime.pendingChapterJumpTarget = null;
+      }
     }
   }
 

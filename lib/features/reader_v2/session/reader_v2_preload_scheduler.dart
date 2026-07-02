@@ -72,7 +72,9 @@ class ReaderV2PreloadScheduler {
   int bumpGeneration() {
     _generation += 1;
     _clearQueued(layout: true, content: false);
-    _activeLayoutKeys.clear();
+    // 舊 generation 的 active 任務讓它自然結束（resolver 端會判 stale 提早
+    // 中止），不清 _activeLayoutKeys——直接清會讓併發上限失守，新舊任務
+    // 同時佔用背景排版。
     _completeLayoutWaiters();
     return _generation;
   }
@@ -333,6 +335,7 @@ class ReaderV2PreloadScheduler {
       final key = _taskKey(task.kind, task.chapterIndex, task.generation);
       _queuedLayoutKeys.remove(key);
       _activeLayoutKeys.add(key);
+      var requeue = false;
       resolver
           .continueLayoutStep(task.chapterIndex)
           .then<void>((view) {
@@ -343,12 +346,19 @@ class ReaderV2PreloadScheduler {
               return;
             }
             // 還沒排完，重新排回佇列尾端——讓佇列裡其他章節有機會先輪到，
-            // 不會被單一超長章節獨占背景排版工作。
-            _enqueue(task, priority: false);
+            // 不會被單一超長章節獨占背景排版工作。重新排隊要等 active 標記
+            // 移除後（whenComplete）才做，避免同一個 key 同時掛在 active 與
+            // queued 兩邊，讓 _clearQueued 誤把它當 active 而漏完成 waiter。
+            requeue = true;
           })
           .catchError((_) => _completeWaiters(key))
           .whenComplete(() {
             _activeLayoutKeys.remove(key);
+            if (requeue && !_disposed && task.generation == _generation) {
+              _enqueue(task, priority: false);
+            } else if (requeue) {
+              _completeWaiters(key);
+            }
             _pumpLayout();
           });
     }
@@ -395,13 +405,26 @@ class ReaderV2PreloadScheduler {
   }
 
   void _clearQueued({required bool content, required bool layout}) {
+    // 被丟棄的排隊任務必須完成它們的 waiter，否則 await 這些任務的呼叫端
+    // （例如相鄰章預載完成後的 refreshNeighbors）會永遠 pending。
+    // active 中的任務不在此列——它們會在自己結束時完成 waiter。
     if (content) {
       _contentQueue.clear();
+      final dropped =
+          _queuedContentKeys
+              .where((key) => !_activeContentKeys.contains(key))
+              .toList(growable: false);
       _queuedContentKeys.clear();
+      dropped.forEach(_completeWaiters);
     }
     if (layout) {
       _layoutQueue.clear();
+      final dropped =
+          _queuedLayoutKeys
+              .where((key) => !_activeLayoutKeys.contains(key))
+              .toList(growable: false);
       _queuedLayoutKeys.clear();
+      dropped.forEach(_completeWaiters);
     }
   }
 }

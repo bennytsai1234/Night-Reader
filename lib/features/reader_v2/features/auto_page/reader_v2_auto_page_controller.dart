@@ -59,6 +59,11 @@ class ReaderV2AutoPageController extends ChangeNotifier {
       final moved = await _step();
       if (!moved) stop();
       return moved;
+    } catch (_) {
+      // viewport command 失敗時停止自動翻頁——不停的話 16ms 週期 timer 會
+      // 反覆丟出未處理的非同步例外。
+      stop();
+      return false;
     } finally {
       _stepping = false;
     }

@@ -97,6 +97,9 @@ class ReaderV2Resolver {
     }
     _layouts.clear();
     _cursors.clear();
+    // 舊 spec 底下的排版錯誤對新 spec 不成立，留著會讓 placeholderPageFor
+    // 誤顯示「章節載入失敗」。
+    _layoutErrors.clear();
   }
 
   /// 可能回傳「部分就緒」的結果——排版還沒排完整章時，`isComplete` 為

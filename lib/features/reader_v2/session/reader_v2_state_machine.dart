@@ -66,10 +66,6 @@ class ReaderV2StateMachine {
     );
   }
 
-  void update(ReaderV2State next) {
-    state = next;
-  }
-
   void updateVisibleLocation(ReaderV2Location location) {
     state = state.copyWith(visibleLocation: location);
   }
@@ -79,10 +75,6 @@ class ReaderV2StateMachine {
       visibleLocation: location,
       committedLocation: location,
     );
-  }
-
-  void updateReadyPageWindow(ReaderV2PageWindow pageWindow) {
-    state = state.copyWith(phase: ReaderV2Phase.ready, pageWindow: pageWindow);
   }
 
   void updateReadyPosition({

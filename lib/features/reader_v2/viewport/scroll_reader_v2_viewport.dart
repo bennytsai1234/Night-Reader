@@ -56,6 +56,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   bool _visibleLocationCaptureFramePending = false;
   bool _shiftWindowFramePending = false;
   bool _shiftWindowAgainRequested = false;
+  bool _contentProgressRebuildPending = false;
   Future<void>? _shiftWindowTask;
 
   @override
@@ -65,6 +66,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       runtime: widget.runtime,
       style: widget.style,
     );
+    _viewportModel.onWindowContentChanged = _scheduleContentProgressRebuild;
     _motion = ScrollReaderV2MotionController(
       vsync: this,
       runtime: widget.runtime,
@@ -145,8 +147,22 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     widget.runtime.unregisterVisibleLocationCapture(this);
     widget.runtime.unregisterViewportRestore(this);
     _detachController(widget.controller);
+    _viewportModel.dispose();
     _motion.dispose();
     super.dispose();
+  }
+
+  /// 背景排版讓視窗內章節長出新內容（strip 已重錨）：合併到下一個 frame
+  /// 重繪一次，讓新內容立即可見，不必等使用者再滑動。
+  void _scheduleContentProgressRebuild() {
+    if (!mounted || _contentProgressRebuildPending) return;
+    _contentProgressRebuildPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _contentProgressRebuildPending = false;
+      if (!mounted) return;
+      setState(() {});
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _attachController() {
@@ -331,6 +347,9 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
     if (!mounted || widget.runtime.chapterCount <= 0) return false;
+    // 使用者正在拖曳時拒絕重定位——jump 後的 settle-restore 若硬拉回目標
+    // 位置會跟手勢打架。開書時的 restore 不受影響（載入畫面沒有拖曳）。
+    if (_motion.isDragging) return false;
     _clearArtificialMotionState();
     _motion.scrollAnimation.stop();
     _motion.isDragging = false;

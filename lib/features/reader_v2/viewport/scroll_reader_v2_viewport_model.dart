@@ -37,9 +37,19 @@ class ScrollReaderV2ViewportModel {
   double _activeForwardWindowBoost = 0.0;
   double _activeBackwardWindowBoost = 0.0;
 
+  /// 視窗內章節因背景排版推進而更新（strip 已同步重錨）後通知，viewport
+  /// State 據此觸發重繪，讓新長出來的內容不必等下一次滑動就出現。
+  void Function()? onWindowContentChanged;
+
   void updateRuntime(ReaderV2Runtime nextRuntime) {
+    cacheManager.dispose();
     runtime = nextRuntime;
     _configure();
+  }
+
+  void dispose() {
+    cacheManager.dispose();
+    onWindowContentChanged = null;
   }
 
   void updateStyle(ReaderV2Style nextStyle) {
@@ -336,10 +346,48 @@ class ScrollReaderV2ViewportModel {
       runtime: runtime,
       pageExtent: scrollPageExtent,
     );
+    cacheManager.onChapterCacheUpdated = _handleChapterCacheUpdated;
     visiblePages = ReaderV2VisiblePageCalculator(
       cacheManager: cacheManager,
       strip: strip,
     );
+  }
+
+  /// 視窗內章節在背景排版推進後重新包裝完成：同步把 strip 上的佔位段落
+  /// 依新高度重錨，再通知 viewport 重繪。
+  ///
+  /// 重錨規則——下方有相鄰段落（部分就緒的「上一章」以 bottom 貼齊中心章
+  /// 頂端放置）時固定 bottom 往上長，避免新長出來的頁面往下疊進下一章的
+  /// 世界座標；否則（視窗前緣的「下一章」）固定 top 往下長。
+  void _handleChapterCacheUpdated(int chapterIndex) {
+    _reanchorGrownChapter(chapterIndex);
+    onWindowContentChanged?.call();
+  }
+
+  void _reanchorGrownChapter(int chapterIndex) {
+    final segmentTop = strip.chapterTop(chapterIndex);
+    final segmentEnd = strip.chapterEnd(chapterIndex);
+    if (segmentTop == null || segmentEnd == null) return;
+    final chapter = cacheManager.chapterAt(chapterIndex);
+    if (chapter == null) return;
+    final oldHeight = segmentEnd - segmentTop;
+    if ((chapter.extent - oldHeight).abs() < 0.5) return;
+    final belowTop = strip.chapterTop(chapterIndex + 1);
+    final anchoredToBottom =
+        belowTop != null && (belowTop - segmentEnd).abs() < 0.5;
+    if (anchoredToBottom) {
+      strip.placeChapter(
+        chapterIndex: chapterIndex,
+        startY: segmentEnd - chapter.extent,
+        height: chapter.extent,
+      );
+    } else {
+      strip.placeChapter(
+        chapterIndex: chapterIndex,
+        startY: segmentTop,
+        height: chapter.extent,
+      );
+    }
   }
 
   double _fullPageHeight(ReaderV2PageCache page) {

@@ -41,7 +41,7 @@
 
 ## Known Risks
 
-- `ReaderV2Runtime` 與 `NavigationController` 為核心，`ReaderV2StateMachine` 已集中 high-risk operation、restore-in-progress、visible/committed location 與 page window mutation；後續改動仍需避免繞過 state machine 直接修改 session state。
+- `ReaderV2Runtime` 與 `NavigationController` 為核心，`ReaderV2StateMachine` 已集中 high-risk operation、restore-in-progress、visible/committed location 與 page window mutation；可繞過 state machine 的 runtime API（`setState`／`state=` setter 等）已於 2026-07 移除，新增變異路徑一律經 state machine 的 begin/complete/fail 介面。
 - 排版引擎反覆量測 line layout（`ReaderV2LayoutEngineStats`），效能迴歸風險高。
 - TTS 逐段高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
 - `ScrollReaderV2Viewport` 已拆為 viewport model、motion controller、command queue 與 canvas widgets；後續改動仍需留意 reading offset、人工 window 邊界續滑與 progress settle 的呼叫順序。

@@ -28,23 +28,38 @@ typedef ReaderV2ViewportRestore =
     Future<bool> Function(ReaderV2Location location);
 
 class ReaderV2Runtime extends ChangeNotifier {
-  ReaderV2Runtime({
+  factory ReaderV2Runtime({
     required Book book,
     required ReaderV2ChapterRepository repository,
     required ReaderV2LayoutEngine layoutEngine,
     required ReaderV2ProgressController progressController,
     required ReaderV2LayoutSpec initialLayoutSpec,
     ReaderV2Location? initialLocation,
-  }) : repository = repository,
-       progressController = progressController,
-       _initialLocation =
-           (initialLocation ??
-                   ReaderV2Location(
-                     chapterIndex: book.chapterIndex,
-                     charOffset: book.charOffset,
-                     visualOffsetPx: book.visualOffsetPx,
-                   ))
-               .normalized(),
+  }) {
+    final location =
+        (initialLocation ??
+                ReaderV2Location(
+                  chapterIndex: book.chapterIndex,
+                  charOffset: book.charOffset,
+                  visualOffsetPx: book.visualOffsetPx,
+                ))
+            .normalized();
+    return ReaderV2Runtime._(
+      repository: repository,
+      layoutEngine: layoutEngine,
+      progressController: progressController,
+      initialLayoutSpec: initialLayoutSpec,
+      initialLocation: location,
+    );
+  }
+
+  ReaderV2Runtime._({
+    required this.repository,
+    required ReaderV2LayoutEngine layoutEngine,
+    required this.progressController,
+    required ReaderV2LayoutSpec initialLayoutSpec,
+    required ReaderV2Location initialLocation,
+  }) : _initialLocation = initialLocation,
        resolver = ReaderV2Resolver(
          repository: repository,
          layoutEngine: layoutEngine,
@@ -53,22 +68,8 @@ class ReaderV2Runtime extends ChangeNotifier {
        stateMachine = ReaderV2StateMachine(
          ReaderV2State(
            phase: ReaderV2Phase.cold,
-           committedLocation:
-               (initialLocation ??
-                       ReaderV2Location(
-                         chapterIndex: book.chapterIndex,
-                         charOffset: book.charOffset,
-                         visualOffsetPx: book.visualOffsetPx,
-                       ))
-                   .normalized(),
-           visibleLocation:
-               (initialLocation ??
-                       ReaderV2Location(
-                         chapterIndex: book.chapterIndex,
-                         charOffset: book.charOffset,
-                         visualOffsetPx: book.visualOffsetPx,
-                       ))
-                   .normalized(),
+           committedLocation: initialLocation,
+           visibleLocation: initialLocation,
            layoutSpec: initialLayoutSpec,
            layoutGeneration: 0,
          ),
@@ -97,16 +98,11 @@ class ReaderV2Runtime extends ChangeNotifier {
   ReaderV2LayoutStatsObserver? _previousLayoutStatsObserver;
   ReaderV2LayoutStatsObserver? _performanceLayoutStatsObserver;
 
-  @deprecated
-  ReaderV2Resolver get debugResolver => resolver;
   ReaderV2PerformanceSnapshot get performanceSnapshot =>
       _performanceMetrics.snapshot();
   String get performanceProfilingSignal =>
       performanceSnapshot.toProfilingSignal();
   ReaderV2State get state => stateMachine.state;
-  set state(ReaderV2State next) {
-    stateMachine.update(next);
-  }
 
   bool get restoreInProgress => stateMachine.restoreInProgress;
 
@@ -196,14 +192,6 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   bool moveToPrevPage({bool saveSettledProgress = true}) {
     return navigation.moveToPrevPage(saveSettledProgress: saveSettledProgress);
-  }
-
-  bool moveToNextTile({bool saveSettledProgress = true}) {
-    return navigation.moveToNextTile(saveSettledProgress: saveSettledProgress);
-  }
-
-  bool moveToPrevTile({bool saveSettledProgress = true}) {
-    return navigation.moveToPrevTile(saveSettledProgress: saveSettledProgress);
   }
 
   void beginInteractivePreloadPause() {
@@ -337,17 +325,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     return !disposed && stateMachine.isCurrent(token);
   }
 
-  void setStateFromMachine() {
-    if (disposed) return;
-    notifyListeners();
-  }
-
-  void setState(ReaderV2State next) {
-    if (disposed) return;
-    stateMachine.update(next);
-    notifyListeners();
-  }
-
   ReaderV2OperationToken beginJumpOperation() {
     final token = stateMachine.beginJump();
     notifyListeners();
@@ -393,12 +370,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   void commitProgressLocation(ReaderV2Location location) {
     if (disposed) return;
     stateMachine.commitLocation(location);
-    notifyListeners();
-  }
-
-  void updateReadyPageWindow(ReaderV2PageWindow pageWindow) {
-    if (disposed) return;
-    stateMachine.updateReadyPageWindow(pageWindow);
     notifyListeners();
   }
 
