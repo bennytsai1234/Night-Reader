@@ -198,8 +198,16 @@ class ScrollReaderV2Canvas extends StatelessWidget {
     )) {
       final screenY = placement.screenY(readingY) + overscrollY;
       final pageHeight = placement.extent;
+      final tileKey = ReaderV2TileKey.fromPageCache(
+        placement.page,
+        layoutRevision: layoutRevision,
+      );
       children.add(
         Positioned(
+          // Stack 對直接子件按 slot 順序 reconcile；可見頁集合位移時若無
+          // key，內層 RepaintBoundary 會整批重建、所有 tile 重繪。以 tile
+          // key 匹配讓位移只搬 element，僅新進入視野的頁面繪製一次。
+          key: ValueKey<ReaderV2TileKey>(tileKey),
           left: 0,
           right: 0,
           top: screenY,
@@ -209,10 +217,7 @@ class ScrollReaderV2Canvas extends StatelessWidget {
             children: [
               ReaderV2TileLayer(
                 tile: placement.page,
-                tileKey: ReaderV2TileKey.fromPageCache(
-                  placement.page,
-                  layoutRevision: layoutRevision,
-                ),
+                tileKey: tileKey,
                 style: renderStyle,
                 backgroundColor: backgroundColor,
                 textColor: textColor,

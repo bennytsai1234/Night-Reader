@@ -220,11 +220,36 @@ class ReaderV2TilePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ReaderV2TilePainter oldDelegate) {
-    return oldDelegate.tile != tile ||
-        oldDelegate.backgroundColor != backgroundColor ||
+    return oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.textColor != textColor ||
         oldDelegate.style != style ||
         oldDelegate.debugOverlay != debugOverlay ||
-        oldDelegate.paintBackground != paintBackground;
+        oldDelegate.paintBackground != paintBackground ||
+        !_samePaintedContent(oldDelegate.tile, tile);
+  }
+
+  /// 只比對 [paint] 實際會讀到的內容。部分就緒章節每走一步背景排版，
+  /// cache manager 會重新包裝該章所有頁面，既有頁的 `pageSize` 等
+  /// 非繪製欄位隨之改變——用整頁深度相等會讓內容沒變的 tile 全部重繪。
+  static bool _samePaintedContent(ReaderV2PageCache a, ReaderV2PageCache b) {
+    if (identical(a, b)) return true;
+    return a.chapterIndex == b.chapterIndex &&
+        a.pageIndex == b.pageIndex &&
+        a.startCharOffset == b.startCharOffset &&
+        a.endCharOffset == b.endCharOffset &&
+        a.contentHeight == b.contentHeight &&
+        _sameRenderLines(a.lines, b.lines);
+  }
+
+  static bool _sameRenderLines(
+    List<ReaderV2RenderLine> a,
+    List<ReaderV2RenderLine> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (!identical(a[index], b[index]) && a[index] != b[index]) return false;
+    }
+    return true;
   }
 }

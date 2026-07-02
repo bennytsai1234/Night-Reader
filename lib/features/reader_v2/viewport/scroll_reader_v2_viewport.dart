@@ -40,6 +40,11 @@ class ScrollReaderV2Viewport extends StatefulWidget {
 
 class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     with TickerProviderStateMixin {
+  /// 拖曳/甩動期間 capture 觸發 runtime notify 的最小間隔。capture 本身
+  /// 每次都靜默寫入 state（進度不掉），但 notify 會讓 viewport 與整個
+  /// page shell 各重建一次，動作中每 2 個 tick 就發一次會疊出重建風暴。
+  static const Duration _motionNotifyInterval = Duration(milliseconds: 200);
+
   late final ScrollReaderV2MotionController _motion;
   late ScrollReaderV2ViewportModel _viewportModel;
   final ScrollReaderV2CommandQueue _viewportCommands =
@@ -54,6 +59,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   bool _initialJumpCompleted = false;
   bool _capturingVisibleLocation = false;
   bool _visibleLocationCaptureFramePending = false;
+  DateTime? _lastMotionNotifyAt;
   bool _shiftWindowFramePending = false;
   bool _shiftWindowAgainRequested = false;
   bool _contentProgressRebuildPending = false;
@@ -375,16 +381,38 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     return mounted && _captureVisibleLocation() != null;
   }
 
-  ReaderV2Location? _captureAndReportVisibleLocation() {
+  ReaderV2Location? _captureAndReportVisibleLocation({
+    bool notifyIfChanged = true,
+  }) {
     _capturingVisibleLocation = true;
     final ReaderV2Location? location;
     try {
-      location = widget.runtime.captureVisibleLocation();
+      location = widget.runtime.captureVisibleLocation(
+        notifyIfChanged: notifyIfChanged,
+      );
     } finally {
       _capturingVisibleLocation = false;
     }
     if (location != null) _lastReportedLocation = location;
     return location;
+  }
+
+  /// 動作（拖曳/甩動/回彈）進行中節流 notify：state 仍每次靜默更新，
+  /// 但頁碼/百分比等 shell 標籤最多每 [_motionNotifyInterval] 刷新一次；
+  /// 靜止時（含 settle 路徑）一律立即 notify。
+  bool _shouldNotifyForCapture() {
+    final inMotion =
+        _motion.isDragging ||
+        _motion.isScrollAnimating ||
+        _motion.isOverscrollAnimating;
+    if (!inMotion) return true;
+    final now = DateTime.now();
+    final last = _lastMotionNotifyAt;
+    if (last == null || now.difference(last) >= _motionNotifyInterval) {
+      _lastMotionNotifyAt = now;
+      return true;
+    }
+    return false;
   }
 
   bool _applyReadingTarget(
@@ -415,7 +443,9 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       _visibleLocationCaptureFramePending = false;
       if (!mounted) return;
       if (revision != _runtimeLocationRevision) return;
-      _captureAndReportVisibleLocation();
+      _captureAndReportVisibleLocation(
+        notifyIfChanged: _shouldNotifyForCapture(),
+      );
     });
   }
 
