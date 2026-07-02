@@ -8,7 +8,7 @@
 ## Scope
 
 - `screen/` — `reader_v2_page.dart`（`ReaderV2Page`，組裝 ControllerHost/Coordinator/RenderPage/Viewport/Menus/Drawer）、`reader_v2_page_shell.dart`、`reader_v2_chapters_drawer.dart`、`reader_v2_controller_host.dart`（聚合子控制器）、`dependencies/reader_v2_dependencies.dart`（從 getIt 注入 DAO + `BookSourceService`，建 `ReaderV2ChapterRepository`）。
-- `session/` — `reader_v2_runtime.dart`（`ReaderV2Runtime extends ChangeNotifier`，整合 repository/content/layoutEngine/renderPage/preloadScheduler/progressController，持有 NavigationController + ViewportBridge 並代理公開 API，預載速度門檻 1500/2600/3600）、`reader_v2_state_machine.dart` + `reader_v2_operation_token.dart`（集中 open/jump/restore/presentation/contentReload 的 phase 與過期操作檢查）、`reader_v2_navigation_controller.dart`（導航跳轉/窗口/neighbor advance）、`reader_v2_viewport_bridge.dart`（viewport capture/restore/進度儲存）、`reader_v2_state.dart`（`ReaderV2Phase{cold,loading,layingOut,restoring,ready,switchingMode,error}`）、`reader_v2_resolver.dart`、`reader_v2_progress_controller.dart`、`reader_v2_preload_scheduler.dart`、`reader_v2_performance_metrics.dart`、`reader_v2_page_window.dart`、`reader_v2_open_target.dart`、`reader_v2_location.dart`、`reader_v2_chapter_view.dart`、`reader_v2_session_facade.dart`。
+- `session/` — `reader_v2_runtime.dart`（`ReaderV2Runtime extends ChangeNotifier`，整合 repository/content/layoutEngine/renderPage/preloadScheduler/progressController，持有 NavigationController + ViewportBridge 並代理公開 API，預載速度門檻 1500/2600/3600）、`reader_v2_state_machine.dart` + `reader_v2_operation_token.dart`（集中 open/jump/restore/presentation/contentReload 的 phase、過期操作檢查、restore-in-progress、visible/committed location 與 page window 更新）、`reader_v2_navigation_controller.dart`（導航跳轉/窗口/neighbor advance）、`reader_v2_viewport_bridge.dart`（viewport capture/restore/進度儲存）、`reader_v2_state.dart`（`ReaderV2Phase{cold,loading,layingOut,restoring,ready,switchingMode,error}`）、`reader_v2_resolver.dart`、`reader_v2_progress_controller.dart`、`reader_v2_preload_scheduler.dart`、`reader_v2_performance_metrics.dart`、`reader_v2_page_window.dart`、`reader_v2_open_target.dart`、`reader_v2_location.dart`、`reader_v2_chapter_view.dart`、`reader_v2_session_facade.dart`。
 - `use_cases/` — `reader_v2_page_coordinator.dart`（點擊分區/TTS 高亮追蹤/換源 sheet）、`coordinators/`（章節導航 resolver、display coordinator、page exit coordinator）。
 - `chapter/` — `reader_v2_chapter_repository.dart`（取章節/正文/書源/replace rule）、`reader_v2_content.dart`、`reader_v2_content_transformer.dart`（套用 replace rule+簡繁轉換）、`reader_v2_processed_chapter.dart`。
 - `layout/` — `reader_v2_layout_engine.dart`（599 行，`ReaderV2LayoutEngine`+`ReaderV2LayoutEngineStats`）、`reader_v2_layout.dart`、`reader_v2_layout_spec.dart`、`reader_v2_typography.dart`、`reader_v2_style.dart`（`ReaderV2Style`，`minReadableLineHeight`）、`reader_v2_layout_constants.dart`。
@@ -41,7 +41,7 @@
 
 ## Known Risks
 
-- `ReaderV2Runtime` 與 `NavigationController` 為核心，`ReaderV2StateMachine` 已集中高風險 open/jump/restore/presentation/contentReload 的 phase 與 operation token 檢查；後續改動仍需避免繞過 state machine 直接修改 phase。
+- `ReaderV2Runtime` 與 `NavigationController` 為核心，`ReaderV2StateMachine` 已集中 high-risk operation、restore-in-progress、visible/committed location 與 page window mutation；後續改動仍需避免繞過 state machine 直接修改 session state。
 - 排版引擎反覆量測 line layout（`ReaderV2LayoutEngineStats`），效能迴歸風險高。
 - TTS 逐段高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
 - `ScrollReaderV2Viewport` 已拆為 viewport model、motion controller、command queue 與 canvas widgets；後續改動仍需留意 reading offset、人工 window 邊界續滑與 progress settle 的呼叫順序。

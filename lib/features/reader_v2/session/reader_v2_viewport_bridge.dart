@@ -122,19 +122,14 @@ class ReaderV2ViewportBridge {
     );
     if (normalized == _runtime.state.committedLocation) {
       if (normalized != _runtime.state.visibleLocation) {
-        _runtime.setState(_runtime.state.copyWith(visibleLocation: normalized));
+        _runtime.updateVisibleLocation(normalized);
       }
       if (immediate) {
         await _runtime.progressController.flush();
       }
       return normalized;
     }
-    _runtime.setState(
-      _runtime.state.copyWith(
-        visibleLocation: normalized,
-        committedLocation: normalized,
-      ),
-    );
+    _runtime.commitProgressLocation(normalized);
     if (immediate) {
       await _runtime.progressController.saveImmediately(normalized);
     } else {
@@ -156,12 +151,7 @@ class ReaderV2ViewportBridge {
     final captured = _normalizeCapturedLocation(capture());
     if (captured == null) return null;
     if (captured == _runtime.state.visibleLocation) return captured;
-    final next = _runtime.state.copyWith(visibleLocation: captured);
-    if (notifyIfChanged) {
-      _runtime.setState(next);
-    } else {
-      _runtime.state = next;
-    }
+    _runtime.updateVisibleLocation(captured, notify: notifyIfChanged);
     return captured;
   }
 

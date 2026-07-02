@@ -11,8 +11,10 @@ class ReaderV2StateMachine {
   ReaderV2State state;
   int _nextOperationId = 0;
   ReaderV2OperationToken? _currentOperation;
+  bool _restoreInProgress = false;
 
   ReaderV2OperationToken? get currentOperation => _currentOperation;
+  bool get restoreInProgress => _restoreInProgress;
 
   ReaderV2OperationToken beginOpen() {
     return _beginOperation(
@@ -68,6 +70,36 @@ class ReaderV2StateMachine {
     state = next;
   }
 
+  void updateVisibleLocation(ReaderV2Location location) {
+    state = state.copyWith(visibleLocation: location);
+  }
+
+  void commitLocation(ReaderV2Location location) {
+    state = state.copyWith(
+      visibleLocation: location,
+      committedLocation: location,
+    );
+  }
+
+  void updateReadyPageWindow(ReaderV2PageWindow pageWindow) {
+    state = state.copyWith(phase: ReaderV2Phase.ready, pageWindow: pageWindow);
+  }
+
+  void updateReadyPosition({
+    required ReaderV2Location visibleLocation,
+    required ReaderV2PageWindow pageWindow,
+  }) {
+    state = state.copyWith(
+      phase: ReaderV2Phase.ready,
+      visibleLocation: visibleLocation,
+      pageWindow: pageWindow,
+    );
+  }
+
+  void updatePageWindow(ReaderV2PageWindow pageWindow) {
+    state = state.copyWith(pageWindow: pageWindow);
+  }
+
   bool isCurrent(ReaderV2OperationToken token) {
     final current = _currentOperation;
     return current != null &&
@@ -116,6 +148,7 @@ class ReaderV2StateMachine {
       layoutGeneration: generation,
     );
     _currentOperation = token;
+    _restoreInProgress = kind == ReaderV2OperationKind.restore;
     state = state.copyWith(
       phase: phase,
       layoutSpec: layoutSpec,
@@ -124,5 +157,12 @@ class ReaderV2StateMachine {
       clearPageWindow: clearPageWindow,
     );
     return token;
+  }
+
+  void endRestore(ReaderV2OperationToken token) {
+    if (_currentOperation?.id == token.id &&
+        _currentOperation?.kind == ReaderV2OperationKind.restore) {
+      _restoreInProgress = false;
+    }
   }
 }

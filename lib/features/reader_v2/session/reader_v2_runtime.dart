@@ -92,7 +92,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   late final ReaderV2ViewportBridge viewportBridge;
 
   bool disposed = false;
-  bool restoreInProgress = false;
   ReaderV2Location? pendingChapterJumpTarget;
 
   ReaderV2LayoutStatsObserver? _previousLayoutStatsObserver;
@@ -108,6 +107,8 @@ class ReaderV2Runtime extends ChangeNotifier {
   set state(ReaderV2State next) {
     stateMachine.update(next);
   }
+
+  bool get restoreInProgress => stateMachine.restoreInProgress;
 
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
@@ -359,6 +360,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     return token;
   }
 
+  void endRestoreOperation(ReaderV2OperationToken token) {
+    stateMachine.endRestore(token);
+  }
+
   bool completeReadyOperation(
     ReaderV2OperationToken token, {
     ReaderV2Location? visibleLocation,
@@ -377,6 +382,47 @@ class ReaderV2Runtime extends ChangeNotifier {
     final failed = stateMachine.fail(token, error);
     if (failed) notifyListeners();
     return failed;
+  }
+
+  void updateVisibleLocation(ReaderV2Location location, {bool notify = true}) {
+    if (disposed) return;
+    stateMachine.updateVisibleLocation(location);
+    if (notify) notifyListeners();
+  }
+
+  void commitProgressLocation(ReaderV2Location location) {
+    if (disposed) return;
+    stateMachine.commitLocation(location);
+    notifyListeners();
+  }
+
+  void updateReadyPageWindow(ReaderV2PageWindow pageWindow) {
+    if (disposed) return;
+    stateMachine.updateReadyPageWindow(pageWindow);
+    notifyListeners();
+  }
+
+  void updateReadyPosition({
+    required ReaderV2Location visibleLocation,
+    required ReaderV2PageWindow pageWindow,
+  }) {
+    if (disposed) return;
+    stateMachine.updateReadyPosition(
+      visibleLocation: visibleLocation,
+      pageWindow: pageWindow,
+    );
+    notifyListeners();
+  }
+
+  void updatePageWindow(ReaderV2PageWindow pageWindow) {
+    if (disposed) return;
+    stateMachine.updatePageWindow(pageWindow);
+    notifyListeners();
+  }
+
+  void notifySessionChanged() {
+    if (disposed) return;
+    notifyListeners();
   }
 
   Future<void> ensureChapters() {

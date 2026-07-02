@@ -67,12 +67,9 @@ class ReaderV2NavigationController {
       chapterIndex: next.chapterIndex,
       charOffset: next.startCharOffset,
     );
-    _runtime.setState(
-      _runtime.state.copyWith(
-        pageWindow: newWindow,
-        visibleLocation: location,
-        phase: ReaderV2Phase.ready,
-      ),
+    _runtime.updateReadyPosition(
+      visibleLocation: location,
+      pageWindow: newWindow,
     );
     unawaited(_runtime.preloadScheduler.scheduleScrollSettled(next));
     return true;
@@ -112,12 +109,9 @@ class ReaderV2NavigationController {
       chapterIndex: prev.chapterIndex,
       charOffset: prev.startCharOffset,
     );
-    _runtime.setState(
-      _runtime.state.copyWith(
-        pageWindow: newWindow,
-        visibleLocation: location,
-        phase: ReaderV2Phase.ready,
-      ),
+    _runtime.updateReadyPosition(
+      visibleLocation: location,
+      pageWindow: newWindow,
     );
     unawaited(_runtime.preloadScheduler.scheduleScrollSettled(prev));
     return true;
@@ -245,7 +239,6 @@ class ReaderV2NavigationController {
     }
     clearPendingNeighborAdvance();
     final token = _runtime.beginRestoreOperation();
-    _runtime.restoreInProgress = true;
     try {
       await _runtime.repository.ensureChapters();
       final normalized = await _normalizeRestoreLocation(location);
@@ -263,9 +256,7 @@ class ReaderV2NavigationController {
         return false;
       }
       if (_isTopAlignedChapterStart(restoreTarget)) {
-        _runtime.setState(
-          _runtime.state.copyWith(visibleLocation: restoreTarget),
-        );
+        _runtime.updateVisibleLocation(restoreTarget);
         return true;
       }
       final captured = _runtime.viewportBridge.captureVisibleLocation(
@@ -276,7 +267,7 @@ class ReaderV2NavigationController {
       _runtime.failOperation(token, e);
       return false;
     } finally {
-      _runtime.restoreInProgress = false;
+      _runtime.endRestoreOperation(token);
     }
   }
 
@@ -309,7 +300,7 @@ class ReaderV2NavigationController {
       lookAhead: const <ReaderV2RenderPage>[],
     );
     _retainLayoutsForWindow(refreshedWindow);
-    _runtime.setState(_runtime.state.copyWith(pageWindow: refreshedWindow));
+    _runtime.updatePageWindow(refreshedWindow);
     _maybeAutoAdvancePendingNeighbor();
   }
 
@@ -468,6 +459,6 @@ class ReaderV2NavigationController {
   void _emitUserNotice(String message) {
     if (_runtime.disposed || message.isEmpty) return;
     _pendingUserNotice = message;
-    _runtime.setState(_runtime.state);
+    _runtime.notifySessionChanged();
   }
 }
