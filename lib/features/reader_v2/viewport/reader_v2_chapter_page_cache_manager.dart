@@ -38,6 +38,10 @@ class ReaderV2CachedChapterPages {
 
   int get chapterIndex => layout.chapterIndex;
 
+  /// false 代表這一章排版還沒排完，[extent] 只是目前為止已經排出來的高度，
+  /// 之後背景排版繼續推進時還會再變大。
+  bool get isComplete => layout.isComplete;
+
   double pageExtentAt(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= pageExtents.length) return 1.0;
     final extent = pageExtents[pageIndex];
@@ -133,7 +137,11 @@ class ReaderV2ChapterPageCacheManager {
   ReaderV2ChapterPageCacheManager({
     required this.runtime,
     required ReaderV2ScrollPageExtentResolver pageExtent,
-  }) : _pageExtent = pageExtent;
+  }) : _pageExtent = pageExtent {
+    // 已經放進視窗、但排版還沒排完的章節，背景排版繼續推進時要能反映到
+    // 畫面上，不必等使用者再滑動才補上新長出來的內容。
+    runtime.resolver.onChapterProgressed = _handleChapterProgressed;
+  }
 
   final ReaderV2Runtime runtime;
   final ReaderV2ScrollPageExtentResolver _pageExtent;
@@ -193,6 +201,48 @@ class ReaderV2ChapterPageCacheManager {
     }
   }
 
+  /// 排到「已完成」或「這一章自己的 [ReaderV2CachedChapterPages.extent] ≥
+  /// minExtentPx」其中之一先滿足就回傳，不必排完整章——等待時間的上界只跟
+  /// minExtentPx 成正比，不跟章節總長度成正比。用於 [ensureWindowAround]
+  /// 視窗邊界的章節，避免撞上一整章超長的未排版內容時卡住。
+  Future<ReaderV2CachedChapterPages?> ensureChapterAtLeast(
+    int chapterIndex, {
+    required double minExtentPx,
+    bool Function()? isCurrent,
+  }) async {
+    if (runtime.chapterCount <= 0) return null;
+    final safeIndex = _safeChapterIndex(chapterIndex);
+    final cached = _chapters[safeIndex];
+    if (cached != null && (cached.isComplete || cached.extent >= minExtentPx)) {
+      _touchChapter(safeIndex);
+      return cached;
+    }
+    _evictedChapters.remove(safeIndex);
+    final generation = _cacheGeneration;
+    try {
+      // 這裡刻意不走 _loadChapter 的 in-flight 去重——resolver 自己那層已經
+      // 用更細的粒度（每個 layoutStep）去重，這裡不必再疊一層以章節為單位
+      // 的去重，否則不同呼叫端要求的 minExtentPx 不同時，晚到的呼叫可能被
+      // 早到、需求量較小的那次呼叫「頂替」，拿到不夠用的結果。
+      final layout = await runtime.resolver.ensureLayoutAtLeast(
+        safeIndex,
+        minExtentPx: minExtentPx,
+      );
+      if (generation != _cacheGeneration ||
+          _evictedChapters.contains(safeIndex) ||
+          !(isCurrent?.call() ?? true)) {
+        return null;
+      }
+      final loaded = _wrapChapterView(layout);
+      _chapters[safeIndex] = loaded;
+      _touchChapter(safeIndex);
+      _bumpRevision();
+      return loaded;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> ensureChapterLoaded(
     int chapterIndex, {
     bool Function()? isCurrent,
@@ -226,17 +276,24 @@ class ReaderV2ChapterPageCacheManager {
     while (previousIndex >= 0 &&
         (loadedPreviousCount == 0 ||
             backwardCoveredExtent < _normalExtent(backwardExtent))) {
-      final chapter = await ensureChapter(
+      final remaining = _normalExtent(backwardExtent) - backwardCoveredExtent;
+      final chapter = await ensureChapterAtLeast(
         previousIndex,
+        minExtentPx: remaining,
         isCurrent: stillCurrent,
       );
       if (!stillCurrent()) return null;
-      if (chapter != null) {
-        previous.add(chapter);
-        backwardCoveredExtent += chapter.extent;
-      }
       loadedPreviousCount += 1;
       previousIndex -= 1;
+      if (chapter == null) continue;
+      previous.add(chapter);
+      backwardCoveredExtent += chapter.extent;
+      if (!chapter.isComplete) {
+        // 這一章排版還沒完成：把它當成目前視窗的邊界，不再往更遠處抓下一
+        // 章。它之後在背景繼續長大時只會影響捲動範圍的上限，不會讓已經
+        // 放進 strip 的其他章節跟著移動——但前提是後面不能再插入新章節。
+        break;
+      }
     }
 
     final next = <ReaderV2CachedChapterPages>[];
@@ -246,14 +303,19 @@ class ReaderV2ChapterPageCacheManager {
     while (nextIndex < runtime.chapterCount &&
         (loadedNextCount == 0 ||
             forwardCoveredExtent < _normalExtent(forwardExtent))) {
-      final chapter = await ensureChapter(nextIndex, isCurrent: stillCurrent);
+      final remaining = _normalExtent(forwardExtent) - forwardCoveredExtent;
+      final chapter = await ensureChapterAtLeast(
+        nextIndex,
+        minExtentPx: remaining,
+        isCurrent: stillCurrent,
+      );
       if (!stillCurrent()) return null;
-      if (chapter != null) {
-        next.add(chapter);
-        forwardCoveredExtent += chapter.extent;
-      }
       loadedNextCount += 1;
       nextIndex += 1;
+      if (chapter == null) continue;
+      next.add(chapter);
+      forwardCoveredExtent += chapter.extent;
+      if (!chapter.isComplete) break;
     }
 
     if (!stillCurrent()) return null;
@@ -403,13 +465,7 @@ class ReaderV2ChapterPageCacheManager {
           safeIndex,
           retryOnStale: false,
         );
-        final pages = ReaderV2PageCacheFactory.fromRenderPages(layout.pages);
-        final pageExtents = pages.map(_pageExtent).toList(growable: false);
-        return ReaderV2CachedChapterPages(
-          layout: layout,
-          pages: pages,
-          pageExtents: pageExtents,
-        );
+        return _wrapChapterView(layout);
       } finally {
         if (identical(_inFlightLoads[safeIndex], task)) {
           _inFlightLoads.remove(safeIndex);
@@ -418,5 +474,27 @@ class ReaderV2ChapterPageCacheManager {
     }();
     _inFlightLoads[safeIndex] = task;
     return task;
+  }
+
+  ReaderV2CachedChapterPages _wrapChapterView(ReaderV2ChapterView layout) {
+    final pages = ReaderV2PageCacheFactory.fromRenderPages(layout.pages);
+    final pageExtents = pages.map(_pageExtent).toList(growable: false);
+    return ReaderV2CachedChapterPages(
+      layout: layout,
+      pages: pages,
+      pageExtents: pageExtents,
+    );
+  }
+
+  /// [ReaderV2Resolver.onChapterProgressed] 的訂閱回呼：只處理目前已經放進
+  /// 視窗（在 [_chapters] 裡）的章節——背景排版還在推進的其他章節跟目前
+  /// 畫面無關，不用理會。純粹重新包裝 resolver 目前最新的快照並 bump
+  /// revision，不觸發任何新的排版工作。
+  void _handleChapterProgressed(int chapterIndex) {
+    if (!_chapters.containsKey(chapterIndex)) return;
+    final layout = runtime.resolver.cachedLayout(chapterIndex);
+    if (layout == null) return;
+    _chapters[chapterIndex] = _wrapChapterView(layout);
+    _bumpRevision();
   }
 }

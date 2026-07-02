@@ -10,6 +10,50 @@ import 'reader_v2_typography.dart';
 typedef ReaderV2LayoutStatsObserver =
     void Function(ReaderV2LayoutEngineStats stats);
 
+/// 排版進度游標：記錄 [ReaderV2LayoutEngine.layoutStep] 下次該從哪裡繼續排。
+/// 不可變，每次 step 都會產生新的游標實例。
+class ReaderV2LayoutCursor {
+  const ReaderV2LayoutCursor({
+    required this.chapterIndex,
+    required this.layoutSignature,
+    required this.nextParagraphIndex,
+    required this.nextParagraphOffset,
+    required this.yCursor,
+    required this.titleEmitted,
+    required this.isComplete,
+  });
+
+  factory ReaderV2LayoutCursor.start({
+    required ReaderV2Content content,
+    required ReaderV2LayoutSpec spec,
+  }) {
+    return ReaderV2LayoutCursor(
+      chapterIndex: content.chapterIndex,
+      layoutSignature: spec.layoutSignature,
+      nextParagraphIndex: 0,
+      nextParagraphOffset: content.bodyStartOffset,
+      yCursor: 0.0,
+      titleEmitted: false,
+      isComplete: false,
+    );
+  }
+
+  final int chapterIndex;
+  final int layoutSignature;
+  final int nextParagraphIndex;
+  final int nextParagraphOffset;
+  final double yCursor;
+  final bool titleEmitted;
+  final bool isComplete;
+}
+
+class ReaderV2LayoutStepResult {
+  const ReaderV2LayoutStepResult({required this.layout, required this.cursor});
+
+  final ReaderV2ChapterLayout layout;
+  final ReaderV2LayoutCursor cursor;
+}
+
 class ReaderV2LayoutEngineStats {
   const ReaderV2LayoutEngineStats({
     required this.chapterIndex,
@@ -69,16 +113,67 @@ class ReaderV2LayoutEngine {
     return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
   }
 
+  /// 排完整章才回傳，行為與輸出結果與改動前完全相同。內部用
+  /// [layoutStep] 迴圈跑到 `isComplete`，供不需要局部提早回傳的呼叫者
+  /// （例如 TTS 取整章文字）使用。
   Future<ReaderV2ChapterLayout> layout(
     ReaderV2Content content,
     ReaderV2LayoutSpec spec,
   ) async {
+    var lines = const <ReaderV2TextLine>[];
+    ReaderV2LayoutCursor? cursor;
+    ReaderV2ChapterLayout layout;
+    while (true) {
+      final step = await layoutStep(
+        content: content,
+        spec: spec,
+        linesSoFar: lines,
+        cursor: cursor,
+        minNewExtentPx: double.infinity,
+      );
+      lines = step.layout.lines;
+      cursor = step.cursor;
+      layout = step.layout;
+      if (cursor.isComplete) break;
+    }
+    return layout;
+  }
+
+  /// 只排出「至少 [minNewExtentPx] 新內容」或排到章節結尾就回傳，不必一次
+  /// 排完整章。從 [cursor] 續跑（null 代表從頭開始），回傳的
+  /// [ReaderV2LayoutStepResult.layout] 是「[linesSoFar] + 本次新排出的行」
+  /// 這個累積快照，[ReaderV2LayoutStepResult.cursor] 記錄下次要從哪裡繼續。
+  ///
+  /// 單一段落過長時仍套用既有的 8ms yield 安全網，避免單一 step 內部就把
+  /// 主執行緒佔滿。
+  Future<ReaderV2LayoutStepResult> layoutStep({
+    required ReaderV2Content content,
+    required ReaderV2LayoutSpec spec,
+    List<ReaderV2TextLine> linesSoFar = const <ReaderV2TextLine>[],
+    ReaderV2LayoutCursor? cursor,
+    required double minNewExtentPx,
+  }) async {
+    final effectiveCursor =
+        cursor ?? ReaderV2LayoutCursor.start(content: content, spec: spec);
+    if (effectiveCursor.isComplete) {
+      return ReaderV2LayoutStepResult(
+        layout: _snapshotLayout(
+          content: content,
+          spec: spec,
+          lines: linesSoFar,
+          isComplete: true,
+        ),
+        cursor: effectiveCursor,
+      );
+    }
+
     _resetStats();
     final stopwatch = Stopwatch()..start();
-    final lines = <ReaderV2TextLine>[];
-    var y = 0.0;
+    final lines = List<ReaderV2TextLine>.of(linesSoFar);
+    var y = effectiveCursor.yCursor;
+    var titleEmitted = effectiveCursor.titleEmitted;
 
-    if (content.title.isNotEmpty) {
+    if (!titleEmitted && content.title.isNotEmpty) {
       final titleLines = _layoutBlock(
         chapterIndex: content.chapterIndex,
         firstLineIndex: lines.length,
@@ -95,15 +190,16 @@ class ReaderV2LayoutEngine {
         y = titleLines.last.bottom + spec.style.paragraphSpacing * 8;
       }
     }
+    titleEmitted = true;
 
-    var paragraphOffset = content.bodyStartOffset;
+    var paragraphIndex = effectiveCursor.nextParagraphIndex;
+    var paragraphOffset = effectiveCursor.nextParagraphOffset;
+    var newExtent = 0.0;
     var elapsedSinceYield = stopwatch.elapsed;
-    for (
-      var paragraphIndex = 0;
-      paragraphIndex < content.paragraphs.length;
-      paragraphIndex++
-    ) {
+
+    while (paragraphIndex < content.paragraphs.length) {
       final paragraph = content.paragraphs[paragraphIndex];
+      final beforeY = y;
       final paragraphLines = _layoutBlock(
         chapterIndex: content.chapterIndex,
         firstLineIndex: lines.length,
@@ -119,7 +215,12 @@ class ReaderV2LayoutEngine {
       if (paragraphLines.isNotEmpty) {
         y = paragraphLines.last.bottom + _paragraphSpacingPixels(spec);
       }
+      newExtent += y - beforeY;
       paragraphOffset += paragraph.length + 2;
+      paragraphIndex += 1;
+
+      if (paragraphIndex >= content.paragraphs.length) break;
+      if (newExtent >= minNewExtentPx) break;
 
       if (stopwatch.elapsed - elapsedSinceYield >= _layoutYieldBudget) {
         await Future<void>.delayed(Duration.zero);
@@ -127,8 +228,44 @@ class ReaderV2LayoutEngine {
       }
     }
 
-    final pages = _paginate(lines: lines, spec: spec, content: content);
-    final layout = ReaderV2ChapterLayout(
+    final isComplete = paragraphIndex >= content.paragraphs.length;
+    final nextCursor = ReaderV2LayoutCursor(
+      chapterIndex: content.chapterIndex,
+      layoutSignature: spec.layoutSignature,
+      nextParagraphIndex: paragraphIndex,
+      nextParagraphOffset: paragraphOffset,
+      yCursor: y,
+      titleEmitted: titleEmitted,
+      isComplete: isComplete,
+    );
+    final layoutResult = _snapshotLayout(
+      content: content,
+      spec: spec,
+      lines: lines,
+      isComplete: isComplete,
+    );
+    _publishStats(
+      chapterIndex: content.chapterIndex,
+      elapsed: stopwatch.elapsed,
+      lineCount: layoutResult.lines.length,
+      pageCount: layoutResult.pages.length,
+    );
+    return ReaderV2LayoutStepResult(layout: layoutResult, cursor: nextCursor);
+  }
+
+  ReaderV2ChapterLayout _snapshotLayout({
+    required ReaderV2Content content,
+    required ReaderV2LayoutSpec spec,
+    required List<ReaderV2TextLine> lines,
+    required bool isComplete,
+  }) {
+    final pages = _paginate(
+      lines: lines,
+      spec: spec,
+      content: content,
+      isComplete: isComplete,
+    );
+    return ReaderV2ChapterLayout(
       chapterIndex: content.chapterIndex,
       displayText: content.displayText,
       contentHash: content.contentHash,
@@ -136,14 +273,8 @@ class ReaderV2LayoutEngine {
       lines: List<ReaderV2TextLine>.unmodifiable(lines),
       pages: List<ReaderV2PageSlice>.unmodifiable(pages),
       contentHeight: lines.isEmpty ? 0.0 : lines.last.bottom,
+      isComplete: isComplete,
     );
-    _publishStats(
-      chapterIndex: content.chapterIndex,
-      elapsed: stopwatch.elapsed,
-      lineCount: lines.length,
-      pageCount: pages.length,
-    );
-    return layout;
   }
 
   void _resetStats() {
@@ -510,6 +641,7 @@ class ReaderV2LayoutEngine {
     required List<ReaderV2TextLine> lines,
     required ReaderV2LayoutSpec spec,
     required ReaderV2Content content,
+    required bool isComplete,
   }) {
     final contentHeight = spec.contentHeight <= 0 ? 1.0 : spec.contentHeight;
     final viewportHeight =
@@ -532,7 +664,7 @@ class ReaderV2LayoutEngine {
           contentHeight: contentHeight,
           viewportHeight: viewportHeight,
           isChapterStart: true,
-          isChapterEnd: true,
+          isChapterEnd: isComplete,
         ),
       ];
     }
@@ -570,6 +702,9 @@ class ReaderV2LayoutEngine {
           content: content,
           contentHeight: contentHeight,
           viewportHeight: viewportHeight,
+          // 尾頁只有在整章真的排完時才算章節結尾；部分結果的尾頁只是
+          // 「目前排到這裡」，後面還會再長出新頁。
+          isChapterEnd: pageIndex == pageCount - 1 ? isComplete : false,
         ),
     ];
   }
@@ -583,6 +718,7 @@ class ReaderV2LayoutEngine {
     required ReaderV2Content content,
     required double contentHeight,
     required double viewportHeight,
+    required bool isChapterEnd,
   }) {
     final first = lines[range.start];
     final last = lines[range.end - 1];
@@ -600,7 +736,7 @@ class ReaderV2LayoutEngine {
       contentHeight: contentHeight,
       viewportHeight: viewportHeight,
       isChapterStart: pageIndex == 0,
-      isChapterEnd: pageIndex == pageCount - 1,
+      isChapterEnd: isChapterEnd,
     );
   }
 

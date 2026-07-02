@@ -86,6 +86,7 @@ class ReaderV2ChapterLayout {
     required this.lines,
     required this.pages,
     required this.contentHeight,
+    this.isComplete = true,
   });
 
   final int chapterIndex;
@@ -95,6 +96,12 @@ class ReaderV2ChapterLayout {
   final List<ReaderV2TextLine> lines;
   final List<ReaderV2PageSlice> pages;
   final double contentHeight;
+
+  /// false 代表這是排版引擎中途回傳的部分結果，章節尚未排完（見
+  /// [ReaderV2LayoutEngine.layoutStep]）。此時 [pages] 的尾頁一定不是章節
+  /// 真正的結尾，[pages.length]（即 `pageCount`）也只是目前為止的數量，
+  /// 之後還會再變多。
+  final bool isComplete;
 
   List<ReaderV2TextLine> linesForPage(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= pages.length) {

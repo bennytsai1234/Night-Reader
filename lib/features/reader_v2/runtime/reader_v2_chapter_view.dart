@@ -58,6 +58,10 @@ class ReaderV2ChapterView {
   int get layoutSignature => layout.layoutSignature;
   double get contentHeight => layout.contentHeight;
 
+  /// false 代表這只是排版引擎中途回傳的部分結果，見
+  /// [ReaderV2ChapterLayout.isComplete]。
+  bool get isComplete => layout.isComplete;
+
   ReaderV2RenderPage pageForCharOffset(int charOffset) {
     if (pages.isEmpty) {
       return ReaderV2RenderPage(

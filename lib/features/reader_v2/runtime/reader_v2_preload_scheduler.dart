@@ -219,7 +219,9 @@ class ReaderV2PreloadScheduler {
     if (_disposed) return Future<void>.value();
     final safeIndex = _validChapterIndex(chapterIndex);
     if (safeIndex == null) return Future<void>.value();
-    if (resolver.cachedLayout(safeIndex) != null) {
+    // 部分就緒不算「做完了」——排版還沒排完整章時要繼續排，不能被當成
+    // 已快取而略過，否則背景永遠不會把它排完。
+    if (resolver.cachedLayout(safeIndex)?.isComplete == true) {
       return Future<void>.value();
     }
     if (isInteractive) {
@@ -332,8 +334,16 @@ class ReaderV2PreloadScheduler {
       _queuedLayoutKeys.remove(key);
       _activeLayoutKeys.add(key);
       resolver
-          .ensureLayout(task.chapterIndex, retryOnStale: false)
-          .then((_) => _completeWaiters(key))
+          .continueLayoutStep(task.chapterIndex)
+          .then<void>((view) {
+            if (view.isComplete || _disposed || task.generation != _generation) {
+              _completeWaiters(key);
+              return;
+            }
+            // 還沒排完，重新排回佇列尾端——讓佇列裡其他章節有機會先輪到，
+            // 不會被單一超長章節獨占背景排版工作。
+            _enqueue(task, priority: false);
+          })
           .catchError((_) => _completeWaiters(key))
           .whenComplete(() {
             _activeLayoutKeys.remove(key);
