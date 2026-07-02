@@ -742,20 +742,20 @@
     .creed p { color: var(--text-2); font-size: 1rem; }
     .steps {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 20px;
       position: relative;
-      max-width: 920px;
+      max-width: 1120px;
       margin: 0 auto;
     }
     .steps::before {
       content: '';
       position: absolute;
-      top: 33px; left: 16%; right: 16%;
+      top: 33px; left: 10%; right: 10%;
       height: 1px;
-      background: linear-gradient(90deg, transparent, var(--line-2) 18%, var(--line-2) 82%, transparent);
+      background: linear-gradient(90deg, transparent, var(--line-2) 10%, var(--line-2) 90%, transparent);
     }
-    .step { text-align: center; padding: 0 14px; position: relative; }
+    .step { text-align: center; padding: 0 10px; position: relative; }
     .step-no {
       width: 66px; height: 66px;
       margin: 0 auto 20px;
@@ -773,6 +773,106 @@
     .step:hover .step-no { border-color: var(--lamp); box-shadow: 0 0 28px var(--lamp-dim); }
     .step h3 { margin-bottom: 6px; }
     .step p { color: var(--text-2); font-size: 0.9rem; }
+
+    /* ===== 卷五：常見問題 ===== */
+    .faq-list {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .faq-item {
+      background: var(--ink-3);
+      border: 1px solid var(--line-1);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      transition: border-color var(--dur-fast) ease, background var(--dur-fast) ease;
+    }
+    .faq-item:hover {
+      border-color: var(--line-2);
+      background: var(--ink-4);
+    }
+    .faq-item.active {
+      border-color: var(--lamp);
+    }
+    .faq-trigger {
+      width: 100%;
+      background: transparent;
+      border: none;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-align: left;
+      cursor: pointer;
+      color: var(--text-1);
+      font-size: 1.05rem;
+      font-weight: 700;
+      gap: 16px;
+    }
+    .faq-trigger svg {
+      color: var(--text-3);
+      transition: transform var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .faq-item.active .faq-trigger svg {
+      transform: rotate(180deg);
+      color: var(--lamp);
+    }
+    .faq-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height var(--dur-mid) var(--ease-expo), padding var(--dur-mid) var(--ease-expo);
+      padding: 0 24px;
+    }
+    .faq-item.active .faq-content {
+      max-height: 500px;
+      padding-bottom: 20px;
+    }
+    .faq-content p {
+      color: var(--text-2);
+      font-size: 0.95rem;
+      line-height: 1.8;
+    }
+
+    /* ===== 免責聲明 ===== */
+    .disclaimer-card {
+      max-width: 760px;
+      margin: 0 auto;
+      background: rgba(198, 74, 51, 0.03);
+      border: 1px solid rgba(198, 74, 51, 0.22);
+      border-radius: var(--radius-md);
+      padding: 24px 28px;
+      text-align: left;
+      position: relative;
+    }
+    .disclaimer-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--seal);
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    }
+    .disclaimer-card h3 {
+      color: var(--text-1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 1.1rem;
+    }
+    .disclaimer-card h3 svg {
+      color: var(--seal);
+    }
+    .disclaimer-card p {
+      color: var(--text-2);
+      font-size: 0.88rem;
+      line-height: 1.75;
+    }
+    .disclaimer-card p + p {
+      margin-top: 8px;
+    }
 
     /* ===== 卷四：開源工藝 ===== */
     .stats {
@@ -915,6 +1015,8 @@
       .demo-controls { width: 100%; max-width: 480px; }
       .cell-lg { grid-column: span 6; }
       .cell { grid-column: span 3; }
+      .steps { grid-template-columns: 1fr; gap: 36px; max-width: 480px; }
+      .steps::before { display: none; }
     }
     @media (max-width: 768px) {
       .nav-links { display: none; }
@@ -974,8 +1076,8 @@
       <ul class="nav-links" id="navLinks">
         <li><a href="#typeset">排版</a></li>
         <li><a href="#features">功能</a></li>
-        <li><a href="#sources">書源</a></li>
-        <li><a href="#craft">開源</a></li>
+        <li><a href="#quickstart">上手</a></li>
+        <li><a href="#faq">問答</a></li>
         <li><a href="#download" class="nav-cta">下載</a></li>
       </ul>
       <button class="nav-toggle" id="navToggle" aria-label="開啟選單" aria-expanded="false">
@@ -1225,34 +1327,45 @@
       </div>
     </section>
 
-    <!-- ===== 卷三：書源自主 ===== -->
-    <section id="sources">
+    <!-- ===== 卷三：快速上手 ===== -->
+    <section id="quickstart">
       <div class="container">
         <div class="sec-head reveal">
           <p class="sec-vol">卷三</p>
-          <h2>你的書，你的來源</h2>
+          <h2>簡單五步，快速上手</h2>
+          <p class="sec-sub">夜讀是純工具型應用，不內建任何書籍內容。只需依照以下步驟匯入書源，即可開啟您的長篇閱讀體驗。</p>
         </div>
 
         <div class="creed reveal">
           <p class="big">夜讀不內建任何書籍內容。<br />它是一把<em>鑰匙</em>，而不是一座圖書館。</p>
-          <p>書源由你匯入、校驗、訂閱更新 — 讀什麼、從哪裡讀，選擇權完全在你手上。</p>
+          <p>書源由您自行管理，所有的資料皆保存在本機。您的書，完全由您掌握。</p>
         </div>
 
         <div class="steps">
           <div class="step reveal">
             <div class="step-no">一</div>
-            <h3>匯入書源</h3>
-            <p>從網路連結或本地檔案匯入，批次校驗有效性，失效來源一眼看出。</p>
+            <h3>啟動管理</h3>
+            <p>開啟 App 後，首先進入「書源管理」頁面，準備配置您的書房。</p>
           </div>
-          <div class="step reveal" style="--rd: 100ms">
+          <div class="step reveal" style="--rd: 80ms">
             <div class="step-no">二</div>
-            <h3>搜尋全網</h3>
-            <p>多書源並行搜尋、探索分類瀏覽，幾秒內聚合所有結果。</p>
+            <h3>匯入書源</h3>
+            <p>支援網路連結（URL）或本地檔案，匯入您信任且具備合法授權的書源。</p>
           </div>
-          <div class="step reveal" style="--rd: 200ms">
+          <div class="step reveal" style="--rd: 160ms">
             <div class="step-no">三</div>
-            <h3>離線同行</h3>
-            <p>預下載整本章節，通勤、飛行、深山 — 沒有訊號的地方照樣讀。</p>
+            <h3>批次校驗</h3>
+            <p>一鍵背景校驗，自動檢測格式與連線狀態，迅速篩除失效的來源。</p>
+          </div>
+          <div class="step reveal" style="--rd: 240ms">
+            <div class="step-no">四</div>
+            <h3>搜尋加架</h3>
+            <p>於「搜尋」頁面並行查詢所有已匯入書源，並將喜愛的內容加入書架。</p>
+          </div>
+          <div class="step reveal" style="--rd: 320ms">
+            <div class="step-no">五</div>
+            <h3>離線閱讀</h3>
+            <p>回到書架點擊即可暢讀。可手動預下載章節，通勤或無網路時亦能離線閱讀。</p>
           </div>
         </div>
       </div>
@@ -1289,6 +1402,83 @@
           <span class="tech-tag">flutter_tts + audio_service</span>
           <span class="tech-tag">Headless WebView</span>
           <span class="tech-tag">Provider 狀態管理</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 卷五：常見問題 ===== -->
+    <section id="faq">
+      <div class="container">
+        <div class="sec-head reveal">
+          <p class="sec-vol">卷五</p>
+          <h2>解惑釋疑</h2>
+          <p class="sec-sub">關於夜讀的常見疑問與解答，助您順暢開啟您的閱讀之旅。</p>
+        </div>
+
+        <div class="faq-list reveal">
+          <div class="faq-item">
+            <button class="faq-trigger" type="button" aria-expanded="false">
+              <span>安裝後沒有任何小說？</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <p>是的，夜讀是純工具型的閱讀器，不內建、不提供也不儲存任何小說書籍。在初次安裝後，您需要前往「書源管理」頁面，自行匯入您信任且具備合法授權的書源才能開始搜尋和閱讀。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger" type="button" aria-expanded="false">
+              <span>支援哪些本地電子書格式？</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <p>目前支援 <code>TXT</code> 與 <code>EPUB</code> 格式。您可以直接將本機的電子書檔案匯入 App 中，系統將會自動為您解析書籍目錄並生成精美的排版內文。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger" type="button" aria-expanded="false">
+              <span>需要登入或驗證碼的書源能使用嗎？</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <p>目前不支援需要瀏覽器驗證碼、圖形驗證或複雜登入互動的書源。這類來源在背景校驗時會直接回報連線錯誤，建議您改為使用不需要互動驗證的開放式書源。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger" type="button" aria-expanded="false">
+              <span>加入書架後會自動下載整本書嗎？</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <p>不會。加入書架僅會保存書籍的基本資訊、目錄大綱與閱讀進度。當您點擊閱讀某個章節時，系統才會動態請求該章正文。如果您希望在離線狀態（例如飛航模式、沒有網路的地方）下閱讀，請務必先在書籍詳情頁手動點擊「預下載章節」進行快取。</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger" type="button" aria-expanded="false">
+              <span>更換手機後，資料會不見嗎？</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <p>不會。夜讀提供了非常便利的「一鍵備份還原」功能。您可以在舊手機上將書架、匯入的書源、替換規則、書籤、歷史進度及偏好設定一次性打包備份，並將備份檔移轉至新手機匯入還原，即可無縫繼續您的閱讀之旅。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 免責聲明區塊 ===== -->
+    <section class="alt" style="padding: 80px 0 40px;">
+      <div class="container">
+        <div class="disclaimer-card reveal">
+          <h3>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            免責與版權聲明
+          </h3>
+          <p>夜讀（Night Reader）是一款通用型網頁規則解析與本地文本排版工具。本專案不提供、不內建、不託管、不維護、不推薦、亦不分發任何書籍、章節內容或第三方書源。所有展示之文本僅作為排版引擎功能展示之公有領域素材。</p>
+          <p>使用者應自行確認其匯入之書源、檔案及內容已獲得著作權人合法授權。禁止使用本 App 存取、下載、快取或散布任何侵害著作權之內容，亦禁止藉此繞過任何付費機制、存取控制或數位著作權管理（DRM）技術保護措施。使用者對其匯入之書源所涉及之版權、法律及其他責任由其自行承擔，本專案及開發者不負任何連帶或擔保責任。</p>
         </div>
       </div>
     </section>
@@ -1481,6 +1671,41 @@
             }
           })
           .catch(function () { /* 維持 Releases 頁連結 */ });
+      })();
+
+      /* ---- FAQ 手風琴 ---- */
+      (function initFaq() {
+        var faqItems = document.querySelectorAll('.faq-item');
+        faqItems.forEach(function (item) {
+          var trigger = item.querySelector('.faq-trigger');
+          var content = item.querySelector('.faq-content');
+          if (!trigger || !content) return;
+          trigger.addEventListener('click', function () {
+            var isActive = item.classList.contains('active');
+            
+            // 關閉其他已展開的項目
+            faqItems.forEach(function (otherItem) {
+              if (otherItem !== item) {
+                otherItem.classList.remove('active');
+                var t = otherItem.querySelector('.faq-trigger');
+                var c = otherItem.querySelector('.faq-content');
+                if (t) t.setAttribute('aria-expanded', 'false');
+                if (c) c.style.maxHeight = null;
+              }
+            });
+
+            // 切換當前項目
+            if (isActive) {
+              item.classList.remove('active');
+              trigger.setAttribute('aria-expanded', 'false');
+              content.style.maxHeight = null;
+            } else {
+              item.classList.add('active');
+              trigger.setAttribute('aria-expanded', 'true');
+              content.style.maxHeight = content.scrollHeight + 'px';
+            }
+          });
+        });
       })();
 
       /* ---- 年份 ---- */
