@@ -336,7 +336,9 @@ class ReaderV2PreloadScheduler {
       resolver
           .continueLayoutStep(task.chapterIndex)
           .then<void>((view) {
-            if (view.isComplete || _disposed || task.generation != _generation) {
+            if (view.isComplete ||
+                _disposed ||
+                task.generation != _generation) {
               _completeWaiters(key);
               return;
             }

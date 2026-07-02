@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -30,35 +30,43 @@ void main() {
   }
 
   group('ReaderV2LayoutEngine', () {
-    test('cuts text into monotonic lines and paginates long chapters', () async {
-      final content = ReaderV2Content.fromRaw(
-        chapterIndex: 0,
-        title: '第一章 測試',
-        rawText: List<String>.filled(
-          18,
-          '這是一段用來測試排版切行與分頁的中文內容，包含標點符號與足夠長度。',
-        ).join('\n\n'),
-      );
-      final layout = await ReaderV2LayoutEngine().layout(content, spec());
+    test(
+      'cuts text into monotonic lines and paginates long chapters',
+      () async {
+        final content = ReaderV2Content.fromRaw(
+          chapterIndex: 0,
+          title: '第一章 測試',
+          rawText: List<String>.filled(
+            18,
+            '這是一段用來測試排版切行與分頁的中文內容，包含標點符號與足夠長度。',
+          ).join('\n\n'),
+        );
+        final layout = await ReaderV2LayoutEngine().layout(content, spec());
 
-      expect(layout.lines, isNotEmpty);
-      expect(layout.pages.length, greaterThan(1));
-      expect(layout.pages.first.isChapterStart, isTrue);
-      expect(layout.pages.last.isChapterEnd, isTrue);
+        expect(layout.lines, isNotEmpty);
+        expect(layout.pages.length, greaterThan(1));
+        expect(layout.pages.first.isChapterStart, isTrue);
+        expect(layout.pages.last.isChapterEnd, isTrue);
 
-      var previousTop = -1.0;
-      var previousOffset = -1;
-      for (final line in layout.lines) {
-        expect(line.top, greaterThanOrEqualTo(previousTop));
-        expect(line.startCharOffset, greaterThanOrEqualTo(previousOffset));
-        expect(line.endCharOffset, greaterThanOrEqualTo(line.startCharOffset));
-        previousTop = line.top;
-        previousOffset = line.startCharOffset;
-      }
+        var previousTop = -1.0;
+        var previousOffset = -1;
+        for (final line in layout.lines) {
+          expect(line.top, greaterThanOrEqualTo(previousTop));
+          expect(line.startCharOffset, greaterThanOrEqualTo(previousOffset));
+          expect(
+            line.endCharOffset,
+            greaterThanOrEqualTo(line.startCharOffset),
+          );
+          previousTop = line.top;
+          previousOffset = line.startCharOffset;
+        }
 
-      final middle = layout.pageForCharOffset(content.displayText.length ~/ 2);
-      expect(middle.pageIndex, inInclusiveRange(0, layout.pages.length - 1));
-    });
+        final middle = layout.pageForCharOffset(
+          content.displayText.length ~/ 2,
+        );
+        expect(middle.pageIndex, inInclusiveRange(0, layout.pages.length - 1));
+      },
+    );
 
     test('keeps an empty chapter renderable with a fallback page', () async {
       final content = ReaderV2Content.fromRaw(
@@ -152,47 +160,53 @@ void main() {
       expect(step.layout.pages.last.isChapterEnd, isFalse);
     });
 
-    test('resuming from a cursor reaches the same result as layout()', () async {
-      final content = longContent(chapterIndex: 7);
-      final engine = ReaderV2LayoutEngine();
-      final full = await engine.layout(content, spec());
+    test(
+      'resuming from a cursor reaches the same result as layout()',
+      () async {
+        final content = longContent(chapterIndex: 7);
+        final engine = ReaderV2LayoutEngine();
+        final full = await engine.layout(content, spec());
 
-      var lines = const <ReaderV2TextLine>[];
-      ReaderV2LayoutCursor? cursor;
-      var stepCount = 0;
-      while (cursor == null || !cursor.isComplete) {
-        final step = await engine.layoutStep(
-          content: content,
-          spec: spec(),
-          linesSoFar: lines,
-          cursor: cursor,
-          minNewExtentPx: 60,
-        );
-        lines = step.layout.lines;
-        cursor = step.cursor;
-        stepCount += 1;
-        expect(stepCount, lessThan(1000), reason: '避免游標邏輯有誤導致無限迴圈');
-      }
+        var lines = const <ReaderV2TextLine>[];
+        ReaderV2LayoutCursor? cursor;
+        var stepCount = 0;
+        while (cursor == null || !cursor.isComplete) {
+          final step = await engine.layoutStep(
+            content: content,
+            spec: spec(),
+            linesSoFar: lines,
+            cursor: cursor,
+            minNewExtentPx: 60,
+          );
+          lines = step.layout.lines;
+          cursor = step.cursor;
+          stepCount += 1;
+          expect(stepCount, lessThan(1000), reason: '避免游標邏輯有誤導致無限迴圈');
+        }
 
-      expect(cursor.isComplete, isTrue);
-      expect(lines.length, full.lines.length);
-      for (var index = 0; index < full.lines.length; index++) {
-        expect(lines[index].text, full.lines[index].text);
-        expect(lines[index].startCharOffset, full.lines[index].startCharOffset);
-        expect(lines[index].endCharOffset, full.lines[index].endCharOffset);
-        expect(lines[index].top, full.lines[index].top);
-        expect(lines[index].bottom, full.lines[index].bottom);
-      }
+        expect(cursor.isComplete, isTrue);
+        expect(lines.length, full.lines.length);
+        for (var index = 0; index < full.lines.length; index++) {
+          expect(lines[index].text, full.lines[index].text);
+          expect(
+            lines[index].startCharOffset,
+            full.lines[index].startCharOffset,
+          );
+          expect(lines[index].endCharOffset, full.lines[index].endCharOffset);
+          expect(lines[index].top, full.lines[index].top);
+          expect(lines[index].bottom, full.lines[index].bottom);
+        }
 
-      // 字元 offset 在續跑邊界上下依然單調不減、無縫接續。
-      var previousEnd = -1;
-      for (final line in lines) {
-        expect(line.startCharOffset, greaterThanOrEqualTo(previousEnd - 1));
-        previousEnd = line.endCharOffset;
-      }
+        // 字元 offset 在續跑邊界上下依然單調不減、無縫接續。
+        var previousEnd = -1;
+        for (final line in lines) {
+          expect(line.startCharOffset, greaterThanOrEqualTo(previousEnd - 1));
+          previousEnd = line.endCharOffset;
+        }
 
-      expect(stepCount, greaterThan(1), reason: '這個測試要驗證的就是多次續跑');
-    });
+        expect(stepCount, greaterThan(1), reason: '這個測試要驗證的就是多次續跑');
+      },
+    );
 
     test(
       'a step that reaches the end of content marks isComplete and final page as chapter end',
@@ -232,21 +246,24 @@ void main() {
       expect(second.layout.pages.length, first.layout.pages.length);
     });
 
-    test('empty chapter completes immediately with a chapter-end fallback page', () async {
-      final content = ReaderV2Content.fromRaw(
-        chapterIndex: 3,
-        title: '',
-        rawText: '',
-      );
-      final result = await ReaderV2LayoutEngine().layoutStep(
-        content: content,
-        spec: spec(),
-        minNewExtentPx: 100,
-      );
+    test(
+      'empty chapter completes immediately with a chapter-end fallback page',
+      () async {
+        final content = ReaderV2Content.fromRaw(
+          chapterIndex: 3,
+          title: '',
+          rawText: '',
+        );
+        final result = await ReaderV2LayoutEngine().layoutStep(
+          content: content,
+          spec: spec(),
+          minNewExtentPx: 100,
+        );
 
-      expect(result.cursor.isComplete, isTrue);
-      expect(result.layout.isComplete, isTrue);
-      expect(result.layout.pages.single.isChapterEnd, isTrue);
-    });
+        expect(result.cursor.isComplete, isTrue);
+        expect(result.layout.isComplete, isTrue);
+        expect(result.layout.pages.single.isChapterEnd, isTrue);
+      },
+    );
   });
 }

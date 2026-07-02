@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -156,21 +156,26 @@ class ReaderV2Resolver {
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     while (true) {
       final cached = _layouts[safeIndex];
-      if (cached != null && cached.layoutSignature == layoutSpec.layoutSignature) {
+      if (cached != null &&
+          cached.layoutSignature == layoutSpec.layoutSignature) {
         if (cached.isComplete || cached.contentHeight >= minExtentPx) {
           _touchLayoutCache(safeIndex);
           return _layouts[safeIndex]!;
         }
       }
       final cachedHeight =
-          (cached != null && cached.layoutSignature == layoutSpec.layoutSignature)
+          (cached != null &&
+                  cached.layoutSignature == layoutSpec.layoutSignature)
               ? cached.contentHeight
               : 0.0;
       await _stepOnce(safeIndex, remainingNeeded: minExtentPx - cachedHeight);
     }
   }
 
-  Future<void> _stepOnce(int chapterIndex, {required double remainingNeeded}) async {
+  Future<void> _stepOnce(
+    int chapterIndex, {
+    required double remainingNeeded,
+  }) async {
     final spec = layoutSpec;
     final cacheGeneration = _cacheGeneration;
     final taskKey = '$chapterIndex|${spec.layoutSignature}|$cacheGeneration';
@@ -182,7 +187,9 @@ class ReaderV2Resolver {
     final taskId = _nextInFlightTaskId++;
     final stepTarget =
         remainingNeeded.isFinite
-            ? math.min(remainingNeeded, _maxStepExtentPx).clamp(1.0, _maxStepExtentPx)
+            ? math
+                .min(remainingNeeded, _maxStepExtentPx)
+                .clamp(1.0, _maxStepExtentPx)
             : _maxStepExtentPx;
     late final Future<void> task;
     task = () async {
@@ -194,7 +201,9 @@ class ReaderV2Resolver {
             existingView != null &&
             existingView.layoutSignature == spec.layoutSignature;
         final linesSoFar =
-            reuseExisting ? existingView.layout.lines : const <ReaderV2TextLine>[];
+            reuseExisting
+                ? existingView.layout.lines
+                : const <ReaderV2TextLine>[];
         final existingCursor = _cursors[chapterIndex];
         final cursor =
             (reuseExisting &&

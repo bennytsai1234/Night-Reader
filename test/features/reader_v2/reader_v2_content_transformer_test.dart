@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_content_transformer.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

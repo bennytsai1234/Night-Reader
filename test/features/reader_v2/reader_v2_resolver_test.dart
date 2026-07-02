@@ -5,10 +5,10 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_resolver.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_resolver.dart';
 
 class _FakeBookDao extends Fake implements BookDao {}
 
@@ -111,10 +111,7 @@ void main() {
       var iterations = 0;
       while (!view.isComplete) {
         final before = view.contentHeight;
-        view = await resolver.ensureLayoutAtLeast(
-          0,
-          minExtentPx: before + 80,
-        );
+        view = await resolver.ensureLayoutAtLeast(0, minExtentPx: before + 80);
         expect(
           view.contentHeight,
           greaterThanOrEqualTo(before),
@@ -196,18 +193,21 @@ void main() {
       expect(next.startCharOffset, chapter1.pages.first.startCharOffset);
     });
 
-    test('prevPageSync 在前一章排版未完成時回傳前一章 loading 佔位頁，不誤用未完成的 pages.last', () async {
-      final resolver = makeResolver([longChapter(0), shortChapter(1)]);
-      await resolver.ensureLayoutAtLeast(0, minExtentPx: 80);
-      final chapter1 = await resolver.ensureLayout(1);
+    test(
+      'prevPageSync 在前一章排版未完成時回傳前一章 loading 佔位頁，不誤用未完成的 pages.last',
+      () async {
+        final resolver = makeResolver([longChapter(0), shortChapter(1)]);
+        await resolver.ensureLayoutAtLeast(0, minExtentPx: 80);
+        final chapter1 = await resolver.ensureLayout(1);
 
-      final prev = resolver.prevPageSync(chapter1.pages.first);
+        final prev = resolver.prevPageSync(chapter1.pages.first);
 
-      expect(prev, isNotNull);
-      expect(prev!.isPlaceholder, isTrue);
-      expect(prev.isLoading, isTrue);
-      expect(prev.chapterIndex, 0);
-    });
+        expect(prev, isNotNull);
+        expect(prev!.isPlaceholder, isTrue);
+        expect(prev.isLoading, isTrue);
+        expect(prev.chapterIndex, 0);
+      },
+    );
 
     test('prevPageSync 在前一章真正排完時才會接到它的最後一頁', () async {
       final resolver = makeResolver([shortChapter(0), shortChapter(1)]);

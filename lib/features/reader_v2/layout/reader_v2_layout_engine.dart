@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 
 import 'reader_v2_layout.dart';
 import 'reader_v2_layout_spec.dart';
@@ -440,7 +440,8 @@ class ReaderV2LayoutEngine {
         final nextChar = remaining.substring(charsConsumed, charsConsumed + 1);
         if (_isEnglishLetter(lastChar) && _isEnglishLetter(nextChar)) {
           var temp = charsConsumed;
-          while (temp > 0 && _isEnglishLetter(remaining.substring(temp - 1, temp))) {
+          while (temp > 0 &&
+              _isEnglishLetter(remaining.substring(temp - 1, temp))) {
             temp--;
           }
           if (temp > 0) {
@@ -594,8 +595,14 @@ class ReaderV2LayoutEngine {
         }
       }
 
-      final int candidateLowIndex = (preferredIndex - 12).clamp(0, clusterEndOffsets.length - 1);
-      final int candidateHighIndex = preferredIndex.clamp(candidateLowIndex, clusterEndOffsets.length - 1);
+      final int candidateLowIndex = (preferredIndex - 12).clamp(
+        0,
+        clusterEndOffsets.length - 1,
+      );
+      final int candidateHighIndex = preferredIndex.clamp(
+        candidateLowIndex,
+        clusterEndOffsets.length - 1,
+      );
 
       final checkOffset = clusterEndOffsets[candidateLowIndex];
       final checkText = text.substring(0, checkOffset);
@@ -627,7 +634,6 @@ class ReaderV2LayoutEngine {
     }
     return clusterEndOffsets[best - 1];
   }
-
 
   double _measureLineWidth(String text, TextStyle style) {
     if (text.isEmpty) return 0;

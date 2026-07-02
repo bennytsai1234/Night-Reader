@@ -5,11 +5,11 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
 
 class _FakeBookDao extends Fake implements BookDao {}
@@ -127,11 +127,7 @@ void main() {
 
       expect(manager.chapterAt(1), isNotNull);
       expect(manager.chapterAt(1)!.isComplete, isFalse);
-      expect(
-        manager.chapterAt(2),
-        isNull,
-        reason: '章節 1 還沒排完，不該再往前抓章節 2',
-      );
+      expect(manager.chapterAt(2), isNull, reason: '章節 1 還沒排完，不該再往前抓章節 2');
     });
 
     test('視窗涵蓋範圍夠大時，章節仍會排完整章（既有行為不受影響）', () async {

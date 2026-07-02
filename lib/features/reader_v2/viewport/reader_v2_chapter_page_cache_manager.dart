@@ -1,6 +1,6 @@
 import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_chapter_view.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_chapter_view.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
 typedef ReaderV2ScrollPageExtentResolver =
     double Function(ReaderV2PageCache page);

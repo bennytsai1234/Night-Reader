@@ -1,7 +1,7 @@
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/bookmark.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
 class ReaderV2BookmarkController {
   ReaderV2BookmarkController({

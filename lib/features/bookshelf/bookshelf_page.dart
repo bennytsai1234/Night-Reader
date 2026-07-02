@@ -9,7 +9,7 @@ import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:file_picker/file_picker.dart';

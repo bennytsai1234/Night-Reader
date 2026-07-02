@@ -7,7 +7,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_tile_key.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_tile_layer.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_tts_highlight_overlay_layer.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_pointer_tap_layer.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_visible_page_calculator.dart';
 

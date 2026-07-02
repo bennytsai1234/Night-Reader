@@ -11,8 +11,8 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_info_header.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override

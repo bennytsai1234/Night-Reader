@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
 typedef ReaderV2AutoPageTimerFactory =
     Timer Function(Duration interval, void Function(Timer timer) onTick);

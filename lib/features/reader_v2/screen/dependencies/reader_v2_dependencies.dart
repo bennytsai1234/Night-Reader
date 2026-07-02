@@ -8,7 +8,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 
 class ReaderV2Dependencies {
   ReaderV2Dependencies({

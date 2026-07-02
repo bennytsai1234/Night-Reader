@@ -5,11 +5,11 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_preload_scheduler.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_resolver.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_preload_scheduler.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_resolver.dart';
 
 class _FakeBookDao extends Fake implements BookDao {}
 

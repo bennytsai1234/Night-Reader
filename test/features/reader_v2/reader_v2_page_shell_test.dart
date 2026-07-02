@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:night_reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
-import 'package:night_reader/features/reader_v2/shell/reader_v2_page_shell.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 
 void main() {
   testWidgets(

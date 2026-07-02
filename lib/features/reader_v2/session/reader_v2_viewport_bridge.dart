@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import 'reader_v2_location.dart';
+import 'reader_v2_operation_token.dart';
 import 'reader_v2_runtime.dart';
 import 'reader_v2_state.dart';
 
@@ -46,11 +47,10 @@ class ReaderV2ViewportBridge {
   ReaderV2Location? captureVisibleLocation({
     bool notifyIfChanged = true,
     bool allowDuringRestore = false,
-  }) =>
-      _captureVisibleLocation(
-        notifyIfChanged: notifyIfChanged,
-        allowDuringRestore: allowDuringRestore,
-      );
+  }) => _captureVisibleLocation(
+    notifyIfChanged: notifyIfChanged,
+    allowDuringRestore: allowDuringRestore,
+  );
 
   Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
@@ -65,28 +65,27 @@ class ReaderV2ViewportBridge {
 
   Future<ReaderV2Location?> flushProgress() {
     if (_runtime.restoreInProgress) return Future<ReaderV2Location?>.value();
-    final location = captureVisibleLocation(notifyIfChanged: false) ??
+    final location =
+        captureVisibleLocation(notifyIfChanged: false) ??
         _runtime.state.visibleLocation;
     return _saveProgressLocation(location);
   }
 
   Future<ReaderV2Location?> saveJumpAfterSettled(
     ReaderV2Location location, {
-    required int requestId,
-    required int generation,
+    required ReaderV2OperationToken token,
   }) {
     return _saveVisibleAnchorAfterViewportSettled(
       fallbackLocation: location,
       restoreLocation: location,
-      isCurrent: () => _isCurrentJump(requestId, generation),
+      isCurrent: () => _runtime.isCurrentOperationToken(token),
     );
   }
 
   Future<ReaderV2Location?> saveProgressLocation(
     ReaderV2Location location, {
     bool immediate = true,
-  }) =>
-      _saveProgressLocation(location, immediate: immediate);
+  }) => _saveProgressLocation(location, immediate: immediate);
 
   Future<ReaderV2Location?> _saveVisibleAnchorAfterViewportSettled({
     required ReaderV2Location fallbackLocation,
@@ -110,10 +109,7 @@ class ReaderV2ViewportBridge {
     if (saved != null) return saved;
     if (_runtime.disposed || _runtime.restoreInProgress) return null;
     if (isCurrent != null && !isCurrent()) return null;
-    return _saveProgressLocation(
-      fallbackLocation,
-      immediate: immediateSave,
-    );
+    return _saveProgressLocation(fallbackLocation, immediate: immediateSave);
   }
 
   Future<ReaderV2Location?> _saveProgressLocation(
@@ -126,9 +122,7 @@ class ReaderV2ViewportBridge {
     );
     if (normalized == _runtime.state.committedLocation) {
       if (normalized != _runtime.state.visibleLocation) {
-        _runtime.setState(
-          _runtime.state.copyWith(visibleLocation: normalized),
-        );
+        _runtime.setState(_runtime.state.copyWith(visibleLocation: normalized));
       }
       if (immediate) {
         await _runtime.progressController.flush();
@@ -180,11 +174,5 @@ class ReaderV2ViewportBridge {
       return null;
     }
     return location.normalized(chapterCount: _runtime.repository.chapterCount);
-  }
-
-  bool _isCurrentJump(int requestId, int generation) {
-    return !_runtime.disposed &&
-        requestId == _runtime.jumpRequestId &&
-        generation == _runtime.state.layoutGeneration;
   }
 }

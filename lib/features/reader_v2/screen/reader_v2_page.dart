@@ -9,23 +9,23 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
-import 'package:night_reader/features/reader_v2/application/reader_v2_controller_host.dart';
-import 'package:night_reader/features/reader_v2/application/reader_v2_page_coordinator.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
+import 'package:night_reader/features/reader_v2/use_cases/reader_v2_page_coordinator.dart';
 import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:night_reader/features/reader_v2/application/coordinators/reader_v2_display_coordinator.dart';
-import 'package:night_reader/features/reader_v2/application/coordinators/reader_v2_page_exit_coordinator.dart';
-import 'package:night_reader/features/reader_v2/application/session/reader_v2_session_facade.dart';
+import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_display_coordinator.dart';
+import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:night_reader/features/reader_v2/shell/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
-import 'package:night_reader/features/reader_v2/shell/reader_v2_page_shell.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_location.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_open_target.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_screen.dart';
 
 class ReaderV2Page extends StatefulWidget {
@@ -337,7 +337,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           ),
         );
       }
-      return (success: true, message: '已切換到 ${resolution.source.bookSourceName}');
+      return (
+        success: true,
+        message: '已切換到 ${resolution.source.bookSourceName}',
+      );
     } catch (e) {
       return (success: false, message: '換源失敗: $e');
     }
