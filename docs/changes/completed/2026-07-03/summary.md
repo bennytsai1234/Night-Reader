@@ -1,0 +1,1 @@
+- [reader-120hz-smoothness](reader-120hz-smoothness.md) — 120Hz 滾動絲滑度：MainActivity 要求最高刷新率、排版 yield 預算改依刷新率取半幀、啟用 pointer resampling；analyze/test 全綠。

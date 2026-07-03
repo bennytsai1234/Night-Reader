@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
@@ -56,6 +57,9 @@ void main() {
 
 Future<void> _startApp() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  // 高刷新率裝置上輸入事件率與顯示刷新率常不同步，重採樣把觸控位移
+  // 對齊 vsync，讓拖曳滾動逐幀位移均勻（官方建議做法，約 5.5ms 取樣位移）。
+  GestureBinding.instance.resamplingEnabled = true;
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
 

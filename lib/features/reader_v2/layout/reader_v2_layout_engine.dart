@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
@@ -105,7 +106,20 @@ class ReaderV2LayoutEngine {
   /// 單一段落排版的預算：超過這個累積耗時就在段落邊界讓出一次主執行緒，
   /// 避免超長章節的排版一次性佔滿一整個（或連續多個）frame 造成卡頓。
   /// 短章節通常整章都排不到這個門檻，行為與讓出前完全一致。
-  static const Duration _layoutYieldBudget = Duration(milliseconds: 8);
+  ///
+  /// 預算取「半個幀」而非固定值：60Hz 幀預算 16.6ms 下半幀約 8.3ms（與舊
+  /// 常數 8ms 一致），120Hz 幀預算只有 8.3ms，固定 8ms 的切片會吃掉整幀，
+  /// 滾動中跨章排版必然掉幀，因此改依實際刷新率縮短切片。
+  static Duration _layoutYieldBudget() {
+    double refreshRate = 60.0;
+    final views = ui.PlatformDispatcher.instance.views;
+    if (views.isNotEmpty) {
+      final reported = views.first.display.refreshRate;
+      if (reported.isFinite && reported >= 30.0) refreshRate = reported;
+    }
+    final halfFrameUs = (1e6 / refreshRate / 2).round();
+    return Duration(microseconds: halfFrameUs);
+  }
 
   bool _isEnglishLetter(String char) {
     if (char.isEmpty) return false;
@@ -196,6 +210,7 @@ class ReaderV2LayoutEngine {
     var paragraphOffset = effectiveCursor.nextParagraphOffset;
     var newExtent = 0.0;
     var elapsedSinceYield = stopwatch.elapsed;
+    final yieldBudget = _layoutYieldBudget();
 
     while (paragraphIndex < content.paragraphs.length) {
       final paragraph = content.paragraphs[paragraphIndex];
@@ -222,7 +237,7 @@ class ReaderV2LayoutEngine {
       if (paragraphIndex >= content.paragraphs.length) break;
       if (newExtent >= minNewExtentPx) break;
 
-      if (stopwatch.elapsed - elapsedSinceYield >= _layoutYieldBudget) {
+      if (stopwatch.elapsed - elapsedSinceYield >= yieldBudget) {
         await Future<void>.delayed(Duration.zero);
         elapsedSinceYield = stopwatch.elapsed;
       }
