@@ -1,1 +1,2 @@
 - [reader-120hz-smoothness](reader-120hz-smoothness.md) — 120Hz 滾動絲滑度：MainActivity 要求最高刷新率、排版 yield 預算改依刷新率取半幀、啟用 pointer resampling；analyze/test 全綠。
+- [reader-fling-decel-microjank](reader-fling-decel-microjank.md) — fling 減速微頓挫：排版切片讓出改幀感知（每幀最多一片、排在幀尾）、內容轉換管線改常駐 worker isolate（免每章 spawn、簡繁轉換離開主執行緒）；新增 3 個 worker 測試，analyze 乾淨、test 661 過 4 skip。

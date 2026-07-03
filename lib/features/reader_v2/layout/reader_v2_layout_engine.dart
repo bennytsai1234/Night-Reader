@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 
 import 'reader_v2_layout.dart';
@@ -121,6 +122,40 @@ class ReaderV2LayoutEngine {
     return Duration(microseconds: halfFrameUs);
   }
 
+  /// 讓出一次主執行緒。零延遲 timer 只讓出 event loop、不等 vsync——同一個
+  /// 幀間隔內可能連跑多片排版切片，把 120Hz 的幀預算吃穿（fling 減速中的
+  /// 微頓挫來源）。改成幀感知：動畫進行中（有排程幀或正在幀內）改等
+  /// [SchedulerBinding.endOfFrame]，每幀最多一片、且排在該幀完成之後；閒置
+  /// 背景排版（無排程幀）與純 Dart 測試（無 binding）維持零延遲讓出，追趕
+  /// 速度不變。32ms 保底 timer 讓「幀已排程但永遠不會 pump」的測試環境不會
+  /// 卡死。
+  static Future<void> _yieldSlice() {
+    final binding = _schedulerBindingOrNull();
+    if (binding == null ||
+        (!binding.hasScheduledFrame &&
+            binding.schedulerPhase == SchedulerPhase.idle)) {
+      return Future<void>.delayed(Duration.zero);
+    }
+    final completer = Completer<void>();
+    final fallback = Timer(const Duration(milliseconds: 32), () {
+      if (!completer.isCompleted) completer.complete();
+    });
+    binding.endOfFrame.then((_) {
+      fallback.cancel();
+      if (!completer.isCompleted) completer.complete();
+    });
+    return completer.future;
+  }
+
+  static SchedulerBinding? _schedulerBindingOrNull() {
+    try {
+      return SchedulerBinding.instance;
+    } catch (_) {
+      // 純 Dart 測試沒有初始化 binding。
+      return null;
+    }
+  }
+
   bool _isEnglishLetter(String char) {
     if (char.isEmpty) return false;
     final code = char.codeUnitAt(0);
@@ -238,7 +273,7 @@ class ReaderV2LayoutEngine {
       if (newExtent >= minNewExtentPx) break;
 
       if (stopwatch.elapsed - elapsedSinceYield >= yieldBudget) {
-        await Future<void>.delayed(Duration.zero);
+        await _yieldSlice();
         elapsedSinceYield = stopwatch.elapsed;
       }
     }

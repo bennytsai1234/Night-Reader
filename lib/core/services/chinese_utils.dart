@@ -20,21 +20,35 @@ class ChineseUtils {
 
   static bool get isInitialized => _initialized;
 
+  /// OpenCC 字典 asset 路徑，順序與 [initializeFromDictionaryData] 的參數
+  /// 一一對應：STPhrases、STCharacters、TSPhrases、TSCharacters。
+  static const List<String> dictionaryAssetPaths = [
+    'assets/opencc/STPhrases.txt',
+    'assets/opencc/STCharacters.txt',
+    'assets/opencc/TSPhrases.txt',
+    'assets/opencc/TSCharacters.txt',
+  ];
+
   /// 在 App 啟動時呼叫一次，載入字典到記憶體
   static Future<void> initialize() async {
     if (_initialized) return;
 
-    final results = await Future.wait([
-      rootBundle.loadString('assets/opencc/STPhrases.txt'),
-      rootBundle.loadString('assets/opencc/STCharacters.txt'),
-      rootBundle.loadString('assets/opencc/TSPhrases.txt'),
-      rootBundle.loadString('assets/opencc/TSCharacters.txt'),
-    ]);
+    final results = await Future.wait(
+      dictionaryAssetPaths.map(rootBundle.loadString),
+    );
+    initializeFromDictionaryData(results);
+  }
 
-    _s2tMaxKeyLen = _parseDictionary(results[0], _s2tPhrases);
-    _parseDictionary(results[1], _s2tChars);
-    _t2sMaxKeyLen = _parseDictionary(results[2], _t2sPhrases);
-    _parseDictionary(results[3], _t2sChars);
+  /// 用原始字典內容直接初始化。給背景 isolate 用——背景 isolate 拿不到
+  /// rootBundle，由主 isolate 把字典原文（rootBundle 已快取）送過去。
+  /// [dictionaryData] 順序須與 [dictionaryAssetPaths] 一致。
+  static void initializeFromDictionaryData(List<String> dictionaryData) {
+    if (_initialized || dictionaryData.length != 4) return;
+
+    _s2tMaxKeyLen = _parseDictionary(dictionaryData[0], _s2tPhrases);
+    _parseDictionary(dictionaryData[1], _s2tChars);
+    _t2sMaxKeyLen = _parseDictionary(dictionaryData[2], _t2sPhrases);
+    _parseDictionary(dictionaryData[3], _t2sChars);
 
     // 詞彙 maxKeyLen 至少要考慮字元表
     if (_s2tMaxKeyLen < 1) _s2tMaxKeyLen = 1;

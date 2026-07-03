@@ -4,6 +4,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_processed_chapter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -130,5 +131,103 @@ void main() {
         expect(result.content, contains('\n　　'));
       },
     );
+
+    test('worker 路徑：簡繁轉換在 worker isolate 內完成', () async {
+      ReaderV2ContentTransformWorker.dictionaryDataLoader =
+          () async => ['简体\t簡體', '简\t簡\n体\t體', '', ''];
+      ReaderV2ContentTransformWorker.instance.debugReset();
+      addTearDown(() {
+        ReaderV2ContentTransformWorker.dictionaryDataLoader =
+            ReaderV2ContentTransformWorker.loadDictionaryDataFromBundle;
+        ReaderV2ContentTransformWorker.instance.debugReset();
+      });
+
+      final transformer = ReaderV2ContentTransformer();
+      final result = await transformer.process(
+        book: Book(bookUrl: 'book://1', origin: 'local', name: '測試書'),
+        chapter: BookChapter(title: '第1章 简体'),
+        rawContent: '這裡有简体字\n第二段也有简体',
+        enabledRules: const [],
+        chineseConvertType: 1,
+      );
+
+      expect(result.displayTitle, '第1章 簡體');
+      expect(result.content, contains('簡體字'));
+      expect(result.content, isNot(contains('简')));
+    });
+
+    test('worker 停用時退回 compute 路徑，替換規則仍生效', () async {
+      ReaderV2ContentTransformWorker.debugDisableWorker = true;
+      addTearDown(() {
+        ReaderV2ContentTransformWorker.debugDisableWorker = false;
+      });
+
+      final transformer = ReaderV2ContentTransformer();
+      final result = await transformer.process(
+        book: Book(
+          bookUrl: 'book://1',
+          origin: 'https://source.example',
+          name: '測試書',
+          readConfig: ReadConfig(useReplaceRule: true),
+        ),
+        chapter: BookChapter(title: '第1章'),
+        rawContent: '第1章\n正文 junk123',
+        enabledRules: [
+          ReplaceRule(
+            name: '正文替換',
+            pattern: r'junk(\d+)',
+            replacement: r'ok$1',
+            scopeContent: true,
+          ),
+        ],
+        chineseConvertType: 0,
+      );
+
+      expect(result.content, contains('ok123'));
+      expect(result.content, isNot(contains('junk123')));
+      expect(result.sameTitleRemoved, isTrue);
+    });
+
+    test('worker 路徑與 compute 路徑輸出一致', () async {
+      final transformer = ReaderV2ContentTransformer();
+      Future<ReaderV2ProcessedChapter> run() {
+        return transformer.process(
+          book: Book(
+            bookUrl: 'book://1',
+            origin: 'https://source.example',
+            name: '測試書',
+            readConfig: ReadConfig(useReplaceRule: true, reSegment: true),
+          ),
+          chapter: BookChapter(title: '第2章 標題'),
+          rawContent: '第2章 標題\n　　正文 junk7\n\n下一段',
+          enabledRules: [
+            ReplaceRule(
+              name: '正文替換',
+              pattern: r'junk(\d+)',
+              replacement: r'ok$1',
+              scopeContent: true,
+            ),
+          ],
+          chineseConvertType: 0,
+        );
+      }
+
+      ReaderV2ContentTransformWorker.instance.debugReset();
+      final viaWorker = await run();
+
+      ReaderV2ContentTransformWorker.debugDisableWorker = true;
+      addTearDown(() {
+        ReaderV2ContentTransformWorker.debugDisableWorker = false;
+      });
+      final viaCompute = await run();
+
+      expect(viaWorker.displayTitle, viaCompute.displayTitle);
+      expect(viaWorker.content, viaCompute.content);
+      expect(viaWorker.sameTitleRemoved, viaCompute.sameTitleRemoved);
+      expect(
+        viaWorker.effectiveReplaceRules.map((rule) => rule.name),
+        viaCompute.effectiveReplaceRules.map((rule) => rule.name),
+      );
+    });
   });
 }
