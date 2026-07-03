@@ -1,8 +1,7 @@
 flutter_native_splash:
-  # Light mode: AppPalette.paper200 (#F4EFE3)
-  color: "#F4EFE3"
-  # Dark mode: AppPalette.ink600 (#1A1612)
-  color_dark: "#1A1612"
+  # 使用全螢幕風景背景圖片
+  background_image: "assets/splash_landscape.png"
+  background_image_dark: "assets/splash_landscape.png"
 
   # 背景色對齊書架底色（scaffoldBackground），原生 splash 撤除後直接交棒到書架，
   # 中間不經任何過場頁、也不露白底。
@@ -11,10 +10,9 @@ flutter_native_splash:
   ios: false
   web: false
 
-  # Android 12+ SplashScreen API：背景色對齊，系統自動使用 ic_launcher 自適應圖示。
-  # icon 底板統一用 #1A1612（與 adaptive icon 不透明底板同色），消除圓遮罩邊緣的奶白殘邊。
+  # Android 12+ 系統對啟動圖有嚴格限制，保留此配置以避免新版 Android 上的自適應圖示邊緣殘白。
   android_12:
-    color: "#F4EFE3"
+    color: "#1A1612"
     color_dark: "#1A1612"
     icon_background_color: "#1A1612"
     icon_background_color_dark: "#1A1612"
