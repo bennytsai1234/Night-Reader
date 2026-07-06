@@ -302,25 +302,30 @@ class ReaderV2ChapterPageCacheManager {
     }
 
     final next = <ReaderV2CachedChapterPages>[];
-    var nextIndex = center.chapterIndex + 1;
-    var loadedNextCount = 0;
-    var forwardCoveredExtent = 0.0;
-    while (nextIndex < runtime.chapterCount &&
-        (loadedNextCount == 0 ||
-            forwardCoveredExtent < _normalExtent(forwardExtent))) {
-      final remaining = _normalExtent(forwardExtent) - forwardCoveredExtent;
-      final chapter = await ensureChapterAtLeast(
-        nextIndex,
-        minExtentPx: remaining,
-        isCurrent: stillCurrent,
-      );
-      if (!stillCurrent()) return null;
-      loadedNextCount += 1;
-      nextIndex += 1;
-      if (chapter == null) continue;
-      next.add(chapter);
-      forwardCoveredExtent += chapter.extent;
-      if (!chapter.isComplete) break;
+    // 中心章自己還沒排完（跳轉/換中心落在快取裡部分就緒的章節）時，它就是
+    // 視窗的前向邊界，不得在它後面掛新章節——否則背景長高時重錨會因為
+    // 下方有相鄰段落而誤判成 bottom 對齊的上一章、往上長疊進前一章。
+    if (center.isComplete) {
+      var nextIndex = center.chapterIndex + 1;
+      var loadedNextCount = 0;
+      var forwardCoveredExtent = 0.0;
+      while (nextIndex < runtime.chapterCount &&
+          (loadedNextCount == 0 ||
+              forwardCoveredExtent < _normalExtent(forwardExtent))) {
+        final remaining = _normalExtent(forwardExtent) - forwardCoveredExtent;
+        final chapter = await ensureChapterAtLeast(
+          nextIndex,
+          minExtentPx: remaining,
+          isCurrent: stillCurrent,
+        );
+        if (!stillCurrent()) return null;
+        loadedNextCount += 1;
+        nextIndex += 1;
+        if (chapter == null) continue;
+        next.add(chapter);
+        forwardCoveredExtent += chapter.extent;
+        if (!chapter.isComplete) break;
+      }
     }
 
     if (!stillCurrent()) return null;

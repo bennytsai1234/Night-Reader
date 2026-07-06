@@ -171,6 +171,49 @@ void main() {
       );
     });
 
+    test('跳轉到部分就緒章節後背景長高必須固定頂端，不得往上疊進上一章', () async {
+      final runtime = makeRuntime([
+        chapter(0, paragraphCount: 4),
+        chapter(1, paragraphCount: 4),
+        chapter(2, paragraphCount: 80),
+        chapter(3, paragraphCount: 4),
+      ]);
+      addTearDown(runtime.dispose);
+      final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
+      addTearDown(model.dispose);
+
+      // 第一步：視窗中心在第 1 章，讓第 2 章成為部分就緒的前向邊界。
+      expect(await model.ensureWindowAround(1), isTrue);
+      final boundary = model.cacheManager.chapterAt(2);
+      expect(boundary, isNotNull);
+      if (boundary!.isComplete) {
+        // 前向窗口較大，若一次就排完則本測試前提不成立——直接視為通過，
+        // 但保留重疊檢查。
+        expectNoOverlappingPlacements(model);
+        return;
+      }
+
+      // 第二步：模擬章節跳轉——視窗改以部分就緒的第 2 章為中心，
+      // 此時第 3 章會被放到它未排完的底部下方。
+      expect(await model.ensureWindowAround(2), isTrue);
+      expectNoOverlappingPlacements(model);
+      final topBefore = model.strip.chapterTop(2)!;
+
+      // 背景排版繼續推進第 2 章，每一步都檢查頂端固定與不重疊。
+      var guard = 0;
+      while (!(model.cacheManager.chapterAt(2)?.isComplete ?? true)) {
+        await runtime.resolver.continueLayoutStep(2);
+        expect(
+          model.strip.chapterTop(2)!,
+          closeTo(topBefore, 0.5),
+          reason: '跳轉後的中心章長高必須固定頂端往下長，往上長會疊進上一章（章節跳轉文字重疊回歸）',
+        );
+        expectNoOverlappingPlacements(model);
+        guard += 1;
+        expect(guard, lessThan(300), reason: '背景排版沒有收斂');
+      }
+    });
+
     test('下方部分就緒章節背景長高時固定頂端往下長，頁面不重疊', () async {
       final runtime = makeRuntime([
         chapter(0, paragraphCount: 4),
