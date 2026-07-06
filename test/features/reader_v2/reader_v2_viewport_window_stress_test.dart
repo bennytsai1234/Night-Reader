@@ -124,56 +124,66 @@ void main() {
   }
 
   group('ScrollReaderV2ViewportModel 視窗壓力測試', () {
-    test('上方部分就緒章節背景長高時持續貼齊下一章頂端，頁面不重疊', () async {
+    test('上一章沒排完先鎖定：不掛假尾巴，排完發通知、接上時零位移', () async {
       final runtime = makeRuntime([
         chapter(0, paragraphCount: 80),
         chapter(1, paragraphCount: 4),
-        chapter(2, paragraphCount: 80),
+        chapter(2, paragraphCount: 4),
       ]);
       addTearDown(runtime.dispose);
       final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
       addTearDown(model.dispose);
-      var contentChanges = 0;
-      model.onWindowContentChanged = () => contentChanges += 1;
+      final readyChapters = <int>[];
+      model.onBackwardChapterReady = readyChapters.add;
 
       final placed = await model.ensureWindowAround(1);
       expect(placed, isTrue);
-      final backward = model.cacheManager.chapterAt(0);
-      expect(backward, isNotNull);
       expect(
-        backward!.isComplete,
+        model.strip.containsChapter(0),
         isFalse,
-        reason: '測試前提：上一章必須是部分就緒（夠長才能驗證背景長高）',
+        reason: '上一章還沒排完，不得把假尾巴掛進 strip（往上鎖定）',
       );
+      final centerTopBefore = model.strip.chapterTop(1)!;
+      final bounds = model.scrollBounds()!;
       expect(
-        model.strip.chapterEnd(0)!,
-        closeTo(model.strip.chapterTop(1)!, 0.5),
-        reason: '上一章的底必須貼齊本章的頂',
+        bounds.min,
+        closeTo(centerTopBefore, 0.5),
+        reason: '鎖定期間捲動下界必須停在本章頂端',
       );
 
-      // 模擬背景排版逐步推進上一章，每一步都檢查重錨不變量。
+      // 背景排版把上一章排完 → 必須發出接上通知。
       var guard = 0;
-      while (!(model.cacheManager.chapterAt(0)?.isComplete ?? true)) {
+      while (!(runtime.resolver.cachedLayout(0)?.isComplete ?? false)) {
         await runtime.resolver.continueLayoutStep(0);
-        expect(
-          model.strip.chapterEnd(0)!,
-          closeTo(model.strip.chapterTop(1)!, 0.5),
-          reason: '上一章長高後必須以 bottom 重錨，否則新頁面會疊進本章（B5 回歸）',
-        );
-        expectNoOverlappingPlacements(model);
         guard += 1;
         expect(guard, lessThan(300), reason: '背景排版沒有收斂');
       }
       expect(
-        contentChanges,
-        greaterThan(0),
-        reason: '背景長高必須發出視窗內容變更通知，viewport 才會重繪（B4 回歸）',
+        readyChapters,
+        contains(0),
+        reason: '鎖定章節排完必須通知 viewport 重建視窗接上',
       );
+
+      // 模擬 viewport 收到通知後重建視窗：完整上一章以 bottom 貼齊接上，
+      // 本章頂端（閱讀位置）不得位移。
+      expect(await model.ensureWindowAround(1), isTrue);
+      expect(model.strip.containsChapter(0), isTrue);
+      expect(
+        model.strip.chapterTop(1)!,
+        closeTo(centerTopBefore, 0.5),
+        reason: '接上上一章時本章頂端不得位移',
+      );
+      expect(
+        model.strip.chapterEnd(0)!,
+        closeTo(model.strip.chapterTop(1)!, 0.5),
+        reason: '接上的上一章必須以 bottom 貼齊本章頂端',
+      );
+      expectNoOverlappingPlacements(model);
     });
 
-    test('視窗重放必須用即時章節高度，過期快照不得讓頁面疊進下一章', () async {
+    test('視窗重放必須用即時章節高度，過期快照不得縮回段落', () async {
       final runtime = makeRuntime([
-        chapter(0, paragraphCount: 80),
+        chapter(0, paragraphCount: 4),
         chapter(1, paragraphCount: 4),
         chapter(2, paragraphCount: 80),
       ]);
@@ -182,15 +192,15 @@ void main() {
       addTearDown(model.dispose);
 
       expect(await model.ensureWindowAround(1), isTrue);
-      final backward = model.cacheManager.chapterAt(0);
-      expect(backward, isNotNull);
-      if (backward!.isComplete) {
-        // 後向窗口一次就排完則本測試前提不成立——直接視為通過。
+      final forward = model.cacheManager.chapterAt(2);
+      expect(forward, isNotNull);
+      if (forward!.isComplete) {
+        // 前向窗口一次就排完則本測試前提不成立——直接視為通過。
         expectNoOverlappingPlacements(model);
         return;
       }
 
-      // 取一份視窗快照，再讓上一章背景長高一步——模擬真實時序：
+      // 取一份視窗快照，再讓下一章背景長高一步——模擬真實時序：
       // ensureWindowAround 的 await 期間章節被重新包裝，placeWindowInStrip
       // 事後才拿舊快照重放。
       final window = await model.cacheManager.ensureWindowAround(
@@ -199,17 +209,17 @@ void main() {
         forwardExtent: model.forwardWindowExtent(),
       );
       expect(window, isNotNull);
-      await runtime.resolver.continueLayoutStep(0);
-      final liveExtent = model.cacheManager.chapterAt(0)!.extent;
+      await runtime.resolver.continueLayoutStep(2);
+      final liveExtent = model.cacheManager.chapterAt(2)!.extent;
       expect(
         liveExtent,
-        greaterThan(backward.extent),
+        greaterThan(forward.extent),
         reason: '測試前提：背景推進後即時 extent 必須比快照高',
       );
 
       model.placeWindowInStrip(window!);
       expect(
-        model.strip.chapterEnd(0)! - model.strip.chapterTop(0)!,
+        model.strip.chapterEnd(2)! - model.strip.chapterTop(2)!,
         closeTo(liveExtent, 0.5),
         reason: '段落高度必須跟上即時 extent，用過期快照重放會讓即時頁面超出段落底',
       );
@@ -268,6 +278,8 @@ void main() {
       addTearDown(runtime.dispose);
       final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
       addTearDown(model.dispose);
+      var contentChanges = 0;
+      model.onWindowContentChanged = () => contentChanges += 1;
 
       final placed = await model.ensureWindowAround(1);
       expect(placed, isTrue);
@@ -293,6 +305,11 @@ void main() {
         guard += 1;
         expect(guard, lessThan(300), reason: '背景排版沒有收斂');
       }
+      expect(
+        contentChanges,
+        greaterThan(0),
+        reason: '背景長高必須發出視窗內容變更通知，viewport 才會重繪（B4 回歸）',
+      );
     });
   });
 }

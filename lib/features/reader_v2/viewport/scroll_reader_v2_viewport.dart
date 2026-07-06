@@ -73,6 +73,10 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       style: widget.style,
     );
     _viewportModel.onWindowContentChanged = _scheduleContentProgressRebuild;
+    // 往上鎖定的上一章排完：排程一次視窗重建把它接上。使用者停在章界時
+    // near-artificial-edge 判定會放行 ensure，接上後 pending 的滑動量由
+    // consumePendingArtificialDelta 接續；不在章界則此次重建自然不動作。
+    _viewportModel.onBackwardChapterReady = (_) => _scheduleWindowShiftForAnchor();
     _motion = ScrollReaderV2MotionController(
       vsync: this,
       runtime: widget.runtime,

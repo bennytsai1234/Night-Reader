@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:night_reader/features/reader_v2/render/reader_v2_page_cache.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_chapter_view.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
@@ -151,11 +153,16 @@ class ReaderV2ChapterPageCacheManager {
   /// 使用者再滑動才會出現。
   void Function(int chapterIndex)? onChapterCacheUpdated;
 
+  /// 被往上鎖定（見 [ensureWindowAround] previous 迴圈）的上一章在背景
+  /// 排完後呼叫，讓 viewport 端重建視窗把完整章節接上。
+  void Function(int chapterIndex)? onBackwardChapterCompleted;
+
   final Map<int, ReaderV2CachedChapterPages> _chapters =
       <int, ReaderV2CachedChapterPages>{};
   final Map<int, Future<ReaderV2CachedChapterPages>> _inFlightLoads =
       <int, Future<ReaderV2CachedChapterPages>>{};
   final Set<int> _evictedChapters = <int>{};
+  final Set<int> _pendingBackwardChapters = <int>{};
   final Map<int, int> _chapterTouchTicks = <int, int>{};
   int _touchTick = 0;
   int _cacheGeneration = 0;
@@ -276,29 +283,21 @@ class ReaderV2ChapterPageCacheManager {
 
     final previous = <ReaderV2CachedChapterPages>[];
     var previousIndex = center.chapterIndex - 1;
-    var loadedPreviousCount = 0;
     var backwardCoveredExtent = 0.0;
     while (previousIndex >= 0 &&
-        (loadedPreviousCount == 0 ||
-            backwardCoveredExtent < _normalExtent(backwardExtent))) {
-      final remaining = _normalExtent(backwardExtent) - backwardCoveredExtent;
-      final chapter = await ensureChapterAtLeast(
-        previousIndex,
-        minExtentPx: remaining,
-        isCurrent: stillCurrent,
-      );
-      if (!stillCurrent()) return null;
-      loadedPreviousCount += 1;
-      previousIndex -= 1;
-      if (chapter == null) continue;
-      previous.add(chapter);
-      backwardCoveredExtent += chapter.extent;
-      if (!chapter.isComplete) {
-        // 這一章排版還沒完成：把它當成目前視窗的邊界，不再往更遠處抓下一
-        // 章。它之後在背景繼續長大時只會影響捲動範圍的上限，不會讓已經
-        // 放進 strip 的其他章節跟著移動——但前提是後面不能再插入新章節。
+        backwardCoveredExtent < _normalExtent(backwardExtent)) {
+      // 往上只掛「已排完」的章節：排版從章首往下排，部分結果的尾端不是
+      // 真正的章尾，掛上去會讓使用者往上滑看到假章尾、且內容隨背景排版
+      // 被替換位移。沒排完就先鎖定——不掛載、踢背景排版，排完後經
+      // [onBackwardChapterCompleted] 通知 viewport 重建視窗接上。
+      final chapter = _completeBackwardChapterOrNull(previousIndex);
+      if (chapter == null) {
+        _lockBackwardChapter(previousIndex);
         break;
       }
+      previous.add(chapter);
+      backwardCoveredExtent += chapter.extent;
+      previousIndex -= 1;
     }
 
     final next = <ReaderV2CachedChapterPages>[];
@@ -350,6 +349,49 @@ class ReaderV2ChapterPageCacheManager {
       forwardExtent: forwardExtent,
       isCurrent: isCurrent,
     );
+  }
+
+  /// 同步取出「已排完」的章節（先查本地快取、再查 resolver 排版快取），
+  /// 沒排完回傳 null。刻意不 await 排版——previous 迴圈若同步等整章排完
+  /// 會卡住整個視窗建立。
+  ReaderV2CachedChapterPages? _completeBackwardChapterOrNull(int chapterIndex) {
+    final safeIndex = _safeChapterIndex(chapterIndex);
+    final cached = _chapters[safeIndex];
+    if (cached != null && cached.isComplete) {
+      _touchChapter(safeIndex);
+      return cached;
+    }
+    final layout = runtime.resolver.cachedLayout(safeIndex);
+    if (layout == null || !layout.isComplete) return null;
+    final loaded = _wrapChapterView(layout);
+    _evictedChapters.remove(safeIndex);
+    _chapters[safeIndex] = loaded;
+    _touchChapter(safeIndex);
+    _bumpRevision();
+    return loaded;
+  }
+
+  /// 登記往上鎖定並踢背景排版。排版完成由 [_maybeCompleteBackwardLock]
+  /// 解除登記並發出 [onBackwardChapterCompleted]；排版失敗或 spec 換代則
+  /// 靜默解除，之後的視窗重建會再嘗試。
+  void _lockBackwardChapter(int chapterIndex) {
+    final safeIndex = _safeChapterIndex(chapterIndex);
+    if (!_pendingBackwardChapters.add(safeIndex)) return;
+    unawaited(() async {
+      try {
+        await runtime.resolver.ensureLayout(safeIndex, retryOnStale: false);
+      } catch (_) {
+        _pendingBackwardChapters.remove(safeIndex);
+      }
+    }());
+  }
+
+  void _maybeCompleteBackwardLock(int chapterIndex) {
+    if (!_pendingBackwardChapters.contains(chapterIndex)) return;
+    final layout = runtime.resolver.cachedLayout(chapterIndex);
+    if (layout == null || !layout.isComplete) return;
+    _pendingBackwardChapters.remove(chapterIndex);
+    onBackwardChapterCompleted?.call(chapterIndex);
   }
 
   void evictOutsideWindow(Set<int> retained) {
@@ -414,6 +456,7 @@ class ReaderV2ChapterPageCacheManager {
     _chapters.clear();
     _inFlightLoads.clear();
     _evictedChapters.clear();
+    _pendingBackwardChapters.clear();
     _chapterTouchTicks.clear();
     _touchTick = 0;
   }
@@ -501,6 +544,7 @@ class ReaderV2ChapterPageCacheManager {
   /// 畫面無關，不用理會。純粹重新包裝 resolver 目前最新的快照並 bump
   /// revision，不觸發任何新的排版工作。
   void _handleChapterProgressed(int chapterIndex) {
+    _maybeCompleteBackwardLock(chapterIndex);
     if (!_chapters.containsKey(chapterIndex)) return;
     final layout = runtime.resolver.cachedLayout(chapterIndex);
     if (layout == null) return;
@@ -519,5 +563,6 @@ class ReaderV2ChapterPageCacheManager {
       runtime.resolver.onChapterProgressed = null;
     }
     onChapterCacheUpdated = null;
+    onBackwardChapterCompleted = null;
   }
 }

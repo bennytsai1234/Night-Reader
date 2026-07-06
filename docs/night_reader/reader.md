@@ -46,6 +46,7 @@
 - TTS 逐段高亮依賴 layout 的字元座標，排版改動會讓高亮偏移。
 - `ScrollReaderV2Viewport` 已拆為 viewport model、motion controller、command queue 與 canvas widgets；後續改動仍需留意 reading offset、人工 window 邊界續滑與 progress settle 的呼叫順序。
 - 預載門檻與背景任務互動需驗；過度預載會吃記憶。
+- 2026-07 決策：往上方向只掛「已排完」的上一章（backward lock），沒排完不掛假尾巴、排完經 `onBackwardChapterCompleted` 通知補掛。曾評估「從章尾反向排版」（可零等待顯示真章尾）並否決——需動排版引擎核心與整條渲染鏈（雙向快取、倒數 tile 鍵、座標系），回歸風險與工程量不成比例；若未來重開此議題，從 tail-preview（尾端版面不進 resolver 主快取）方案起。
 
 ## Do Not Do
 

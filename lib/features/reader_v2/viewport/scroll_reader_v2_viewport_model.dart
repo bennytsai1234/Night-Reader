@@ -41,6 +41,11 @@ class ScrollReaderV2ViewportModel {
   /// State 據此觸發重繪，讓新長出來的內容不必等下一次滑動就出現。
   void Function()? onWindowContentChanged;
 
+  /// 被往上鎖定的上一章排完後通知（已通過相關性守衛：該章不在 strip、
+  /// 其下一章在 strip），viewport State 據此排程視窗重建把它接上，讓停在
+  /// 章界等待的使用者不必再滑一下才看到真章尾。
+  void Function(int chapterIndex)? onBackwardChapterReady;
+
   void updateRuntime(ReaderV2Runtime nextRuntime) {
     cacheManager.dispose();
     runtime = nextRuntime;
@@ -50,6 +55,7 @@ class ScrollReaderV2ViewportModel {
   void dispose() {
     cacheManager.dispose();
     onWindowContentChanged = null;
+    onBackwardChapterReady = null;
   }
 
   void updateStyle(ReaderV2Style nextStyle) {
@@ -380,10 +386,19 @@ class ScrollReaderV2ViewportModel {
       pageExtent: scrollPageExtent,
     );
     cacheManager.onChapterCacheUpdated = _handleChapterCacheUpdated;
+    cacheManager.onBackwardChapterCompleted = _handleBackwardChapterCompleted;
     visiblePages = ReaderV2VisiblePageCalculator(
       cacheManager: cacheManager,
       strip: strip,
     );
+  }
+
+  /// 往上鎖定的章節排完了：只在它仍然是「視窗正上方的缺口」時往上通知
+  /// ——視窗早已移走的過期完成訊號直接丟棄，避免無關的視窗重建。
+  void _handleBackwardChapterCompleted(int chapterIndex) {
+    if (strip.containsChapter(chapterIndex)) return;
+    if (!strip.containsChapter(chapterIndex + 1)) return;
+    onBackwardChapterReady?.call(chapterIndex);
   }
 
   /// 視窗內章節在背景排版推進後重新包裝完成：同步把 strip 上的佔位段落
