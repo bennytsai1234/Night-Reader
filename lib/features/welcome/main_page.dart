@@ -51,9 +51,11 @@ class _MainPageState extends State<MainPage> {
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
-  // 啟動轉場狀態:原生 splash 是純深棕色(無圖標),轉場圖預載完成後即撤,
-  // 由全螢幕夜空藝術圖接手,撐到書架首批書本載完(且至少顯示一小段時間)再淡出。
+  // 啟動轉場狀態:原生 splash 是純深紫夜空色(無圖標,取自藝術圖天空平均色),
+  // 轉場圖預載完成後即撤,藝術圖在同色底上淡入浮現(全程漸變、無硬切),
+  // 撐到書架首批書本載完(且至少顯示一小段時間)再淡出。
   late bool _splashArtVisible = widget.destinations == null;
+  bool _splashArtShown = false;
   bool _splashArtFading = false;
   bool _splashArtDismissScheduled = false;
   DateTime? _splashArtShownAt;
@@ -61,8 +63,10 @@ class _MainPageState extends State<MainPage> {
   VoidCallback? _splashShelfListener;
 
   static const _splashArtAsset = 'assets/splash_landscape.png';
-  static const _splashArtBackground = Color(0xFF1A1612);
-  static const _splashArtMinDisplay = Duration(milliseconds: 1200);
+  static const _splashArtBackground = Color(0xFF261940);
+  static const _splashArtRevealDuration = Duration(milliseconds: 700);
+  static const _splashArtRevealScaleDuration = Duration(milliseconds: 1100);
+  static const _splashArtMinDisplay = Duration(milliseconds: 1600);
   static const _splashArtFadeDuration = Duration(milliseconds: 500);
 
   late final PageController _pageController = PageController(
@@ -161,7 +165,22 @@ class _MainPageState extends State<MainPage> {
                   },
                   child: Container(
                     color: _splashArtBackground,
-                    child: Image.asset(_splashArtAsset, fit: BoxFit.cover),
+                    child: AnimatedOpacity(
+                      opacity: _splashArtShown ? 1.0 : 0.0,
+                      duration: _splashArtRevealDuration,
+                      curve: Curves.easeOut,
+                      child: AnimatedScale(
+                        scale: _splashArtShown ? 1.0 : 1.06,
+                        duration: _splashArtRevealScaleDuration,
+                        curve: Curves.easeOutCubic,
+                        child: Image.asset(
+                          _splashArtAsset,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -184,9 +203,9 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  // 原生 splash(純深棕色、無圖標)撐到全螢幕轉場圖預載完成才撤,兩者同底色、
-  // 無縫交棒;轉場圖再撐到書架首批書本查完才淡出,讓使用者一看到書架就是
-  // 填好的清單、不閃轉圈。加 2 秒逾時,避免查詢異常卡住開機。
+  // 原生 splash(純深紫色、無圖標)撐到全螢幕轉場圖預載完成才撤,轉場層同底色、
+  // 無縫交棒後藝術圖才淡入浮現;再撐到書架首批書本查完才淡出,讓使用者一看到
+  // 書架就是填好的清單、不閃轉圈。加 2 秒逾時,避免查詢異常卡住開機。
   Future<void> _handOffNativeSplashToArt() async {
     try {
       await precacheImage(const AssetImage(_splashArtAsset), context);
@@ -196,6 +215,7 @@ class _MainPageState extends State<MainPage> {
     _splashArtShownAt = DateTime.now();
     FlutterNativeSplash.remove();
     if (!mounted) return;
+    setState(() => _splashArtShown = true);
     _dismissSplashArtWhenShelfReady();
   }
 
