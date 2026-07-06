@@ -38,8 +38,9 @@ class ScrollReaderV2ViewportModel {
   double _activeBackwardWindowBoost = 0.0;
 
   /// 視窗內章節因背景排版推進而更新（strip 已同步重錨）後通知，viewport
-  /// State 據此觸發重繪，讓新長出來的內容不必等下一次滑動就出現。
-  void Function()? onWindowContentChanged;
+  /// State 據此補償 readingY 並觸發重繪，讓新長出來的內容不必等下一次滑動
+  /// 就出現。
+  void Function(int chapterIndex, double topDelta)? onWindowContentChanged;
 
   /// 被往上鎖定的上一章排完後通知（已通過相關性守衛：該章不在 strip、
   /// 其下一章在 strip），viewport State 據此排程視窗重建把它接上，讓停在
@@ -216,7 +217,9 @@ class ScrollReaderV2ViewportModel {
   /// Debug 不變量：位於中心章（含）之後、尚未排完的章節必須是視窗前向
   /// 邊界，下方不得緊貼任何段落。中心章之前的部分就緒章節本來就以
   /// bottom 貼齊下一章放置，屬合法情況。
-  bool _debugNoSegmentBelowPartialChapter(ReaderV2ChapterPageCacheWindow window) {
+  bool _debugNoSegmentBelowPartialChapter(
+    ReaderV2ChapterPageCacheWindow window,
+  ) {
     for (final chapterIndex in window.retainedChapterIndexes) {
       if (chapterIndex < window.center.chapterIndex) continue;
       final chapter = cacheManager.chapterAt(chapterIndex);
@@ -408,34 +411,36 @@ class ScrollReaderV2ViewportModel {
   /// 頂端放置）時固定 bottom 往上長，避免新長出來的頁面往下疊進下一章的
   /// 世界座標；否則（視窗前緣的「下一章」）固定 top 往下長。
   void _handleChapterCacheUpdated(int chapterIndex) {
-    _reanchorGrownChapter(chapterIndex);
-    onWindowContentChanged?.call();
+    final topDelta = _reanchorGrownChapter(chapterIndex);
+    onWindowContentChanged?.call(chapterIndex, topDelta);
   }
 
-  void _reanchorGrownChapter(int chapterIndex) {
+  double _reanchorGrownChapter(int chapterIndex) {
     final segmentTop = strip.chapterTop(chapterIndex);
     final segmentEnd = strip.chapterEnd(chapterIndex);
-    if (segmentTop == null || segmentEnd == null) return;
+    if (segmentTop == null || segmentEnd == null) return 0.0;
     final chapter = cacheManager.chapterAt(chapterIndex);
-    if (chapter == null) return;
+    if (chapter == null) return 0.0;
     final oldHeight = segmentEnd - segmentTop;
-    if ((chapter.extent - oldHeight).abs() < 0.5) return;
+    if ((chapter.extent - oldHeight).abs() < 0.5) return 0.0;
     final belowTop = strip.chapterTop(chapterIndex + 1);
     final anchoredToBottom =
         belowTop != null && (belowTop - segmentEnd).abs() < 0.5;
+    final nextTop = anchoredToBottom ? segmentEnd - chapter.extent : segmentTop;
     if (anchoredToBottom) {
       strip.placeChapter(
         chapterIndex: chapterIndex,
-        startY: segmentEnd - chapter.extent,
+        startY: nextTop,
         height: chapter.extent,
       );
     } else {
       strip.placeChapter(
         chapterIndex: chapterIndex,
-        startY: segmentTop,
+        startY: nextTop,
         height: chapter.extent,
       );
     }
+    return nextTop - segmentTop;
   }
 
   double _fullPageHeight(ReaderV2PageCache page) {

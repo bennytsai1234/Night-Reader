@@ -158,11 +158,7 @@ void main() {
         guard += 1;
         expect(guard, lessThan(300), reason: '背景排版沒有收斂');
       }
-      expect(
-        readyChapters,
-        contains(0),
-        reason: '鎖定章節排完必須通知 viewport 重建視窗接上',
-      );
+      expect(readyChapters, contains(0), reason: '鎖定章節排完必須通知 viewport 重建視窗接上');
 
       // 模擬 viewport 收到通知後重建視窗：完整上一章以 bottom 貼齊接上，
       // 本章頂端（閱讀位置）不得位移。
@@ -279,7 +275,7 @@ void main() {
       final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
       addTearDown(model.dispose);
       var contentChanges = 0;
-      model.onWindowContentChanged = () => contentChanges += 1;
+      model.onWindowContentChanged = (_, _) => contentChanges += 1;
 
       final placed = await model.ensureWindowAround(1);
       expect(placed, isTrue);
@@ -309,6 +305,51 @@ void main() {
         contentChanges,
         greaterThan(0),
         reason: '背景長高必須發出視窗內容變更通知，viewport 才會重繪（B4 回歸）',
+      );
+    });
+
+    test('bottom 錨定章節背景長高時回報 top 位移供 readingY 補償', () async {
+      final runtime = makeRuntime([
+        chapter(0, paragraphCount: 80),
+        chapter(1, paragraphCount: 4),
+      ]);
+      addTearDown(runtime.dispose);
+      final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
+      addTearDown(model.dispose);
+
+      expect(await model.ensureWindowAround(1), isTrue);
+      final centerTop = model.strip.chapterTop(1)!;
+
+      // 測試 reanchor 補償訊號本身：手動放入一段「未排完的上一章」，
+      // 讓它 bottom 貼齊中心章，背景長高時 top 必須往上移並回報 delta。
+      final previous = await model.cacheManager.ensureChapter(0);
+      expect(previous, isNotNull);
+      if (previous!.isComplete) {
+        expectNoOverlappingPlacements(model);
+        return;
+      }
+      model.strip.placeChapter(
+        chapterIndex: 0,
+        startY: centerTop - previous.extent,
+        height: previous.extent,
+      );
+      final topBefore = model.strip.chapterTop(0)!;
+      var reportedDelta = 0.0;
+      model.onWindowContentChanged = (chapterIndex, topDelta) {
+        if (chapterIndex == 0) reportedDelta += topDelta;
+      };
+
+      await runtime.resolver.continueLayoutStep(0);
+      final topAfter = model.strip.chapterTop(0)!;
+      expect(
+        topAfter,
+        lessThan(topBefore),
+        reason: 'bottom 錨定的上一章長高時 top 會往上移，這正是需補償的跳動來源',
+      );
+      expect(
+        reportedDelta,
+        closeTo(topAfter - topBefore, 0.5),
+        reason: 'viewport 需要拿到同一個 top delta 來平移 readingY',
       );
     });
   });

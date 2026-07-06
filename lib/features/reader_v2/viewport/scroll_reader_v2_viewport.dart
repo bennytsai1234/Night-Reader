@@ -72,11 +72,12 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       runtime: widget.runtime,
       style: widget.style,
     );
-    _viewportModel.onWindowContentChanged = _scheduleContentProgressRebuild;
+    _viewportModel.onWindowContentChanged = _handleWindowContentChanged;
     // 往上鎖定的上一章排完：排程一次視窗重建把它接上。使用者停在章界時
     // near-artificial-edge 判定會放行 ensure，接上後 pending 的滑動量由
     // consumePendingArtificialDelta 接續；不在章界則此次重建自然不動作。
-    _viewportModel.onBackwardChapterReady = (_) => _scheduleWindowShiftForAnchor();
+    _viewportModel.onBackwardChapterReady =
+        (_) => _scheduleWindowShiftForAnchor();
     _motion = ScrollReaderV2MotionController(
       vsync: this,
       runtime: widget.runtime,
@@ -162,8 +163,16 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     super.dispose();
   }
 
-  /// 背景排版讓視窗內章節長出新內容（strip 已重錨）：合併到下一個 frame
-  /// 重繪一次，讓新內容立即可見，不必等使用者再滑動。
+  /// 背景排版讓視窗內章節長出新內容（strip 已重錨）：若目前視覺 anchor
+  /// 章節同步位移，先補償 readingY，再合併到下一個 frame 重繪一次。
+  void _handleWindowContentChanged(int chapterIndex, double topDelta) {
+    if (topDelta.abs() >= 0.01 &&
+        _viewportModel.anchorChapterIndex(_motion.readingY) == chapterIndex) {
+      _compensateReadingYForStripShift(topDelta);
+    }
+    _scheduleContentProgressRebuild();
+  }
+
   void _scheduleContentProgressRebuild() {
     if (!mounted || _contentProgressRebuildPending) return;
     _contentProgressRebuildPending = true;
@@ -285,12 +294,18 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       return mounted && (isCurrent?.call() ?? true);
     }
 
+    final anchorChapter = _viewportModel.anchorChapterIndex(_motion.readingY);
+    final anchorTopBefore = _viewportModel.strip.chapterTop(anchorChapter);
     final placed = await _viewportModel.ensureWindowAround(
       chapterIndex,
       isCurrent: stillCurrent,
     );
     if (!stillCurrent() || !placed) return;
 
+    final anchorTopAfter = _viewportModel.strip.chapterTop(anchorChapter);
+    if (anchorTopBefore != null && anchorTopAfter != null) {
+      _compensateReadingYForStripShift(anchorTopAfter - anchorTopBefore);
+    }
     _motion.consumePendingArtificialDelta();
     final resumedFling = _motion.resumePendingArtificialFlingIfNeeded();
     if (!resumedFling && _motion.isScrollAnimating) {
@@ -301,6 +316,12 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       );
     }
     setState(() {});
+  }
+
+  void _compensateReadingYForStripShift(double delta) {
+    if (delta.abs() < 0.01) return;
+    _motion.compensateReadingYForStripShift(delta);
+    _scheduleVisibleLocationCapture();
   }
 
   Future<void> _primeAndSyncToRuntimeLocation({bool force = false}) async {

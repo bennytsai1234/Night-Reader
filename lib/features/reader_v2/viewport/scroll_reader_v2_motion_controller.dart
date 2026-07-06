@@ -155,6 +155,23 @@ class ScrollReaderV2MotionController {
     }
   }
 
+  void compensateReadingYForStripShift(double delta) {
+    if (delta.abs() < 0.01) return;
+    final wasAnimating = scrollAnimation.isAnimating;
+    final velocity = wasAnimating ? scrollAnimation.velocity : 0.0;
+    if (wasAnimating) scrollAnimation.stop();
+
+    setReadingY(clampReadingY(readingY + delta));
+    _lastAnimationValue = readingY;
+    if (!wasAnimating) return;
+
+    scrollAnimation.value = readingY;
+    if (velocity.abs() >= 50.0 &&
+        !_isAtBookBoundaryForDelta(velocity, readingY)) {
+      startFling(velocity);
+    }
+  }
+
   double clampReadingY(double target) {
     final bounds = _scrollBounds();
     if (bounds == null) return target;
