@@ -92,8 +92,11 @@ class ScrollReaderV2MotionController {
   bool pausedFlingAtArtificialBoundary = false;
   int _animationTickCount = 0;
   bool _interactivePreloadPaused = false;
+  bool _activeScrollAnimationIsFling = false;
 
   bool get isScrollAnimating => scrollAnimation.isAnimating;
+  bool get isFlingAnimating =>
+      scrollAnimation.isAnimating && _activeScrollAnimationIsFling;
   bool get isOverscrollAnimating => overscrollAnimation.isAnimating;
   double get scrollAnimationValue => scrollAnimation.value;
   double get scrollVelocity =>
@@ -111,6 +114,7 @@ class ScrollReaderV2MotionController {
 
   void reset() {
     scrollAnimation.stop();
+    _activeScrollAnimationIsFling = false;
     setReadingY(0.0);
     setOverscrollY(0.0);
     _lastAnimationValue = 0.0;
@@ -170,6 +174,21 @@ class ScrollReaderV2MotionController {
         !_isAtBookBoundaryForDelta(velocity, readingY)) {
       startFling(velocity);
     }
+  }
+
+  void rebaseActiveFlingToCurrentReadingY() {
+    if (!isFlingAnimating) return;
+    final velocity = scrollAnimation.velocity;
+    _activeScrollAnimationIsFling = false;
+    scrollAnimation.stop();
+    _lastAnimationValue = readingY;
+    scrollAnimation.value = readingY;
+    if (velocity.abs() < 50.0 ||
+        _isAtBookBoundaryForDelta(velocity, readingY)) {
+      unawaited(_handleScrollSettled());
+      return;
+    }
+    startFling(velocity);
   }
 
   double clampReadingY(double target) {
@@ -243,6 +262,7 @@ class ScrollReaderV2MotionController {
     final velocity = scrollAnimation.velocity;
     pausedFlingAtArtificialBoundary = true;
     _pendingArtificialFlingVelocity = velocity.abs() >= 50.0 ? velocity : null;
+    _activeScrollAnimationIsFling = false;
     scrollAnimation.stop();
     _lastAnimationValue = readingY;
     scrollAnimation.value = readingY;
@@ -358,6 +378,7 @@ class ScrollReaderV2MotionController {
     beginInteractivePreloadPause();
     clearArtificialMotionState();
     isDragging = true;
+    _activeScrollAnimationIsFling = false;
     scrollAnimation.stop();
     overscrollAnimation.stop();
     _animationTickCount = 0;
@@ -371,6 +392,7 @@ class ScrollReaderV2MotionController {
 
     if (scrollAnimating) {
       final currentTarget = scrollAnimation.value;
+      _activeScrollAnimationIsFling = false;
       scrollAnimation.stop();
       applyReadingTarget(
         currentTarget,
@@ -449,8 +471,9 @@ class ScrollReaderV2MotionController {
     _updateWindowBoostForFling(effectiveVelocity);
     _scheduleWindowShiftForAnchor();
     scrollAnimation.stop();
-    scrollAnimation.value = readingY;
     _lastAnimationValue = readingY;
+    scrollAnimation.value = readingY;
+    _activeScrollAnimationIsFling = true;
     _animationTickCount = 0;
     unawaited(
       _runtime.preloadDirectionalForVelocity(
@@ -465,6 +488,7 @@ class ScrollReaderV2MotionController {
     );
     unawaited(
       scrollAnimation.animateWith(simulation).whenComplete(() {
+        _activeScrollAnimationIsFling = false;
         if (_isMounted()) unawaited(_handleScrollSettled());
       }),
     );
@@ -475,11 +499,12 @@ class ScrollReaderV2MotionController {
     final start = readingY;
     final clampedTarget = clampReadingY(target);
     if ((clampedTarget - start).abs() < 0.01) return false;
+    _activeScrollAnimationIsFling = false;
     scrollAnimation.stop();
     setOverscrollY(0.0);
     isDragging = false;
-    scrollAnimation.value = readingY;
     _lastAnimationValue = readingY;
+    scrollAnimation.value = readingY;
     try {
       await scrollAnimation
           .animateTo(
@@ -526,6 +551,7 @@ class ScrollReaderV2MotionController {
         pauseFlingAtArtificialBoundary();
         return;
       }
+      _activeScrollAnimationIsFling = false;
       scrollAnimation.stop();
       unawaited(_handleScrollSettled());
       return;

@@ -308,7 +308,9 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     }
     _motion.consumePendingArtificialDelta();
     final resumedFling = _motion.resumePendingArtificialFlingIfNeeded();
-    if (!resumedFling && _motion.isScrollAnimating) {
+    if (!resumedFling && _motion.isFlingAnimating) {
+      _motion.rebaseActiveFlingToCurrentReadingY();
+    } else if (!resumedFling && _motion.isScrollAnimating) {
       _motion.applyReadingTarget(
         _motion.scrollAnimationValue,
         scheduleShift: false,
