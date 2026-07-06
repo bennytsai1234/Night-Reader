@@ -69,16 +69,6 @@ class ReaderV2InfiniteSegmentStrip {
     _revision += 1;
   }
 
-  double placeCenterIfAbsent({
-    required int chapterIndex,
-    required double height,
-  }) {
-    final existing = chapterTop(chapterIndex);
-    if (existing != null) return existing;
-    placeChapter(chapterIndex: chapterIndex, startY: 0.0, height: height);
-    return 0.0;
-  }
-
   void retain(Set<int> retained) {
     final before = _segments.length;
     _segments.removeWhere(

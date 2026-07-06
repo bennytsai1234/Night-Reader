@@ -171,6 +171,51 @@ void main() {
       );
     });
 
+    test('視窗重放必須用即時章節高度，過期快照不得讓頁面疊進下一章', () async {
+      final runtime = makeRuntime([
+        chapter(0, paragraphCount: 80),
+        chapter(1, paragraphCount: 4),
+        chapter(2, paragraphCount: 80),
+      ]);
+      addTearDown(runtime.dispose);
+      final model = ScrollReaderV2ViewportModel(runtime: runtime, style: style);
+      addTearDown(model.dispose);
+
+      expect(await model.ensureWindowAround(1), isTrue);
+      final backward = model.cacheManager.chapterAt(0);
+      expect(backward, isNotNull);
+      if (backward!.isComplete) {
+        // 後向窗口一次就排完則本測試前提不成立——直接視為通過。
+        expectNoOverlappingPlacements(model);
+        return;
+      }
+
+      // 取一份視窗快照，再讓上一章背景長高一步——模擬真實時序：
+      // ensureWindowAround 的 await 期間章節被重新包裝，placeWindowInStrip
+      // 事後才拿舊快照重放。
+      final window = await model.cacheManager.ensureWindowAround(
+        centerChapterIndex: 1,
+        backwardExtent: model.backwardWindowExtent(),
+        forwardExtent: model.forwardWindowExtent(),
+      );
+      expect(window, isNotNull);
+      await runtime.resolver.continueLayoutStep(0);
+      final liveExtent = model.cacheManager.chapterAt(0)!.extent;
+      expect(
+        liveExtent,
+        greaterThan(backward.extent),
+        reason: '測試前提：背景推進後即時 extent 必須比快照高',
+      );
+
+      model.placeWindowInStrip(window!);
+      expect(
+        model.strip.chapterEnd(0)! - model.strip.chapterTop(0)!,
+        closeTo(liveExtent, 0.5),
+        reason: '段落高度必須跟上即時 extent，用過期快照重放會讓即時頁面超出段落底',
+      );
+      expectNoOverlappingPlacements(model);
+    });
+
     test('跳轉到部分就緒章節後背景長高必須固定頂端，不得往上疊進上一章', () async {
       final runtime = makeRuntime([
         chapter(0, paragraphCount: 4),

@@ -160,35 +160,68 @@ class ScrollReaderV2ViewportModel {
   }
 
   void placeWindowInStrip(ReaderV2ChapterPageCacheWindow window) {
+    // 快照只提供章節清單與順序；高度一律取 cacheManager 的即時 extent——
+    // ensureWindowAround 的 await 期間章節可能已被背景排版重新包裝長高，
+    // 用快照的舊高度重放會讓即時頁面超出段落底、疊進下一段。
+    double liveExtent(ReaderV2CachedChapterPages chapter) {
+      return cacheManager.chapterAt(chapter.chapterIndex)?.extent ??
+          chapter.extent;
+    }
+
     final center = window.center;
     final centerTop = strip.chapterTop(center.chapterIndex) ?? 0.0;
+    final centerExtent = liveExtent(center);
     strip.placeChapter(
       chapterIndex: center.chapterIndex,
       startY: centerTop,
-      height: center.extent,
+      height: centerExtent,
     );
 
     var backwardTop = centerTop;
     for (final chapter in window.previous) {
-      backwardTop -= chapter.extent;
+      final extent = liveExtent(chapter);
+      backwardTop -= extent;
       strip.placeChapter(
         chapterIndex: chapter.chapterIndex,
         startY: backwardTop,
-        height: chapter.extent,
+        height: extent,
       );
     }
 
-    var forwardTop = centerTop + center.extent;
+    var forwardTop = centerTop + centerExtent;
     for (final chapter in window.next) {
+      final extent = liveExtent(chapter);
       strip.placeChapter(
         chapterIndex: chapter.chapterIndex,
         startY: forwardTop,
-        height: chapter.extent,
+        height: extent,
       );
-      forwardTop += chapter.extent;
+      forwardTop += extent;
     }
 
     strip.retain(window.retainedChapterIndexes);
+    assert(
+      _debugNoSegmentBelowPartialChapter(window),
+      '部分就緒章節（中心章含以後）下方不得有相鄰段落——背景長高時重錨會誤判為 '
+      'bottom 對齊的上一章、往上長疊進前一章（章節跳轉文字重疊回歸）',
+    );
+  }
+
+  /// Debug 不變量：位於中心章（含）之後、尚未排完的章節必須是視窗前向
+  /// 邊界，下方不得緊貼任何段落。中心章之前的部分就緒章節本來就以
+  /// bottom 貼齊下一章放置，屬合法情況。
+  bool _debugNoSegmentBelowPartialChapter(ReaderV2ChapterPageCacheWindow window) {
+    for (final chapterIndex in window.retainedChapterIndexes) {
+      if (chapterIndex < window.center.chapterIndex) continue;
+      final chapter = cacheManager.chapterAt(chapterIndex);
+      if (chapter == null || chapter.isComplete) continue;
+      final end = strip.chapterEnd(chapterIndex);
+      final belowTop = strip.chapterTop(chapterIndex + 1);
+      if (end != null && belowTop != null && (belowTop - end).abs() < 0.5) {
+        return false;
+      }
+    }
+    return true;
   }
 
   double? readingYForLocation(ReaderV2Location location) {
