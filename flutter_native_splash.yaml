@@ -1,17 +1,19 @@
 flutter_native_splash:
-  # 使用全螢幕風景背景圖片
+  # Android 11 以下：原生啟動畫面直接鋪全螢幕風景背景圖。
   background_image: "assets/splash_landscape.png"
   background_image_dark: "assets/splash_landscape.png"
-
-  # 背景色對齊書架底色（scaffoldBackground），原生 splash 撤除後直接交棒到書架，
-  # 中間不經任何過場頁、也不露白底。
 
   android: true
   ios: false
   web: false
 
-  # Android 12+ 系統對啟動圖有嚴格限制，保留此配置以避免新版 Android 上的自適應圖示邊緣殘白。
+  # Android 12+ 系統啟動畫面不支援全螢幕背景圖（background_image 僅 Android 11 以下生效），
+  # 且預設會在正中間放 App 圖示；這裡塞全透明圖把圖示拿掉，讓原生 splash 是一片純深棕色，
+  # 全螢幕藝術圖改由 Flutter 首幀的啟動轉場層接手（見 features/welcome/main_page.dart），
+  # 撐到書架首批書本載完再淡出交棒。
   android_12:
+    image: "assets/app_icon/splash_transparent.png"
+    image_dark: "assets/app_icon/splash_transparent.png"
     color: "#1A1612"
     color_dark: "#1A1612"
     icon_background_color: "#1A1612"
