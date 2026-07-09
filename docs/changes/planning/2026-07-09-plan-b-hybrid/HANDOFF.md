@@ -4,7 +4,7 @@
 
 ## 開始步驟
 
-1. 讀主計畫檔 `docs/changes/planning/2026-07-09-plan-b-hybrid-reader.md`，按其中「下次 session 續作步驟」的 W1 → W6 依序執行。
+1. 讀主計畫檔 `docs/changes/planning/2026-07-09-plan-b-hybrid-reader.md`，按其中「下次 session 續作步驟」繼續執行。
 2. 設計真相：`方案B_混合架構開發文檔.md`（repo 根目錄）——六條不變量 I1–I6 與各模組規格，任何實作違反其一一律退回。
 3. 整合決策：本目錄 `blueprint.md`——十項決策（D1–D10）、目錄與檔案所有權表、依賴規則。衝突時：整合相容性以 blueprint 為準，引擎內部設計以方案 B 文檔為準。
 4. 現況細節：本目錄 7 份 spec（page-assembly / session-runtime / viewport-motion / layout-render-style / chapter-content / features-bridge / tests-baseline），內含必須保留的 API 精確簽名、持久化格式、行為常數。實作每個模組前先讀對應 spec。
@@ -20,6 +20,27 @@
 
 - 主計畫檔提到「五個代理並行」「agents 一律用 sonnet」是前一工具的多代理編排指令——單線作業的 agent 忽略即可，改為依 blueprint §2 所有權表**逐模組循序實作**（順序：W2-A measure → W2-B text → W2-C paragraph+pump → W2-D view → W2-E anchor/overlay/progress/telemetry），每個模組附單元測試。
 - 模組間只透過 `core/hybrid_types.dart` + `core/hybrid_contracts.dart` 互相認識；不得跨模組直接 import 內部實作（依賴規則見 blueprint §3）。
+
+## 目前進度（2026-07-09 Codex）
+
+已完成：
+
+1. W1 契約：新增 `lib/features/reader_v2/hybrid/core/hybrid_types.dart` 與 `hybrid_contracts.dart`，定義 BlockKey、LayoutEpoch、StyleFingerprint、ChapterBlocks、LayoutTask、BlockReady 與各模組抽象介面。
+2. W2 基礎模組：
+   - `measure/`：DocumentIndex、MeasurementStore、MetricsDiskCache。
+   - `text/`：HybridChapterRepository adapter、TextPreprocessor。
+   - `paragraph/` + `pump/`：ParagraphCache、LayoutPump、BudgetGovernor、LayoutCostModel。
+   - `view/`：HybridScrollView skeleton、RenderCachedBlock、AdmissionController。
+   - `anchor/`、`overlay/`、`progress/`、`telemetry/`：AnchorManager、selection/TTS overlay helper、HybridProgress、HybridTelemetry/DebugOverlay。
+3. 測試：新增 `test/features/reader_v2/hybrid/` 聚焦測試，覆蓋 core range、DocumentIndex、metrics disk cache、text slicing、ParagraphCache pin、LayoutPump gate、TTS rect 與 progress。
+
+驗證：
+
+- `C:\Users\045650\flutter\bin\flutter.bat test test/features/reader_v2/hybrid`：13 passed。
+- `C:\Users\045650\flutter\bin\flutter.bat analyze`：No issues found。
+- `C:\Users\045650\flutter\bin\flutter.bat test`：678 passed / 4 skipped。
+
+下一步從 W3 開始：新增 `hybrid_reader_screen.dart`，落實 D5 七個 bridge 閉包與 capture/restore，並改 `reader_v2_page.dart` 切換點與 D6 進度顯示。
 
 ## 品質底線
 
