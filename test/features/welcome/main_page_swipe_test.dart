@@ -10,6 +10,14 @@ MainDestination _fake(String label) => MainDestination(
 );
 
 void main() {
+  setUpAll(() {
+    WidgetController.hitTestWarningShouldBeFatal = true;
+  });
+
+  tearDownAll(() {
+    WidgetController.hitTestWarningShouldBeFatal = false;
+  });
+
   testWidgets('renders first destination by default', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -30,7 +38,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byKey(const Key('page-書架')), const Offset(-400, 0));
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('page-發現')), findsOneWidget);
@@ -93,9 +101,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byKey(const Key('page-書架')), const Offset(-400, 0));
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
     await tester.pumpAndSettle();
-    await tester.drag(find.byKey(const Key('page-發現')), const Offset(400, 0));
+    await tester.drag(find.byType(PageView), const Offset(400, 0));
     await tester.pumpAndSettle();
 
     expect(calls, isEmpty);

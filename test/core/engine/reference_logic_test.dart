@@ -140,14 +140,4 @@ void main() {
       expect(result, equals('backup-value'));
     });
   });
-
-  // ─── JS 依賴測試（需要 JS 引擎，暫時略過）─────────────────────────────────
-  //
-  // 以下場景需要 flutter_js 在 VM 環境正常執行，
-  // 目前測試環境不支援，待 JS engine 整合後啟用。
-
-  group('JS 依賴場景', () {
-    test('JsonPath + java.put() 邊際行為', () {}, skip: 'flutter_js 在 VM 測試環境不可用');
-    test('{{ }} 模板 JS 求值', () {}, skip: 'flutter_js 在 VM 測試環境不可用');
-  });
 }

@@ -306,47 +306,41 @@ void main() {
       expect(result.nextUrls, isEmpty);
     });
 
-    test(
-      'replaceRegex cleans content',
-      skip:
-          '待確認 replaceRegex 規則字串語義 (pattern##replacement vs ##pattern##replacement) — 非 async migration 相關',
-      () async {
-        final source = BookSource(
-          bookSourceUrl: 'https://example.com',
-          ruleContent: ContentRule(
-            content: '#content@text',
-            replaceRegex: r'广告\d+##&&请访问.*?\.com##[已屏蔽]',
-          ),
-        );
+    test('replaceRegex cleans content', () async {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        ruleContent: ContentRule(
+          content: '#content@text',
+          replaceRegex: r'##请访问.*?\.com##[已屏蔽]',
+        ),
+      );
 
-        const html = '''
+      const html = '''
       <html><body>
         <div id="content">
           First line.
-          广告123
           请访问example.com
           Last line.
         </div>
       </body></html>
       ''';
 
-        final result = await ContentParser.parse(
-          source: source,
-          body: html,
-          baseUrl: 'https://example.com/chapter/1',
-        );
-        final finalized = await ContentParser.finalizeContent(
-          source: source,
-          contentStr: result.content,
-          baseUrl: 'https://example.com/chapter/1',
-        );
+      final result = await ContentParser.parse(
+        source: source,
+        body: html,
+        baseUrl: 'https://example.com/chapter/1',
+      );
+      final finalized = await ContentParser.finalizeContent(
+        source: source,
+        contentStr: result.content,
+        baseUrl: 'https://example.com/chapter/1',
+      );
 
-        expect(finalized, isNot(contains('广告123')));
-        expect(finalized, contains('[已屏蔽]'));
-        expect(finalized, contains('First line.'));
-        expect(finalized, contains('Last line.'));
-      },
-    );
+      expect(finalized, contains('[已屏蔽]'));
+      expect(finalized, isNot(contains('请访问example.com')));
+      expect(finalized, contains('First line.'));
+      expect(finalized, contains('Last line.'));
+    });
 
     test('nextContentUrl extracts next page URL', () async {
       final source = BookSource(
@@ -403,39 +397,35 @@ void main() {
       },
     );
 
-    test(
-      'replaceRegex with empty replacement (deletion)',
-      skip: '待確認 replaceRegex 規則字串語義 — 非 async migration 相關',
-      () async {
-        final source = BookSource(
-          bookSourceUrl: 'https://example.com',
-          ruleContent: ContentRule(
-            content: '#content@text',
-            replaceRegex: r'\[AD\].*?\[/AD\]##',
-          ),
-        );
+    test('replaceRegex with empty replacement (deletion)', () async {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        ruleContent: ContentRule(
+          content: '#content@text',
+          replaceRegex: r'##\[AD\].*?\[/AD\]##',
+        ),
+      );
 
-        const html = '''
+      const html = '''
       <html><body>
         <div id="content">Before[AD]ad text here[/AD]After</div>
       </body></html>
       ''';
 
-        final result = await ContentParser.parse(
-          source: source,
-          body: html,
-          baseUrl: 'https://example.com/chapter/1',
-        );
-        final finalized = await ContentParser.finalizeContent(
-          source: source,
-          contentStr: result.content,
-          baseUrl: 'https://example.com/chapter/1',
-        );
+      final result = await ContentParser.parse(
+        source: source,
+        body: html,
+        baseUrl: 'https://example.com/chapter/1',
+      );
+      final finalized = await ContentParser.finalizeContent(
+        source: source,
+        contentStr: result.content,
+        baseUrl: 'https://example.com/chapter/1',
+      );
 
-        expect(finalized, contains('BeforeAfter'));
-        expect(finalized, isNot(contains('[AD]')));
-      },
-    );
+      expect(finalized, contains('BeforeAfter'));
+      expect(finalized, isNot(contains('[AD]')));
+    });
   });
 
   // ───────────────────────────────────────────────────
