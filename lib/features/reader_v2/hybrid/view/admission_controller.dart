@@ -129,12 +129,7 @@ final class AdmissionController extends ChangeNotifier {
     }
     final safeTop = visibleTop - cacheExtent;
     final safeBottom = visibleBottom + cacheExtent;
-    final outside = bottom <= safeTop || top >= safeBottom;
-    assert(
-      outside,
-      'I2: admitted block must enter outside visible+cacheExtent.',
-    );
-    return outside;
+    return bottom <= safeTop || top >= safeBottom;
   }
 
   void _flushPending() {
@@ -176,18 +171,52 @@ final class AdmissionController extends ChangeNotifier {
       final visibleTop = _visibleTop;
       final visibleBottom = _visibleBottom;
       if (visibleTop == null || visibleBottom == null) return false;
-      if (!canAdmitOutsideVisible(
+      final outsideVisibleCache = canAdmitOutsideVisible(
         key: key,
         visibleTop: visibleTop,
         visibleBottom: visibleBottom,
         cacheExtent: _cacheExtent,
-      )) {
-        return false;
-      }
+      );
+      final outsideVisible = canAdmitOutsideVisible(
+        key: key,
+        visibleTop: visibleTop,
+        visibleBottom: visibleBottom,
+        cacheExtent: 0,
+      );
+      if (!outsideVisible) return false;
+      assert(
+        outsideVisibleCache || _isContiguousEdge(key),
+        'I2: cache recovery is only safe at a contiguous document edge.',
+      );
     }
+    Map<BlockKey, double>? previousTops;
+    assert(() {
+      previousTops = <BlockKey, double>{
+        for (final existingKey in documentIndex.keys)
+          existingKey: documentIndex.topOf(existingKey)!,
+      };
+      return true;
+    }());
     _pending.remove(key);
     documentIndex.admit(key, metrics);
+    assert(() {
+      final tops = previousTops;
+      if (tops == null) return true;
+      for (final entry in tops.entries) {
+        final currentTop = documentIndex.topOf(entry.key);
+        if (currentTop == null || (currentTop - entry.value).abs() > 0.000001) {
+          return false;
+        }
+      }
+      return true;
+    }(), 'I3: admitting an exact edge block moved existing coordinates.');
     return true;
+  }
+
+  bool _isContiguousEdge(BlockKey key) {
+    return key < documentIndex.centerKey
+        ? _nextBackwardKey() == key
+        : _nextForwardKey() == key;
   }
 
   BlockKey? _nextForwardKey() {

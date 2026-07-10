@@ -356,6 +356,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
         );
+        lineTop =
+            _textBoxTopForOffset(
+              paragraph,
+              position.offset,
+              block.text.length + indent,
+            ) ??
+            line.top;
         charOffset =
             (block.charRange.start + math.max(0, position.offset - indent))
                 .clamp(block.charRange.start, block.charRange.end)
@@ -528,12 +535,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             .clamp(0, block.text.length)
             .toInt() +
         indent;
-    final boxes = paragraph.getBoxesForRange(
-      local,
-      math.min(local + 1, block.text.length + indent),
-    );
-    if (boxes.isEmpty) return 0.0;
-    return boxes.first.top;
+    return _textBoxTopForOffset(paragraph, local, block.text.length + indent) ??
+        0.0;
   }
 
   void _applyScrollOffset(double target) {
@@ -1359,6 +1362,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (dy < lineBottom) return last;
     }
     return last;
+  }
+
+  /// capture 與 restore 必須共用同一種文字 box 幾何；混用 LineMetrics.top
+  /// 與 TextBox.top 會把字型 leading 的差值寫進 visualOffsetPx。
+  double? _textBoxTopForOffset(
+    ui.Paragraph paragraph,
+    int textOffset,
+    int textLength,
+  ) {
+    if (textLength <= 0) return 0.0;
+    final safeOffset = textOffset.clamp(0, textLength).toInt();
+    final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
+    final boxes = paragraph.getBoxesForRange(start, start + 1);
+    if (boxes.isEmpty) return null;
+    return boxes.first.top;
   }
 
   ReaderV2Style _overlayStyle() => widget.style.copyWith(paddingTop: 0.0);

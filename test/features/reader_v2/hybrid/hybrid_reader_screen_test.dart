@@ -90,6 +90,10 @@ void main() {
   ReaderV2Runtime makeRuntime(
     List<BookChapter> chapters, {
     _FakeBookDao? bookDao,
+    ReaderV2Location initialLocation = const ReaderV2Location(
+      chapterIndex: 0,
+      charOffset: 0,
+    ),
   }) {
     final book = Book(
       bookUrl: 'http://book.test',
@@ -116,7 +120,7 @@ void main() {
         bookDao: dao,
       ),
       initialLayoutSpec: spec(),
-      initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      initialLocation: initialLocation,
     );
   }
 
@@ -216,6 +220,43 @@ void main() {
     expect(snapshot.chapterPercent, greaterThan(0));
     expect(snapshot.chapterPercent, lessThanOrEqualTo(99.9));
     expect(snapshot.chapterLabel, '第 1/3 章');
+  });
+
+  testWidgets('關閉重開後 capture/restore 幾何誤差不超過 0.01 logical px', (tester) async {
+    final chapters = List.generate(3, chapter);
+    final firstRuntime = makeRuntime(chapters);
+    final firstController = ReaderV2ViewportController();
+    addTearDown(firstRuntime.dispose);
+
+    await pumpScreen(tester, firstRuntime, firstController);
+    await openAndSettle(tester, firstRuntime);
+    expect(await firstController.scrollBy!(650), isTrue);
+    await tester.pumpAndSettle();
+
+    final beforeClose = firstRuntime.captureVisibleLocation(
+      notifyIfChanged: false,
+    );
+    expect(beforeClose, isNotNull);
+    expect(beforeClose!.charOffset, greaterThan(0));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final reopenedRuntime = makeRuntime(chapters, initialLocation: beforeClose);
+    final reopenedController = ReaderV2ViewportController();
+    addTearDown(reopenedRuntime.dispose);
+
+    await pumpScreen(tester, reopenedRuntime, reopenedController);
+    await openAndSettle(tester, reopenedRuntime);
+
+    final afterReopen = reopenedRuntime.captureVisibleLocation(
+      notifyIfChanged: false,
+    );
+    expect(afterReopen, isNotNull);
+    expect(afterReopen!.chapterIndex, beforeClose.chapterIndex);
+    expect(afterReopen.charOffset, beforeClose.charOffset);
+    expect(
+      (afterReopen.visualOffsetPx - beforeClose.visualOffsetPx).abs(),
+      lessThanOrEqualTo(0.01),
+    );
   });
 
   testWidgets('runtime.jumpToChapter 後 viewport 跟隨到新章', (tester) async {

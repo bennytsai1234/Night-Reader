@@ -101,15 +101,50 @@ void main() {
       expect(index.admittedCount, 4);
     });
 
-    test('asserts when a late block would enter visible plus cache extent', () {
+    test(
+      'admits a late exact edge block without moving existing coordinates',
+      () {
+        final index = DocumentIndex(
+          centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+        );
+        final admission =
+            AdmissionController(documentIndex: index)
+              ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+              ..registerChapter(_chapterBlocks(0, 2))
+              ..offer(_ready(0, 0))
+              ..activateViewport(
+                visibleTop: 0,
+                visibleBottom: 100,
+                cacheExtent: 50,
+              );
+        addTearDown(admission.dispose);
+
+        final originalTop = index.topOf(
+          const BlockKey(chapterIndex: 0, blockIndex: 0),
+        );
+        admission.offer(_ready(0, 1));
+
+        expect(index.admittedCount, 2);
+        expect(
+          index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 0)),
+          originalTop,
+        );
+        expect(
+          index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 1)),
+          100,
+        );
+      },
+    );
+
+    test('admits a late exact backward edge without moving the center', () {
       final index = DocumentIndex(
-        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 1),
       );
       final admission =
           AdmissionController(documentIndex: index)
             ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-            ..registerChapter(_chapterBlocks(0, 2))
-            ..offer(_ready(0, 0))
+            ..registerChapter(_chapterBlocks(0, 3))
+            ..offer(_ready(0, 1))
             ..activateViewport(
               visibleTop: 0,
               visibleBottom: 100,
@@ -117,16 +152,42 @@ void main() {
             );
       addTearDown(admission.dispose);
 
-      expect(() => admission.offer(_ready(0, 1)), throwsAssertionError);
-      expect(index.admittedCount, 1);
+      admission.offer(_ready(0, 0));
 
-      admission.updateViewport(
-        visibleTop: 0,
-        visibleBottom: 50,
-        cacheExtent: 50,
-      );
       expect(index.admittedCount, 2);
+      expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 1)), 0);
+      expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 0)), -100);
     });
+
+    test(
+      'keeps a late edge pending until it is outside the visible viewport',
+      () {
+        final index = DocumentIndex(
+          centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+        );
+        final admission =
+            AdmissionController(documentIndex: index)
+              ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+              ..registerChapter(_chapterBlocks(0, 2))
+              ..offer(_ready(0, 0))
+              ..activateViewport(
+                visibleTop: 0,
+                visibleBottom: 120,
+                cacheExtent: 50,
+              );
+        addTearDown(admission.dispose);
+
+        admission.offer(_ready(0, 1));
+        expect(index.admittedCount, 1);
+
+        admission.updateViewport(
+          visibleTop: 0,
+          visibleBottom: 100,
+          cacheExtent: 50,
+        );
+        expect(index.admittedCount, 2);
+      },
+    );
   });
 
   group('MetricsDiskCache', () {

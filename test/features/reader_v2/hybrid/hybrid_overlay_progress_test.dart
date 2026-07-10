@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/hybrid/anchor/anchor_manager.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
@@ -68,6 +69,30 @@ void main() {
       final progress = HybridProgress(documentIndex: index, chapterCount: 3);
       expect(progress.progressForOffset(100).chapterPercent, 0);
       expect(progress.progressForOffset(99.9).chapterPercent, 99.9);
+    });
+
+    test('progress snapshots with the same displayed values compare equal', () {
+      const first = HybridProgressSnapshot(
+        chapterIndex: 2,
+        chapterCount: 10,
+        chapterPercent: 35.01,
+      );
+      const second = HybridProgressSnapshot(
+        chapterIndex: 2,
+        chapterCount: 10,
+        chapterPercent: 35.04,
+      );
+      const changed = HybridProgressSnapshot(
+        chapterIndex: 2,
+        chapterCount: 10,
+        chapterPercent: 35.06,
+      );
+
+      expect(first.percentLabel, '35.0%');
+      expect(second.percentLabel, '35.0%');
+      expect(changed.percentLabel, '35.1%');
+      expect(first, second);
+      expect(first, isNot(changed));
     });
   });
 }

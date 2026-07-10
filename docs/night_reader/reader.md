@@ -43,7 +43,8 @@
 ## Known Risks
 
 - `ReaderV2Runtime` hybrid owner 模式沿用 `ReaderV2StateMachine` 的 operation token 與 `layoutGeneration`；hybrid `LayoutEpoch` 必須維持一對一，不可建立第二個獨立世代來源。
-- I1–I6 是硬底線：extent 只能讀精確 metrics；admission 必須從 center 向兩側連續且在 visible+cache 外；禁止 offset correction；dragging 零排版；領先量不足必須降級；所有重建以 `ReaderV2Location` ↔ `HybridAnchor` 為基準。
+- I1–I6 是硬底線：extent 只能讀精確 metrics；admission 必須從 center 向兩側連續，正常放行位於 visible+cache 外；late exact edge 只可在實際 visible 外恢復，且既有 block 座標必須完全不變；禁止 offset correction；dragging 零排版；領先量不足必須降級；所有重建以 `ReaderV2Location` ↔ `HybridAnchor` 為基準。
+- capture/restore 的 `visualOffsetPx` 必須以同一套 `ui.TextBox.top` 幾何換算；不可混用 `LineMetrics` 行頂與 tight text box 行頂。
 - TTS/錨點仍使用 `ReaderV2Content.displayText` 的 UTF-16 半開區間；縮排前綴不屬於 displayText，幾何換算必須扣除。
 - 磁碟 metrics 的 fingerprint 必須跨程序穩定，且逐章 contentHash 不符時不可 warm；平台字型摘要變化需換命名空間。
 - 本機只能驗證邏輯與 widget 行為；120Hz fling p99、長時間 Paragraph 記憶體平台期與真機字型 fallback 仍需 CI APK/device lab 驗收。

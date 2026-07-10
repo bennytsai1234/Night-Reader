@@ -76,7 +76,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       host: _host,
       showNotice: _showNotice,
     );
-    _progress.addListener(_scheduleRebuild);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
@@ -161,6 +160,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         originName: widget.book.originName,
         displayPageLabel: _displayChapterLabel(runtime),
         displayChapterPercentLabel: _displayChapterPercentLabel(runtime),
+        progressListenable: _progress,
         navigation: navigation,
         isAutoPaging: _host.autoPage?.isRunning ?? false,
         autoPageSpeed: settings.autoPageSpeed,

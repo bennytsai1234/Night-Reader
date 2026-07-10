@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 
 class ReaderV2PageShell extends StatelessWidget {
@@ -25,6 +27,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.originName,
     required this.displayPageLabel,
     required this.displayChapterPercentLabel,
+    this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
     required this.autoPageSpeed,
@@ -71,6 +74,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final String originName;
   final String displayPageLabel;
   final String displayChapterPercentLabel;
+  final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
   final double autoPageSpeed;
@@ -231,6 +235,17 @@ class _PermanentInfoBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progressListenable = shell.progressListenable;
+    if (progressListenable == null) {
+      return _buildBar(context, null);
+    }
+    return ValueListenableBuilder<HybridProgressSnapshot?>(
+      valueListenable: progressListenable,
+      builder: (context, progress, _) => _buildBar(context, progress),
+    );
+  }
+
+  Widget _buildBar(BuildContext context, HybridProgressSnapshot? progress) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -264,7 +279,7 @@ class _PermanentInfoBar extends StatelessWidget {
               ),
             ),
             Text(
-              shell.displayPageLabel,
+              progress?.chapterLabel ?? shell.displayPageLabel,
               style: TextStyle(
                 color: shell.textColor.withValues(alpha: 0.5),
                 fontSize: 10,
@@ -274,7 +289,7 @@ class _PermanentInfoBar extends StatelessWidget {
             SizedBox(
               width: 60,
               child: Text(
-                shell.displayChapterPercentLabel,
+                progress?.percentLabel ?? shell.displayChapterPercentLabel,
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   color: shell.textColor.withValues(alpha: 0.5),

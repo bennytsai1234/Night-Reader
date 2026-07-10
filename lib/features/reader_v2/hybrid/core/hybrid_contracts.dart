@@ -66,4 +66,17 @@ final class HybridProgressSnapshot {
   }
 
   String get percentLabel => '${chapterPercent.toStringAsFixed(1)}%';
+
+  /// 這是資訊列的顯示模型；小於 0.1% 的 raw progress 變化不應觸發
+  /// widget rebuild。
+  @override
+  bool operator ==(Object other) {
+    return other is HybridProgressSnapshot &&
+        other.chapterIndex == chapterIndex &&
+        other.chapterCount == chapterCount &&
+        other.percentLabel == percentLabel;
+  }
+
+  @override
+  int get hashCode => Object.hash(chapterIndex, chapterCount, percentLabel);
 }
