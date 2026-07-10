@@ -46,6 +46,130 @@ void main() {
       );
       expect(index.chapterExtent(0), 150);
     });
+
+    test('incremental edge admits match a bulk rebuild exactly', () {
+      const center = BlockKey(chapterIndex: 2, blockIndex: 3);
+      final metrics = <BlockKey, BlockMetrics>{};
+      var height = 10.0;
+      for (var chapter = 0; chapter < 5; chapter += 1) {
+        for (var block = 0; block < 7; block += 1) {
+          metrics[BlockKey(chapterIndex: chapter, blockIndex: block)] =
+              BlockMetrics(height: height, lineCount: 1);
+          height += 3.5;
+        }
+      }
+      final sorted = metrics.keys.toList()..sort();
+      final centerPos = sorted.indexOf(center);
+
+      final incremental = DocumentIndex(centerKey: center);
+      incremental.admit(center, metrics[center]!);
+      // 由 center 向兩側交錯放行（I2 的實際運轉方式）。
+      var forward = centerPos + 1;
+      var backward = centerPos - 1;
+      while (forward < sorted.length || backward >= 0) {
+        if (forward < sorted.length) {
+          incremental.admit(sorted[forward], metrics[sorted[forward]]!);
+          forward += 1;
+        }
+        if (backward >= 0) {
+          incremental.admit(sorted[backward], metrics[sorted[backward]]!);
+          backward -= 1;
+        }
+      }
+
+      final bulk = DocumentIndex(centerKey: center)..admitAll(metrics);
+      expect(incremental.admittedCount, bulk.admittedCount);
+      expect(incremental.beforeExtent, closeTo(bulk.beforeExtent, 1e-6));
+      expect(incremental.afterExtent, closeTo(bulk.afterExtent, 1e-6));
+      expect(incremental.keys.toList(), bulk.keys.toList());
+      expect(incremental.keys.toList(), sorted);
+      for (final key in sorted) {
+        expect(incremental.topOf(key), closeTo(bulk.topOf(key)!, 1e-6));
+        expect(incremental.bottomOf(key), closeTo(bulk.bottomOf(key)!, 1e-6));
+      }
+      expect(incremental.backwardEdgeKey, sorted.first);
+      expect(incremental.forwardEdgeKey, sorted.last);
+      for (var chapter = 0; chapter < 5; chapter += 1) {
+        expect(
+          incremental.chapterExtent(chapter),
+          closeTo(bulk.chapterExtent(chapter), 1e-6),
+        );
+      }
+    });
+
+    test('keysInRange returns exactly the intersecting blocks in order', () {
+      const center = BlockKey(chapterIndex: 1, blockIndex: 0);
+      final index = DocumentIndex(centerKey: center)..admitAll({
+        for (var i = 0; i < 4; i += 1)
+          BlockKey(chapterIndex: 0, blockIndex: i): const BlockMetrics(
+            height: 25,
+            lineCount: 1,
+          ),
+        for (var i = 0; i < 4; i += 1)
+          BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
+            height: 25,
+            lineCount: 1,
+          ),
+      });
+      // 文檔佔據 [-100, 100)，每塊 25px。
+      List<BlockKey> naive(double top, double bottom) {
+        if (bottom <= top) return const <BlockKey>[]; // 空區間 → 空（契約）
+        return index.keys.where((key) {
+          final blockTop = index.topOf(key)!;
+          return blockTop + 25 > top && blockTop < bottom;
+        }).toList();
+      }
+
+      for (final (top, bottom) in <(double, double)>[
+        (-100, 100),
+        (-60, 60),
+        (-25, 25),
+        (-1, 1),
+        (0, 50),
+        (-50, 0),
+        (-200, -99),
+        (99, 200),
+        (-300, -150),
+        (150, 300),
+        (10, 10),
+      ]) {
+        expect(
+          index.keysInRange(top, bottom),
+          naive(top, bottom),
+          reason: 'range [$top, $bottom)',
+        );
+      }
+    });
+
+    test('chapterRange spans both sides when the chapter crosses center', () {
+      const center = BlockKey(chapterIndex: 1, blockIndex: 2);
+      final index = DocumentIndex(centerKey: center)..admitAll({
+        const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
+          height: 40,
+          lineCount: 1,
+        ),
+        for (var i = 0; i < 4; i += 1)
+          BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
+            height: 30,
+            lineCount: 1,
+          ),
+        const BlockKey(chapterIndex: 2, blockIndex: 0): const BlockMetrics(
+          height: 50,
+          lineCount: 1,
+        ),
+      });
+      // before: ch0b0(-100..-60) ch1b0(-60..-30) ch1b1(-30..0)
+      // after: ch1b2(0..30) ch1b3(30..60) ch2b0(60..110)
+      final range = index.chapterRange(1)!;
+      expect(range.top, closeTo(-60, 1e-9));
+      expect(range.bottom, closeTo(60, 1e-9));
+      expect(index.chapterExtent(1), closeTo(120, 1e-9));
+      expect(index.chapterRange(0)!.top, closeTo(-100, 1e-9));
+      expect(index.chapterRange(0)!.bottom, closeTo(-60, 1e-9));
+      expect(index.chapterRange(2)!.top, closeTo(60, 1e-9));
+      expect(index.chapterRange(2)!.bottom, closeTo(110, 1e-9));
+      expect(index.chapterRange(3), isNull);
+    });
   });
 
   group('MeasurementStore', () {

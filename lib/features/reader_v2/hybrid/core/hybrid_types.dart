@@ -488,6 +488,7 @@ final class LayoutTask {
     required this.fingerprint,
     required this.textStyle,
     required this.contentWidth,
+    this.textColor = const ui.Color(0xFF000000),
     this.priority = LayoutTaskPriority.prefetch,
     this.direction = HybridScrollDirection.forward,
     this.indentChars = 0,
@@ -500,6 +501,10 @@ final class LayoutTask {
   final StyleFingerprint fingerprint;
   final HybridBlockTextStyle textStyle;
   final double contentWidth;
+
+  /// 烘進 ui.Paragraph 的文字色。不影響幾何，因此不屬於
+  /// StyleFingerprint——換色只重建 Paragraph，metrics 全部保留。
+  final ui.Color textColor;
   final LayoutTaskPriority priority;
   final HybridScrollDirection direction;
 

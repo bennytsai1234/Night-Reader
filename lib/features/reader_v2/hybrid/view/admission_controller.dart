@@ -133,6 +133,8 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   void _flushPending() {
+    // 每個滾動幀都會經 updateViewport 進來；沒有待放行 block 就零成本離開。
+    if (_pending.isEmpty) return;
     var changed = false;
     while (true) {
       var admittedThisRound = false;
@@ -220,11 +222,7 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   BlockKey? _nextForwardKey() {
-    final center = documentIndex.centerKey;
-    BlockKey edge = center;
-    for (final key in documentIndex.keys) {
-      if (key >= center && key > edge) edge = key;
-    }
+    final edge = documentIndex.forwardEdgeKey ?? documentIndex.centerKey;
     final count = _chapterBlockCounts[edge.chapterIndex];
     if (count == null) return null;
     if (edge.blockIndex + 1 < count) {
@@ -242,11 +240,7 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   BlockKey? _nextBackwardKey() {
-    final center = documentIndex.centerKey;
-    BlockKey edge = center;
-    for (final key in documentIndex.keys) {
-      if (key < edge) edge = key;
-    }
+    final edge = documentIndex.backwardEdgeKey ?? documentIndex.centerKey;
     if (edge.blockIndex > 0) {
       return BlockKey(
         chapterIndex: edge.chapterIndex,

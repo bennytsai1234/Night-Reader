@@ -29,7 +29,12 @@ abstract interface class HybridTextPreprocessor {
 
 abstract interface class HybridParagraphCache {
   ui.Paragraph? acquire(BlockKey key, LayoutEpoch epoch);
-  void put(BlockKey key, LayoutEpoch epoch, ui.Paragraph paragraph);
+  void put(
+    BlockKey key,
+    LayoutEpoch epoch,
+    ui.Paragraph paragraph, {
+    ui.Color bakedColor,
+  });
   void pinRange(BlockRange range);
   void unpinAll();
   void dispose();

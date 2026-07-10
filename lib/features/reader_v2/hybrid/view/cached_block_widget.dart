@@ -21,8 +21,9 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
   final MeasurementStore measurementStore;
   final ParagraphCache paragraphCache;
 
-  /// 文字顏色在 paint 期以 colorFilter 套用：主題切換只重繪、不重排、
-  /// 不失效 Paragraph 快取。
+  /// 期望的文字色。烘色一致時 paint 直繪（零離屏）；主題切換的過渡幀
+  /// 以 colorFilter tint 舊 Paragraph，待 pump 以新色重建後收斂。
+  /// 色不影響幾何——metrics 與 epoch 皆不失效。
   final Color textColor;
 
   @override
@@ -121,14 +122,21 @@ final class RenderCachedBlock extends RenderBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    final paragraph = _paragraphCache.acquire(_blockKey, _epoch);
-    if (paragraph == null) return;
+    final entry = _paragraphCache.acquireEntry(_blockKey, _epoch);
+    if (entry == null) return;
     final canvas = context.canvas;
+    if (entry.bakedColor == _textColor) {
+      // 熱路徑：色已烘進 Paragraph，直繪零離屏。
+      canvas.drawParagraph(entry.paragraph, offset);
+      return;
+    }
+    // 換色過渡幀：pump 尚未以新色重建本 block，暫以 tint 維持視覺正確。
+    // saveLayer 極昂貴，僅允許出現在這條收斂中的路徑。
     canvas.saveLayer(
       offset & size,
       Paint()..colorFilter = ColorFilter.mode(_textColor, BlendMode.srcIn),
     );
-    canvas.drawParagraph(paragraph, offset);
+    canvas.drawParagraph(entry.paragraph, offset);
     canvas.restore();
   }
 

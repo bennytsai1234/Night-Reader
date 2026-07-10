@@ -198,6 +198,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _detachController(oldWidget.viewportController);
       _attachController();
     }
+    if (oldWidget.textColor != widget.textColor) {
+      // 換色不 bump epoch（幾何不變）：清投放記錄讓視窗掃描以新色
+      // 重投 LayoutTask，重建期間 paint 以 tint 過渡、逐塊收斂到直繪。
+      _enqueued.clear();
+      _ensureWindowTasks();
+      _schedulePump();
+    }
   }
 
   @override
@@ -702,7 +709,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }) {
     final key = block.key;
     final metrics = _measurementStore.get(_namespace, key);
-    final hasParagraph = _paragraphCache.contains(key, _epoch);
+    // fresh = 存在且烘色一致；換色後這裡回 false → 重投任務以新色重建。
+    final hasParagraph = _paragraphCache.containsFresh(
+      key,
+      _epoch,
+      widget.textColor,
+    );
     final admitted = _documentIndex.metricsFor(key) != null;
     if (admitted) {
       if (!hasParagraph) _submitTask(blocks, block, anchor: anchor);
@@ -735,6 +747,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           justify: !block.isTitle,
         ),
         contentWidth: spec.contentWidth,
+        textColor: widget.textColor,
         priority: _priorityFor(key, anchor: anchor),
         direction:
             key < _documentIndex.centerKey
@@ -1386,16 +1399,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (offset == null || _viewportSize.height <= 0) return;
     final top = offset - _admission.backwardGuaranteedWindow;
     final bottom = offset + _viewportSize.height + _admission.guaranteedWindow;
-    final keys = <BlockKey>[];
-    for (final key in _documentIndex.keys) {
-      final blockTop = _documentIndex.topOf(key);
-      final blockBottom = _documentIndex.bottomOf(key);
-      if (blockTop == null || blockBottom == null) continue;
-      if (blockBottom > top && blockTop < bottom) keys.add(key);
-    }
     _paragraphCache
       ..unpinAll()
-      ..pinKeys(keys, _epoch);
+      ..pinKeys(_documentIndex.keysInRange(top, bottom), _epoch);
   }
 
   Widget _buildLoading(ReaderV2State state) {

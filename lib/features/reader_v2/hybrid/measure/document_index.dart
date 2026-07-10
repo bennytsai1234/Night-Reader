@@ -22,17 +22,26 @@ final class ChapterOffsetRange {
   double get extent => bottom - top;
 }
 
+/// 增量式雙 Fenwick 文檔索引。
+///
+/// I2 保證 admission 恆為「由 center 向兩側的連續邊緣」，因此 admit 是
+/// 兩側 list/Fenwick 的 append——熱路徑上沒有排序、沒有全量重建。
+/// 亂序 admit（理論上不發生）以 debug assert 攔截並 fallback 全量重建。
 final class DocumentIndex implements HybridDocumentIndex {
   DocumentIndex({required BlockKey centerKey}) : _centerKey = centerKey;
 
   BlockKey _centerKey;
   final Map<BlockKey, BlockMetrics> _metrics = <BlockKey, BlockMetrics>{};
-  List<BlockKey> _beforeCenter = const <BlockKey>[];
-  List<BlockKey> _centerAndAfter = const <BlockKey>[];
-  Map<BlockKey, int> _beforePositions = const <BlockKey, int>{};
-  Map<BlockKey, int> _afterPositions = const <BlockKey, int>{};
-  _FenwickTree _beforeTree = _FenwickTree.empty();
-  _FenwickTree _afterTree = _FenwickTree.empty();
+
+  /// center 之上，index 0 = 最接近 center，索引向上（key 遞減）。
+  final List<BlockKey> _beforeCenter = <BlockKey>[];
+
+  /// center 與其下，index 0 = center，key 遞增。
+  final List<BlockKey> _centerAndAfter = <BlockKey>[];
+  final Map<BlockKey, int> _beforePositions = <BlockKey, int>{};
+  final Map<BlockKey, int> _afterPositions = <BlockKey, int>{};
+  final _FenwickTree _beforeTree = _FenwickTree();
+  final _FenwickTree _afterTree = _FenwickTree();
 
   BlockKey get centerKey => _centerKey;
   int get admittedCount => _metrics.length;
@@ -41,25 +50,65 @@ final class DocumentIndex implements HybridDocumentIndex {
   int get beforeCount => _beforeCenter.length;
   int get centerAndAfterCount => _centerAndAfter.length;
 
+  /// 最上緣（最小）已放行 key；before 側為空時為 null。
+  BlockKey? get backwardEdgeKey =>
+      _beforeCenter.isEmpty ? null : _beforeCenter.last;
+
+  /// 最下緣（最大）已放行 key；after 側為空時為 null。
+  BlockKey? get forwardEdgeKey =>
+      _centerAndAfter.isEmpty ? null : _centerAndAfter.last;
+
+  /// 已放行 key 由上而下（遞增）——天然有序，零排序零複製。
   Iterable<BlockKey> get keys sync* {
-    final sorted = _metrics.keys.toList()..sort();
-    yield* sorted;
+    for (var i = _beforeCenter.length - 1; i >= 0; i -= 1) {
+      yield _beforeCenter[i];
+    }
+    yield* _centerAndAfter;
   }
 
   void reset({required BlockKey centerKey}) {
     _centerKey = centerKey;
     _metrics.clear();
-    _rebuild();
+    _rebuildAll();
   }
 
   void admit(BlockKey key, BlockMetrics metrics) {
+    final existing = _metrics[key];
+    if (existing != null) {
+      if (existing == metrics) return;
+      // 已放行 block 的高度變更會移動既有座標（I3 禁止，理論上不發生）；
+      // 保守走全量重建維持索引一致。
+      _metrics[key] = metrics;
+      _rebuildAll();
+      return;
+    }
     _metrics[key] = metrics;
-    _rebuild();
+    if (key < _centerKey) {
+      final inOrder = _beforeCenter.isEmpty || key < _beforeCenter.last;
+      assert(inOrder, 'I2: backward admit $key is not at the contiguous edge.');
+      if (!inOrder) {
+        _rebuildAll();
+        return;
+      }
+      _beforePositions[key] = _beforeCenter.length;
+      _beforeCenter.add(key);
+      _beforeTree.append(metrics.height);
+    } else {
+      final inOrder = _centerAndAfter.isEmpty || key > _centerAndAfter.last;
+      assert(inOrder, 'I2: forward admit $key is not at the contiguous edge.');
+      if (!inOrder) {
+        _rebuildAll();
+        return;
+      }
+      _afterPositions[key] = _centerAndAfter.length;
+      _centerAndAfter.add(key);
+      _afterTree.append(metrics.height);
+    }
   }
 
   void admitAll(Map<BlockKey, BlockMetrics> metrics) {
     _metrics.addAll(metrics);
-    _rebuild();
+    _rebuildAll();
   }
 
   BlockMetrics? metricsFor(BlockKey key) => _metrics[key];
@@ -121,36 +170,127 @@ final class DocumentIndex implements HybridDocumentIndex {
     return _beforeCenter[index];
   }
 
-  @override
-  double chapterExtent(int chapterIndex) {
-    var total = 0.0;
-    for (final entry in _metrics.entries) {
-      if (entry.key.chapterIndex == chapterIndex) {
-        total += entry.value.height;
+  /// 與 [top, bottom) 相交的已放行 block，由上而下。
+  /// Fenwick 定位起點 O(log n)，之後只走訪範圍內的 k 個 block。
+  List<BlockKey> keysInRange(double top, double bottom) {
+    final result = <BlockKey>[];
+    if (bottom <= top) return result;
+    // before 側：block i 佔據 [-prefix(i), -prefix(i-1))。
+    if (top < 0 && _beforeCenter.isNotEmpty) {
+      final startDistance = -bottom;
+      final int startIndex;
+      if (startDistance < 0) {
+        startIndex = 0;
+      } else {
+        startIndex =
+            _beforeTree.firstPrefixGreaterThan(startDistance) ??
+            _beforeCenter.length;
+      }
+      // blockBottom 追蹤第 i 個 block 的 bottom（= -prefix(i-1)），
+      // 超出上緣（bottom <= top 查詢值）即停。
+      var blockBottom = -_beforeTree.prefixSum(startIndex - 1);
+      final collected = <BlockKey>[];
+      for (var i = startIndex; i < _beforeCenter.length; i += 1) {
+        if (blockBottom <= top) break;
+        final key = _beforeCenter[i];
+        collected.add(key);
+        blockBottom -= _metrics[key]!.height;
+      }
+      // before 側索引由近而遠（文檔序由下而上），反轉成由上而下。
+      result.addAll(collected.reversed);
+    }
+    // after 側：block j 佔據 [prefix(j-1), prefix(j))。
+    if (bottom > 0 && _centerAndAfter.isNotEmpty) {
+      final lo = top < 0 ? 0.0 : top;
+      final startIndex = _afterTree.firstPrefixGreaterThan(lo);
+      if (startIndex != null) {
+        var blockTop =
+            startIndex == 0 ? 0.0 : _afterTree.prefixSum(startIndex - 1);
+        for (var j = startIndex; j < _centerAndAfter.length; j += 1) {
+          if (blockTop >= bottom) break;
+          final key = _centerAndAfter[j];
+          result.add(key);
+          blockTop += _metrics[key]!.height;
+        }
       }
     }
-    return total;
+    return result;
   }
 
+  @override
+  double chapterExtent(int chapterIndex) {
+    return chapterRange(chapterIndex)?.extent ?? 0.0;
+  }
+
+  /// 章節在文檔座標的範圍。同章 key 在兩側各自連續，二分定位 O(log n)。
   ChapterOffsetRange? chapterRange(int chapterIndex) {
     double? top;
     double? bottom;
-    for (final key in keys) {
-      if (key.chapterIndex != chapterIndex) continue;
-      final blockTop = topOf(key);
-      final blockBottom = bottomOf(key);
-      if (blockTop == null || blockBottom == null) continue;
-      top = top == null ? blockTop : (blockTop < top ? blockTop : top);
-      bottom =
-          bottom == null
-              ? blockBottom
-              : (blockBottom > bottom ? blockBottom : bottom);
+    // after 側（遞增）：章首 = lowerBound(chapter, 0)。
+    final afterFirst = _lowerBound(
+      _centerAndAfter,
+      BlockKey(chapterIndex: chapterIndex, blockIndex: 0),
+      ascending: true,
+    );
+    if (afterFirst < _centerAndAfter.length &&
+        _centerAndAfter[afterFirst].chapterIndex == chapterIndex) {
+      final afterEnd = _lowerBound(
+        _centerAndAfter,
+        BlockKey(chapterIndex: chapterIndex + 1, blockIndex: 0),
+        ascending: true,
+      );
+      top = topOf(_centerAndAfter[afterFirst]);
+      bottom = bottomOf(_centerAndAfter[afterEnd - 1]);
+    }
+    // before 側（遞減）：同章 key 仍連續。
+    final beforeFirst = _lowerBound(
+      _beforeCenter,
+      BlockKey(chapterIndex: chapterIndex + 1, blockIndex: 0),
+      ascending: false,
+    );
+    if (beforeFirst < _beforeCenter.length &&
+        _beforeCenter[beforeFirst].chapterIndex == chapterIndex) {
+      final beforeEnd = _lowerBound(
+        _beforeCenter,
+        BlockKey(chapterIndex: chapterIndex, blockIndex: 0),
+        ascending: false,
+      );
+      // before 側 index 越大越靠上——beforeEnd-1 是章內最上緣。
+      final chapterTop = topOf(_beforeCenter[beforeEnd - 1]);
+      final chapterBottom = bottomOf(_beforeCenter[beforeFirst]);
+      if (chapterTop != null && (top == null || chapterTop < top)) {
+        top = chapterTop;
+      }
+      if (chapterBottom != null && (bottom == null || chapterBottom > bottom)) {
+        bottom = chapterBottom;
+      }
     }
     if (top == null || bottom == null) return null;
     return ChapterOffsetRange(top: top, bottom: bottom);
   }
 
-  void _rebuild() {
+  /// ascending：回傳第一個 >= target 的索引；
+  /// descending（before 側）：list 遞減，回傳第一個 < target 的索引。
+  int _lowerBound(
+    List<BlockKey> list,
+    BlockKey target, {
+    required bool ascending,
+  }) {
+    var low = 0;
+    var high = list.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      final goRight = ascending ? list[mid] < target : list[mid] >= target;
+      if (goRight) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low;
+  }
+
+  void _rebuildAll() {
     final before = <BlockKey>[];
     final after = <BlockKey>[];
     for (final key in _metrics.keys) {
@@ -162,37 +302,69 @@ final class DocumentIndex implements HybridDocumentIndex {
     }
     before.sort((a, b) => b.compareTo(a));
     after.sort();
-    _beforeCenter = List<BlockKey>.unmodifiable(before);
-    _centerAndAfter = List<BlockKey>.unmodifiable(after);
-    _beforePositions = <BlockKey, int>{
-      for (var i = 0; i < before.length; i += 1) before[i]: i,
-    };
-    _afterPositions = <BlockKey, int>{
-      for (var i = 0; i < after.length; i += 1) after[i]: i,
-    };
-    _beforeTree = _FenwickTree(
+    _beforeCenter
+      ..clear()
+      ..addAll(before);
+    _centerAndAfter
+      ..clear()
+      ..addAll(after);
+    _beforePositions.clear();
+    for (var i = 0; i < before.length; i += 1) {
+      _beforePositions[before[i]] = i;
+    }
+    _afterPositions.clear();
+    for (var i = 0; i < after.length; i += 1) {
+      _afterPositions[after[i]] = i;
+    }
+    _beforeTree.rebuild(
       before.map((key) => _metrics[key]!.height).toList(growable: false),
     );
-    _afterTree = _FenwickTree(
+    _afterTree.rebuild(
       after.map((key) => _metrics[key]!.height).toList(growable: false),
     );
   }
 }
 
+/// 可增量 append 的 Fenwick tree：append 攤銷 O(log n)（容量翻倍時全量重建）。
 final class _FenwickTree {
-  _FenwickTree(List<double> values)
-    : _tree = List<double>.filled(values.length + 1, 0.0) {
-    for (var i = 0; i < values.length; i += 1) {
-      _add(i, values[i]);
+  final List<double> _values = <double>[];
+  List<double> _tree = <double>[0.0];
+  double _total = 0.0;
+
+  int get length => _values.length;
+  double get total => _total;
+
+  void append(double value) {
+    _values.add(value);
+    _total += value;
+    if (_values.length + 1 > _tree.length) {
+      _regrow();
+    } else {
+      _add(_values.length - 1, value);
     }
   }
 
-  _FenwickTree.empty() : _tree = <double>[0.0];
+  void rebuild(List<double> values) {
+    _values
+      ..clear()
+      ..addAll(values);
+    _total = 0.0;
+    for (final value in values) {
+      _total += value;
+    }
+    _regrow();
+  }
 
-  final List<double> _tree;
-
-  int get length => _tree.length - 1;
-  double get total => length == 0 ? 0.0 : prefixSum(length - 1);
+  void _regrow() {
+    var capacity = 8;
+    while (capacity < _values.length + 1) {
+      capacity <<= 1;
+    }
+    _tree = List<double>.filled(capacity, 0.0);
+    for (var i = 0; i < _values.length; i += 1) {
+      _add(i, _values[i]);
+    }
+  }
 
   double prefixSum(int index) {
     if (index < 0) return 0.0;
@@ -232,7 +404,7 @@ final class _FenwickTree {
     var sum = 0.0;
     while (bitMask != 0) {
       final next = index + bitMask;
-      if (next < _tree.length) {
+      if (next <= length) {
         final nextSum = sum + _tree[next];
         final keepGoing = strict ? nextSum <= target : nextSum < target;
         if (keepGoing) {

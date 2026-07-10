@@ -73,9 +73,16 @@ final class LayoutPump implements HybridLayoutPump {
       final contentHeight = paragraph.height <= 0 ? 1.0 : paragraph.height;
       final metrics = BlockMetrics(
         height: contentHeight + task.trailingSpacing,
-        lineCount: paragraph.computeLineMetrics().length,
+        // numberOfLines 是 O(1) getter；computeLineMetrics 會配置整串
+        // LineMetrics，不可進 ballistic 切片。
+        lineCount: paragraph.numberOfLines,
       );
-      _paragraphCache.put(task.key, task.epoch, paragraph);
+      _paragraphCache.put(
+        task.key,
+        task.epoch,
+        paragraph,
+        bakedColor: task.textColor,
+      );
       _measurementStore.put(_namespace, task.key, metrics);
       _costModel.record(
         charCount: task.block.text.length,
@@ -143,6 +150,7 @@ final class LayoutPump implements HybridLayoutPump {
         ui.ParagraphBuilder(paragraphStyle)
           ..pushStyle(
             ui.TextStyle(
+              color: task.textColor,
               fontSize: task.textStyle.fontSize,
               height: task.textStyle.lineHeight,
               letterSpacing: task.textStyle.letterSpacing,

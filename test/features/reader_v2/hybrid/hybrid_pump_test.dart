@@ -32,6 +32,25 @@ void main() {
       expect(cache.contains(key0, epoch), isFalse);
       cache.dispose();
     });
+
+    test('tracks baked color for the paint fast path', () {
+      final cache = ParagraphCache();
+      const epoch = LayoutEpoch.initial;
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      const black = ui.Color(0xFF000000);
+      const sepia = ui.Color(0xFF5B4636);
+
+      cache.put(key, epoch, _paragraph('a'), bakedColor: black);
+      expect(cache.containsFresh(key, epoch, black), isTrue);
+      expect(cache.containsFresh(key, epoch, sepia), isFalse);
+      expect(cache.acquireEntry(key, epoch)?.bakedColor, black);
+
+      // 換色重建後條目被替換、烘色更新。
+      cache.put(key, epoch, _paragraph('a'), bakedColor: sepia);
+      expect(cache.containsFresh(key, epoch, sepia), isTrue);
+      expect(cache.acquireEntry(key, epoch)?.bakedColor, sepia);
+      cache.dispose();
+    });
   });
 
   group('LayoutPump', () {
@@ -87,6 +106,7 @@ void main() {
             letterSpacing: 0,
           ),
           contentWidth: 240,
+          textColor: const ui.Color(0xFFEEEEEE),
         ),
       );
 
@@ -94,6 +114,17 @@ void main() {
       await ready;
       expect(store.get(namespace, key), isNotNull);
       expect(cache.contains(key, LayoutEpoch.initial), isTrue);
+      expect(
+        cache.containsFresh(
+          key,
+          LayoutEpoch.initial,
+          const ui.Color(0xFFEEEEEE),
+        ),
+        isTrue,
+        reason: 'pump 必須把 LayoutTask.textColor 烘進快取條目',
+      );
+      final metrics = store.get(namespace, key)!;
+      expect(metrics.lineCount, greaterThan(0));
       pump.dispose();
       cache.dispose();
     });
