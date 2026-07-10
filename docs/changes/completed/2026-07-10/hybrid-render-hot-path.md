@@ -38,6 +38,13 @@
 - [x] `_updateParagraphPins` 改 `keysInRange` 範圍查詢（進度 chapterRange 隨 DocumentIndex 一併 O(log n)）
 - [x] 驗證：`flutter analyze` 零問題；`flutter test` 698 全過；新增增量等價性、keysInRange、跨 center chapterRange、烘色快取與 pump 烘色測試
 
+## 覆核（同日）
+
+- 呼叫點稽核：release 熱路徑已無 `DocumentIndex.keys` 全量走訪（僅剩 AdmissionController debug assert 內一處）；`admit` 唯一呼叫者為 AdmissionController（I2 連續性由其保證）；`admitAll` lib 內無人使用（僅測試與 reset 路徑）。
+- 新增 `document_index_fuzz_test.dart`：30 輪隨機章數/塊數/高度/center、雙側隨機交錯放行，逐步與樸素參考模型全比對（keys 順序、topOf/bottomOf、blockAtOffset、keysInRange、chapterRange/Extent、edge keys、雙側 extent）。
+- `chapterExtent` 語義（總和→範圍長度）唯一 lib 消費者為 HybridProgress，行為等價。
+- 換色鏈重審：舊色任務殘留佇列時新任務後到後蓋（put 替換並 dispose 舊 Paragraph），收斂正確；幾何路徑（TTS/anchor）容忍過渡期舊色 Paragraph，無幾何影響。
+
 ## 遺留
 
 - 幀率終驗需實機 APK（本機無 Android SDK）；DebugOverlay 遙測欄位（frame p99、pump 佇列、領先量）可直接對照改善前後。
