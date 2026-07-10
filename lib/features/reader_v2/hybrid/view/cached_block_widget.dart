@@ -113,9 +113,17 @@ final class RenderCachedBlock extends RenderBox {
 
   @override
   void performLayout() {
-    final metrics = _measurementStore.get(_namespace, _blockKey);
-    assert(metrics != null, 'I1: RenderCachedBlock requires exact metrics.');
-    final height = metrics?.height ?? 1.0;
+    // sliver 的 itemExtentBuilder（讀 DocumentIndex admitted metrics）已把
+    // 精確高度做成 tight constraints——直接採用，不再讀 MeasurementStore：
+    // epoch 換代或章節 invalidate 的過渡幀 store 可能先被清，但已放行
+    // block 的座標與 extent 必須維持不變（I3）。
+    final double height;
+    if (constraints.hasTightHeight) {
+      height = constraints.maxHeight;
+    } else {
+      // 非 sliver 環境（獨立測試佈局）才回退 store。
+      height = _measurementStore.get(_namespace, _blockKey)?.height ?? 1.0;
+    }
     final width = constraints.hasBoundedWidth ? constraints.maxWidth : 0.0;
     size = constraints.constrain(Size(width, height));
   }

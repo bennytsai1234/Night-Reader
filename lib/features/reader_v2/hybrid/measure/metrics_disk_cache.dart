@@ -32,6 +32,9 @@ final class MetricsDiskCache {
           ..setUint32(8, metrics.length, Endian.big);
     bytes.add(header.buffer.asUint8List());
     final keys = metrics.keys.toList()..sort();
+    // 同章數百列共用同一個 digest——逐列重算 sha1 會把幾千列的寫入
+    // 從次毫秒拖到十幾毫秒（寫入發生在 UI isolate）。
+    final chapterDigests = <int, List<int>>{};
     for (final key in keys) {
       final metric = metrics[key]!;
       final row =
@@ -42,9 +45,12 @@ final class MetricsDiskCache {
             ..setInt32(16, metric.lineCount, Endian.big);
       bytes.add(row.buffer.asUint8List());
       bytes.add(
-        sha1
-            .convert(utf8.encode(chapterContentHashes[key.chapterIndex] ?? ''))
-            .bytes,
+        chapterDigests[key.chapterIndex] ??=
+            sha1
+                .convert(
+                  utf8.encode(chapterContentHashes[key.chapterIndex] ?? ''),
+                )
+                .bytes,
       );
     }
     await file.writeAsBytes(bytes.takeBytes(), flush: true);

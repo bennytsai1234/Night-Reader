@@ -123,6 +123,40 @@ final class DocumentIndex implements HybridDocumentIndex {
     return list[index];
   }
 
+  // ---- sliver 幾何查詢（供 RenderHybridBlockSliver 覆寫框架線性掃描） ----
+  //
+  // 框架 RenderSliverFixedExtentBoxAdaptor 在 itemExtentBuilder 模式下的
+  // offset↔index 換算是從 0 線性累加（O(n)/O(n×v) 每幀）；以下三個查詢
+  // 以 Fenwick 前綴和提供逐點等價的 O(log n) 版本。座標皆為該側 sliver
+  // 自身的 layout offset（index 0 起、無縫隙），與框架語意一致。
+
+  /// 該側全部已放行 block 的總 extent（= computeMaxScrollOffset）。
+  double sliverScrollExtent({required bool beforeCenter}) {
+    return beforeCenter ? _beforeTree.total : _afterTree.total;
+  }
+
+  /// 第 [index] 個子項的 layout offset（= 前 index 個 extent 之和）。
+  /// index 超出已放行數量時回傳總 extent（框架在 run-out 時同樣落在尾端）。
+  double sliverLayoutOffset({required bool beforeCenter, required int index}) {
+    final tree = beforeCenter ? _beforeTree : _afterTree;
+    if (index <= 0) return 0.0;
+    return tree.prefixSum(index - 1);
+  }
+
+  /// scrollOffset 落點的子項 index。逐點對齊框架
+  /// `_getChildIndexForScrollOffset`：offset 0 → 0；恰在邊界屬前一子項；
+  /// 超過總 extent → 最後一個 index；空側且 offset>0 → -1。
+  int sliverIndexForScrollOffset({
+    required bool beforeCenter,
+    required double scrollOffset,
+  }) {
+    if (scrollOffset <= 0.0) return 0;
+    final tree = beforeCenter ? _beforeTree : _afterTree;
+    if (tree.length == 0) return -1;
+    if (scrollOffset >= tree.total) return tree.length - 1;
+    return tree.firstPrefixGreaterOrEqual(scrollOffset) ?? tree.length - 1;
+  }
+
   @override
   double? topOf(BlockKey key) {
     if (!_metrics.containsKey(key)) return null;

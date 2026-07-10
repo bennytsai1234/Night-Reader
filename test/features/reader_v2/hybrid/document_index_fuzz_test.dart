@@ -121,6 +121,79 @@ void main() {
         }
       }
 
+      // sliver 幾何查詢：對照框架 RenderSliverFixedExtentBoxAdaptor 在
+      // itemExtentBuilder 模式下的線性演算法（RenderHybridBlockSliver 以
+      // Fenwick 取代之，語意必須逐點一致）。Fenwick 與逐項累加的浮點求和
+      // 順序不同（誤差 ~1e-13），index 探測避開精確邊界（±1e-6 nudge，
+      // 高度 ≥5.0 不會因此跨界），offset 比較用 closeTo。
+      {
+        final sorted = admitted.toList()..sort();
+        final centerSortedPos = sorted.where((k) => k < center).length;
+        final beforeList =
+            sorted.sublist(0, centerSortedPos).reversed.toList(growable: false);
+        final afterList = sorted.sublist(centerSortedPos);
+        for (final (beforeCenter, list) in <(bool, List<BlockKey>)>[
+          (true, beforeList),
+          (false, afterList),
+        ]) {
+          double naiveOffset(int count) {
+            var sum = 0.0;
+            for (var i = 0; i < count && i < list.length; i += 1) {
+              sum += heights[list[i]]!;
+            }
+            return sum;
+          }
+
+          // 框架 _getChildIndexForScrollOffset 的忠實複刻。
+          int naiveIndex(double scrollOffset) {
+            if (scrollOffset == 0.0) return 0;
+            var position = 0.0;
+            var i = 0;
+            while (position < scrollOffset) {
+              if (i > list.length - 1) break;
+              position += heights[list[i]]!;
+              i += 1;
+            }
+            return i - 1;
+          }
+
+          final side = beforeCenter ? 'before' : 'after';
+          final total = naiveOffset(list.length);
+          expect(
+            index.sliverScrollExtent(beforeCenter: beforeCenter),
+            closeTo(total, 1e-6),
+            reason: '$side extent',
+          );
+          for (var i = 0; i <= list.length + 2; i += 1) {
+            expect(
+              index.sliverLayoutOffset(beforeCenter: beforeCenter, index: i),
+              closeTo(naiveOffset(i), 1e-6),
+              reason: '$side layoutOffset($i)',
+            );
+          }
+          final probes = <double>[
+            0.0,
+            total + 25.0,
+            for (var i = 0; i < list.length; i += 1) ...<double>[
+              // 框架不會傳負 scrollOffset，邊界前緣只在 i>0 時探測。
+              if (i > 0) naiveOffset(i) - 1e-6, // 邊界前緣（屬前一子項）
+              naiveOffset(i) + 1e-6, // 邊界後緣（屬本子項）
+              naiveOffset(i) + heights[list[i]]! * 0.5, // 內部點
+            ],
+          ];
+          for (final offset in probes) {
+            expect(
+              index.sliverIndexForScrollOffset(
+                beforeCenter: beforeCenter,
+                scrollOffset: offset,
+              ),
+              naiveIndex(offset),
+              reason: '$side indexFor($offset) n=${list.length}',
+            );
+          }
+        }
+      }
+
       // 全部放行後的章節範圍對照。
       for (var c = 0; c < chapterCount; c += 1) {
         final chapterKeys =

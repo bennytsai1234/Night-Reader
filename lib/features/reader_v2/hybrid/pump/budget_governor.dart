@@ -21,7 +21,12 @@ final class BudgetGovernor {
 
   void recordFrameTimings(List<ui.FrameTiming> timings) {
     for (final timing in timings) {
-      final micros = timing.totalSpan.inMicroseconds.toDouble();
+      // 用 UI+raster 工作時間，不用 totalSpan：totalSpan 含 vsync 對齊等
+      // 待，60Hz 裝置健康幀就 >8.33ms，會把 ballistic gate 永久關死——
+      // 領先量在 fling 中無法補充，慣性衝到已放行邊界被硬夾停（撞牆）。
+      final micros =
+          (timing.buildDuration + timing.rasterDuration).inMicroseconds
+              .toDouble();
       _averageFrameMicros =
           _averageFrameMicros == 0
               ? micros
@@ -34,8 +39,9 @@ final class BudgetGovernor {
       case PumpState.dragging:
         return 0;
       case PumpState.ballistic:
-        if (_averageFrameMicros > jankFrameBudget.inMicroseconds) return 0;
-        return _leadDeficit ? 2 : 1;
+        // 領先量不足時絕不歸零：撞牆急停比偶發掉幀更糟。
+        if (_leadDeficit) return 2;
+        return _averageFrameMicros > jankFrameBudget.inMicroseconds ? 0 : 1;
       case PumpState.rebuilding:
         return 1;
       case PumpState.idle:

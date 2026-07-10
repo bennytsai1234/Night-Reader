@@ -98,6 +98,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
+
+  /// 單一穩定實例：`Scrollable` 只認 physics 的 runtimeType 鏈，position
+  /// 抱的是第一顆——動態摩擦由 physics 透過 [_admission] 即時查詢。
+  late final HybridScrollPhysics _physics;
   late ParagraphCache _paragraphCache;
   late LayoutPump _pump;
   late LayoutEpoch _epoch;
@@ -142,6 +146,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex)
       ..addListener(_scheduleRebuild);
+    _physics = HybridScrollPhysics(admission: _admission);
     _paragraphCache = ParagraphCache();
     _refreshEpochBinding();
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
@@ -264,6 +269,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _handleEpochRebuild() {
+    // 舊 namespace 的量測 best-effort 落盤後自 store 回收——同款樣式改回
+    // 來可直接 warm；不回收的話每次樣式變更都漏一整組 metrics 在記憶體。
+    final oldNamespace = _namespace;
+    unawaited(
+      _writeDiskMetrics(
+        _measurementStore.snapshot(oldNamespace),
+        fingerprint: oldNamespace.fingerprint,
+      ),
+    );
+    _measurementStore.invalidateNamespace(oldNamespace);
     _enqueued.clear();
     _blocks.clear();
     _blocksInFlight.clear();
@@ -272,7 +287,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final oldCache = _paragraphCache;
     _paragraphCache = ParagraphCache();
     WidgetsBinding.instance.addPostFrameCallback((_) => oldCache.dispose());
+    // 舊索引的 extent 屬於已回收的舊 namespace；不清空的話重建到 restore
+    // 完成之間的幀會拿舊座標配空 metrics 觸發 I1。restore 會重定中心。
+    _documentIndex.reset(centerKey: _documentIndex.centerKey);
     _refreshEpochBinding();
+    _warmedChapters.removeWhere((entry) => entry.namespace != _namespace);
   }
 
   // ---- runtime 事件 ----
@@ -1313,22 +1332,29 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  Future<void> _writeDiskMetrics(Map<BlockKey, BlockMetrics> snapshot) async {
+  Future<void> _writeDiskMetrics(
+    Map<BlockKey, BlockMetrics> snapshot, {
+    StyleFingerprint? fingerprint,
+  }) async {
     if (!widget.enableDiskMetrics ||
         widget.bookUrl == null ||
         snapshot.isEmpty) {
       return;
     }
+    // await 前同步快照：epoch 重建 / dispose 之後 _blocks 與 _fingerprint
+    // 都可能已被換掉。
+    final targetFingerprint = fingerprint ?? _fingerprint;
+    final chapterContentHashes = <int, String>{
+      for (final blocks in _blocks.values)
+        blocks.chapterIndex: blocks.contentHash,
+    };
     try {
       final cache = await _obtainDiskCache();
       await cache.write(
         bookUrl: widget.bookUrl!,
-        fingerprint: _fingerprint,
+        fingerprint: targetFingerprint,
         metrics: snapshot,
-        chapterContentHashes: <int, String>{
-          for (final blocks in _blocks.values)
-            blocks.chapterIndex: blocks.contentHash,
-        },
+        chapterContentHashes: chapterContentHashes,
       );
     } catch (_) {
       // 同上：最佳努力。
@@ -1366,15 +1392,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return false;
   }
 
+  /// 找 dy 所在行（超出末行時回末行）。每個滾動幀都會進來——用單行查詢
+  /// API，不可用 computeLineMetrics（整串 LineMetrics 配置進熱路徑）。
   ({double top, double bottom})? _lineAt(ui.Paragraph paragraph, double dy) {
-    ({double top, double bottom})? last;
-    for (final line in paragraph.computeLineMetrics()) {
-      final lineTop = line.baseline - line.ascent;
-      final lineBottom = lineTop + line.height;
-      last = (top: lineTop, bottom: lineBottom);
-      if (dy < lineBottom) return last;
-    }
-    return last;
+    final lineCount = paragraph.numberOfLines;
+    if (lineCount <= 0) return null;
+    // x=0 取該行行首字元；y 由引擎 clamp 到首/末行。
+    final position = paragraph.getPositionForOffset(Offset(0, dy));
+    final lineNumber =
+        (paragraph.getLineNumberAt(math.max(0, position.offset)) ??
+                lineCount - 1)
+            .clamp(0, lineCount - 1)
+            .toInt();
+    final line = paragraph.getLineMetricsAt(lineNumber);
+    if (line == null) return null;
+    final lineTop = line.baseline - line.ascent;
+    return (top: lineTop, bottom: lineTop + line.height);
   }
 
   /// capture 與 restore 必須共用同一種文字 box 幾何；混用 LineMetrics.top
@@ -1471,10 +1504,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                       left: widget.style.paddingLeft,
                       right: widget.style.paddingRight,
                     ),
-                    physics: HybridScrollPhysics(
-                      applyForwardFriction: _admission.needsForwardFriction,
-                      applyBackwardFriction: _admission.needsBackwardFriction,
-                    ),
+                    physics: _physics,
                   ),
                 ),
                 if (highlight != null && highlight.isValid)
