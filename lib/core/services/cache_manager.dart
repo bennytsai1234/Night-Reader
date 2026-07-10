@@ -77,6 +77,7 @@ class CacheManager {
 
   // 記憶體快取 (50MB)
   final LruMemoryCache _memoryCache = LruMemoryCache(1024 * 1024 * 50);
+  final Map<String, int> _memoryDeadlines = <String, int>{};
 
   CacheManager._internal();
 
@@ -90,6 +91,10 @@ class CacheManager {
   /// 讀取快取文本 (優先從記憶體，再從磁碟資料庫，最後從檔案系統)
   Future<String?> get(String key) async {
     // 1. 記憶體
+    if (_isMemoryExpired(key)) {
+      await delete(key);
+      return null;
+    }
     final mem = getFromMemory(key);
     if (mem is String) return mem;
 
@@ -100,7 +105,7 @@ class CacheManager {
       if (cache != null) {
         if (cache.deadline == 0 ||
             cache.deadline > DateTime.now().millisecondsSinceEpoch) {
-          putMemory(key, cache.value);
+          _putMemory(key, cache.value, deadline: cache.deadline);
           return cache.value;
         } else {
           await delete(key); // 已過期，清理
@@ -126,13 +131,13 @@ class CacheManager {
     String content, {
     int saveTimeSeconds = 0,
   }) async {
-    putMemory(key, content);
-
-    // 儲存至資料庫
     final deadline =
         saveTimeSeconds == 0
             ? 0
             : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
+    _putMemory(key, content, deadline: deadline);
+
+    // 儲存至資料庫
 
     await _cacheDao?.upsert(
       Cache(key: key, value: content, deadline: deadline),
@@ -148,9 +153,27 @@ class CacheManager {
   }
 
   /// 記憶體快取專用介面
-  void putMemory(String key, dynamic value) => _memoryCache.put(key, value);
+  void putMemory(String key, dynamic value) => _putMemory(key, value);
   dynamic getFromMemory(String key) => _memoryCache.get(key);
-  void deleteMemory(String key) => _memoryCache.remove(key);
+  void deleteMemory(String key) {
+    _memoryDeadlines.remove(key);
+    _memoryCache.remove(key);
+  }
+
+  void _putMemory(String key, dynamic value, {int deadline = 0}) {
+    _memoryCache.put(key, value);
+    if (deadline == 0) {
+      _memoryDeadlines.remove(key);
+    } else {
+      _memoryDeadlines[key] = deadline;
+    }
+  }
+
+  bool _isMemoryExpired(String key) {
+    final deadline = _memoryDeadlines[key];
+    return deadline != null &&
+        deadline <= DateTime.now().millisecondsSinceEpoch;
+  }
 
   /// 刪除快取 (記憶體 + 資料庫 + 檔案)
   Future<void> delete(String key) async {

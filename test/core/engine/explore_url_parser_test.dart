@@ -7,6 +7,7 @@ import '../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('ExploreUrlParser', () {
     JavascriptRuntime? runtime;
@@ -312,7 +313,7 @@ void main() {
       expect(kinds, hasLength(1));
       expect(kinds.first.title, '推薦');
       expect(kinds.first.url, 'https://example.com/recommend');
-    });
+    }, skip: quickJsSkip);
 
     test(
       'parseAsync normalizes legacy bare destructuring arrow params',
@@ -342,6 +343,7 @@ void main() {
         expect(kinds.first.title, '推薦');
         expect(kinds.first.url, 'https://example.com/recommend');
       },
+      skip: quickJsSkip,
     );
   });
 }

@@ -20,6 +20,7 @@ import '../../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('Promise bridge integration', () {
     JavascriptRuntime? runtime;
@@ -399,5 +400,5 @@ void main() {
         expect(result, 'chapter body');
       },
     );
-  });
+  }, skip: quickJsSkip);
 }

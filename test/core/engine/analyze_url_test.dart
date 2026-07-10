@@ -8,6 +8,7 @@ import '../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('AnalyzeUrl Tests', () {
     JavascriptRuntime? runtime;
@@ -108,21 +109,25 @@ void main() {
       );
     });
 
-    test('Source header supports @js JSON stringify and source.key alias', () {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final analyzer = AnalyzeUrl(
-        'https://example.com/api',
-        source: BookSource(
-          bookSourceUrl: 'https://source.example.com',
-          header: '@js:JSON.stringify({Referer: source.key})',
-        ),
-      );
+    test(
+      'Source header supports @js JSON stringify and source.key alias',
+      () {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final analyzer = AnalyzeUrl(
+          'https://example.com/api',
+          source: BookSource(
+            bookSourceUrl: 'https://source.example.com',
+            header: '@js:JSON.stringify({Referer: source.key})',
+          ),
+        );
 
-      expect(analyzer.headerMap['Referer'], 'https://source.example.com');
-    });
+        expect(analyzer.headerMap['Referer'], 'https://source.example.com');
+      },
+      skip: quickJsSkip,
+    );
 
     test(
       'Legacy template aliases support cookie.removeCookie and source.getKey',
@@ -141,13 +146,10 @@ void main() {
         expect(analyzer.method, 'POST');
         expect(analyzer.body, 'searchkey=%E9%BE%99%E6%97%8F');
       },
+      skip: quickJsSkip,
     );
 
     test('source jsLib helpers are available to url template js', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
       final analyzer = await AnalyzeUrl.create(
         '{{searchUrl(key)}}',
         key: '末世',
@@ -162,13 +164,9 @@ function searchUrl(key) {
       );
 
       expect(analyzer.url, 'https://example.com/search?q=%E6%9C%AB%E4%B8%96');
-    });
+    }, skip: quickJsSkip);
 
     test('Lenient JS-style url options are supported', () {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
       final analyzer = AnalyzeUrl(
         '''
 https://example.com/api,{
@@ -185,7 +183,7 @@ https://example.com/api,{
       expect(analyzer.method, 'POST');
       expect(analyzer.body, 'keyword=novel&page=2');
       expect(analyzer.headerMap['X-Test'], 'Value');
-    });
+    }, skip: quickJsSkip);
 
     test('POST string body defaults to form content-type', () {
       final analyzer = AnalyzeUrl(

@@ -14,6 +14,7 @@ import '../../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('JsExtensions bridge completeness', () {
     JavascriptRuntime? runtime;
@@ -933,5 +934,5 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
         expect(resolved, 'http://m.666biquge.com/modules/article/waps.php');
       },
     );
-  });
+  }, skip: quickJsSkip);
 }
