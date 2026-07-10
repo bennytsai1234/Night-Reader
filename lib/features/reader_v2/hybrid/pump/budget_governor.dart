@@ -11,8 +11,13 @@ final class BudgetGovernor {
   final Duration ballisticSliceBudget;
   final Duration jankFrameBudget;
   double _averageFrameMicros = 0;
+  bool _leadDeficit = false;
 
   double get averageFrameMicros => _averageFrameMicros;
+
+  void updateLeadDeficit(bool value) {
+    _leadDeficit = value;
+  }
 
   void recordFrameTimings(List<ui.FrameTiming> timings) {
     for (final timing in timings) {
@@ -30,11 +35,11 @@ final class BudgetGovernor {
         return 0;
       case PumpState.ballistic:
         if (_averageFrameMicros > jankFrameBudget.inMicroseconds) return 0;
-        return 1;
+        return _leadDeficit ? 2 : 1;
       case PumpState.rebuilding:
         return 1;
       case PumpState.idle:
-        return 8;
+        return _leadDeficit ? 12 : 8;
     }
   }
 }

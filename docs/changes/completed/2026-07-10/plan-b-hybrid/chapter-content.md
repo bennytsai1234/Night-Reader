@@ -1,5 +1,7 @@
 # 子系統規格：章節資料與內容轉換（Chapter / Content）
 
+> 2026-07-10 完成歸檔。
+
 負責範圍：`lib/features/reader_v2/chapter/*` 四個檔案 + 其下游依賴
 `lib/core/services/reader_chapter_content_store.dart`、
 `lib/core/services/reader_chapter_content_storage.dart`、

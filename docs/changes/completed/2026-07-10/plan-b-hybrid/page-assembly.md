@@ -1,5 +1,7 @@
 # 子系統規格：頁面組裝與協調器（Page Assembly & Coordinator）
 
+> 2026-07-10 完成歸檔。
+
 > 調查範圍：`lib/features/reader_v2/screen/*`、`lib/features/reader_v2/use_cases/*`，以及為理解這兩層而順藤讀到的
 > `session/*`、`viewport/reader_v2_screen.dart`、`viewport/scroll_reader_v2_viewport.dart`（僅讀到「介面契約」層級，
 > 內部滾動/手勢演算法屬於另一個子系統，不在本文件深入展開）、`core/models/book*`、`core/database/dao/book_dao.dart`。

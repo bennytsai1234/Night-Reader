@@ -1,6 +1,8 @@
 
 # 子系統規格：視埠公開契約與運動控制（Viewport Public Contract & Motion Control）
 
+> 2026-07-10 完成歸檔。
+
 > 調查範圍：`lib/features/reader_v2/viewport/` 目錄下的現行（v2 "Scroll" 引擎）視埠與運動控制程式碼，
 > 以及它與外部呼叫者（TTS、auto_page、tap-menu、controller host）之間的公開契約。
 > **這是「方案 B 混合架構」要替換掉的舊引擎**；本文件的目的不是描述方案 B 本身，

@@ -9,10 +9,10 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
+import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/use_cases/reader_v2_page_coordinator.dart';
-import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
-import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_display_coordinator.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
@@ -26,7 +26,6 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
-import 'package:night_reader/features/reader_v2/viewport/reader_v2_screen.dart';
 
 class ReaderV2Page extends StatefulWidget {
   const ReaderV2Page({
@@ -46,8 +45,6 @@ class ReaderV2Page extends StatefulWidget {
 
 class _ReaderV2PageState extends State<ReaderV2Page>
     implements ReaderV2ExitFlowDelegate {
-  static const ReaderV2DisplayCoordinator _displayCoordinator =
-      ReaderV2DisplayCoordinator();
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
   final SourceSwitchService _sourceSwitchService = SourceSwitchService();
@@ -58,6 +55,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   late final ReaderV2ControllerHost _host;
   late final ReaderV2PageCoordinator _coordinator;
+
+  /// D6：hybrid 引擎回報的「章序 + 章內百分比」，取代舊分頁模型頁碼。
+  final ValueNotifier<HybridProgressSnapshot?> _progress =
+      ValueNotifier<HybridProgressSnapshot?>(null);
   Size? _lastViewportSize;
   bool _rebuildQueued = false;
 
@@ -75,12 +76,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       host: _host,
       showNotice: _showNotice,
     );
+    _progress.addListener(_scheduleRebuild);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _progress.dispose();
     _host.dispose();
     super.dispose();
   }
@@ -111,7 +114,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final theme = settings.currentTheme;
     final menuTheme = settings.currentMenuTheme;
     final isDarkBackground = theme.backgroundColor.computeLuminance() < 0.5;
-    final page = _currentPage(runtime);
     final chapterIndex = _currentChapterIndex(runtime);
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
@@ -150,14 +152,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         menuTextColor: menuTheme.textColor,
         controlsVisible: menu.controlsVisible,
         showReadTitleAddition: settings.showReadTitleAddition,
-        hasVisibleContent: page != null,
+        hasVisibleContent:
+            runtime != null && runtime.state.phase == ReaderV2Phase.ready,
         isLoading:
             runtime == null || runtime.state.phase != ReaderV2Phase.ready,
         chapterTitle: _chapterTitleAt(chapterIndex),
         chapterUrl: _chapterUrlAt(chapterIndex),
         originName: widget.book.originName,
-        displayPageLabel: _displayPageLabel(runtime, page),
-        displayChapterPercentLabel: _displayChapterPercentLabel(runtime, page),
+        displayPageLabel: _displayChapterLabel(runtime),
+        displayChapterPercentLabel: _displayChapterPercentLabel(runtime),
         navigation: navigation,
         isAutoPaging: _host.autoPage?.isRunning ?? false,
         autoPageSpeed: settings.autoPageSpeed,
@@ -212,7 +215,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         _host.syncRuntimeConfiguration(runtime, size, style);
 
         final theme = _host.settings.currentTheme;
-        return EngineReaderV2Screen(
+        return HybridReaderScreen(
           runtime: runtime,
           backgroundColor: theme.backgroundColor,
           textColor: theme.textColor,
@@ -220,6 +223,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           viewportController: _host.viewportController,
           ttsHighlight: _host.tts?.currentHighlight,
           onContentTapUp: _handleContentTap,
+          progressListenable: _progress,
+          bookUrl: widget.book.bookUrl,
         );
       },
     );
@@ -394,11 +399,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         .toInt();
   }
 
-  ReaderV2RenderPage? _currentPage(ReaderV2Runtime? runtime) {
-    if (runtime == null) return null;
-    return runtime.state.pageWindow?.current;
-  }
-
   String _chapterTitleAt(int index) {
     final runtime = _host.runtime;
     if (runtime != null) return runtime.titleFor(index);
@@ -413,32 +413,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return widget.initialChapters[index].url;
   }
 
-  String _displayPageLabel(ReaderV2Runtime? runtime, ReaderV2RenderPage? page) {
-    if (runtime == null) return '...';
-    final visiblePage = _visiblePageForScroll(runtime);
-    if (visiblePage != null && visiblePage.pageSize > 0) {
-      return _displayCoordinator.formatPageLabel(
-        visiblePage.pageIndex,
-        visiblePage.pageSize,
-      );
-    }
-    return '...';
+  /// D6：廢除頁碼，狀態列顯示「章序」。
+  String _displayChapterLabel(ReaderV2Runtime? runtime) {
+    final snapshot = _progress.value;
+    if (snapshot != null) return snapshot.chapterLabel;
+    if (runtime == null || runtime.chapterCount <= 0) return '...';
+    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章';
   }
 
-  String _displayChapterPercentLabel(
-    ReaderV2Runtime? runtime,
-    ReaderV2RenderPage? page,
-  ) {
-    if (runtime == null) return '...%';
-    return _visiblePageForScroll(runtime)?.readProgress ?? '...%';
-  }
-
-  ReaderV2RenderPage? _visiblePageForScroll(ReaderV2Runtime runtime) {
-    final location = runtime.state.visibleLocation.normalized(
-      chapterCount: runtime.chapterCount,
-    );
-    final layout = runtime.resolver.cachedLayout(location.chapterIndex);
-    if (layout == null || layout.pages.isEmpty) return null;
-    return layout.pageForCharOffset(location.charOffset);
+  /// D6：章內百分比（未達書尾封頂 99.9%，由 HybridProgress 保證）。
+  String _displayChapterPercentLabel(ReaderV2Runtime? runtime) {
+    return _progress.value?.percentLabel ?? '...%';
   }
 }

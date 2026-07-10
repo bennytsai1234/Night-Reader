@@ -68,6 +68,7 @@ final class HybridTtsHighlightPainter extends CustomPainter {
             .toDouble();
     final maxBottom = size.height.isFinite ? size.height : double.infinity;
     final rects = <Rect>[];
+    final seen = <Rect>{};
     for (final line in lines) {
       if (line.key.chapterIndex != highlight.chapterIndex) continue;
       if (!line.charRange.intersects(range)) continue;
@@ -76,7 +77,13 @@ final class HybridTtsHighlightPainter extends CustomPainter {
         top.toDouble(),
         maxBottom,
       );
-      rects.add(Rect.fromLTRB(left, top.toDouble(), right, bottom.toDouble()));
+      final rect = Rect.fromLTRB(
+        left,
+        top.toDouble(),
+        right,
+        bottom.toDouble(),
+      );
+      if (seen.add(rect)) rects.add(rect);
     }
     return rects;
   }

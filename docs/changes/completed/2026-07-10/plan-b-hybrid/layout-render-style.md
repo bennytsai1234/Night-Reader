@@ -1,5 +1,7 @@
 # 子系統規格：排版樣式參數與渲染／高亮契約（reader_v2 layout + render）
 
+> 2026-07-10 完成歸檔。
+
 > 調查範圍：`lib/features/reader_v2/layout/*`、`lib/features/reader_v2/render/*`、以及與這兩者直接耦合的
 > `lib/features/reader_v2/chapter/reader_v2_content.dart`、`lib/features/reader_v2/session/reader_v2_chapter_view.dart`、
 > `lib/features/reader_v2/session/reader_v2_location.dart`、`lib/features/reader_v2/features/settings/*`、

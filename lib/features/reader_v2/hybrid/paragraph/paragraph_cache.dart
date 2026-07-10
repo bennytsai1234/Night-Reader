@@ -5,7 +5,7 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dar
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
 final class ParagraphCache implements HybridParagraphCache {
-  ParagraphCache({this.capacity = 160}) : assert(capacity > 0);
+  ParagraphCache({this.capacity = 512}) : assert(capacity > 0);
 
   final int capacity;
   final LinkedHashMap<_ParagraphCacheKey, ui.Paragraph> _entries =
@@ -61,6 +61,16 @@ final class ParagraphCache implements HybridParagraphCache {
 
   bool contains(BlockKey key, LayoutEpoch epoch) {
     return _entries.containsKey(_ParagraphCacheKey(key, epoch));
+  }
+
+  void invalidateChapter(int chapterIndex) {
+    final keys = _entries.keys
+        .where((key) => key.blockKey.chapterIndex == chapterIndex)
+        .toList(growable: false);
+    for (final key in keys) {
+      _pinned.remove(key);
+      _entries.remove(key)?.dispose();
+    }
   }
 
   void _evictIfNeeded() {

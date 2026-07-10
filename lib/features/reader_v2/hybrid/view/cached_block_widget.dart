@@ -12,6 +12,7 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
     required this.namespace,
     required this.measurementStore,
     required this.paragraphCache,
+    this.textColor = const Color(0xFF000000),
   });
 
   final BlockKey blockKey;
@@ -19,6 +20,10 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
   final MeasurementNamespace namespace;
   final MeasurementStore measurementStore;
   final ParagraphCache paragraphCache;
+
+  /// 文字顏色在 paint 期以 colorFilter 套用：主題切換只重繪、不重排、
+  /// 不失效 Paragraph 快取。
+  final Color textColor;
 
   @override
   RenderCachedBlock createRenderObject(BuildContext context) {
@@ -28,6 +33,7 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
       namespace: namespace,
       measurementStore: measurementStore,
       paragraphCache: paragraphCache,
+      textColor: textColor,
     );
   }
 
@@ -41,7 +47,8 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
       ..epoch = epoch
       ..namespace = namespace
       ..measurementStore = measurementStore
-      ..paragraphCache = paragraphCache;
+      ..paragraphCache = paragraphCache
+      ..textColor = textColor;
   }
 }
 
@@ -52,17 +59,20 @@ final class RenderCachedBlock extends RenderBox {
     required MeasurementNamespace namespace,
     required MeasurementStore measurementStore,
     required ParagraphCache paragraphCache,
+    required Color textColor,
   }) : _blockKey = blockKey,
        _epoch = epoch,
        _namespace = namespace,
        _measurementStore = measurementStore,
-       _paragraphCache = paragraphCache;
+       _paragraphCache = paragraphCache,
+       _textColor = textColor;
 
   BlockKey _blockKey;
   LayoutEpoch _epoch;
   MeasurementNamespace _namespace;
   MeasurementStore _measurementStore;
   ParagraphCache _paragraphCache;
+  Color _textColor;
 
   set blockKey(BlockKey value) {
     if (_blockKey == value) return;
@@ -94,6 +104,12 @@ final class RenderCachedBlock extends RenderBox {
     markNeedsPaint();
   }
 
+  set textColor(Color value) {
+    if (_textColor == value) return;
+    _textColor = value;
+    markNeedsPaint();
+  }
+
   @override
   void performLayout() {
     final metrics = _measurementStore.get(_namespace, _blockKey);
@@ -108,7 +124,10 @@ final class RenderCachedBlock extends RenderBox {
     final paragraph = _paragraphCache.acquire(_blockKey, _epoch);
     if (paragraph == null) return;
     final canvas = context.canvas;
-    canvas.saveLayer(offset & size, Paint());
+    canvas.saveLayer(
+      offset & size,
+      Paint()..colorFilter = ColorFilter.mode(_textColor, BlendMode.srcIn),
+    );
     canvas.drawParagraph(paragraph, offset);
     canvas.restore();
   }

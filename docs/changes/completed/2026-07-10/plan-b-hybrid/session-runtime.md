@@ -1,5 +1,7 @@
 # Session 執行期與進度持久化 — 子系統規格
 
+> 2026-07-10 完成歸檔。
+
 範圍：`lib/features/reader_v2/session/*`（`reader_v2_runtime.dart`、`reader_v2_state_machine.dart`、
 `reader_v2_navigation_controller.dart`、`reader_v2_viewport_bridge.dart`、
 `reader_v2_progress_controller.dart`、`reader_v2_location.dart`、`reader_v2_state.dart`、

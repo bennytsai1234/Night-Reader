@@ -30,11 +30,13 @@ final class LayoutPump implements HybridLayoutPump {
   final LayoutCostModel _costModel;
   final Queue<LayoutTask> _queue = Queue<LayoutTask>();
   final StreamController<BlockReady> _completed =
-      StreamController<BlockReady>.broadcast();
+      StreamController<BlockReady>.broadcast(sync: true);
   PumpState _state = PumpState.idle;
   bool _disposed = false;
 
   int get queueDepth => _queue.length;
+
+  int maxCharsForBudget(Duration budget) => _costModel.maxCharsFor(budget);
 
   @override
   Stream<BlockReady> get completed => _completed.stream;
@@ -68,8 +70,9 @@ final class LayoutPump implements HybridLayoutPump {
       final task = _nextTask();
       final started = Stopwatch()..start();
       final paragraph = _buildParagraph(task);
+      final contentHeight = paragraph.height <= 0 ? 1.0 : paragraph.height;
       final metrics = BlockMetrics(
-        height: paragraph.height <= 0 ? 1.0 : paragraph.height,
+        height: contentHeight + task.trailingSpacing,
         lineCount: paragraph.computeLineMetrics().length,
       );
       _paragraphCache.put(task.key, task.epoch, paragraph);
@@ -134,6 +137,8 @@ final class LayoutPump implements HybridLayoutPump {
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );
+    final indent =
+        task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
     final builder =
         ui.ParagraphBuilder(paragraphStyle)
           ..pushStyle(
@@ -148,7 +153,7 @@ final class LayoutPump implements HybridLayoutPump {
               fontFeatures: kReaderV2CjkFontFeatures,
             ),
           )
-          ..addText(task.block.text);
+          ..addText('$indent${task.block.text}');
     final paragraph =
         builder.build()
           ..layout(ui.ParagraphConstraints(width: task.contentWidth));

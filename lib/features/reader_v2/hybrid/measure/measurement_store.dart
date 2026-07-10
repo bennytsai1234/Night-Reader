@@ -45,4 +45,12 @@ final class MeasurementStore implements HybridMeasurementStore {
   }
 
   int count(MeasurementNamespace namespace) => _metrics[namespace]?.length ?? 0;
+
+  /// 取指定命名空間目前全部量測值的複本，供 DocumentIndex 重定中心後
+  /// 一次性 re-admit（reset 會清掉 index 內的度量，store 仍是真相）。
+  Map<BlockKey, BlockMetrics> snapshot(MeasurementNamespace namespace) {
+    final entries = _metrics[namespace];
+    if (entries == null) return <BlockKey, BlockMetrics>{};
+    return Map<BlockKey, BlockMetrics>.of(entries);
+  }
 }

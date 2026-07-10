@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -167,6 +168,30 @@ final class StyleFingerprint {
     platformFontSignature,
     typographyFeatureSignature,
   );
+
+  /// 跨程序穩定的磁碟 key 材料。`Object.hash` 只適合記憶體 hashCode，
+  /// 不保證不同 Dart process 仍產生相同值。
+  String get stableKey => jsonEncode(<Object>[
+    viewportWidth,
+    viewportHeight,
+    contentWidth,
+    contentHeight,
+    fontSize,
+    lineHeight,
+    letterSpacing,
+    paragraphSpacing,
+    paddingTop,
+    paddingBottom,
+    paddingLeft,
+    paddingRight,
+    textIndent,
+    bold,
+    justify,
+    textScaleFactor,
+    fontFamilySignature,
+    platformFontSignature,
+    typographyFeatureSignature,
+  ]);
 
   @override
   bool operator ==(Object other) {
@@ -465,7 +490,10 @@ final class LayoutTask {
     required this.contentWidth,
     this.priority = LayoutTaskPriority.prefetch,
     this.direction = HybridScrollDirection.forward,
-  });
+    this.indentChars = 0,
+    this.trailingSpacing = 0.0,
+  }) : assert(indentChars >= 0),
+       assert(trailingSpacing >= 0);
 
   final ChapterBlock block;
   final LayoutEpoch epoch;
@@ -474,6 +502,15 @@ final class LayoutTask {
   final double contentWidth;
   final LayoutTaskPriority priority;
   final HybridScrollDirection direction;
+
+  /// 段首縮排的全形空白字元數（沿用舊引擎「排版時動態前綴」規則；
+  /// 續塊與標題恆為 0）。前綴不屬於章節 displayText，
+  /// charOffset 換算時必須扣除。
+  final int indentChars;
+
+  /// 排在本 block 之後的垂直間距（px），計入 BlockMetrics.height。
+  /// 標題塊 = paragraphSpacing*8；段落末塊 = fontSize*行高*paragraphSpacing。
+  final double trailingSpacing;
 
   BlockKey get key => block.key;
 }

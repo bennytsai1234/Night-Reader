@@ -1,5 +1,7 @@
 # Features 層對閱讀面的依賴 — 子系統規格
 
+> 2026-07-10 完成歸檔。
+
 > 調查範圍:`lib/features/reader_v2/features/{tts,settings,menu,auto_page,bookmark}/*`
 > 對照文檔:`方案B_混合架構開發文檔.md`(下稱「設計文檔」)
 > 本文為唯讀調查產物,未修改 repo 任何檔案。所有行號/簽名皆為調查當下(commit `7dc8219`)之精確抄錄。

@@ -13,6 +13,12 @@ final class LayoutCostModel {
     return Duration(microseconds: (millis * 1000).round());
   }
 
+  int maxCharsFor(Duration budget, {int min = 64, int max = 1800}) {
+    final budgetMs = budget.inMicroseconds / 1000;
+    if (budgetMs <= 0 || _msPerChar <= 0) return min;
+    return (budgetMs / _msPerChar).floor().clamp(min, max).toInt();
+  }
+
   void record({required int charCount, required Duration elapsed}) {
     if (charCount <= 0) return;
     final observed = elapsed.inMicroseconds / 1000 / charCount;

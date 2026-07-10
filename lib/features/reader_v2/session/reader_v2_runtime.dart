@@ -8,7 +8,6 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_reposi
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/render/reader_v2_tile_painter.dart';
 
 import 'reader_v2_location.dart';
 import 'reader_v2_operation_token.dart';
@@ -94,6 +93,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   bool disposed = false;
   ReaderV2Location? pendingChapterJumpTarget;
+  Object? _hybridViewportOwner;
 
   ReaderV2LayoutStatsObserver? _previousLayoutStatsObserver;
   ReaderV2LayoutStatsObserver? _performanceLayoutStatsObserver;
@@ -105,6 +105,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   ReaderV2State get state => stateMachine.state;
 
   bool get restoreInProgress => stateMachine.restoreInProgress;
+  bool get hybridViewportActive => _hybridViewportOwner != null;
 
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
@@ -148,6 +149,16 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Viewport bridge delegation --
 
+  void registerHybridViewport(Object owner) {
+    _hybridViewportOwner = owner;
+  }
+
+  void unregisterHybridViewport(Object owner) {
+    if (identical(_hybridViewportOwner, owner)) {
+      _hybridViewportOwner = null;
+    }
+  }
+
   void registerVisibleLocationCapture(
     Object owner,
     ReaderV2VisibleLocationCapture capture,
@@ -187,10 +198,12 @@ class ReaderV2Runtime extends ChangeNotifier {
   // -- Navigation delegation --
 
   bool moveToNextPage({bool saveSettledProgress = true}) {
+    if (hybridViewportActive) return false;
     return navigation.moveToNextPage(saveSettledProgress: saveSettledProgress);
   }
 
   bool moveToPrevPage({bool saveSettledProgress = true}) {
+    if (hybridViewportActive) return false;
     return navigation.moveToPrevPage(saveSettledProgress: saveSettledProgress);
   }
 
@@ -217,6 +230,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> jumpToChapter(int chapterIndex) {
+    if (hybridViewportActive) return _jumpHybridToChapter(chapterIndex);
     return navigation.jumpToChapter(chapterIndex);
   }
 
@@ -224,6 +238,9 @@ class ReaderV2Runtime extends ChangeNotifier {
     ReaderV2Location location, {
     bool immediateSave = true,
   }) {
+    if (hybridViewportActive) {
+      return _jumpHybridToLocation(location, immediateSave: immediateSave);
+    }
     return navigation.jumpToLocation(location, immediateSave: immediateSave);
   }
 
@@ -247,6 +264,16 @@ class ReaderV2Runtime extends ChangeNotifier {
       final location = _initialLocation.normalized(
         chapterCount: repository.chapterCount,
       );
+      if (hybridViewportActive) {
+        final positioned = await _positionHybridViewport(
+          location: location,
+          token: token,
+        );
+        if (!positioned && stateMachine.isCurrent(token)) {
+          failOperation(token, StateError('Hybrid viewport restore failed.'));
+        }
+        return;
+      }
       if (viewportBridge.viewportRestore != null) {
         final restored = await navigation.restoreFromLocation(location);
         if (restored || state.phase == ReaderV2Phase.error) return;
@@ -273,6 +300,29 @@ class ReaderV2Runtime extends ChangeNotifier {
         pendingChapterJumpTarget ??
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
+
+    if (hybridViewportActive) {
+      final token = stateMachine.beginPresentation(
+        spec: spec,
+        layoutGeneration: state.layoutGeneration + 1,
+      );
+      notifyListeners();
+      try {
+        final positioned = await _positionHybridViewport(
+          location: location,
+          token: token,
+        );
+        if (!positioned && stateMachine.isCurrent(token)) {
+          failOperation(
+            token,
+            StateError('Hybrid presentation restore failed.'),
+          );
+        }
+      } catch (error) {
+        failOperation(token, error);
+      }
+      return;
+    }
 
     final generation = preloadScheduler.bumpGeneration();
     resolver.updateLayoutSpec(spec);
@@ -309,6 +359,25 @@ class ReaderV2Runtime extends ChangeNotifier {
         pendingChapterJumpTarget ??
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
+    if (hybridViewportActive) {
+      repository.clearContentCache();
+      final token = stateMachine.beginContentReload(
+        layoutGeneration: state.layoutGeneration + 1,
+      );
+      notifyListeners();
+      try {
+        final positioned = await _positionHybridViewport(
+          location: location,
+          token: token,
+        );
+        if (!positioned && stateMachine.isCurrent(token)) {
+          failOperation(token, StateError('Hybrid content restore failed.'));
+        }
+      } catch (error) {
+        failOperation(token, error);
+      }
+      return;
+    }
     final generation = preloadScheduler.bumpGeneration();
     repository.clearContentCache();
     resolver.clearCachedLayouts();
@@ -421,6 +490,81 @@ class ReaderV2Runtime extends ChangeNotifier {
     return repository.loadContent(chapterIndex);
   }
 
+  Future<void> _jumpHybridToChapter(int chapterIndex) async {
+    final location = ReaderV2Location(
+      chapterIndex: chapterIndex,
+      charOffset: 0,
+      visualOffsetPx: state.layoutSpec.anchorOffsetInViewport,
+    );
+    pendingChapterJumpTarget = location;
+    try {
+      await _jumpHybridToLocation(location, immediateSave: false);
+      final normalized = location.normalized(
+        chapterCount: repository.chapterCount,
+      );
+      if (disposed ||
+          state.phase != ReaderV2Phase.ready ||
+          state.visibleLocation != normalized) {
+        return;
+      }
+      await viewportBridge.saveProgressLocation(normalized);
+    } finally {
+      if (identical(pendingChapterJumpTarget, location)) {
+        pendingChapterJumpTarget = null;
+      }
+    }
+  }
+
+  Future<void> _jumpHybridToLocation(
+    ReaderV2Location location, {
+    required bool immediateSave,
+  }) async {
+    final token = beginJumpOperation();
+    try {
+      final positioned = await _positionHybridViewport(
+        location: location,
+        token: token,
+      );
+      if (!positioned) {
+        if (stateMachine.isCurrent(token)) {
+          failOperation(token, StateError('Hybrid jump restore failed.'));
+        }
+        return;
+      }
+      if (immediateSave) {
+        await viewportBridge.saveProgressLocation(state.visibleLocation);
+      }
+    } catch (error) {
+      failOperation(token, error);
+    }
+  }
+
+  Future<bool> _positionHybridViewport({
+    required ReaderV2Location location,
+    required ReaderV2OperationToken token,
+  }) async {
+    await repository.ensureChapters();
+    if (!stateMachine.isCurrent(token)) return false;
+    final chapterCount = repository.chapterCount;
+    if (chapterCount <= 0) return false;
+    final chapterIndex =
+        location.chapterIndex.clamp(0, chapterCount - 1).toInt();
+    final content = await repository.loadContent(chapterIndex);
+    if (!stateMachine.isCurrent(token)) return false;
+    final normalized = ReaderV2Location(
+      chapterIndex: chapterIndex,
+      charOffset: location.charOffset,
+      visualOffsetPx: location.visualOffsetPx,
+    ).normalized(
+      chapterCount: chapterCount,
+      chapterLength: content.displayText.length,
+    );
+    final restore = viewportBridge.viewportRestore;
+    if (restore == null || !await restore(normalized)) return false;
+    if (!stateMachine.isCurrent(token)) return false;
+    return completeReadyOperation(token, visibleLocation: normalized);
+  }
+
   void _attachPerformanceLayoutObserver() {
     _previousLayoutStatsObserver = ReaderV2LayoutEngine.debugOnStats;
     _performanceLayoutStatsObserver = (stats) {
@@ -444,10 +588,10 @@ class ReaderV2Runtime extends ChangeNotifier {
   @override
   void dispose() {
     disposed = true;
+    _hybridViewportOwner = null;
     _detachPerformanceLayoutObserver();
     preloadScheduler.dispose();
     progressController.dispose();
-    ReaderV2TilePainter.invalidateCache();
     super.dispose();
   }
 }

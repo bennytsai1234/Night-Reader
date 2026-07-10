@@ -5,6 +5,7 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/measurement_store.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/metrics_disk_cache.dart';
+import 'package:night_reader/features/reader_v2/hybrid/view/admission_controller.dart';
 
 void main() {
   group('DocumentIndex', () {
@@ -69,6 +70,65 @@ void main() {
     });
   });
 
+  group('AdmissionController', () {
+    test('holds out-of-order ready blocks until both sides are contiguous', () {
+      final index = DocumentIndex(
+        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 1),
+      );
+      final admission =
+          AdmissionController(documentIndex: index)
+            ..reset(epoch: LayoutEpoch.initial, chapterCount: 2)
+            ..registerChapter(_chapterBlocks(0, 3))
+            ..registerChapter(_chapterBlocks(1, 1));
+      addTearDown(admission.dispose);
+
+      admission.offer(_ready(1, 0));
+      expect(index.admittedCount, 0);
+
+      admission.offer(_ready(0, 1));
+      expect(index.keys, <BlockKey>[
+        const BlockKey(chapterIndex: 0, blockIndex: 1),
+      ]);
+
+      admission.offer(_ready(0, 2));
+      expect(index.keys, <BlockKey>[
+        const BlockKey(chapterIndex: 0, blockIndex: 1),
+        const BlockKey(chapterIndex: 0, blockIndex: 2),
+        const BlockKey(chapterIndex: 1, blockIndex: 0),
+      ]);
+
+      admission.offer(_ready(0, 0));
+      expect(index.admittedCount, 4);
+    });
+
+    test('asserts when a late block would enter visible plus cache extent', () {
+      final index = DocumentIndex(
+        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+      );
+      final admission =
+          AdmissionController(documentIndex: index)
+            ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+            ..registerChapter(_chapterBlocks(0, 2))
+            ..offer(_ready(0, 0))
+            ..activateViewport(
+              visibleTop: 0,
+              visibleBottom: 100,
+              cacheExtent: 50,
+            );
+      addTearDown(admission.dispose);
+
+      expect(() => admission.offer(_ready(0, 1)), throwsAssertionError);
+      expect(index.admittedCount, 1);
+
+      admission.updateViewport(
+        visibleTop: 0,
+        visibleBottom: 50,
+        cacheExtent: 50,
+      );
+      expect(index.admittedCount, 2);
+    });
+  });
+
   group('MetricsDiskCache', () {
     test('round-trips versioned binary metrics', () async {
       final temp = await Directory.systemTemp.createTemp(
@@ -91,14 +151,53 @@ void main() {
           bookUrl: 'book://1',
           fingerprint: fp,
           metrics: metrics,
+          chapterContentHashes: const <int, String>{2: 'content-v1'},
         ),
         1,
       );
 
-      final restored = await cache.read(bookUrl: 'book://1', fingerprint: fp);
+      final restored = await cache.read(
+        bookUrl: 'book://1',
+        fingerprint: fp,
+        chapterContentHashes: const <int, String>{2: 'content-v1'},
+      );
       expect(restored, metrics);
+      expect(
+        await cache.read(
+          bookUrl: 'book://1',
+          fingerprint: fp,
+          chapterContentHashes: const <int, String>{2: 'content-v2'},
+        ),
+        isEmpty,
+      );
     });
   });
+}
+
+ChapterBlocks _chapterBlocks(int chapterIndex, int count) {
+  return ChapterBlocks(
+    chapterIndex: chapterIndex,
+    title: '',
+    displayText: 'x' * count,
+    contentHash: 'hash-$chapterIndex',
+    blocks: List<ChapterBlock>.generate(
+      count,
+      (index) => ChapterBlock(
+        key: BlockKey(chapterIndex: chapterIndex, blockIndex: index),
+        text: 'x',
+        charRange: HybridTextRange(index, index + 1),
+        sourceParagraphIndex: index,
+      ),
+    ),
+  );
+}
+
+BlockReady _ready(int chapterIndex, int blockIndex) {
+  return BlockReady(
+    key: BlockKey(chapterIndex: chapterIndex, blockIndex: blockIndex),
+    epoch: LayoutEpoch.initial,
+    metrics: const BlockMetrics(height: 100, lineCount: 1),
+  );
 }
 
 StyleFingerprint _fingerprint({required double width}) {

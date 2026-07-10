@@ -1,5 +1,7 @@
 # 子系統 spec：reader_v2 既有測試基線（供「方案 B 混合架構」換引擎參考）
 
+> 2026-07-10 完成歸檔。
+
 負責子系統：`test/features/reader_v2/**`（15 個測試檔）+ 對應的 `lib/features/reader_v2/**` 生產程式碼；另涵蓋 `analysis_options.yaml`（本 repo **不存在**此檔，詳見 §6）。
 
 本 spec 為唯讀調查產出，**未修改 repo 任何檔案**。撰寫時已讀：

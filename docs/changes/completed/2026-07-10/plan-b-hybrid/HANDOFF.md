@@ -1,10 +1,12 @@
 # 方案 B 升級交接檔（給任何接手的 coding agent，含 Codex）
 
+> 完成狀態：本升級已於 2026-07-10 完成；本檔保留為接手過程紀錄，最終結果見同層 `../plan-b-hybrid-reader.md`。
+
 你要接手一項進行中的架構升級：把夜讀 Night Reader 的閱讀器核心替換為「方案 B 混合架構」（Framework 滾動骨架 + 自有排版管線）。調查與設計已全部完成並鎖定，你的工作是照既定步驟實作，不需要重新調查或重新設計。
 
 ## 開始步驟
 
-1. 讀主計畫檔 `docs/changes/planning/2026-07-09-plan-b-hybrid-reader.md`，按其中「下次 session 續作步驟」繼續執行。
+1. 主計畫與完成結果：`docs/changes/completed/2026-07-10/plan-b-hybrid-reader.md`。
 2. 設計真相：`方案B_混合架構開發文檔.md`（repo 根目錄）——六條不變量 I1–I6 與各模組規格，任何實作違反其一一律退回。
 3. 整合決策：本目錄 `blueprint.md`——十項決策（D1–D10）、目錄與檔案所有權表、依賴規則。衝突時：整合相容性以 blueprint 為準，引擎內部設計以方案 B 文檔為準。
 4. 現況細節：本目錄 7 份 spec（page-assembly / session-runtime / viewport-motion / layout-render-style / chapter-content / features-bridge / tests-baseline），內含必須保留的 API 精確簽名、持久化格式、行為常數。實作每個模組前先讀對應 spec。
@@ -21,7 +23,7 @@
 - 主計畫檔提到「五個代理並行」「agents 一律用 sonnet」是前一工具的多代理編排指令——單線作業的 agent 忽略即可，改為依 blueprint §2 所有權表**逐模組循序實作**（順序：W2-A measure → W2-B text → W2-C paragraph+pump → W2-D view → W2-E anchor/overlay/progress/telemetry），每個模組附單元測試。
 - 模組間只透過 `core/hybrid_types.dart` + `core/hybrid_contracts.dart` 互相認識；不得跨模組直接 import 內部實作（依賴規則見 blueprint §3）。
 
-## 目前進度（2026-07-09 Codex）
+## 當時進度（2026-07-09 Codex）
 
 已完成：
 
@@ -40,7 +42,7 @@
 - `C:\Users\045650\flutter\bin\flutter.bat analyze`：No issues found。
 - `C:\Users\045650\flutter\bin\flutter.bat test`：678 passed / 4 skipped。
 
-下一步從 W3 開始：新增 `hybrid_reader_screen.dart`，落實 D5 七個 bridge 閉包與 capture/restore，並改 `reader_v2_page.dart` 切換點與 D6 進度顯示。
+W3–W6 後續已完成：`hybrid_reader_screen.dart`、D5/D6 接線、I1–I6 審查、舊 viewport 清理與全量驗證結果記錄於主計畫。
 
 ## 品質底線
 

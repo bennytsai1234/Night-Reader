@@ -10,8 +10,9 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 final class MetricsDiskCache {
   MetricsDiskCache({required this.baseDirectory});
 
-  static const int _version = 1;
+  static const int _version = 2;
   static const int _headerMagic = 0x4E52484D; // NRHM
+  static const int _rowSize = 40;
 
   final Directory baseDirectory;
 
@@ -19,6 +20,7 @@ final class MetricsDiskCache {
     required String bookUrl,
     required StyleFingerprint fingerprint,
     required Map<BlockKey, BlockMetrics> metrics,
+    Map<int, String> chapterContentHashes = const <int, String>{},
   }) async {
     final file = _fileFor(bookUrl: bookUrl, fingerprint: fingerprint);
     await file.parent.create(recursive: true);
@@ -39,6 +41,11 @@ final class MetricsDiskCache {
             ..setFloat64(8, metric.height, Endian.big)
             ..setInt32(16, metric.lineCount, Endian.big);
       bytes.add(row.buffer.asUint8List());
+      bytes.add(
+        sha1
+            .convert(utf8.encode(chapterContentHashes[key.chapterIndex] ?? ''))
+            .bytes,
+      );
     }
     await file.writeAsBytes(bytes.takeBytes(), flush: true);
     return metrics.length;
@@ -47,6 +54,7 @@ final class MetricsDiskCache {
   Future<Map<BlockKey, BlockMetrics>> read({
     required String bookUrl,
     required StyleFingerprint fingerprint,
+    Map<int, String>? chapterContentHashes,
   }) async {
     final file = _fileFor(bookUrl: bookUrl, fingerprint: fingerprint);
     if (!await file.exists()) return <BlockKey, BlockMetrics>{};
@@ -60,20 +68,33 @@ final class MetricsDiskCache {
       return <BlockKey, BlockMetrics>{};
     }
     final count = header.getUint32(8, Endian.big);
-    final expectedLength = 12 + count * 20;
+    final expectedLength = 12 + count * _rowSize;
     if (data.length != expectedLength) return <BlockKey, BlockMetrics>{};
     final result = <BlockKey, BlockMetrics>{};
     for (var i = 0; i < count; i += 1) {
-      final offset = 12 + i * 20;
+      final offset = 12 + i * _rowSize;
       final row = ByteData.sublistView(data, offset, offset + 20);
-      final key = BlockKey(
-        chapterIndex: row.getInt32(0, Endian.big),
-        blockIndex: row.getInt32(4, Endian.big),
-      );
-      result[key] = BlockMetrics(
-        height: row.getFloat64(8, Endian.big),
-        lineCount: row.getInt32(16, Endian.big),
-      );
+      final chapterIndex = row.getInt32(0, Endian.big);
+      final expectedContentHash = chapterContentHashes?[chapterIndex];
+      if (chapterContentHashes != null) {
+        if (expectedContentHash == null) continue;
+        final storedDigest = data.sublist(offset + 20, offset + _rowSize);
+        final expectedDigest =
+            sha1.convert(utf8.encode(expectedContentHash)).bytes;
+        if (!_bytesEqual(storedDigest, expectedDigest)) continue;
+      }
+      final height = row.getFloat64(8, Endian.big);
+      final lineCount = row.getInt32(16, Endian.big);
+      final blockIndex = row.getInt32(4, Endian.big);
+      if (chapterIndex < 0 ||
+          blockIndex < 0 ||
+          !height.isFinite ||
+          height <= 0 ||
+          lineCount < 0) {
+        continue;
+      }
+      final key = BlockKey(chapterIndex: chapterIndex, blockIndex: blockIndex);
+      result[key] = BlockMetrics(height: height, lineCount: lineCount);
     }
     return result;
   }
@@ -82,10 +103,12 @@ final class MetricsDiskCache {
     required String bookUrl,
     required MeasurementNamespace namespace,
     required void Function(BlockKey key, BlockMetrics metrics) put,
+    Map<int, String>? chapterContentHashes,
   }) async {
     final entries = await read(
       bookUrl: bookUrl,
       fingerprint: namespace.fingerprint,
+      chapterContentHashes: chapterContentHashes,
     );
     for (final entry in entries.entries) {
       put(entry.key, entry.value);
@@ -99,7 +122,7 @@ final class MetricsDiskCache {
   }) {
     final bookHash = sha1.convert(utf8.encode(bookUrl)).toString();
     final fingerprintHash =
-        sha1.convert(utf8.encode(fingerprint.stableHash.toString())).toString();
+        sha1.convert(utf8.encode(fingerprint.stableKey)).toString();
     return File(
       p.join(
         baseDirectory.path,
@@ -109,4 +132,12 @@ final class MetricsDiskCache {
       ),
     );
   }
+}
+
+bool _bytesEqual(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var i = 0; i < left.length; i += 1) {
+    if (left[i] != right[i]) return false;
+  }
+  return true;
 }

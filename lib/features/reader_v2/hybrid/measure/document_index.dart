@@ -29,6 +29,8 @@ final class DocumentIndex implements HybridDocumentIndex {
   final Map<BlockKey, BlockMetrics> _metrics = <BlockKey, BlockMetrics>{};
   List<BlockKey> _beforeCenter = const <BlockKey>[];
   List<BlockKey> _centerAndAfter = const <BlockKey>[];
+  Map<BlockKey, int> _beforePositions = const <BlockKey, int>{};
+  Map<BlockKey, int> _afterPositions = const <BlockKey, int>{};
   _FenwickTree _beforeTree = _FenwickTree.empty();
   _FenwickTree _afterTree = _FenwickTree.empty();
 
@@ -36,6 +38,8 @@ final class DocumentIndex implements HybridDocumentIndex {
   int get admittedCount => _metrics.length;
   double get beforeExtent => _beforeTree.total;
   double get afterExtent => _afterTree.total;
+  int get beforeCount => _beforeCenter.length;
+  int get centerAndAfterCount => _centerAndAfter.length;
 
   Iterable<BlockKey> get keys sync* {
     final sorted = _metrics.keys.toList()..sort();
@@ -74,12 +78,12 @@ final class DocumentIndex implements HybridDocumentIndex {
   double? topOf(BlockKey key) {
     if (!_metrics.containsKey(key)) return null;
     if (key < _centerKey) {
-      final index = _beforeCenter.indexOf(key);
-      if (index < 0) return null;
+      final index = _beforePositions[key];
+      if (index == null) return null;
       return -_beforeTree.prefixSum(index);
     }
-    final index = _centerAndAfter.indexOf(key);
-    if (index < 0) return null;
+    final index = _afterPositions[key];
+    if (index == null) return null;
     return index == 0 ? 0.0 : _afterTree.prefixSum(index - 1);
   }
 
@@ -160,6 +164,12 @@ final class DocumentIndex implements HybridDocumentIndex {
     after.sort();
     _beforeCenter = List<BlockKey>.unmodifiable(before);
     _centerAndAfter = List<BlockKey>.unmodifiable(after);
+    _beforePositions = <BlockKey, int>{
+      for (var i = 0; i < before.length; i += 1) before[i]: i,
+    };
+    _afterPositions = <BlockKey, int>{
+      for (var i = 0; i < after.length; i += 1) after[i]: i,
+    };
     _beforeTree = _FenwickTree(
       before.map((key) => _metrics[key]!.height).toList(growable: false),
     );

@@ -26,12 +26,19 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
       LinkedHashMap<int, ChapterText>();
   final Map<int, Future<ChapterText>> _inFlight = <int, Future<ChapterText>>{};
   int? _prefetchCenter;
+  int _generation = 0;
+  bool _disposed = false;
 
   @override
   Stream<ChapterEvent> get events => _events.stream;
 
   @override
   Future<ChapterText> load(ChapterId id) {
+    if (_disposed) {
+      return Future<ChapterText>.error(
+        StateError('HybridChapterRepository has been disposed.'),
+      );
+    }
     final cached = _window.remove(id);
     if (cached != null) {
       _window[id] = cached;
@@ -39,10 +46,12 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     }
     final inFlight = _inFlight[id];
     if (inFlight != null) return inFlight;
+    final generation = _generation;
     late final Future<ChapterText> task;
     task = () async {
       final content = await _loadContent(id);
       final text = _adapt(content);
+      if (_disposed || generation != _generation) return text;
       _window[id] = text;
       _events.add(
         ChapterEvent.loaded(chapterId: id, contentHash: text.contentHash),
@@ -51,9 +60,11 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
       return text;
     }();
     _inFlight[id] = task;
-    task.whenComplete(() {
+    void cleanUp() {
       if (identical(_inFlight[id], task)) _inFlight.remove(id);
-    });
+    }
+
+    unawaited(task.then<void>((_) => cleanUp(), onError: (_, _) => cleanUp()));
     return task;
   }
 
@@ -68,19 +79,27 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     ) {
       if (index < 0) continue;
       if (_repository != null && index >= _repository.chapterCount) continue;
-      unawaited(load(index));
+      unawaited(load(index).then<void>((_) {}, onError: (_, _) {}));
     }
   }
 
-  void invalidateLoaded() {
+  void invalidateLoaded({bool emitEvents = true}) {
+    _generation += 1;
     final ids = _window.keys.toList(growable: false);
     _window.clear();
+    _inFlight.clear();
+    if (!emitEvents || _disposed) return;
     for (final id in ids) {
       _events.add(ChapterEvent.invalidated(chapterId: id));
     }
   }
 
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _generation += 1;
+    _window.clear();
+    _inFlight.clear();
     await _events.close();
   }
 
