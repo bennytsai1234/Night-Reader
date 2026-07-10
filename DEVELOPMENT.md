@@ -60,7 +60,7 @@
 │   │   ├── di/                  # GetIt 依賴注入
 │   │   ├── engine/              # 規則引擎（AnalyzeRule/AnalyzeUrl/JS/WebBook/EventBus）
 │   │   ├── exception/           # 應用例外
-│   │   ├── local_book/          # TXT/EPUB 本地書格式偵測與解析
+│   │   ├── local_book/          # TXT 本地書格式偵測與解析
 │   │   ├── models/              # 資料契約層（Book/BookSource/Chapter...）
 │   │   ├── network/             # Dio 攔截器、StrResponse
 │   │   ├── services/            # 業務服務層（書源調度/下載/TTS/備份/校驗/日誌...）

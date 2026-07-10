@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import '../services/encoding_detect.dart';
@@ -26,8 +25,8 @@ class TxtParser {
     final pattern = customPattern ?? defaultChapterPattern;
     final bytes = await file.readAsBytes();
     final charsetName = EncodingDetect.getEncode(bytes);
-    final charset = EncodingDetect.detect(bytes);
     final content = EncodingDetect.decode(bytes);
+    final bomLength = EncodingDetect.bomLength(bytes);
 
     final result = <Map<String, dynamic>>[];
     final matches = pattern.allMatches(content).toList();
@@ -40,19 +39,20 @@ class TxtParser {
     ];
     final byteOffsets = _buildByteOffsets(
       content: content,
-      charset: charset,
+      charsetName: charsetName,
       charOffsets: charOffsets,
+      initialByteOffset: bomLength,
     );
 
     if (matches.isEmpty) {
       _appendChunkedRange(
         result: result,
         content: content,
-        charset: charset,
+        charsetName: charsetName,
         titleBase: '正文',
         charStart: 0,
         charEnd: content.length,
-        byteStart: 0,
+        byteStart: byteOffsets.first,
         byteEnd: bytes.length,
         chunkChars: _fallbackChunkChars,
       );
@@ -64,7 +64,7 @@ class TxtParser {
       _appendChunkedRange(
         result: result,
         content: content,
-        charset: charset,
+        charsetName: charsetName,
         titleBase: '前言',
         charStart: 0,
         charEnd: matches.first.start,
@@ -85,7 +85,7 @@ class TxtParser {
       _appendChunkedRange(
         result: result,
         content: content,
-        charset: charset,
+        charsetName: charsetName,
         titleBase: titleBase,
         charStart: charStart,
         charEnd: charEnd,
@@ -100,17 +100,21 @@ class TxtParser {
 
   List<int> _buildByteOffsets({
     required String content,
-    required Encoding charset,
+    required String charsetName,
     required List<int> charOffsets,
+    required int initialByteOffset,
   }) {
     final byteOffsets = List<int>.filled(charOffsets.length, 0);
     var currentChar = 0;
-    var currentByte = 0;
+    var currentByte = initialByteOffset;
     for (var i = 0; i < charOffsets.length; i++) {
       final targetChar = charOffsets[i];
       if (targetChar > currentChar) {
         currentByte +=
-            charset.encode(content.substring(currentChar, targetChar)).length;
+            EncodingDetect.encodeWithCharset(
+              content.substring(currentChar, targetChar),
+              charsetName,
+            ).length;
       }
       byteOffsets[i] = currentByte;
       currentChar = targetChar;
@@ -121,7 +125,7 @@ class TxtParser {
   void _appendChunkedRange({
     required List<Map<String, dynamic>> result,
     required String content,
-    required Encoding charset,
+    required String charsetName,
     required String titleBase,
     required int charStart,
     required int charEnd,
@@ -139,18 +143,20 @@ class TxtParser {
 
     while (currentChar < charEnd) {
       part += 1;
-      final nextChar =
+      var nextChar =
           (currentChar + chunkChars < charEnd)
               ? currentChar + chunkChars
               : charEnd;
+      nextChar = _safeChunkEnd(content, currentChar, nextChar, charEnd);
       final isLast = nextChar == charEnd;
       final nextByte =
           isLast
               ? byteEnd
               : (currentByte +
-                      charset
-                          .encode(content.substring(currentChar, nextChar))
-                          .length)
+                      EncodingDetect.encodeWithCharset(
+                        content.substring(currentChar, nextChar),
+                        charsetName,
+                      ).length)
                   .clamp(currentByte, byteEnd)
                   .toInt();
 
@@ -163,5 +169,17 @@ class TxtParser {
       currentChar = nextChar;
       currentByte = nextByte;
     }
+  }
+
+  int _safeChunkEnd(String text, int start, int end, int limit) {
+    if (end <= start || end >= limit) return end;
+    final previous = text.codeUnitAt(end - 1);
+    final next = text.codeUnitAt(end);
+    final splitsSurrogatePair =
+        previous >= 0xD800 &&
+        previous <= 0xDBFF &&
+        next >= 0xDC00 &&
+        next <= 0xDFFF;
+    return splitsSurrogatePair ? end + 1 : end;
   }
 }

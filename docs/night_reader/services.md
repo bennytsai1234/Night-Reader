@@ -19,7 +19,7 @@
 - `lib/core/services/reader_chapter_content_store.dart` + `reader_chapter_content_storage.dart` + `chapter_content_scheduler.dart` + `chapter_content_preparation_pipeline.dart` — `ReaderChapterContentStore`（章節正文取存封裝）。
 - `lib/core/services/book_storage_service.dart`、`book_cover_storage_service.dart`、`bookshelf_state_tracker.dart`、`bookshelf_exchange_service.dart`。
 - `lib/core/services/backup_service.dart` + `restore_service.dart` — `BackupService`（zip 匯出 books/sources/rules/bookmarks/download/reader_chapter_content）。
-- `lib/core/services/local_book_service.dart`（`LocalBookImportResult`, TXT/EPUB 匯入）、`epub_service.dart`、`resource_service.dart`、`export_book_service.dart`。
+- `lib/core/services/local_book_service.dart`（`LocalBookImportResult`，TXT 匯入與分段讀取）、`resource_service.dart`、`export_book_service.dart`。
 - `lib/core/services/app_log_service.dart`（`AppLog`，全域日誌，**幾乎所有模組引用**）、`crash_handler.dart`、`app_version.dart`、`app_permission_service.dart`。
 - `lib/core/services/update_service.dart` + `update_ignore_store.dart`（版本更新）。
 - `lib/core/services/webview_data_service.dart`、`backstage_webview.dart`、`rule_big_data_service.dart`、`default_data.dart`、`cache_manager.dart`、`chinese_utils.dart`（`ChineseUtils.s2t/t2s`）、`event_bus.dart`、`cookie_store.dart`、`encoding_detect.dart`、`rate_limiter.dart`。

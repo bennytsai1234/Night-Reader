@@ -156,7 +156,7 @@ class ChapterContentPreparationPipeline {
     try {
       if (book.origin == 'local') {
         final raw = await LocalBookService().getContent(book, chapter);
-        if (raw.isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
+        if (raw.trim().isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
           return ChapterContentPreparationResult.ready(raw);
         }
         return ChapterContentPreparationResult.failed(
@@ -181,7 +181,7 @@ class ChapterContentPreparationPipeline {
         chapter,
         nextChapterUrl: nextChapterUrl,
       );
-      if (raw.isNotEmpty) {
+      if (raw.trim().isNotEmpty) {
         return ChapterContentPreparationResult.ready(raw);
       }
       return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
@@ -197,8 +197,7 @@ class ChapterContentPreparationPipeline {
       return switch (e.type) {
         DioExceptionType.connectionTimeout ||
         DioExceptionType.receiveTimeout ||
-        DioExceptionType.sendTimeout =>
-          '加載章節失敗: 連線逾時',
+        DioExceptionType.sendTimeout => '加載章節失敗: 連線逾時',
         DioExceptionType.connectionError => '加載章節失敗: 網路連線失敗',
         _ => '加載章節失敗: 網路錯誤',
       };
@@ -212,7 +211,7 @@ class ChapterContentPreparationPipeline {
     required bool saveChapterMetadata,
   }) async {
     final store = contentStore;
-    if (store == null || result.content.isEmpty) return;
+    if (store == null || result.content.trim().isEmpty) return;
     if (result.isReady) {
       await store.saveRawContent(
         book: book,

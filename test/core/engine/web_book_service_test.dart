@@ -209,4 +209,53 @@ void main() {
     ]);
     expect(chapters.map((chapter) => chapter.index).toList(), <int>[0, 1, 2]);
   });
+
+  test('並發正文任一分頁失敗時整章失敗', () async {
+    requestHandler = (request) async {
+      switch (request.uri.path) {
+        case '/content/1':
+          request.response.write('''
+<html><body>
+  <div id="content">第一頁正文</div>
+  <a class="next" href="/content/2">第二頁</a>
+  <a class="next" href="/content/3">第三頁</a>
+</body></html>
+''');
+        case '/content/2':
+          request.response.statusCode = HttpStatus.internalServerError;
+          request.response.write('failed');
+        case '/content/3':
+          request.response.write(
+            '<html><body><div id="content">第三頁正文</div></body></html>',
+          );
+        default:
+          request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    };
+
+    final source = BookSource(
+      bookSourceUrl: baseUrl,
+      bookSourceName: '測試書源',
+      ruleContent: ContentRule(
+        content: '#content@text',
+        nextContentUrl: 'a.next@href',
+      ),
+    );
+    final book = Book(
+      bookUrl: '$baseUrl/book/parallel-content',
+      origin: baseUrl,
+      originName: '測試書源',
+    );
+    final chapter = BookChapter(
+      title: '第一章',
+      url: '$baseUrl/content/1',
+      bookUrl: book.bookUrl,
+    );
+
+    await expectLater(
+      WebBook.getContentAwait(source, book, chapter),
+      throwsA(anything),
+    );
+  });
 }

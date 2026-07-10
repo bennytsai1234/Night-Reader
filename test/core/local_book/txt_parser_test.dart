@@ -1,6 +1,17 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
+import 'package:night_reader/core/services/encoding_detect.dart';
+
+List<int> _utf16LeWithBom(String text) {
+  final bytes = <int>[0xFF, 0xFE];
+  for (final codeUnit in text.codeUnits) {
+    bytes
+      ..add(codeUnit & 0xFF)
+      ..add(codeUnit >> 8);
+  }
+  return bytes;
+}
 
 void main() {
   group('TxtParser Tests', () {
@@ -31,6 +42,35 @@ void main() {
       expect(chapters.length, 2);
       expect(chapters[0]['title'], contains('第一章'));
       expect(chapters[1]['title'], contains('第二章'));
+    });
+
+    test('UTF-16LE Chapter Splitting and Byte Ranges', () async {
+      final file = File('${Directory.systemTemp.path}/utf16le_chapters.txt');
+      await file.writeAsBytes(
+        _utf16LeWithBom('第一章 測試\n內容甲\n第二章 測試\n內容乙'),
+        flush: true,
+      );
+
+      try {
+        final result = await TxtParser(file).splitChapters();
+
+        expect(result.charset, 'UTF-16LE');
+        expect(result.chapters, hasLength(2));
+        expect(result.chapters.first['start'], 2);
+        expect(result.chapters.first['end'], result.chapters.last['start']);
+
+        final bytes = await file.readAsBytes();
+        final first = result.chapters.first;
+        final firstContent = EncodingDetect.decodeWithCharset(
+          bytes.sublist(first['start'] as int, first['end'] as int),
+          result.charset,
+        );
+        expect(firstContent, contains('第一章 測試'));
+        expect(firstContent, contains('內容甲'));
+        expect(firstContent, isNot(contains('第二章 測試')));
+      } finally {
+        if (await file.exists()) await file.delete();
+      }
     });
 
     test('No Chapter Title Handling', () async {

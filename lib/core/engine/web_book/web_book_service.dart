@@ -188,6 +188,7 @@ class WebBook {
             source,
             book,
             stage: 'toc',
+            allowPartial: true,
             concurrency: effectivePageConcurrency,
             cancelToken: cancelToken,
           );
@@ -374,6 +375,7 @@ class WebBook {
         source,
         book,
         stage: 'content',
+        allowPartial: false,
         concurrency: effectivePageConcurrency,
         cancelToken: cancelToken,
       );
@@ -507,6 +509,7 @@ class WebBook {
     BookSource source,
     Book book, {
     required String stage,
+    required bool allowPartial,
     int concurrency = _pageConcurrency,
     CancelToken? cancelToken,
   }) async {
@@ -528,6 +531,7 @@ class WebBook {
             return res;
           } catch (e) {
             AppLog.e('WebBook: 並發抓取失敗 $url: $e');
+            if (!allowPartial) rethrow;
             return null;
           } finally {
             sem.release();

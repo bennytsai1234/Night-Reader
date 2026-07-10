@@ -94,6 +94,22 @@ void main() {
       },
     );
 
+    test(
+      'does not remove a legal body prefix that only starts with title',
+      () async {
+        final result = await const ReaderV2ContentTransformer().process(
+          book: Book(bookUrl: 'book://1', origin: 'local', name: '測試書'),
+          chapter: BookChapter(title: '序'),
+          rawContent: '序章內容從這裡開始。',
+          enabledRules: const [],
+          chineseConvertType: 0,
+        );
+
+        expect(result.content, contains('序章內容從這裡開始。'));
+        expect(result.sameTitleRemoved, isFalse);
+      },
+    );
+
     test('keeps single newlines as paragraph boundaries', () {
       final content = ReaderV2Content.fromRaw(
         chapterIndex: 0,

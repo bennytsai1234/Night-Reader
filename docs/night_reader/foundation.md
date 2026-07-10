@@ -15,7 +15,7 @@
 - `lib/core/constant/` — `app_const.dart`、`app_pattern.dart`、`book_type.dart`、`source_type.dart`、`page_anim.dart`、`prefer_key.dart`。
 - `lib/core/di/injection.dart` — `getIt` + `configureDependencies()`。
 - `lib/core/exception/app_exception.dart`。
-- `lib/core/local_book/` — `local_book_formats.dart`（`kSupportedLocalBookExtensions={'txt','epub'}`）、`txt_parser.dart`。
+- `lib/core/local_book/` — `local_book_formats.dart`（`kSupportedLocalBookExtensions={'txt'}`）、`txt_parser.dart`。
 - `lib/core/storage/` — `app_cache.dart`（`AppCache`，磁碟快取+過期）、`app_storage_paths.dart`、`file_doc.dart`、`storage_metrics.dart`。
 - `lib/core/utils/` — `utils.dart`、`url_util.dart`、`string_utils.dart`、`html_utils.dart`、`network_utils.dart`、`lru_map.dart`、`logger.dart`、`ttf_parser.dart` 等。
 - `lib/core/widgets/book_cover_widget.dart`。

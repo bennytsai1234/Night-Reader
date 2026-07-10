@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -238,6 +239,13 @@ class ReaderV2ChapterRepository {
     BookChapter chapter,
     int cacheGeneration,
   ) async {
+    final localExtension = localBookExtensionFromPath(book.bookUrl);
+    if (book.origin == 'local' &&
+        book.bookUrl.startsWith('local://') &&
+        localExtension.isNotEmpty &&
+        !isSupportedLocalBookPath(book.bookUrl)) {
+      throw const ReaderV2ChapterRepositoryException('本地書格式不受支援，請使用 TXT 檔案');
+    }
     final contentDao = this.contentDao;
     if (contentDao == null) return null;
     final storage = ReaderChapterContentStorage.withMaterializer(

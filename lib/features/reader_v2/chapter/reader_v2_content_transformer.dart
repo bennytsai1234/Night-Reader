@@ -16,6 +16,7 @@ class ReaderV2ContentTransformer {
   const ReaderV2ContentTransformer();
 
   static final Map<String, RegExp> _regexCache = {};
+  static const String _duplicateTitleBoundary = r'(?=\s|\p{P}|$)';
 
   static RegExp _getOrCreateRegex(String pattern, {bool unicode = false}) {
     final key = '$pattern|$unicode';
@@ -81,7 +82,8 @@ class ReaderV2ContentTransformer {
   ) {
     final effectiveRules = (result['effectiveRules'] as List<dynamic>)
         .map(
-          (rule) => ReplaceRule.fromJson(Map<String, dynamic>.from(rule as Map)),
+          (rule) =>
+              ReplaceRule.fromJson(Map<String, dynamic>.from(rule as Map)),
         )
         .toList(growable: false);
     return ReaderV2ProcessedChapter(
@@ -164,7 +166,8 @@ class ReaderV2ContentTransformer {
       chapterTitle,
     ).replaceAll(AppPattern.spaceRegex, r'\s*');
     final duplicateTitlePattern = _getOrCreateRegex(
-      '^(\\s|\\p{P}|$nameRegex)*$titleRegex(\\s)*',
+      '^(\\s|\\p{P}|$nameRegex)*$titleRegex'
+      '$_duplicateTitleBoundary(\\s)*',
       unicode: true,
     );
     final duplicateTitleMatch = duplicateTitlePattern.firstMatch(content);
@@ -182,7 +185,8 @@ class ReaderV2ContentTransformer {
           displayTitle,
         ).replaceAll(AppPattern.spaceRegex, r'\s*');
         final displayDuplicateTitlePattern = _getOrCreateRegex(
-          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex(\\s)*',
+          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex'
+          '$_duplicateTitleBoundary(\\s)*',
           unicode: true,
         );
         final displayDuplicateTitleMatch = displayDuplicateTitlePattern

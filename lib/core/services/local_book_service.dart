@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -9,9 +8,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
-import 'package:night_reader/core/services/epub_service.dart';
-import 'package:night_reader/core/services/resource_service.dart';
-import 'package:fast_gbk/fast_gbk.dart';
+import 'package:night_reader/core/services/encoding_detect.dart';
 
 /// 本地書籍匯入結果
 class LocalBookImportResult {
@@ -42,67 +39,33 @@ class LocalBookService {
       throw UnsupportedError('不支援的本地格式: $ext');
     }
 
-    if (ext == 'txt') {
-      final result = await compute((File f) async {
-        final parser = TxtParser(f);
-        return await parser.splitChapters();
-      }, file);
+    final result = await compute((File f) async {
+      final parser = TxtParser(f);
+      return await parser.splitChapters();
+    }, file);
 
-      final book = Book(
-        bookUrl: bookUrl,
-        name: p.basenameWithoutExtension(path),
-        author: '本地',
-        origin: 'local',
-        originName: '本地',
-        isInBookshelf: true,
-        type: 0,
-        charset: result.charset,
-      );
-      final chapters = <BookChapter>[
-        for (var i = 0; i < result.chapters.length; i++)
-          BookChapter(
-            url: '$bookUrl#$i',
-            title: result.chapters[i]['title'] ?? '第 $i 章',
-            bookUrl: bookUrl,
-            index: i,
-            start: result.chapters[i]['start'],
-            end: result.chapters[i]['end'],
-          ),
-      ];
-      return LocalBookImportResult(book: book, chapters: chapters);
-    }
-
-    if (ext == 'epub') {
-      final meta = await EpubService().parseMetadata(file);
-      if (meta.coverBytes != null) {
-        await ResourceService().persistMemoryResource(
-          'memory://$bookUrl',
-          meta.coverBytes!,
-        );
-      }
-      final book = Book(
-        bookUrl: bookUrl,
-        name: meta.title,
-        author: meta.author,
-        origin: 'local',
-        originName: '本地',
-        isInBookshelf: true,
-        type: 1,
-        coverUrl: meta.coverBytes != null ? 'memory://$bookUrl' : null,
-      );
-      final chapters = <BookChapter>[
-        for (var i = 0; i < meta.chapters.length; i++)
-          BookChapter(
-            url: meta.chapters[i]['href'] ?? '',
-            title: meta.chapters[i]['title'] ?? '第 $i 章',
-            bookUrl: bookUrl,
-            index: i,
-          ),
-      ];
-      return LocalBookImportResult(book: book, chapters: chapters);
-    }
-
-    throw UnsupportedError('目前尚未支援 $ext 本地解析');
+    final book = Book(
+      bookUrl: bookUrl,
+      name: p.basenameWithoutExtension(path),
+      author: '本地',
+      origin: 'local',
+      originName: '本地',
+      isInBookshelf: true,
+      type: 0,
+      charset: result.charset,
+    );
+    final chapters = <BookChapter>[
+      for (var i = 0; i < result.chapters.length; i++)
+        BookChapter(
+          url: '$bookUrl#$i',
+          title: result.chapters[i]['title'] ?? '第 $i 章',
+          bookUrl: bookUrl,
+          index: i,
+          start: result.chapters[i]['start'],
+          end: result.chapters[i]['end'],
+        ),
+    ];
+    return LocalBookImportResult(book: book, chapters: chapters);
   }
 
   /// 獲取本地書籍章節內容
@@ -112,29 +75,25 @@ class LocalBookService {
     if (!await file.exists()) return '檔案不存在: $path';
 
     final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
-    if (ext == 'txt') {
-      // 根據章節索引 (start, end) 指標讀取 TXT 部分內容 (對標 Android ReadLocalBook.kt)
-      if (chapter.start != null && chapter.end != null) {
-        return _queueTxtRead(() async {
-          final accessFile = await _getTxtAccessFile(file, path);
-          final start = chapter.start!;
-          final end = chapter.end!;
-          AppLog.d(
-            'LocalBookService: Reading bytes from $start to $end (length: ${end - start})',
-          );
-          await accessFile.setPosition(start);
-          final bytes = await accessFile.read(end - start);
-          return _decodeBytes(bytes, book.charset ?? 'utf-8');
-        });
-      }
-      AppLog.d(
-        'LocalBookService: Missing offsets for chapter ${chapter.title}',
-      );
-      return '本地 TXT 索引缺失，請重新匯入';
-    } else if (ext == 'epub') {
-      return await EpubService().getChapterContent(file, chapter.url);
+    if (!isSupportedLocalBookExtension(ext)) {
+      return '不支援的本地格式: $ext，請使用 TXT 檔案';
     }
-    return '不支援的本地格式: $ext';
+    // 根據章節索引 (start, end) 指標讀取 TXT 部分內容 (對標 Android ReadLocalBook.kt)
+    if (chapter.start != null && chapter.end != null) {
+      return _queueTxtRead(() async {
+        final accessFile = await _getTxtAccessFile(file, path);
+        final start = chapter.start!;
+        final end = chapter.end!;
+        AppLog.d(
+          'LocalBookService: Reading bytes from $start to $end (length: ${end - start})',
+        );
+        await accessFile.setPosition(start);
+        final bytes = await accessFile.read(end - start);
+        return EncodingDetect.decodeWithCharset(bytes, book.charset ?? 'utf-8');
+      });
+    }
+    AppLog.d('LocalBookService: Missing offsets for chapter ${chapter.title}');
+    return '本地 TXT 索引缺失，請重新匯入';
   }
 
   Future<T> _queueTxtRead<T>(Future<T> Function() action) {
@@ -162,22 +121,4 @@ class LocalBookService {
     _txtAccessFilePath = path;
     return _txtAccessFile!;
   }
-
-  String _decodeBytes(List<int> bytes, String charset) {
-    try {
-      final name = charset.toLowerCase();
-      if (name == 'gbk' || name == 'gb2312' || name == 'gb18030') {
-        return gbk.decode(bytes);
-      }
-      return utf8.decode(bytes);
-    } catch (e) {
-      // 降級處理：如果 UTF-8 失敗嘗試 GBK，反之亦然
-      try {
-        return gbk.decode(bytes);
-      } catch (_) {
-        return utf8.decode(bytes, allowMalformed: true);
-      }
-    }
-  }
-
 }

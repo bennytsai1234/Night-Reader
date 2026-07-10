@@ -30,6 +30,7 @@
 | 標題 | 選定選項 | 影響模組 | 理由 |
 |---|---|---|---|
 | Reader V2 採方案 B 混合架構 | Framework `CustomScrollView.center` 雙 sliver + 自有 block 排版管線 | reader（hybrid / screen / session bridge） | 以精確 extent、連續 admission、零 offset correction 與邏輯錨點取代舊自繪 strip/backward lock，降低補章跳動與 fling 主執行緒排版風險。 |
+| 本地書格式統一為 TXT | 檔案選擇、分享匯入、章節索引與 Reader V2 只接受 TXT | foundation / services / bookshelf / association / reader | 維持純文字章節契約，避免封裝格式標記與資源語意進入文字 block 管線。 |
 
 ## Module List
 
@@ -61,4 +62,4 @@
 - **reader**：擁有 Reader V2 閱讀器主流程；現行核心為 `features/reader_v2/hybrid`（text → measure → paragraph/pump → center 雙 sliver view，橫切 anchor/overlay/progress/telemetry），外層沿用 screen / session state machine / features bridge。release 重點回歸區。未來工作從這裡開始：精確 extent、admission/領先量、Paragraph cache、章節預載與進度、TTS 逐段高亮、閱讀設定、點擊區、書籤、章內替換、換源 sheet。症狀指向：排版錯位/空白 block、滾動撞邊界、補章跳動、TTS 高亮偏移、進度或設定不保留。
 - **settings_about**：擁有設定頁群與關於/更新檢查（`features/settings` + `features/about`：`SettingsProvider`、各設定子頁、`AboutPage`、`UpdateCheckRunner`）。未來工作從這裡開始：主題/閱讀/TTS/備份/隱私設定、版本更新檢查、崩潰日誌頁。症狀指向：設定不儲存、主題未套用、更新檢查失敗。`SettingsProvider` 與 `AppConfig` 雙向同步。
 - **downloads**：擁有背景下載佇列管理頁與快取清理（`features/cache_manager` + `core/services` 中 `DownloadService`/scheduler/executor）。未來工作從這裡開始：下載佇列 UI、任務暫停/重試/刪除、快取清理、佇列與 `DownloadService` 互動。症狀指向：佇列不更新、任務卡住、快取未清、背景任務未執行。
-- **association**：擁有外部意圖處理（`features/association`：`AssociationHandlerService`，深連結 URI 與分享檔案）。未來工作從這裡開始：深連結開書、分享 TXT/EPUB 匯入、意圖對話框。症狀指向：從連結/分享開啟失敗、本地書匯入無反應。
+- **association**：擁有外部意圖處理（`features/association`：`AssociationHandlerService`，深連結 URI 與分享檔案）。未來工作從這裡開始：深連結開書、分享 TXT 匯入、意圖對話框。症狀指向：從連結/分享開啟失敗、本地書匯入無反應。

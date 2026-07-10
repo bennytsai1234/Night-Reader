@@ -20,8 +20,8 @@ class BookChapter implements RuleDataInterface {
   String? wordCount; // 本章字數
   int? start; // 文本起始偏移 (針對本地大文件)
   int? end; // 文本終止偏移
-  String? startFragmentId; // EPUB 章節 fragmentId
-  String? endFragmentId; // EPUB 下一章 fragmentId
+  String? startFragmentId;
+  String? endFragmentId;
   String? variable; // 自定義變量 (JSON)
   String? content; // 章節內容
 

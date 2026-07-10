@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:night_reader/core/services/epub_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -13,7 +12,7 @@ class ResourceService {
   factory ResourceService() => _instance;
   ResourceService._internal();
 
-  final Map<String, Uint8Uint8List> _memoryCache = {};
+  final Map<String, Uint8List> _memoryCache = {};
 
   Future<void> persistMemoryResource(String key, Uint8List data) async {
     _memoryCache[key] = data;
@@ -37,11 +36,6 @@ class ResourceService {
       return bytes;
     }
 
-    final restored = await _tryRestoreFromLocalEpub(key);
-    if (restored != null && restored.isNotEmpty) {
-      _memoryCache[key] = restored;
-      return restored;
-    }
     return null;
   }
 
@@ -51,27 +45,4 @@ class ResourceService {
     final fileName = '${base64Url.encode(utf8.encode(key))}.bin';
     return File(p.join(dir.path, fileName));
   }
-
-  Future<Uint8List?> _tryRestoreFromLocalEpub(String key) async {
-    const prefix = 'memory://local://';
-    if (!key.startsWith(prefix)) return null;
-
-    final sourcePath = key.substring(prefix.length);
-    if (!sourcePath.toLowerCase().endsWith('.epub')) return null;
-
-    final file = File(sourcePath);
-    if (!await file.exists()) return null;
-
-    try {
-      final meta = await EpubService().parseMetadata(file);
-      final bytes = meta.coverBytes;
-      if (bytes == null || bytes.isEmpty) return null;
-      await persistMemoryResource(key, bytes);
-      return bytes;
-    } catch (_) {
-      return null;
-    }
-  }
 }
-
-typedef Uint8Uint8List = Uint8List; // Fix for potential naming conflicts
