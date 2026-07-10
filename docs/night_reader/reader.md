@@ -19,7 +19,7 @@
 
 ## Dependencies & Impact
 
-- 上游：`database/dao`（book/book_source/chapter/bookmark/replace_rule/reader_chapter_content）、`services/{book_source,book_storage,source_switch,tts,reader_chapter_content_store/storage}`、`engine/{app_event_bus,reader/chinese_text_converter}`、`models/{book,chapter,replace_rule,book_source}`、`config/app_config`、`constant/{page_anim,prefer_key}`、`di`、`shared/{theme,navigation}`。
+- 上游：`database/dao`（book/book_source/chapter/bookmark/replace_rule/reader_chapter_content）、`services/{book_source,book_storage,source_switch,tts,reader_chapter_content_store/storage}`、`engine/{app_event_bus,reader/chinese_text_converter}`、`models/{book,chapter,replace_rule,book_source}`、`config/app_config`、`constant/prefer_key`、`di`、`shared/{theme,navigation}`。
 - 下游影響：TTS 經 `TTSService`+`ttsProgress` 事件；進度/書籤寫回 DAO；換源經 `source_switch_service`。閱讀設定與 `settings`/`AppConfig` 同步。
 - 被開書轉場（`shared/navigation/book_open_route.dart`）進入。
 

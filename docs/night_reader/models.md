@@ -8,7 +8,7 @@
 ## Scope
 
 - `lib/core/models/` 根目錄：`book.dart`、`book_source.dart`、`base_source.dart`、`book_source_part.dart`、`chapter.dart`、`bookmark.dart`、`book_group.dart`、`book_progress.dart`、`book_chapter_review.dart`、`cache.dart`、`cookie.dart`、`dict_rule.dart`、`download_task.dart`、`http_tts.dart`、`read_record.dart`、`reader_chapter_content.dart`、`replace_rule.dart`、`rule_data_interface.dart`、`rule_sub.dart`、`search_book.dart`、`search_keyword.dart`、`server.dart`、`source_subscription.dart`、`txt_toc_rule.dart`。
-- `lib/core/models/book/` — `book_base.dart`、`book_content.dart`、`book_extensions.dart`（`BookExtensions`，JS 引擎操作的 Book 擴充方法）、`book_logic.dart`、`book_serialization.dart`。
+- `lib/core/models/book/` — `book_base.dart`、`book_extensions.dart`（`BookExtensions`，JS 引擎操作的 Book 擴充方法）、`book_logic.dart`、`book_serialization.dart`。
 - `lib/core/models/source/` — `book_source_base.dart`、`book_source_logic.dart`、`book_source_rules.dart`、`book_source_serialization.dart`、`explore_kind.dart`（`ExploreKind`，發現分類）。
 
 ## Dependencies & Impact

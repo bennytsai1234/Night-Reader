@@ -12,12 +12,12 @@
 - `lib/features/welcome/` — `splash_page.dart`、`main_page.dart`（底部導航：書架/發現/我的）、`startup_failure_panel.dart`。
 - `lib/core/base/base_provider.dart` — `BaseProvider`（`isLoading`/`errorMessage`/`cancelToken`）。
 - `lib/core/config/app_config.dart` — 全域配置鏡像，與 `SettingsProvider` 同步。
-- `lib/core/constant/` — `app_const.dart`、`app_pattern.dart`、`book_type.dart`、`source_type.dart`、`page_anim.dart`、`prefer_key.dart`。
+- `lib/core/constant/` — `app_const.dart`、`app_pattern.dart`、`book_type.dart`、`source_type.dart`、`prefer_key.dart`。
 - `lib/core/di/injection.dart` — `getIt` + `configureDependencies()`。
 - `lib/core/exception/app_exception.dart`。
 - `lib/core/local_book/` — `local_book_formats.dart`（`kSupportedLocalBookExtensions={'txt'}`）、`txt_parser.dart`。
 - `lib/core/storage/` — `app_cache.dart`（`AppCache`，磁碟快取+過期）、`app_storage_paths.dart`、`file_doc.dart`、`storage_metrics.dart`。
-- `lib/core/utils/` — `utils.dart`、`url_util.dart`、`string_utils.dart`、`html_utils.dart`、`network_utils.dart`、`lru_map.dart`、`logger.dart`、`ttf_parser.dart` 等。
+- `lib/core/utils/` — `utils.dart`、`url_util.dart`、`string_utils.dart`、`html_utils.dart`、`network_utils.dart`、`lru_map.dart`、`ttf_parser.dart` 等。
 - `lib/core/widgets/book_cover_widget.dart`。
 - `lib/core/network/` — `str_response.dart`（`StrResponse`）、`interceptors/app_interceptor.dart`（`AppInterceptor`，UA/Referer/手動 redirect 鏈）、`interceptors/lenient_cookie_manager.dart`（`LenientCookieManager`，容錯 cookie）。組裝於 `core/services/network_service.dart`。
 
