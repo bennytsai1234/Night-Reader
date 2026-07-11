@@ -77,12 +77,14 @@ final class RenderCachedBlock extends RenderBox {
 
   set blockKey(BlockKey value) {
     if (_blockKey == value) return;
+    _cancelParagraphWait();
     _blockKey = value;
     markNeedsLayout();
   }
 
   set epoch(LayoutEpoch value) {
     if (_epoch == value) return;
+    _cancelParagraphWait();
     _epoch = value;
     markNeedsPaint();
   }
@@ -101,6 +103,7 @@ final class RenderCachedBlock extends RenderBox {
 
   set paragraphCache(ParagraphCache value) {
     if (identical(_paragraphCache, value)) return;
+    _cancelParagraphWait();
     _paragraphCache = value;
     markNeedsPaint();
   }
@@ -128,10 +131,41 @@ final class RenderCachedBlock extends RenderBox {
     size = constraints.constrain(Size(width, height));
   }
 
+  /// paint 撲空後是否已向 [ParagraphCache] 註冊 put-waiter。
+  bool _waitingForParagraph = false;
+
+  void _handleParagraphReady() {
+    // put() 消費 waiter 即移除註冊，這裡只需重置旗標並請求重繪。
+    _waitingForParagraph = false;
+    if (attached) markNeedsPaint();
+  }
+
+  void _cancelParagraphWait() {
+    if (!_waitingForParagraph) return;
+    _paragraphCache.removePutWaiter(_blockKey, _epoch, _handleParagraphReady);
+    _waitingForParagraph = false;
+  }
+
+  @override
+  void detach() {
+    _cancelParagraphWait();
+    super.detach();
+  }
+
   @override
   void paint(PaintingContext context, Offset offset) {
     final entry = _paragraphCache.acquireEntry(_blockKey, _epoch);
-    if (entry == null) return;
+    if (entry == null) {
+      // 段落尚未建置或已被 LRU 逐出：extent 由 DocumentIndex 撐著，這幀
+      // 只能留白；註冊一次性 waiter，段落補建完成即自動重繪，不再依賴
+      // sliver 子項被回收再 materialize 才恢復。
+      if (!_waitingForParagraph) {
+        _waitingForParagraph = true;
+        _paragraphCache.addPutWaiter(_blockKey, _epoch, _handleParagraphReady);
+      }
+      return;
+    }
+    _cancelParagraphWait();
     final canvas = context.canvas;
     if (entry.bakedColor == _textColor) {
       // 熱路徑：色已烘進 Paragraph，直繪零離屏。

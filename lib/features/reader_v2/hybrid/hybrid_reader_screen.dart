@@ -56,6 +56,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
     this.enableDiskMetrics = true,
+    this.paragraphCacheCapacity = 512,
   });
 
   final ReaderV2Runtime runtime;
@@ -75,6 +76,9 @@ class HybridReaderScreen extends StatefulWidget {
   /// 測試可注入 `TextPreprocessor(useIsolate: false)` 避免真 isolate。
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskMetrics;
+
+  /// 測試 seam：縮小 ParagraphCache 容量以重現 LRU 逐出；正式路徑用預設。
+  final int paragraphCacheCapacity;
 
   @override
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
@@ -128,6 +132,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   ReaderV2Location? _lastSyncedLocation;
   bool _initialRestoreCompleted = false;
   bool _capturing = false;
+
+  /// restore 進行中旗標：此期間投放的 block 於建置「之前」即 pin 進
+  /// ParagraphCache（見 [_admitOrSubmit]），防止初始視窗建置量超過快取
+  /// 容量時 LRU 把首屏段落逐出。
+  bool _restorePinning = false;
   bool _dragging = false;
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
@@ -146,7 +155,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     // 直驅（fling 幀 build 成本歸零的關鍵）。
     _admission = AdmissionController(documentIndex: _documentIndex);
     _physics = HybridScrollPhysics(admission: _admission);
-    _paragraphCache = ParagraphCache();
+    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     _refreshEpochBinding();
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
     _lastReportedLocation = widget.runtime.state.visibleLocation;
@@ -284,7 +293,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterRepo.invalidateLoaded(emitEvents: false);
     _pump.dispose();
     final oldCache = _paragraphCache;
-    _paragraphCache = ParagraphCache();
+    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     WidgetsBinding.instance.addPostFrameCallback((_) => oldCache.dispose());
     // 舊索引的 extent 屬於已回收的舊 namespace；不清空的話重建到 restore
     // 完成之間的幀會拿舊座標配空 metrics 觸發 I1。restore 會重定中心。
@@ -457,6 +466,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       for (final loadedBlocks in _blocks.values) {
         _admission.registerChapter(loadedBlocks);
       }
+      // restore 期間畫面停在 loading，_updateParagraphPins 不會執行；先清
+      // 舊 pin、預 pin 錨點，並開啟 submit-time pinning——不 pin 的話初始
+      // 視窗建置量超過快取容量時，LRU 會把首屏段落逐出（開書只剩錨點
+      // 一行、其餘佔位空白）。正式 build 的 _updateParagraphPins 會接手
+      // 重整 pin 集合。
+      _paragraphCache
+        ..unpinAll()
+        ..pinKeys(<BlockKey>[anchor.blockKey], _epoch);
+      _restorePinning = true;
       _enqueued.clear();
       _windowCenter = chapterIndex;
       _chapterRepo.setPrefetchCenter(chapterIndex);
@@ -477,6 +495,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       return true;
     } finally {
       if (ticket == _restoreTicket) {
+        _restorePinning = false;
         _pump.onScrollStateChanged(
           _dragging ? PumpState.dragging : PumpState.idle,
         );
@@ -722,6 +741,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     bool anchor = false,
   }) {
     final key = block.key;
+    // pin 必須發生在建置之前：pumpPending 單一批次就可能建掉整個初始
+    // 視窗，put 之後才 pin 救不回批次途中已被 LRU 逐出的條目。
+    if (_restorePinning) {
+      _paragraphCache.pinKeys(<BlockKey>[key], _epoch);
+    }
     final metrics = _measurementStore.get(_namespace, key);
     // fresh = 存在且烘色一致；換色後這裡回 false → 重投任務以新色重建。
     final hasParagraph = _paragraphCache.containsFresh(

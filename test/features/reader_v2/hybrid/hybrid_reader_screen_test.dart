@@ -13,6 +13,7 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dar
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
+import 'package:night_reader/features/reader_v2/hybrid/view/cached_block_widget.dart';
 import 'package:night_reader/features/reader_v2/hybrid/view/hybrid_scroll_view.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -130,6 +131,7 @@ void main() {
     ReaderV2ViewportController controller, {
     ValueNotifier<HybridProgressSnapshot?>? progress,
     ReaderV2TtsHighlight? ttsHighlight,
+    int paragraphCacheCapacity = 512,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -147,6 +149,7 @@ void main() {
               progressListenable: progress,
               preprocessor: const TextPreprocessor(useIsolate: false),
               enableDiskMetrics: false,
+              paragraphCacheCapacity: paragraphCacheCapacity,
             ),
           ),
         ),
@@ -191,6 +194,32 @@ void main() {
         ReaderV2Location.maxVisualOffsetPx,
       ),
     );
+  });
+
+  testWidgets('開書建置量超過 ParagraphCache 容量時，首屏 block 不空白', (tester) async {
+    // 回歸守門員：容量遠小於初始視窗所需 block 數時，修復前 restore 期間
+    // 無 pin 保護，LRU 會把錨點周圍（首屏可見）的段落逐出——開書只剩
+    // 錨點一行、其餘佔位空白，滑動後才恢復。
+    final runtime = makeRuntime(
+      List.generate(3, (i) => chapter(i, paragraphCount: 12)),
+    );
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 4);
+    await openAndSettle(tester, runtime);
+    expect(runtime.state.phase, ReaderV2Phase.ready);
+
+    final elements = find.byType(CachedBlockWidget).evaluate().toList();
+    expect(elements, isNotEmpty);
+    for (final element in elements) {
+      final widget = element.widget as CachedBlockWidget;
+      expect(
+        element.renderObject,
+        paints..paragraph(),
+        reason: '${widget.blockKey} 已 materialize，必須畫得出段落而非佔位空白',
+      );
+    }
   });
 
   testWidgets('scrollBy 前進、settle 落盤並更新 D6 進度', (tester) async {

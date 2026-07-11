@@ -33,6 +33,31 @@ void main() {
       cache.dispose();
     });
 
+    test('put 一次性消費 put-waiter，remove 後不再回呼', () {
+      final cache = ParagraphCache();
+      const epoch = LayoutEpoch.initial;
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      var calls = 0;
+      void waiter() => calls += 1;
+
+      cache
+        ..addPutWaiter(key, epoch, waiter)
+        ..put(key, epoch, _paragraph('a'));
+      expect(calls, 1);
+
+      // 一次性：put 已消費註冊，再 put 不重複回呼。
+      cache.put(key, epoch, _paragraph('b'));
+      expect(calls, 1);
+
+      // remove 後 put 不回呼。
+      cache
+        ..addPutWaiter(key, epoch, waiter)
+        ..removePutWaiter(key, epoch, waiter)
+        ..put(key, epoch, _paragraph('c'));
+      expect(calls, 1);
+      cache.dispose();
+    });
+
     test('tracks baked color for the paint fast path', () {
       final cache = ParagraphCache();
       const epoch = LayoutEpoch.initial;

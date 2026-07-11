@@ -20,6 +20,8 @@ final class ParagraphCache implements HybridParagraphCache {
   final LinkedHashMap<_ParagraphCacheKey, ParagraphEntry> _entries =
       LinkedHashMap<_ParagraphCacheKey, ParagraphEntry>();
   final Set<_ParagraphCacheKey> _pinned = <_ParagraphCacheKey>{};
+  final Map<_ParagraphCacheKey, List<ui.VoidCallback>> _putWaiters =
+      <_ParagraphCacheKey, List<ui.VoidCallback>>{};
 
   int get length => _entries.length;
 
@@ -49,6 +51,34 @@ final class ParagraphCache implements HybridParagraphCache {
     previous?.paragraph.dispose();
     _entries[cacheKey] = ParagraphEntry(paragraph, bakedColor);
     _evictIfNeeded();
+    // 一次性消費：paint 撲空而空白的 render object 靠這裡收到重繪信號；
+    // 除此之外沒有任何管道能讓「補建完成的段落」回到畫面上。
+    final waiters = _putWaiters.remove(cacheKey);
+    if (waiters != null) {
+      for (final callback in waiters) {
+        callback();
+      }
+    }
+  }
+
+  /// paint 撲空時註冊：該 key 的 Paragraph 進快取後回呼一次（一次性，
+  /// put 時整組消費移除）。
+  void addPutWaiter(BlockKey key, LayoutEpoch epoch, ui.VoidCallback callback) {
+    _putWaiters
+        .putIfAbsent(_ParagraphCacheKey(key, epoch), () => <ui.VoidCallback>[])
+        .add(callback);
+  }
+
+  void removePutWaiter(
+    BlockKey key,
+    LayoutEpoch epoch,
+    ui.VoidCallback callback,
+  ) {
+    final cacheKey = _ParagraphCacheKey(key, epoch);
+    final waiters = _putWaiters[cacheKey];
+    if (waiters == null) return;
+    waiters.remove(callback);
+    if (waiters.isEmpty) _putWaiters.remove(cacheKey);
   }
 
   @override
@@ -76,6 +106,7 @@ final class ParagraphCache implements HybridParagraphCache {
     }
     _entries.clear();
     _pinned.clear();
+    _putWaiters.clear();
   }
 
   bool contains(BlockKey key, LayoutEpoch epoch) {
