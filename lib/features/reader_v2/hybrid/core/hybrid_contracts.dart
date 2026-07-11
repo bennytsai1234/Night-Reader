@@ -66,11 +66,27 @@ final class HybridProgressSnapshot {
   final double chapterPercent;
 
   String get chapterLabel {
-    if (chapterCount <= 0) return '第 0 章';
-    return '第 ${chapterIndex + 1}/$chapterCount 章';
+    if (chapterCount <= 0) return '第 0 章 0/10';
+    return '第 ${chapterIndex + 1} 章 $chapterSegment/10';
   }
 
-  String get percentLabel => '${chapterPercent.toStringAsFixed(1)}%';
+  /// 目前章節在整本書中的進度。
+  double get bookPercent {
+    if (chapterCount <= 0) return 0.0;
+    final safeChapterIndex = chapterIndex.clamp(0, chapterCount - 1);
+    final safeChapterPercent = chapterPercent.clamp(0.0, 100.0);
+    return ((safeChapterIndex + safeChapterPercent / 100) /
+            chapterCount.toDouble()) *
+        100;
+  }
+
+  String get percentLabel => '${bookPercent.toStringAsFixed(1)}%';
+
+  /// 目前章節已完成的十分段數；章節開始為 0/10，章節結束為 10/10。
+  int get chapterSegment {
+    if (chapterPercent >= 100) return 10;
+    return (chapterPercent / 10).floor().clamp(0, 9);
+  }
 
   /// 這是資訊列的顯示模型；小於 0.1% 的 raw progress 變化不應觸發
   /// widget rebuild。
@@ -79,9 +95,11 @@ final class HybridProgressSnapshot {
     return other is HybridProgressSnapshot &&
         other.chapterIndex == chapterIndex &&
         other.chapterCount == chapterCount &&
+        other.chapterLabel == chapterLabel &&
         other.percentLabel == percentLabel;
   }
 
   @override
-  int get hashCode => Object.hash(chapterIndex, chapterCount, percentLabel);
+  int get hashCode =>
+      Object.hash(chapterIndex, chapterCount, chapterLabel, percentLabel);
 }

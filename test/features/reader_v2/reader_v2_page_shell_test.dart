@@ -494,8 +494,8 @@ void main() {
     );
 
     expect(contentBuilds, 1);
-    expect(find.text('第 1/3 章'), findsOneWidget);
-    expect(find.text('10.0%'), findsOneWidget);
+    expect(find.text('第 1 章 1/10'), findsOneWidget);
+    expect(find.text('3.3%'), findsOneWidget);
 
     progress.value = const HybridProgressSnapshot(
       chapterIndex: 1,
@@ -505,8 +505,8 @@ void main() {
     await tester.pump();
 
     expect(contentBuilds, 1);
-    expect(find.text('第 2/3 章'), findsOneWidget);
-    expect(find.text('42.3%'), findsOneWidget);
+    expect(find.text('第 2 章 4/10'), findsOneWidget);
+    expect(find.text('47.4%'), findsOneWidget);
   });
 }
 

@@ -219,7 +219,8 @@ void main() {
     expect(snapshot.chapterCount, 3);
     expect(snapshot.chapterPercent, greaterThan(0));
     expect(snapshot.chapterPercent, lessThanOrEqualTo(99.9));
-    expect(snapshot.chapterLabel, '第 1/3 章');
+    expect(snapshot.chapterLabel, startsWith('第 1 章 '));
+    expect(snapshot.chapterSegment, inInclusiveRange(0, 9));
   });
 
   testWidgets('關閉重開後 capture/restore 幾何誤差不超過 0.01 logical px', (tester) async {
