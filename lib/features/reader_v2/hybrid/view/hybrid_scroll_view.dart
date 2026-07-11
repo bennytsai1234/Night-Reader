@@ -70,24 +70,17 @@ final class HybridScrollView extends StatelessWidget {
       key: key,
       documentIndex: documentIndex,
       beforeCenter: beforeCenter,
-      delegate: SliverChildBuilderDelegate((context, index) {
-        final key = documentIndex.keyForSliverIndex(
-          beforeCenter: beforeCenter,
-          index: index,
-        );
-        if (key == null) return null;
-        return Padding(
-          padding: horizontalPadding,
-          child: CachedBlockWidget(
-            blockKey: key,
-            epoch: epoch,
-            namespace: namespace,
-            measurementStore: measurementStore,
-            paragraphCache: paragraphCache,
-            textColor: textColor,
-          ),
-        );
-      }, childCount: _itemCount(beforeCenter: beforeCenter)),
+      delegate: HybridSliverChildDelegate(
+        documentIndex: documentIndex,
+        beforeCenter: beforeCenter,
+        resetGeneration: documentIndex.resetGeneration,
+        namespace: namespace,
+        measurementStore: measurementStore,
+        paragraphCache: paragraphCache,
+        epoch: epoch,
+        textColor: textColor,
+        horizontalPadding: horizontalPadding,
+      ),
       itemExtentBuilder: (index, dimensions) {
         final key = documentIndex.keyForSliverIndex(
           beforeCenter: beforeCenter,
@@ -107,11 +100,75 @@ final class HybridScrollView extends StatelessWidget {
       },
     );
   }
+}
 
-  int _itemCount({required bool beforeCenter}) {
-    return beforeCenter
-        ? documentIndex.beforeCount
-        : documentIndex.centerAndAfterCount;
+/// 即時讀 [DocumentIndex] 的 child delegate。
+///
+/// 取代 `SliverChildBuilderDelegate`：childCount 不在 build 時凍結，
+/// 新放行 block 由 [DocumentIndex.revision] → render 層 markNeedsLayout
+/// 直接材料化，不需要 setState 重建整棵滾動子樹（fling 幀 build 歸零）。
+/// [RenderCachedBlock] 自身即 repaint boundary，故不再額外包
+/// RepaintBoundary / AutomaticKeepAlive。
+final class HybridSliverChildDelegate extends SliverChildDelegate {
+  const HybridSliverChildDelegate({
+    required this.documentIndex,
+    required this.beforeCenter,
+    required this.resetGeneration,
+    required this.namespace,
+    required this.measurementStore,
+    required this.paragraphCache,
+    required this.epoch,
+    required this.textColor,
+    required this.horizontalPadding,
+  });
+
+  final DocumentIndex documentIndex;
+  final bool beforeCenter;
+  final int resetGeneration;
+  final MeasurementNamespace namespace;
+  final MeasurementStore measurementStore;
+  final ParagraphCache paragraphCache;
+  final LayoutEpoch epoch;
+  final Color textColor;
+  final EdgeInsets horizontalPadding;
+
+  @override
+  Widget? build(BuildContext context, int index) {
+    final key = documentIndex.keyForSliverIndex(
+      beforeCenter: beforeCenter,
+      index: index,
+    );
+    if (key == null) return null;
+    return Padding(
+      padding: horizontalPadding,
+      child: CachedBlockWidget(
+        blockKey: key,
+        epoch: epoch,
+        namespace: namespace,
+        measurementStore: measurementStore,
+        paragraphCache: paragraphCache,
+        textColor: textColor,
+      ),
+    );
+  }
+
+  @override
+  int? get estimatedChildCount =>
+      beforeCenter
+          ? documentIndex.beforeCount
+          : documentIndex.centerAndAfterCount;
+
+  @override
+  bool shouldRebuild(covariant HybridSliverChildDelegate oldDelegate) {
+    return !identical(documentIndex, oldDelegate.documentIndex) ||
+        beforeCenter != oldDelegate.beforeCenter ||
+        resetGeneration != oldDelegate.resetGeneration ||
+        namespace != oldDelegate.namespace ||
+        !identical(measurementStore, oldDelegate.measurementStore) ||
+        !identical(paragraphCache, oldDelegate.paragraphCache) ||
+        epoch != oldDelegate.epoch ||
+        textColor != oldDelegate.textColor ||
+        horizontalPadding != oldDelegate.horizontalPadding;
   }
 }
 
@@ -128,16 +185,19 @@ final class HybridScrollPhysics extends ClampingScrollPhysics {
     this.admission,
     this.unreadyFriction = 0.45,
     this.deficitFlingFriction = 0.09,
+    this.baseFlingFriction = 0.015,
   });
 
   final AdmissionController? admission;
 
-  /// 領先量不足時拖曳位移的衰減倍率。
+  /// 領先量完全耗盡時拖曳位移的衰減倍率下限。
   final double unreadyFriction;
 
-  /// 領先量不足時 fling 模擬的摩擦係數（框架預設 0.015 的 6 倍）：
-  /// 慣性以自然曲線更快收斂，取代衝到已放行邊界被硬夾停的「撞牆」。
+  /// 領先量完全耗盡時 fling 模擬的摩擦係數上限（框架預設 0.015 的 6 倍）。
   final double deficitFlingFriction;
+
+  /// 框架 [ClampingScrollSimulation] 的預設摩擦，作為連續內插的下端。
+  final double baseFlingFriction;
 
   @override
   HybridScrollPhysics applyTo(ScrollPhysics? ancestor) {
@@ -146,23 +206,22 @@ final class HybridScrollPhysics extends ClampingScrollPhysics {
       admission: admission,
       unreadyFriction: unreadyFriction,
       deficitFlingFriction: deficitFlingFriction,
+      baseFlingFriction: baseFlingFriction,
     );
   }
 
-  bool _deficitToward({required bool forward}) {
-    final controller = admission;
-    if (controller == null) return false;
-    return forward
-        ? controller.needsForwardFriction
-        : controller.needsBackwardFriction;
+  /// 0=領先量充足、1=完全耗盡。admission 提供含遲滯的 smoothstep 曲線，
+  /// 讓 admission 增長觸發 simulation 重建時，摩擦連續過渡而非二態跳變。
+  double _scaleToward({required bool forward}) {
+    return admission?.frictionScaleToward(forward: forward) ?? 0.0;
   }
 
   @override
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
     // offset 為指針位移：負值 = 內容前進（pixels 增加）。
-    final towardForward = offset < 0;
-    if (_deficitToward(forward: towardForward)) {
-      return offset * unreadyFriction;
+    final scale = _scaleToward(forward: offset < 0);
+    if (scale > 0) {
+      return offset * (1.0 + (unreadyFriction - 1.0) * scale);
     }
     return super.applyPhysicsToUserOffset(position, offset);
   }
@@ -172,23 +231,27 @@ final class HybridScrollPhysics extends ClampingScrollPhysics {
     ScrollMetrics position,
     double velocity,
   ) {
-    // velocity > 0 = pixels 增加 = 向前。行進方向領先量不足時改用高摩擦
-    // 模擬；領先量充足或已到書首/書尾邊界則維持框架行為。
+    // velocity > 0 = pixels 增加 = 向前。行進方向領先量偏低時以連續加重
+    // 的摩擦收斂；領先量充足或已到書首/書尾邊界則維持框架行為。
     if (!position.outOfRange &&
-        velocity.abs() >= toleranceFor(position).velocity &&
-        _deficitToward(forward: velocity > 0)) {
-      if (velocity > 0.0 && position.pixels >= position.maxScrollExtent) {
-        return null;
+        velocity.abs() >= toleranceFor(position).velocity) {
+      final scale = _scaleToward(forward: velocity > 0);
+      if (scale > 0) {
+        if (velocity > 0.0 && position.pixels >= position.maxScrollExtent) {
+          return null;
+        }
+        if (velocity < 0.0 && position.pixels <= position.minScrollExtent) {
+          return null;
+        }
+        return ClampingScrollSimulation(
+          position: position.pixels,
+          velocity: velocity,
+          friction:
+              baseFlingFriction +
+              (deficitFlingFriction - baseFlingFriction) * scale,
+          tolerance: toleranceFor(position),
+        );
       }
-      if (velocity < 0.0 && position.pixels <= position.minScrollExtent) {
-        return null;
-      }
-      return ClampingScrollSimulation(
-        position: position.pixels,
-        velocity: velocity,
-        friction: deficitFlingFriction,
-        tolerance: toleranceFor(position),
-      );
     }
     return super.createBallisticSimulation(position, velocity);
   }

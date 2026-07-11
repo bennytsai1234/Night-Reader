@@ -58,6 +58,43 @@ final class AdmissionController extends ChangeNotifier {
 
   bool get hasLeadDeficit => needsForwardFriction || needsBackwardFriction;
 
+  // 摩擦連續化參數：領先量 ≤ floor×window 滿摩擦、≥ release×window 完全
+  // 解除，之間 smoothstep；遲滯 latch 須先跌破 engage×window 才開始施加，
+  // 避免 admission 增長觸發 simulation 重建時摩擦在門檻上二態抖動。
+  static const double _frictionEngageFraction = 0.8;
+  static const double _frictionReleaseFraction = 1.0;
+  static const double _frictionFloorFraction = 0.25;
+  bool _forwardFrictionLatched = false;
+  bool _backwardFrictionLatched = false;
+
+  /// 行進方向的摩擦比例（0=無額外摩擦、1=滿赤字摩擦），連續且帶遲滯。
+  double frictionScaleToward({required bool forward}) {
+    final latched =
+        forward ? _forwardFrictionLatched : _backwardFrictionLatched;
+    if (!latched) return 0.0;
+    if (forward ? atForwardBookBoundary : atBackwardBookBoundary) return 0.0;
+    final window = forward ? guaranteedWindow : backwardGuaranteedWindow;
+    final lead = forward ? _latestForwardLead : _latestBackwardLead;
+    final floor = window * _frictionFloorFraction;
+    final release = window * _frictionReleaseFraction;
+    if (lead <= floor) return 1.0;
+    if (lead >= release) return 0.0;
+    final t = (release - lead) / (release - floor);
+    return t * t * (3 - 2 * t);
+  }
+
+  bool _updateFrictionLatch({
+    required bool latched,
+    required double lead,
+    required double window,
+    required bool atBoundary,
+  }) {
+    if (atBoundary) return false;
+    if (lead < window * _frictionEngageFraction) return true;
+    if (lead >= window * _frictionReleaseFraction) return false;
+    return latched;
+  }
+
   void reset({required LayoutEpoch epoch, required int chapterCount}) {
     _epoch = epoch;
     _chapterCount = chapterCount;
@@ -67,6 +104,10 @@ final class AdmissionController extends ChangeNotifier {
     _visibleTop = null;
     _visibleBottom = null;
     _cacheExtent = 0;
+    _latestForwardLead = double.infinity;
+    _latestBackwardLead = double.infinity;
+    _forwardFrictionLatched = false;
+    _backwardFrictionLatched = false;
   }
 
   void registerChapter(ChapterBlocks blocks) {
@@ -259,6 +300,18 @@ final class AdmissionController extends ChangeNotifier {
   }) {
     _latestForwardLead = documentIndex.afterExtent - viewportBottom;
     _latestBackwardLead = documentIndex.beforeExtent + viewportTop;
+    _forwardFrictionLatched = _updateFrictionLatch(
+      latched: _forwardFrictionLatched,
+      lead: _latestForwardLead,
+      window: guaranteedWindow,
+      atBoundary: atForwardBookBoundary,
+    );
+    _backwardFrictionLatched = _updateFrictionLatch(
+      latched: _backwardFrictionLatched,
+      lead: _latestBackwardLead,
+      window: backwardGuaranteedWindow,
+      atBoundary: atBackwardBookBoundary,
+    );
     assert(
       (atForwardBookBoundary || _latestForwardLead >= 0) &&
           (atBackwardBookBoundary || _latestBackwardLead >= 0),

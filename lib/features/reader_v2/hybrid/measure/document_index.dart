@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show ChangeNotifier, Listenable;
+
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
@@ -32,6 +34,15 @@ final class DocumentIndex implements HybridDocumentIndex {
 
   BlockKey _centerKey;
   final Map<BlockKey, BlockMetrics> _metrics = <BlockKey, BlockMetrics>{};
+  final _DocumentRevision _revision = _DocumentRevision();
+  int _resetGeneration = 0;
+
+  /// 放行/重建的變更訊號。render 層（sliver）訂閱後以 markNeedsLayout
+  /// 直驅重排——新放行 block 的可見化不需要 widget 層 setState 重建。
+  Listenable get revision => _revision;
+
+  /// 結構性 reset 的世代。delegate 用它辨識同一 index 實例內的 key 替換。
+  int get resetGeneration => _resetGeneration;
 
   /// center 之上，index 0 = 最接近 center，索引向上（key 遞減）。
   final List<BlockKey> _beforeCenter = <BlockKey>[];
@@ -70,6 +81,8 @@ final class DocumentIndex implements HybridDocumentIndex {
     _centerKey = centerKey;
     _metrics.clear();
     _rebuildAll();
+    _resetGeneration += 1;
+    _revision.bump();
   }
 
   void admit(BlockKey key, BlockMetrics metrics) {
@@ -80,6 +93,7 @@ final class DocumentIndex implements HybridDocumentIndex {
       // 保守走全量重建維持索引一致。
       _metrics[key] = metrics;
       _rebuildAll();
+      _revision.bump();
       return;
     }
     _metrics[key] = metrics;
@@ -88,6 +102,7 @@ final class DocumentIndex implements HybridDocumentIndex {
       assert(inOrder, 'I2: backward admit $key is not at the contiguous edge.');
       if (!inOrder) {
         _rebuildAll();
+        _revision.bump();
         return;
       }
       _beforePositions[key] = _beforeCenter.length;
@@ -98,17 +113,20 @@ final class DocumentIndex implements HybridDocumentIndex {
       assert(inOrder, 'I2: forward admit $key is not at the contiguous edge.');
       if (!inOrder) {
         _rebuildAll();
+        _revision.bump();
         return;
       }
       _afterPositions[key] = _centerAndAfter.length;
       _centerAndAfter.add(key);
       _afterTree.append(metrics.height);
     }
+    _revision.bump();
   }
 
   void admitAll(Map<BlockKey, BlockMetrics> metrics) {
     _metrics.addAll(metrics);
     _rebuildAll();
+    _revision.bump();
   }
 
   BlockMetrics? metricsFor(BlockKey key) => _metrics[key];
@@ -357,6 +375,11 @@ final class DocumentIndex implements HybridDocumentIndex {
       after.map((key) => _metrics[key]!.height).toList(growable: false),
     );
   }
+}
+
+/// 對外只暴露 [Listenable]，bump 收在 [DocumentIndex] 內部。
+final class _DocumentRevision extends ChangeNotifier {
+  void bump() => notifyListeners();
 }
 
 /// 可增量 append 的 Fenwick tree：append 攤銷 O(log n)（容量翻倍時全量重建）。

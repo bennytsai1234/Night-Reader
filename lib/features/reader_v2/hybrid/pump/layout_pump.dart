@@ -64,9 +64,17 @@ final class LayoutPump implements HybridLayoutPump {
       );
       return 0;
     }
-    final allowed = _governor.allowedSlices(_state);
+    // 預算消費制：governor 給出本幀可用 µs，逐 task 以 cost model 預測
+    // 打包；首片只要預算 > 0 就執行（block 已按 ballisticSliceBudget
+    // 預先切塊，單片有界；歸零起跑會讓 idle/rebuilding 供給停擺）。
+    final budgetMicros = _governor.frameBudgetMicros(_state);
     var completed = 0;
-    while (completed < allowed && _queue.isNotEmpty) {
+    final stopwatch = Stopwatch()..start();
+    while (_queue.isNotEmpty && budgetMicros > 0) {
+      if (completed > 0) {
+        final predicted = _costModel.predict(_peekTask()).inMicroseconds;
+        if (stopwatch.elapsedMicroseconds + predicted > budgetMicros) break;
+      }
       final task = _nextTask();
       final started = Stopwatch()..start();
       final paragraph = _buildParagraph(task);
@@ -92,11 +100,9 @@ final class LayoutPump implements HybridLayoutPump {
         BlockReady(key: task.key, epoch: task.epoch, metrics: metrics),
       );
       completed += 1;
-      if (_state == PumpState.ballistic &&
-          started.elapsed > _governor.ballisticSliceBudget) {
-        break;
-      }
+      if (stopwatch.elapsedMicroseconds >= budgetMicros) break;
     }
+    _governor.recordPumpWork(stopwatch.elapsed);
     return completed;
   }
 
@@ -105,6 +111,21 @@ final class LayoutPump implements HybridLayoutPump {
     _disposed = true;
     _queue.clear();
     unawaited(_completed.close());
+  }
+
+  /// 與 [_nextTask] 同一套計分的唯讀預覽（平手取先入者，兩者一致）。
+  LayoutTask _peekTask() {
+    if (_queue.length <= 1) return _queue.first;
+    var best = _queue.first;
+    var bestScore = _score(best);
+    for (final task in _queue) {
+      final score = _score(task);
+      if (score < bestScore) {
+        bestScore = score;
+        best = task;
+      }
+    }
+    return best;
   }
 
   LayoutTask _nextTask() {

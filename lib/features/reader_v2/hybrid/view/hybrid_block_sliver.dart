@@ -58,8 +58,26 @@ final class RenderHybridBlockSliver extends RenderSliverVariedExtentList {
   DocumentIndex _documentIndex;
   set documentIndex(DocumentIndex value) {
     if (identical(_documentIndex, value)) return;
+    if (attached) _documentIndex.revision.removeListener(_handleRevision);
     _documentIndex = value;
+    if (attached) _documentIndex.revision.addListener(_handleRevision);
     markNeedsLayout();
+  }
+
+  /// 放行/重建直驅重排：新 block 的材料化只需本 sliver relayout（extent、
+  /// childCount 皆即時讀 [DocumentIndex]），widget 層不參與。
+  void _handleRevision() => markNeedsLayout();
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _documentIndex.revision.addListener(_handleRevision);
+  }
+
+  @override
+  void detach() {
+    _documentIndex.revision.removeListener(_handleRevision);
+    super.detach();
   }
 
   bool _beforeCenter;

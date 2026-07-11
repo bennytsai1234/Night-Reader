@@ -82,8 +82,6 @@ class HybridReaderScreen extends StatefulWidget {
 
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
-  /// 動作中 capture 觸發 runtime notify 的最小間隔（沿用舊引擎節流值）。
-  static const Duration _motionNotifyInterval = Duration(milliseconds: 200);
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
 
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
@@ -128,7 +126,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   int _restoreTicket = 0;
   ReaderV2Location? _lastReportedLocation;
   ReaderV2Location? _lastSyncedLocation;
-  DateTime? _lastMotionNotifyAt;
   bool _initialRestoreCompleted = false;
   bool _capturing = false;
   bool _dragging = false;
@@ -144,8 +141,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       repository: widget.runtime.repository,
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
-    _admission = AdmissionController(documentIndex: _documentIndex)
-      ..addListener(_scheduleRebuild);
+    // 放行不再驅動 widget 層 setState：新 block 的材料化由
+    // DocumentIndex.revision → RenderHybridBlockSliver.markNeedsLayout
+    // 直驅（fling 幀 build 成本歸零的關鍵）。
+    _admission = AdmissionController(documentIndex: _documentIndex);
     _physics = HybridScrollPhysics(admission: _admission);
     _paragraphCache = ParagraphCache();
     _refreshEpochBinding();
@@ -630,7 +629,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               if (blocks == null || !mounted) return;
               _enqueueChapterTasks(blocks);
               _schedulePump();
-              _scheduleRebuild();
             }),
           );
         }
@@ -655,7 +653,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   // ---- 排版任務投放（admit 保持每側自 center 起連續，I2/I3 前提） ----
 
   void _ensureWindowTasks({BlockKey? anchorKey}) {
-    final admittedBefore = _documentIndex.admittedCount;
     for (final delta in const <int>[0, 1, -1, 2, -2]) {
       final chapter = _windowCenter + delta;
       if (chapter < 0 || chapter >= widget.runtime.chapterCount) continue;
@@ -667,14 +664,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             if ((loaded.chapterIndex - _windowCenter).abs() > 2) return;
             _enqueueChapterTasks(loaded);
             _schedulePump();
-            _scheduleRebuild();
           }),
         );
         continue;
       }
       _enqueueChapterTasks(blocks, anchorKey: delta == 0 ? anchorKey : null);
     }
-    if (_documentIndex.admittedCount != admittedBefore) _scheduleRebuild();
   }
 
   void _enqueueChapterTasks(ChapterBlocks blocks, {BlockKey? anchorKey}) {
@@ -830,7 +825,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     // 已排定的 post-frame pump 可能剛好撞上使用者開始拖曳；
     // I4 在這裡硬停，待 ScrollEnd 再恢復，不能讓 debug assert 擊穿手勢。
     if (_dragging) return;
-    final completed = await _pump.pumpPending();
+    await _pump.pumpPending();
     if (!mounted) return;
     if (_pump.queueDepth > 0) {
       _schedulePump();
@@ -839,7 +834,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _enqueued.clear();
       _updateLeadTelemetry();
     }
-    if (completed > 0) _scheduleRebuild();
+    // 完成的排版經 admission 放行時由 DocumentIndex.revision 直驅 sliver
+    // relayout，這裡不再 setState 世界重建。
   }
 
   void _updateLeadTelemetry() {
@@ -891,7 +887,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureFramePending = false;
       if (!mounted) return;
-      final location = _captureAndReport(notify: _shouldNotifyForMotion());
+      // 動作中一律靜默 capture：runtime notify 會連鎖 ReaderV2Page 與本
+      // screen 的整面 setState（fling 中的節奏性重活）。頁面層滾動中需要
+      // 跟動的顯示走 progressListenable 窄通道；完整 notify 留給 settle。
+      final location = _captureAndReport(notify: false);
       final offset = _effectiveScrollOffset();
       if (offset != null) {
         _admission.updateViewport(
@@ -907,16 +906,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _shiftWindow(location.chapterIndex);
       }
     });
-  }
-
-  bool _shouldNotifyForMotion() {
-    final now = DateTime.now();
-    final last = _lastMotionNotifyAt;
-    if (last == null || now.difference(last) >= _motionNotifyInterval) {
-      _lastMotionNotifyAt = now;
-      return true;
-    }
-    return false;
   }
 
   ReaderV2Location? _captureAndReport({required bool notify}) {

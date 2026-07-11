@@ -1,11 +1,11 @@
 {
-    "schema_version": 1,
-    "commit": "",
-    "indexed_at": "2026-06-25T04:28:25Z",
-    "project": "C-Users-045650-Desktop-Project-Night-Reader",
-    "nodes": 5493,
-    "edges": 18223,
-    "original_size": 11468800,
-    "compressed_size": 1999985,
-    "compression_level": 9
+    "schema_version": 2,
+    "commit": "859a963f06b6383c32bf17b11f1905895143c114",
+    "indexed_at": "2026-07-11T04:49:32Z",
+    "project": "home-benny-projects-Night-Reader",
+    "nodes": 5795,
+    "edges": 21061,
+    "original_size": 18415616,
+    "compressed_size": 2925932,
+    "compression_level": 3
 }
