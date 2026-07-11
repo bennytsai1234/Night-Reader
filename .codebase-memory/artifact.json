@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "859a963f06b6383c32bf17b11f1905895143c114",
-    "indexed_at": "2026-07-11T04:49:32Z",
+    "commit": "ba7df63600782d4255832a71953bedaf3f6bb047",
+    "indexed_at": "2026-07-11T04:49:52Z",
     "project": "home-benny-projects-Night-Reader",
     "nodes": 5795,
     "edges": 21061,
     "original_size": 18415616,
-    "compressed_size": 2925932,
+    "compressed_size": 2925930,
     "compression_level": 3
 }
