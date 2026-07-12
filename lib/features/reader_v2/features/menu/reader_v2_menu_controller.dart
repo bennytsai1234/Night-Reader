@@ -3,10 +3,9 @@ import 'package:flutter/foundation.dart';
 class ReaderV2MenuController extends ChangeNotifier {
   bool controlsVisible = false;
   bool isScrubbing = false;
-  int scrubIndex = 0;
-  int? pendingChapterNavigationIndex;
 
-  bool get hasPendingChapterNavigation => pendingChapterNavigationIndex != null;
+  /// 拖動條的章內進度（0–100）；只在 [isScrubbing] 期間有意義。
+  double scrubPercent = 0;
 
   void dismissControls() {
     if (!controlsVisible) return;
@@ -20,30 +19,22 @@ class ReaderV2MenuController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onScrubStart(int currentIndex) {
+  void onScrubStart(double percent) {
     isScrubbing = true;
-    scrubIndex = currentIndex;
+    scrubPercent = percent;
     notifyListeners();
   }
 
-  void onScrubbing(int index) {
-    if (!isScrubbing && scrubIndex == index) return;
+  void onScrubbing(double percent) {
+    if (isScrubbing && scrubPercent == percent) return;
     isScrubbing = true;
-    scrubIndex = index;
+    scrubPercent = percent;
     notifyListeners();
   }
 
-  void onScrubEnd(int index) {
+  void onScrubEnd(double percent) {
     isScrubbing = false;
-    pendingChapterNavigationIndex = index;
-    scrubIndex = index;
-    notifyListeners();
-  }
-
-  void completeChapterNavigation() {
-    if (pendingChapterNavigationIndex == null && !isScrubbing) return;
-    pendingChapterNavigationIndex = null;
-    isScrubbing = false;
+    scrubPercent = percent;
     notifyListeners();
   }
 

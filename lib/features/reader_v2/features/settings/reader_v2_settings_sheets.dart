@@ -23,12 +23,17 @@ class ReaderV2SettingsSheets {
 
   static void showAdvancedSettings(
     BuildContext context,
-    ReaderV2SettingsController settings,
-  ) {
+    ReaderV2SettingsController settings, {
+    VoidCallback? onChangeSource,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _ReaderAdvancedSheet(settings: settings),
+      builder:
+          (_) => _ReaderAdvancedSheet(
+            settings: settings,
+            onChangeSource: onChangeSource,
+          ),
     );
   }
 }
@@ -209,19 +214,6 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
             ],
           ),
         ),
-        const SheetSection(title: '自動翻頁'),
-        ListenableBuilder(
-          listenable: settings,
-          builder: (context, _) => ReaderV2SettingComponents.buildSliderRow(
-            label: '速度',
-            value: settings.autoPageSpeed,
-            min: ReaderV2SettingsController.minAutoPageSpeed,
-            max: ReaderV2SettingsController.maxAutoPageSpeed,
-            divisions: 41,
-            onChanged: settings.setAutoPageSpeed,
-            valueFormatter: (value) => '${(value * 100).round()}%',
-          ),
-        ),
       ],
     );
   }
@@ -288,12 +280,14 @@ class _ReaderThemeSelector extends StatelessWidget {
 }
 
 class _ReaderAdvancedSheet extends StatelessWidget {
-  const _ReaderAdvancedSheet({required this.settings});
+  const _ReaderAdvancedSheet({required this.settings, this.onChangeSource});
 
   final ReaderV2SettingsController settings;
+  final VoidCallback? onChangeSource;
 
   @override
   Widget build(BuildContext context) {
+    final changeSource = onChangeSource;
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
@@ -301,6 +295,35 @@ class _ReaderAdvancedSheet extends StatelessWidget {
           title: '進階設定',
           icon: Icons.tune_rounded,
           children: [
+            if (changeSource != null) ...[
+              const SheetSection(title: '書源'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('換源', style: TextStyle(fontSize: 14)),
+                subtitle: const Text(
+                  '搜尋其他書源並切換本書來源',
+                  style: TextStyle(fontSize: 11),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () {
+                  Navigator.pop(context);
+                  changeSource();
+                },
+              ),
+              const Divider(height: 32),
+            ],
+            const SheetSection(title: '自動翻頁'),
+            ReaderV2SettingComponents.buildSliderRow(
+              label: '速度',
+              value: settings.autoPageSpeed,
+              min: ReaderV2SettingsController.minAutoPageSpeed,
+              max: ReaderV2SettingsController.maxAutoPageSpeed,
+              divisions: 43,
+              onChanged: settings.setAutoPageSpeed,
+              valueFormatter: (value) => '${(value * 100).round()}%',
+            ),
+            const Divider(height: 32),
             const SheetSection(title: '繁簡轉換'),
             Wrap(
               spacing: 12,

@@ -15,8 +15,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   static const double minReadableLineHeight =
       ReaderV2Style.minReadableLineHeight;
-  static const double minAutoPageSpeed = 0.04;
-  static const double maxAutoPageSpeed = 0.45;
+  static const double minAutoPageSpeed =
+      ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double maxAutoPageSpeed =
+      ReaderV2PrefsRepository.maxAutoPageSpeed;
 
   final ReaderV2PrefsRepository _prefsRepository;
 

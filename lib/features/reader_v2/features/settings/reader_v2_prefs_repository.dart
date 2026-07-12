@@ -87,6 +87,11 @@ class ReaderV2PrefsSnapshot {
 class ReaderV2PrefsRepository {
   const ReaderV2PrefsRepository();
 
+  /// 自動翻頁速度（每秒滾動畫面高的比例）的合法範圍；
+  /// 所有讀寫端（設定 sheet、全域設定頁、AutoPageController）共用此常數。
+  static const double minAutoPageSpeed = 0.02;
+  static const double maxAutoPageSpeed = 0.45;
+
   static ReaderV2PrefsSnapshot? _latestSnapshot;
 
   static ReaderV2PrefsSnapshot get cachedSnapshot =>
@@ -240,7 +245,9 @@ class ReaderV2PrefsRepository {
   double _normalizeAutoPageSpeed(double? value) {
     if (value == null || !value.isFinite)
       return ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
-    if (value > 1) return (value / 100).clamp(0.08, 0.45).toDouble();
-    return value.clamp(0.08, 0.45).toDouble();
+    if (value > 1) {
+      return (value / 100).clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
+    }
+    return value.clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
   }
 }

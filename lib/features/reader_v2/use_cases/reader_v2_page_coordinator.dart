@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
@@ -18,6 +19,10 @@ class ReaderV2PageCoordinator {
 
   final ReaderV2ControllerHost _host;
   final ReaderV2NoticeSink _showNotice;
+
+  /// 拖動條跨檔位的預覽跳轉防抖：快速滑過多個檔位時只跳最後停留者。
+  static const Duration _scrubPreviewDebounce = Duration(milliseconds: 180);
+  Timer? _scrubPreviewTimer;
 
   bool _followingTtsHighlight = false;
   ReaderV2TtsHighlight? _lastFollowedTtsHighlight;
@@ -81,7 +86,63 @@ class ReaderV2PageCoordinator {
     final safeIndex =
         index.clamp(0, (runtime.chapterCount - 1).clamp(0, 1 << 20)).toInt();
     await runtime.jumpToChapter(safeIndex);
-    _host.menu.completeChapterNavigation();
+  }
+
+  /// 拖動中跨檔位的即時預覽：防抖後跳到該位置，但不寫進度——
+  /// 進度只在放開（[commitChapterPercent]）時落盤。
+  void previewChapterPercent(double percent) {
+    _scrubPreviewTimer?.cancel();
+    _scrubPreviewTimer = Timer(_scrubPreviewDebounce, () {
+      unawaited(jumpToCurrentChapterPercent(percent, immediateSave: false));
+    });
+  }
+
+  /// 拖動條放開：取消未觸發的預覽，跳到最終位置並存進度。
+  Future<void> commitChapterPercent(double percent) {
+    _scrubPreviewTimer?.cancel();
+    _scrubPreviewTimer = null;
+    return jumpToCurrentChapterPercent(percent);
+  }
+
+  /// 跳到「目前章節」的百分比位置。
+  ///
+  /// 百分比以 displayText 字元比例換算 charOffset（與排版像素進度略有
+  /// 出入，但單調且誤差可忽略）；percent 0 對齊章首（charOffset 0 +
+  /// anchor offset 的 top-aligned 慣例）。
+  Future<void> jumpToCurrentChapterPercent(
+    double percent, {
+    bool immediateSave = true,
+  }) async {
+    final runtime = _host.runtime;
+    if (runtime == null || runtime.chapterCount <= 0) return;
+    final chapterIndex =
+        runtime.state.visibleLocation.chapterIndex
+            .clamp(0, runtime.chapterCount - 1)
+            .toInt();
+    final ratio = (percent / 100).clamp(0.0, 1.0).toDouble();
+    if (ratio <= 0) {
+      await runtime.jumpToLocation(
+        ReaderV2Location(
+          chapterIndex: chapterIndex,
+          charOffset: 0,
+          visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+        ),
+        immediateSave: immediateSave,
+      );
+      return;
+    }
+    final content = await runtime.loadContentAt(chapterIndex);
+    final length = content.displayText.length;
+    final charOffset = (length * ratio).round().clamp(0, length).toInt();
+    await runtime.jumpToLocation(
+      ReaderV2Location(chapterIndex: chapterIndex, charOffset: charOffset),
+      immediateSave: immediateSave,
+    );
+  }
+
+  void dispose() {
+    _scrubPreviewTimer?.cancel();
+    _scrubPreviewTimer = null;
   }
 
   void toggleAutoPage() {

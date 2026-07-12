@@ -30,7 +30,6 @@ class ReaderV2PageShell extends StatelessWidget {
     this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
-    required this.autoPageSpeed,
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onExitIntent,
@@ -40,7 +39,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
-    required this.onAutoPageSpeedChanged,
     required this.onToggleDayNight,
     required this.onReplaceRule,
     required this.onShowControls,
@@ -50,11 +48,9 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
-    this.onChangeSource,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
-    this.showChangeSource = true,
   });
 
   final Book book;
@@ -77,7 +73,6 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
-  final double autoPageSpeed;
   final IconData dayNightIcon;
   final String dayNightTooltip;
   final VoidCallback onExitIntent;
@@ -87,21 +82,18 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
-  final ValueChanged<double> onAutoPageSpeedChanged;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
   final VoidCallback onShowControls;
   final VoidCallback onDismissControls;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
-  final VoidCallback onScrubStart;
-  final ValueChanged<int> onScrubbing;
-  final ValueChanged<int> onScrubEnd;
-  final VoidCallback? onChangeSource;
+  final ValueChanged<double> onScrubStart;
+  final ValueChanged<double> onScrubbing;
+  final ValueChanged<double> onScrubEnd;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
-  final bool showChangeSource;
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +165,6 @@ class ReaderV2PageShell extends StatelessWidget {
                 menuTextColor: menuTextColor,
                 navigation: navigation,
                 isAutoPaging: isAutoPaging,
-                autoPageSpeed: autoPageSpeed,
                 dayNightIcon: dayNightIcon,
                 dayNightTooltip: dayNightTooltip,
                 onOpenDrawer: onOpenDrawer,
@@ -181,7 +172,6 @@ class ReaderV2PageShell extends StatelessWidget {
                 onInterface: onInterface,
                 onSettings: onSettings,
                 onAutoPage: onAutoPage,
-                onAutoPageSpeedChanged: onAutoPageSpeedChanged,
                 onToggleDayNight: onToggleDayNight,
                 onReplaceRule: onReplaceRule,
                 onPrevChapter: onPrevChapter,
@@ -189,11 +179,10 @@ class ReaderV2PageShell extends StatelessWidget {
                 onScrubStart: onScrubStart,
                 onScrubbing: onScrubbing,
                 onScrubEnd: onScrubEnd,
-                onChangeSource: onChangeSource,
+                progressListenable: progressListenable,
                 showTts: showTts,
                 showAutoPage: showAutoPage,
                 showReplaceRule: showReplaceRule,
-                showChangeSource: showChangeSource,
               ),
             ],
           ),

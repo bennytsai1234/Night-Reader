@@ -91,5 +91,30 @@ void main() {
       prefs.getDouble(PreferKey.readerAutoPageSpeed),
       ReaderV2SettingsController.maxAutoPageSpeed,
     );
+
+    controller.setAutoPageSpeed(0.001);
+    // saveAutoPageSpeed 為 unawaited 非同步，讓 event queue 先跑完。
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      controller.autoPageSpeed,
+      ReaderV2SettingsController.minAutoPageSpeed,
+    );
+    expect(
+      prefs.getDouble(PreferKey.readerAutoPageSpeed),
+      ReaderV2SettingsController.minAutoPageSpeed,
+    );
+  });
+
+  test('auto page speed floor allows slower than legacy 8%', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreferKey.readerAutoPageSpeed: 0.02,
+    });
+
+    final controller = ReaderV2SettingsController();
+    await controller.loadSettings();
+
+    // 舊版載入時把速度硬 clamp 到 0.08；下限放寬後 0.02 必須原樣保留。
+    expect(controller.autoPageSpeed, 0.02);
   });
 }

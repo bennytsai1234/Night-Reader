@@ -133,9 +133,9 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                   ReaderV2SettingComponents.buildSliderRow(
                     label: '自動速度',
                     value: prefs.autoPageSpeed,
-                    min: 0.08,
-                    max: 0.45,
-                    divisions: 37,
+                    min: ReaderV2PrefsRepository.minAutoPageSpeed,
+                    max: ReaderV2PrefsRepository.maxAutoPageSpeed,
+                    divisions: 43,
                     valueFormatter: (value) => '${(value * 100).round()}%',
                     onChanged: (value) {
                       _updatePrefs(prefs.copyWith(autoPageSpeed: value));

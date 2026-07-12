@@ -82,6 +82,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
     super.dispose();
@@ -118,8 +119,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       currentIndex: chapterIndex,
       isScrubbing: menu.isScrubbing,
-      scrubIndex: menu.scrubIndex,
-      pendingIndex: menu.pendingChapterNavigationIndex,
+      scrubPercent: menu.scrubPercent,
       titleFor: _chapterTitleAt,
     );
 
@@ -163,7 +163,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         progressListenable: _progress,
         navigation: navigation,
         isAutoPaging: _host.autoPage?.isRunning ?? false,
-        autoPageSpeed: settings.autoPageSpeed,
         dayNightIcon: settings.dayNightToggleIcon,
         dayNightTooltip: settings.dayNightToggleTooltip,
         onExitIntent: _handleExitIntent,
@@ -174,27 +173,30 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             () =>
                 ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
         onSettings:
-            () =>
-                ReaderV2SettingsSheets.showAdvancedSettings(context, settings),
+            () => ReaderV2SettingsSheets.showAdvancedSettings(
+              context,
+              settings,
+              onChangeSource: widget.book.isLocal ? null : _showChangeSource,
+            ),
         onAutoPage: _coordinator.toggleAutoPage,
-        onAutoPageSpeedChanged: settings.setAutoPageSpeed,
         onToggleDayNight: settings.toggleDayNightTheme,
         onReplaceRule: () => _coordinator.openReplaceRule(context),
         onShowControls: menu.showControls,
         onDismissControls: menu.dismissControls,
         onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
         onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
-        onScrubStart: () => menu.onScrubStart(chapterIndex),
-        onScrubbing: menu.onScrubbing,
-        onScrubEnd: (index) {
-          menu.onScrubEnd(index);
-          unawaited(_coordinator.jumpToChapter(index));
+        onScrubStart: menu.onScrubStart,
+        onScrubbing: (percent) {
+          menu.onScrubbing(percent);
+          _coordinator.previewChapterPercent(percent);
         },
-        onChangeSource: _showChangeSource,
+        onScrubEnd: (percent) {
+          menu.onScrubEnd(percent);
+          unawaited(_coordinator.commitChapterPercent(percent));
+        },
         showTts: true,
         showAutoPage: true,
         showReplaceRule: true,
-        showChangeSource: !widget.book.isLocal,
       ),
     );
   }

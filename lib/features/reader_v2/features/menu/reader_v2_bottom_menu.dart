@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'reader_v2_menu_palette.dart';
 
 class ReaderV2ChapterNavigationState {
@@ -6,24 +8,21 @@ class ReaderV2ChapterNavigationState {
     required this.chapterCount,
     required this.currentIndex,
     required this.isScrubbing,
-    required this.scrubIndex,
-    required this.pendingIndex,
+    required this.scrubPercent,
     required this.titleFor,
   });
 
   final int chapterCount;
   final int currentIndex;
   final bool isScrubbing;
-  final int scrubIndex;
-  final int? pendingIndex;
+
+  /// 拖動中的章內進度（0–100）。
+  final double scrubPercent;
   final String Function(int index) titleFor;
 
-  bool get hasPending => pendingIndex != null;
   bool get canNavigateToPrev => chapterCount > 1 && currentIndex > 0;
   bool get canNavigateToNext =>
       chapterCount > 1 && currentIndex < chapterCount - 1;
-  int get displayIndex =>
-      isScrubbing ? scrubIndex : (pendingIndex ?? currentIndex);
 }
 
 class ReaderV2BottomMenu extends StatelessWidget {
@@ -34,7 +33,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.menuTextColor,
     required this.navigation,
     required this.isAutoPaging,
-    required this.autoPageSpeed,
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onOpenDrawer,
@@ -42,7 +40,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
-    required this.onAutoPageSpeedChanged,
     required this.onToggleDayNight,
     required this.onReplaceRule,
     required this.onPrevChapter,
@@ -50,11 +47,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
-    this.onChangeSource,
+    this.progressListenable,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
-    this.showChangeSource = true,
   });
 
   final bool controlsVisible;
@@ -62,7 +58,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final Color menuTextColor;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
-  final double autoPageSpeed;
   final IconData dayNightIcon;
   final String dayNightTooltip;
   final VoidCallback onOpenDrawer;
@@ -70,19 +65,19 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
-  final ValueChanged<double> onAutoPageSpeedChanged;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
-  final VoidCallback onScrubStart;
-  final ValueChanged<int> onScrubbing;
-  final ValueChanged<int> onScrubEnd;
-  final VoidCallback? onChangeSource;
+  final ValueChanged<double> onScrubStart;
+  final ValueChanged<double> onScrubbing;
+  final ValueChanged<double> onScrubEnd;
+
+  /// 章內進度的窄通道；未拖動時拖動條跟隨此值即時顯示。
+  final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
-  final bool showChangeSource;
 
   @override
   Widget build(BuildContext context) {
@@ -126,10 +121,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (showAutoPage) ...[
-                      _buildAutoPageSpeed(menuStyle),
-                      const SizedBox(height: 4),
-                    ],
                     _buildChapterSlider(context, menuStyle),
                     const SizedBox(height: 8),
                     _buildMainActions(menuStyle),
@@ -198,55 +189,22 @@ class ReaderV2BottomMenu extends StatelessWidget {
     BuildContext context,
     ReaderV2MenuStyle menuStyle,
   ) {
-    final maxVal =
-        (navigation.chapterCount <= 1 ? 0 : navigation.chapterCount - 1)
-            .toDouble();
-    final displayIndex = navigation.displayIndex.clamp(
-      0,
-      navigation.chapterCount <= 0 ? 0 : navigation.chapterCount - 1,
-    );
-    final displayTitle =
-        navigation.chapterCount > 0 ? navigation.titleFor(displayIndex) : '';
-    final canChangeChapter =
-        navigation.chapterCount > 1 && !navigation.hasPending;
+    final canScrub = navigation.chapterCount > 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if ((navigation.isScrubbing || navigation.hasPending) &&
-              displayTitle.isNotEmpty)
+          if (navigation.isScrubbing)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (navigation.hasPending) ...[
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          menuStyle.accent,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Flexible(
-                    child: Text(
-                      displayTitle,
-                      style: TextStyle(
-                        color: menuStyle.mutedForeground,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+              child: Text(
+                '本章 ${(navigation.scrubPercent / 10).round()}/10',
+                style: TextStyle(
+                  color: menuStyle.mutedForeground,
+                  fontSize: 11,
+                ),
               ),
             ),
           Row(
@@ -269,21 +227,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
                       overlayRadius: 12,
                     ),
                   ),
-                  child: Slider(
-                    value: displayIndex.toDouble().clamp(0, maxVal),
-                    min: 0,
-                    max: maxVal,
-                    onChangeStart:
-                        canChangeChapter ? (_) => onScrubStart() : null,
-                    onChanged:
-                        canChangeChapter ? (v) => onScrubbing(v.toInt()) : null,
-                    onChangeEnd:
-                        canChangeChapter ? (v) => onScrubEnd(v.toInt()) : null,
-                    activeColor: menuStyle.accent,
-                    inactiveColor: menuStyle.mutedForeground.withValues(
-                      alpha: 0.24,
-                    ),
-                  ),
+                  child: _buildProgressSlider(canScrub, menuStyle),
                 ),
               ),
               TextButton(
@@ -300,59 +244,52 @@ class ReaderV2BottomMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAutoPageSpeed(ReaderV2MenuStyle menuStyle) {
-    final value = autoPageSpeed.clamp(0.08, 0.45).toDouble();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Icon(Icons.speed_rounded, color: menuStyle.foreground, size: 18),
-          const SizedBox(width: 10),
-          Text(
-            '自動翻頁',
-            style: TextStyle(color: menuStyle.foreground, fontSize: 12),
-          ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 2,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                activeTrackColor: menuStyle.accent,
-                inactiveTrackColor: menuStyle.mutedForeground.withValues(
-                  alpha: 0.24,
-                ),
-                thumbColor: menuStyle.accent,
-              ),
-              child: Slider(
-                value: value,
-                min: 0.08,
-                max: 0.45,
-                divisions: 37,
-                onChanged: onAutoPageSpeedChanged,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 42,
-            child: Text(
-              '${(value * 100).round()}%',
-              textAlign: TextAlign.end,
-              style: TextStyle(color: menuStyle.mutedForeground, fontSize: 11),
-            ),
-          ),
-        ],
-      ),
+  /// 拖動條表示「本章內進度」，與資訊列同樣切成十等份：未拖動時跟隨
+  /// 閱讀進度（經 progressListenable 窄通道，不觸發整頁 rebuild）；
+  /// 拖動跨檔位時由外層做預覽跳轉，放開才落定存進度。
+  Widget _buildProgressSlider(bool canScrub, ReaderV2MenuStyle menuStyle) {
+    final listenable = progressListenable;
+    if (listenable == null) {
+      return _progressSlider(canScrub, menuStyle, currentPercent: 0);
+    }
+    return ValueListenableBuilder<HybridProgressSnapshot?>(
+      valueListenable: listenable,
+      builder: (context, progress, _) {
+        return _progressSlider(
+          canScrub,
+          menuStyle,
+          currentPercent: progress?.chapterPercent ?? 0,
+        );
+      },
+    );
+  }
+
+  Widget _progressSlider(
+    bool canScrub,
+    ReaderV2MenuStyle menuStyle, {
+    required double currentPercent,
+  }) {
+    final value =
+        (navigation.isScrubbing ? navigation.scrubPercent : currentPercent)
+            .clamp(0.0, 100.0)
+            .toDouble();
+    return Slider(
+      value: value,
+      min: 0,
+      max: 100,
+      divisions: 10,
+      onChangeStart: canScrub ? onScrubStart : null,
+      onChanged: canScrub ? onScrubbing : null,
+      onChangeEnd: canScrub ? onScrubEnd : null,
+      activeColor: menuStyle.accent,
+      inactiveColor: menuStyle.mutedForeground.withValues(alpha: 0.24),
     );
   }
 
   Widget _buildMainActions(ReaderV2MenuStyle menuStyle) {
-    final changeSource = onChangeSource;
     final actions = <Widget>[
       _menuIcon(Icons.list, '目錄', onOpenDrawer, menuStyle),
       if (showTts) _menuIcon(Icons.record_voice_over, '朗讀', onTts, menuStyle),
-      if (showChangeSource && changeSource != null)
-        _menuIcon(Icons.swap_horiz, '換源', changeSource, menuStyle),
       _menuIcon(Icons.color_lens, '介面', onInterface, menuStyle),
       _menuIcon(Icons.settings, '設定', onSettings, menuStyle),
     ];

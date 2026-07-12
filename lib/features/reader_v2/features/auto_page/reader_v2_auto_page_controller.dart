@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
@@ -21,8 +22,10 @@ class ReaderV2AutoPageController extends ChangeNotifier {
        _scrollInterval = scrollInterval,
        _timerFactory = timerFactory ?? Timer.periodic;
 
-  static const double _minAutoPageSpeed = 0.04;
-  static const double _maxAutoPageSpeed = 0.45;
+  static const double _minAutoPageSpeed =
+      ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double _maxAutoPageSpeed =
+      ReaderV2PrefsRepository.maxAutoPageSpeed;
   static const double _defaultAutoPageSpeed = 0.16;
 
   final ReaderV2Runtime runtime;
