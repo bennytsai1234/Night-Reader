@@ -95,6 +95,7 @@ final class StyleFingerprint {
     required this.fontFamilySignature,
     required this.platformFontSignature,
     this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
+    this.lastLineSpacingCompensation = false,
   });
 
   factory StyleFingerprint.fromLayoutSpec(
@@ -124,6 +125,7 @@ final class StyleFingerprint {
       textScaleFactor: textScaleFactor,
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
+      lastLineSpacingCompensation: style.lastLineSpacingCompensation,
     );
   }
 
@@ -146,6 +148,7 @@ final class StyleFingerprint {
   final String fontFamilySignature;
   final String platformFontSignature;
   final String typographyFeatureSignature;
+  final bool lastLineSpacingCompensation;
 
   int get stableHash => Object.hash(
     viewportWidth,
@@ -167,6 +170,7 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
+    lastLineSpacingCompensation,
   );
 
   /// 跨程序穩定的磁碟 key 材料。`Object.hash` 只適合記憶體 hashCode，
@@ -191,6 +195,7 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
+    lastLineSpacingCompensation,
   ]);
 
   @override
@@ -214,7 +219,8 @@ final class StyleFingerprint {
         other.textScaleFactor == textScaleFactor &&
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
-        other.typographyFeatureSignature == typographyFeatureSignature;
+        other.typographyFeatureSignature == typographyFeatureSignature &&
+        other.lastLineSpacingCompensation == lastLineSpacingCompensation;
   }
 
   @override

@@ -37,6 +37,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    ReaderV2TypographyOptions Function()? currentTypographyOptions,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
        replaceDao =
@@ -52,6 +53,9 @@ class ReaderV2ChapterRepository {
                : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
+       currentTypographyOptions =
+           currentTypographyOptions ??
+           (() => const ReaderV2TypographyOptions()),
        _chapters = List<BookChapter>.from(initialChapters);
 
   final Book book;
@@ -62,6 +66,7 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+  final ReaderV2TypographyOptions Function() currentTypographyOptions;
   final ReaderV2ContentTransformer _contentTransformer =
       const ReaderV2ContentTransformer();
 
@@ -282,6 +287,7 @@ class ReaderV2ChapterRepository {
       rawContent: prepared.content,
       enabledRules: enabledRules,
       chineseConvertType: currentChineseConvert(),
+      typographyOptions: currentTypographyOptions(),
     );
   }
 

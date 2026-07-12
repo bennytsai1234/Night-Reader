@@ -188,6 +188,16 @@ class PreferKey {
   static const String readerPageTurnMode = 'reader_page_turn_mode';
   static const String readerAutoPageSpeed = 'reader_auto_page_speed';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
+  static const String readerTypographyNormalizePunctuation =
+      'reader_typography_normalize_punctuation';
+  static const String readerTypographyPairQuotes =
+      'reader_typography_pair_quotes';
+  static const String readerTypographyCollapsePunctuation =
+      'reader_typography_collapse_punctuation';
+  static const String readerTypographyRemoveCjkSpaces =
+      'reader_typography_remove_cjk_spaces';
+  static const String readerLastLineSpacingCompensation =
+      'reader_last_line_spacing_compensation';
   static const String readerTtsRate = 'reader_tts_rate';
   static const String readerTtsPitch = 'reader_tts_pitch';
   static const String readerTtsLanguage = 'reader_tts_language';

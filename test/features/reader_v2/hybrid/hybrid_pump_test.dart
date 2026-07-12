@@ -129,6 +129,7 @@ void main() {
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
+            textAlign: ui.TextAlign.justify,
           ),
           contentWidth: 240,
           textColor: const ui.Color(0xFFEEEEEE),
@@ -153,6 +154,71 @@ void main() {
       pump.dispose();
       cache.dispose();
     });
+
+    test('B2 末行字距補償增加末行寬度但不超過內容寬', () async {
+      final b2Store = MeasurementStore();
+      final b2Cache = ParagraphCache();
+      final b2Fingerprint = _fingerprint(lastLineSpacingCompensation: true);
+      final baselineStore = MeasurementStore();
+      final baselineCache = ParagraphCache();
+      final baselineFingerprint = _fingerprint();
+      final b2Pump = LayoutPump(
+        paragraphCache: b2Cache,
+        measurementStore: b2Store,
+        namespace: MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: b2Fingerprint,
+        ),
+      );
+      final baselinePump = LayoutPump(
+        paragraphCache: baselineCache,
+        measurementStore: baselineStore,
+        namespace: MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: baselineFingerprint,
+        ),
+      );
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      LayoutTask taskFor(StyleFingerprint fingerprint) {
+        return LayoutTask(
+          block: const ChapterBlock(
+            key: key,
+            text: '這是一段足夠長的中文測試文字，用來確保排版會產生上方滿行與最後短行。',
+            charRange: HybridTextRange(0, 33),
+            sourceParagraphIndex: 0,
+          ),
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+          textStyle: const HybridBlockTextStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            textAlign: ui.TextAlign.justify,
+          ),
+          contentWidth: 150,
+        );
+      }
+
+      b2Pump.submit(taskFor(b2Fingerprint));
+      baselinePump.submit(taskFor(baselineFingerprint));
+
+      expect(await b2Pump.pumpPending(), 1);
+      expect(await baselinePump.pumpPending(), 1);
+      final paragraph = b2Cache.acquire(key, LayoutEpoch.initial)!;
+      final baselineParagraph =
+          baselineCache.acquire(key, LayoutEpoch.initial)!;
+      final lines = paragraph.computeLineMetrics();
+      final baselineLines = baselineParagraph.computeLineMetrics();
+      expect(lines.length, greaterThan(1));
+      expect(lines.last.width, greaterThan(0));
+      expect(lines.last.width, greaterThan(baselineLines.last.width));
+      expect(lines.last.width, lessThanOrEqualTo(150.01));
+
+      b2Pump.dispose();
+      b2Cache.dispose();
+      baselinePump.dispose();
+      baselineCache.dispose();
+    });
   });
 }
 
@@ -163,8 +229,8 @@ ui.Paragraph _paragraph(String text) {
   return builder.build()..layout(const ui.ParagraphConstraints(width: 100));
 }
 
-StyleFingerprint _fingerprint() {
-  return const StyleFingerprint(
+StyleFingerprint _fingerprint({bool lastLineSpacingCompensation = false}) {
+  return StyleFingerprint(
     viewportWidth: 320,
     viewportHeight: 640,
     contentWidth: 288,
@@ -183,5 +249,6 @@ StyleFingerprint _fingerprint() {
     textScaleFactor: 1,
     fontFamilySignature: 'system',
     platformFontSignature: 'test',
+    lastLineSpacingCompensation: lastLineSpacingCompensation,
   );
 }

@@ -12,6 +12,279 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 
 import 'reader_v2_processed_chapter.dart';
 
+/// Reader V2 文字排版正規化選項。
+///
+/// 這個值會隨內容轉換工作送進 worker isolate，避免 worker 讀取主 isolate
+/// 的靜態設定而與 fallback 路徑產生不同結果。
+class ReaderV2TypographyOptions {
+  const ReaderV2TypographyOptions({
+    this.normalizePunctuation = true,
+    this.pairQuotes = false,
+    this.collapseRepeatedPunctuation = false,
+    this.removeCjkSpaces = false,
+  });
+
+  factory ReaderV2TypographyOptions.fromJson(Object? value) {
+    if (value is! Map) return const ReaderV2TypographyOptions();
+
+    bool readBool(String key, bool fallback) {
+      final raw = value[key];
+      return raw is bool ? raw : fallback;
+    }
+
+    return ReaderV2TypographyOptions(
+      normalizePunctuation: readBool('normalizePunctuation', true),
+      pairQuotes: readBool('pairQuotes', false),
+      collapseRepeatedPunctuation: readBool(
+        'collapseRepeatedPunctuation',
+        false,
+      ),
+      removeCjkSpaces: readBool('removeCjkSpaces', false),
+    );
+  }
+
+  final bool normalizePunctuation;
+  final bool pairQuotes;
+  final bool collapseRepeatedPunctuation;
+  final bool removeCjkSpaces;
+
+  Map<String, Object> toJson() {
+    return <String, Object>{
+      'normalizePunctuation': normalizePunctuation,
+      'pairQuotes': pairQuotes,
+      'collapseRepeatedPunctuation': collapseRepeatedPunctuation,
+      'removeCjkSpaces': removeCjkSpaces,
+    };
+  }
+}
+
+/// 在內容轉換階段執行文字排版正規化。
+///
+/// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
+/// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
+String normalizeTypography(
+  String input, {
+  bool normalizePunctuation = true,
+  bool pairQuotes = false,
+  bool collapseRepeatedPunctuation = false,
+  bool removeCjkSpaces = false,
+}) {
+  if (input.isEmpty) return input;
+
+  final cleaned = StringBuffer();
+  final lineNormalized = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  for (final rune in lineNormalized.runes) {
+    if (rune == 0x0A) {
+      cleaned.write('\n');
+      continue;
+    }
+    if (rune == 0x09 || rune == 0x00A0 || rune == 0x3000) {
+      cleaned.write(' ');
+      continue;
+    }
+    if (_isInvisibleTypographyRune(rune) || _isControlRune(rune)) {
+      continue;
+    }
+    cleaned.write(String.fromCharCode(rune));
+  }
+
+  var result = cleaned
+      .toString()
+      .split('\n')
+      .map((line) => line.replaceAll(RegExp(r' +'), ' '))
+      .join('\n');
+  if (normalizePunctuation) {
+    result = _normalizeEllipsis(result);
+    result = _normalizeCjkPunctuation(result);
+  }
+  if (pairQuotes) {
+    result = _normalizePairedQuotes(result);
+  }
+  if (collapseRepeatedPunctuation) {
+    result = _collapseRepeatedPunctuation(result);
+  }
+  if (removeCjkSpaces) {
+    result = _removeCjkSpaces(result);
+  }
+  return result;
+}
+
+bool _isInvisibleTypographyRune(int rune) {
+  return rune == 0x200B || // ZERO WIDTH SPACE
+      rune == 0x200C || // ZERO WIDTH NON-JOINER
+      rune == 0x200D || // ZERO WIDTH JOINER
+      rune == 0xFEFF; // ZERO WIDTH NO-BREAK SPACE / BOM
+}
+
+bool _isControlRune(int rune) {
+  if (rune == 0x09 || rune == 0x0A) return false;
+  return (rune >= 0x00 && rune <= 0x1F) || (rune >= 0x7F && rune <= 0x9F);
+}
+
+String _normalizeEllipsis(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (_isEllipsisDot(rune)) {
+      var end = index + 1;
+      while (end < runes.length && _isEllipsisDot(runes[end])) {
+        end += 1;
+      }
+      if (end - index >= 3) {
+        output.write('……');
+        index = end - 1;
+        continue;
+      }
+    }
+    if (rune == 0x2026) {
+      output.write('……');
+      if (index + 1 < runes.length && runes[index + 1] == 0x2026) {
+        index += 1;
+      }
+      continue;
+    }
+    output.write(String.fromCharCode(rune));
+  }
+  return output.toString();
+}
+
+bool _isEllipsisDot(int rune) {
+  return rune == 0x2E || rune == 0xFF0E || rune == 0x3002;
+}
+
+String _normalizeCjkPunctuation(String input) {
+  const replacements = <int, String>{
+    0x2C: '，', // comma
+    0x2E: '。', // full stop
+    0x21: '！', // exclamation
+    0x3F: '？', // question
+    0x3B: '；', // semicolon
+    0x3A: '：', // colon
+  };
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final replacement = replacements[runes[index]];
+    if (replacement == null) {
+      output.write(String.fromCharCode(runes[index]));
+      continue;
+    }
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, index, 1);
+    final hasCjkSide = _isCjkRune(previous) || _isCjkRune(next);
+    final hasNumericSide =
+        _isAsciiOrFullWidthDigit(previous) || _isAsciiOrFullWidthDigit(next);
+    output.write(
+      hasCjkSide && !hasNumericSide
+          ? replacement
+          : String.fromCharCode(runes[index]),
+    );
+  }
+  return output.toString();
+}
+
+int? _neighborRune(List<int> runes, int index, int direction) {
+  var cursor = index + direction;
+  while (cursor >= 0 && cursor < runes.length) {
+    final rune = runes[cursor];
+    if (rune == 0x0A) return null;
+    if (rune != 0x20) return rune;
+    cursor += direction;
+  }
+  return null;
+}
+
+String _normalizePairedQuotes(String input) {
+  final runes = input.runes.toList(growable: false);
+  var quoteCount = 0;
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == 0x22 && !_isEscaped(runes, index)) {
+      quoteCount += 1;
+    }
+  }
+  if (quoteCount == 0 || quoteCount.isOdd) return input;
+
+  final output = StringBuffer();
+  var opening = true;
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == 0x22 && !_isEscaped(runes, index)) {
+      output.write(opening ? '「' : '」');
+      opening = !opening;
+    } else {
+      output.write(String.fromCharCode(runes[index]));
+    }
+  }
+  return output.toString();
+}
+
+bool _isEscaped(List<int> runes, int index) {
+  var slashCount = 0;
+  for (var cursor = index - 1; cursor >= 0 && runes[cursor] == 0x5C; cursor--) {
+    slashCount += 1;
+  }
+  return slashCount.isOdd;
+}
+
+String _collapseRepeatedPunctuation(String input) {
+  final output = StringBuffer();
+  int? previous;
+  for (final rune in input.runes) {
+    final isCollapsible = _isCollapsiblePunctuation(rune);
+    if (isCollapsible && rune == previous) continue;
+    output.write(String.fromCharCode(rune));
+    previous = isCollapsible ? rune : null;
+  }
+  return output.toString();
+}
+
+bool _isCollapsiblePunctuation(int rune) {
+  return const <int>{
+    0x2C,
+    0xFF0C,
+    0x2E,
+    0x3002,
+    0x21,
+    0xFF01,
+    0x3F,
+    0xFF1F,
+    0x3B,
+    0xFF1B,
+    0x3A,
+    0xFF1A,
+    0x3001,
+  }.contains(rune);
+}
+
+String _removeCjkSpaces(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == 0x20 &&
+        index > 0 &&
+        index + 1 < runes.length &&
+        _isCjkRune(runes[index - 1]) &&
+        _isCjkRune(runes[index + 1])) {
+      continue;
+    }
+    output.write(String.fromCharCode(runes[index]));
+  }
+  return output.toString();
+}
+
+bool _isAsciiOrFullWidthDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) || (rune >= 0xFF10 && rune <= 0xFF19);
+}
+
+bool _isCjkRune(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x3400 && rune <= 0x4DBF) ||
+      (rune >= 0x4E00 && rune <= 0x9FFF) ||
+      (rune >= 0xF900 && rune <= 0xFAFF) ||
+      (rune >= 0x20000 && rune <= 0x323AF);
+}
+
 class ReaderV2ContentTransformer {
   const ReaderV2ContentTransformer();
 
@@ -35,6 +308,8 @@ class ReaderV2ContentTransformer {
     required String rawContent,
     required List<ReplaceRule> enabledRules,
     required int chineseConvertType,
+    ReaderV2TypographyOptions typographyOptions =
+        const ReaderV2TypographyOptions(),
   }) async {
     final args = <String, Object?>{
       'bookName': book.name,
@@ -45,6 +320,7 @@ class ReaderV2ContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
       'chineseConvertType': chineseConvertType,
+      'typographyOptions': typographyOptions.toJson(),
     };
 
     // 首選：常駐 worker isolate。免去每章 compute spawn，且簡繁轉換也在
@@ -104,6 +380,9 @@ class ReaderV2ContentTransformer {
             .cast<Map<String, dynamic>>();
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
+    final typographyOptions = ReaderV2TypographyOptions.fromJson(
+      args['typographyOptions'],
+    );
     final rules =
         rulesJson
             .map(ReplaceRule.fromJson)
@@ -126,11 +405,13 @@ class ReaderV2ContentTransformer {
       titleRules: titleRules,
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: reSegmentEnabled,
+      typographyOptions: typographyOptions,
     );
     final displayTitle = _processTitle(
       chapterTitle: chapterTitle,
       rules: titleRules,
       useReplaceRules: useReplaceRules,
+      typographyOptions: typographyOptions,
     );
 
     return <String, Object?>{
@@ -152,6 +433,7 @@ class ReaderV2ContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
+    required ReaderV2TypographyOptions typographyOptions,
   }) {
     if (rawContent.isEmpty) {
       return const ReaderV2ProcessedChapter(displayTitle: '', content: '');
@@ -179,6 +461,7 @@ class ReaderV2ContentTransformer {
         chapterTitle: chapterTitle,
         rules: titleRules,
         useReplaceRules: true,
+        typographyOptions: typographyOptions,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
         final displayTitleRegex = RegExp.escape(
@@ -227,6 +510,15 @@ class ReaderV2ContentTransformer {
         } catch (_) {}
       }
     }
+
+    content = normalizeTypography(
+      content,
+      normalizePunctuation: typographyOptions.normalizePunctuation,
+      pairQuotes: typographyOptions.pairQuotes,
+      collapseRepeatedPunctuation:
+          typographyOptions.collapseRepeatedPunctuation,
+      removeCjkSpaces: typographyOptions.removeCjkSpaces,
+    );
 
     final paragraphs = <String>[];
     const indent = '　　';
@@ -285,6 +577,7 @@ class ReaderV2ContentTransformer {
     required String chapterTitle,
     required List<ReplaceRule> rules,
     required bool useReplaceRules,
+    required ReaderV2TypographyOptions typographyOptions,
   }) {
     var displayTitle = chapterTitle.replaceAll(RegExp(r'[\r\n]'), '');
     if (useReplaceRules) {
@@ -298,7 +591,14 @@ class ReaderV2ContentTransformer {
         } catch (_) {}
       }
     }
-    return displayTitle;
+    return normalizeTypography(
+      displayTitle,
+      normalizePunctuation: typographyOptions.normalizePunctuation,
+      pairQuotes: typographyOptions.pairQuotes,
+      collapseRepeatedPunctuation:
+          typographyOptions.collapseRepeatedPunctuation,
+      removeCjkSpaces: typographyOptions.removeCjkSpaces,
+    );
   }
 }
 

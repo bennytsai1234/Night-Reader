@@ -11,6 +11,9 @@ import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
 final class LayoutPump implements HybridLayoutPump {
+  /// 避免短末行因少數字元而被拉得過鬆；單位為 logical pixels。
+  static const double lastLineLetterSpacingCap = 2.0;
+
   LayoutPump({
     required ParagraphCache paragraphCache,
     required HybridMeasurementStore measurementStore,
@@ -77,6 +80,7 @@ final class LayoutPump implements HybridLayoutPump {
       }
       final task = _nextTask();
       final started = Stopwatch()..start();
+      final layoutPasses = _costModel.layoutPassesFor(task);
       final paragraph = _buildParagraph(task);
       final contentHeight = paragraph.height <= 0 ? 1.0 : paragraph.height;
       final metrics = BlockMetrics(
@@ -95,6 +99,7 @@ final class LayoutPump implements HybridLayoutPump {
       _costModel.record(
         charCount: task.block.text.length,
         elapsed: started.elapsed,
+        layoutPasses: layoutPasses,
       );
       _completed.add(
         BlockReady(key: task.key, epoch: task.epoch, metrics: metrics),
@@ -159,33 +164,247 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   ui.Paragraph _buildParagraph(LayoutTask task) {
+    if (!_shouldCompensateLastLine(task)) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+
+    // Flutter 的 LineMetrics 沒有字元索引，而 justify 後的 TextBox 寬度也
+    // 可能已包含引擎分配的額外間距。先用 start 建立自然寬度的 Pass 1，
+    // 再以同一組斷行範圍建立 justify + 末行補償的 Pass 2；對齊方式不參與
+    // 斷行，因此兩個 Paragraph 的 line boundary 相同。
+    final paragraph = _buildParagraphWithLetterSpacing(
+      task,
+      extraLetterSpacing: 0,
+      textAlignOverride: ui.TextAlign.start,
+    );
+
+    final lines = paragraph.computeLineMetrics();
+    if (lines.length < 2) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+    final lastLineIndex = lines.lastIndexWhere((line) => line.hardBreak);
+    if (lastLineIndex <= 0) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+    final lineRanges = _lineRanges(
+      paragraph,
+      _indentFor(task).length + task.block.text.length,
+      lines.length,
+    );
+    if (lineRanges.length <= lastLineIndex) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+
+    final extraLetterSpacing = _averageJustifyExpansion(
+      paragraph,
+      lines,
+      lineRanges,
+      '${_indentFor(task)}${task.block.text}',
+      lastLineIndex,
+      task,
+    );
+    if (extraLetterSpacing <= 0) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+
+    final indent = _indentFor(task);
+    final textLength = indent.length + task.block.text.length;
+    final lastLine = lineRanges[lastLineIndex];
+    final renderedText = '$indent${task.block.text}';
+    final lastLineBoxes = _boxesForTextClusters(
+      paragraph,
+      renderedText,
+      lastLine,
+    );
+    final lastLineGaps = lastLineBoxes.length - 1;
+    if (lastLineGaps <= 0) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+    final lastLineHeadroom =
+        (task.contentWidth - lines[lastLineIndex].width) /
+        lastLineGaps.toDouble();
+    final safeExtraLetterSpacing =
+        extraLetterSpacing
+            .clamp(0.0, lastLineHeadroom > 0 ? lastLineHeadroom : 0.0)
+            .toDouble();
+    if (safeExtraLetterSpacing <= 0) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+    final start = lastLine.start.clamp(indent.length, textLength).toInt();
+    final end = lastLine.end.clamp(start, textLength).toInt();
+    if (end <= start) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
+
+    // Pass 2：只對末行字元範圍增加 letterSpacing，文字與 displayText 完全
+    // 不變；因此 TTS range、錨點與 contentHash 仍在同一座標系。
+    return _buildParagraphWithLetterSpacing(
+      task,
+      extraLetterSpacing: safeExtraLetterSpacing,
+      extraStart: start,
+      extraEnd: end,
+      textAlignOverride: task.textStyle.textAlign,
+    );
+  }
+
+  bool _shouldCompensateLastLine(LayoutTask task) {
+    return task.fingerprint.lastLineSpacingCompensation &&
+        !task.block.isTitle &&
+        !task.block.isContinuation &&
+        task.textStyle.textAlign == ui.TextAlign.justify;
+  }
+
+  double _averageJustifyExpansion(
+    ui.Paragraph paragraph,
+    List<ui.LineMetrics> lines,
+    List<ui.TextRange> lineRanges,
+    String renderedText,
+    int lastLineIndex,
+    LayoutTask task,
+  ) {
+    final expansions = <double>[];
+    for (var index = 0; index < lastLineIndex; index += 1) {
+      if (lines[index].hardBreak) continue;
+      final line = lineRanges[index];
+      final boxes = _boxesForTextClusters(paragraph, renderedText, line);
+      final gaps = boxes.length - 1;
+      if (gaps <= 0) continue;
+
+      final expansion =
+          (task.contentWidth - lines[index].width) / gaps.toDouble();
+      if (expansion.isFinite && expansion > 0) {
+        expansions.add(expansion);
+      }
+    }
+    if (expansions.isEmpty) return 0;
+    final average =
+        expansions.reduce((total, value) => total + value) / expansions.length;
+    return average.clamp(0.0, lastLineLetterSpacingCap).toDouble();
+  }
+
+  List<ui.TextBox> _boxesForTextClusters(
+    ui.Paragraph paragraph,
+    String renderedText,
+    ui.TextRange range,
+  ) {
+    final boxes = <ui.TextBox>[];
+    var offset = range.start;
+    while (offset < range.end) {
+      final codeUnit = renderedText.codeUnitAt(offset);
+      final isHighSurrogate = codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+      final clusterEnd =
+          (offset + (isHighSurrogate ? 2 : 1)).clamp(0, range.end).toInt();
+      if (clusterEnd <= offset) break;
+      boxes.addAll(paragraph.getBoxesForRange(offset, clusterEnd));
+      offset = clusterEnd;
+    }
+    return boxes;
+  }
+
+  List<ui.TextRange> _lineRanges(
+    ui.Paragraph paragraph,
+    int textLength,
+    int lineCount,
+  ) {
+    final ranges = <ui.TextRange>[];
+    var offset = 0;
+    while (ranges.length < lineCount && offset < textLength) {
+      final range = paragraph.getLineBoundary(
+        ui.TextPosition(offset: offset, affinity: ui.TextAffinity.downstream),
+      );
+      if (!range.isValid || range.end <= offset) break;
+      ranges.add(range);
+      if (range.end >= textLength) break;
+      offset = range.end;
+    }
+    return ranges;
+  }
+
+  ui.Paragraph _buildParagraphWithLetterSpacing(
+    LayoutTask task, {
+    required double extraLetterSpacing,
+    int? extraStart,
+    int? extraEnd,
+    required ui.TextAlign textAlignOverride,
+  }) {
     final paragraphStyle = ui.ParagraphStyle(
-      textAlign: task.textStyle.textAlign,
+      textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );
-    final indent =
-        task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
-    final builder =
-        ui.ParagraphBuilder(paragraphStyle)
-          ..pushStyle(
-            ui.TextStyle(
-              color: task.textColor,
-              fontSize: task.textStyle.fontSize,
-              height: task.textStyle.lineHeight,
-              letterSpacing: task.textStyle.letterSpacing,
-              fontWeight:
-                  task.textStyle.bold
-                      ? ui.FontWeight.bold
-                      : ui.FontWeight.normal,
-              fontFeatures: kReaderV2CjkFontFeatures,
-            ),
-          )
-          ..addText('$indent${task.block.text}');
+    final indent = _indentFor(task);
+    final text = '$indent${task.block.text}';
+    final builder = ui.ParagraphBuilder(paragraphStyle)
+      ..pushStyle(_textStyle(task));
+    final start = extraStart?.clamp(0, text.length).toInt();
+    final end = extraEnd?.clamp(start ?? 0, text.length).toInt();
+    if (extraLetterSpacing > 0 && start != null && end != null && end > start) {
+      if (start > 0) builder.addText(text.substring(0, start));
+      builder
+        ..pushStyle(
+          _textStyle(
+            task,
+            letterSpacing: task.textStyle.letterSpacing + extraLetterSpacing,
+          ),
+        )
+        ..addText(text.substring(start, end))
+        ..pop();
+      if (end < text.length) builder.addText(text.substring(end));
+    } else {
+      builder.addText(text);
+    }
     final paragraph =
         builder.build()
           ..layout(ui.ParagraphConstraints(width: task.contentWidth));
     return paragraph;
+  }
+
+  String _indentFor(LayoutTask task) {
+    return task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
+  }
+
+  ui.TextStyle _textStyle(LayoutTask task, {double? letterSpacing}) {
+    return ui.TextStyle(
+      color: task.textColor,
+      fontSize: task.textStyle.fontSize,
+      height: task.textStyle.lineHeight,
+      letterSpacing: letterSpacing ?? task.textStyle.letterSpacing,
+      fontWeight:
+          task.textStyle.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
+      fontFeatures: kReaderV2CjkFontFeatures,
+    );
   }
 }

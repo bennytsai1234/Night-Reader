@@ -18,6 +18,7 @@ class ReaderV2LayoutStyle {
     required this.paddingRight,
     this.bold = false,
     this.textIndent = 0,
+    this.lastLineSpacingCompensation = false,
   });
 
   final double fontSize;
@@ -30,6 +31,7 @@ class ReaderV2LayoutStyle {
   final double paddingRight;
   final bool bold;
   final int textIndent;
+  final bool lastLineSpacingCompensation;
 
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
@@ -109,6 +111,7 @@ class ReaderV2LayoutSpec {
       style.paddingRight,
       style.textIndent,
       style.bold,
+      style.lastLineSpacingCompensation,
       kReaderV2CjkTypographyFeatureSignature,
     );
   }

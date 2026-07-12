@@ -34,6 +34,7 @@ class ReaderV2ControllerHost {
       book: book,
       initialChapters: initialChapters,
       currentChineseConvert: () => settings.chineseConvert,
+      currentTypographyOptions: () => settings.typographyOptions,
     );
     bookStorageService = BookStorageService(
       bookDao: dependencies.bookDao,
@@ -183,6 +184,7 @@ class ReaderV2ControllerHost {
         paddingRight: style.paddingRight,
         bold: style.bold,
         textIndent: style.textIndent,
+        lastLineSpacingCompensation: style.lastLineSpacingCompensation,
       ),
     );
   }

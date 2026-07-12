@@ -98,10 +98,11 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => _ReaderThemeSelector(
-            selectedIndex: settings.themeIndex,
-            onSelected: settings.setTheme,
-          ),
+          builder:
+              (context, _) => _ReaderThemeSelector(
+                selectedIndex: settings.themeIndex,
+                onSelected: settings.setTheme,
+              ),
         ),
         const SheetSection(
           title: '選單樣式',
@@ -112,10 +113,11 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => _ReaderThemeSelector(
-            selectedIndex: settings.menuThemeIndex,
-            onSelected: settings.setMenuTheme,
-          ),
+          builder:
+              (context, _) => _ReaderThemeSelector(
+                selectedIndex: settings.menuThemeIndex,
+                onSelected: settings.setMenuTheme,
+              ),
         ),
         const SheetSection(title: '排版精修'),
         ReaderV2SettingComponents.buildSliderRow(
@@ -125,10 +127,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 40,
           onChanged: (value) {
             setState(() => _fontSize = value);
-            _scheduleCommit(
-              'fontSize',
-              () => settings.setFontSize(_fontSize),
-            );
+            _scheduleCommit('fontSize', () => settings.setFontSize(_fontSize));
           },
           onChangeEnd: (value) {
             _commitNow('fontSize', () => settings.setFontSize(value));
@@ -163,10 +162,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
             );
           },
           onChangeEnd: (value) {
-            _commitNow(
-              'letterSpacing',
-              () => settings.setLetterSpacing(value),
-            );
+            _commitNow('letterSpacing', () => settings.setLetterSpacing(value));
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -190,31 +186,100 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => Row(
-            children: [
-              const SizedBox(
-                width: 65,
-                child: Text('首行縮排', style: TextStyle(fontSize: 12)),
+          builder:
+              (context, _) => Row(
+                children: [
+                  const SizedBox(
+                    width: 65,
+                    child: Text('首行縮排', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Spacer(),
+                  DropdownButton<int>(
+                    value: settings.textIndent,
+                    underline: const SizedBox.shrink(),
+                    items:
+                        [0, 1, 2, 4]
+                            .map(
+                              (i) => DropdownMenuItem(
+                                value: i,
+                                child: Text('$i 字'),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (value) {
+                      if (value != null) settings.setTextIndent(value);
+                    },
+                  ),
+                ],
               ),
-              const Spacer(),
-              DropdownButton<int>(
-                value: settings.textIndent,
-                underline: const SizedBox.shrink(),
-                items:
-                    [0, 1, 2, 4]
-                        .map(
-                          (i) =>
-                              DropdownMenuItem(value: i, child: Text('$i 字')),
-                        )
-                        .toList(),
-                onChanged: (value) {
-                  if (value != null) settings.setTextIndent(value);
-                },
-              ),
-            ],
-          ),
+        ),
+        const SheetSection(title: '文字正規化'),
+        ListenableBuilder(
+          listenable: settings,
+          builder:
+              (context, _) => _ReaderTypographySwitches(settings: settings),
         ),
       ],
+    );
+  }
+}
+
+class _ReaderTypographySwitches extends StatelessWidget {
+  const _ReaderTypographySwitches({required this.settings});
+
+  final ReaderV2SettingsController settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _buildSwitch(
+          title: '標點正規化',
+          subtitle: '中文語境下統一半形標點與省略號',
+          value: settings.normalizeTypography,
+          onChanged: settings.setNormalizeTypography,
+        ),
+        _buildSwitch(
+          title: '引號配對（進階）',
+          subtitle: '將成對的半形雙引號轉為「」',
+          value: settings.pairTypographyQuotes,
+          onChanged: settings.setPairTypographyQuotes,
+        ),
+        _buildSwitch(
+          title: '收斂連續標點（進階）',
+          subtitle: '例如將「！！！」收斂為「！」',
+          value: settings.collapseTypographyPunctuation,
+          onChanged: settings.setCollapseTypographyPunctuation,
+        ),
+        _buildSwitch(
+          title: '移除中文字間空格（進階）',
+          subtitle: '移除「你 好 嗎」這類來源雜訊空格',
+          value: settings.removeTypographyCjkSpaces,
+          onChanged: settings.setRemoveTypographyCjkSpaces,
+        ),
+        _buildSwitch(
+          title: '末行字距補償（B2）',
+          subtitle: '讓末行貼近上方滿行字距；每段會額外排版一次',
+          value: settings.lastLineSpacingCompensation,
+          onChanged: settings.setLastLineSpacingCompensation,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSwitch({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(title, style: const TextStyle(fontSize: 13)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }

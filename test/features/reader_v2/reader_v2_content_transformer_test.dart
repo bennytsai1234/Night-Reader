@@ -10,6 +10,41 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ReaderV2ContentTransformer', () {
+    test('normalizeTypography 清理空白、隱形字元與 CJK 標點', () {
+      expect(
+        normalizeTypography('你\u200B\t　好\u0001,世界... 3.14 https://a.com'),
+        '你 好，世界…… 3.14 https://a.com',
+      );
+      expect(normalizeTypography('英文句子, hello!'), '英文句子， hello!');
+    });
+
+    test('normalizeTypography 的進階規則預設關閉且可各自開關', () {
+      const input = '"你 好 嗎"！！！';
+      expect(normalizeTypography(input), input);
+      expect(
+        normalizeTypography('等等...', normalizePunctuation: false),
+        '等等...',
+      );
+      expect(
+        normalizeTypography(
+          input,
+          pairQuotes: true,
+          collapseRepeatedPunctuation: true,
+          removeCjkSpaces: true,
+        ),
+        '「你好嗎」！',
+      );
+      expect(normalizeTypography('你 好 嗎', removeCjkSpaces: true), '你好嗎');
+    });
+
+    test('normalizeTypography 不破壞詩歌換行與數字脈絡', () {
+      expect(
+        normalizeTypography('你\n 好\n3.14\nVersion 1.2'),
+        '你\n 好\n3.14\nVersion 1.2',
+      );
+      expect(normalizeTypography('第3.章'), '第3.章');
+    });
+
     test(
       'applies scoped content rules through the shared replace engine',
       () async {
