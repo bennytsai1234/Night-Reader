@@ -60,6 +60,8 @@ Future<void> _startApp() async {
   // 高刷新率裝置上輸入事件率與顯示刷新率常不同步，重採樣把觸控位移
   // 對齊 vsync，讓拖曳滾動逐幀位移均勻（官方建議做法，約 5.5ms 取樣位移）。
   GestureBinding.instance.resamplingEnabled = true;
+  // 延後首幀:原生 splash(純主題色 + AVD 動畫圖示)一路撐到書架首批書載完,
+  // 由 MainPage 判定就緒後呼叫 remove() 放行(見 features/welcome/main_page.dart)。
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
 

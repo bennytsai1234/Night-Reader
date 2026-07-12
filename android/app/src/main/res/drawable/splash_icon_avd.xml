@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 一段式啟動畫面的動畫圖示（亮色主題變體；暗色見 drawable-night/）。
+     設計呼應品牌圖標：書本線稿展開 + 彎月升起 + 星星閃現，總長 1000ms。
+     內容收在中央 2/3 圓形安全區內（Android 12+ 圖示遮罩規範）。
+     由 values-v31 styles 的 windowSplashScreenAnimatedIcon 引用。 -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="288"
+            android:viewportHeight="288">
+            <group
+                android:name="moon"
+                android:translateX="132"
+                android:translateY="70"
+                android:scaleX="3.2"
+                android:scaleY="3.2">
+                <path
+                    android:name="moonPath"
+                    android:fillColor="#B6914A"
+                    android:fillAlpha="0"
+                    android:pathData="M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9c0.83,0 1.64,-0.11 2.4,-0.33 -2.61,-1.45 -4.4,-4.27 -4.4,-7.67s1.79,-6.22 4.4,-7.67C13.64,3.11 12.83,3 12,3z"/>
+            </group>
+            <path
+                android:name="spine"
+                android:strokeColor="#1A1612"
+                android:strokeWidth="7"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:trimPathEnd="0"
+                android:pathData="M144,158 L144,206"/>
+            <path
+                android:name="pageL"
+                android:strokeColor="#1A1612"
+                android:strokeWidth="7"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:trimPathEnd="0"
+                android:pathData="M144,158 C126,146 104,144 84,150 L84,198 C104,192 126,194 144,206"/>
+            <path
+                android:name="pageR"
+                android:strokeColor="#1A1612"
+                android:strokeWidth="7"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:trimPathEnd="0"
+                android:pathData="M144,158 C162,146 184,144 204,150 L204,198 C184,192 162,194 144,206"/>
+            <path
+                android:name="star1"
+                android:fillColor="#B6914A"
+                android:fillAlpha="0"
+                android:pathData="M98,75 L100.2,79.8 105,82 L100.2,84.2 98,89 L95.8,84.2 91,82 L95.8,79.8 Z"/>
+            <path
+                android:name="star2"
+                android:fillColor="#B6914A"
+                android:fillAlpha="0"
+                android:pathData="M210,131 L211.6,134.4 215,136 L211.6,137.6 210,141 L208.4,137.6 205,136 L208.4,134.4 Z"/>
+            <path
+                android:name="star3"
+                android:fillColor="#B6914A"
+                android:fillAlpha="0"
+                android:pathData="M78,103 L79.6,106.4 83,108 L79.6,109.6 78,113 L76.4,109.6 73,108 L76.4,106.4 Z"/>
+        </vector>
+    </aapt:attr>
+    <target android:name="spine">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="80"
+                android:duration="280"
+                android:interpolator="@android:interpolator/fast_out_slow_in"/>
+        </aapt:attr>
+    </target>
+    <target android:name="pageL">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="200"
+                android:duration="550"
+                android:interpolator="@android:interpolator/fast_out_slow_in"/>
+        </aapt:attr>
+    </target>
+    <target android:name="pageR">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="trimPathEnd"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="200"
+                android:duration="550"
+                android:interpolator="@android:interpolator/fast_out_slow_in"/>
+        </aapt:attr>
+    </target>
+    <target android:name="moon">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="70"
+                android:valueTo="58"
+                android:valueType="floatType"
+                android:startOffset="280"
+                android:duration="520"
+                android:interpolator="@android:interpolator/linear_out_slow_in"/>
+        </aapt:attr>
+    </target>
+    <target android:name="moonPath">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="280"
+                android:duration="400"/>
+        </aapt:attr>
+    </target>
+    <target android:name="star1">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="520"
+                android:duration="240"/>
+        </aapt:attr>
+    </target>
+    <target android:name="star2">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="640"
+                android:duration="240"/>
+        </aapt:attr>
+    </target>
+    <target android:name="star3">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0"
+                android:valueTo="1"
+                android:valueType="floatType"
+                android:startOffset="760"
+                android:duration="240"/>
+        </aapt:attr>
+    </target>
+</animated-vector>

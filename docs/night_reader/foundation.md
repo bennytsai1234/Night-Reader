@@ -9,7 +9,7 @@
 
 - `lib/main.dart`、`lib/app_providers.dart` — 進入點；`main()` 用 `runZonedGuarded` 包裹、DI 初始化、`ErrorWidget.builder`、`Workmanager` 後台 callback、`ReaderApp` 殼。
 - `lib/shared/` — `theme/`（`AppTheme`、`AppTokens`、`AppTextStyles`、`context_ext.dart`）、`widgets/`（`app_bottom_sheet.dart`、`source_option_tile.dart`）、`navigation/book_open_route.dart`（開書轉場至 `ReaderV2Page`）。
-- `lib/features/welcome/` — `splash_page.dart`、`main_page.dart`（底部導航：書架/發現/我的）、`startup_failure_panel.dart`。
+- `lib/features/welcome/` — `main_page.dart`（底部導航：書架/發現/我的；一段式啟動——原生 splash 撐到書架首批載完才 `FlutterNativeSplash.remove()` 放行首幀）、`startup_failure_panel.dart`。原生 splash 設定在 `flutter_native_splash.yaml`（主題色純色底）；Android 12+ 動畫圖示為手寫 `android/.../drawable/splash_icon_avd.xml`（含 night 變體），重跑 create 後需手動加回 v31 styles 兩行（見 yaml 註解）。
 - `lib/core/base/base_provider.dart` — `BaseProvider`（`isLoading`/`errorMessage`/`cancelToken`）。
 - `lib/core/config/app_config.dart` — 全域配置鏡像，與 `SettingsProvider` 同步。
 - `lib/core/constant/` — `app_const.dart`、`app_pattern.dart`、`book_type.dart`、`source_type.dart`、`prefer_key.dart`。
@@ -29,7 +29,7 @@
 
 ## Key Flows
 
-- 啟動：`WidgetsFlutterBinding` → `configureDependencies()` → `runApp(MultiProvider)` → `SplashPage` → 首框後 `_runPostFirstFrameStartupTasks`（Workmanager init、legacy font 清理）。
+- 啟動：`WidgetsFlutterBinding` → `FlutterNativeSplash.preserve()`（延後首幀，原生 splash 把持畫面）→ `configureDependencies()` → `runApp(MultiProvider)` → `MainPage`（書架首批載完或 2s 逾時 → `remove()` 放行首幀）→ 首框後 `_runPostFirstFrameStartupTasks`（Workmanager init、legacy font 清理）。
 - 失敗路徑：`_StartupFailureApp` + `StartupFailurePanel` + `_retryCriticalStartup`（`getIt.reset()` 重啟）。
 - 後台：`callbackDispatcher` 重新 `configureDependencies()`（Isolate 不共享主執行緒狀態）。
 

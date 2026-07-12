@@ -1,20 +1,21 @@
 flutter_native_splash:
-  # 所有 Android 版本統一：原生 splash 為純深紫夜空色（取自藝術圖天空的平均色），
-  # 不鋪背景圖也不放圖標；全螢幕夜空藝術圖由 Flutter 首幀的啟動轉場層在同色底上
-  # 淡入浮現（見 features/welcome/main_page.dart），撐到書架首批書本載完再淡出交棒。
-  # 全程只有漸變、沒有硬切。
-  color: "#261940"
-  color_dark: "#261940"
+  # 一段式啟動畫面：原生 splash 為主題色純色底（與書架 scaffold 背景一致，硬切交棒
+  # 無跳色），由 main.dart 的 FlutterNativeSplash.preserve() 延後首幀，撐到書架首批
+  # 書載完才放行（見 features/welcome/main_page.dart）。全程只有這一層原生畫面，
+  # 沒有 Flutter 端轉場圖。
+  color: "#F4EFE3"       # 亮主題 scaffold 背景（AppPalette.paper200）
+  color_dark: "#1A1612"  # 暗主題 scaffold 背景（AppPalette.ink600）
 
   android: true
   ios: false
   web: false
 
-  # Android 12+ 系統啟動畫面預設會在正中間放 App 圖示；塞全透明圖把圖示拿掉。
+  # Android 12+ 系統啟動畫面：純色底 + 置中 AVD 動畫圖示。動畫圖示不是本套件生成，
+  # 而是手寫的 @drawable/splash_icon_avd（drawable/ 亮色變體 + drawable-night/ 暗色
+  # 變體）。注意：重跑 `dart run flutter_native_splash:create` 會覆寫 values-v31 與
+  # values-night-v31 的 styles.xml，之後需手動把下面兩行加回兩份 LaunchTheme：
+  #   <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_avd</item>
+  #   <item name="android:windowSplashScreenAnimationDuration">1000</item>
   android_12:
-    image: "assets/app_icon/splash_transparent.png"
-    image_dark: "assets/app_icon/splash_transparent.png"
-    color: "#261940"
-    color_dark: "#261940"
-    icon_background_color: "#261940"
-    icon_background_color_dark: "#261940"
+    color: "#F4EFE3"
+    color_dark: "#1A1612"
