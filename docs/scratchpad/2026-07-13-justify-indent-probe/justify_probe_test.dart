@@ -138,4 +138,47 @@ void main() {
     _dumpPlaceholder('多行段落', _body, ui.TextAlign.justify);
     _dumpPlaceholder('單行段落', '韓採妍趁機箭步上前。', ui.TextAlign.justify);
   });
+
+  // 末行補償 off-by-one 疑點：headroom 以 gaps（字數-1）為分母，但
+  // letterSpacing 加在每個字後（字數份）——總增量 = spacing×字數 >
+  // headroom，幾乎滿行的末行是否被擠到回捲？
+  test('末行補償 off-by-one：近滿末行 + clamp 到 headroom/gaps 是否回捲', () {
+    const chars = 27; // 9/9/9 三行，無標點避免避頭尾干擾
+    final text = '夜' * chars;
+    const width = _fontSize * 9 + 1; // 每行 9 字 + 1px 殘餘
+    // Pass 2 模擬：末行 [18,27) 套 extraLetterSpacing = headroom/gaps
+    const spacing = 1.0 / 8; // headroom 1px / gaps 8
+    final style = ui.ParagraphStyle(
+      textAlign: ui.TextAlign.justify,
+      textDirection: ui.TextDirection.ltr,
+      fontSize: _fontSize,
+      height: 1.5,
+    );
+    final builder =
+        ui.ParagraphBuilder(style)
+          ..pushStyle(ui.TextStyle(color: const ui.Color(0xFF000000)))
+          ..addText(text.substring(0, 18))
+          ..pushStyle(
+            ui.TextStyle(
+              color: const ui.Color(0xFF000000),
+              letterSpacing: spacing,
+            ),
+          )
+          ..addText(text.substring(18))
+          ..pop();
+    final p =
+        builder.build()..layout(const ui.ParagraphConstraints(width: width));
+    final lines = p.computeLineMetrics();
+    // ignore: avoid_print
+    print('==== 末行補償 off-by-one 探針（width=$width, spacing=$spacing）====');
+    for (var i = 0; i < lines.length; i += 1) {
+      // ignore: avoid_print
+      print(
+        '  line[$i] width=${lines[i].width.toStringAsFixed(2)} '
+        'hardBreak=${lines[i].hardBreak}',
+      );
+    }
+    // ignore: avoid_print
+    print('  lineCount=${lines.length}（3=安全, 4=末字回捲）');
+  });
 }
