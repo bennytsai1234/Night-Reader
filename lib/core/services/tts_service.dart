@@ -254,8 +254,34 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> setLanguage(String lang) async {
-    _language = lang;
-    await _flutterTts.setLanguage(lang);
+    final normalized = lang.trim();
+    if (normalized.isEmpty) return;
+
+    await _flutterTts.setLanguage(normalized);
+    _language = normalized;
+    _voices = await _fetchVoices();
+
+    final selectedVoice = _selectedVoice;
+    if (selectedVoice != null) {
+      final matched = _findVoiceByKey(voiceKeyOf(selectedVoice));
+      if (matched == null) {
+        _selectedVoice = null;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(PreferKey.ttsVoice);
+      } else {
+        try {
+          await _applyVoice(matched);
+          _selectedVoice = matched;
+        } catch (e) {
+          _selectedVoice = null;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(PreferKey.ttsVoice);
+          AppLog.e(
+            'TTSService: reapply voice after language change failed: $e',
+          );
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -280,27 +306,46 @@ class TTSService extends ChangeNotifier {
   Future<void> setEngine(String? engine) async {
     final prefs = await SharedPreferences.getInstance();
     final normalized = engine?.trim() ?? '';
-    if (normalized.isEmpty) {
-      _selectedEngine = null;
-      await prefs.remove(PreferKey.ttsEngine);
-    } else {
-      await _flutterTts.setEngine(normalized);
-      _selectedEngine = normalized;
-      await prefs.setString(PreferKey.ttsEngine, normalized);
+    try {
+      final targetEngine =
+          normalized.isEmpty ? await _fetchDefaultEngine() : normalized;
+      if (targetEngine != null && targetEngine.isNotEmpty) {
+        await _flutterTts.setEngine(targetEngine);
+        await _applyCurrentTtsSettings();
+      }
+
+      if (normalized.isEmpty) {
+        _selectedEngine = null;
+        await prefs.remove(PreferKey.ttsEngine);
+      } else {
+        _selectedEngine = normalized;
+        await prefs.setString(PreferKey.ttsEngine, normalized);
+      }
+      _selectedVoice = null;
+      await prefs.remove(PreferKey.ttsVoice);
+      _voices = await _fetchVoices();
+      notifyListeners();
+    } catch (e) {
+      notifyListeners();
+      AppLog.e('TTSService: set engine failed: $e', error: e);
+      rethrow;
     }
-    _selectedVoice = null;
-    await prefs.remove(PreferKey.ttsVoice);
-    _voices = await _fetchVoices();
-    notifyListeners();
   }
 
   Future<void> setVoiceByKey(String? voiceKey) async {
     final prefs = await SharedPreferences.getInstance();
     if (voiceKey == null || voiceKey.isEmpty) {
-      _selectedVoice = null;
       try {
-        await _flutterTts.clearVoice();
-      } catch (_) {}
+        final result = await _flutterTts.clearVoice();
+        if (!_isSuccessfulTtsResult(result)) {
+          throw StateError('系統未接受系統預設音色');
+        }
+      } catch (e) {
+        notifyListeners();
+        AppLog.e('TTSService: clear voice failed: $e', error: e);
+        rethrow;
+      }
+      _selectedVoice = null;
       await prefs.remove(PreferKey.ttsVoice);
       notifyListeners();
       return;
@@ -312,10 +357,34 @@ class TTSService extends ChangeNotifier {
     );
     if (matched == null) return;
 
-    await _flutterTts.setVoice(matched);
+    try {
+      await _applyVoice(matched);
+    } catch (e) {
+      notifyListeners();
+      AppLog.e('TTSService: set voice failed: $e', error: e);
+      rethrow;
+    }
     _selectedVoice = matched;
     await prefs.setString(PreferKey.ttsVoice, jsonEncode(matched));
     notifyListeners();
+  }
+
+  Map<String, String>? _findVoiceByKey(String voiceKey) {
+    return _voices.cast<Map<String, String>?>().firstWhere(
+      (voice) => voice != null && voiceKeyOf(voice) == voiceKey,
+      orElse: () => null,
+    );
+  }
+
+  Future<void> _applyVoice(Map<String, String> voice) async {
+    final result = await _flutterTts.setVoice(voice);
+    if (!_isSuccessfulTtsResult(result)) {
+      throw StateError('系統未接受音色：${voiceLabelOf(voice)}');
+    }
+  }
+
+  static bool _isSuccessfulTtsResult(dynamic result) {
+    return !((result is num && result <= 0) || (result is bool && !result));
   }
 
   String voiceKeyOf(Map<String, String> voice) {
@@ -348,6 +417,7 @@ class TTSService extends ChangeNotifier {
     if (savedEngine.isNotEmpty && _engines.contains(savedEngine)) {
       try {
         await _flutterTts.setEngine(savedEngine);
+        await _applyCurrentTtsSettings();
         _selectedEngine = savedEngine;
       } catch (e) {
         AppLog.e('TTSService: set saved engine failed: $e', error: e);
@@ -370,8 +440,12 @@ class TTSService extends ChangeNotifier {
             orElse: () => null,
           );
           if (matched != null) {
-            await _flutterTts.setVoice(matched);
-            _selectedVoice = matched;
+            try {
+              await _applyVoice(matched);
+              _selectedVoice = matched;
+            } catch (e) {
+              AppLog.e('TTSService: restore saved voice failed: $e', error: e);
+            }
           }
         }
       } catch (e) {
@@ -394,11 +468,31 @@ class TTSService extends ChangeNotifier {
     return const <String>[];
   }
 
+  Future<String?> _fetchDefaultEngine() async {
+    try {
+      final raw = await _flutterTts.getDefaultEngine;
+      final engine = raw?.toString().trim() ?? '';
+      return engine.isEmpty ? null : engine;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _applyCurrentTtsSettings() async {
+    final language = _language?.trim();
+    if (language != null && language.isNotEmpty) {
+      await _flutterTts.setLanguage(language);
+    }
+    await _flutterTts.setSpeechRate(_rate);
+    await _flutterTts.setPitch(_pitch);
+    await _flutterTts.setVolume(_volume);
+  }
+
   Future<List<Map<String, String>>> _fetchVoices() async {
     try {
       final raw = await _flutterTts.getVoices;
       if (raw is List) {
-        return raw
+        final voices = raw
             .whereType<Map>()
             .map(
               (voice) => voice.map(
@@ -406,8 +500,49 @@ class TTSService extends ChangeNotifier {
               ),
             )
             .toList(growable: false);
+        final usableVoices = voices
+            .where(TTSService.isUsableVoice)
+            .toList(growable: false);
+        final language = _language;
+        if (language == null || language.trim().isEmpty) {
+          return usableVoices;
+        }
+        final languageVoices = usableVoices
+            .where((voice) => TTSService.voiceMatchesLanguage(voice, language))
+            .toList(growable: false);
+        return languageVoices.isNotEmpty ? languageVoices : usableVoices;
       }
     } catch (_) {}
     return const <Map<String, String>>[];
+  }
+
+  @visibleForTesting
+  static bool isUsableVoice(Map<String, String> voice) {
+    final networkRequired = voice['network_required']?.trim().toLowerCase();
+    if (networkRequired == '1' || networkRequired == 'true') return false;
+
+    final features =
+        voice['features']
+            ?.split(RegExp(r'[\t, ]+'))
+            .map((feature) => feature.trim().toLowerCase())
+            .where((feature) => feature.isNotEmpty) ??
+        const <String>[];
+    return !features.contains('notinstalled');
+  }
+
+  @visibleForTesting
+  static bool voiceMatchesLanguage(Map<String, String> voice, String language) {
+    final target = _normalizeLocale(language);
+    final locale = _normalizeLocale(voice['locale'] ?? '');
+    if (target.isEmpty || locale.isEmpty) return true;
+
+    final targetLanguage = target.split('-').first;
+    return locale == target ||
+        locale == targetLanguage ||
+        locale.startsWith('$targetLanguage-');
+  }
+
+  static String _normalizeLocale(String value) {
+    return value.trim().replaceAll('_', '-').toLowerCase();
   }
 }

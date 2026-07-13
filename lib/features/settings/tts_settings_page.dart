@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -99,12 +97,18 @@ class TtsSettingsPage extends StatelessWidget {
                           ),
                         ),
                       ],
-                      onChanged:
-                          (value) => unawaited(
-                            tts.setEngine(
-                              value == null || value.isEmpty ? null : value,
-                            ),
-                          ),
+                      onChanged: (value) async {
+                        try {
+                          await tts.setEngine(
+                            value == null || value.isEmpty ? null : value,
+                          );
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('語音引擎切換失敗，已維持原設定')),
+                          );
+                        }
+                      },
                     ),
                   ),
                   Padding(
@@ -136,11 +140,22 @@ class TtsSettingsPage extends StatelessWidget {
                       onChanged:
                           voices.isEmpty
                               ? null
-                              : (value) => unawaited(
-                                tts.setVoiceByKey(
-                                  value == null || value.isEmpty ? null : value,
-                                ),
-                              ),
+                              : (value) async {
+                                try {
+                                  await tts.setVoiceByKey(
+                                    value == null || value.isEmpty
+                                        ? null
+                                        : value,
+                                  );
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('音色無法套用，請改選其他音色'),
+                                    ),
+                                  );
+                                }
+                              },
                     ),
                   ),
                 ],
