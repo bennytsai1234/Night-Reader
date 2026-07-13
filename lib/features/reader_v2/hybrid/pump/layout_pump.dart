@@ -244,9 +244,12 @@ final class LayoutPump implements HybridLayoutPump {
         textAlignOverride: task.textStyle.textAlign,
       );
     }
+    // letterSpacing 加在範圍內每個字元之後（含末字），總增量是
+    // spacing × 字數而非 × 間隙數；分母若用 gaps，近滿末行會超寬
+    // 一個 spacing 而把末字擠到下一行。
     final lastLineHeadroom =
         (task.contentWidth - lines[lastLineIndex].width) /
-        lastLineGaps.toDouble();
+        lastLineBoxes.length.toDouble();
     final safeExtraLetterSpacing =
         extraLetterSpacing
             .clamp(0.0, lastLineHeadroom > 0 ? lastLineHeadroom : 0.0)

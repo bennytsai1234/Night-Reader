@@ -220,6 +220,57 @@ void main() {
       baselineCache.dispose();
     });
 
+    test('B2 末行補償：近滿末行不得把末字擠到下一行', () async {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+        ),
+      );
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      const fontSize = 20.0;
+      // 27 個無標點字元 + 寬 9 字 + 1px 殘餘 → 9/9/9 三行；末行 headroom
+      // 僅 1px。補償上限若誤用間隙數（8）作分母，總增量 9×0.125 會超寬
+      // 而把末字擠成第四行孤行。
+      final text = '夜' * 27;
+      pump.submit(
+        LayoutTask(
+          block: ChapterBlock(
+            key: key,
+            text: text,
+            charRange: const HybridTextRange(0, 27),
+            sourceParagraphIndex: 0,
+          ),
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+          textStyle: const HybridBlockTextStyle(
+            fontSize: fontSize,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            textAlign: ui.TextAlign.justify,
+          ),
+          contentWidth: fontSize * 9 + 1,
+        ),
+      );
+
+      expect(await pump.pumpPending(), 1);
+      final paragraph = cache.acquire(key, LayoutEpoch.initial)!;
+      final lines = paragraph.computeLineMetrics();
+      expect(lines.length, 3, reason: '補償不得改變斷行（末字回捲即為 off-by-one）');
+      expect(
+        lines.last.width,
+        lessThanOrEqualTo(fontSize * 9 + 1 + 0.01),
+        reason: '末行寬不得超出內容寬',
+      );
+      pump.dispose();
+      cache.dispose();
+    });
+
     test('justify 下段首縮排以 placeholder 保留原寬，字距不吸收縮排寬度', () async {
       final store = MeasurementStore();
       final cache = ParagraphCache();
