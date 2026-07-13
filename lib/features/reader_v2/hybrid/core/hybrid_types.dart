@@ -514,9 +514,10 @@ final class LayoutTask {
   final LayoutTaskPriority priority;
   final HybridScrollDirection direction;
 
-  /// 段首縮排的全形空白字元數（沿用舊引擎「排版時動態前綴」規則；
-  /// 續塊與標題恆為 0）。前綴不屬於章節 displayText，
-  /// charOffset 換算時必須扣除。
+  /// 段首縮排的字元數（沿用舊引擎「排版時動態前綴」規則；
+  /// 續塊與標題恆為 0）。Paragraph 內以等寬 placeholder 呈現（每個佔
+  /// 1 code unit，justify 不會像對 U+3000 那樣折疊它）。前綴不屬於
+  /// 章節 displayText，charOffset 換算時必須扣除。
   final int indentChars;
 
   /// 排在本 block 之後的垂直間距（px），計入 BlockMetrics.height。

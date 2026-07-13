@@ -365,14 +365,29 @@ final class LayoutPump implements HybridLayoutPump {
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );
-    final indent = _indentFor(task);
-    final text = '$indent${task.block.text}';
+    final indentLength = _indentFor(task).length;
+    final body = task.block.text;
+    final textLength = indentLength + body.length;
     final builder = ui.ParagraphBuilder(paragraphStyle)
       ..pushStyle(_textStyle(task));
-    final start = extraStart?.clamp(0, text.length).toInt();
-    final end = extraEnd?.clamp(start ?? 0, text.length).toInt();
+    // 縮排以 placeholder 而非 U+3000 文字送進 Paragraph：justify 會把
+    // 行首全形空白視為可分配空白——縮排被壓成 0 寬、其寬度平攤進整行
+    // 字距，造成 soft-wrap 行字距異常放大且失去縮排。placeholder 不是
+    // 空白字元故不受影響；每個仍佔 1 code unit（U+FFFC），因此
+    // charOffset / TTS / 錨點的座標換算與 U+3000 前綴完全相同。
+    for (var i = 0; i < indentLength; i += 1) {
+      builder.addPlaceholder(
+        task.textStyle.fontSize,
+        task.textStyle.fontSize,
+        ui.PlaceholderAlignment.bottom,
+      );
+    }
+    final start = extraStart?.clamp(indentLength, textLength).toInt();
+    final end = extraEnd?.clamp(start ?? indentLength, textLength).toInt();
     if (extraLetterSpacing > 0 && start != null && end != null && end > start) {
-      if (start > 0) builder.addText(text.substring(0, start));
+      final bodyStart = start - indentLength;
+      final bodyEnd = end - indentLength;
+      if (bodyStart > 0) builder.addText(body.substring(0, bodyStart));
       builder
         ..pushStyle(
           _textStyle(
@@ -380,11 +395,11 @@ final class LayoutPump implements HybridLayoutPump {
             letterSpacing: task.textStyle.letterSpacing + extraLetterSpacing,
           ),
         )
-        ..addText(text.substring(start, end))
+        ..addText(body.substring(bodyStart, bodyEnd))
         ..pop();
-      if (end < text.length) builder.addText(text.substring(end));
+      if (bodyEnd < body.length) builder.addText(body.substring(bodyEnd));
     } else {
-      builder.addText(text);
+      builder.addText(body);
     }
     final paragraph =
         builder.build()
@@ -392,6 +407,9 @@ final class LayoutPump implements HybridLayoutPump {
     return paragraph;
   }
 
+  /// 縮排在座標系上的替身字串：實際 Paragraph 以等量 placeholder 呈現
+  /// （見 [_buildParagraphWithLetterSpacing]），此字串只用來計算前綴
+  /// 長度與逐字 cluster 邊界，兩者每字元都佔 1 code unit，座標一致。
   String _indentFor(LayoutTask task) {
     return task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
   }

@@ -11,7 +11,9 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 final class MetricsDiskCache {
   MetricsDiskCache({required this.baseDirectory});
 
-  static const int _version = 2;
+  // v3：縮排前綴從 U+3000 文字改為 placeholder；extent 理論上不變，
+  // 升版讓非 1em 全形空白字型的舊快取一次性重量測。
+  static const int _version = 3;
   static const int _headerMagic = 0x4E52484D; // NRHM
   static const int _rowSize = 40;
 
