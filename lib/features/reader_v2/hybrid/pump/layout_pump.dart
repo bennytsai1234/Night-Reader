@@ -164,7 +164,10 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   ui.Paragraph _buildParagraph(LayoutTask task) {
-    if (!_shouldCompensateLastLine(task)) {
+    // 條件含單行寬度上界估算：必為單行的 block（對白短句為大宗）
+    // 不進兩段式路徑，維持單次 layout；與 cost model 的
+    // layoutPassesFor 共用同一判斷，成本預測不失準。
+    if (!LayoutCostModel.mayCompensateLastLine(task)) {
       return _buildParagraphWithLetterSpacing(
         task,
         extraLetterSpacing: 0,
@@ -280,13 +283,6 @@ final class LayoutPump implements HybridLayoutPump {
       extraEnd: end,
       textAlignOverride: task.textStyle.textAlign,
     );
-  }
-
-  bool _shouldCompensateLastLine(LayoutTask task) {
-    return task.fingerprint.lastLineSpacingCompensation &&
-        !task.block.isTitle &&
-        !task.block.isContinuation &&
-        task.textStyle.textAlign == ui.TextAlign.justify;
   }
 
   double _averageJustifyExpansion(

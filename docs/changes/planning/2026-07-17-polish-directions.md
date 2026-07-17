@@ -2,7 +2,7 @@
 
 feature freeze 下的候選打磨方向。依據：`docs/changes/completed/2026-07-12` 排版重設計 handoff、`2026-07-13` 兩筆修正、`docs/night_reader/reader.md` Known Risks、以及 2026-07-17 現況核實（`flutter analyze` 乾淨；正規化層與 B2 均已落地）。各方向獨立，可單挑執行；每項執行前仍走各自的 Before/After gate。
 
-## 方向 1：B2 末行字距補償——成本打磨與預設值決策
+## 方向 1：B2 末行字距補償——成本打磨與預設值決策 ◐（程式部分 2026-07-17 完成；真機 p99 對比與預設值決策待驗收劇本）
 
 - **現況**：B2 已實作為設定開關，預設關（`app_config.dart:21`），且 off-by-one 已修（2026-07-13）。代價是每個 block layout 兩次，layout 是 fling 熱路徑，handoff 明訂「真機量 fling p99 後才可預設開」。
 - **打磨內容**：
@@ -18,7 +18,7 @@ feature freeze 下的候選打磨方向。依據：`docs/changes/completed/2026-
 - **驗證**：text_preprocessor 單測（構造 >1800 字段落，斷言切割行寬近滿）＋探針目視。
 - **層級**：T1–T2（影響 block 邊界與 metrics 快取 contentHash 語意，需確認續塊 charOffset 契約不變）。
 
-## 方向 3：正規化激進項可靠化（引號配對／連續標點收斂／CJK 雜訊空格）
+## 方向 3：正規化激進項可靠化（引號配對／連續標點收斂／CJK 雜訊空格） ✅（2026-07-17 完成；預設值調整待真書觀察）
 
 - **現況**：`pairTypographyQuotes`、`collapseTypographyPunctuation`、`removeTypographyCjkSpaces` 三個激進項均已實作但因誤傷率高預設關。
 - **打磨內容**：
@@ -28,7 +28,7 @@ feature freeze 下的候選打磨方向。依據：`docs/changes/completed/2026-
 - **驗證**：normalizeTypography 聚焦單測擴充；真書樣本目視。
 - **層級**：T1（純函式層，transformer 單點）。
 
-## 方向 4：真機驗收欠帳制度化
+## 方向 4：真機驗收欠帳制度化 ✅（2026-07-17 完成；基準數據待真機首跑回填）
 
 - **現況**：reader.md Known Risks 明列三項本機無法驗的欠帳——120Hz fling p99、長時間 Paragraph 記憶體平台期、真機字型 fallback。目前只有 debug overlay 手動看。
 - **打磨內容**：
@@ -47,7 +47,7 @@ feature freeze 下的候選打磨方向。依據：`docs/changes/completed/2026-
 - **驗證**：探針測試輸出對照 2026-07-13 紀錄。
 - **層級**：T0–T1（純驗證，除非發現行為變化）。
 
-## 方向 6：B2 與 TTS 高亮的交互驗證
+## 方向 6：B2 與 TTS 高亮的交互驗證 ✅（2026-07-17 完成，本機幾何契約測試；真機 TTS 目視留驗收劇本）
 
 - **現況**：B2 對末行 push 額外 `letterSpacing` span，TTS 高亮走 `getBoxesForRange` 真實 glyph 幾何，理論上契約不破；但「B2 開啟＋TTS 逐段高亮落在末行」這條路徑目前沒有針對性測試。
 - **打磨內容**：加 widget/單測——B2 開啟下對末行字元範圍取 boxes，斷言與畫面 glyph 位置一致；真機開 TTS 目視一輪。

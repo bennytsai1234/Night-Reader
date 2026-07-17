@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/measurement_store.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
+import 'package:night_reader/features/reader_v2/hybrid/pump/layout_cost_model.dart';
 import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
 
 void main() {
@@ -266,6 +267,136 @@ void main() {
         lines.last.width,
         lessThanOrEqualTo(fontSize * 9 + 1 + 0.01),
         reason: '末行寬不得超出內容寬',
+      );
+      pump.dispose();
+      cache.dispose();
+    });
+
+    test('B2 條件式 Pass 2：必為單行的 block 不進兩段式路徑', () {
+      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
+      LayoutTask taskFor(String text, {double contentWidth = 240}) {
+        return LayoutTask(
+          block: ChapterBlock(
+            key: const BlockKey(chapterIndex: 0, blockIndex: 0),
+            text: text,
+            charRange: HybridTextRange(0, text.length),
+            sourceParagraphIndex: 0,
+          ),
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+          textStyle: const HybridBlockTextStyle(
+            fontSize: 20,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            textAlign: ui.TextAlign.justify,
+          ),
+          contentWidth: contentWidth,
+          indentChars: 2,
+        );
+      }
+
+      final costModel = LayoutCostModel();
+      // 縮排 2 + 6 字 = 8 units ≤ 12 units 寬 → 必為單行，單次 layout。
+      final short = taskFor('「好。」他說', contentWidth: 240);
+      expect(LayoutCostModel.mayCompensateLastLine(short), isFalse);
+      expect(costModel.layoutPassesFor(short), 1.0);
+      // 縮排 2 + 16 字 = 18 units > 12 units 寬 → 可能 soft-wrap，兩段式。
+      final long = taskFor('衝在最前面的妖怪頭顱便滾落在地。', contentWidth: 240);
+      expect(LayoutCostModel.mayCompensateLastLine(long), isTrue);
+      expect(costModel.layoutPassesFor(long), 2.0);
+      // B2 關閉時一律單次。
+      expect(
+        costModel.layoutPassesFor(
+          LayoutTask(
+            block: long.block,
+            epoch: LayoutEpoch.initial,
+            fingerprint: _fingerprint(),
+            textStyle: long.textStyle,
+            contentWidth: 240,
+            indentChars: 2,
+          ),
+        ),
+        1.0,
+      );
+    });
+
+    test('B2 開啟時末行 getBoxesForRange 幾何與畫面一致（TTS 高亮契約）', () async {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+        ),
+      );
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      const fontSize = 20.0;
+      const indentChars = 2;
+      const text = '衝在最前面的妖怪頭顱便滾落在地面上。';
+      // 縮排 2 + 18 字 = 20 units；寬 16.4 units → 首行 soft-wrap、
+      // 末行 4 字有大量 headroom，B2 補償必然生效（受 cap 限制）。
+      const contentWidth = fontSize * 16.4;
+      pump.submit(
+        LayoutTask(
+          block: const ChapterBlock(
+            key: key,
+            text: text,
+            charRange: HybridTextRange(0, 18),
+            sourceParagraphIndex: 0,
+          ),
+          epoch: LayoutEpoch.initial,
+          fingerprint: fingerprint,
+          textStyle: const HybridBlockTextStyle(
+            fontSize: fontSize,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            textAlign: ui.TextAlign.justify,
+          ),
+          contentWidth: contentWidth,
+          indentChars: indentChars,
+        ),
+      );
+
+      expect(await pump.pumpPending(), 1);
+      final paragraph = cache.acquire(key, LayoutEpoch.initial)!;
+      final lines = paragraph.computeLineMetrics();
+      expect(lines.length, 2);
+      expect(
+        lines.last.width,
+        greaterThan(fontSize * 4),
+        reason: 'B2 須實際生效（末行寬 > 自然寬）',
+      );
+
+      // TTS 高亮以 displayText offset + 縮排位移換 boxes；B2 的
+      // letterSpacing span 不得讓 boxes 與實繪 glyph 幾何脫鉤：
+      // 末行各字 box 必須連續相接（無累積漂移）、落在第二行、
+      // 總覆蓋範圍與 LineMetrics 寬一致。實測 SkParagraph 把
+      // letterSpacing 前後各半分攤在字形兩側，行首容許半個 spacing
+      // 的起始偏移（≤ cap 2.0）。
+      final lastLineStart = indentChars + 14; // 首行 14 字 + 縮排
+      double? expectedLeft;
+      var firstLeft = 0.0;
+      for (var offset = lastLineStart; offset < indentChars + 18; offset += 1) {
+        final box = paragraph.getBoxesForRange(offset, offset + 1).single;
+        if (expectedLeft == null) {
+          firstLeft = box.left;
+          expect(
+            firstLeft,
+            inInclusiveRange(0.0, LayoutPump.lastLineLetterSpacingCap),
+          );
+        } else {
+          expect(box.left, closeTo(expectedLeft, 0.01), reason: '末行 box 必須連續相接');
+        }
+        expect(box.top, greaterThan(lines.first.height - 0.01));
+        expectedLeft = box.right;
+      }
+      expect(
+        expectedLeft!,
+        closeTo(lines.last.width, LayoutPump.lastLineLetterSpacingCap),
+        reason: '末行 boxes 覆蓋範圍不得偏離 LineMetrics 寬',
       );
       pump.dispose();
       cache.dispose();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert' show jsonEncode;
 import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:ui' as ui show FrameTiming, Paragraph;
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -222,6 +224,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   void dispose() {
+    _logTelemetrySessionSummary();
     widget.runtime.unregisterHybridViewport(this);
     widget.runtime.removeListener(_onRuntimeChanged);
     widget.runtime.unregisterVisibleLocationCapture(this);
@@ -247,6 +250,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(widget.runtime.flushProgress());
       unawaited(_writeDiskMetrics(_measurementStore.snapshot(_namespace)));
     }
+  }
+
+  /// session 結束時把 telemetry 累計摘要寫入 AppLog（設定頁日誌可回收），
+  /// 附帶影響幀成本的關鍵樣式脈絡，供真機驗收劇本對比（如 B2 開/關）。
+  void _logTelemetrySessionSummary() {
+    final summary = _telemetry.sessionSummary();
+    if ((summary['frames'] as int? ?? 0) == 0) return;
+    summary['fontSize'] = _fingerprint.fontSize;
+    summary['lastLineSpacingCompensation'] =
+        _fingerprint.lastLineSpacingCompensation;
+    AppLog.i('ReaderV2 telemetry session: ${jsonEncode(summary)}');
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {

@@ -59,6 +59,41 @@ void main() {
       expect(normalizeTypography('“你好”', normalizePunctuation: false), '“你好”');
     });
 
+    test('pairQuotes 逐行配對：雜訊引號只影響該行，不再整章放棄或錯位', () {
+      // 第二行奇數個引號：該行原樣保留，其他行正常配對
+      //（舊實作為整章全域計數，全章奇數 → 三行全部放棄）。
+      expect(
+        normalizeTypography(
+          '"第一句"\n殘缺"引號行\n"第三句"',
+          pairQuotes: true,
+        ),
+        '「第一句」\n殘缺"引號行\n「第三句」',
+      );
+      // 同行多對引號仍交替配對。
+      expect(
+        normalizeTypography('"甲"與"乙"', pairQuotes: true),
+        '「甲」與「乙」',
+      );
+      // 反斜線跳脫的引號不參與配對。
+      expect(
+        normalizeTypography('"a\\"b"', pairQuotes: true),
+        '「a\\"b」',
+      );
+    });
+
+    test('激進項誤傷對照表：省略號與西文空格不受波及', () {
+      // collapseRepeatedPunctuation 不得吃掉正規化後的 …… 省略號。
+      expect(
+        normalizeTypography('等等……好！！！', collapseRepeatedPunctuation: true),
+        '等等……好！',
+      );
+      // removeCjkSpaces 只移除漢字之間的空格，西文詞間空格保留。
+      expect(
+        normalizeTypography('你 好 hello world 嗎', removeCjkSpaces: true),
+        '你好 hello world 嗎',
+      );
+    });
+
     test('normalizeTypography 歧義寬度標點：間隔號轉全形中點', () {
       expect(normalizeTypography('哈利·波特'), '哈利・波特');
       expect(normalizeTypography('哈利‧波特'), '哈利・波特');

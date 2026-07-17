@@ -313,15 +313,23 @@ bool _isCjkContextRune(int? rune) {
       rune == 0x30FB;
 }
 
+/// 直引號 `"` 無方向資訊，只能靠交替配對。配對以**行**為單位：
+/// 對白引號幾乎不跨行，逐行配對能把單一雜訊引號的錯位影響隔離在
+/// 該行（整章全域交替時，一個落單引號會讓其後所有開/收全部顛倒；
+/// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留。
 String _normalizePairedQuotes(String input) {
-  final runes = input.runes.toList(growable: false);
+  return input.split('\n').map(_normalizePairedQuotesLine).join('\n');
+}
+
+String _normalizePairedQuotesLine(String line) {
+  final runes = line.runes.toList(growable: false);
   var quoteCount = 0;
   for (var index = 0; index < runes.length; index += 1) {
     if (runes[index] == 0x22 && !_isEscaped(runes, index)) {
       quoteCount += 1;
     }
   }
-  if (quoteCount == 0 || quoteCount.isOdd) return input;
+  if (quoteCount == 0 || quoteCount.isOdd) return line;
 
   final output = StringBuffer();
   var opening = true;
