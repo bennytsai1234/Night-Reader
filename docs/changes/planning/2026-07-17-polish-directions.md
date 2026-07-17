@@ -37,7 +37,7 @@ feature freeze 下的候選打磨方向。依據：`docs/changes/completed/2026-
 - **驗證**：telemetry 匯出格式單測；一次真機實跑產出基準數據入 scratchpad。
 - **層級**：T1（觀測性，不動排版邏輯）。
 
-## 方向 5：Flutter 3.44.6 升級後的排版探針回歸
+## 方向 5：Flutter 3.44.6 升級後的排版探針回歸 ✅（2026-07-17 完成，見 completed/2026-07-17）
 
 - **現況**：昨日剛升 SDK 與 21 個套件。`flutter analyze` 乾淨（2026-07-17 實測）。但排版管線對 SkParagraph 行為敏感（justify 折疊空白、placeholder advance、避頭尾斷行），這些是引擎行為不是 API，analyze/test 綠不代表行為未變。
 - **打磨內容**：

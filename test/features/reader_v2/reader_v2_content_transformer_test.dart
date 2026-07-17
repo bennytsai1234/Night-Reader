@@ -37,6 +37,36 @@ void main() {
       expect(normalizeTypography('你 好 嗎', removeCjkSpaces: true), '你好嗎');
     });
 
+    test('normalizeTypography 歧義寬度標點：彎引號成對轉 CJK 專屬碼位', () {
+      // 中文脈絡的彎雙引號 → 「」；巢狀彎單引號 → 『』
+      expect(normalizeTypography('“你好”'), '「你好」');
+      expect(normalizeTypography('“他說‘好’了”'), '「他說『好』了」');
+      // 引號內只有標點也算中文脈絡（省略號/破折號開頭的對白）
+      expect(normalizeTypography('“……”'), '「……」');
+      // 引號內全西文但外側鄰字是中文 → 成對一起轉，不破對
+      expect(normalizeTypography('他說“Hello, world”。'), '他說「Hello, world」。');
+      // 純西文脈絡的引號對原樣保留
+      expect(normalizeTypography('He said “hello” loudly'), 'He said “hello” loudly');
+      // 落單（不成對）的引號原樣保留
+      expect(normalizeTypography('他說”了'), '他說”了');
+      expect(normalizeTypography('“他說了'), '“他說了');
+      // 收尾前又開新引號：前一個落單保留，後一對正常轉
+      expect(normalizeTypography('“早안“你好”'), '“早안「你好」');
+      // 撇號不視為引號收尾
+      expect(normalizeTypography('他說“don’t worry”。'), '他說「don’t worry」。');
+      expect(normalizeTypography("It’s fine"), 'It’s fine');
+      // 開關關閉時不動
+      expect(normalizeTypography('“你好”', normalizePunctuation: false), '“你好”');
+    });
+
+    test('normalizeTypography 歧義寬度標點：間隔號轉全形中點', () {
+      expect(normalizeTypography('哈利·波特'), '哈利・波特');
+      expect(normalizeTypography('哈利‧波特'), '哈利・波特');
+      // 非漢字兩側不轉（數字/西文脈絡）
+      expect(normalizeTypography('3·14'), '3·14');
+      expect(normalizeTypography('a·b'), 'a·b');
+    });
+
     test('normalizeTypography 不破壞詩歌換行與數字脈絡', () {
       expect(
         normalizeTypography('你\n 好\n3.14\nVersion 1.2'),

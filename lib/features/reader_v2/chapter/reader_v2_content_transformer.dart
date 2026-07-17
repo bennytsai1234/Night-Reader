@@ -96,6 +96,7 @@ String normalizeTypography(
   if (normalizePunctuation) {
     result = _normalizeEllipsis(result);
     result = _normalizeCjkPunctuation(result);
+    result = _normalizeAmbiguousWidthPunctuation(result);
   }
   if (pairQuotes) {
     result = _normalizePairedQuotes(result);
@@ -193,6 +194,123 @@ int? _neighborRune(List<int> runes, int index, int direction) {
     cursor += direction;
   }
   return null;
+}
+
+/// 歧義寬度標點轉 CJK 專屬碼位。
+///
+/// 彎引號（U+201C/201D/2018/2019）與間隔號（U+00B7/U+2027）屬東亞歧義
+/// 寬度字元：Android 字型回退鏈逐字取第一個有字形的字型，這些碼位會
+/// 命中 Roboto 的西文窄字形而非 CJK 字型，因此不佔一格、與漢字不同寬
+/// （`fwid` 只作用於有 OpenType 半形→全形對映的字形，Roboto 不支援）。
+/// 轉成 Roboto 沒有字形的 CJK 專屬碼位（「」『』・）後，回退鏈必然落到
+/// CJK 字型、佔滿一格。
+String _normalizeAmbiguousWidthPunctuation(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  _convertCurlyQuotePairs(
+    runes,
+    output,
+    open: 0x201C,
+    close: 0x201D,
+    openReplacement: '「',
+    closeReplacement: '」',
+  );
+  _convertCurlyQuotePairs(
+    runes,
+    output,
+    open: 0x2018,
+    close: 0x2019,
+    openReplacement: '『',
+    closeReplacement: '』',
+  );
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune != 0xB7 && rune != 0x2027) continue;
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = index + 1 < runes.length ? runes[index + 1] : null;
+    if (_isCjkRune(previous) && _isCjkRune(next)) {
+      output[index] = '・';
+    }
+  }
+  return output.join();
+}
+
+/// 彎引號成對轉換：開/收一起轉，避免逐字元判斷在 `他說“Hello”` 這類
+/// 案例只轉一邊而破對。不成對（落單）的引號原樣保留；純西文脈絡的
+/// 引號對（內文與外側鄰字皆無 CJK）也原樣保留。
+void _convertCurlyQuotePairs(
+  List<int> runes,
+  List<String> output, {
+  required int open,
+  required int close,
+  required String openReplacement,
+  required String closeReplacement,
+}) {
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != open) {
+      index += 1;
+      continue;
+    }
+    var closeIndex = -1;
+    var cursor = index + 1;
+    for (; cursor < runes.length; cursor += 1) {
+      final rune = runes[cursor];
+      if (rune == open) break; // 收尾前又開新引號：放棄目前這個開引號
+      if (rune == close && !_isApostropheRune(runes, cursor, close)) {
+        closeIndex = cursor;
+        break;
+      }
+    }
+    if (closeIndex < 0) {
+      index = cursor; // 從中斷點（可能是新的開引號）繼續
+      continue;
+    }
+    if (_quotePairHasCjkContext(runes, index, closeIndex)) {
+      output[index] = openReplacement;
+      output[closeIndex] = closeReplacement;
+    }
+    index = closeIndex + 1;
+  }
+}
+
+/// `’` 夾在拉丁字母/數字之間是撇號（don’t、it’s），不當作引號收尾。
+bool _isApostropheRune(List<int> runes, int index, int close) {
+  if (close != 0x2019) return false;
+  final previous = index > 0 ? runes[index - 1] : null;
+  final next = index + 1 < runes.length ? runes[index + 1] : null;
+  return _isLatinLetterOrDigit(previous) && _isLatinLetterOrDigit(next);
+}
+
+bool _isLatinLetterOrDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) ||
+      (rune >= 0x41 && rune <= 0x5A) ||
+      (rune >= 0x61 && rune <= 0x7A);
+}
+
+bool _quotePairHasCjkContext(List<int> runes, int openIndex, int closeIndex) {
+  for (var cursor = openIndex + 1; cursor < closeIndex; cursor += 1) {
+    if (_isCjkContextRune(runes[cursor])) return true;
+  }
+  return _isCjkContextRune(_neighborRune(runes, openIndex, -1)) ||
+      _isCjkContextRune(_neighborRune(runes, closeIndex, 1));
+}
+
+/// CJK 脈絡字元：漢字之外也涵蓋 CJK 標點/全形區段與常見中文標點
+/// （`“……”`、`“——”他說` 這類引號內只有標點的段落也要能判定為中文脈絡）。
+bool _isCjkContextRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x3000 && rune <= 0x303F) ||
+      (rune >= 0xFF00 && rune <= 0xFF60) ||
+      rune == 0x2014 ||
+      rune == 0x2026 ||
+      rune == 0x30FB;
 }
 
 String _normalizePairedQuotes(String input) {
