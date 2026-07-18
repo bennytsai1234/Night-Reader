@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
@@ -28,11 +27,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double paragraphSpacing = 1.0;
   double letterSpacing = 0.0;
   int textIndent = 2;
-  bool normalizeTypography = true;
-  bool pairTypographyQuotes = false;
-  bool collapseTypographyPunctuation = false;
-  bool removeTypographyCjkSpaces = false;
   bool lastLineSpacingCompensation = false;
+  bool japaneseAutoTranslate = false;
   double textPadding = 16.0;
   int themeIndex = 0;
   int lastDayThemeIndex = 0;
@@ -60,11 +56,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     paragraphSpacing = snapshot.paragraphSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
-    normalizeTypography = snapshot.normalizeTypography;
-    pairTypographyQuotes = snapshot.pairTypographyQuotes;
-    collapseTypographyPunctuation = snapshot.collapseTypographyPunctuation;
-    removeTypographyCjkSpaces = snapshot.removeTypographyCjkSpaces;
     lastLineSpacingCompensation = snapshot.lastLineSpacingCompensation;
+    japaneseAutoTranslate = snapshot.japaneseAutoTranslate;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
@@ -98,15 +91,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
       bold: false,
       textIndent: textIndent,
       lastLineSpacingCompensation: lastLineSpacingCompensation,
-    );
-  }
-
-  ReaderV2TypographyOptions get typographyOptions {
-    return ReaderV2TypographyOptions(
-      normalizePunctuation: normalizeTypography,
-      pairQuotes: pairTypographyQuotes,
-      collapseRepeatedPunctuation: collapseTypographyPunctuation,
-      removeCjkSpaces: removeTypographyCjkSpaces,
     );
   }
 
@@ -159,42 +143,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setNormalizeTypography(bool value) {
-    if (normalizeTypography == value) return;
-    normalizeTypography = value;
-    _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.saveNormalizeTypography(value));
-    notifyListeners();
-  }
-
-  void setPairTypographyQuotes(bool value) {
-    if (pairTypographyQuotes == value) return;
-    pairTypographyQuotes = value;
-    _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.savePairTypographyQuotes(value));
-    notifyListeners();
-  }
-
-  void setCollapseTypographyPunctuation(bool value) {
-    if (collapseTypographyPunctuation == value) return;
-    collapseTypographyPunctuation = value;
-    _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.saveCollapseTypographyPunctuation(value));
-    notifyListeners();
-  }
-
-  void setRemoveTypographyCjkSpaces(bool value) {
-    if (removeTypographyCjkSpaces == value) return;
-    removeTypographyCjkSpaces = value;
-    _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.saveRemoveTypographyCjkSpaces(value));
-    notifyListeners();
-  }
-
   void setLastLineSpacingCompensation(bool value) {
     if (lastLineSpacingCompensation == value) return;
     lastLineSpacingCompensation = value;
     unawaited(_prefsRepository.saveLastLineSpacingCompensation(value));
+    notifyListeners();
+  }
+
+  void setJapaneseAutoTranslate(bool value) {
+    if (japaneseAutoTranslate == value) return;
+    japaneseAutoTranslate = value;
+    _contentSettingsGeneration += 1;
+    unawaited(_prefsRepository.saveJapaneseAutoTranslate(value));
     notifyListeners();
   }
 

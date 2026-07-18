@@ -31,6 +31,8 @@
 |---|---|---|---|
 | Reader V2 採方案 B 混合架構 | Framework `CustomScrollView.center` 雙 sliver + 自有 block 排版管線 | reader（hybrid / screen / session bridge） | 以精確 extent、連續 admission、零 offset correction 與邏輯錨點取代舊自繪 strip/backward lock，降低補章跳動與 fling 主執行緒排版風險。 |
 | 本地書格式統一為 TXT | 檔案選擇、分享匯入、章節索引與 Reader V2 只接受 TXT | foundation / services / bookshelf / association / reader | 維持純文字章節契約，避免封裝格式標記與資源語意進入文字 block 管線。 |
+| 文字正規化內化（2026-07-18） | 恆開、無使用者開關；【】〖〗｢｣統一轉「」『』；歧義寬度標點（—…‥⋯）以內嵌 `NightReaderPunct` 子集字型（`tool/punct_font/`）保證全形 | reader（transformer / layout / settings） | 使用者真書觀察：四開關全開仍格線錯位；碼位映射管不到 Roboto 窄字形的 U+2014/U+2026，字型層才是確定解。改字型資產須同步 bump `kReaderV2CjkTypographyFeatureSignature`。 |
+| 日文段落自動翻譯（2026-07-18） | ML Kit on-device（`google_mlkit_translation`），假名偵測逐段翻譯，transformer 後主 isolate pass，譯文沿用簡繁設定 | reader（chapter / settings） / services | feature freeze 下使用者明確要求：翻譯書缺譯段落整句日文無法閱讀。離線、免金鑰，符合純工具定位；平台通道不可進 worker isolate。 |
 
 ## Module List
 

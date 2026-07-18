@@ -118,33 +118,19 @@ void main() {
     expect(controller.autoPageSpeed, 0.02);
   });
 
-  test('typography options use the requested defaults and persist', () async {
+  test('last line spacing compensation loads and persists', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      PreferKey.readerTypographyNormalizePunctuation: false,
-      PreferKey.readerTypographyPairQuotes: true,
-      PreferKey.readerTypographyCollapsePunctuation: true,
-      PreferKey.readerTypographyRemoveCjkSpaces: true,
       PreferKey.readerLastLineSpacingCompensation: true,
     });
 
     final controller = ReaderV2SettingsController();
     await controller.loadSettings();
 
-    expect(controller.normalizeTypography, isFalse);
-    expect(controller.pairTypographyQuotes, isTrue);
-    expect(controller.collapseTypographyPunctuation, isTrue);
-    expect(controller.removeTypographyCjkSpaces, isTrue);
     expect(controller.lastLineSpacingCompensation, isTrue);
-    expect(controller.typographyOptions.removeCjkSpaces, isTrue);
 
-    controller.setNormalizeTypography(true);
     controller.setLastLineSpacingCompensation(false);
     await Future<void>.delayed(Duration.zero);
     final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getBool(PreferKey.readerTypographyNormalizePunctuation),
-      isTrue,
-    );
     expect(prefs.getBool(PreferKey.readerLastLineSpacingCompensation), isFalse);
   });
 }

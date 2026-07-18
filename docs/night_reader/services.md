@@ -24,6 +24,11 @@
 - `lib/core/services/update_service.dart` + `update_ignore_store.dart`（版本更新）。
 - `lib/core/services/webview_data_service.dart`、`backstage_webview.dart`、`rule_big_data_service.dart`、`default_data.dart`、`cache_manager.dart`、`chinese_utils.dart`（`ChineseUtils.s2t/t2s`）、`event_bus.dart`、`cookie_store.dart`、`encoding_detect.dart`、`rate_limiter.dart`。
 
+## 新增（2026-07-18）
+
+- `japanese_text_detector.dart` — 假名偵測純函式（`looksJapanese`），無平台相依，reader transformer worker 與翻譯 pass 共用。
+- `japanese_translation_service.dart` — `JapaneseParagraphTranslator` 介面＋`MlkitJapaneseTranslator`（ML Kit on-device ja→zh，模型管理 `ValueNotifier` 狀態、段落 LRU、逾時降級 null）。平台通道，僅主 isolate 可用；由 reader 的 `reader_v2_japanese_pass.dart` 消費。
+
 ## Dependencies & Impact
 
 - 上游：`database`（DAO）、`engine`（`WebBook`/`AnalyzeRule`/`HeadlessWebViewService`/`AppEventBus`/`ChineseTextConverter`）、`network`、`models`、`storage`、`di`、`utils`。

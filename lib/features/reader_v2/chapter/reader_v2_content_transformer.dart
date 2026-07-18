@@ -9,66 +9,22 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/japanese_text_detector.dart';
 
 import 'reader_v2_processed_chapter.dart';
 
-/// Reader V2 文字排版正規化選項。
-///
-/// 這個值會隨內容轉換工作送進 worker isolate，避免 worker 讀取主 isolate
-/// 的靜態設定而與 fallback 路徑產生不同結果。
-class ReaderV2TypographyOptions {
-  const ReaderV2TypographyOptions({
-    this.normalizePunctuation = true,
-    this.pairQuotes = false,
-    this.collapseRepeatedPunctuation = false,
-    this.removeCjkSpaces = false,
-  });
-
-  factory ReaderV2TypographyOptions.fromJson(Object? value) {
-    if (value is! Map) return const ReaderV2TypographyOptions();
-
-    bool readBool(String key, bool fallback) {
-      final raw = value[key];
-      return raw is bool ? raw : fallback;
-    }
-
-    return ReaderV2TypographyOptions(
-      normalizePunctuation: readBool('normalizePunctuation', true),
-      pairQuotes: readBool('pairQuotes', false),
-      collapseRepeatedPunctuation: readBool(
-        'collapseRepeatedPunctuation',
-        false,
-      ),
-      removeCjkSpaces: readBool('removeCjkSpaces', false),
-    );
-  }
-
-  final bool normalizePunctuation;
-  final bool pairQuotes;
-  final bool collapseRepeatedPunctuation;
-  final bool removeCjkSpaces;
-
-  Map<String, Object> toJson() {
-    return <String, Object>{
-      'normalizePunctuation': normalizePunctuation,
-      'pairQuotes': pairQuotes,
-      'collapseRepeatedPunctuation': collapseRepeatedPunctuation,
-      'removeCjkSpaces': removeCjkSpaces,
-    };
-  }
-}
-
 /// 在內容轉換階段執行文字排版正規化。
+///
+/// 無開關、恆開（2026-07-18 內化決策）：所有規則都以 CJK 脈絡判定自我防護，
+/// 中文語境下把半形/歧義寬度標點統一為佔滿全形格的碼位，讓格線對齊；
+/// 純西文脈絡（英文句、數字、URL）一律原樣保留。
 ///
 /// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
 /// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
-String normalizeTypography(
-  String input, {
-  bool normalizePunctuation = true,
-  bool pairQuotes = false,
-  bool collapseRepeatedPunctuation = false,
-  bool removeCjkSpaces = false,
-}) {
+///
+/// [preserveCjkSpaces] 供標題使用：章節標題的空格是刻意的結構分隔
+/// （「第一章 起點」），不是來源雜訊；內文才需要為格線刪空格。
+String normalizeTypography(String input, {bool preserveCjkSpaces = false}) {
   if (input.isEmpty) return input;
 
   final cleaned = StringBuffer();
@@ -93,18 +49,15 @@ String normalizeTypography(
       .split('\n')
       .map((line) => line.replaceAll(RegExp(r' +'), ' '))
       .join('\n');
-  if (normalizePunctuation) {
-    result = _normalizeEllipsis(result);
-    result = _normalizeCjkPunctuation(result);
-    result = _normalizeAmbiguousWidthPunctuation(result);
-  }
-  if (pairQuotes) {
-    result = _normalizePairedQuotes(result);
-  }
-  if (collapseRepeatedPunctuation) {
-    result = _collapseRepeatedPunctuation(result);
-  }
-  if (removeCjkSpaces) {
+  result = _normalizeEllipsis(result);
+  result = _normalizeDashes(result);
+  result = _normalizeCjkPunctuation(result);
+  result = _normalizeAmbiguousWidthPunctuation(result);
+  result = _normalizePairedQuotes(result);
+  result = _normalizePairedSingleQuotes(result);
+  result = _normalizeBrackets(result);
+  result = _mapCjkOnlyPunctuation(result);
+  if (!preserveCjkSpaces) {
     result = _removeCjkSpaces(result);
   }
   return result;
@@ -138,9 +91,10 @@ String _normalizeEllipsis(String input) {
         continue;
       }
     }
-    if (rune == 0x2026) {
+    if (rune == 0x2026 || rune == 0x22EF) {
       output.write('……');
-      if (index + 1 < runes.length && runes[index + 1] == 0x2026) {
+      if (index + 1 < runes.length &&
+          (runes[index + 1] == 0x2026 || runes[index + 1] == 0x22EF)) {
         index += 1;
       }
       continue;
@@ -154,6 +108,52 @@ bool _isEllipsisDot(int rune) {
   return rune == 0x2E || rune == 0xFF0E || rune == 0x3002;
 }
 
+/// 破折號統一為 U+2014（NightReaderPunct 字型保證滿版一格、連排無縫）。
+///
+/// - `―`（U+2015）、`─`（U+2500 製表線，網文常拿來當破折號）→ `—`
+/// - CJK 脈絡下的 `--` 連跑（2+ 個 ASCII hyphen）→ `——`
+/// - CJK 脈絡下的 `–`（U+2013）→ `—`；數字區間（1–5）不動
+/// - 既有 `—` 連跑保持原樣（寬度由字型解決，不強改字數）
+String _normalizeDashes(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune == 0x2015 || rune == 0x2500) {
+      output.write('—');
+      continue;
+    }
+    if (rune == 0x2D) {
+      var end = index + 1;
+      while (end < runes.length && runes[end] == 0x2D) {
+        end += 1;
+      }
+      final runLength = end - index;
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = end < runes.length ? runes[end] : null;
+      if (runLength >= 2 &&
+          (_isCjkContextRune(previous) || _isCjkContextRune(next))) {
+        output.write('——');
+        index = end - 1;
+        continue;
+      }
+      output.write('-' * runLength);
+      index = end - 1;
+      continue;
+    }
+    if (rune == 0x2013) {
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = index + 1 < runes.length ? runes[index + 1] : null;
+      if (_isCjkContextRune(previous) || _isCjkContextRune(next)) {
+        output.write('—');
+        continue;
+      }
+    }
+    output.write(String.fromCharCode(rune));
+  }
+  return output.toString();
+}
+
 String _normalizeCjkPunctuation(String input) {
   const replacements = <int, String>{
     0x2C: '，', // comma
@@ -162,6 +162,7 @@ String _normalizeCjkPunctuation(String input) {
     0x3F: '？', // question
     0x3B: '；', // semicolon
     0x3A: '：', // colon
+    0x7E: '～', // tilde（「喂~」→「喂～」）
   };
   final runes = input.runes.toList(growable: false);
   final output = StringBuffer();
@@ -316,29 +317,164 @@ bool _isCjkContextRune(int? rune) {
 /// 直引號 `"` 無方向資訊，只能靠交替配對。配對以**行**為單位：
 /// 對白引號幾乎不跨行，逐行配對能把單一雜訊引號的錯位影響隔離在
 /// 該行（整章全域交替時，一個落單引號會讓其後所有開/收全部顛倒；
-/// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留。
+/// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留；
+/// 逐對再做 CJK 脈絡判定，純英文行（`"Hello," he said.`）不動。
 String _normalizePairedQuotes(String input) {
-  return input.split('\n').map(_normalizePairedQuotesLine).join('\n');
+  return input
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x22,
+          openReplacement: '「',
+          closeReplacement: '」',
+          skipAt: (runes, index) => false,
+        ),
+      )
+      .join('\n');
 }
 
-String _normalizePairedQuotesLine(String line) {
+/// 直單引號 `'` 同理配對轉 `『』`（中文巢狀引號慣例的內層）。
+/// 夾在拉丁字母/數字之間的 `'` 是撇號（don't），不參與配對。
+String _normalizePairedSingleQuotes(String input) {
+  return input
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x27,
+          openReplacement: '『',
+          closeReplacement: '』',
+          skipAt: (runes, index) {
+            final previous = index > 0 ? runes[index - 1] : null;
+            final next = index + 1 < runes.length ? runes[index + 1] : null;
+            return _isLatinLetterOrDigit(previous) &&
+                _isLatinLetterOrDigit(next);
+          },
+        ),
+      )
+      .join('\n');
+}
+
+String _convertAlternatingQuotesLine(
+  String line, {
+  required int quote,
+  required String openReplacement,
+  required String closeReplacement,
+  required bool Function(List<int> runes, int index) skipAt,
+}) {
   final runes = line.runes.toList(growable: false);
-  var quoteCount = 0;
+  final positions = <int>[];
   for (var index = 0; index < runes.length; index += 1) {
-    if (runes[index] == 0x22 && !_isEscaped(runes, index)) {
-      quoteCount += 1;
+    if (runes[index] == quote &&
+        !_isEscaped(runes, index) &&
+        !skipAt(runes, index)) {
+      positions.add(index);
     }
   }
-  if (quoteCount == 0 || quoteCount.isOdd) return line;
+  if (positions.isEmpty || positions.length.isOdd) return line;
 
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var converted = false;
+  for (var pair = 0; pair + 1 < positions.length; pair += 2) {
+    final openIndex = positions[pair];
+    final closeIndex = positions[pair + 1];
+    if (!_quotePairHasCjkContext(runes, openIndex, closeIndex)) continue;
+    output[openIndex] = openReplacement;
+    output[closeIndex] = closeReplacement;
+    converted = true;
+  }
+  return converted ? output.join() : line;
+}
+
+/// 半形括號在 CJK 脈絡下成對轉全形：`()`→`（）`、`[]`→`【】`
+/// （`【】` 隨後由 [_mapCjkOnlyPunctuation] 統一轉 `「」`）。
+/// 同行成對＋逐對 CJK 脈絡判定；純西文（`f(x)`、`[1]`）不動。
+String _normalizeBrackets(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x28,
+    close: 0x29,
+    openReplacement: '（',
+    closeReplacement: '）',
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x5B,
+    close: 0x5D,
+    openReplacement: '【',
+    closeReplacement: '】',
+  );
+  return output.join();
+}
+
+void _convertBracketPairs(
+  List<int> runes,
+  List<String> output, {
+  required int open,
+  required int close,
+  required String openReplacement,
+  required String closeReplacement,
+}) {
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != open) {
+      index += 1;
+      continue;
+    }
+    var closeIndex = -1;
+    var cursor = index + 1;
+    for (; cursor < runes.length; cursor += 1) {
+      final rune = runes[cursor];
+      if (rune == 0x0A || rune == open) break;
+      if (rune == close) {
+        closeIndex = cursor;
+        break;
+      }
+    }
+    if (closeIndex < 0) {
+      index = cursor > index ? cursor : index + 1;
+      continue;
+    }
+    if (_quotePairHasCjkContext(runes, index, closeIndex)) {
+      output[index] = openReplacement;
+      output[closeIndex] = closeReplacement;
+    }
+    index = closeIndex + 1;
+  }
+}
+
+/// CJK 專屬碼位的一對一風格映射（恆為中文脈絡，無需判定）：
+/// `【】〖〗`→`「」『』`（2026-07-18 使用者定案：統一成上下引號）、
+/// 半形直角引號 `｢｣`（U+FF62/FF63）→ `「」`。
+String _mapCjkOnlyPunctuation(String input) {
+  const mappings = <int, String>{
+    0x3010: '「', // 【
+    0x3011: '」', // 】
+    0x3016: '『', // 〖
+    0x3017: '』', // 〗
+    0xFF62: '「', // ｢
+    0xFF63: '」', // ｣
+  };
   final output = StringBuffer();
-  var opening = true;
-  for (var index = 0; index < runes.length; index += 1) {
-    if (runes[index] == 0x22 && !_isEscaped(runes, index)) {
-      output.write(opening ? '「' : '」');
-      opening = !opening;
+  for (final rune in input.runes) {
+    final replacement = mappings[rune];
+    if (replacement != null) {
+      output.write(replacement);
     } else {
-      output.write(String.fromCharCode(runes[index]));
+      output.write(String.fromCharCode(rune));
     }
   }
   return output.toString();
@@ -352,36 +488,9 @@ bool _isEscaped(List<int> runes, int index) {
   return slashCount.isOdd;
 }
 
-String _collapseRepeatedPunctuation(String input) {
-  final output = StringBuffer();
-  int? previous;
-  for (final rune in input.runes) {
-    final isCollapsible = _isCollapsiblePunctuation(rune);
-    if (isCollapsible && rune == previous) continue;
-    output.write(String.fromCharCode(rune));
-    previous = isCollapsible ? rune : null;
-  }
-  return output.toString();
-}
-
-bool _isCollapsiblePunctuation(int rune) {
-  return const <int>{
-    0x2C,
-    0xFF0C,
-    0x2E,
-    0x3002,
-    0x21,
-    0xFF01,
-    0x3F,
-    0xFF1F,
-    0x3B,
-    0xFF1B,
-    0x3A,
-    0xFF1A,
-    0x3001,
-  }.contains(rune);
-}
-
+/// 兩側皆 CJK 脈絡字元（漢字或全形標點）的半形空格是來源雜訊，直接刪。
+/// 半形空格不佔全形格，是格線錯位的主要來源之一；「他說 「你好」」這類
+/// 標點鄰接空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。
 String _removeCjkSpaces(String input) {
   final runes = input.runes.toList(growable: false);
   final output = StringBuffer();
@@ -389,8 +498,8 @@ String _removeCjkSpaces(String input) {
     if (runes[index] == 0x20 &&
         index > 0 &&
         index + 1 < runes.length &&
-        _isCjkRune(runes[index - 1]) &&
-        _isCjkRune(runes[index + 1])) {
+        _isCjkContextRune(runes[index - 1]) &&
+        _isCjkContextRune(runes[index + 1])) {
       continue;
     }
     output.write(String.fromCharCode(runes[index]));
@@ -434,8 +543,6 @@ class ReaderV2ContentTransformer {
     required String rawContent,
     required List<ReplaceRule> enabledRules,
     required int chineseConvertType,
-    ReaderV2TypographyOptions typographyOptions =
-        const ReaderV2TypographyOptions(),
   }) async {
     final args = <String, Object?>{
       'bookName': book.name,
@@ -446,7 +553,6 @@ class ReaderV2ContentTransformer {
       'useReplaceRules': book.getUseReplaceRule(),
       'reSegmentEnabled': book.getReSegment(),
       'chineseConvertType': chineseConvertType,
-      'typographyOptions': typographyOptions.toJson(),
     };
 
     // 首選：常駐 worker isolate。免去每章 compute spawn，且簡繁轉換也在
@@ -470,13 +576,32 @@ class ReaderV2ContentTransformer {
         processed.displayTitle,
         convertType: chineseConvertType,
       ),
-      content: converter.convert(
+      content: convertChinesePreservingJapanese(
         processed.content,
-        convertType: chineseConvertType,
+        chineseConvertType,
       ),
       effectiveReplaceRules: processed.effectiveReplaceRules,
       sameTitleRemoved: processed.sameTitleRemoved,
     );
+  }
+
+  /// 逐行簡繁轉換，假名偵測命中的行跳過。
+  ///
+  /// 日文段落的漢字若先被簡繁字典改字（発→發、国→國），就不再是
+  /// 合法日文，後續的日文翻譯 pass（ML Kit）輸入品質會劣化；即使
+  /// 翻譯功能關閉，把日文漢字硬轉成中文字形也是改壞原文。
+  static String convertChinesePreservingJapanese(String text, int convertType) {
+    if (text.isEmpty || convertType == 0) return text;
+    const converter = ChineseTextConverter();
+    return text
+        .split('\n')
+        .map(
+          (line) =>
+              looksJapanese(line)
+                  ? line
+                  : converter.convert(line, convertType: convertType),
+        )
+        .join('\n');
   }
 
   static ReaderV2ProcessedChapter _decodeProcessed(
@@ -506,9 +631,6 @@ class ReaderV2ContentTransformer {
             .cast<Map<String, dynamic>>();
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
-    final typographyOptions = ReaderV2TypographyOptions.fromJson(
-      args['typographyOptions'],
-    );
     final rules =
         rulesJson
             .map(ReplaceRule.fromJson)
@@ -531,13 +653,11 @@ class ReaderV2ContentTransformer {
       titleRules: titleRules,
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: reSegmentEnabled,
-      typographyOptions: typographyOptions,
     );
     final displayTitle = _processTitle(
       chapterTitle: chapterTitle,
       rules: titleRules,
       useReplaceRules: useReplaceRules,
-      typographyOptions: typographyOptions,
     );
 
     return <String, Object?>{
@@ -559,7 +679,6 @@ class ReaderV2ContentTransformer {
     required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
-    required ReaderV2TypographyOptions typographyOptions,
   }) {
     if (rawContent.isEmpty) {
       return const ReaderV2ProcessedChapter(displayTitle: '', content: '');
@@ -587,7 +706,6 @@ class ReaderV2ContentTransformer {
         chapterTitle: chapterTitle,
         rules: titleRules,
         useReplaceRules: true,
-        typographyOptions: typographyOptions,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
         final displayTitleRegex = RegExp.escape(
@@ -637,14 +755,7 @@ class ReaderV2ContentTransformer {
       }
     }
 
-    content = normalizeTypography(
-      content,
-      normalizePunctuation: typographyOptions.normalizePunctuation,
-      pairQuotes: typographyOptions.pairQuotes,
-      collapseRepeatedPunctuation:
-          typographyOptions.collapseRepeatedPunctuation,
-      removeCjkSpaces: typographyOptions.removeCjkSpaces,
-    );
+    content = normalizeTypography(content);
 
     final paragraphs = <String>[];
     const indent = '　　';
@@ -703,7 +814,6 @@ class ReaderV2ContentTransformer {
     required String chapterTitle,
     required List<ReplaceRule> rules,
     required bool useReplaceRules,
-    required ReaderV2TypographyOptions typographyOptions,
   }) {
     var displayTitle = chapterTitle.replaceAll(RegExp(r'[\r\n]'), '');
     if (useReplaceRules) {
@@ -717,14 +827,7 @@ class ReaderV2ContentTransformer {
         } catch (_) {}
       }
     }
-    return normalizeTypography(
-      displayTitle,
-      normalizePunctuation: typographyOptions.normalizePunctuation,
-      pairQuotes: typographyOptions.pairQuotes,
-      collapseRepeatedPunctuation:
-          typographyOptions.collapseRepeatedPunctuation,
-      removeCjkSpaces: typographyOptions.removeCjkSpaces,
-    );
+    return normalizeTypography(displayTitle, preserveCjkSpaces: true);
   }
 }
 
@@ -901,10 +1004,11 @@ class ReaderV2ContentTransformWorker {
                 result['displayTitle'] as String? ?? '',
                 convertType: convertType,
               );
-              result['content'] = converter.convert(
-                result['content'] as String? ?? '',
-                convertType: convertType,
-              );
+              result['content'] =
+                  ReaderV2ContentTransformer.convertChinesePreservingJapanese(
+                    result['content'] as String? ?? '',
+                    convertType,
+                  );
             }
             replyPort.send(<String, Object?>{
               'id': id,

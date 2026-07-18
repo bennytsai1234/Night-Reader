@@ -13,85 +13,108 @@ void main() {
     test('normalizeTypography 清理空白、隱形字元與 CJK 標點', () {
       expect(
         normalizeTypography('你\u200B\t　好\u0001,世界... 3.14 https://a.com'),
-        '你 好，世界…… 3.14 https://a.com',
+        '你好，世界…… 3.14 https://a.com',
       );
       expect(normalizeTypography('英文句子, hello!'), '英文句子， hello!');
     });
 
-    test('normalizeTypography 的進階規則預設關閉且可各自開關', () {
-      const input = '"你 好 嗎"！！！';
-      expect(normalizeTypography(input), input);
-      expect(
-        normalizeTypography('等等...', normalizePunctuation: false),
-        '等等...',
-      );
-      expect(
-        normalizeTypography(
-          input,
-          pairQuotes: true,
-          collapseRepeatedPunctuation: true,
-          removeCjkSpaces: true,
-        ),
-        '「你好嗎」！',
-      );
-      expect(normalizeTypography('你 好 嗎', removeCjkSpaces: true), '你好嗎');
+    test('normalizeTypography 恆開：引號配對＋CJK 空格移除＋連續標點保留', () {
+      // 直引號成對轉「」、漢字間空格移除；連續驚嘆號保留作者語氣。
+      expect(normalizeTypography('"你 好 嗎"！！！'), '「你好嗎」！！！');
+      expect(normalizeTypography('等等...'), '等等……');
+      expect(normalizeTypography('你 好 嗎'), '你好嗎');
+      // 全形標點鄰接的空格也是雜訊（不只漢字之間）。
+      expect(normalizeTypography('他說 「你好」 了'), '他說「你好」了');
     });
 
     test('normalizeTypography 歧義寬度標點：彎引號成對轉 CJK 專屬碼位', () {
       // 中文脈絡的彎雙引號 → 「」；巢狀彎單引號 → 『』
-      expect(normalizeTypography('“你好”'), '「你好」');
-      expect(normalizeTypography('“他說‘好’了”'), '「他說『好』了」');
+      expect(normalizeTypography('\u201C你好\u201D'), '「你好」');
+      expect(normalizeTypography('\u201C他說\u2018好\u2019了\u201D'), '「他說『好』了」');
       // 引號內只有標點也算中文脈絡（省略號/破折號開頭的對白）
-      expect(normalizeTypography('“……”'), '「……」');
+      expect(normalizeTypography('\u201C……\u201D'), '「……」');
       // 引號內全西文但外側鄰字是中文 → 成對一起轉，不破對
-      expect(normalizeTypography('他說“Hello, world”。'), '他說「Hello, world」。');
+      expect(
+        normalizeTypography('他說\u201CHello, world\u201D。'),
+        '他說「Hello, world」。',
+      );
       // 純西文脈絡的引號對原樣保留
-      expect(normalizeTypography('He said “hello” loudly'), 'He said “hello” loudly');
+      expect(
+        normalizeTypography('He said \u201Chello\u201D loudly'),
+        'He said \u201Chello\u201D loudly',
+      );
       // 落單（不成對）的引號原樣保留
-      expect(normalizeTypography('他說”了'), '他說”了');
-      expect(normalizeTypography('“他說了'), '“他說了');
+      expect(normalizeTypography('他說\u201D了'), '他說\u201D了');
+      expect(normalizeTypography('\u201C他說了'), '\u201C他說了');
       // 收尾前又開新引號：前一個落單保留，後一對正常轉
-      expect(normalizeTypography('“早안“你好”'), '“早안「你好」');
+      expect(normalizeTypography('\u201C早안\u201C你好\u201D'), '\u201C早안「你好」');
       // 撇號不視為引號收尾
-      expect(normalizeTypography('他說“don’t worry”。'), '他說「don’t worry」。');
-      expect(normalizeTypography("It’s fine"), 'It’s fine');
-      // 開關關閉時不動
-      expect(normalizeTypography('“你好”', normalizePunctuation: false), '“你好”');
+      expect(
+        normalizeTypography('他說\u201Cdon\u2019t worry\u201D。'),
+        '他說「don\u2019t worry」。',
+      );
+      expect(normalizeTypography("It\u2019s fine"), 'It\u2019s fine');
     });
 
-    test('pairQuotes 逐行配對：雜訊引號只影響該行，不再整章放棄或錯位', () {
+    test('直引號逐行配對：雜訊引號只影響該行，純西文行不動', () {
       // 第二行奇數個引號：該行原樣保留，其他行正常配對
       //（舊實作為整章全域計數，全章奇數 → 三行全部放棄）。
       expect(
-        normalizeTypography(
-          '"第一句"\n殘缺"引號行\n"第三句"',
-          pairQuotes: true,
-        ),
+        normalizeTypography('"第一句"\n殘缺"引號行\n"第三句"'),
         '「第一句」\n殘缺"引號行\n「第三句」',
       );
       // 同行多對引號仍交替配對。
-      expect(
-        normalizeTypography('"甲"與"乙"', pairQuotes: true),
-        '「甲」與「乙」',
-      );
+      expect(normalizeTypography('"甲"與"乙"'), '「甲」與「乙」');
       // 反斜線跳脫的引號不參與配對。
-      expect(
-        normalizeTypography('"a\\"b"', pairQuotes: true),
-        '「a\\"b」',
-      );
+      expect(normalizeTypography('"甲\\"乙"'), '「甲\\"乙」');
+      // 純西文行的直引號原樣保留（逐對 CJK 脈絡判定）。
+      expect(normalizeTypography('"Hello," he said.'), '"Hello," he said.');
     });
 
-    test('激進項誤傷對照表：省略號與西文空格不受波及', () {
-      // collapseRepeatedPunctuation 不得吃掉正規化後的 …… 省略號。
-      expect(
-        normalizeTypography('等等……好！！！', collapseRepeatedPunctuation: true),
-        '等等……好！',
-      );
-      // removeCjkSpaces 只移除漢字之間的空格，西文詞間空格保留。
-      expect(
-        normalizeTypography('你 好 hello world 嗎', removeCjkSpaces: true),
-        '你好 hello world 嗎',
-      );
+    test('直單引號配對轉『』，撇號不受波及', () {
+      expect(normalizeTypography("他說'好'了"), '他說『好』了');
+      expect(normalizeTypography("他說don't好"), "他說don't好");
+      expect(normalizeTypography("it's a 'test' here"), "it's a 'test' here");
+    });
+
+    test('破折號統一為全形 em dash，西文連字號不動', () {
+      expect(normalizeTypography('他說--我不去'), '他說——我不去');
+      expect(normalizeTypography('他說——我不去'), '他說——我不去');
+      expect(normalizeTypography('他說\u2015我走'), '他說—我走');
+      expect(normalizeTypography('\u2500\u2500他說'), '——他說');
+      expect(normalizeTypography('他\u2013說'), '他—說');
+      expect(normalizeTypography('1-5 和 2020--2021'), '1-5 和 2020--2021');
+      expect(normalizeTypography('co-op 與 1\u20135'), 'co-op 與 1\u20135');
+    });
+
+    test('刪節號各種來源統一為 ……', () {
+      expect(normalizeTypography('等等。。。'), '等等……');
+      expect(normalizeTypography('等等…'), '等等……');
+      expect(normalizeTypography('等等\u22EF\u22EF'), '等等……');
+      expect(normalizeTypography('等等……好！！！'), '等等……好！！！');
+    });
+
+    test('半形括號在 CJK 脈絡成對轉全形，西文/數學不動', () {
+      expect(normalizeTypography('他笑了(苦笑)一下'), '他笑了（苦笑）一下');
+      // [] 先轉【】、再統一映射為「」。
+      expect(normalizeTypography('[系統]任務完成'), '「系統」任務完成');
+      expect(normalizeTypography('f(x)=1 and a[0]'), 'f(x)=1 and a[0]');
+      expect(normalizeTypography('(他說'), '(他說');
+    });
+
+    test('CJK 專屬括號統一映射為上下引號', () {
+      expect(normalizeTypography('【系統】升級完成'), '「系統」升級完成');
+      expect(normalizeTypography('〖注〗這是註解'), '『注』這是註解');
+      expect(normalizeTypography('\uFF62你好\uFF63'), '「你好」');
+    });
+
+    test('波浪號在 CJK 脈絡轉全形', () {
+      expect(normalizeTypography('喂~你好'), '喂～你好');
+      expect(normalizeTypography('a~b 和 3~5'), 'a~b 和 3~5');
+    });
+
+    test('CJK 空格移除不波及西文詞間空格', () {
+      expect(normalizeTypography('你 好 hello world 嗎'), '你好 hello world 嗎');
     });
 
     test('normalizeTypography 歧義寬度標點：間隔號轉全形中點', () {
@@ -270,6 +293,30 @@ void main() {
       expect(result.displayTitle, '第1章 簡體');
       expect(result.content, contains('簡體字'));
       expect(result.content, isNot(contains('简')));
+    });
+
+    test('worker 路徑：假名段落跳過簡繁轉換（保留日文漢字）', () async {
+      ReaderV2ContentTransformWorker.dictionaryDataLoader =
+          () async => ['中国\t中國', '国\t國', '', ''];
+      ReaderV2ContentTransformWorker.instance.debugReset();
+      addTearDown(() {
+        ReaderV2ContentTransformWorker.dictionaryDataLoader =
+            ReaderV2ContentTransformWorker.loadDictionaryDataFromBundle;
+        ReaderV2ContentTransformWorker.instance.debugReset();
+      });
+
+      final transformer = ReaderV2ContentTransformer();
+      final result = await transformer.process(
+        book: Book(bookUrl: 'book://1', origin: 'local', name: '測試書'),
+        chapter: BookChapter(title: '第1章'),
+        rawContent: '中国很大\nこれは中国の本です',
+        enabledRules: const [],
+        chineseConvertType: 1,
+      );
+
+      // 中文行照常轉繁；日文行的漢字保持原樣（否則翻譯輸入被改壞）。
+      expect(result.content, contains('中國很大'));
+      expect(result.content, contains('これは中国の本です'));
     });
 
     test('worker 停用時退回 compute 路徑，替換規則仍生效', () async {

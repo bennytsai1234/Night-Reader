@@ -101,6 +101,7 @@ dependencies:
   get_it: ^9.2.1
   logger: ^2.6.2
   permission_handler: ^12.0.1
+  google_mlkit_translation: ^0.14.0
 
 dependency_overrides:
   # Flutter SDK 把 meta 精確釘在 1.18.0,但升級後的 analyzer(^1.18.3,build_runner/
@@ -138,3 +139,8 @@ flutter:
     - assets/app_icon/ic_foreground.png
     - assets/default_sources/
     - assets/opencc/
+
+  fonts:
+    - family: NightReaderPunct
+      fonts:
+        - asset: assets/fonts/NightReaderPunct.ttf

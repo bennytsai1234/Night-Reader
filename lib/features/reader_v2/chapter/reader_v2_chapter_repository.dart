@@ -10,11 +10,13 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/japanese_translation_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 import 'reader_v2_content.dart';
 import 'reader_v2_content_transformer.dart';
+import 'reader_v2_japanese_pass.dart';
 import 'reader_v2_processed_chapter.dart';
 
 class ReaderV2ChapterRepositoryException implements Exception {
@@ -37,7 +39,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
-    ReaderV2TypographyOptions Function()? currentTypographyOptions,
+    JapaneseParagraphTranslator? Function()? currentJapaneseTranslator,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
        replaceDao =
@@ -53,9 +55,7 @@ class ReaderV2ChapterRepository {
                : null),
        service = service ?? BookSourceService(),
        currentChineseConvert = currentChineseConvert ?? (() => 0),
-       currentTypographyOptions =
-           currentTypographyOptions ??
-           (() => const ReaderV2TypographyOptions()),
+       currentJapaneseTranslator = currentJapaneseTranslator ?? (() => null),
        _chapters = List<BookChapter>.from(initialChapters);
 
   final Book book;
@@ -66,7 +66,10 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
-  final ReaderV2TypographyOptions Function() currentTypographyOptions;
+
+  /// 回傳 null 代表日文自動翻譯關閉；開啟時回傳翻譯器（主 isolate 平台
+  /// 通道，不可進 worker）。
+  final JapaneseParagraphTranslator? Function() currentJapaneseTranslator;
   final ReaderV2ContentTransformer _contentTransformer =
       const ReaderV2ContentTransformer();
 
@@ -281,13 +284,19 @@ class ReaderV2ChapterRepository {
       );
     }
     final enabledRules = await _ensureEnabledReplaceRules();
-    return _contentTransformer.process(
+    final processed = await _contentTransformer.process(
       book: book,
       chapter: chapter,
       rawContent: prepared.content,
       enabledRules: enabledRules,
       chineseConvertType: currentChineseConvert(),
-      typographyOptions: currentTypographyOptions(),
+    );
+    final translator = currentJapaneseTranslator();
+    if (translator == null) return processed;
+    return translateJapaneseParagraphs(
+      processed,
+      translator: translator,
+      chineseConvertType: currentChineseConvert(),
     );
   }
 

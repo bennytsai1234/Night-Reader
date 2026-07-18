@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/services/japanese_translation_service.dart';
 import 'package:night_reader/features/reader_v2/screen/dependencies/reader_v2_dependencies.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmark_controller.dart';
@@ -34,7 +35,11 @@ class ReaderV2ControllerHost {
       book: book,
       initialChapters: initialChapters,
       currentChineseConvert: () => settings.chineseConvert,
-      currentTypographyOptions: () => settings.typographyOptions,
+      currentJapaneseTranslator:
+          () =>
+              settings.japaneseAutoTranslate
+                  ? MlkitJapaneseTranslator.instance
+                  : null,
     );
     bookStorageService = BookStorageService(
       bookDao: dependencies.bookDao,

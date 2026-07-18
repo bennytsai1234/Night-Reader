@@ -1,6 +1,5 @@
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,11 +15,8 @@ class ReaderV2PrefsSnapshot {
   final int menuThemeIndex;
   final double autoPageSpeed;
   final int chineseConvert;
-  final bool normalizeTypography;
-  final bool pairTypographyQuotes;
-  final bool collapseTypographyPunctuation;
-  final bool removeTypographyCjkSpaces;
   final bool lastLineSpacingCompensation;
+  final bool japaneseAutoTranslate;
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
@@ -36,11 +32,8 @@ class ReaderV2PrefsSnapshot {
     required this.menuThemeIndex,
     required this.autoPageSpeed,
     required this.chineseConvert,
-    required this.normalizeTypography,
-    required this.pairTypographyQuotes,
-    required this.collapseTypographyPunctuation,
-    required this.removeTypographyCjkSpaces,
     required this.lastLineSpacingCompensation,
+    required this.japaneseAutoTranslate,
     required this.showAddToShelfAlert,
     required this.clickActions,
   });
@@ -58,12 +51,8 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: 0,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
-      normalizeTypography: AppConfig.readerTypographyNormalizePunctuation,
-      pairTypographyQuotes: AppConfig.readerTypographyPairQuotes,
-      collapseTypographyPunctuation:
-          AppConfig.readerTypographyCollapsePunctuation,
-      removeTypographyCjkSpaces: AppConfig.readerTypographyRemoveCjkSpaces,
       lastLineSpacingCompensation: AppConfig.readerLastLineSpacingCompensation,
+      japaneseAutoTranslate: AppConfig.readerJapaneseAutoTranslate,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
     );
@@ -81,11 +70,8 @@ class ReaderV2PrefsSnapshot {
     int? menuThemeIndex,
     double? autoPageSpeed,
     int? chineseConvert,
-    bool? normalizeTypography,
-    bool? pairTypographyQuotes,
-    bool? collapseTypographyPunctuation,
-    bool? removeTypographyCjkSpaces,
     bool? lastLineSpacingCompensation,
+    bool? japaneseAutoTranslate,
     bool? showAddToShelfAlert,
     List<int>? clickActions,
   }) {
@@ -101,25 +87,12 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
       autoPageSpeed: autoPageSpeed ?? this.autoPageSpeed,
       chineseConvert: chineseConvert ?? this.chineseConvert,
-      normalizeTypography: normalizeTypography ?? this.normalizeTypography,
-      pairTypographyQuotes: pairTypographyQuotes ?? this.pairTypographyQuotes,
-      collapseTypographyPunctuation:
-          collapseTypographyPunctuation ?? this.collapseTypographyPunctuation,
-      removeTypographyCjkSpaces:
-          removeTypographyCjkSpaces ?? this.removeTypographyCjkSpaces,
       lastLineSpacingCompensation:
           lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
+      japaneseAutoTranslate:
+          japaneseAutoTranslate ?? this.japaneseAutoTranslate,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
-    );
-  }
-
-  ReaderV2TypographyOptions get typographyOptions {
-    return ReaderV2TypographyOptions(
-      normalizePunctuation: normalizeTypography,
-      pairQuotes: pairTypographyQuotes,
-      collapseRepeatedPunctuation: collapseTypographyPunctuation,
-      removeCjkSpaces: removeTypographyCjkSpaces,
     );
   }
 }
@@ -170,21 +143,12 @@ class ReaderV2PrefsRepository {
       chineseConvert:
           prefs.getInt(PreferKey.readerChineseConvert) ??
           defaults.chineseConvert,
-      normalizeTypography:
-          prefs.getBool(PreferKey.readerTypographyNormalizePunctuation) ??
-          defaults.normalizeTypography,
-      pairTypographyQuotes:
-          prefs.getBool(PreferKey.readerTypographyPairQuotes) ??
-          defaults.pairTypographyQuotes,
-      collapseTypographyPunctuation:
-          prefs.getBool(PreferKey.readerTypographyCollapsePunctuation) ??
-          defaults.collapseTypographyPunctuation,
-      removeTypographyCjkSpaces:
-          prefs.getBool(PreferKey.readerTypographyRemoveCjkSpaces) ??
-          defaults.removeTypographyCjkSpaces,
       lastLineSpacingCompensation:
           prefs.getBool(PreferKey.readerLastLineSpacingCompensation) ??
           defaults.lastLineSpacingCompensation,
+      japaneseAutoTranslate:
+          prefs.getBool(PreferKey.readerJapaneseAutoTranslate) ??
+          defaults.japaneseAutoTranslate,
       showAddToShelfAlert:
           prefs.getBool(PreferKey.showAddToShelfAlert) ??
           defaults.showAddToShelfAlert,
@@ -244,29 +208,14 @@ class ReaderV2PrefsRepository {
     return _setInt(PreferKey.readerChineseConvert, value);
   }
 
-  Future<void> saveNormalizeTypography(bool value) {
-    AppConfig.readerTypographyNormalizePunctuation = value;
-    return _setBool(PreferKey.readerTypographyNormalizePunctuation, value);
-  }
-
-  Future<void> savePairTypographyQuotes(bool value) {
-    AppConfig.readerTypographyPairQuotes = value;
-    return _setBool(PreferKey.readerTypographyPairQuotes, value);
-  }
-
-  Future<void> saveCollapseTypographyPunctuation(bool value) {
-    AppConfig.readerTypographyCollapsePunctuation = value;
-    return _setBool(PreferKey.readerTypographyCollapsePunctuation, value);
-  }
-
-  Future<void> saveRemoveTypographyCjkSpaces(bool value) {
-    AppConfig.readerTypographyRemoveCjkSpaces = value;
-    return _setBool(PreferKey.readerTypographyRemoveCjkSpaces, value);
-  }
-
   Future<void> saveLastLineSpacingCompensation(bool value) {
     AppConfig.readerLastLineSpacingCompensation = value;
     return _setBool(PreferKey.readerLastLineSpacingCompensation, value);
+  }
+
+  Future<void> saveJapaneseAutoTranslate(bool value) {
+    AppConfig.readerJapaneseAutoTranslate = value;
+    return _setBool(PreferKey.readerJapaneseAutoTranslate, value);
   }
 
   Future<void> saveShowAddToShelfAlert(bool value) {
@@ -307,15 +256,9 @@ class ReaderV2PrefsRepository {
   }
 
   void _syncAppConfig(ReaderV2PrefsSnapshot snapshot) {
-    AppConfig.readerTypographyNormalizePunctuation =
-        snapshot.normalizeTypography;
-    AppConfig.readerTypographyPairQuotes = snapshot.pairTypographyQuotes;
-    AppConfig.readerTypographyCollapsePunctuation =
-        snapshot.collapseTypographyPunctuation;
-    AppConfig.readerTypographyRemoveCjkSpaces =
-        snapshot.removeTypographyCjkSpaces;
     AppConfig.readerLastLineSpacingCompensation =
         snapshot.lastLineSpacingCompensation;
+    AppConfig.readerJapaneseAutoTranslate = snapshot.japaneseAutoTranslate;
   }
 
   List<int> _parseClickActions(String? stored) {

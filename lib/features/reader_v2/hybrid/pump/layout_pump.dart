@@ -361,6 +361,7 @@ final class LayoutPump implements HybridLayoutPump {
     final paragraphStyle = ui.ParagraphStyle(
       textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,
+      fontFamily: kReaderV2PunctFontFamily,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );
@@ -416,6 +417,7 @@ final class LayoutPump implements HybridLayoutPump {
   ui.TextStyle _textStyle(LayoutTask task, {double? letterSpacing}) {
     return ui.TextStyle(
       color: task.textColor,
+      fontFamily: kReaderV2PunctFontFamily,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
       letterSpacing: letterSpacing ?? task.textStyle.letterSpacing,
