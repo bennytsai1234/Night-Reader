@@ -57,3 +57,6 @@ android/.kotlin/
 # Reasonix
 .reasonix/
 reasonix.toml
+
+# codebase-memory-mcp 的本機索引（衍生產物，可用 index_repository 重建）
+.codebase-memory/
