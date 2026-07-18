@@ -19,6 +19,8 @@
 - **回歸重點區**：Reader V2 與 Source Manager 是 release 的重點回歸區域，變更後需加強驗證（DEVELOPMENT.md）。
 - **書源驗證特性**：書源驗證涉及 WebView、Cookie 與真實網站互動，容易出現僅真機/真實網站才復現的問題；除錯時優先用 `tool/` 下的驗證腳本（DEVELOPMENT.md）。
 - **Release 流程**：由 `.github/workflows/android-release.yml` 處理，tag 為 `v*`。標準流程：`flutter pub get → flutter analyze → flutter test → git push origin HEAD → git tag vX.Y.Z → git push origin vX.Y.Z`。需更新版號時先改 `pubspec.yaml` 並先提交。tag 推上後確認 GitHub Actions 的 Android Release workflow 已開始建置，看到建置中即可結束任務。
+- **真機驗收語意（2026-07-18 定案）**：使用者本人即第一位安裝者與驗收者——release 後自驗，發現問題以 hotfix 小版號跟進；不做 release 前的強制真機 gate。視覺/熱路徑類變更把「真機待驗項」寫進當日 completed 文件，驗後回填。`workflow_dispatch` 手動觸發只建置不發布（APK 掛 artifact，7 天），需要先拿測試 APK 時可用。
+- **Release 打包紀律**：風險主題大的變更（視覺、排版熱路徑）盡量一個 release 一個主題，方便真機驗收時切分問題來源。
 - **Flutter/Dart 版本**：Flutter `3.41.6`、Dart SDK `^3.7.0`、Java 17。
 - **測試指令**：`flutter analyze`、`flutter test`；書源驗證用 `tool/` 腳本。
 - **機密/著作權**：App 為純工具，不分發書籍或書源；不得引入任何書籍內容或第三方書源到 repo。
