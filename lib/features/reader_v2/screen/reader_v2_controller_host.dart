@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_book
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
+import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -176,8 +177,16 @@ class ReaderV2ControllerHost {
   }
 
   ReaderV2LayoutSpec specFromStyle(Size size, ReaderV2Style style) {
+    // em-grid 鎖寬：cell 為實測值（有樣式級快取，重複呼叫零成本），
+    // 量測失敗（回 null）時 fromViewport 維持未鎖寬的原始 contentWidth。
+    final cellWidth = LayoutPump.measureCellWidth(
+      fontSize: style.fontSize,
+      letterSpacing: style.letterSpacing,
+      bold: style.bold,
+    );
     return ReaderV2LayoutSpec.fromViewport(
       viewportSize: size,
+      cellWidth: cellWidth,
       style: ReaderV2LayoutStyle(
         fontSize: style.fontSize,
         lineHeight: style.lineHeight,

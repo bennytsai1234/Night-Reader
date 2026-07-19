@@ -499,8 +499,10 @@ final class LayoutTask {
     this.direction = HybridScrollDirection.forward,
     this.indentChars = 0,
     this.trailingSpacing = 0.0,
+    this.cellWidth,
   }) : assert(indentChars >= 0),
-       assert(trailingSpacing >= 0);
+       assert(trailingSpacing >= 0),
+       assert(cellWidth == null || cellWidth > 0);
 
   final ChapterBlock block;
   final LayoutEpoch epoch;
@@ -523,6 +525,10 @@ final class LayoutTask {
   /// 排在本 block 之後的垂直間距（px），計入 BlockMetrics.height。
   /// 標題塊 = paragraphSpacing*8；段落末塊 = fontSize*行高*paragraphSpacing。
   final double trailingSpacing;
+
+  /// em-grid 鎖寬的實測全形字 advance（`ReaderV2LayoutSpec.cellWidth`）；
+  /// 縮排 placeholder 以此為寬，null 時退回 fontSize（未鎖寬的舊行為）。
+  final double? cellWidth;
 
   BlockKey get key => block.key;
 }

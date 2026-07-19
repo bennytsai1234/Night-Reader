@@ -14,6 +14,57 @@ final class LayoutPump implements HybridLayoutPump {
   /// 避免短末行因少數字元而被拉得過鬆；單位為 logical pixels。
   static const double lastLineLetterSpacingCap = 2.0;
 
+  static final Map<String, double> _cellWidthCache = <String, double>{};
+
+  /// em-grid 鎖寬的 cell 來源：以真實引擎量「一一」兩字的 x 差取得目前
+  /// 內文樣式下單一全形字的 advance（含 letterSpacing）。必須與 [_textStyle]
+  /// 同一組字型鏈與 fontFeatures，否則鎖出來的格與實排不同步；也因此
+  /// 不可用 fontSize + letterSpacing 公式推算（次像素差乘上每列字數會
+  /// 累積回漂移）。量測失敗回 null（呼叫端不鎖寬）。
+  static double? measureCellWidth({
+    required double fontSize,
+    required double letterSpacing,
+    required bool bold,
+  }) {
+    if (!fontSize.isFinite || fontSize <= 0) return null;
+    if (!letterSpacing.isFinite) return null;
+    final key =
+        '$fontSize|$letterSpacing|$bold|$kReaderV2CjkTypographyFeatureSignature';
+    final cached = _cellWidthCache[key];
+    if (cached != null) return cached;
+    final builder = ui.ParagraphBuilder(
+        ui.ParagraphStyle(
+          textDirection: ui.TextDirection.ltr,
+          fontFamily: kReaderV2PunctFontFamily,
+          fontSize: fontSize,
+        ),
+      )
+      ..pushStyle(
+        ui.TextStyle(
+          fontFamily: kReaderV2PunctFontFamily,
+          fontSize: fontSize,
+          letterSpacing: letterSpacing,
+          fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
+          fontFeatures: kReaderV2CjkFontFeatures,
+        ),
+      )
+      ..addText('一一');
+    final paragraph =
+        builder.build()
+          ..layout(ui.ParagraphConstraints(width: fontSize * 8));
+    double? cell;
+    final first = paragraph.getBoxesForRange(0, 1);
+    final second = paragraph.getBoxesForRange(1, 2);
+    if (first.isNotEmpty && second.isNotEmpty) {
+      final advance = second.first.left - first.first.left;
+      if (advance.isFinite && advance > 0) cell = advance;
+    }
+    paragraph.dispose();
+    if (cell == null) return null;
+    _cellWidthCache[key] = cell;
+    return cell;
+  }
+
   LayoutPump({
     required ParagraphCache paragraphCache,
     required HybridMeasurementStore measurementStore,
@@ -375,9 +426,12 @@ final class LayoutPump implements HybridLayoutPump {
     // 字距，造成 soft-wrap 行字距異常放大且失去縮排。placeholder 不是
     // 空白字元故不受影響；每個仍佔 1 code unit（U+FFFC），因此
     // charOffset / TTS / 錨點的座標換算與 U+3000 前綴完全相同。
+    // placeholder 寬用鎖寬 cell（= 全形字 advance 含 letterSpacing），
+    // 縮排才恰好佔整數格；未鎖寬時退回 fontSize 舊行為。
+    final indentCellWidth = task.cellWidth ?? task.textStyle.fontSize;
     for (var i = 0; i < indentLength; i += 1) {
       builder.addPlaceholder(
-        task.textStyle.fontSize,
+        indentCellWidth,
         task.textStyle.fontSize,
         ui.PlaceholderAlignment.bottom,
       );

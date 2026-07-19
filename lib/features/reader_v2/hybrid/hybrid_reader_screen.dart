@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -276,6 +277,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _epoch = LayoutEpoch(widget.runtime.state.layoutGeneration);
     _fingerprint = StyleFingerprint.fromLayoutSpec(
       widget.runtime.state.layoutSpec,
+      justify: AppConfig.readerV2ContentJustify,
       platformFontSignature:
           '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
     );
@@ -796,9 +798,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: block.isTitle,
-          justify: !block.isTitle,
+          // em-grid 鎖寬後滿列天生切齊右緣，justify 只剩把避頭尾列殘差
+          // 攤進字距、破壞直行格線的副作用，內文預設 start 對齊；
+          // AppConfig 開關僅供真機對照。
+          justify: AppConfig.readerV2ContentJustify && !block.isTitle,
         ),
         contentWidth: spec.contentWidth,
+        cellWidth: spec.cellWidth,
         textColor: widget.textColor,
         priority: _priorityFor(key, anchor: anchor),
         direction:
@@ -1452,7 +1458,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return boxes.first.top;
   }
 
-  ReaderV2Style _overlayStyle() => widget.style.copyWith(paddingTop: 0.0);
+  /// 高亮 overlay 的水平 padding 必須用 spec 調整後的值：em-grid 鎖寬把
+  /// 殘差平分回左右 padding，widget.style 仍是使用者原始設定。
+  ReaderV2Style _overlayStyle() {
+    final specStyle = widget.runtime.state.layoutSpec.style;
+    return widget.style.copyWith(
+      paddingTop: 0.0,
+      paddingLeft: specStyle.paddingLeft,
+      paddingRight: specStyle.paddingRight,
+    );
+  }
 
   void _updateParagraphPins() {
     final offset = _effectiveScrollOffset();
@@ -1527,9 +1542,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                     controller: controller,
                     cacheExtent: _viewportSize.height,
                     textColor: widget.textColor,
+                    // 鎖寬後的置中殘差在 spec.style 的 padding 裡，
+                    // 不可用 widget.style（使用者原始 padding）。
                     horizontalPadding: EdgeInsets.only(
-                      left: widget.style.paddingLeft,
-                      right: widget.style.paddingRight,
+                      left: state.layoutSpec.style.paddingLeft,
+                      right: state.layoutSpec.style.paddingRight,
                     ),
                     physics: _physics,
                   ),

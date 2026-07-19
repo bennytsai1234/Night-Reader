@@ -1,6 +1,36 @@
 # em 網格鎖寬：修正直行格線漂移（草稿，T2）
 
-狀態：草稿，待使用者確認 Before/After 後開工。
+狀態：**已完成（2026-07-19）**。根因由真機截圖量測證實（見「截圖量測驗證」節），
+使用者過 Before/After gate 後實作。`flutter analyze` 無 issue、
+`flutter test` 766/766 全綠（含新增 `em_grid_lock_test.dart` 9 條）。
+
+## 實作對照（plan → 落點）
+
+1. cell 實測 → `LayoutPump.measureCellWidth`（靜態，樣式級快取；集中在
+   LayoutPump 以遵守「唯一 Paragraph 模組」紀律），量「一一」x 差。
+2. 鎖寬 → `ReaderV2LayoutSpec.fromViewport` 增 `cellWidth` 參數；contentWidth
+   取 cell 乘積（+0.05px slack 防 float 累加誤差提早斷行）而非減法回推，
+   殘差平分回 spec.style 左右 padding；`specFromStyle`
+   （`reader_v2_controller_host.dart`）量測並傳入。繪製端
+   （`HybridScrollView` horizontalPadding、TTS overlay）改讀 spec 調整後
+   padding，不再用 widget.style 原始值。
+3. justify 改 start → `AppConfig.readerV2ContentJustify`（預設 false、無 UI
+   的 debug 對照開關）；`hybrid_reader_screen.dart` 的 LayoutTask 與
+   StyleFingerprint 都吃這個值。
+4. 縮排 placeholder → `LayoutTask.cellWidth` 新欄位，pump 以其為 placeholder
+   寬（null 退回 fontSize 舊行為，既有測試不變）。
+5. 末行補償 → 免改：`mayCompensateLastLine` 原本就在 textAlign != justify 時
+   回 false，justify 關閉後雙 pass 自動消失。
+6. 簽名 bump → `'fwid+lastline-v1+punct-v1+emgrid-v1'`。
+
+### 真機待驗項（release 後回填）
+
+- 格線對齊截圖對照（同一頁改前/改後；可用本次的量測腳本重量一次，
+  滿列 pitch 應回到與短列同值）。
+- 左右邊界置中觀感（殘差平分後單側最多加約半字寬 padding）。
+- 避頭尾列右緣一格空的觀感是否可接受；不可接受時
+  `AppConfig.readerV2ContentJustify = true` 切回「justify + 鎖寬」對照。
+- fling 效能無回歸。
 
 ## 症狀
 
@@ -23,6 +53,25 @@
    平均 ≠ 各列實際值，末列與上一列仍有落差（使用者觀察到的「2/3 收尾列稍微靠左」）。
 
 結論：漂移不是文字碼位問題（碼位已乾淨），是「殘差永遠 > 0 且逐列分配不一」的幾何問題。
+
+## 截圖量測驗證（2026-07-19，真機截圖 1809×2560）
+
+方法：截圖轉灰階後逐列偵測字元 ink run 中心，對 run 中心做網格擬合（最小平方
+＋整數格點指派）。量測結果與假設完全吻合：
+
+- **em 基準**：段末短列（未 justify）16 列全部落在 **53.32px** 均勻網格上
+  （擬合 rms 3–6px），彼此相位一致——驗證要點 3（無 justify 的列彼此對齊）成立。
+- **justify 滿列被均勻拉寬**：乾淨滿列（無標點併格雜訊）以 **54.3–54.5px**
+  均勻網格完美擬合（rms 2–4px）＝每縫 +1.1px、+2.0%；30 字累積漂移
+  ≈ 33px ≈ **0.6 字寬**——驗證要點 1（向右累積放大）成立。
+- **逐列幅度不一**：避頭尾早斷列（「第三類則是…」）中位字距 **56.4px**（+5.8%），
+  累積漂移超過 1.5 字寬；短列則完全 0 拉寬——驗證要點 2 成立。
+- **殘差數學吻合**：版心 ink 寬 ≈ 1738px ≈ 32.6 cell → 殘差 ≈ 0.6 cell 攤進
+  31 縫 ≈ +1.06px/縫 → 預測滿列字距 54.4px，與實測 54.3–54.5 一致。
+- **備選假設全數排除**：拉寬只出現在 justify 列且全列均勻 → 非標點 ink 錯覺
+  （漂移是真實 advance 拉寬）、非 fallback 字寬（否則短列也會出現且漂移起點
+  應在特定字後）；短列縮排恰為 2 cell（144 ≈ 37+2×53.32）→ 縮排 placeholder
+  無恙（letterSpacing=0）；短列 0 拉寬 → 末行補償未汙染。
 
 ## 變更內容
 

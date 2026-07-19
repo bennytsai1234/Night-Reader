@@ -17,5 +17,9 @@ const String kReaderV2PunctFontFamily = 'NightReaderPunct';
 // 幾何；開關本身則由 StyleFingerprint.lastLineSpacingCompensation 區分。
 // punct-v1：引入 NightReaderPunct 標點字型（2026-07-18），字形寬度變更，
 // 舊 metrics 不可沿用。
+// emgrid-v1：em 網格鎖寬（2026-07-19）——contentWidth 修剪至實測 cell
+// 整數倍、內文 justify 改 start、縮排 placeholder 寬改 cell；幾何整批
+// 變更，舊 metrics 不可沿用（contentWidth/justify 本在 fingerprint 內，
+// 此處雙保險）。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+punct-v1';
+    'fwid+lastline-v1+punct-v1+emgrid-v1';
