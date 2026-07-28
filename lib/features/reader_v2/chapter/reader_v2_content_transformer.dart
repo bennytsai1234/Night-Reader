@@ -487,6 +487,11 @@ void _convertBracketPairs(
 /// CJK 專屬碼位的一對一風格映射（恆為中文脈絡，無需判定）：
 /// `【】〖〗`→`「」『』`（2026-07-18 使用者定案：統一成上下引號）、
 /// 半形直角引號 `｢｣`（U+FF62/FF63）→ `「」`。
+///
+/// 直排專用直角引號 `﹁﹂﹃﹄`（U+FE41–FE44，CJK Compatibility Forms）
+/// 也一併收：字形是為**垂直**排版設計的，在橫排版面上渲染成細長的
+/// 直立角線，與正常「」明顯不同粗細；直排書籍轉檔、OCR 與部分繁體
+/// 書源會帶進這組碼位（2026-07-28 補）。`〝〞`（U+301D/U+301E）同理。
 String _mapCjkOnlyPunctuation(String input) {
   const mappings = <int, String>{
     0x3010: '「', // 【
@@ -495,6 +500,12 @@ String _mapCjkOnlyPunctuation(String input) {
     0x3017: '』', // 〗
     0xFF62: '「', // ｢
     0xFF63: '」', // ｣
+    0xFE41: '「', // ﹁ 直排左直角
+    0xFE42: '」', // ﹂ 直排右直角
+    0xFE43: '『', // ﹃ 直排左雙直角
+    0xFE44: '』', // ﹄ 直排右雙直角
+    0x301D: '「', // 〝
+    0x301E: '」', // 〞
   };
   final output = StringBuffer();
   for (final rune in input.runes) {

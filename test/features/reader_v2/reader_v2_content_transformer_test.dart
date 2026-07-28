@@ -119,6 +119,13 @@ void main() {
       expect(normalizeTypography('【系統】升級完成'), '「系統」升級完成');
       expect(normalizeTypography('〖注〗這是註解'), '『注』這是註解');
       expect(normalizeTypography('\uFF62你好\uFF63'), '「你好」');
+      // 直排專用直角引號（U+FE41–FE44）：字形為垂直排版設計，橫排時
+      // 是細長的直立角線，與全形「」粗細明顯不同；直排轉檔/OCR 來的
+      // 文本會帶進這組碼位。
+      expect(normalizeTypography('\uFE41你好\uFE42'), '「你好」');
+      expect(normalizeTypography('\uFE43註解\uFE44'), '『註解』');
+      // CJK 雙彎引號同樣收斂。
+      expect(normalizeTypography('\u301D你好\u301E'), '「你好」');
     });
 
     test('波浪號在 CJK 脈絡轉全形', () {
