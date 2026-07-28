@@ -27,7 +27,7 @@ void main() {
       expect(normalizeTypography('他說 「你好」 了'), '他說「你好」了');
     });
 
-    test('normalizeTypography 歧義寬度標點：彎引號成對轉 CJK 專屬碼位', () {
+    test('normalizeTypography 歧義寬度標點：彎引號逐字元轉 CJK 專屬碼位', () {
       // 中文脈絡的彎雙引號 → 「」；巢狀彎單引號 → 『』
       expect(normalizeTypography('\u201C你好\u201D'), '「你好」');
       expect(normalizeTypography('\u201C他說\u2018好\u2019了\u201D'), '「他說『好』了」');
@@ -43,11 +43,19 @@ void main() {
         normalizeTypography('He said \u201Chello\u201D loudly'),
         'He said \u201Chello\u201D loudly',
       );
-      // 落單（不成對）的引號原樣保留
-      expect(normalizeTypography('他說\u201D了'), '他說\u201D了');
-      expect(normalizeTypography('\u201C他說了'), '\u201C他說了');
-      // 收尾前又開新引號：前一個落單保留，後一對正常轉
-      expect(normalizeTypography('\u201C早안\u201C你好\u201D'), '\u201C早안「你好」');
+      // 落單（不成對）的引號也要轉：`\u201C`/`\u201D` 碼位自帶方向，配對不是
+      // 必要條件。中文小說連續對白的標準寫法是「每段開頭有開引號、只有
+      // 最末段有收引號」，舊版要求成對而讓前面每段的開引號原樣殘留，
+      // 同一段對白裡並存細窄的西文引號與全形「」（2026-07-28 修正）。
+      expect(normalizeTypography('他說\u201D了'), '他說」了');
+      expect(normalizeTypography('\u201C他說了'), '「他說了');
+      // 多段落連續對白：每段開頭的開引號全部統一
+      expect(
+        normalizeTypography('\u201C第一句。\n\u201C第二句。\n\u201C第三句。\u201D'),
+        '「第一句。\n「第二句。\n「第三句。」',
+      );
+      // 收尾前又開新引號：內外層都轉，不留殘餘
+      expect(normalizeTypography('\u201C早안\u201C你好\u201D'), '「早안「你好」');
       // 撇號不視為引號收尾
       expect(
         normalizeTypography('他說\u201Cdon\u2019t worry\u201D。'),
@@ -56,19 +64,24 @@ void main() {
       expect(normalizeTypography("It\u2019s fine"), 'It\u2019s fine');
     });
 
-    test('直引號逐行配對：雜訊引號只影響該行，純西文行不動', () {
-      // 第二行奇數個引號：該行原樣保留，其他行正常配對
-      //（舊實作為整章全域計數，全章奇數 → 三行全部放棄）。
+    test('直引號逐行交替：落單引號取得方向，純西文行不動', () {
+      // 第二行奇數個引號：不再整行放棄，落單引號依後文判定開/收
+      //（後接內容字 → 開引號），三行的引號字形因此一致。
       expect(
         normalizeTypography('"第一句"\n殘缺"引號行\n"第三句"'),
-        '「第一句」\n殘缺"引號行\n「第三句」',
+        '「第一句」\n殘缺「引號行\n「第三句」',
       );
       // 同行多對引號仍交替配對。
       expect(normalizeTypography('"甲"與"乙"'), '「甲」與「乙」');
       // 反斜線跳脫的引號不參與配對。
       expect(normalizeTypography('"甲\\"乙"'), '「甲\\"乙」');
-      // 純西文行的直引號原樣保留（逐對 CJK 脈絡判定）。
+      // 純西文行的直引號原樣保留（行級 CJK 脈絡判定）。
       expect(normalizeTypography('"Hello," he said.'), '"Hello," he said.');
+      // 彎引號與直引號混用的行，兩種都收斂到「」。
+      expect(
+        normalizeTypography('他說\u201C好\u201D，她回答"不好"。'),
+        '他說「好」，她回答「不好」。',
+      );
     });
 
     test('直單引號配對轉『』，撇號不受波及', () {

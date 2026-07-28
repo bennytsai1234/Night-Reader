@@ -206,27 +206,12 @@ int? _neighborRune(List<int> runes, int index, int direction) {
 /// 轉成 Roboto 沒有字形的 CJK 專屬碼位（「」『』・）後，回退鏈必然落到
 /// CJK 字型、佔滿一格。
 String _normalizeAmbiguousWidthPunctuation(String input) {
-  final runes = input.runes.toList(growable: false);
+  final converted = input.split('\n').map(_convertCurlyQuotesLine).join('\n');
+  final runes = converted.runes.toList(growable: false);
   final output = List<String>.generate(
     runes.length,
     (index) => String.fromCharCode(runes[index]),
     growable: false,
-  );
-  _convertCurlyQuotePairs(
-    runes,
-    output,
-    open: 0x201C,
-    close: 0x201D,
-    openReplacement: '「',
-    closeReplacement: '」',
-  );
-  _convertCurlyQuotePairs(
-    runes,
-    output,
-    open: 0x2018,
-    close: 0x2019,
-    openReplacement: '『',
-    closeReplacement: '』',
   );
   for (var index = 0; index < runes.length; index += 1) {
     final rune = runes[index];
@@ -240,51 +225,50 @@ String _normalizeAmbiguousWidthPunctuation(String input) {
   return output.join();
 }
 
-/// 彎引號成對轉換：開/收一起轉，避免逐字元判斷在 `他說“Hello”` 這類
-/// 案例只轉一邊而破對。不成對（落單）的引號原樣保留；純西文脈絡的
-/// 引號對（內文與外側鄰字皆無 CJK）也原樣保留。
-void _convertCurlyQuotePairs(
-  List<int> runes,
-  List<String> output, {
-  required int open,
-  required int close,
-  required String openReplacement,
-  required String closeReplacement,
-}) {
-  var index = 0;
-  while (index < runes.length) {
-    if (runes[index] != open) {
-      index += 1;
-      continue;
-    }
-    var closeIndex = -1;
-    var cursor = index + 1;
-    for (; cursor < runes.length; cursor += 1) {
-      final rune = runes[cursor];
-      if (rune == open) break; // 收尾前又開新引號：放棄目前這個開引號
-      if (rune == close && !_isApostropheRune(runes, cursor, close)) {
-        closeIndex = cursor;
-        break;
-      }
-    }
-    if (closeIndex < 0) {
-      index = cursor; // 從中斷點（可能是新的開引號）繼續
-      continue;
-    }
-    if (_quotePairHasCjkContext(runes, index, closeIndex)) {
-      output[index] = openReplacement;
-      output[closeIndex] = closeReplacement;
-    }
-    index = closeIndex + 1;
-  }
-}
+/// 彎引號逐字元轉換，以**行**為 CJK 脈絡判定單位。
+///
+/// 為什麼不成對掃描（2026-07-28 修正）：`“`/`”` 碼位本身即帶開/收方向，
+/// 不需要配對就能安全映射。舊版要求開引號找得到收引號才轉，而中文小說
+/// 連續對白的標準寫法是「每段開頭有開引號、只有最末段有收引號」——前面
+/// 每一段的 `“` 永遠配不到對而原樣留下，同一段對白裡因此並存 Roboto 的
+/// 細窄 `“` 與 CJK 的全形 `「」`，兩種字形一眼可辨。落單引號、
+/// `“他說“不要”…”` 這類內外層結構也同樣漏轉。
+///
+/// 純西文行（整行無 CJK 脈絡字元）仍原樣保留，`He said “hello”` 不受影響。
+///
+/// 單引號 `‘’` 另有撇號歧義（don’t、boys’），以「行內是否有尚未關閉的
+/// `‘`」判定：有 → `’` 是收引號；沒有且前字為拉丁字母/數字 → 撇號保留。
+String _convertCurlyQuotesLine(String line) {
+  final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
 
-/// `’` 夾在拉丁字母/數字之間是撇號（don’t、it’s），不當作引號收尾。
-bool _isApostropheRune(List<int> runes, int index, int close) {
-  if (close != 0x2019) return false;
-  final previous = index > 0 ? runes[index - 1] : null;
-  final next = index + 1 < runes.length ? runes[index + 1] : null;
-  return _isLatinLetterOrDigit(previous) && _isLatinLetterOrDigit(next);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var singleQuoteOpen = false;
+  for (var index = 0; index < runes.length; index += 1) {
+    switch (runes[index]) {
+      case 0x201C:
+        output[index] = '「';
+      case 0x201D:
+        output[index] = '」';
+      case 0x2018:
+        output[index] = '『';
+        singleQuoteOpen = true;
+      case 0x2019:
+        if (singleQuoteOpen) {
+          output[index] = '』';
+          singleQuoteOpen = false;
+        } else if (!_isLatinLetterOrDigit(
+          index > 0 ? runes[index - 1] : null,
+        )) {
+          output[index] = '』';
+        }
+    }
+  }
+  return output.join();
 }
 
 bool _isLatinLetterOrDigit(int? rune) {
@@ -334,8 +318,13 @@ String _normalizePairedQuotes(String input) {
       .join('\n');
 }
 
-/// 直單引號 `'` 同理配對轉 `『』`（中文巢狀引號慣例的內層）。
-/// 夾在拉丁字母/數字之間的 `'` 是撇號（don't），不參與配對。
+/// 直單引號 `'` 同理交替轉 `『』`（中文巢狀引號慣例的內層）。
+///
+/// 撇號保護：**前一個字元**是拉丁字母/數字即視為撇號，不參與配對。
+/// 舊版要求前後皆拉丁，`believin'` 這種字尾撇號（後接空格）漏網，
+/// 在改為交替狀態機後會被當成引號轉掉。代價是中文行內的英文引語
+/// （`他讀了 'test' 這個字`）收尾側會被當撇號而破對——字尾撇號遠比
+/// 中文行內夾英文引語常見，取誤傷較小的一側。
 String _normalizePairedSingleQuotes(String input) {
   return input
       .split('\n')
@@ -345,17 +334,21 @@ String _normalizePairedSingleQuotes(String input) {
           quote: 0x27,
           openReplacement: '『',
           closeReplacement: '』',
-          skipAt: (runes, index) {
-            final previous = index > 0 ? runes[index - 1] : null;
-            final next = index + 1 < runes.length ? runes[index + 1] : null;
-            return _isLatinLetterOrDigit(previous) &&
-                _isLatinLetterOrDigit(next);
-          },
+          skipAt: (runes, index) =>
+              _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
         ),
       )
       .join('\n');
 }
 
+/// 直引號交替轉換：不再要求整行偶數個。
+///
+/// 舊版奇數個就整行放棄，多段落對白（每段開頭一個 `"`）因此整段留著
+/// 半形直引號，與已轉的 `「」` 混排。改為交替狀態機：起手是開或收由
+/// 第一個引號的前文決定（行首／句讀標點之後 → 開，否則 → 收），之後
+/// 開收交替；落單的引號也拿得到一個方向，字形因此統一。
+///
+/// CJK 脈絡判定改以**行**為單位（與彎引號一致）：純西文行原樣保留。
 String _convertAlternatingQuotesLine(
   String line, {
   required int quote,
@@ -364,6 +357,8 @@ String _convertAlternatingQuotesLine(
   required bool Function(List<int> runes, int index) skipAt,
 }) {
   final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
+
   final positions = <int>[];
   for (var index = 0; index < runes.length; index += 1) {
     if (runes[index] == quote &&
@@ -372,23 +367,56 @@ String _convertAlternatingQuotesLine(
       positions.add(index);
     }
   }
-  if (positions.isEmpty || positions.length.isOdd) return line;
+  if (positions.isEmpty) return line;
 
   final output = List<String>.generate(
     runes.length,
     (index) => String.fromCharCode(runes[index]),
     growable: false,
   );
-  var converted = false;
-  for (var pair = 0; pair + 1 < positions.length; pair += 2) {
-    final openIndex = positions[pair];
-    final closeIndex = positions[pair + 1];
-    if (!_quotePairHasCjkContext(runes, openIndex, closeIndex)) continue;
-    output[openIndex] = openReplacement;
-    output[closeIndex] = closeReplacement;
-    converted = true;
+  var expectingOpen = _looksLikeQuoteOpening(runes, positions.first);
+  for (final position in positions) {
+    output[position] = expectingOpen ? openReplacement : closeReplacement;
+    expectingOpen = !expectingOpen;
   }
-  return converted ? output.join() : line;
+  return output.join();
+}
+
+/// 直引號的開/收起手判定，看的是**後文**而非前文。
+///
+/// 前文不管用：開引號與收引號的前一個字元都可能是漢字
+/// （`他說"…"` 的開、`…好"` 的收）。後文則有明確訊號——收引號後面
+/// 接的是句讀或行尾，開引號後面接的是內容字。
+bool _looksLikeQuoteOpening(List<int> runes, int index) {
+  final next = _neighborRune(runes, index, 1);
+  if (next == null) return false; // 行尾 → 收引號
+  return !_isQuoteClosingFollower(next);
+}
+
+/// 句讀與收括號類標點：其前出現的引號是收引號。
+bool _isQuoteClosingFollower(int rune) {
+  const followers = <int>{
+    0x3001, // 、
+    0x3002, // 。
+    0xFF0C, // ，
+    0xFF01, // ！
+    0xFF1F, // ？
+    0xFF1B, // ；
+    0xFF1A, // ：
+    0x300D, // 」
+    0x300F, // 』
+    0xFF09, // ）
+    0x3011, // 】
+    0x2C, // ,
+    0x2E, // .
+    0x21, // !
+    0x3F, // ?
+    0x3B, // ;
+    0x3A, // :
+    0x29, // )
+    0x5D, // ]
+  };
+  return followers.contains(rune);
 }
 
 /// 半形括號在 CJK 脈絡下成對轉全形：`()`→`（）`、`[]`→`【】`
