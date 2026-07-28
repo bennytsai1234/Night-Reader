@@ -1,70 +1,141 @@
-# services
+# 模組：services — 業務服務層
 
-## Responsibility
+## 1. 職責
 
-- 業務服務層：把 DAO、規則引擎、網路層組裝成書源調度、下載、TTS、備份還原、書源校驗/偵錯/換源/更新、本機書匯入、章節正文取存、全域日誌與崩潰等業務流程。
-- 未來工作從這裡開始：抓書流程調度、下載排程、TTS 朗讀服務、備份還原、書源校驗/偵錯、換源、章節正文取存、網路層組裝、日誌/崩潰。
+封裝所有跨 DAO／跨引擎的**業務協調邏輯**，為 UI 層（ViewModels／Pages）提供操作級的介面。每個 Service 原則上是一個單例 + Facade，不持有 UI 狀態，但可繼承 `ChangeNotifier` 對外發布進度。
 
-## Scope
+## 2. 範疇
 
-- `lib/core/services/network_service.dart` — `NetworkService`（單例，全域 Dio + CookieJar + 書源併發鎖 `_sourceLocks`，組裝 `AppInterceptor`+`LenientCookieManager`）。
-- `lib/core/services/http_client.dart` — `HttpClient`（單例，封裝 `NetworkService().dio`，對 engine 暴露）。
-- `lib/core/services/book_source_service.dart` — `BookSourceService`（getBookInfo/getChapterList/getBookContent，委派 `WebBook`）。
-- `lib/core/services/download_service.dart` + `download/` — `DownloadService = DownloadBase with DownloadScheduler, DownloadExecutor`（單例，章節背景下載）。
-- `lib/core/services/tts_service.dart`、`audio_handler.dart` — `TTSService`（`ChangeNotifier`，整合 flutter_tts + audio_service + `ReaderAudioHandler`）。
-- `lib/core/services/check_source_service.dart` + `source_check_isolate.dart` + `source_check_js_worker_probe.dart` + `source_validation_context.dart` — 書源批次校驗（Isolate, 1079 行）。
-- `lib/core/services/source_debug_service.dart` — `SourceDebugService`（`DebugLog` + logStream，逐階段除錯）。
-- `lib/core/services/source_switch_service.dart` — `SourceSwitchResolution` 換源解析（pool 並發）。
-- `lib/core/services/source_update_service.dart`、`source_validation_context.dart`。
-- `lib/core/services/reader_chapter_content_store.dart` + `reader_chapter_content_storage.dart` + `chapter_content_scheduler.dart` + `chapter_content_preparation_pipeline.dart` — `ReaderChapterContentStore`（章節正文取存封裝）。
-- `lib/core/services/book_storage_service.dart`、`book_cover_storage_service.dart`、`bookshelf_state_tracker.dart`、`bookshelf_exchange_service.dart`。
-- `lib/core/services/backup_service.dart` + `restore_service.dart` — `BackupService`（zip 匯出 books/sources/rules/bookmarks/download/reader_chapter_content）。
-- `lib/core/services/local_book_service.dart`（`LocalBookImportResult`，TXT 匯入與分段讀取）、`resource_service.dart`、`export_book_service.dart`。
-- `lib/core/services/app_log_service.dart`（`AppLog`，全域日誌，**幾乎所有模組引用**）、`crash_handler.dart`、`app_version.dart`、`app_permission_service.dart`。
-- `lib/core/services/update_service.dart` + `update_ignore_store.dart`（版本更新）。
-- `lib/core/services/webview_data_service.dart`、`backstage_webview.dart`、`rule_big_data_service.dart`、`default_data.dart`、`cache_manager.dart`、`chinese_utils.dart`（`ChineseUtils.s2t/t2s`）、`event_bus.dart`、`cookie_store.dart`、`encoding_detect.dart`、`rate_limiter.dart`。
+```
+lib/core/services/
+├── book_source_service.dart         # 書源調度：委派 WebBook 引擎執行搜尋/詳情/目錄/正文
+├── source_switch_service.dart       # 換源：多書源平行搜尋 → alignment → 持久化
+├── check_source_service.dart        # 批量書源校驗（isolate 池 + JS heavy 分類 + 隔離 quarantine）
+├── source_check_isolate.dart        # 校驗 isolate 通訊協議（1444 行，含 IsolateCheckConfig）
+├── source_validation_context.dart   # Zone 旗標：非互動校驗上下文，阻擋 captcha 流程
+├── source_debug_service.dart        # 書源除錯：逐步執行並串流 DebugLog
+├── download_service.dart            # 下載入口：繼承 DownloadBase + mixin Scheduler/Executor
+├── download/download_base.dart      # 基底狀態（task 列隊、併發計數、pause/resume）
+├── download/download_scheduler.dart # 調度邏輯：事件監聽、優先權、addDownloadTask
+├── download/download_executor.dart  # 執行邏輯：逐章 fetch → 失敗分類 → 進度回寫
+├── tts_service.dart                 # TTS 朗讀引擎（flutter_tts + audio_service 通知欄）
+├── audio_handler.dart               # 系統媒體控制處理器（通知欄、藍牙耳機）
+├── backup_service.dart              # 全量備份 → ZIP（含 manifest、DB JSON、SharedPreferences）
+├── restore_service.dart             # ZIP 還原（Schema 版本相容檢查）
+├── bookshelf_exchange_service.dart  # 書架匯入/匯出（JSON 格式、URL / 分享）
+├── book_storage_service.dart        # 書本完整刪除（級聯：content + bookmark + download + chapter）
+├── local_book_service.dart          # 本地 TXT 解析與章節內容提取
+├── reader_chapter_content_store.dart    # 正文快取讀寫（DAO 封裝層）
+├── reader_chapter_content_storage.dart  # 正文存取策略（先讀快取 → pipeline materialize）
+├── chapter_content_preparation_pipeline.dart  # 正文獲取管線：快取 → 下載 → 解碼 → 重試
+├── network_service.dart             # 全域 Dio 實例 + CookieJar + 書源併發鎖
+├── http_client.dart                 # HttpClient 靜態門面（委託 NetworkService）
+├── cookie_store.dart                # CookieJar 的 GetIt 相容包裝（isolate 安全）
+├── rate_limiter.dart                # 書源級速率限制（BaseSource.concurrentRate）
+├── cache_manager.dart               # LRU 記憶體快取 + 檔案快取雙層（isolate 安全退化）
+├── resource_service.dart            # 自定義協議資源（memory:// 圖片/字體快取）
+├── event_bus.dart                   # 全域事件匯流排（StreamController.broadcast）
+├── app_log_service.dart             # 全域日誌門面（封裝 logger + 記憶體環形緩衝 + toast）
+├── crash_handler.dart               # 全域異常捕獲（FlutterError + PlatformDispatcher）
+├── app_version.dart                 # 版本資訊（PackageInfo 包裝）
+├── app_permission_service.dart      # 權限請求封裝（通知、儲存空間）
+├── update_service.dart              # GitHub Release 版本檢查（純 HTTP + 語意比對）
+├── update_ignore_store.dart         # 略過版本持久化
+├── export_book_service.dart         # 單書匯出 TXT（含遠端補抓）
+├── japanese_translation_service.dart    # 日文翻譯串接 TODO
+├── japanese_text_detector.dart          # 日文字元偵測
+├── chinese_utils.dart               # 繁簡轉換工具
+├── encoding_detect.dart             # 檔案編碼偵測
+├── default_data.dart                # 預設資料植入（首次啟動寫入樣本書源）
+├── book_cover_storage_service.dart  # 封面圖片磁碟快取
+├── bookshelf_state_tracker.dart     # 書架狀態追蹤（背景更新時防止雙重刷新）
+├── backstage_webview.dart           # 隱藏 WebView（1×1 opacity）執行 JS 擷取內容
+├── webview_data_service.dart        # WebView 數據裝載協調 TODO
+├── rule_big_data_service.dart       # 規則大數據分析 TODO
+└── app_database.dart (reference)    # 非服務；BackupService 讀取其 schemaVersion
+```
 
-## 新增（2026-07-18）
+相關測試：`test/backup_service_test.dart`、`test/download_executor_test.dart`、`test/app_exception_test.dart`。
 
-- `japanese_text_detector.dart` — 假名偵測純函式（`looksJapanese`），無平台相依，reader transformer worker 與翻譯 pass 共用。
-- `japanese_translation_service.dart` — `JapaneseParagraphTranslator` 介面＋`MlkitJapaneseTranslator`（ML Kit on-device ja→zh，模型管理 `ValueNotifier` 狀態、段落 LRU、逾時降級 null）。平台通道，僅主 isolate 可用；由 reader 的 `reader_v2_japanese_pass.dart` 消費。
+## 3. 依賴與衝擊
 
-## Dependencies & Impact
+| 方向 | 依賴 |
+|------|------|
+| **引入 services** | ViewModel、Page、`core/engine/web_book/`、`core/engine/js/`、`core/local_book/` |
+| **services 依賴** | `core/database/dao/`（大量）、`core/models/`、`core/di/injection.dart`、`core/network/interceptors/` |
+| **跨 services 引用** | 幾乎所有 service 都引用 `AppLog`（`app_log_service.dart`）；`download_executor` 引用 `ReaderChapterContentStore` / `Storage`；`chapter_content_preparation_pipeline` 引用 `BookSourceService` / `LocalBookService` |
+| **孤立服務** | `event_bus.dart`、`crash_handler.dart`、`chinese_utils.dart`、`encoding_detect.dart` 被廣泛引用但自身依賴極少 |
 
-- 上游：`database`（DAO）、`engine`（`WebBook`/`AnalyzeRule`/`HeadlessWebViewService`/`AppEventBus`/`ChineseTextConverter`）、`network`、`models`、`storage`、`di`、`utils`。
-- 下游：被所有 feature providers 使用；`AppLog`/`BookSourceService`/`DownloadService`/`TTSService` 為重度共用。
-- 下游影響：改 `BookSourceService` 影響 search/explore/book_detail/reader/source_manager；改 `ReaderChapterContentStore` 影響 reader；改 `BackupService` 影響 settings 與跨機還原；改 `NetworkService` 影響全 App 網路。
+**衝擊半徑變更**：`BookSourceService` 的簽名異動會波及所有校驗、換源、下載、匯出流程。`CheckSourceService` 若調整 isolate 協議，需同步修改 `source_check_isolate.dart` 的序列化格式。
 
-## Key Flows
+## 4. 關鍵流程
 
-- 抓書：feature provider → `BookSourceService` → `WebBook` → DAO 寫入 → `AppEventBus` 廣播（upBookshelf/upDownload 等）。
-- 下載：`DownloadService` 排程 `DownloadScheduler` → `DownloadExecutor` → `BookSourceService.getBookContent` → `ReaderChapterContentStore` 存正文 → `AppEventBus.upDownload`。
-- TTS：`TTSService` ← reader `ReaderV2TtsController`；逐詞進度經 `ttsProgress` 事件 → reader 高亮。
-- 校驗：`CheckSourceService` 在 Isolate 跑規則（注意 JS FFI 限制）→ 回報狀態 → `source_manager` 顯示。
-- 備份/還原：`BackupService` zip 匯出全表 → `RestoreService` 還原。
+### 4.1 正文獲取管線
+```
+UI → ReaderChapterContentStorage.read()
+  → ReaderChapterContentStore.hasReadyContent()  // 快取命中? → 回傳
+  → ChapterContentPreparationPipeline.prepare()   // 沒命中
+      → BookSourceService.getContent() 或 LocalBookService.getContent()
+      → 解碼 → 寫入 content DAO → 回傳
+```
+支援指數退避重試（`download_executor.dart:_maxRetries = 3`）。
 
-## Change Entry Points & Routes
+### 4.2 書源校驗
+```
+CheckSourceService.check(urls)
+  → SourceValidationContext.runNonInteractive()    // 設 Zone 旗標
+  → primeSourceExecutionTraits()                   // classify JS heavy ← compute(isolate)
+  → _SourceCheckExecutionPool.run()                // N worker + 同 domain semaphore + JS semaphore
+      → spawnSourceCheck(isolate) → IsolateCheckConfig
+      → 逐階段（search/discovery/info/toc/content）
+      → _applyIsolateResult() → 寫 group/comment 到 BookSource
+  → JsEngine.clearCaches() → JsExtensionsBase.clearCaches()
+  → fire AppEventBus.checkSourceDone
+```
 
-- 抓書調度：`book_source_service.dart` + engine `web_book`。
-- 下載：`download_service.dart` + `download/*.dart`；UI 端見 `downloads` 模組的 `features/cache_manager`。
-- TTS：`tts_service.dart` + `audio_handler.dart`；reader 端見 `reader` 模組 `features/tts/`。
-- 備份還原：`backup_service.dart` + `restore_service.dart`；UI 端 `features/settings/backup_settings_page.dart`。
-- 校驗/偵錯：`check_source_service.dart` + `source_check_isolate.dart`；UI 端 `source_manager` 模組。
-- 換源：`source_switch_service.dart`；呼叫端 reader/book_detail。
-- 章節正文：`reader_chapter_content_store.dart` + `chapter_content_preparation_pipeline.dart`；reader 端 `content/reader_v2_chapter_repository.dart`。
-- 日誌/崩潰：`app_log_service.dart` + `crash_handler.dart`；全 App 皆用。
+### 4.3 下載
+```
+DownloadService.addDownloadTask()
+  → DownloadScheduler.addDownloadTask()    // 寫 DB + 佇列
+  → DownloadScheduler.startDownloads()     // 排程迴圈（checkPause / checkPriority）
+  → DownloadExecutor.processTask()         // 逐章 fetch（最多 maxChapterConcurrent 併發）
+      → ReaderChapterContentStorage.read(forceRefresh: true, maxAttempts: 3)
+      → 失敗分類（classifyDownloadFailureReason）
+  → 完成 → fire AppEventBus.upBookshelf
+```
+暫停/繼續/重試由 `DownloadScheduler.togglePause()` / `retryTask()` 控制。
 
-## Known Risks
+### 4.4 備份 / 還原
+```
+BackupService.createBackupZip()
+  → manifest.json + 7 張 DB 表 JSON + config.json (SharedPreferences) → ZIP
+RestoreService.restoreFromZip()
+  → 檢查 manifest.schemaVersion ≤ AppDatabase.schemaVersion
+  → 依檔名對應匯入各 DAO（相容兩種命名慣例 e.g. bookshelf.json / books.json）
+```
 
-- `CheckSourceService` 在 Isolate 跑，無法直接用 JS 引擎（FFI 限制），校驗對 JS 規則的覆蓋有限；需 `source_check_js_worker_probe.dart` 探測。
-- `DownloadService` 與 `ReaderChapterContentStore` 共用章節正文，並發寫入需留意狀態。
-- `TTSService` 跨平台行為差異大（Android 系統引擎），易有只真機才復現的問題。
-- `BackupService` 匯出清單若忘了新表會導致還原缺資料。
-- `NetworkService` 的 `_sourceLocks` 對同書源請求序列化，移除會造成書源被ban。
+## 5. 變更入口與路線
 
-## Do Not Do
+| 變更標的 | 起點檔案 | 注意 |
+|----------|----------|------|
+| 新增正文快取策略 | `reader_chapter_content_store.dart`、`reader_chapter_content_storage.dart` | 會影響下載、閱讀器、匯出 |
+| 新增書源校驗階段 | `check_source_service.dart` + `source_check_isolate.dart` | isolate 序列化協定需同步 |
+| 調整換源邏輯 | `source_switch_service.dart` | 注意 `persistSwitch` 的 DB 刪除/重建 |
+| 修改網路層 | `network_service.dart` → `http_client.dart` | 衝擊所有 HTTP 請求 |
+| 修改 TTS | `tts_service.dart` + `audio_handler.dart` | 通知欄控制與 `ReaderAudioHandler.emitEvent` 廣播 |
 
-- 不要在 service 直接操作 UI（層 feature providers）。
-- 不要把 JS 規則執行搬進 Isolate 校驗流程。
-- 不要在 `NetworkService` 移除書源併發鎖。
-- 不要未測試即改 `BackupService` 的 zip 結構（破壞舊備份還原）。
+## 6. 已知風險
+
+1. **Isolate 序列化脆弱**：`source_check_isolate.dart`（1444 行）透過 `SendPort` 傳遞 `Map<String, dynamic>`，任何 `BookSource` 欄位增減若未同步序列化邏輯，會靜默遺失資料。無單元測試覆蓋序列化往返。
+2. **`CheckSourceService` 狀態同步**：使用 `_notifyThrottleInterval = 350ms` Timer 節流 `notifyListeners()`，高併發下 `dispose()` 與 Timer 存在潛在 race（`_isDisposed` 檢查非原子）。
+3. **雙引擎 TTS**：`tts_service.dart` 仰賴註解「唯一 FlutterTts 引擎」，若 `AudioService.init` 拋異常則降級無通知欄，但初始化時機在 `main.dart` `runApp` 之前，錯誤僅寫 log。
+4. **Cookie 競爭**：`NetworkService` 使用 `PersistCookieJar(FileStorage)`，背景 isolate 校驗時改用記憶體 `CookieJar`（`ephemeral: true`）避免檔案競爭，但無機制同步兩者。
+5. **Backup schema 版本斷層**：`BackupService.currentSchemaVersion` 直接取自 `AppDatabase().schemaVersion`，還原時僅檢查 `≤`，若未來降版或前向不相容 migration 會無聲失敗。
+
+## 7. 禁止事項
+
+- ❌ 不要在 Service 內直接操作 Widget／Navigator；需要觸發 UI 變更請用 `AppEventBus` 或 `ChangeNotifier`。
+- ❌ 不要在 Service 內呼叫 `getIt` 靜態取得 DAO 以外的依賴；DAO 應在建構式注入（如 `BookStorageService`、`SourceSwitchService` 所為）。
+- ❌ 不要在 `CheckSourceService` 的 isolate worker 中創建 `SharedPreferences` 實例（platform channel 不可用）。
+- ❌ 不要直接修改 `BackstageWebView._hiddenWebViewWidget` 靜態欄位來置換 Widget；請透過 parent widget 的 state 重建。
+- ❌ 不要在 Service 層進行檔案 I/O 後不做錯誤處理就丟 `File` 物件給 caller；統一用 `AppLog.e` 記錄再回傳 nullable 結果（如 `BackupService.createBackupZip` 模式）。
