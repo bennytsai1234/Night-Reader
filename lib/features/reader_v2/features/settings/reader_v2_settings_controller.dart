@@ -28,7 +28,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double letterSpacing = 0.0;
   int textIndent = 2;
   bool lastLineSpacingCompensation = false;
-  bool japaneseAutoTranslate = false;
   double textPadding = 16.0;
   int themeIndex = 0;
   int lastDayThemeIndex = 0;
@@ -57,7 +56,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
     lastLineSpacingCompensation = snapshot.lastLineSpacingCompensation;
-    japaneseAutoTranslate = snapshot.japaneseAutoTranslate;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
@@ -147,14 +145,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (lastLineSpacingCompensation == value) return;
     lastLineSpacingCompensation = value;
     unawaited(_prefsRepository.saveLastLineSpacingCompensation(value));
-    notifyListeners();
-  }
-
-  void setJapaneseAutoTranslate(bool value) {
-    if (japaneseAutoTranslate == value) return;
-    japaneseAutoTranslate = value;
-    _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.saveJapaneseAutoTranslate(value));
     notifyListeners();
   }
 

@@ -8,7 +8,6 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
-import 'package:night_reader/core/services/japanese_translation_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 
 class ReaderV2Dependencies {
@@ -23,7 +22,6 @@ class ReaderV2Dependencies {
     BookmarkDao? bookmarkDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
-    JapaneseParagraphTranslator? Function()? currentJapaneseTranslator,
   }) : initialChapters = List<BookChapter>.from(initialChapters),
        bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
@@ -42,8 +40,7 @@ class ReaderV2Dependencies {
            bookmarkDao ??
            (getIt.isRegistered<BookmarkDao>() ? getIt<BookmarkDao>() : null),
        service = service ?? BookSourceService(),
-       currentChineseConvert = currentChineseConvert ?? (() => 0),
-       currentJapaneseTranslator = currentJapaneseTranslator ?? (() => null);
+       currentChineseConvert = currentChineseConvert ?? (() => 0);
 
   final Book book;
   final List<BookChapter> initialChapters;
@@ -55,7 +52,6 @@ class ReaderV2Dependencies {
   final BookmarkDao? bookmarkDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
-  final JapaneseParagraphTranslator? Function() currentJapaneseTranslator;
 
   ReaderV2ChapterRepository createChapterRepository() {
     return ReaderV2ChapterRepository(
@@ -68,7 +64,6 @@ class ReaderV2Dependencies {
       replaceDao: replaceDao,
       service: service,
       currentChineseConvert: currentChineseConvert,
-      currentJapaneseTranslator: currentJapaneseTranslator,
     );
   }
 }

@@ -78,10 +78,7 @@ void main() {
       // 純西文行的直引號原樣保留（行級 CJK 脈絡判定）。
       expect(normalizeTypography('"Hello," he said.'), '"Hello," he said.');
       // 彎引號與直引號混用的行，兩種都收斂到「」。
-      expect(
-        normalizeTypography('他說\u201C好\u201D，她回答"不好"。'),
-        '他說「好」，她回答「不好」。',
-      );
+      expect(normalizeTypography('他說\u201C好\u201D，她回答"不好"。'), '他說「好」，她回答「不好」。');
     });
 
     test('直單引號配對轉『』，撇號不受波及', () {
@@ -313,30 +310,6 @@ void main() {
       expect(result.displayTitle, '第1章 簡體');
       expect(result.content, contains('簡體字'));
       expect(result.content, isNot(contains('简')));
-    });
-
-    test('worker 路徑：假名段落跳過簡繁轉換（保留日文漢字）', () async {
-      ReaderV2ContentTransformWorker.dictionaryDataLoader =
-          () async => ['中国\t中國', '国\t國', '', ''];
-      ReaderV2ContentTransformWorker.instance.debugReset();
-      addTearDown(() {
-        ReaderV2ContentTransformWorker.dictionaryDataLoader =
-            ReaderV2ContentTransformWorker.loadDictionaryDataFromBundle;
-        ReaderV2ContentTransformWorker.instance.debugReset();
-      });
-
-      final transformer = ReaderV2ContentTransformer();
-      final result = await transformer.process(
-        book: Book(bookUrl: 'book://1', origin: 'local', name: '測試書'),
-        chapter: BookChapter(title: '第1章'),
-        rawContent: '中国很大\nこれは中国の本です',
-        enabledRules: const [],
-        chineseConvertType: 1,
-      );
-
-      // 中文行照常轉繁；日文行的漢字保持原樣（否則翻譯輸入被改壞）。
-      expect(result.content, contains('中國很大'));
-      expect(result.content, contains('これは中国の本です'));
     });
 
     test('worker 停用時退回 compute 路徑，替換規則仍生效', () async {

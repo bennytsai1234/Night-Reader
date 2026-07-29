@@ -356,7 +356,6 @@ class ReaderV2LayoutEngine {
 
   TextStyle _contentTextStyle(ReaderV2LayoutSpec spec) {
     return TextStyle(
-      fontFamily: kReaderV2PunctFontFamily,
       fontSize: spec.style.fontSize,
       height: spec.style.effectiveLineHeight,
       letterSpacing: spec.style.letterSpacing,
@@ -367,7 +366,6 @@ class ReaderV2LayoutEngine {
 
   TextStyle _titleTextStyle(ReaderV2LayoutSpec spec) {
     return TextStyle(
-      fontFamily: kReaderV2PunctFontFamily,
       fontSize: spec.style.fontSize + 4,
       height: spec.style.effectiveLineHeight,
       letterSpacing: spec.style.letterSpacing,

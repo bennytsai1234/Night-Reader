@@ -9,7 +9,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
-import 'package:night_reader/core/services/japanese_text_detector.dart';
 
 import 'reader_v2_processed_chapter.dart';
 
@@ -108,7 +107,7 @@ bool _isEllipsisDot(int rune) {
   return rune == 0x2E || rune == 0xFF0E || rune == 0x3002;
 }
 
-/// 破折號統一為 U+2014（NightReaderPunct 字型保證滿版一格、連排無縫）。
+/// 破折號統一為 U+2014。
 ///
 /// - `―`（U+2015）、`─`（U+2500 製表線，網文常拿來當破折號）→ `—`
 /// - CJK 脈絡下的 `--` 連跑（2+ 個 ASCII hyphen）→ `——`
@@ -334,8 +333,9 @@ String _normalizePairedSingleQuotes(String input) {
           quote: 0x27,
           openReplacement: '『',
           closeReplacement: '』',
-          skipAt: (runes, index) =>
-              _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
+          skipAt:
+              (runes, index) =>
+                  _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
         ),
       )
       .join('\n');
@@ -615,32 +615,13 @@ class ReaderV2ContentTransformer {
         processed.displayTitle,
         convertType: chineseConvertType,
       ),
-      content: convertChinesePreservingJapanese(
+      content: converter.convert(
         processed.content,
-        chineseConvertType,
+        convertType: chineseConvertType,
       ),
       effectiveReplaceRules: processed.effectiveReplaceRules,
       sameTitleRemoved: processed.sameTitleRemoved,
     );
-  }
-
-  /// 逐行簡繁轉換，假名偵測命中的行跳過。
-  ///
-  /// 日文段落的漢字若先被簡繁字典改字（発→發、国→國），就不再是
-  /// 合法日文，後續的日文翻譯 pass（ML Kit）輸入品質會劣化；即使
-  /// 翻譯功能關閉，把日文漢字硬轉成中文字形也是改壞原文。
-  static String convertChinesePreservingJapanese(String text, int convertType) {
-    if (text.isEmpty || convertType == 0) return text;
-    const converter = ChineseTextConverter();
-    return text
-        .split('\n')
-        .map(
-          (line) =>
-              looksJapanese(line)
-                  ? line
-                  : converter.convert(line, convertType: convertType),
-        )
-        .join('\n');
   }
 
   static ReaderV2ProcessedChapter _decodeProcessed(
@@ -1043,11 +1024,10 @@ class ReaderV2ContentTransformWorker {
                 result['displayTitle'] as String? ?? '',
                 convertType: convertType,
               );
-              result['content'] =
-                  ReaderV2ContentTransformer.convertChinesePreservingJapanese(
-                    result['content'] as String? ?? '',
-                    convertType,
-                  );
+              result['content'] = converter.convert(
+                result['content'] as String? ?? '',
+                convertType: convertType,
+              );
             }
             replyPort.send(<String, Object?>{
               'id': id,

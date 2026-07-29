@@ -16,7 +16,6 @@ class ReaderV2PrefsSnapshot {
   final double autoPageSpeed;
   final int chineseConvert;
   final bool lastLineSpacingCompensation;
-  final bool japaneseAutoTranslate;
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
@@ -33,7 +32,6 @@ class ReaderV2PrefsSnapshot {
     required this.autoPageSpeed,
     required this.chineseConvert,
     required this.lastLineSpacingCompensation,
-    required this.japaneseAutoTranslate,
     required this.showAddToShelfAlert,
     required this.clickActions,
   });
@@ -52,7 +50,6 @@ class ReaderV2PrefsSnapshot {
       autoPageSpeed: 0.16,
       chineseConvert: 0,
       lastLineSpacingCompensation: AppConfig.readerLastLineSpacingCompensation,
-      japaneseAutoTranslate: AppConfig.readerJapaneseAutoTranslate,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
     );
@@ -71,7 +68,6 @@ class ReaderV2PrefsSnapshot {
     double? autoPageSpeed,
     int? chineseConvert,
     bool? lastLineSpacingCompensation,
-    bool? japaneseAutoTranslate,
     bool? showAddToShelfAlert,
     List<int>? clickActions,
   }) {
@@ -89,8 +85,6 @@ class ReaderV2PrefsSnapshot {
       chineseConvert: chineseConvert ?? this.chineseConvert,
       lastLineSpacingCompensation:
           lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
-      japaneseAutoTranslate:
-          japaneseAutoTranslate ?? this.japaneseAutoTranslate,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
     );
@@ -146,9 +140,6 @@ class ReaderV2PrefsRepository {
       lastLineSpacingCompensation:
           prefs.getBool(PreferKey.readerLastLineSpacingCompensation) ??
           defaults.lastLineSpacingCompensation,
-      japaneseAutoTranslate:
-          prefs.getBool(PreferKey.readerJapaneseAutoTranslate) ??
-          defaults.japaneseAutoTranslate,
       showAddToShelfAlert:
           prefs.getBool(PreferKey.showAddToShelfAlert) ??
           defaults.showAddToShelfAlert,
@@ -213,11 +204,6 @@ class ReaderV2PrefsRepository {
     return _setBool(PreferKey.readerLastLineSpacingCompensation, value);
   }
 
-  Future<void> saveJapaneseAutoTranslate(bool value) {
-    AppConfig.readerJapaneseAutoTranslate = value;
-    return _setBool(PreferKey.readerJapaneseAutoTranslate, value);
-  }
-
   Future<void> saveShowAddToShelfAlert(bool value) {
     return _setBool(PreferKey.showAddToShelfAlert, value);
   }
@@ -258,7 +244,6 @@ class ReaderV2PrefsRepository {
   void _syncAppConfig(ReaderV2PrefsSnapshot snapshot) {
     AppConfig.readerLastLineSpacingCompensation =
         snapshot.lastLineSpacingCompensation;
-    AppConfig.readerJapaneseAutoTranslate = snapshot.japaneseAutoTranslate;
   }
 
   List<int> _parseClickActions(String? stored) {

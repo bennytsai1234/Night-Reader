@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/japanese_translation_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
@@ -330,8 +329,6 @@ class _ReaderAdvancedSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final changeSource = onChangeSource;
-    // 開 sheet 時刷新一次模型狀態，讓日文翻譯列的 subtitle 反映現況。
-    unawaited(MlkitJapaneseTranslator.instance.areModelsDownloaded());
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
@@ -394,27 +391,6 @@ class _ReaderAdvancedSheet extends StatelessWidget {
                           selected ? settings.setChineseConvert(2) : null,
                 ),
               ],
-            ),
-            const Divider(height: 32),
-            const SheetSection(title: '日文翻譯'),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('日文段落自動翻譯', style: TextStyle(fontSize: 14)),
-              subtitle: ValueListenableBuilder<JapaneseModelStatus>(
-                valueListenable: MlkitJapaneseTranslator.instance.status,
-                builder:
-                    (context, status, _) => Text(
-                      _japaneseModelSubtitle(status),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-              ),
-              value: settings.japaneseAutoTranslate,
-              onChanged: (value) {
-                settings.setJapaneseAutoTranslate(value);
-                if (value) {
-                  unawaited(MlkitJapaneseTranslator.instance.ensureModels());
-                }
-              },
             ),
             const Divider(height: 32),
             const SheetSection(
@@ -514,19 +490,5 @@ class _ClickActionGrid extends StatelessWidget {
             );
           }).toList(),
     );
-  }
-}
-
-String _japaneseModelSubtitle(JapaneseModelStatus status) {
-  switch (status) {
-    case JapaneseModelStatus.downloading:
-      return '翻譯模型下載中（約 60MB，需 Wi-Fi）…';
-    case JapaneseModelStatus.ready:
-      return '含假名段落自動離線翻譯為中文';
-    case JapaneseModelStatus.failed:
-      return '模型下載失敗，請連上 Wi-Fi 後重新開啟';
-    case JapaneseModelStatus.missing:
-    case JapaneseModelStatus.unknown:
-      return '首次啟用需下載離線模型（約 60MB，Wi-Fi）';
   }
 }

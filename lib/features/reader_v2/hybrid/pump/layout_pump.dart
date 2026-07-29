@@ -32,26 +32,24 @@ final class LayoutPump implements HybridLayoutPump {
         '$fontSize|$letterSpacing|$bold|$kReaderV2CjkTypographyFeatureSignature';
     final cached = _cellWidthCache[key];
     if (cached != null) return cached;
-    final builder = ui.ParagraphBuilder(
-        ui.ParagraphStyle(
-          textDirection: ui.TextDirection.ltr,
-          fontFamily: kReaderV2PunctFontFamily,
-          fontSize: fontSize,
-        ),
-      )
-      ..pushStyle(
-        ui.TextStyle(
-          fontFamily: kReaderV2PunctFontFamily,
-          fontSize: fontSize,
-          letterSpacing: letterSpacing,
-          fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
-          fontFeatures: kReaderV2CjkFontFeatures,
-        ),
-      )
-      ..addText('一一');
+    final builder =
+        ui.ParagraphBuilder(
+            ui.ParagraphStyle(
+              textDirection: ui.TextDirection.ltr,
+              fontSize: fontSize,
+            ),
+          )
+          ..pushStyle(
+            ui.TextStyle(
+              fontSize: fontSize,
+              letterSpacing: letterSpacing,
+              fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
+              fontFeatures: kReaderV2CjkFontFeatures,
+            ),
+          )
+          ..addText('一一');
     final paragraph =
-        builder.build()
-          ..layout(ui.ParagraphConstraints(width: fontSize * 8));
+        builder.build()..layout(ui.ParagraphConstraints(width: fontSize * 8));
     double? cell;
     final first = paragraph.getBoxesForRange(0, 1);
     final second = paragraph.getBoxesForRange(1, 2);
@@ -412,7 +410,6 @@ final class LayoutPump implements HybridLayoutPump {
     final paragraphStyle = ui.ParagraphStyle(
       textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,
-      fontFamily: kReaderV2PunctFontFamily,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
     );
@@ -471,7 +468,6 @@ final class LayoutPump implements HybridLayoutPump {
   ui.TextStyle _textStyle(LayoutTask task, {double? letterSpacing}) {
     return ui.TextStyle(
       color: task.textColor,
-      fontFamily: kReaderV2PunctFontFamily,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
       letterSpacing: letterSpacing ?? task.textStyle.letterSpacing,

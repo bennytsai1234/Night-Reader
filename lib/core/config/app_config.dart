@@ -19,7 +19,4 @@ class AppConfig {
   /// 字距、破壞直行格線，故預設 false（start 對齊）；真機要對照
   /// 「justify + 鎖寬」觀感時手動改 true。
   static bool readerV2ContentJustify = false;
-
-  /// Reader V2 日文段落自動翻譯（ML Kit on-device）；需下載模型，預設關閉。
-  static bool readerJapaneseAutoTranslate = false;
 }

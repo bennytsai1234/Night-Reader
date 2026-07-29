@@ -42,8 +42,6 @@ lib/core/services/
 ├── update_service.dart              # GitHub Release 版本檢查（純 HTTP + 語意比對）
 ├── update_ignore_store.dart         # 略過版本持久化
 ├── export_book_service.dart         # 單書匯出 TXT（含遠端補抓）
-├── japanese_translation_service.dart    # 日文翻譯串接 TODO
-├── japanese_text_detector.dart          # 日文字元偵測
 ├── chinese_utils.dart               # 繁簡轉換工具
 ├── encoding_detect.dart             # 檔案編碼偵測
 ├── default_data.dart                # 預設資料植入（首次啟動寫入樣本書源）

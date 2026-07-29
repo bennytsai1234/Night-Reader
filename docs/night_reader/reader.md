@@ -13,7 +13,7 @@
 | Shell | `screen/` | `ReaderV2Page`（Widget entry）、`ReaderV2PageShell`（Scaffold + 選單骨架）、`ReaderV2ControllerHost`（子控制器組合工廠） |
 | Application | `use_cases/` | `ReaderV2PageCoordinator`（點擊/跳章/書籤/自動翻頁/替換規則）、`ReaderV2PageExitCoordinator`（退出流程處理）、`ReaderV2DisplayCoordinator`（格式化顯示） |
 | Runtime | `session/` | `ReaderV2Runtime`（中央狀態）、`ReaderV2StateMachine`（7 階段 FSM）、`ReaderV2NavigationController`（頁面級翻頁/跳轉）、`ReaderV2ViewportBridge`（capture/restore 委派）、`ReaderV2PreloadScheduler`（背景載入/排版排程）、`ReaderV2ProgressController`（進度持久化） |
-| Content | `chapter/` | `ReaderV2ChapterRepository`（章節存取）、`ReaderV2Content` / `ReaderV2ProcessedChapter`（處理後文字）、`ReaderV2JapanesePass`（日文處理）、`ReaderV2ContentTransformer` |
+| Content | `chapter/` | `ReaderV2ChapterRepository`（章節存取）、`ReaderV2Content` / `ReaderV2ProcessedChapter`（處理後文字）、`ReaderV2ContentTransformer` |
 | Layout | `layout/` | `ReaderV2LayoutEngine` / `ReaderV2LayoutSpec` / `ReaderV2Layout`（版式計算）、`ReaderV2Style` / `ReaderV2Typography` |
 | Render | `render/` | `ReaderV2RenderPage`（分頁渲染）、`ReaderV2TextAdapter` / `ReaderV2LineBox` |
 | Viewport | `viewport/` | `ReaderV2ViewportController`（七閉包的 attach/detach 界面）、`ReaderV2PointerTapLayer` |
