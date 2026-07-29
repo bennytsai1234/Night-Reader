@@ -55,7 +55,21 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: >-
+          flutter build apk
+          --release
+          --split-per-abi
+          --target-platform android-arm64
+          --analyze-size
+          --code-size-directory build/size-analysis
+
+      - name: Upload code size analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: night-reader-code-size-${{ github.ref_name }}
+          path: build/size-analysis/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Verify release APK manifest
         run: |

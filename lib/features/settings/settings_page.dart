@@ -183,7 +183,7 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.asset('assets/app-icon.png', fit: BoxFit.cover),
+            child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
           const SizedBox(width: 14),
           Expanded(

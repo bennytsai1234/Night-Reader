@@ -25,7 +25,6 @@ dependencies:
 
   # === Database ===
   drift: ^2.33.0
-  drift_flutter: ^0.3.0
   path: ^1.9.0
   path_provider: ^2.1.5
 
@@ -134,7 +133,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/
-    - assets/app_icon/ic_foreground.png
+    - assets/ui/app_icon.webp
     - assets/default_sources/
     - assets/opencc/
