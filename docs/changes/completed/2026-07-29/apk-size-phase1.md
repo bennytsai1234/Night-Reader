@@ -20,7 +20,7 @@
 - `flutter analyze`：通過，無問題。
 - `flutter test`：758 項測試全數通過；設定頁 asset 聚焦測試另行通過。
 - pub dependency graph 已不含 `drift_flutter`、`sqlite3_flutter_libs`、`sqlcipher_flutter_libs`。
-- workflow YAML 解析成功；CI 實際 size artifact 留待推送後的 workflow 驗證。
+- workflow YAML 解析成功；GitHub Actions run `30427969487` 完整通過，APK、manifest 與 size artifact 均驗證成功。
 
 ## 邊界
 
@@ -32,4 +32,6 @@
 - runtime icon assets 由 2,228 KiB 降為 67.7 KiB，靜態淨減少 2.110 MiB。
 - launcher icon 原始 PNG 與已產生的 Android mipmap/drawable 均保留。
 - `--analyze-size` 報告將以 `night-reader-code-size-<ref>` workflow artifact 保存 30 天。
+- arm64 APK 由移除 ML Kit 後的 33,252,698 bytes 降為 31,039,517 bytes（29.60 MiB），實際減少 2,213,181 bytes。
+- AOT snapshot 共 13,547,216 bytes；前三名為 Flutter 3,684,187、夜讀 2,045,716、fast_gbk 1,666,823 bytes。後續優先評估 GBK 查表與 crypto import 邊界。
 - 本次未改變模組邊界、所有權或外部 API，Atlas 文件無需更新。
