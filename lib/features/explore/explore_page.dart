@@ -14,8 +14,6 @@ import 'widgets/legado_explore_kind_flow.dart';
 
 const String _allGroupsMenuValue = '__all_groups__';
 
-/// ExplorePage - 發現主頁面
-/// (對標 Android ExploreFragment + ExploreAdapter)
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
 
@@ -60,7 +58,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                   MaterialPageRoute(builder: (_) => const SearchPage()),
                 ),
           ),
-          if (provider.groups.isNotEmpty)
+          if (!provider.isLoadingSources &&
+              provider.sourceLoadError == null &&
+              provider.groups.isNotEmpty)
             PopupMenuButton<String>(
               icon: Icon(
                 Icons.tune_rounded,
@@ -128,6 +128,25 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }
 
   Widget _buildSourceList(ExploreProvider provider, ThemeData theme) {
+    if (provider.isLoadingSources) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (provider.sourceLoadError != null) {
+      return _buildEmptyState(
+        theme: theme,
+        icon: Icons.error_outline,
+        message: provider.sourceLoadError!,
+        actions: [
+          FilledButton.icon(
+            onPressed: provider.refresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('重試'),
+          ),
+        ],
+      );
+    }
+
     if (provider.isEmpty &&
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
@@ -483,33 +502,40 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
     if (!context.mounted || action == null) return;
 
-    switch (action) {
-      case 'edit':
-        final full = await provider.getFullSource(source.bookSourceUrl);
-        if (full != null && context.mounted) {
-          Navigator.push(
+    try {
+      switch (action) {
+        case 'edit':
+          final full = await provider.getFullSource(source.bookSourceUrl);
+          if (full != null && context.mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+            );
+          }
+          return;
+        case 'top':
+          await provider.topSource(source);
+          return;
+        case 'search':
+          final full = await provider.getFullSource(source.bookSourceUrl);
+          if (full == null || !context.mounted) return;
+          await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+            MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
           );
-        }
-        return;
-      case 'top':
-        await provider.topSource(source);
-        return;
-      case 'search':
-        final full = await provider.getFullSource(source.bookSourceUrl);
-        if (full == null || !context.mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
-        );
-        return;
-      case 'refresh':
-        await provider.refreshKindsCache(source);
-        return;
-      case 'delete':
-        _confirmDelete(context, provider, source);
-        return;
+          return;
+        case 'refresh':
+          await provider.refreshKindsCache(source);
+          return;
+        case 'delete':
+          _confirmDelete(context, provider, source);
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
     }
   }
 
@@ -530,9 +556,16 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 child: const Text('取消'),
               ),
               TextButton(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
-                  provider.deleteSource(source);
+                  try {
+                    await provider.deleteSource(source);
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('刪除書源失敗：$error')),
+                    );
+                  }
                 },
                 child: Text(
                   '刪除',
