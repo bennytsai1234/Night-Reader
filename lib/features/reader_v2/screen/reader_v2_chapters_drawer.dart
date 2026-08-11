@@ -105,7 +105,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
       title: Text(
         chapterTitle,
         style: TextStyle(
-          color: isCurrentChapter ? Colors.blue : null,
+          color:
+              isCurrentChapter ? Theme.of(context).colorScheme.primary : null,
           fontWeight: isCurrentChapter ? FontWeight.bold : null,
         ),
       ),
