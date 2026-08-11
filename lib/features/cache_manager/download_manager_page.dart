@@ -14,6 +14,8 @@ class DownloadManagerPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = context.watch<DownloadService>();
     final tasks = service.tasks;
+    final hasActiveTasks = tasks.any((task) => !task.isCompleted);
+    final hasCompletedTasks = tasks.any((task) => task.isCompleted);
 
     return Scaffold(
       appBar: AppBar(
@@ -26,17 +28,20 @@ class DownloadManagerPage extends StatelessWidget {
                   : Icons.pause_circle_outline,
             ),
             tooltip: service.isPaused ? '恢復全部' : '暫停全部',
-            onPressed: service.togglePause,
+            onPressed: hasActiveTasks ? service.togglePause : null,
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: '清除已完成',
-            onPressed: () {
-              // 深度還原：清除已完成的任務
-              for (var task in tasks.where((t) => t.isCompleted).toList()) {
-                service.removeTask(task.bookUrl);
-              }
-            },
+            onPressed:
+                hasCompletedTasks
+                    ? () {
+                      for (final task
+                          in tasks.where((task) => task.isCompleted).toList()) {
+                        service.removeTask(task.bookUrl);
+                      }
+                    }
+                    : null,
           ),
         ],
       ),
@@ -320,7 +325,7 @@ class DownloadManagerPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _detailRow('書籍', task.bookName),
-                _detailRow('分類', task.lastErrorReason ?? '下載失敗'),
+                _detailRow('失敗類型', task.lastErrorReason ?? '下載失敗'),
                 if (task.lastErrorChapterIndex != null)
                   _detailRow('章節', '第 ${task.lastErrorChapterIndex! + 1} 章'),
                 _detailRow('失敗章節數', '${task.errorCount}'),
@@ -367,8 +372,9 @@ class DownloadManagerPage extends StatelessWidget {
   }
 
   Color _statusColor(BuildContext context, DownloadTask task) {
-    if (task.isFailed || task.errorCount > 0)
+    if (task.isFailed || task.errorCount > 0) {
       return Theme.of(context).colorScheme.error;
+    }
     if (task.isPaused) return context.warning;
     if (task.isCompleted) return context.success;
     return Theme.of(context).colorScheme.onSurfaceVariant;
