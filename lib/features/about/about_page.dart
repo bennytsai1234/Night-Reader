@@ -49,11 +49,11 @@ class _AboutPageState extends State<AboutPage> {
             context,
             icon: Icons.code_rounded,
             title: 'GitHub 開源位址',
-            subtitle: 'github.com/bennytsai1234/reader',
+            subtitle: 'github.com/bennytsai1234/Night-Reader',
             onTap:
                 () => launchExternalUrlWithFeedback(
                   context,
-                  'https://github.com/bennytsai1234/reader',
+                  'https://github.com/bennytsai1234/Night-Reader',
                 ),
           ),
           _buildListTile(
