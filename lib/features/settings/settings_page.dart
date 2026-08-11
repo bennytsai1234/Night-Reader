@@ -130,7 +130,7 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: AppSpacing.xxl),
           Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Text(
                 '夜讀 · GPL-3.0',
                 textAlign: TextAlign.center,
@@ -151,7 +151,7 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? scheme.surface,
@@ -209,7 +209,7 @@ class SettingsPage extends StatelessWidget {
   Widget _buildSectionTitle(BuildContext context, String title) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
       child: Text(
         title,
         style: AppTextStyles.labelSm.copyWith(height: 1.3, letterSpacing: 1.4, color: scheme.primary, fontWeight: FontWeight.w700),
@@ -221,7 +221,7 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Material(
         color: theme.cardTheme.color ?? scheme.surface,
         elevation: theme.cardTheme.elevation ?? 0,
