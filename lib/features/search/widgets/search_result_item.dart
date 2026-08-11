@@ -32,7 +32,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
     final theme = Theme.of(context);
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
+        horizontal: AppSpacing.lg,
         vertical: AppSpacing.xs,
       ),
       leading: BookCoverWidget(
