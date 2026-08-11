@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -42,7 +43,10 @@ class BookSourceService {
     );
   }
 
-  /// 獲取正文內容 (對標 getContentAwait)
+  /// 獲取正文內容。
+  ///
+  /// 正文分頁必須完整走完才算成功；達安全上限仍有下一頁時直接失敗，
+  /// 避免只抓到前半章卻被上層當 ready 寫入正文快取。
   Future<String> getContent(
     BookSource source,
     Book book,
@@ -51,12 +55,11 @@ class BookSourceService {
     int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
-    return await WebBook.getContentAwait(
+    return await CompleteContentFetcher.fetch(
       source,
       book,
       chapter,
       nextChapterUrl: nextChapterUrl,
-      pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
     );
   }
