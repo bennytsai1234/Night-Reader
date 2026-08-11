@@ -36,11 +36,14 @@ jobs:
 
       - name: Run critical regression checks
         run: |
-          flutter analyze lib/features/reader_v2 lib/features/source_manager test/features/reader_v2 test/features/source_manager
+          flutter analyze lib/features/reader_v2 lib/features/source_manager lib/features/settings/theme_settings_provider.dart lib/core/engine/web_book/complete_content_fetcher.dart lib/core/services/book_source_service.dart test/features/reader_v2 test/features/source_manager test/features/settings/theme_settings_provider_test.dart test/shared/theme/theme_customization_test.dart test/core/services/chapter_content_concurrency_test.dart
           flutter test test/features/reader_v2 \
             test/features/source_manager/source_manager_provider_test.dart \
             test/features/source_manager/source_manager_page_smoke_test.dart \
-            test/features/source_manager/source_login_test.dart
+            test/features/source_manager/source_login_test.dart \
+            test/features/settings/theme_settings_provider_test.dart \
+            test/shared/theme/theme_customization_test.dart \
+            test/core/services/chapter_content_concurrency_test.dart
 
       - name: Decode Android release keystore
         env:
