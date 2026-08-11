@@ -37,8 +37,8 @@ class SettingsPage extends StatelessWidget {
             _buildListTile(
               context,
               icon: Icons.palette_outlined,
-              title: '閱讀排版與主題',
-              summary: '切換閱讀背景、字體、字號',
+              title: '閱讀設定',
+              summary: '調整排版、操作與內容轉換',
               onTap:
                   () => Navigator.push(
                     context,
