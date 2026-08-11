@@ -29,7 +29,7 @@ class ExploreBookItem extends StatelessWidget {
       onTap: () => _navigateToDetail(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
+          horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
         ),
         child: Row(
