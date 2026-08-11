@@ -17,12 +17,14 @@ class ChangeCoverProvider extends ChangeNotifier {
   List<AggregatedSearchBook> _covers = [];
   bool _isInitialized = false;
   bool _isSearching = false;
+  String? _errorMessage;
   int _searchCount = 0;
   int _totalSources = 0;
 
   List<AggregatedSearchBook> get covers => _covers;
   bool get isInitialized => _isInitialized;
   bool get isSearching => _isSearching;
+  String? get errorMessage => _errorMessage;
   double get progress => _totalSources == 0 ? 0 : _searchCount / _totalSources;
 
   AggregatedSearchBook _buildDefaultCoverItem(String name, String author) {
@@ -47,6 +49,7 @@ class ChangeCoverProvider extends ChangeNotifier {
     _covers = [];
     _isInitialized = false;
     _isSearching = false;
+    _errorMessage = null;
     _searchCount = 0;
     _totalSources = 0;
     notifyListeners();
@@ -55,79 +58,92 @@ class ChangeCoverProvider extends ChangeNotifier {
   /// 先載入資料庫中既有封面，再視需要發起搜尋。
   Future<void> init(String name, String author) async {
     _isInitialized = false;
+    _isSearching = false;
+    _errorMessage = null;
     _covers = [_buildDefaultCoverItem(name, author)];
     _searchCount = 0;
     _totalSources = 0;
     notifyListeners();
 
-    final stored = await _searchBookDao.getEnabledHasCover(name, author);
-    if (stored.isNotEmpty) {
-      for (var b in stored) {
-        if (!_covers.any((c) => c.book.coverUrl == b.coverUrl)) {
-          _covers.add(AggregatedSearchBook(book: b, sources: ['本地記錄']));
+    try {
+      final stored = await _searchBookDao.getEnabledHasCover(name, author);
+      for (final book in stored) {
+        if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
+          _covers.add(
+            AggregatedSearchBook(book: book, sources: const ['本地記錄']),
+          );
         }
       }
-    }
+      _isInitialized = true;
+      notifyListeners();
 
-    _isInitialized = true;
-    notifyListeners();
-
-    if (stored.isEmpty) {
-      search(name, author);
+      if (stored.isEmpty) {
+        await search(name, author);
+      }
+    } catch (error) {
+      AppLog.e('載入封面資料失敗: $error', error: error);
+      _isInitialized = true;
+      _isSearching = false;
+      _errorMessage = '封面載入失敗，請重試';
+      notifyListeners();
     }
   }
 
   Future<void> search(String name, String author) async {
+    if (_isSearching) return;
     _isInitialized = true;
-    _isSearching = false;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 50));
-
     _isSearching = true;
+    _errorMessage = null;
     _covers = [_buildDefaultCoverItem(name, author)];
     _searchCount = 0;
+    _totalSources = 0;
     notifyListeners();
 
-    final stored = await _searchBookDao.getEnabledHasCover(name, author);
-    for (var b in stored) {
-      if (!_covers.any((c) => c.book.coverUrl == b.coverUrl)) {
-        _covers.add(AggregatedSearchBook(book: b, sources: ['本地記錄']));
+    try {
+      final stored = await _searchBookDao.getEnabledHasCover(name, author);
+      for (final book in stored) {
+        if (!_covers.any((cover) => cover.book.coverUrl == book.coverUrl)) {
+          _covers.add(
+            AggregatedSearchBook(book: book, sources: const ['本地記錄']),
+          );
+        }
       }
-    }
 
-    final enabledSources = await _sourceDao.getEnabled();
-    final coverSources =
-        enabledSources
-            .where(
-              (s) =>
-                  s.ruleSearch?.coverUrl != null &&
-                  s.ruleSearch!.coverUrl!.isNotEmpty,
-            )
-            .toList();
+      final enabledSources = await _sourceDao.getEnabled();
+      final coverSources =
+          enabledSources
+              .where(
+                (source) =>
+                    source.ruleSearch?.coverUrl != null &&
+                    source.ruleSearch!.coverUrl!.isNotEmpty,
+              )
+              .toList();
 
-    _totalSources = coverSources.length;
-    if (_totalSources == 0) {
+      _totalSources = coverSources.length;
+      if (_totalSources == 0) return;
+
+      final threadCount = await SharedPreferences.getInstance().then(
+        (prefs) => prefs.getInt('thread_count') ?? 8,
+      );
+      final coverPool = Pool(threadCount);
+
+      final tasks = <Future<void>>[];
+      for (final source in coverSources) {
+        if (!_isSearching) break;
+        tasks.add(
+          coverPool.withResource(
+            () => _searchSingleSource(source, name, author),
+          ),
+        );
+      }
+      await Future.wait(tasks);
+    } catch (error) {
+      AppLog.e('搜尋封面失敗: $error', error: error);
+      _errorMessage = '封面搜尋失敗，請重試';
+    } finally {
       _isSearching = false;
       notifyListeners();
-      return;
     }
-
-    final threadCount = await SharedPreferences.getInstance().then(
-      (p) => p.getInt('thread_count') ?? 8,
-    );
-    final coverPool = Pool(threadCount);
-
-    final tasks = <Future<void>>[];
-    for (final source in coverSources) {
-      if (!_isSearching) break;
-      tasks.add(
-        coverPool.withResource(() => _searchSingleSource(source, name, author)),
-      );
-    }
-
-    await Future.wait(tasks);
-    _isSearching = false;
-    notifyListeners();
   }
 
   Future<void> _searchSingleSource(
@@ -140,16 +156,17 @@ class ChangeCoverProvider extends ChangeNotifier {
       final books = await _service.searchBooks(source, name);
 
       final filtered = books.where(
-        (b) =>
-            b.name == name &&
+        (book) =>
+            book.name == name &&
             (author.isEmpty ||
-                (b.author?.contains(author) ?? false) ||
-                author.contains(b.author ?? '')),
+                (book.author?.contains(author) ?? false) ||
+                author.contains(book.author ?? '')),
       );
 
-      for (var result in filtered) {
+      for (final result in filtered) {
+        if (!_isSearching) break;
         if (result.coverUrl != null && result.coverUrl!.isNotEmpty) {
-          if (!_covers.any((c) => c.book.coverUrl == result.coverUrl)) {
+          if (!_covers.any((cover) => cover.book.coverUrl == result.coverUrl)) {
             final aggregated = AggregatedSearchBook(
               book: result,
               sources: [result.originName ?? '未知'],
@@ -160,8 +177,11 @@ class ChangeCoverProvider extends ChangeNotifier {
           }
         }
       }
-    } catch (e) {
-      AppLog.e('搜尋封面書源 ${source.bookSourceName} 失敗: $e', error: e);
+    } catch (error) {
+      AppLog.e(
+        '搜尋封面書源 ${source.bookSourceName} 失敗: $error',
+        error: error,
+      );
     } finally {
       _searchCount++;
       notifyListeners();
