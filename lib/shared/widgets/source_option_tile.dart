@@ -56,7 +56,7 @@ class SourceOptionTile extends StatelessWidget {
             Text(
               '最新: ${searchBook.latestChapterTitle ?? '無最新章節資訊'}',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.orange[800],
+                color: theme.colorScheme.tertiary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
