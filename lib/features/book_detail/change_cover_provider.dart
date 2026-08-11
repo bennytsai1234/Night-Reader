@@ -127,7 +127,7 @@ class ChangeCoverProvider extends ChangeNotifier {
       );
       final coverPool = Pool(threadCount);
 
-      final tasks = <Future<void>>[];
+      final tasks = <Future<bool>>[];
       for (final source in coverSources) {
         if (!_isSearching) break;
         tasks.add(
@@ -136,7 +136,10 @@ class ChangeCoverProvider extends ChangeNotifier {
           ),
         );
       }
-      await Future.wait(tasks);
+      final results = await Future.wait(tasks);
+      if (_isSearching && results.isNotEmpty && results.every((ok) => !ok)) {
+        _errorMessage = '封面搜尋失敗，請重試';
+      }
     } catch (error) {
       AppLog.e('搜尋封面失敗: $error', error: error);
       _errorMessage = '封面搜尋失敗，請重試';
@@ -146,12 +149,12 @@ class ChangeCoverProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _searchSingleSource(
+  Future<bool> _searchSingleSource(
     BookSource source,
     String name,
     String author,
   ) async {
-    if (!_isSearching) return;
+    if (!_isSearching) return true;
     try {
       final books = await _service.searchBooks(source, name);
 
@@ -177,11 +180,13 @@ class ChangeCoverProvider extends ChangeNotifier {
           }
         }
       }
+      return true;
     } catch (error) {
       AppLog.e(
         '搜尋封面書源 ${source.bookSourceName} 失敗: $error',
         error: error,
       );
+      return false;
     } finally {
       _searchCount++;
       notifyListeners();
