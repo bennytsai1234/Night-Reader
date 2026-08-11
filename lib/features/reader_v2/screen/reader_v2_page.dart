@@ -363,23 +363,39 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2TtsSheet.show(context, tts: tts);
   }
 
-  void _showChangeSource() {
+  Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
-    showModalBottomSheet<void>(
+    SourceSwitchResolution? switchedResolution;
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder:
           (sheetContext) => ChangeSourceSheet(
             book: widget.book,
-            onSelectSource: _handleChangeSourceSelected,
+            onSelectSource:
+                (candidate) => _handleChangeSourceSelected(
+                  candidate,
+                  onSuccess: (resolution) => switchedResolution = resolution,
+                ),
           ),
+    );
+
+    final resolution = switchedResolution;
+    if (!mounted || resolution == null) return;
+    Navigator.of(context).pushReplacement(
+      BookOpenRoute(
+        book: resolution.migratedBook,
+        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
+        initialChapters: resolution.chapters,
+      ),
     );
   }
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
-    SearchBook candidate,
-  ) async {
+    SearchBook candidate, {
+    void Function(SourceSwitchResolution resolution)? onSuccess,
+  }) async {
     final runtime = _host.runtime;
     final currentLocation = runtime?.state.visibleLocation;
     final currentIndex = _currentChapterIndex(runtime);
@@ -408,16 +424,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         chapterDao: _host.dependencies.chapterDao,
       );
       AppEventBus().fire(AppEventBus.upBookshelf);
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          BookOpenRoute(
-            book: resolution.migratedBook,
-            openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
-            initialChapters: resolution.chapters,
-          ),
-        );
-      }
+      onSuccess?.call(resolution);
       return (
         success: true,
         message: '已切換到 ${resolution.source.bookSourceName}',
