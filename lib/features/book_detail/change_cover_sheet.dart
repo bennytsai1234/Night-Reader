@@ -52,10 +52,18 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
         return;
       }
       final image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image != null && mounted) {
-        context.read<BookDetailProvider>().updateCover('file://${image.path}');
+      if (image == null || !mounted) return;
+      final outcome = await context
+          .read<BookDetailProvider>()
+          .updateCover('file://${image.path}');
+      if (!mounted) return;
+      if (outcome.success) {
         Navigator.pop(context);
+        return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(outcome.message)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
