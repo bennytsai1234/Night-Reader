@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
@@ -16,10 +17,12 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     BookSourceService? service,
     BookSourceDao? sourceDao,
     SearchBookDao? searchBookDao,
+    Duration sourceSearchTimeout = const Duration(seconds: 15),
     bool autoStart = true,
   }) : service = service ?? BookSourceService(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-       searchBookDao = searchBookDao ?? getIt<SearchBookDao>() {
+       searchBookDao = searchBookDao ?? getIt<SearchBookDao>(),
+       _sourceSearchTimeout = sourceSearchTimeout {
     if (autoStart) {
       unawaited(loadGroups());
       unawaited(startSearch());
@@ -32,6 +35,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   final BookSourceService service;
   final BookSourceDao _sourceDao;
   final SearchBookDao searchBookDao;
+  final Duration _sourceSearchTimeout;
 
   List<SearchBook> allResults = <SearchBook>[];
   List<SearchBook> filteredResults = <SearchBook>[];
@@ -44,6 +48,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   String _filterQuery = '';
   int _activeSearchId = 0;
   bool _disposed = false;
+  final Set<CancelToken> _activeSearchTokens = <CancelToken>{};
 
   Future<void> loadGroups() async {
     final sources = await _sourceDao.getEnabled();
@@ -69,6 +74,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   }
 
   Future<void> startSearch() async {
+    _cancelActiveSearch();
     final searchId = ++_activeSearchId;
     final enabledSources = await _loadEnabledSources();
     if (!_isSearchActive(searchId)) return;
@@ -81,18 +87,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final cachedResults = _sortResults(
       cached.where((result) => allowedOrigins.contains(result.origin)).toList(),
     );
-
-    if (cachedResults.isNotEmpty) {
-      allResults = cachedResults;
-      _rebuildFilteredResults();
-      status = '載入快取來源... 正在同步更新...';
-      _notifySafely();
-    }
+    allResults = cachedResults;
+    _rebuildFilteredResults();
 
     isSearching = true;
     if (enabledSources.isEmpty) {
       status = '目前範圍沒有可用書源';
-    } else if (allResults.isEmpty) {
+    } else if (cachedResults.isNotEmpty) {
+      status = '已載入 ${cachedResults.length} 個快取來源，正在同步更新...';
+    } else {
       status = '正在搜尋可用書源...';
     }
     _notifySafely();
@@ -105,44 +108,62 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
 
     try {
       var failedSources = 0;
+      var completedSources = 0;
       final searchPool = Pool(_maxConcurrentSearches);
       try {
         final searchTasks =
             enabledSources.map((source) {
               return searchPool.withResource(() async {
+                if (!_isSearchActive(searchId)) return;
+
+                final cancelToken = CancelToken();
+                _activeSearchTokens.add(cancelToken);
                 try {
                   final author = book.author.trim();
-                  if (checkAuthor && author.isNotEmpty) {
-                    return await service.preciseSearch(
-                      source,
-                      book.name,
-                      author,
+                  final shouldCheckAuthor = checkAuthor && author.isNotEmpty;
+                  final results = await service
+                      .searchBooks(
+                        source,
+                        book.name,
+                        filter:
+                            shouldCheckAuthor
+                                ? (name, candidateAuthor) =>
+                                    name == book.name && candidateAuthor == author
+                                : (name, _) => name == book.name,
+                        shouldBreak: (size) => size >= 1,
+                        cancelToken: cancelToken,
+                      )
+                      .timeout(
+                        _sourceSearchTimeout,
+                        onTimeout: () {
+                          cancelToken.cancel('換源搜尋逾時');
+                          throw TimeoutException('換源搜尋逾時');
+                        },
+                      );
+                  if (!_isSearchActive(searchId)) return;
+                  _mergeSearchResults(results);
+                } catch (_) {
+                  if (_isSearchActive(searchId)) {
+                    failedSources++;
+                  }
+                } finally {
+                  _activeSearchTokens.remove(cancelToken);
+                  if (_isSearchActive(searchId)) {
+                    completedSources++;
+                    _updateSearchingStatus(
+                      completedSources,
+                      enabledSources.length,
                     );
                   }
-                  return await service.searchBooks(
-                    source,
-                    book.name,
-                    filter: (name, _) => name == book.name,
-                    shouldBreak: (size) => size >= 1,
-                  );
-                } catch (_) {
-                  failedSources++;
-                  return const <SearchBook>[];
                 }
               });
             }).toList();
 
-        final resultsList = await Future.wait(searchTasks);
+        await Future.wait(searchTasks);
         if (!_isSearchActive(searchId)) return;
 
-        final results = _sortResults(
-          resultsList.expand((item) => item).toList(),
-        );
-        allResults = results;
-        _rebuildFilteredResults();
         isSearching = false;
-
-        if (results.isEmpty) {
+        if (allResults.isEmpty) {
           status =
               failedSources == enabledSources.length
                   ? '搜尋完成，但所有書源都失敗'
@@ -180,6 +201,8 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _activeSearchId++;
+    _cancelActiveSearch();
     super.dispose();
   }
 
@@ -189,7 +212,11 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
   Future<List<BookSource>> _loadEnabledSources() async {
     var enabledSources =
         (await _sourceDao.getEnabled())
-            .where((source) => source.isSearchEnabledByRuntime)
+            .where(
+              (source) =>
+                  source.isSearchEnabledByRuntime &&
+                  source.bookSourceUrl != book.origin,
+            )
             .toList();
     if (selectedGroup == '全部') {
       return enabledSources;
@@ -204,6 +231,41 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
             .toList();
     return enabledSources;
   }
+
+  void _mergeSearchResults(List<SearchBook> results) {
+    if (results.isEmpty) return;
+
+    final merged = <String, SearchBook>{
+      for (final result in allResults) _resultKey(result): result,
+    };
+    for (final result in results) {
+      if (result.origin == book.origin || result.name != book.name) continue;
+      merged[_resultKey(result)] = result;
+    }
+    allResults = _sortResults(merged.values.toList());
+    _rebuildFilteredResults();
+  }
+
+  void _updateSearchingStatus(int completedSources, int totalSources) {
+    if (allResults.isEmpty) {
+      status = '正在搜尋可用書源... ($completedSources/$totalSources)';
+    } else {
+      status =
+          '已找到 ${allResults.length} 個來源，仍在搜尋... ($completedSources/$totalSources)';
+    }
+    _notifySafely();
+  }
+
+  void _cancelActiveSearch() {
+    for (final token in _activeSearchTokens.toList()) {
+      if (!token.isCancelled) {
+        token.cancel('換源搜尋已取消');
+      }
+    }
+    _activeSearchTokens.clear();
+  }
+
+  String _resultKey(SearchBook result) => '${result.origin}\n${result.bookUrl}';
 
   void _rebuildFilteredResults() {
     if (_filterQuery.isEmpty) {
