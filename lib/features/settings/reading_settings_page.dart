@@ -68,7 +68,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
               : ListTileTheme(
                 data: const ListTileThemeData(
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xl,
+                    horizontal: AppSpacing.md,
                   ),
                 ),
                 child: ListView(
@@ -97,7 +97,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                     _buildSectionTitle('自動翻頁'),
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
+                        horizontal: AppSpacing.md,
                       ),
                       child: ReaderV2SettingComponents.buildSliderRow(
                         label: '速度',
@@ -170,7 +170,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   Widget _buildLoadError(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -196,9 +196,9 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Text(
