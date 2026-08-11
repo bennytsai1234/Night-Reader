@@ -16,7 +16,9 @@ void main() {
     expect(() => const TtsSettingsPage(), returnsNormally);
   });
 
-  testWidgets('Settings page exposes Reading Preferences entry', (tester) async {
+  testWidgets('Settings page exposes Reading Preferences entry', (
+    tester,
+  ) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
 
     expect(
@@ -36,6 +38,9 @@ void main() {
     testWidgets('Settings panels use clipped Material surfaces in $mode', (
       tester,
     ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.lightTheme,

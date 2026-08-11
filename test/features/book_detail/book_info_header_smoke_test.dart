@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -96,7 +97,7 @@ void main() {
           bookUrl: 'file:///books/demo.txt',
           name: '本地書',
           author: '作者乙',
-          origin: 'local',
+          origin: BookType.localTag,
           originName: '本地',
         ),
         sources: const <String>['本地'],

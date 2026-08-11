@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/services/restore_service.dart';
@@ -26,6 +27,8 @@ class _FakeBookmarkDao extends Fake implements BookmarkDao {}
 
 class _FakeDownloadDao extends Fake implements DownloadDao {}
 
+class _FakeReadRecordDao extends Fake implements ReadRecordDao {}
+
 class _FakeReaderChapterContentDao extends Fake
     implements ReaderChapterContentDao {}
 
@@ -42,6 +45,7 @@ void main() {
     getIt.registerSingleton<BookGroupDao>(_FakeBookGroupDao());
     getIt.registerSingleton<BookmarkDao>(_FakeBookmarkDao());
     getIt.registerSingleton<DownloadDao>(_FakeDownloadDao());
+    getIt.registerSingleton<ReadRecordDao>(_FakeReadRecordDao());
     getIt.registerSingleton<ReaderChapterContentDao>(
       _FakeReaderChapterContentDao(),
     );

@@ -51,7 +51,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SourceManagerPage()));
     await tester.pumpAndSettle();
-    expect(find.text('暫無書源'), findsOneWidget);
+    expect(find.text('尚未加入書源'), findsOneWidget);
 
     await tester.tap(find.byTooltip('更多操作'));
     await tester.pumpAndSettle();
@@ -84,7 +84,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(dao.loadCount, loadCountBeforeEditor);
-    expect(find.text('暫無書源'), findsOneWidget);
+    expect(find.text('尚未加入書源'), findsOneWidget);
   });
 
   testWidgets('group mutation controls are disabled while loading', (

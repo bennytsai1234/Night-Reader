@@ -51,7 +51,7 @@ void main() {
     service.log('可複製日誌');
     await tester.pump();
 
-    await tester.tap(find.byTooltip('複製全量日誌'));
+    await tester.tap(find.byTooltip('複製完整日誌'));
     await tester.pump();
 
     expect(find.textContaining('複製日誌失敗'), findsOneWidget);
