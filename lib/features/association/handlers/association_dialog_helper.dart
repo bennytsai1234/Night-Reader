@@ -29,7 +29,7 @@ mixin AssociationDialogHelper on AssociationBase {
             ),
             actions: [
               if (type == 'bookSource' || type == 'auto')
-                _btn(dialogContext, '匯入書源', () async {
+                _btn(context, dialogContext, '匯入書源', () async {
                   final count =
                       isFile
                           ? await SourceImportService().importFromJson(jsonData!)
@@ -42,7 +42,7 @@ mixin AssociationDialogHelper on AssociationBase {
                   );
                 }),
               if (type == 'book' || type == 'auto')
-                _btn(dialogContext, '匯入書架', () async {
+                _btn(context, dialogContext, '匯入書架', () async {
                   if (isFile) {
                     final result = await BookshelfExchangeService().importFromFile(
                       File(src),
@@ -75,7 +75,7 @@ mixin AssociationDialogHelper on AssociationBase {
                   }
                 }),
               if (type == 'replaceRule' || type == 'auto')
-                _btn(dialogContext, '匯入替換規則', () async {
+                _btn(context, dialogContext, '匯入替換規則', () async {
                   final text =
                       isFile
                           ? jsonData!
@@ -129,6 +129,7 @@ mixin AssociationDialogHelper on AssociationBase {
   }
 
   Widget _btn(
+    BuildContext pageContext,
     BuildContext dialogContext,
     String label,
     Future<void> Function() action,
@@ -138,12 +139,10 @@ mixin AssociationDialogHelper on AssociationBase {
       try {
         await action();
       } catch (error) {
-        // 各匯入流程會在成功時自行提示；意外失敗統一回報。
-        if (dialogContext.mounted) {
-          ScaffoldMessenger.of(dialogContext).showSnackBar(
-            SnackBar(content: Text('$label失敗：$error')),
-          );
-        }
+        if (!pageContext.mounted) return;
+        ScaffoldMessenger.of(
+          pageContext,
+        ).showSnackBar(SnackBar(content: Text('$label失敗：$error')));
       }
     },
     child: Text(label),
