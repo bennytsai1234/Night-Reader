@@ -111,10 +111,19 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
             enabledSources.map((source) {
               return searchPool.withResource(() async {
                 try {
-                  return await service.preciseSearch(
+                  final author = book.author.trim();
+                  if (checkAuthor && author.isNotEmpty) {
+                    return await service.preciseSearch(
+                      source,
+                      book.name,
+                      author,
+                    );
+                  }
+                  return await service.searchBooks(
                     source,
                     book.name,
-                    checkAuthor ? book.author : '',
+                    filter: (name, _) => name == book.name,
+                    shouldBreak: (size) => size >= 1,
                   );
                 } catch (_) {
                   failedSources++;
