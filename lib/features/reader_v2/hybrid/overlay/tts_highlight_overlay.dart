@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
 
 final class HybridTtsHighlightOverlay extends StatelessWidget {
   const HybridTtsHighlightOverlay({
@@ -97,12 +98,18 @@ final class HybridTtsHighlightPainter extends CustomPainter {
       highlight: highlight,
     );
     if (rects.isEmpty) return;
+    final darkReader = textColor.computeLuminance() > 0.5;
+    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
+      dark: darkReader,
+      menu: false,
+    );
+    final highlightColor = custom?.highlight ?? const Color(0xFFFFC857);
     final shadowPaint =
         Paint()
-          ..color = const Color(0xFFFFC857).withValues(alpha: 0.14)
+          ..color = highlightColor.withValues(alpha: 0.14)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
     final fillPaint =
-        Paint()..color = const Color(0xFFFFC857).withValues(alpha: 0.20);
+        Paint()..color = highlightColor.withValues(alpha: 0.20);
     final strokePaint =
         Paint()
           ..style = PaintingStyle.stroke
