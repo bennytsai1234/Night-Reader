@@ -25,14 +25,14 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
         children: [
           _buildSectionTitle('本地備份與還原'),
           ListTile(
-            title: const Text('手動備份 (本地)'),
-            subtitle: const Text('將目前所有書架與配置進行備份至手機存儲'),
+            title: const Text('建立備份'),
+            subtitle: const Text('建立 ZIP 備份後，選擇儲存或分享位置'),
             leading: const Icon(Icons.backup_outlined),
             onTap: _isProcessing ? null : _handleManualBackup,
           ),
           ListTile(
-            title: const Text('手動還原 (本地文件)'),
-            subtitle: const Text('從本地備份檔恢復資料'),
+            title: const Text('從備份檔還原'),
+            subtitle: const Text('選擇 ZIP 備份檔並匯入書架、書源與設定'),
             leading: const Icon(Icons.restore),
             onTap: _isProcessing ? null : _handleManualRestore,
           ),
@@ -73,12 +73,10 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
         await SharePlus.instance.share(
           ShareParams(files: [XFile(file.path)], text: '夜讀備份檔'),
         );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('建立備份失敗')));
-        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('建立備份失敗')));
       }
     } catch (e) {
       if (mounted) {
@@ -98,31 +96,53 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     );
     if (!mounted) return;
 
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      setState(() => _isProcessing = true);
-      try {
-        final success = await RestoreService().restoreFromZip(file);
-        if (mounted) {
-          if (success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('還原成功，請重啟 App 以載入新資料')),
-            );
-          } else {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('還原出錯: $e')));
-        }
-      } finally {
-        if (mounted) setState(() => _isProcessing = false);
+    final path = result?.files.single.path;
+    if (path == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('還原這份備份？'),
+            content: const Text(
+              '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('開始還原'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final file = File(path);
+    setState(() => _isProcessing = true);
+    try {
+      final success = await RestoreService().restoreFromZip(file);
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('還原完成，重新啟動 App 後生效')),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('還原出錯: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 }
