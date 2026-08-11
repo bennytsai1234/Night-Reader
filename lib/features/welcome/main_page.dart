@@ -11,7 +11,6 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:night_reader/features/search/search_page.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
@@ -103,12 +102,6 @@ class _MainPageState extends State<MainPage> {
         shelf != null &&
         !shelf.isLoading &&
         shelf.loadErrorMessage != null;
-    final showEmptyShelfAction =
-        isRealShelfTab &&
-        shelf != null &&
-        !shelf.isLoading &&
-        shelf.loadErrorMessage == null &&
-        shelf.books.isEmpty;
 
     return PopScope<void>(
       canPop: false,
@@ -170,28 +163,34 @@ class _MainPageState extends State<MainPage> {
                   color: Theme.of(context).scaffoldBackgroundColor,
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 52,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            shelf.loadErrorMessage!,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
-                            onPressed: shelf.loadBooks,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('重試'),
-                          ),
-                        ],
+                      padding: const EdgeInsets.all(24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 32,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              shelf.loadErrorMessage!,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color:
+                                    Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: shelf.loadBooks,
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('重試'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -199,19 +198,8 @@ class _MainPageState extends State<MainPage> {
               ),
           ],
         ),
-        floatingActionButton:
-            showEmptyShelfAction
-                ? FloatingActionButton.extended(
-                  onPressed:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SearchPage()),
-                      ),
-                  icon: const Icon(Icons.search),
-                  label: const Text('搜尋書籍'),
-                )
-                : null,
         bottomNavigationBar: NavigationBar(
+          height: 64,
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             if (_currentIndex == index) {
