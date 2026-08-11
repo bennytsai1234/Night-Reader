@@ -27,9 +27,9 @@ class SearchHistoryView extends StatelessWidget {
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.lg,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.xxl,
       ),
       children: [
