@@ -194,6 +194,9 @@ class _CrashLogPageState extends State<CrashLogPage> {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('清除崩潰日誌？'),
             content: const Text('清除後無法復原。'),
             actions: [

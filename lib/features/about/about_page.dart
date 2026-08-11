@@ -208,6 +208,9 @@ class _AboutPageState extends State<AboutPage> {
       context: context,
       builder:
           (ctx) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('免責聲明'),
             content: SingleChildScrollView(
               child: Text(

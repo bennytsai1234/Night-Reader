@@ -3,6 +3,8 @@ import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 class ReadingStatsPage extends StatefulWidget {
   const ReadingStatsPage({super.key});
@@ -35,14 +37,17 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
 
           if (snapshot.hasError) {
             return Center(
-              child: FilledButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _records = _readRecordDao.getAllShow();
-                  });
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('重新載入'),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _records = _readRecordDao.getAllShow();
+                    });
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('重新載入'),
+                ),
               ),
             );
           }
@@ -52,26 +57,38 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
             return const Center(child: Text('尚無閱讀紀錄'));
           }
 
-          return ListView.separated(
-            itemCount: records.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final record = records[index];
-              return ListTile(
-                leading: const Icon(Icons.menu_book_outlined),
-                title: Text(record.bookName),
-                subtitle: Text('累積閱讀 ${_formatDuration(record.readTime)}'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SearchPage(initialQuery: record.bookName),
-                    ),
-                  );
-                },
-              );
-            },
+          return ListTileTheme(
+            data: const ListTileThemeData(
+              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            ),
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+              itemCount: records.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final record = records[index];
+                return ListTile(
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: Text(
+                    record.bookName,
+                    style: AppTextStyles.bodyBase.copyWith(height: 1.35),
+                  ),
+                  subtitle: Text(
+                    '累積閱讀 ${_formatDuration(record.readTime)}',
+                    style: AppTextStyles.bodySm.copyWith(height: 1.4),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SearchPage(initialQuery: record.bookName),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           );
         },
       ),

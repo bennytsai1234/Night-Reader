@@ -124,10 +124,16 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                 children: [
                   if (_isSaving) const LinearProgressIndicator(minHeight: 2),
                   Padding(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.lg,
+                      AppSpacing.xl,
+                      AppSpacing.md,
+                    ),
                     child: Text(
                       '預設為九宮格全部喚起選單，可逐格改成翻頁、換章、朗讀或書籤。',
                       style: TextStyle(
+                        height: 1.45,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -136,18 +142,24 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                     child: IgnorePointer(
                       ignoring: _isSaving,
                       child: Container(
-                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.xl,
+                          AppSpacing.md,
+                          AppSpacing.xl,
+                          AppSpacing.xxl,
+                        ),
                         child: GridView.builder(
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 3,
                                 childAspectRatio: 0.6,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
+                                crossAxisSpacing: AppSpacing.md,
+                                mainAxisSpacing: AppSpacing.md,
                               ),
                           itemCount: 9,
                           itemBuilder: (ctx, index) {
                             return InkWell(
+                              borderRadius: AppRadius.cardMd,
                               onTap: () => _showActionSelector(context, index),
                               child: Container(
                                 decoration: BoxDecoration(
@@ -158,7 +170,7 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.primary.withValues(alpha: 0.05),
-                                  borderRadius: AppRadius.cardSm,
+                                  borderRadius: AppRadius.cardMd,
                                 ),
                                 child: Center(
                                   child: Column(
@@ -167,21 +179,27 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                                       Text(
                                         '區域 ${index + 1}',
                                         style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 12,
+                                          height: 1.3,
                                           color:
                                               Theme.of(
                                                 context,
                                               ).colorScheme.onSurfaceVariant,
                                         ),
                                       ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        ReaderV2TapAction.fromCode(
-                                          _actions[index],
-                                        ).label,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                      const SizedBox(height: AppSpacing.md),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: AppSpacing.sm,
+                                        ),
+                                        child: Text(
+                                          ReaderV2TapAction.fromCode(
+                                            _actions[index],
+                                          ).label,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -239,6 +257,9 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                 children:
                     ReaderV2TapAction.values.map((entry) {
                       return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xl,
+                        ),
                         title: Text(entry.label),
                         onTap: () async {
                           Navigator.pop(ctx);

@@ -52,20 +52,29 @@ class DownloadManagerPage extends StatelessWidget {
                 children: [
                   _buildQueueSummary(context, service, tasks),
                   Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-                      itemCount: tasks.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final task = tasks[index];
-                        return _buildTaskTile(
-                          context,
-                          service,
-                          task,
-                          index,
-                          tasks.length,
-                        );
-                      },
+                    child: ListTileTheme(
+                      data: const ListTileThemeData(
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xl,
+                        ),
+                      ),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.only(
+                          bottom: AppSpacing.xxl,
+                        ),
+                        itemCount: tasks.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final task = tasks[index];
+                          return _buildTaskTile(
+                            context,
+                            service,
+                            task,
+                            index,
+                            tasks.length,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -85,7 +94,7 @@ class DownloadManagerPage extends StatelessWidget {
               context,
             ).colorScheme.onSurface.withValues(alpha: 0.1),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.xl),
           Text(
             '暫無背景下載任務',
             style: TextStyle(
@@ -114,38 +123,45 @@ class DownloadManagerPage extends StatelessWidget {
           task.lastUpdateTime > latest ? task.lastUpdateTime : latest,
     );
 
-    return Material(
-      color: Theme.of(
-        context,
-      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.lg,
-          AppSpacing.md,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _summaryChip(context, '等待', '$waiting'),
-                _summaryChip(context, '下載中', '$running'),
-                _summaryChip(context, '暫停', '$paused'),
-                _summaryChip(context, '失敗', '$failed'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              service.isBookshelfRefreshing
-                  ? '書架正在檢查更新，下載會等檢查完成後繼續'
-                  : '最近任務更新：${_formatTimestamp(latestUpdate)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.md,
+        AppSpacing.xl,
+        AppSpacing.sm,
+      ),
+      child: Material(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: AppRadius.cardLg,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.md,
+                children: [
+                  _summaryChip(context, '等待', '$waiting'),
+                  _summaryChip(context, '下載中', '$running'),
+                  _summaryChip(context, '暫停', '$paused'),
+                  _summaryChip(context, '失敗', '$failed'),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                service.isBookshelfRefreshing
+                    ? '書架正在檢查更新，下載會等檢查完成後繼續'
+                    : '最近任務更新：${_formatTimestamp(latestUpdate)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -180,44 +196,55 @@ class DownloadManagerPage extends StatelessWidget {
     return ListTile(
       title: Text(
         task.bookName,
-        style: AppTextStyles.bodySm.copyWith(fontWeight: FontWeight.bold),
+        style: AppTextStyles.bodyBase.copyWith(
+          height: 1.35,
+          fontWeight: FontWeight.bold,
+        ),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           LinearProgressIndicator(
             value: progress,
             backgroundColor:
                 Theme.of(context).colorScheme.surfaceContainerHighest,
             minHeight: 4,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.sm),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _statusText(task),
-                style: AppTextStyles.labelXs.copyWith(
-                  color: _statusColor(context, task),
+              Expanded(
+                child: Text(
+                  _statusText(task),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.labelSm.copyWith(
+                    height: 1.3,
+                    color: _statusColor(context, task),
+                  ),
                 ),
               ),
-              if (task.isDownloading)
+              if (task.isDownloading) ...[
+                const SizedBox(width: AppSpacing.md),
                 Text(
-                  '正在下載...',
-                  style: AppTextStyles.labelXs.copyWith(
+                  '正在下載…',
+                  style: AppTextStyles.labelSm.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
+              ],
             ],
           ),
           if (failureSummary != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               failureSummary,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.labelXs.copyWith(
+              style: AppTextStyles.labelSm.copyWith(
+                height: 1.3,
                 color: Theme.of(context).colorScheme.error,
               ),
             ),
@@ -319,6 +346,9 @@ class DownloadManagerPage extends StatelessWidget {
       context: context,
       builder:
           (context) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('下載失敗原因'),
             content: Column(
               mainAxisSize: MainAxisSize.min,

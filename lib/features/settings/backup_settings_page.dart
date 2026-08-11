@@ -115,6 +115,9 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('還原這份備份？'),
             content: Text(
               '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',

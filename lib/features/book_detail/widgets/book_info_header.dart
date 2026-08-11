@@ -49,7 +49,7 @@ class BookInfoHeader extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -67,7 +67,7 @@ class BookInfoHeader extends StatelessWidget {
                 author: book.author,
                 width: 100,
                 height: 140,
-                borderRadius: AppRadius.cardXs,
+                borderRadius: AppRadius.cardMd,
               ),
             ),
           ),
@@ -88,9 +88,9 @@ class BookInfoHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text('作者：${book.author}', style: AppTextStyles.bodyMd),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 if (book.isLocal)
                   Text('來源：${book.originName}', style: AppTextStyles.bodySm)
                 else
@@ -104,12 +104,12 @@ class BookInfoHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                const SizedBox(height: 6),
+                const SizedBox(height: AppSpacing.sm),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: _SourceStatusChip(provider: provider),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
                     Expanded(
@@ -130,7 +130,7 @@ class BookInfoHeader extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => toggleBookshelf(context, provider),

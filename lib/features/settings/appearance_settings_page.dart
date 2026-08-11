@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/theme_customization.dart';
 import 'package:provider/provider.dart';
 
@@ -22,7 +23,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('外觀與主題')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.lg,
+          AppSpacing.xl,
+          AppSpacing.xxl,
+        ),
         children: [
           SegmentedButton<ThemeArea>(
             segments: const [
@@ -33,10 +39,10 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             selected: {_area},
             onSelectionChanged: (value) => setState(() => _area = value.first),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.lg),
           if (_area == ThemeArea.app) ...[
             const Text('App 顯示模式', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.md),
             SegmentedButton<ThemeMode>(
               segments: const [
                 ButtonSegment(value: ThemeMode.system, label: Text('跟隨系統')),
@@ -46,18 +52,18 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
               selected: {appSettings.themeMode},
               onSelectionChanged: (value) => appSettings.setThemeMode(value.first),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.md),
             Text(
               '跟隨系統時，手機為淺色就套用淺色方案，手機為深色就套用深色方案。',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.xl),
           ] else ...[
             Text(
               _area == ThemeArea.reader ? '閱讀方案切換' : '閱讀選單方案切換',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.md),
             SegmentedButton<AreaThemeMode>(
               segments: const [
                 ButtonSegment(
@@ -79,12 +85,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
               onSelectionChanged: (value) =>
                   settings.setAreaMode(_area, value.first),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.md),
             Text(
               '淺色與深色各使用自己的配色方案；跟隨系統只負責依手機目前模式選擇要套用哪一套。',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.xl),
           ],
           SegmentedButton<bool>(
             segments: const [
@@ -102,9 +108,9 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             selected: {_dark},
             onSelectionChanged: (value) => setState(() => _dark = value.first),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.xl),
           _Preview(area: _area, dark: _dark, settings: settings),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.xl),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('使用自訂配色'),
@@ -112,12 +118,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             value: _useCustom(settings),
             onChanged: (value) => settings.setUseCustom(_area, _dark, value),
           ),
-          const Divider(height: 28),
+          const Divider(height: AppSpacing.xxl),
           if (_area == ThemeArea.app)
             ..._buildAppEditors(settings)
           else
             ..._buildAreaEditors(settings),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.lg),
           OutlinedButton.icon(
             onPressed: () => settings.reset(_area, _dark),
             icon: const Icon(Icons.restart_alt),
@@ -201,7 +207,7 @@ class _Preview extends StatelessWidget {
       return Container(
         decoration: BoxDecoration(
           color: c.background,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppRadius.cardLg,
           border: Border.all(color: c.border),
         ),
         clipBehavior: Clip.antiAlias,
@@ -217,17 +223,17 @@ class _Preview extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
                   color: c.surface,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.cardMd,
                 ),
                 child: Row(
                   children: [
                     Icon(Icons.auto_stories, color: c.primary),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: AppSpacing.lg),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,10 +266,10 @@ class _Preview extends StatelessWidget {
         : (dark ? settings.menuDark : settings.menuLight);
     return Container(
       height: 150,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: c.background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.cardLg,
         border: Border.all(color: c.border),
       ),
       child: area == ThemeArea.reader
@@ -274,12 +280,12 @@ class _Preview extends StatelessWidget {
                   dark ? '深色閱讀方案' : '淺色閱讀方案',
                   style: TextStyle(color: c.accent, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   '窗外的風慢慢吹過，紙頁在燈下留下柔和的影子。',
                   style: TextStyle(color: c.text, height: 1.6),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   '方案名稱只代表切換槽位，實際顏色由你自訂。',
                   style: TextStyle(color: c.secondaryText, fontSize: 12),
@@ -291,10 +297,10 @@ class _Preview extends StatelessWidget {
               children: [
                 Icon(Icons.list_alt, color: c.text),
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
                     color: c.highlight,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: AppRadius.cardMd,
                   ),
                   child: Icon(Icons.record_voice_over, color: c.accent),
                 ),
@@ -408,6 +414,7 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
   Widget build(BuildContext context) {
     final color = _hsl.toColor();
     return AlertDialog(
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
       title: const Text('調整顏色'),
       content: SingleChildScrollView(
         child: Column(
@@ -417,10 +424,10 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
               height: 64,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppRadius.cardMd,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
             TextField(
               controller: _hex,
               decoration: InputDecoration(
@@ -433,7 +440,7 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
                 if (_hexError != null) setState(() => _hexError = null);
               },
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.md),
             _slider('色相', _hsl.hue, 0, 360, (v) => _hsl = _hsl.withHue(v)),
             _slider(
               '飽和度',
@@ -452,6 +459,13 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xl,
+      ),
+      actionsOverflowButtonSpacing: AppSpacing.md,
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
         FilledButton(onPressed: _submit, child: const Text('套用')),
