@@ -142,7 +142,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
   Widget build(BuildContext context) {
     final settings = widget.settings;
     return AppBottomSheet(
-      title: '界面設定',
+      title: '外觀與排版',
       icon: Icons.format_paint_outlined,
       children: [
         const SheetSection(
@@ -290,7 +290,7 @@ class _ReaderTypographySwitches extends StatelessWidget {
     return Column(
       children: [
         _buildSwitch(
-          title: '末行字距補償（B2）',
+          title: '末行字距補償',
           subtitle: '讓末行貼近上方滿行字距；每段會額外排版一次',
           value: settings.lastLineSpacingCompensation,
           onChanged: settings.setLastLineSpacingCompensation,
