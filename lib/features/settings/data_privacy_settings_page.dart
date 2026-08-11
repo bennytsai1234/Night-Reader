@@ -31,7 +31,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
       appBar: AppBar(title: const Text('資料與隱私')),
       body: ListTileTheme(
         data: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
         ),
         child: ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
@@ -129,9 +129,9 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Text(
@@ -155,6 +155,9 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
       context: context,
       builder:
           (context) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: Text(title),
             content: Text(
               message,
@@ -231,9 +234,9 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
             for (final item in items) _permissionTile(item),
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
+                AppSpacing.md,
                 AppSpacing.xs,
-                AppSpacing.xl,
+                AppSpacing.md,
                 AppSpacing.sm,
               ),
               child: Wrap(
@@ -415,9 +418,9 @@ class _NoticePage extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
           AppSpacing.xl,
-          AppSpacing.xl,
-          AppSpacing.xl,
+          AppSpacing.md,
           AppSpacing.xxl,
         ),
         itemBuilder: (context, index) {
