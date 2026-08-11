@@ -66,42 +66,44 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        // 搜尋範圍按鈕 (對標 Legado SearchActivity 的 tvSearchScope)
-        InkWell(
-          onTap: onScopePressed,
-          borderRadius: AppRadius.cardXs,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  scopeDisplay,
-                  style: AppTextStyles.labelSm.copyWith(
-                    color:
-                        provider.searchScope.isAll
-                            ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
-                            : theme.colorScheme.onSurface,
-                    fontWeight:
-                        provider.searchScope.isAll
-                            ? FontWeight.normal
-                            : FontWeight.bold,
+        Tooltip(
+          message: '選擇搜尋範圍',
+          child: InkWell(
+            onTap: onScopePressed,
+            borderRadius: AppRadius.cardXs,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    scopeDisplay,
+                    style: AppTextStyles.labelSm.copyWith(
+                      color:
+                          provider.searchScope.isAll
+                              ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+                              : theme.colorScheme.onSurface,
+                      fontWeight:
+                          provider.searchScope.isAll
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                    ),
                   ),
-                ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  size: 16,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ],
+                  Icon(
+                    Icons.arrow_drop_down,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        // 搜尋/停止按鈕
         IconButton(
+          tooltip: provider.isSearching ? '停止搜尋' : '搜尋',
           icon: Icon(
             provider.isSearching ? Icons.stop_circle_outlined : Icons.search,
             color:
@@ -117,33 +119,22 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             }
           },
         ),
-        // 設定選單（精準搜尋）
         PopupMenuButton<String>(
           tooltip: '搜尋設定',
           icon: const Icon(Icons.more_vert),
           onSelected: (value) {
-            switch (value) {
-              case 'scope':
-                onScopeMenuSelected?.call();
-                break;
-              case 'precision':
-                provider.togglePrecisionSearch();
-                break;
+            if (value == 'precision') {
+              provider.togglePrecisionSearch();
             }
           },
-          itemBuilder: (context) {
-            return [
-              PopupMenuItem<String>(
-                value: 'scope',
-                child: Text('搜尋範圍: $scopeDisplay'),
-              ),
-              CheckedPopupMenuItem<String>(
-                value: 'precision',
-                checked: provider.precisionSearch,
-                child: const Text('精準搜尋（完全匹配）'),
-              ),
-            ];
-          },
+          itemBuilder:
+              (context) => [
+                CheckedPopupMenuItem<String>(
+                  value: 'precision',
+                  checked: provider.precisionSearch,
+                  child: const Text('精準搜尋（完全匹配）'),
+                ),
+              ],
         ),
       ],
     );
