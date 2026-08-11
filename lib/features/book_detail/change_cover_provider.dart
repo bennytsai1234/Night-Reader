@@ -14,16 +14,17 @@ class ChangeCoverProvider extends ChangeNotifier {
   final SearchBookDao _searchBookDao = getIt<SearchBookDao>();
   final BookSourceService _service = BookSourceService();
 
-  List<AggregatedSearchBook> _covers = []; // 修正類型
+  List<AggregatedSearchBook> _covers = [];
+  bool _isInitialized = false;
   bool _isSearching = false;
   int _searchCount = 0;
   int _totalSources = 0;
 
   List<AggregatedSearchBook> get covers => _covers;
+  bool get isInitialized => _isInitialized;
   bool get isSearching => _isSearching;
   double get progress => _totalSources == 0 ? 0 : _searchCount / _totalSources;
 
-  // 預設封面虛擬項 (原 Android defaultCover)
   AggregatedSearchBook _buildDefaultCoverItem(String name, String author) {
     return AggregatedSearchBook(
       book: SearchBook(
@@ -44,6 +45,7 @@ class ChangeCoverProvider extends ChangeNotifier {
 
   void clear() {
     _covers = [];
+    _isInitialized = false;
     _isSearching = false;
     _searchCount = 0;
     _totalSources = 0;
@@ -52,10 +54,12 @@ class ChangeCoverProvider extends ChangeNotifier {
 
   /// 先載入資料庫中既有封面，再視需要發起搜尋。
   Future<void> init(String name, String author) async {
+    _isInitialized = false;
     _covers = [_buildDefaultCoverItem(name, author)];
+    _searchCount = 0;
+    _totalSources = 0;
     notifyListeners();
 
-    // 1. 先從資料庫加載既有封面
     final stored = await _searchBookDao.getEnabledHasCover(name, author);
     if (stored.isNotEmpty) {
       for (var b in stored) {
@@ -63,16 +67,18 @@ class ChangeCoverProvider extends ChangeNotifier {
           _covers.add(AggregatedSearchBook(book: b, sources: ['本地記錄']));
         }
       }
-      notifyListeners();
     }
 
-    // 2. 若本地沒有記錄，自動發起搜尋
+    _isInitialized = true;
+    notifyListeners();
+
     if (stored.isEmpty) {
       search(name, author);
     }
   }
 
   Future<void> search(String name, String author) async {
+    _isInitialized = true;
     _isSearching = false;
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 50));
