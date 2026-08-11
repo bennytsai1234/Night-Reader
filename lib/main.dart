@@ -15,6 +15,7 @@ import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
+import 'features/association/association_handler_service.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
@@ -225,6 +226,26 @@ class ReaderApp extends StatefulWidget {
 }
 
 class _ReaderAppState extends State<ReaderApp> {
+  final AssociationHandlerService _associationHandler =
+      AssociationHandlerService();
+  bool _associationInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_associationInitialized) return;
+    _associationInitialized = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _associationHandler.init(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _associationHandler.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<SettingsProvider, ThemeSettingsProvider>(
