@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'association_base.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
-import 'package:night_reader/features/replace_rule/replace_rule_provider.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
@@ -80,9 +83,7 @@ mixin AssociationDialogHelper on AssociationBase {
                       isFile
                           ? jsonData!
                           : await SourceImportService().fetchImportTextFromUrl(src);
-                  final count = await context
-                      .read<ReplaceRuleProvider>()
-                      .importFromText(text);
+                  final count = await _importReplaceRules(text);
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -97,6 +98,22 @@ mixin AssociationDialogHelper on AssociationBase {
             ],
           ),
     );
+  }
+
+  Future<int> _importReplaceRules(String text) async {
+    final decoded = jsonDecode(text);
+    if (decoded is! List) {
+      throw const FormatException('替換規則格式不正確');
+    }
+    final dao = getIt<ReplaceRuleDao>();
+    var count = 0;
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      final rule = ReplaceRule.fromJson(Map<String, dynamic>.from(item));
+      await dao.upsert(rule);
+      count += 1;
+    }
+    return count;
   }
 
   void showForceImportDialog(BuildContext context, String path) {
