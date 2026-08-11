@@ -16,7 +16,7 @@ void main() {
     expect(() => const TtsSettingsPage(), returnsNormally);
   });
 
-  testWidgets('Settings page hides Reading Settings entry', (tester) async {
+  testWidgets('Settings page exposes Reading Preferences entry', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
 
     expect(
@@ -28,7 +28,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('閱讀設定'), findsNothing);
+    expect(find.text('閱讀偏好'), findsOneWidget);
     expect(find.text('朗讀與語音'), findsOneWidget);
   });
 
