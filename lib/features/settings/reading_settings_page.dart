@@ -17,6 +17,8 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   final ReaderV2PrefsRepository _prefsRepository =
       const ReaderV2PrefsRepository();
   ReaderV2PrefsSnapshot? _prefs;
+  Object? _loadError;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -25,11 +27,26 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   }
 
   Future<void> _loadPrefs() async {
-    final snapshot = await _prefsRepository.load();
-    if (!mounted) return;
-    setState(() {
-      _prefs = snapshot;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final snapshot = await _prefsRepository.load();
+      if (!mounted) return;
+      setState(() {
+        _prefs = snapshot;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = error;
+      });
+    }
   }
 
   void _updatePrefs(ReaderV2PrefsSnapshot next) {
@@ -44,8 +61,10 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('閱讀偏好')),
       body:
-          prefs == null
+          _isLoading
               ? const Center(child: CircularProgressIndicator())
+              : _loadError != null || prefs == null
+              ? _buildLoadError(context)
               : ListView(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
                 children: [
@@ -118,6 +137,32 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                   ),
                 ],
               ),
+    );
+  }
+
+  Widget _buildLoadError(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Text('閱讀偏好載入失敗'),
+            const SizedBox(height: AppSpacing.md),
+            FilledButton.icon(
+              onPressed: _loadPrefs,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
