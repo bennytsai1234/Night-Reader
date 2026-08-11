@@ -78,7 +78,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
 
           return Scaffold(
             appBar: AppBar(
-              title: Text('調試: ${widget.source.bookSourceName}'),
+              title: Text('除錯：${widget.source.bookSourceName}'),
               actions: [
                 if (provider.isRunning || !provider.isFinished)
                   Center(
@@ -99,7 +99,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                       provider.logs.isEmpty
                           ? null
                           : () => _copyFullLog(provider.logs),
-                  tooltip: '複製全量日誌',
+                  tooltip: '複製完整日誌',
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
@@ -107,7 +107,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                       provider.isFinished && !provider.isRunning
                           ? () => provider.startDebug()
                           : null,
-                  tooltip: '重新調試',
+                  tooltip: '重新除錯',
                 ),
               ],
             ),
@@ -118,7 +118,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                   provider.logs.isEmpty
                       ? Center(
                         child: Text(
-                          provider.isFinished ? '沒有調試日誌' : '準備調試…',
+                          provider.isFinished ? '沒有除錯日誌' : '準備除錯…',
                           style: AppTextStyles.bodySm.copyWith(
                             color: Colors.white70,
                           ),
