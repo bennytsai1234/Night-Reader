@@ -10,7 +10,7 @@ class SourceEditBookInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         RuleTextField(controller: controllers['ruleBookInfoInit']!, label: '預處理規則', hint: '載入詳情頁前執行'),
         RuleTextField(controller: controllers['ruleBookInfoName']!, label: '書名規則'),
