@@ -80,49 +80,50 @@ void main() {
 
       expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '放入書架'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '換源'), findsOneWidget);
       expect(find.widgetWithText(TextButton, '背景下載'), findsNothing);
       expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
       expect(find.byIcon(Icons.library_add), findsOneWidget);
     },
   );
 
-  testWidgets(
-    'BookInfoHeader hides background download action for local books',
-    (tester) async {
-      final provider = BookDetailProvider(
-        AggregatedSearchBook(
-          book: SearchBook(
-            bookUrl: 'file:///books/demo.txt',
-            name: '本地書',
-            author: '作者乙',
-            origin: 'local',
-            originName: '本地',
-          ),
-          sources: const <String>['本地'],
+  testWidgets('BookInfoHeader hides source switching for local books', (
+    tester,
+  ) async {
+    final provider = BookDetailProvider(
+      AggregatedSearchBook(
+        book: SearchBook(
+          bookUrl: 'file:///books/demo.txt',
+          name: '本地書',
+          author: '作者乙',
+          origin: 'local',
+          originName: '本地',
         ),
-      );
+        sources: const <String>['本地'],
+      ),
+    );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: BookInfoHeader(
-              book: provider.book,
-              provider: provider,
-              showPhotoView: (_, __) {},
-              onEdit: () {},
-              showSourceOptions: (_, __) {},
-              navigateToReader: (_, __, ___, ____) {},
-              showChangeSource: (_, __) {},
-              toggleBookshelf: (_, __) async {},
-            ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BookInfoHeader(
+            book: provider.book,
+            provider: provider,
+            showPhotoView: (_, __) {},
+            onEdit: () {},
+            showSourceOptions: (_, __) {},
+            navigateToReader: (_, __, ___, ____) {},
+            showChangeSource: (_, __) {},
+            toggleBookshelf: (_, __) async {},
           ),
         ),
-      );
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
 
-      expect(find.text('背景下載'), findsNothing);
-    },
-  );
+    expect(find.text('換源'), findsNothing);
+    expect(find.text('背景下載'), findsNothing);
+  });
 
   testWidgets('BookInfoHeader continue reading 會帶入 charOffset', (tester) async {
     final provider = BookDetailProvider(
