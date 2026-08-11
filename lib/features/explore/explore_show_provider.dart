@@ -34,7 +34,7 @@ class ExploreShowProvider extends ChangeNotifier {
   BookSource? _bookSource;
   List<SearchBook> _books = [];
   int _page = 1;
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _hasMore = true;
   String? _errorMessage;
   int _requestSerial = 0;
@@ -45,7 +45,7 @@ class ExploreShowProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
   String? get errorMessage => _errorMessage;
-  bool get isEmpty => _books.isEmpty && !_isLoading;
+  bool get isEmpty => _books.isEmpty && !_isLoading && _errorMessage == null;
 
   ExploreShowProvider({
     required this.sourceUrl,
@@ -59,14 +59,25 @@ class ExploreShowProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    _bookSource = await _sourceDao.getByUrl(sourceUrl);
-    if (_bookSource == null) {
-      _errorMessage = '找不到書源';
+    try {
+      _bookSource = await _sourceDao.getByUrl(sourceUrl);
+      if (_isDisposed) return;
+      if (_bookSource == null) {
+        _isLoading = false;
+        _errorMessage = '找不到書源';
+        notifyListeners();
+        return;
+      }
+      await _bookshelfTracker.initialize(onChanged: notifyListeners);
+      if (_isDisposed) return;
+      await _loadData();
+    } catch (error) {
+      if (_isDisposed) return;
+      AppLog.e('探索初始化失敗', error: error);
+      _isLoading = false;
+      _errorMessage = '探索內容初始化失敗';
       notifyListeners();
-      return;
     }
-    await _bookshelfTracker.initialize(onChanged: notifyListeners);
-    await _loadData();
   }
 
   /// 判斷書籍是否在書架中 (對標 Android isInBookShelf)
@@ -104,15 +115,15 @@ class ExploreShowProvider extends ChangeNotifier {
         _books.addAll(results);
         _page++;
       }
-    } on DioException catch (e) {
+    } on DioException catch (error) {
       if (_isDisposed || requestId != _requestSerial) return;
-      if (e.type == DioExceptionType.cancel) return;
-      AppLog.e('探索載入失敗', error: e);
-      _errorMessage = e.message ?? '載入失敗';
-    } catch (e) {
+      if (error.type == DioExceptionType.cancel) return;
+      AppLog.e('探索載入失敗', error: error);
+      _errorMessage = error.message ?? '載入失敗';
+    } catch (error) {
       if (_isDisposed || requestId != _requestSerial) return;
-      AppLog.e('探索載入失敗', error: e);
-      _errorMessage = e.toString();
+      AppLog.e('探索載入失敗', error: error);
+      _errorMessage = error.toString();
     } finally {
       final shouldFinalize = !_isDisposed && requestId == _requestSerial;
       if (shouldFinalize) {
@@ -136,6 +147,12 @@ class ExploreShowProvider extends ChangeNotifier {
     _books = [];
     _hasMore = true;
     _errorMessage = null;
+    if (_bookSource == null) {
+      _isLoading = true;
+      notifyListeners();
+      await _init();
+      return;
+    }
     await _loadData();
   }
 
