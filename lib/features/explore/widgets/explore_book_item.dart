@@ -30,7 +30,7 @@ class ExploreBookItem extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.md,
+          vertical: AppSpacing.sm,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,11 +39,11 @@ class ExploreBookItem extends StatelessWidget {
               coverUrl: book.coverUrl,
               bookName: book.name,
               author: book.author,
-              width: 56,
-              height: 75,
+              width: 54,
+              height: 72,
               borderRadius: AppRadius.cardXs,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,10 +54,9 @@ class ExploreBookItem extends StatelessWidget {
                         child: Text(
                           book.name,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            height: 1.3,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -69,73 +68,61 @@ class ExploreBookItem extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
+                            color: theme.colorScheme.primary.withValues(alpha: 0.08),
                             borderRadius: AppRadius.pillShape,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.library_add_check,
-                                size: 12,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                '書架',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  height: 1.2,
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            '書架',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
+                  const SizedBox(height: 2),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
                       '作者: ${book.author}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 2),
                   if (book.latestChapterTitle != null &&
-                      book.latestChapterTitle!.isNotEmpty)
+                      book.latestChapterTitle!.isNotEmpty) ...[
+                    const SizedBox(height: 1),
                     Text(
                       '最新: ${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.4,
                         color: context.warning,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 2),
-                  if (book.intro != null && book.intro!.isNotEmpty)
+                  ],
+                  if (book.intro != null && book.intro!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
                       style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.45,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: AppSpacing.xs),
-                  if (book.kind != null && book.kind!.isNotEmpty)
+                  ],
+                  if (book.kind != null && book.kind!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
                     Wrap(
                       spacing: AppSpacing.xs,
                       runSpacing: AppSpacing.xs,
                       children: _buildKindTags(theme),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -151,25 +138,24 @@ class ExploreBookItem extends StatelessWidget {
             .split(RegExp(r'[,，]'))
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
-            .take(4)
+            .take(3)
             .toList();
 
     return kinds.map((kind) {
       return Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
-          vertical: 2,
+          vertical: 1,
         ),
         decoration: BoxDecoration(
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            color: theme.colorScheme.outline.withValues(alpha: 0.28),
           ),
           borderRadius: AppRadius.cardXs,
         ),
         child: Text(
           kind,
           style: theme.textTheme.labelSmall?.copyWith(
-            height: 1.2,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
