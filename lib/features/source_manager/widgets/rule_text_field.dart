@@ -21,7 +21,7 @@ class RuleTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -48,7 +48,7 @@ class RuleTextField extends StatelessWidget {
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.lg,
-                vertical: AppSpacing.lg,
+                vertical: AppSpacing.md,
               ),
               border: const OutlineInputBorder(
                 borderRadius: AppRadius.cardMd,
@@ -114,7 +114,7 @@ class RuleTextField extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Text(
                     '$label - 規則小幫手',
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -124,7 +124,7 @@ class RuleTextField extends StatelessWidget {
                 ...helpers.map(
                   (h) => ListTile(
                     contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.xl,
+                      horizontal: AppSpacing.lg,
                     ),
                     title: Text(h['label']!),
                     subtitle: Text(h['value']!),
