@@ -138,9 +138,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         icon: Icons.error_outline,
         message: provider.sourceLoadError!,
         actions: [
-          FilledButton.icon(
+          TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 18),
             label: const Text('重試'),
           ),
         ],
@@ -155,18 +155,18 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         icon: Icons.travel_explore_outlined,
         message: '目前沒有可用的發現書源',
         actions: [
-          FilledButton.icon(
+          TextButton.icon(
             onPressed:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const SourceManagerPage()),
                 ),
-            icon: const Icon(Icons.source_outlined),
+            icon: const Icon(Icons.source_outlined, size: 18),
             label: const Text('管理書源'),
           ),
           TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 18),
             label: const Text('重新整理'),
           ),
         ],
@@ -187,12 +187,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 provider.setSearchQuery('');
               }
             },
-            icon: const Icon(Icons.clear),
+            icon: const Icon(Icons.clear, size: 18),
             label: const Text('清除條件'),
           ),
-          FilledButton.icon(
+          TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 18),
             label: const Text('重新整理'),
           ),
         ],
@@ -201,7 +201,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, AppSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(0, AppSpacing.xs, 0, AppSpacing.md),
       itemCount: provider.sources.length,
       itemBuilder: (context, index) {
         final source = provider.sources[index];
@@ -219,27 +219,34 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 52, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 32,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: actions,
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: actions,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -252,17 +259,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     bool isExpanded,
     ThemeData theme,
   ) {
-    final titleBackground = theme.colorScheme.primaryContainer.withValues(
-      alpha: 0.55,
-    );
-    final titleForeground = theme.colorScheme.onPrimaryContainer;
+    final titleBackground = theme.colorScheme.primary.withValues(alpha: 0.06);
+    final titleForeground = theme.colorScheme.onSurface;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        AppSpacing.lg,
+        AppSpacing.md,
         0,
-        AppSpacing.lg,
-        index == provider.sources.length - 1 ? AppSpacing.md : 10,
+        AppSpacing.md,
+        index == provider.sources.length - 1 ? AppSpacing.sm : AppSpacing.sm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,10 +282,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 ),
             child: Material(
               color: titleBackground,
-              borderRadius: AppRadius.cardMd,
+              borderRadius: AppRadius.cardSm,
               child: InkWell(
                 key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-                borderRadius: AppRadius.cardMd,
+                borderRadius: AppRadius.cardSm,
                 onTap: () {
                   provider.toggleExpand(index);
                   if (!isExpanded) {
@@ -292,7 +297,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
-                    vertical: 10,
+                    vertical: 8,
                   ),
                   child: Row(
                     children: [
@@ -309,20 +314,20 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       ),
                       if (isExpanded && provider.isLoadingKinds)
                         SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: 16,
+                          height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: theme.colorScheme.primary,
                           ),
                         ),
                       if (isExpanded && provider.isLoadingKinds)
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppSpacing.xs),
                       Icon(
                         isExpanded
                             ? Icons.keyboard_arrow_down
                             : Icons.chevron_right,
-                        size: 20,
+                        size: 19,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ],
@@ -334,15 +339,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           if (isExpanded && !provider.isLoadingKinds)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm,
-                AppSpacing.sm,
-                AppSpacing.sm,
+                AppSpacing.xs,
+                AppSpacing.xs,
+                AppSpacing.xs,
                 0,
               ),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerLowest,
-                  borderRadius: AppRadius.cardMd,
+                  color: theme.colorScheme.surface,
+                  borderRadius: AppRadius.cardSm,
                   border: Border.all(
                     color: theme.colorScheme.outlineVariant.withValues(
                       alpha: 0.8,
@@ -354,7 +359,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                         ? Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.md,
-                            vertical: 10,
+                            vertical: 8,
                           ),
                           child: Text(
                             '暫無分類',
@@ -379,7 +384,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     final kinds = provider.expandedKinds;
 
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.xs),
       child: LegadoExploreKindFlow(
         styles: kinds.map((kind) => kind.effectiveStyle).toList(),
         children:
@@ -388,13 +393,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
               final hasUrl = kind.url != null && kind.url!.isNotEmpty;
               final background =
                   isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.08)
-                      : theme.colorScheme.primaryContainer.withValues(
-                        alpha: 0.42,
-                      );
+                      ? theme.colorScheme.error.withValues(alpha: 0.06)
+                      : theme.colorScheme.primary.withValues(alpha: 0.05);
               final borderColor =
                   isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.2)
+                      ? theme.colorScheme.error.withValues(alpha: 0.18)
                       : theme.colorScheme.outlineVariant;
               final textColor =
                   isError
@@ -403,9 +406,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
               return Material(
                 color: background,
-                borderRadius: AppRadius.cardMd,
+                borderRadius: AppRadius.cardSm,
                 child: InkWell(
-                  borderRadius: AppRadius.cardMd,
+                  borderRadius: AppRadius.cardSm,
                   onTap:
                       isError
                           ? () => _showKindError(context, kind)
@@ -413,14 +416,14 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           ? () => _navigateToExploreShow(source, kind)
                           : null,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 40),
+                    constraints: const BoxConstraints(minHeight: 34),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: AppSpacing.sm,
+                        horizontal: 9,
+                        vertical: AppSpacing.xs,
                       ),
                       decoration: BoxDecoration(
-                        borderRadius: AppRadius.cardMd,
+                        borderRadius: AppRadius.cardSm,
                         border: Border.all(color: borderColor),
                       ),
                       alignment: Alignment.center,
@@ -431,9 +434,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                         textAlign: TextAlign.center,
                         style: theme.textTheme.labelSmall?.copyWith(
                           fontSize: 11,
-                          height: 1.15,
+                          height: 1.1,
                           color: textColor,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
