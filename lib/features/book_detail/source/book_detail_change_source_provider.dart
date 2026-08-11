@@ -141,10 +141,14 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
                         },
                       );
                   if (!_isSearchActive(searchId)) return;
-                  _mergeSearchResults(results);
+                  _replaceSourceResults(source.bookSourceUrl, results);
                 } catch (_) {
                   if (_isSearchActive(searchId)) {
                     failedSources++;
+                    _replaceSourceResults(
+                      source.bookSourceUrl,
+                      const <SearchBook>[],
+                    );
                   }
                 } finally {
                   _activeSearchTokens.remove(cancelToken);
@@ -232,11 +236,10 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     return enabledSources;
   }
 
-  void _mergeSearchResults(List<SearchBook> results) {
-    if (results.isEmpty) return;
-
+  void _replaceSourceResults(String sourceUrl, List<SearchBook> results) {
     final merged = <String, SearchBook>{
-      for (final result in allResults) _resultKey(result): result,
+      for (final result in allResults)
+        if (result.origin != sourceUrl) _resultKey(result): result,
     };
     for (final result in results) {
       if (result.origin == book.origin || result.name != book.name) continue;
