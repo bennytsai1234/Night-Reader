@@ -159,33 +159,42 @@ class ThemeSettingsProvider extends ChangeNotifier {
     }
   }
 
-  static ReadingTheme resolveReaderTheme({
+  static ReaderAreaThemeColors? resolveReaderAreaColors({
     required bool dark,
     required bool menu,
-    required ReadingTheme fallback,
   }) {
     final prefs = getIt<SharedPreferences>();
     final useCustom = prefs.getBool(
           menu
               ? (dark ? _kMenuDarkCustom : _kMenuLightCustom)
               : (dark ? _kReaderDarkCustom : _kReaderLightCustom),
-        ) ?? false;
-    if (!useCustom) return fallback;
-    final raw = prefs.getString(
-      menu ? (dark ? _kMenuDark : _kMenuLight) : (dark ? _kReaderDark : _kReaderLight),
-    );
-    final defaults = menu
+        ) ??
+        false;
+    if (!useCustom) return null;
+    final key = menu
+        ? (dark ? _kMenuDark : _kMenuLight)
+        : (dark ? _kReaderDark : _kReaderLight);
+    final fallback = menu
         ? (dark ? ReaderAreaThemeColors.menuDarkDefault : ReaderAreaThemeColors.menuLightDefault)
         : (dark ? ReaderAreaThemeColors.contentDarkDefault : ReaderAreaThemeColors.contentLightDefault);
-    ReaderAreaThemeColors colors = defaults;
-    if (raw != null) {
-      try {
-        final json = jsonDecode(raw);
-        if (json is Map<String, dynamic>) {
-          colors = ReaderAreaThemeColors.fromJson(json, fallback: defaults);
-        }
-      } catch (_) {}
-    }
+    final raw = prefs.getString(key);
+    if (raw == null || raw.isEmpty) return fallback;
+    try {
+      final value = jsonDecode(raw);
+      if (value is Map<String, dynamic>) {
+        return ReaderAreaThemeColors.fromJson(value, fallback: fallback);
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
+  static ReadingTheme resolveReaderTheme({
+    required bool dark,
+    required bool menu,
+    required ReadingTheme fallback,
+  }) {
+    final colors = resolveReaderAreaColors(dark: dark, menu: menu);
+    if (colors == null) return fallback;
     return ReadingTheme(
       name: dark ? '自訂夜間' : '自訂日間',
       backgroundColor: colors.background,
