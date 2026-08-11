@@ -14,11 +14,18 @@ class CoverGridItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDefault = result.book.bookUrl == 'use_default_cover';
     return GestureDetector(
-      onTap: () {
-        context.read<BookDetailProvider>().updateCover(
+      onTap: () async {
+        final outcome = await context.read<BookDetailProvider>().updateCover(
           isDefault ? '' : (result.book.coverUrl ?? ''),
         );
-        Navigator.pop(context);
+        if (!context.mounted) return;
+        if (outcome.success) {
+          Navigator.pop(context);
+          return;
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(outcome.message)));
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
