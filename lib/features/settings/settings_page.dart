@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
+import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
 import 'tts_settings_page.dart';
@@ -39,26 +40,20 @@ class SettingsPage extends StatelessWidget {
               icon: Icons.timer_outlined,
               title: '閱讀統計',
               summary: '查看每本書的累積閱讀時間',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ReadingStatsPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReadingStatsPage()),
+              ),
             ),
             _buildListTile(
               context,
               icon: Icons.tune_outlined,
               title: '閱讀偏好',
               summary: '調整操作、自動翻頁與內容轉換',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ReadingSettingsPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReadingSettingsPage()),
+              ),
               isLast: true,
             ),
           ]),
@@ -68,13 +63,10 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.source_outlined,
               title: '書源管理',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SourceManagerPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+              ),
               isLast: true,
             ),
           ]),
@@ -82,27 +74,33 @@ class SettingsPage extends StatelessWidget {
           _buildPanel(context, [
             _buildListTile(
               context,
+              icon: Icons.palette_outlined,
+              title: '外觀與主題',
+              summary: '分別自訂全域、閱讀與選單的日夜配色',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AppearanceSettingsPage()),
+              ),
+            ),
+            _buildListTile(
+              context,
               icon: Icons.volume_up_outlined,
               title: '朗讀與語音',
               summary: '語速、音調、系統語音',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
+              ),
             ),
             _buildListTile(
               context,
               icon: Icons.backup_outlined,
               title: '備份與還原',
               summary: '本地備份、數據遷移',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BackupSettingsPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BackupSettingsPage()),
+              ),
               isLast: true,
             ),
           ]),
@@ -113,23 +111,19 @@ class SettingsPage extends StatelessWidget {
               icon: Icons.download_for_offline_outlined,
               title: '背景下載佇列',
               summary: '查看、暫停、重試與刪除下載任務',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DownloadManagerPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DownloadManagerPage()),
+              ),
             ),
             _buildListTile(
               context,
               icon: Icons.info_outline,
               title: '關於夜讀',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AboutPage()),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutPage()),
+              ),
               isLast: true,
             ),
           ]),
@@ -142,9 +136,7 @@ class SettingsPage extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: AppTextStyles.labelSm.copyWith(
                   height: 1.4,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                   letterSpacing: 1.4,
                 ),
               ),
@@ -157,31 +149,17 @@ class SettingsPage extends StatelessWidget {
 
   Widget _buildProfileCard(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: AppSpacing.md,
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        border: Border.all(
-          color: isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10),
-        ),
+        color: theme.cardTheme.color ?? scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: AppRadius.cardLg,
-        boxShadow:
-            theme.cardTheme.shadowColor != null
-                ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : [],
+        boxShadow: theme.cardTheme.shadowColor != null
+            ? [BoxShadow(color: theme.cardTheme.shadowColor!, blurRadius: 6, offset: const Offset(0, 2))]
+            : [],
       ),
       child: Row(
         children: [
@@ -190,60 +168,37 @@ class SettingsPage extends StatelessWidget {
             height: 52,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0F14110D),
-                  blurRadius: 0,
-                  spreadRadius: 1,
-                ),
-              ],
+              boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: 0.08), spreadRadius: 1)],
             ),
             clipBehavior: Clip.antiAlias,
             child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
           const SizedBox(width: AppSpacing.lg),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '夜讀',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontFamilySerif,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    letterSpacing: 2.0,
-                    color: isDark ? AppPalette.ink50 : AppPalette.ink700,
-                  ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                '夜讀',
+                style: TextStyle(
+                  fontFamily: AppTextStyles.fontFamilySerif,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  letterSpacing: 2.0,
+                  color: scheme.onSurface,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  '閱讀，從這裡開始',
-                  style: AppTextStyles.bodySm.copyWith(
-                    height: 1.4,
-                    color: isDark ? AppPalette.ink200 : AppPalette.ink300,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '閱讀，從這裡開始',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4, color: scheme.onSurfaceVariant),
+              ),
+            ]),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: AppRadius.pillShape,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: AppRadius.pillShape),
             child: Text(
               '本地',
-              style: AppTextStyles.labelXs.copyWith(
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                color: accent,
-                letterSpacing: 0.3,
-              ),
+              style: AppTextStyles.labelXs.copyWith(height: 1.2, fontWeight: FontWeight.w600, color: scheme.primary, letterSpacing: 0.3),
             ),
           ),
         ],
@@ -252,46 +207,27 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(BuildContext context, String title) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.sm),
       child: Text(
         title,
-        style: AppTextStyles.labelSm.copyWith(
-          height: 1.3,
-          letterSpacing: 1.4,
-          color: accent,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppTextStyles.labelSm.copyWith(height: 1.3, letterSpacing: 1.4, color: scheme.primary, fontWeight: FontWeight.w700),
       ),
     );
   }
 
   Widget _buildPanel(BuildContext context, List<Widget> children) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final borderColor =
-        isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10);
-
+    final scheme = theme.colorScheme;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Material(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
+        color: theme.cardTheme.color ?? scheme.surface,
         elevation: theme.cardTheme.elevation ?? 0,
         shadowColor: theme.cardTheme.shadowColor,
         clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.cardLg,
-          side: BorderSide(color: borderColor),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardLg, side: BorderSide(color: scheme.outlineVariant)),
         child: Column(children: children),
       ),
     );
@@ -305,73 +241,34 @@ class SettingsPage extends StatelessWidget {
     required VoidCallback onTap,
     bool isLast = false,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.lg,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
         decoration: BoxDecoration(
-          border:
-              isLast
-                  ? null
-                  : Border(
-                    bottom: BorderSide(
-                      color:
-                          isDark
-                              ? const Color(0x1EF4EDD7)
-                              : const Color(0x16241C10),
-                    ),
-                  ),
+          border: isLast ? null : Border(bottom: BorderSide(color: scheme.outlineVariant)),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: AppRadius.cardSm,
-              ),
-              child: Icon(icon, color: accent, size: 18),
-            ),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTextStyles.bodyBase.copyWith(
-                      height: 1.35,
-                      color: isDark ? AppPalette.ink50 : AppPalette.ink700,
-                    ),
-                  ),
-                  if (summary != null) ...[
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      summary,
-                      style: AppTextStyles.bodySm.copyWith(
-                        height: 1.4,
-                        color: isDark ? AppPalette.ink200 : AppPalette.ink300,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Icon(
-              Icons.chevron_right,
-              color: isDark ? AppPalette.ink200 : AppPalette.ink300,
-            ),
-          ],
-        ),
+        child: Row(children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: AppRadius.cardSm),
+            child: Icon(icon, color: scheme.primary, size: 18),
+          ),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: AppTextStyles.bodyBase.copyWith(height: 1.35, color: scheme.onSurface)),
+              if (summary != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(summary, style: AppTextStyles.bodySm.copyWith(height: 1.4, color: scheme.onSurfaceVariant)),
+              ],
+            ]),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+        ]),
       ),
     );
   }
