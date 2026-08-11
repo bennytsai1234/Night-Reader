@@ -15,7 +15,7 @@ class SourceEditBasic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         _buildField(controllers['name']!, '書源名稱', '例如: 筆趣閣'),
         _buildField(controllers['url']!, '書源網址', '例如: https://example.com'),
@@ -40,7 +40,7 @@ class SourceEditBasic extends StatelessWidget {
     int maxLines = 1,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
