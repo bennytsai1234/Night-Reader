@@ -24,9 +24,9 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       appBar: AppBar(title: const Text('外觀與主題')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl,
+          AppSpacing.md,
           AppSpacing.lg,
-          AppSpacing.xl,
+          AppSpacing.md,
           AppSpacing.xxl,
         ),
         children: [
