@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/theme_customization.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<ThemeSettingsProvider>();
+    final appSettings = context.watch<SettingsProvider>();
     return Scaffold(
       appBar: AppBar(title: const Text('外觀與主題')),
       body: ListView(
@@ -32,10 +34,32 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             onSelectionChanged: (value) => setState(() => _area = value.first),
           ),
           const SizedBox(height: 12),
+          if (_area == ThemeArea.app) ...[
+            const Text('App 顯示模式', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, label: Text('跟隨系統')),
+                ButtonSegment(value: ThemeMode.light, label: Text('日間')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('夜間')),
+              ],
+              selected: {appSettings.themeMode},
+              onSelectionChanged: (value) => appSettings.setThemeMode(value.first),
+            ),
+            const SizedBox(height: 16),
+          ],
           SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: false, icon: Icon(Icons.light_mode_outlined), label: Text('日間')),
-              ButtonSegment(value: true, icon: Icon(Icons.dark_mode_outlined), label: Text('夜間')),
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.light_mode_outlined),
+                label: Text('日間設定'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.dark_mode_outlined),
+                label: Text('夜間設定'),
+              ),
             ],
             selected: {_dark},
             onSelectionChanged: (value) => setState(() => _dark = value.first),
@@ -52,9 +76,9 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           ),
           const Divider(height: 28),
           if (_area == ThemeArea.app)
-            ..._buildAppEditors(context, settings)
+            ..._buildAppEditors(settings)
           else
-            ..._buildAreaEditors(context, settings),
+            ..._buildAreaEditors(settings),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () => settings.reset(_area, _dark),
@@ -77,7 +101,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     };
   }
 
-  List<Widget> _buildAppEditors(BuildContext context, ThemeSettingsProvider settings) {
+  List<Widget> _buildAppEditors(ThemeSettingsProvider settings) {
     final colors = _dark ? settings.appDark : settings.appLight;
     final entries = <(String, Color, AppUiThemeColors Function(Color))>[
       ('主色', colors.primary, (v) => colors.copyWith(primary: v)),
@@ -90,14 +114,18 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       ('次要文字', colors.textSecondary, (v) => colors.copyWith(textSecondary: v)),
       ('邊框與分隔線', colors.border, (v) => colors.copyWith(border: v)),
     ];
-    return entries.map((entry) => _ColorTile(
-      label: entry.$1,
-      color: entry.$2,
-      onChanged: (value) => settings.updateApp(_dark, entry.$3(value)),
-    )).toList();
+    return entries
+        .map(
+          (entry) => _ColorTile(
+            label: entry.$1,
+            color: entry.$2,
+            onChanged: (value) => settings.updateApp(_dark, entry.$3(value)),
+          ),
+        )
+        .toList();
   }
 
-  List<Widget> _buildAreaEditors(BuildContext context, ThemeSettingsProvider settings) {
+  List<Widget> _buildAreaEditors(ThemeSettingsProvider settings) {
     final colors = _area == ThemeArea.reader
         ? (_dark ? settings.readerDark : settings.readerLight)
         : (_dark ? settings.menuDark : settings.menuLight);
@@ -106,14 +134,18 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
       ('主要文字', colors.text, (v) => colors.copyWith(text: v)),
       ('次要文字', colors.secondaryText, (v) => colors.copyWith(secondaryText: v)),
       ('主色／選中狀態', colors.accent, (v) => colors.copyWith(accent: v)),
-      ('高亮', colors.highlight, (v) => colors.copyWith(highlight: v)),
+      ('高亮／選中背景', colors.highlight, (v) => colors.copyWith(highlight: v)),
       ('邊框與分隔線', colors.border, (v) => colors.copyWith(border: v)),
     ];
-    return entries.map((entry) => _ColorTile(
-      label: entry.$1,
-      color: entry.$2,
-      onChanged: (value) => settings.updateArea(_area, _dark, entry.$3(value)),
-    )).toList();
+    return entries
+        .map(
+          (entry) => _ColorTile(
+            label: entry.$1,
+            color: entry.$2,
+            onChanged: (value) => settings.updateArea(_area, _dark, entry.$3(value)),
+          ),
+        )
+        .toList();
   }
 }
 
@@ -129,56 +161,116 @@ class _Preview extends StatelessWidget {
     if (area == ThemeArea.app) {
       final c = dark ? settings.appDark : settings.appLight;
       return Container(
-        decoration: BoxDecoration(color: c.background, borderRadius: BorderRadius.circular(16), border: Border.all(color: c.border)),
+        decoration: BoxDecoration(
+          color: c.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: c.border),
+        ),
         clipBehavior: Clip.antiAlias,
-        child: Column(children: [
-          Container(height: 42, color: c.appBar, alignment: Alignment.center, child: Text('夜讀', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold))),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(12)),
-              child: Row(children: [
-                Icon(Icons.auto_stories, color: c.primary),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('主題即時預覽', style: TextStyle(color: c.textPrimary)),
-                  Text('主要畫面、卡片與導覽', style: TextStyle(color: c.textSecondary, fontSize: 12)),
-                ])),
-              ]),
+        child: Column(
+          children: [
+            Container(
+              height: 42,
+              color: c.appBar,
+              alignment: Alignment.center,
+              child: Text(
+                '夜讀',
+                style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-          Container(height: 38, color: c.navigation, alignment: Alignment.center, child: Icon(Icons.home_rounded, color: c.primary)),
-        ]),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_stories, color: c.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('主題即時預覽', style: TextStyle(color: c.textPrimary)),
+                          Text(
+                            '主要畫面、卡片與導覽',
+                            style: TextStyle(color: c.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              height: 38,
+              color: c.navigation,
+              alignment: Alignment.center,
+              child: Icon(Icons.home_rounded, color: c.primary),
+            ),
+          ],
+        ),
       );
     }
+
     final c = area == ThemeArea.reader
         ? (dark ? settings.readerDark : settings.readerLight)
         : (dark ? settings.menuDark : settings.menuLight);
     return Container(
       height: 150,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: c.background, borderRadius: BorderRadius.circular(16), border: Border.all(color: c.border)),
+      decoration: BoxDecoration(
+        color: c.background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border),
+      ),
       child: area == ThemeArea.reader
-          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('第十二章　夜色', style: TextStyle(color: c.accent, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              Text('窗外的風慢慢吹過，紙頁在燈下留下柔和的影子。', style: TextStyle(color: c.text, height: 1.6)),
-              const SizedBox(height: 6),
-              Text('閱讀正文與資訊顏色彼此獨立。', style: TextStyle(color: c.secondaryText, fontSize: 12)),
-            ])
-          : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-              Icon(Icons.list_alt, color: c.text),
-              Icon(Icons.record_voice_over, color: c.accent),
-              Icon(Icons.format_size, color: c.text),
-              Icon(Icons.settings, color: c.secondaryText),
-            ]),
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '第十二章　夜色',
+                  style: TextStyle(color: c.accent, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '窗外的風慢慢吹過，紙頁在燈下留下柔和的影子。',
+                  style: TextStyle(color: c.text, height: 1.6),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '閱讀正文與資訊顏色彼此獨立。',
+                  style: TextStyle(color: c.secondaryText, fontSize: 12),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Icon(Icons.list_alt, color: c.text),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: c.highlight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.record_voice_over, color: c.accent),
+                ),
+                Icon(Icons.format_size, color: c.text),
+                Icon(Icons.settings, color: c.secondaryText),
+              ],
+            ),
     );
   }
 }
 
 class _ColorTile extends StatelessWidget {
   const _ColorTile({required this.label, required this.color, required this.onChanged});
+
   final String label;
   final Color color;
   final ValueChanged<Color> onChanged;
@@ -190,9 +282,20 @@ class _ColorTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(label),
       subtitle: Text('#${hex.substring(2)}'),
-      trailing: Container(width: 36, height: 36, decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.outlineVariant))),
+      trailing: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+      ),
       onTap: () async {
-        final value = await showDialog<Color>(context: context, builder: (_) => _ColorEditorDialog(initial: color));
+        final value = await showDialog<Color>(
+          context: context,
+          builder: (_) => _ColorEditorDialog(initial: color),
+        );
         if (value != null) onChanged(value);
       },
     );
@@ -201,6 +304,7 @@ class _ColorTile extends StatelessWidget {
 
 class _ColorEditorDialog extends StatefulWidget {
   const _ColorEditorDialog({required this.initial});
+
   final Color initial;
 
   @override
@@ -224,16 +328,20 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
     super.dispose();
   }
 
-  String _hexText(Color color) => color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+  String _hexText(Color color) =>
+      color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
 
   void _syncHex() => _hex.text = _hexText(_hsl.toColor());
 
   void _applyHex() {
-    var value = _hex.text.trim().replaceFirst('#', '');
+    final value = _hex.text.trim().replaceFirst('#', '');
     if (value.length != 6) return;
     final parsed = int.tryParse(value, radix: 16);
     if (parsed == null) return;
-    setState(() => _hsl = HSLColor.fromColor(Color(0xFF000000 | parsed)));
+    setState(() {
+      _hsl = HSLColor.fromColor(Color(0xFF000000 | parsed));
+      _syncHex();
+    });
   }
 
   @override
@@ -242,35 +350,73 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
     return AlertDialog(
       title: const Text('調整顏色'),
       content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(height: 64, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12))),
-          const SizedBox(height: 12),
-          TextField(controller: _hex, decoration: const InputDecoration(prefixText: '#', labelText: 'HEX'), onSubmitted: (_) => _applyHex(), onEditingComplete: _applyHex),
-          const SizedBox(height: 10),
-          _slider('色相', _hsl.hue, 0, 360, (v) => _hsl = _hsl.withHue(v)),
-          _slider('飽和度', _hsl.saturation, 0, 1, (v) => _hsl = _hsl.withSaturation(v)),
-          _slider('明度', _hsl.lightness, 0, 1, (v) => _hsl = _hsl.withLightness(v)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 64,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _hex,
+              decoration: const InputDecoration(prefixText: '#', labelText: 'HEX'),
+              onSubmitted: (_) => _applyHex(),
+            ),
+            const SizedBox(height: 10),
+            _slider('色相', _hsl.hue, 0, 360, (v) => _hsl = _hsl.withHue(v)),
+            _slider(
+              '飽和度',
+              _hsl.saturation,
+              0,
+              1,
+              (v) => _hsl = _hsl.withSaturation(v),
+            ),
+            _slider(
+              '明度',
+              _hsl.lightness,
+              0,
+              1,
+              (v) => _hsl = _hsl.withLightness(v),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.pop(context, color), child: const Text('套用')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _hsl.toColor()),
+          child: const Text('套用'),
+        ),
       ],
     );
   }
 
-  Widget _slider(String label, double value, double min, double max, HSLColor Function(double) update) {
-    return Row(children: [
-      SizedBox(width: 58, child: Text(label)),
-      Expanded(child: Slider(
-        value: value.clamp(min, max),
-        min: min,
-        max: max,
-        onChanged: (v) => setState(() {
-          _hsl = update(v);
-          _syncHex();
-        }),
-      )),
-    ]);
+  Widget _slider(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> update,
+  ) {
+    return Row(
+      children: [
+        SizedBox(width: 58, child: Text(label)),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max,
+            onChanged: (v) => setState(() {
+              update(v);
+              _syncHex();
+            }),
+          ),
+        ),
+      ],
+    );
   }
 }
