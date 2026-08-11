@@ -381,11 +381,21 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     SearchBook candidate,
   ) async {
     final runtime = _host.runtime;
+    final currentLocation = runtime?.state.visibleLocation;
     final currentIndex = _currentChapterIndex(runtime);
     final currentTitle = _chapterTitleAt(currentIndex);
+    final switchingBook = widget.book.copyWith(
+      chapterIndex: currentIndex,
+      durChapterTitle:
+          currentTitle.isEmpty ? widget.book.durChapterTitle : currentTitle,
+      charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
+      visualOffsetPx:
+          currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
+    );
     try {
+      await _host.flushProgress();
       final resolution = await _sourceSwitchService.resolveSwitch(
-        widget.book,
+        switchingBook,
         candidate,
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
@@ -397,7 +407,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         bookDao: _host.dependencies.bookDao,
         chapterDao: _host.dependencies.chapterDao,
       );
-      await _host.flushProgress();
       AppEventBus().fire(AppEventBus.upBookshelf);
 
       if (mounted) {
