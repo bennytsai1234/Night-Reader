@@ -5,7 +5,7 @@ import '../../book_detail_provider.dart';
 
 class CoverManualInput extends StatelessWidget {
   final TextEditingController urlController;
-  final Function() onPickImage;
+  final Future<void> Function() onPickImage;
 
   const CoverManualInput({
     super.key,
@@ -31,13 +31,19 @@ class CoverManualInput extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: () {
-              if (urlController.text.isNotEmpty) {
-                context.read<BookDetailProvider>().updateCover(
-                  urlController.text.trim(),
-                );
+            onPressed: () async {
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+              final outcome =
+                  await context.read<BookDetailProvider>().updateCover(url);
+              if (!context.mounted) return;
+              if (outcome.success) {
                 Navigator.pop(context);
+                return;
               }
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(outcome.message)));
             },
             child: const Text('確定'),
           ),
