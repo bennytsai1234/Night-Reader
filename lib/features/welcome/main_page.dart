@@ -199,7 +199,6 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
         bottomNavigationBar: NavigationBar(
-          height: 64,
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             if (_currentIndex == index) {
