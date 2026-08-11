@@ -39,7 +39,7 @@ class TtsSettingsPage extends StatelessWidget {
               return ListTileTheme(
                 data: const ListTileThemeData(
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xl,
+                    horizontal: AppSpacing.md,
                   ),
                 ),
                 child: ListView(
@@ -80,9 +80,9 @@ class TtsSettingsPage extends StatelessWidget {
                     _buildSectionTitle(context, '系統語音'),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.xl,
+                        AppSpacing.md,
                         0,
-                        AppSpacing.xl,
+                        AppSpacing.md,
                         AppSpacing.md,
                       ),
                       child: DropdownButtonFormField<String>(
@@ -127,9 +127,9 @@ class TtsSettingsPage extends StatelessWidget {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.xl,
+                        AppSpacing.md,
                         0,
-                        AppSpacing.xl,
+                        AppSpacing.md,
                         AppSpacing.md,
                       ),
                       child: DropdownButtonFormField<String>(
@@ -190,9 +190,9 @@ class TtsSettingsPage extends StatelessWidget {
   Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Text(
