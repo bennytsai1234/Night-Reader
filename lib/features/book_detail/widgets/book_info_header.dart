@@ -73,15 +73,27 @@ class BookInfoHeader extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.lg),
           Expanded(
-            child: GestureDetector(
-              onTap: onEdit,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(book.name, style: AppTextStyles.titleMd),
-                  const SizedBox(height: 8),
-                  Text('作者：${book.author}', style: AppTextStyles.bodyMd),
-                  const SizedBox(height: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: Text(book.name, style: AppTextStyles.titleMd)),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: '編輯書籍資訊',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('作者：${book.author}', style: AppTextStyles.bodyMd),
+                const SizedBox(height: 4),
+                if (book.isLocal)
+                  Text('來源：${book.originName}', style: AppTextStyles.bodySm)
+                else
                   GestureDetector(
                     onTap: () => showSourceOptions(context, book),
                     child: Text(
@@ -92,62 +104,57 @@ class BookInfoHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _SourceStatusChip(provider: provider),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed:
-                              () => navigateToReader(
-                                context,
-                                book,
-                                ReaderV2OpenTarget.resume(book),
-                                provider.allChapters,
-                              ),
-                          style: actionButtonStyle,
-                          icon: const Icon(Icons.menu_book_rounded, size: 18),
-                          label: Text(
-                            book.chapterIndex == 0 && book.charOffset == 0
-                                ? '開始閱讀'
-                                : '繼續閱讀',
-                          ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _SourceStatusChip(provider: provider),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed:
+                            () => navigateToReader(
+                              context,
+                              book,
+                              ReaderV2OpenTarget.resume(book),
+                              provider.allChapters,
+                            ),
+                        style: actionButtonStyle,
+                        icon: const Icon(Icons.menu_book_rounded, size: 18),
+                        label: Text(
+                          book.chapterIndex == 0 && book.charOffset == 0
+                              ? '開始閱讀'
+                              : '繼續閱讀',
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => toggleBookshelf(context, provider),
-                          style: actionButtonStyle,
-                          icon: Icon(
-                            provider.isInBookshelf
-                                ? Icons.library_add_check
-                                : Icons.library_add,
-                            size: 18,
-                          ),
-                          label: Text(provider.isInBookshelf ? '移出書架' : '放入書架'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => toggleBookshelf(context, provider),
+                        style: actionButtonStyle,
+                        icon: Icon(
+                          provider.isInBookshelf
+                              ? Icons.library_add_check
+                              : Icons.library_add,
+                          size: 18,
                         ),
+                        label: Text(provider.isInBookshelf ? '移出書架' : '放入書架'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+                if (!book.isLocal)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 4,
-                      children: [
-                        TextButton(
-                          onPressed: () => showChangeSource(context, provider),
-                          child: const Text('換源', style: AppTextStyles.labelSm),
-                        ),
-                      ],
+                    child: TextButton(
+                      onPressed: () => showChangeSource(context, provider),
+                      child: const Text('換源', style: AppTextStyles.labelSm),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
         ],
