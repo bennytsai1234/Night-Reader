@@ -6,6 +6,7 @@ import 'core/services/tts_service.dart';
 import 'features/bookshelf/bookshelf_provider.dart';
 import 'features/explore/explore_provider.dart';
 import 'features/settings/settings_provider.dart';
+import 'features/settings/theme_settings_provider.dart';
 import 'features/book_detail/change_cover_provider.dart';
 
 /// AppProviders - 集中管理全域 Provider
@@ -13,6 +14,7 @@ class AppProviders {
   static List<SingleChildWidget> get providers => [
     ChangeNotifierProvider(create: (_) => BookshelfProvider()),
     ChangeNotifierProvider(create: (_) => SettingsProvider()),
+    ChangeNotifierProvider(create: (_) => ThemeSettingsProvider()),
     ChangeNotifierProvider(create: (_) => ChangeCoverProvider()),
     ChangeNotifierProvider<DownloadService>(create: (_) => DownloadService()),
     // TTSService 從 getIt 獲取單例，保持全域一致性
