@@ -38,7 +38,7 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: FilledButton.icon(
                   onPressed: () {
                     setState(() {
@@ -59,7 +59,7 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
 
           return ListTileTheme(
             data: const ListTileThemeData(
-              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             ),
             child: ListView.separated(
               padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
