@@ -58,16 +58,12 @@ final class AdmissionController extends ChangeNotifier {
 
   bool get hasLeadDeficit => needsForwardFriction || needsBackwardFriction;
 
-  // 摩擦連續化參數：領先量 ≤ floor×window 滿摩擦、≥ release×window 完全
-  // 解除，之間 smoothstep；遲滯 latch 須先跌破 engage×window 才開始施加，
-  // 避免 admission 增長觸發 simulation 重建時摩擦在門檻上二態抖動。
   static const double _frictionEngageFraction = 0.8;
   static const double _frictionReleaseFraction = 1.0;
   static const double _frictionFloorFraction = 0.25;
   bool _forwardFrictionLatched = false;
   bool _backwardFrictionLatched = false;
 
-  /// 行進方向的摩擦比例（0=無額外摩擦、1=滿赤字摩擦），連續且帶遲滯。
   double frictionScaleToward({required bool forward}) {
     final latched =
         forward ? _forwardFrictionLatched : _backwardFrictionLatched;
@@ -122,7 +118,18 @@ final class AdmissionController extends ChangeNotifier {
 
   void offer(BlockReady ready) {
     if (ready.epoch != _epoch) return;
-    if (documentIndex.metricsFor(ready.key) != null) return;
+    final existing = documentIndex.metricsFor(ready.key);
+    if (existing != null) {
+      // Paragraph 可能因 LRU、換色或重建而再次量測。若幾何真的改變，不能
+      // 只替換 Paragraph 卻保留舊 extent，否則下一個 block 仍會從舊座標
+      // 開始而造成重疊／裁字。DocumentIndex 會重建 Fenwick 座標並通知
+      // sliver relayout；相同 metrics 則零成本返回。
+      if (existing != ready.metrics) {
+        documentIndex.admit(ready.key, ready.metrics);
+        _scheduleNotify();
+      }
+      return;
+    }
     _pending[ready.key] = ready.metrics;
     _flushPending();
   }
@@ -174,7 +181,6 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   void _flushPending() {
-    // 每個滾動幀都會經 updateViewport 進來；沒有待放行 block 就零成本離開。
     if (_pending.isEmpty) return;
     var changed = false;
     while (true) {
