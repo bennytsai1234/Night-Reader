@@ -57,10 +57,11 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('選取圖片失敗: $e')));
+      }
     }
   }
 
@@ -102,8 +103,12 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
   Widget _buildCoverGrid() {
     return Consumer<ChangeCoverProvider>(
       builder: (context, provider, child) {
-        if (provider.covers.isEmpty && !provider.isSearching)
+        if (!provider.isInitialized) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (provider.covers.isEmpty && !provider.isSearching) {
           return const Center(child: Text('未找到相關封面'));
+        }
         return GridView.builder(
           padding: const EdgeInsets.only(top: AppSpacing.lg),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
