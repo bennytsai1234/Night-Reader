@@ -49,7 +49,7 @@ class BookInfoHeader extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -71,7 +71,7 @@ class BookInfoHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.lg),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
