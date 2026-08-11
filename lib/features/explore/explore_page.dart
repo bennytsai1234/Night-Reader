@@ -6,6 +6,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
@@ -132,9 +133,18 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       return _buildEmptyState(
         theme: theme,
         icon: Icons.travel_explore_outlined,
-        message: '目前無可用發現規則的書源',
+        message: '目前沒有可用的發現書源',
         actions: [
           FilledButton.icon(
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+                ),
+            icon: const Icon(Icons.source_outlined),
+            label: const Text('管理書源'),
+          ),
+          TextButton.icon(
             onPressed: provider.refresh,
             icon: const Icon(Icons.refresh),
             label: const Text('重新整理'),
