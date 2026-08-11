@@ -10,7 +10,7 @@ class SourceEditExplore extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         RuleTextField(
           controller: controllers['exploreUrl']!,
