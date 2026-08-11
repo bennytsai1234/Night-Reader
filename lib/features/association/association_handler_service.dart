@@ -41,29 +41,32 @@ class AssociationHandlerService extends AssociationBase
     sharedMediaSubscription = ReceiveSharingIntent.instance
         .getMediaStream()
         .listen((value) {
-          if (context.mounted)
+          if (context.mounted) {
             handleSharedMedia(
               context,
               value,
               showImportDialog,
-              (ctx, path) => showForceImportDialog(ctx, path, handleSharedBook),
+              showForceImportDialog,
             );
+          }
         }, onError: (err) => AppLog.e('SharingIntent error: $err', error: err));
 
     // Check initial intents
     ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-      if (value.isNotEmpty && context.mounted)
+      if (value.isNotEmpty && context.mounted) {
         handleSharedMedia(
           context,
           value,
           showImportDialog,
-          (ctx, path) => showForceImportDialog(ctx, path, handleSharedBook),
+          showForceImportDialog,
         );
+      }
     });
 
     appLinks.getInitialLink().then((uri) {
-      if (uri != null && context.mounted)
+      if (uri != null && context.mounted) {
         handleUri(context, uri, showImportDialog);
+      }
     });
   }
 }
