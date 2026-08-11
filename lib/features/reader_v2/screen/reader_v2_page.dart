@@ -56,7 +56,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   late final ReaderV2ControllerHost _host;
   late final ReaderV2PageCoordinator _coordinator;
 
-  /// D6：hybrid 引擎回報的「章序 + 章內百分比」，取代舊分頁模型頁碼。
   final ValueNotifier<HybridProgressSnapshot?> _progress =
       ValueNotifier<HybridProgressSnapshot?>(null);
   Size? _lastViewportSize;
@@ -103,8 +102,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _rebuildQueued = false;
       if (mounted) setState(() {});
     });
-    // A pure tap may be the only event; do not wait for a drag animation to
-    // provide the next frame that drains the post-frame rebuild.
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
@@ -219,19 +216,66 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         _host.syncRuntimeConfiguration(runtime, size, style);
 
         final theme = _host.settings.currentTheme;
-        return HybridReaderScreen(
-          runtime: runtime,
-          backgroundColor: theme.backgroundColor,
-          textColor: theme.textColor,
-          style: style,
-          viewportController: _host.viewportController,
-          ttsHighlight: _host.tts?.currentHighlight,
-          onContentTapUp: _handleContentTap,
-          progressListenable: _progress,
-          bookUrl: widget.book.bookUrl,
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            HybridReaderScreen(
+              runtime: runtime,
+              backgroundColor: theme.backgroundColor,
+              textColor: theme.textColor,
+              style: style,
+              viewportController: _host.viewportController,
+              ttsHighlight: _host.tts?.currentHighlight,
+              onContentTapUp: _handleContentTap,
+              progressListenable: _progress,
+              bookUrl: widget.book.bookUrl,
+            ),
+            if (runtime.state.phase == ReaderV2Phase.error)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SafeArea(
+                  minimum: const EdgeInsets.all(24),
+                  child: _buildReaderErrorActions(runtime),
+                ),
+              ),
+          ],
         );
       },
     );
+  }
+
+  Widget _buildReaderErrorActions(ReaderV2Runtime runtime) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.icon(
+          onPressed: () => unawaited(_retryReader(runtime)),
+          icon: const Icon(Icons.refresh),
+          label: const Text('重試'),
+        ),
+        if (!widget.book.isLocal)
+          OutlinedButton.icon(
+            onPressed: _showChangeSource,
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('換源'),
+          ),
+        TextButton.icon(
+          onPressed: _handleExitIntent,
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('返回'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _retryReader(ReaderV2Runtime runtime) async {
+    if (runtime.chapterCount <= 0) {
+      await runtime.openBook();
+      return;
+    }
+    await runtime.reloadContentPreservingLocation();
   }
 
   void _handleContentTap(TapUpDetails details) {
@@ -333,10 +377,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  /// 閱讀器情境的換源回呼。
-  ///
-  /// 成功:對齊目前章節 → 持久化 → flush 進度 → pushReplacement 以新書重開整頁。
-  /// 失敗:回傳失敗訊息,**不 pop、不動 runtime**,完整停留在原源。
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate,
   ) async {
@@ -357,7 +397,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         bookDao: _host.dependencies.bookDao,
         chapterDao: _host.dependencies.chapterDao,
       );
-      // 持久化成功後再 flush 舊源進度,避免換源失敗時污染原書狀態。
       await _host.flushProgress();
       AppEventBus().fire(AppEventBus.upBookshelf);
 
@@ -441,7 +480,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return widget.initialChapters[index].url;
   }
 
-  /// D6：廢除頁碼，狀態列顯示「章序」。
   String _displayChapterLabel(ReaderV2Runtime? runtime) {
     final snapshot = _progress.value;
     if (snapshot != null) return snapshot.chapterLabel;
@@ -451,7 +489,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章 · 本章 ...';
   }
 
-  /// D6：全書百分比（章內未達章尾封頂 99.9%，由 HybridProgress 保證）。
   String _displayChapterPercentLabel(ReaderV2Runtime? runtime) {
     return _progress.value?.percentLabel ?? '全書 ...%';
   }
