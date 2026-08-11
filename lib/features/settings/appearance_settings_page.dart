@@ -333,6 +333,7 @@ class _ColorEditorDialog extends StatefulWidget {
 class _ColorEditorDialogState extends State<_ColorEditorDialog> {
   late HSLColor _hsl;
   late final TextEditingController _hex;
+  String? _hexError;
 
   @override
   void initState() {
@@ -350,17 +351,38 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
   String _hexText(Color color) =>
       color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
 
-  void _syncHex() => _hex.text = _hexText(_hsl.toColor());
+  void _syncHex() {
+    _hex.text = _hexText(_hsl.toColor());
+    _hexError = null;
+  }
+
+  Color? _parseHex() {
+    final value = _hex.text.trim().replaceFirst('#', '');
+    if (value.length != 6) return null;
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) return null;
+    return Color(0xFF000000 | parsed);
+  }
 
   void _applyHex() {
-    final value = _hex.text.trim().replaceFirst('#', '');
-    if (value.length != 6) return;
-    final parsed = int.tryParse(value, radix: 16);
-    if (parsed == null) return;
+    final color = _parseHex();
     setState(() {
-      _hsl = HSLColor.fromColor(Color(0xFF000000 | parsed));
+      if (color == null) {
+        _hexError = '請輸入 6 位 HEX 顏色';
+        return;
+      }
+      _hsl = HSLColor.fromColor(color);
       _syncHex();
     });
+  }
+
+  void _submit() {
+    final color = _parseHex();
+    if (color == null) {
+      setState(() => _hexError = '請輸入 6 位 HEX 顏色');
+      return;
+    }
+    Navigator.pop(context, color);
   }
 
   @override
@@ -382,8 +404,15 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
             const SizedBox(height: 12),
             TextField(
               controller: _hex,
-              decoration: const InputDecoration(prefixText: '#', labelText: 'HEX'),
+              decoration: InputDecoration(
+                prefixText: '#',
+                labelText: 'HEX',
+                errorText: _hexError,
+              ),
               onSubmitted: (_) => _applyHex(),
+              onChanged: (_) {
+                if (_hexError != null) setState(() => _hexError = null);
+              },
             ),
             const SizedBox(height: 10),
             _slider('色相', _hsl.hue, 0, 360, (v) => _hsl = _hsl.withHue(v)),
@@ -406,10 +435,7 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _hsl.toColor()),
-          child: const Text('套用'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('套用')),
       ],
     );
   }
