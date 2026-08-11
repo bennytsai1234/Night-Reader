@@ -7,6 +7,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_m
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
 
 class ReaderV2PageShell extends StatelessWidget {
   const ReaderV2PageShell({
@@ -245,6 +246,15 @@ class _PermanentInfoBar extends StatelessWidget {
       percentLabel,
       if (shell.isAutoPaging) '自動翻頁中',
     ].join('，');
+    final dark = shell.backgroundColor.computeLuminance() < 0.5;
+    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
+      dark: dark,
+      menu: false,
+    );
+    final infoColor =
+        custom?.secondaryText ?? shell.textColor.withValues(alpha: 0.68);
+    final accentColor = custom?.accent ?? infoColor;
+    final borderColor = custom?.border;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -255,6 +265,14 @@ class _PermanentInfoBar extends StatelessWidget {
             shell.backgroundColor.withValues(alpha: 0.88),
           ],
         ),
+        border:
+            borderColor == null
+                ? null
+                : Border(
+                  top: BorderSide(
+                    color: borderColor.withValues(alpha: 0.45),
+                  ),
+                ),
       ),
       child: Semantics(
         container: true,
@@ -269,10 +287,7 @@ class _PermanentInfoBar extends StatelessWidget {
                   kReaderPermanentInfoBottomSpacing,
             ),
             child: DefaultTextStyle(
-              style: TextStyle(
-                color: shell.textColor.withValues(alpha: 0.68),
-                fontSize: 11,
-              ),
+              style: TextStyle(color: infoColor, fontSize: 11),
               child: Row(
                 children: [
                   Expanded(
@@ -282,7 +297,7 @@ class _PermanentInfoBar extends StatelessWidget {
                           Icon(
                             Icons.auto_stories_outlined,
                             size: 13,
-                            color: shell.textColor.withValues(alpha: 0.68),
+                            color: accentColor,
                           ),
                           const SizedBox(width: 4),
                           const Text('自動翻頁中'),
