@@ -113,7 +113,6 @@ void main() {
     expect(ends, hasLength(1));
     expect(ends.single, greaterThan(25));
     expect(ends.single, lessThanOrEqualTo(100));
-    // 十等份：拖動中回報的都是檔位值。
     expect(updates.every((value) => value % 10 == 0), isTrue);
     expect(ends.single % 10, 0);
   });
@@ -142,8 +141,8 @@ void main() {
     expect(find.text('本章 4/10'), findsOneWidget);
     expect(find.text('目錄'), findsOneWidget);
     expect(find.text('朗讀'), findsOneWidget);
-    expect(find.text('介面'), findsOneWidget);
-    expect(find.text('設定'), findsOneWidget);
+    expect(find.text('排版'), findsOneWidget);
+    expect(find.text('進階'), findsOneWidget);
     expect(find.text('換源'), findsNothing);
   });
 }
