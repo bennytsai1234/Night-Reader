@@ -11,6 +11,7 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/search/search_page.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
@@ -51,9 +52,6 @@ class _MainPageState extends State<MainPage> {
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
-  // 一段式啟動:main.dart 的 FlutterNativeSplash.preserve() 延後首幀,讓原生
-  // splash(主題色純色底 + AVD 動畫圖示)從點圖標一路撐到書架首批書載完才放行;
-  // 若超過逾時上限，則由不攔截操作的 Flutter loading overlay 接手。
   bool _nativeSplashReleaseScheduled = false;
   bool _showStartupLoadingOverlay = false;
   DateTime? _splashHeldAt;
@@ -61,8 +59,6 @@ class _MainPageState extends State<MainPage> {
   VoidCallback? _splashShelfListener;
   Timer? _splashTimeoutTimer;
 
-  // 最短顯示時間讓原生圖示動畫(約 1000ms,首幀回呼前已播一段)不被腰斬;
-  // 逾時保險避免書架查詢異常卡住開機。
   static const _splashMinDisplay = Duration(milliseconds: 900);
   static const _splashShelfTimeout = Duration(seconds: 2);
 
@@ -96,7 +92,6 @@ class _MainPageState extends State<MainPage> {
         _releaseSplashWhenShelfReady();
       }
       if (widget.destinations == null) {
-        // 僅真實 app 路徑;測試注入 destinations 時不觸碰 platform channel。
         unawaited(_runAutomaticUpdateCheck());
       }
     });
@@ -104,6 +99,14 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final shelf = context.watch<BookshelfProvider?>();
+    final showEmptyShelfAction =
+        widget.destinations == null &&
+        _currentIndex == 0 &&
+        shelf != null &&
+        !shelf.isLoading &&
+        shelf.books.isEmpty;
+
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -160,6 +163,18 @@ class _MainPageState extends State<MainPage> {
             ),
           ],
         ),
+        floatingActionButton:
+            showEmptyShelfAction
+                ? FloatingActionButton.extended(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SearchPage()),
+                      ),
+                  icon: const Icon(Icons.search),
+                  label: const Text('搜尋書籍'),
+                )
+                : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
@@ -198,15 +213,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _defaultDoubleTap(BuildContext context, int index) {
-    // 預設 double-tap 行為僅針對預設 destinations(書架在 index 0)
     if (widget.destinations != null) return;
     if (index == 0) {
       context.read<BookshelfProvider>().loadBooks();
     }
   }
 
-  // 書架首批書載完(或逾時)才呼叫 FlutterNativeSplash.remove() 放行首幀,
-  // 原生 splash 一路把持畫面,首幀即為填好的書架、不閃轉圈。
   void _releaseSplashWhenShelfReady() {
     _splashHeldAt = DateTime.now();
     final shelf = context.read<BookshelfProvider?>();
@@ -254,8 +266,6 @@ class _MainPageState extends State<MainPage> {
     _releaseNativeSplashOnce();
   }
 
-  // 書架就緒後放行;若距首幀回呼未滿 _splashMinDisplay 則補足,
-  // 讓原生圖示動畫播完、不因小書架瞬間載完而腰斬。
   void _releaseNativeSplashOnce() {
     if (_nativeSplashReleaseScheduled) return;
     _nativeSplashReleaseScheduled = true;
