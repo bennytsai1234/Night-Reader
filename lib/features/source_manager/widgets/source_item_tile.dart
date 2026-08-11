@@ -53,9 +53,9 @@ class SourceItemTile extends StatelessWidget {
         if (showHostHeader)
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
               AppSpacing.md,
-              AppSpacing.xl,
+              AppSpacing.md,
+              AppSpacing.md,
               AppSpacing.xs,
             ),
             child: Text(
