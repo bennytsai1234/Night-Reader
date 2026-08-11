@@ -22,6 +22,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
     menuDarkCustom = _prefs.getBool(_kMenuDarkCustom) ?? false;
     readerMode = AreaThemeMode.fromStorage(_prefs.getString(_kReaderMode));
     menuMode = AreaThemeMode.fromStorage(_prefs.getString(_kMenuMode));
+    _activeInstance = this;
   }
 
   static const _kAppLight = 'theme_app_light_custom_v1';
@@ -41,6 +42,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   static const _kReaderMode = 'theme_reader_mode_v1';
   static const _kMenuMode = 'theme_menu_mode_v1';
 
+  static ThemeSettingsProvider? _activeInstance;
   final SharedPreferences _prefs;
 
   late AppUiThemeColors appLight;
@@ -222,6 +224,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
       area == ThemeArea.reader ? _kReaderMode : _kMenuMode,
       mode.storageValue,
     );
+    final active = _activeInstance;
+    if (active == null) return;
+    if (area == ThemeArea.reader) {
+      active.readerMode = mode;
+    } else {
+      active.menuMode = mode;
+    }
+    active.notifyListeners();
   }
 
   static bool resolveAreaDarkMode(ThemeArea area, {bool fallback = false}) {
@@ -231,16 +241,12 @@ class ThemeSettingsProvider extends ChangeNotifier {
         return false;
       case AreaThemeMode.dark:
         return true;
-      case AreaThemeMode.followApp:
-        return _resolveAppDarkMode(fallback: fallback);
+      case AreaThemeMode.followSystem:
+        return _resolveSystemDarkMode(fallback: fallback);
     }
   }
 
-  static bool _resolveAppDarkMode({required bool fallback}) {
-    final prefs = _registeredPrefs();
-    final mode = prefs?.getString('themeMode') ?? 'system';
-    if (mode == 'light') return false;
-    if (mode == 'dark') return true;
+  static bool _resolveSystemDarkMode({required bool fallback}) {
     try {
       return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark;
@@ -291,7 +297,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
     final colors = resolveReaderAreaColors(dark: dark, menu: menu);
     if (colors == null) return fallback;
     return ReadingTheme(
-      name: dark ? '自訂夜間' : '自訂日間',
+      name: dark ? '自訂深色' : '自訂淺色',
       backgroundColor: colors.background,
       textColor: colors.text,
     );
@@ -308,6 +314,12 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (prefs == null) return;
     prefs.setInt(dark ? _kMenuNightIndex : _kMenuDayIndex, value);
   }
+
+  @override
+  void dispose() {
+    if (identical(_activeInstance, this)) _activeInstance = null;
+    super.dispose();
+  }
 }
 
 enum ThemeArea { app, reader, menu }
@@ -315,19 +327,20 @@ enum ThemeArea { app, reader, menu }
 enum AreaThemeMode {
   light,
   dark,
-  followApp;
+  followSystem;
 
   String get storageValue => switch (this) {
     AreaThemeMode.light => 'light',
     AreaThemeMode.dark => 'dark',
-    AreaThemeMode.followApp => 'followApp',
+    AreaThemeMode.followSystem => 'system',
   };
 
   static AreaThemeMode fromStorage(String? value) {
     return switch (value) {
       'light' => AreaThemeMode.light,
       'dark' => AreaThemeMode.dark,
-      _ => AreaThemeMode.followApp,
+      'system' || 'followApp' => AreaThemeMode.followSystem,
+      _ => AreaThemeMode.followSystem,
     };
   }
 }
