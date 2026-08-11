@@ -129,12 +129,18 @@ class _ReaderV2ReplaceRuleEditorSheetState
       ).showSnackBar(const SnackBar(content: Text('規則格式無效，請檢查正則內容')));
       return;
     }
-    setState(() {
-      _saving = true;
-    });
-    await widget.onSave(rule);
-    if (!mounted) return;
-    Navigator.pop(context);
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(rule);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('儲存規則失敗：$error')));
+      setState(() => _saving = false);
+    }
   }
 
   @override
@@ -144,7 +150,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
       icon: Icons.rule_rounded,
       trailing: TextButton(
         onPressed: _saving ? null : _save,
-        child: const Text('儲存'),
+        child: Text(_saving ? '儲存中…' : '儲存'),
       ),
       children: [
         Form(
