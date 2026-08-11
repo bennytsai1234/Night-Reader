@@ -37,10 +37,7 @@ const List<MainDestination> _defaultDestinations = [
 class MainPage extends StatefulWidget {
   const MainPage({super.key, this.destinations, this.onDestinationDoubleTap});
 
-  /// 自訂分頁清單;測試時用以避免拉入真實 page 的 deps。預設為 [_defaultDestinations]。
   final List<MainDestination>? destinations;
-
-  /// 同一個 destination 被快速連點兩次時觸發。預設邏輯:書架 → loadBooks()。
   final MainDestinationDoubleTapCallback? onDestinationDoubleTap;
 
   @override
@@ -100,11 +97,17 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     final shelf = context.watch<BookshelfProvider?>();
-    final showEmptyShelfAction =
-        widget.destinations == null &&
-        _currentIndex == 0 &&
+    final isRealShelfTab = widget.destinations == null && _currentIndex == 0;
+    final showShelfLoadError =
+        isRealShelfTab &&
         shelf != null &&
         !shelf.isLoading &&
+        shelf.loadErrorMessage != null;
+    final showEmptyShelfAction =
+        isRealShelfTab &&
+        shelf != null &&
+        !shelf.isLoading &&
+        shelf.loadErrorMessage == null &&
         shelf.books.isEmpty;
 
     return PopScope<void>(
@@ -161,6 +164,39 @@ class _MainPageState extends State<MainPage> {
                 ),
               ),
             ),
+            if (showShelfLoadError)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 52,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            shelf.loadErrorMessage!,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: shelf.loadBooks,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重試'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         floatingActionButton:
