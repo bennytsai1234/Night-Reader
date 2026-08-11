@@ -60,6 +60,7 @@ class BookSourceService {
       book,
       chapter,
       nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
     );
   }
