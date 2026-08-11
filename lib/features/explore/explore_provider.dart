@@ -22,34 +22,31 @@ class ExploreProvider extends ChangeNotifier {
   final ExploreKindsLoader _kindsLoader;
   StreamSubscription<List<BookSource>>? _sourceSubscription;
 
-  // --- 書源列表 ---
   List<BookSource> _allSources = [];
   List<BookSource> _filteredSources = [];
   String _searchQuery = '';
+  bool _isLoadingSources = true;
+  String? _sourceLoadError;
 
-  // --- 展開狀態 (同一時間只展開一個書源) ---
   int _expandedIndex = -1;
   List<ExploreKind> _expandedKinds = [];
   bool _isLoadingKinds = false;
   int _kindsRequestGeneration = 0;
 
-  // --- 分組 ---
   List<String> _groups = [];
   String? _selectedGroup;
 
-  // --- ExploreKind 快取 (對標 Android exploreKindsMap) ---
-  // Legado 以 bookSourceUrl + exploreUrl 作為分類快取鍵，規則變更後會自動
-  // 重新解析，不會沿用舊分類。
   final Map<String, List<ExploreKind>> _kindsCache = {};
   final Map<String, int> _latestKindsRequestByCacheKey = {};
 
-  // --- Getters ---
   List<BookSource> get sources => _filteredSources;
   List<String> get groups => _groups;
   String? get selectedGroup => _selectedGroup;
   int get expandedIndex => _expandedIndex;
   List<ExploreKind> get expandedKinds => _expandedKinds;
   bool get isLoadingKinds => _isLoadingKinds;
+  bool get isLoadingSources => _isLoadingSources;
+  String? get sourceLoadError => _sourceLoadError;
   String get searchQuery => _searchQuery;
   bool get isEmpty => _filteredSources.isEmpty;
 
@@ -60,15 +57,35 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   void _bindSources() {
-    _sourceSubscription = _sourceDao.watchDiscoveryPart().listen((sources) {
-      _reloadFromSnapshot(sources);
-    });
+    _sourceSubscription = _sourceDao.watchDiscoveryPart().listen(
+      (sources) {
+        _isLoadingSources = false;
+        _sourceLoadError = null;
+        _reloadFromSnapshot(sources);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppLog.e('載入發現書源失敗', error: error, stackTrace: stackTrace);
+        _isLoadingSources = false;
+        _sourceLoadError = '發現書源載入失敗';
+        notifyListeners();
+      },
+    );
   }
 
-  /// 載入所有啟用探索的書源
   Future<void> _loadSources() async {
-    final allSources = await _sourceDao.getDiscoveryPart();
-    _reloadFromSnapshot(allSources);
+    _isLoadingSources = true;
+    _sourceLoadError = null;
+    notifyListeners();
+    try {
+      final allSources = await _sourceDao.getDiscoveryPart();
+      _isLoadingSources = false;
+      _reloadFromSnapshot(allSources);
+    } catch (error, stackTrace) {
+      AppLog.e('重新載入發現書源失敗', error: error, stackTrace: stackTrace);
+      _isLoadingSources = false;
+      _sourceLoadError = '發現書源載入失敗';
+      notifyListeners();
+    }
   }
 
   Future<BookSource?> getFullSource(String url) {
@@ -88,12 +105,11 @@ class ExploreProvider extends ChangeNotifier {
         sources.where((source) => source.canParticipateInDiscovery).toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 
-    // 提取分組
     final groupSet = <String>{};
-    for (final s in _allSources) {
-      if (s.bookSourceGroup != null && s.bookSourceGroup!.isNotEmpty) {
-        for (final g in s.bookSourceGroup!.split(RegExp(r'[,，]'))) {
-          final trimmed = g.trim();
+    for (final source in _allSources) {
+      if (source.bookSourceGroup != null && source.bookSourceGroup!.isNotEmpty) {
+        for (final group in source.bookSourceGroup!.split(RegExp(r'[,，]'))) {
+          final trimmed = group.trim();
           if (trimmed.isNotEmpty) groupSet.add(trimmed);
         }
       }
@@ -130,7 +146,6 @@ class ExploreProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 搜索過濾 (對標 Android SearchView onQueryTextChange)
   void setSearchQuery(String query) {
     _searchQuery = query;
     _invalidateKindsRequest();
@@ -140,7 +155,6 @@ class ExploreProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 分組過濾 (對標 Android groupsMenu)
   void setGroupFilter(String? group) {
     if (_selectedGroup == group) {
       _selectedGroup = null;
@@ -155,35 +169,30 @@ class ExploreProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 應用過濾邏輯
   void _applyFilter() {
     if (_selectedGroup != null) {
-      // 按分組過濾 (對標 Android flowGroupExplore)
       _filteredSources =
-          _allSources.where((s) {
-            if (s.bookSourceGroup == null) return false;
-            final groups = s.bookSourceGroup!
+          _allSources.where((source) {
+            if (source.bookSourceGroup == null) return false;
+            final groups = source.bookSourceGroup!
                 .split(RegExp(r'[,，]'))
-                .map((e) => e.trim());
+                .map((value) => value.trim());
             return groups.contains(_selectedGroup);
           }).toList();
     } else if (_searchQuery.isNotEmpty) {
-      // 按關鍵字過濾 (對標 Android flowExplore(key))
       final key = _searchQuery.toLowerCase();
       _filteredSources =
-          _allSources.where((s) {
-            return s.bookSourceName.toLowerCase().contains(key) ||
-                (s.bookSourceGroup?.toLowerCase().contains(key) ?? false);
+          _allSources.where((source) {
+            return source.bookSourceName.toLowerCase().contains(key) ||
+                (source.bookSourceGroup?.toLowerCase().contains(key) ?? false);
           }).toList();
     } else {
       _filteredSources = List.from(_allSources);
     }
   }
 
-  /// 展開/收合書源 (對標 Android ExploreAdapter llTitle.setOnClickListener)
   Future<void> toggleExpand(int index) async {
     if (_expandedIndex == index) {
-      // 收合
       _invalidateKindsRequest();
       _expandedIndex = -1;
       _expandedKinds = [];
@@ -201,7 +210,6 @@ class ExploreProvider extends ChangeNotifier {
     await _loadKindsForSource(source, requestGeneration);
   }
 
-  /// 為書源載入分類標籤 (帶快取，對標 Android exploreKinds())
   Future<void> _loadKindsForSource(
     BookSource source,
     int requestGeneration,
@@ -226,11 +234,11 @@ class ExploreProvider extends ChangeNotifier {
       if (_isCurrentKindsRequest(source, requestGeneration)) {
         _expandedKinds = kinds;
       }
-    } catch (e) {
-      AppLog.e('載入探索分類失敗', error: e);
+    } catch (error) {
+      AppLog.e('載入探索分類失敗', error: error);
       if (_isCurrentKindsRequest(source, requestGeneration)) {
         _expandedKinds = [
-          ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString()),
+          ExploreKind(title: 'ERROR:$error', url: error.toString()),
         ];
       }
     } finally {
@@ -258,7 +266,6 @@ class ExploreProvider extends ChangeNotifier {
     return '${source.bookSourceUrl}\n${source.exploreUrl ?? ''}';
   }
 
-  /// 刷新分類快取 (對標 Android menu_refresh / clearExploreKindsCache)
   Future<void> refreshKindsCache(BookSource source) async {
     final cacheKey = _cacheKeyForSource(source);
     _kindsCache.remove(cacheKey);
@@ -266,8 +273,7 @@ class ExploreProvider extends ChangeNotifier {
     await ExploreUrlParser.clearCache(source, exploreUrl: source.exploreUrl);
     if (_expandedIndex >= 0 &&
         _expandedIndex < _filteredSources.length &&
-        _filteredSources[_expandedIndex].bookSourceUrl ==
-            source.bookSourceUrl) {
+        _filteredSources[_expandedIndex].bookSourceUrl == source.bookSourceUrl) {
       final requestGeneration = ++_kindsRequestGeneration;
       _isLoadingKinds = true;
       _expandedKinds = [];
@@ -276,19 +282,17 @@ class ExploreProvider extends ChangeNotifier {
     }
   }
 
-  /// 置頂書源 (對標 Android ExploreViewModel.topSource)
   Future<void> topSource(BookSource source) async {
     final minOrder =
         _allSources.isEmpty
             ? 0
             : _allSources
-                .map((s) => s.customOrder)
+                .map((item) => item.customOrder)
                 .reduce((a, b) => a < b ? a : b);
     await _sourceDao.updateCustomOrderByUrl(source.bookSourceUrl, minOrder - 1);
     await _loadSources();
   }
 
-  /// 刪除書源 (對標 Android ExploreViewModel.deleteSource)
   Future<void> deleteSource(BookSource source) async {
     await _sourceDao.deleteByUrl(source.bookSourceUrl);
     _kindsCache.removeWhere(
@@ -300,7 +304,6 @@ class ExploreProvider extends ChangeNotifier {
     await _loadSources();
   }
 
-  /// 重新載入所有書源
   Future<void> refresh() async {
     _expandedIndex = -1;
     _expandedKinds = [];
