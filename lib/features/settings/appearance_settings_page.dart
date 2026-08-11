@@ -40,30 +40,49 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             SegmentedButton<ThemeMode>(
               segments: const [
                 ButtonSegment(value: ThemeMode.system, label: Text('跟隨系統')),
-                ButtonSegment(value: ThemeMode.light, label: Text('淺色')),
-                ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
+                ButtonSegment(value: ThemeMode.light, label: Text('淺色方案')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('深色方案')),
               ],
               selected: {appSettings.themeMode},
               onSelectionChanged: (value) => appSettings.setThemeMode(value.first),
             ),
+            const SizedBox(height: 8),
+            Text(
+              '跟隨系統時，手機為淺色就套用淺色方案，手機為深色就套用深色方案。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 16),
           ] else ...[
             Text(
-              _area == ThemeArea.reader ? '閱讀顯示模式' : '閱讀選單顯示模式',
+              _area == ThemeArea.reader ? '閱讀方案切換' : '閱讀選單方案切換',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             SegmentedButton<AreaThemeMode>(
               segments: const [
-                ButtonSegment(value: AreaThemeMode.followApp, label: Text('跟隨 App')),
-                ButtonSegment(value: AreaThemeMode.light, label: Text('淺色')),
-                ButtonSegment(value: AreaThemeMode.dark, label: Text('深色')),
+                ButtonSegment(
+                  value: AreaThemeMode.followSystem,
+                  label: Text('跟隨系統'),
+                ),
+                ButtonSegment(
+                  value: AreaThemeMode.light,
+                  label: Text('淺色方案'),
+                ),
+                ButtonSegment(
+                  value: AreaThemeMode.dark,
+                  label: Text('深色方案'),
+                ),
               ],
               selected: {
                 _area == ThemeArea.reader ? settings.readerMode : settings.menuMode,
               },
               onSelectionChanged: (value) =>
                   settings.setAreaMode(_area, value.first),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '淺色與深色各使用自己的配色方案；跟隨系統只負責依手機目前模式選擇要套用哪一套。',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
           ],
@@ -72,12 +91,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
               ButtonSegment(
                 value: false,
                 icon: Icon(Icons.light_mode_outlined),
-                label: Text('淺色設定'),
+                label: Text('編輯淺色方案'),
               ),
               ButtonSegment(
                 value: true,
                 icon: Icon(Icons.dark_mode_outlined),
-                label: Text('深色設定'),
+                label: Text('編輯深色方案'),
               ),
             ],
             selected: {_dark},
@@ -102,7 +121,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           OutlinedButton.icon(
             onPressed: () => settings.reset(_area, _dark),
             icon: const Icon(Icons.restart_alt),
-            label: const Text('恢復這組自訂色為預設值'),
+            label: Text(_dark ? '恢復深色方案預設值' : '恢復淺色方案預設值'),
           ),
         ],
       ),
@@ -193,7 +212,7 @@ class _Preview extends StatelessWidget {
               color: c.appBar,
               alignment: Alignment.center,
               child: Text(
-                '夜讀',
+                dark ? '深色方案預覽' : '淺色方案預覽',
                 style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold),
               ),
             ),
@@ -252,7 +271,7 @@ class _Preview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '第十二章　夜色',
+                  dark ? '深色閱讀方案' : '淺色閱讀方案',
                   style: TextStyle(color: c.accent, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
@@ -262,7 +281,7 @@ class _Preview extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '閱讀正文與資訊顏色彼此獨立。',
+                  '方案名稱只代表切換槽位，實際顏色由你自訂。',
                   style: TextStyle(color: c.secondaryText, fontSize: 12),
                 ),
               ],
