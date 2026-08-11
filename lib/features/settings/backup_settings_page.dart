@@ -23,7 +23,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       appBar: AppBar(title: const Text('備份與還原')),
       body: ListTileTheme(
         data: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
         ),
         child: ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
@@ -61,9 +61,9 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Text(
