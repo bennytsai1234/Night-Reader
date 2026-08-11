@@ -32,13 +32,13 @@ class SettingsPage extends StatelessWidget {
         children: [
           _buildProfileCard(context),
 
-          _buildSectionTitle(context, '主題與外觀'),
+          _buildSectionTitle(context, '閱讀'),
           _buildPanel(context, [
             _buildListTile(
               context,
-              icon: Icons.palette_outlined,
-              title: '閱讀設定',
-              summary: '調整排版、操作與內容轉換',
+              icon: Icons.tune_outlined,
+              title: '閱讀偏好',
+              summary: '調整操作、自動翻頁與內容轉換',
               onTap:
                   () => Navigator.push(
                     context,
