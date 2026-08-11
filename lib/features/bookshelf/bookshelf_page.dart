@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
-import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
@@ -119,6 +118,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   : [
                     IconButton(
                       icon: const Icon(Icons.search),
+                      tooltip: '搜尋書籍',
                       onPressed:
                           () => Navigator.push(
                             context,
@@ -151,7 +151,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                                 children: [
                                   Icon(Icons.file_open_outlined, size: 20),
                                   SizedBox(width: 12),
-                                  Text('添加本地'),
+                                  Text('加入本地書籍'),
                                 ],
                               ),
                             ),
@@ -342,7 +342,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
   Future<void> _handleBookshelfImport(BuildContext context) async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json', 'zip'],
+      allowedExtensions: ['json'],
     );
     if (result == null ||
         result.files.single.path == null ||
@@ -351,27 +351,27 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     final path = result.files.single.path!;
     try {
-      if (path.toLowerCase().endsWith('.zip')) {
-        final restored = await RestoreService().restoreFromZip(File(path));
-        if (!context.mounted) return;
+      final imported = await BookshelfExchangeService().importFromFile(
+        File(path),
+      );
+      if (!context.mounted) return;
+      final importedTotal =
+          imported.books + imported.chapters + imported.sources + imported.contents;
+      if (importedTotal == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(restored ? '備份還原完成，請重新開啟相關頁面確認資料' : '備份還原失敗')),
+          const SnackBar(content: Text('未找到可匯入的書架資料')),
         );
-      } else {
-        final imported = await BookshelfExchangeService().importFromFile(
-          File(path),
-        );
-        if (!context.mounted) return;
-        context.read<BookshelfProvider>().loadBooks();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
-              '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
-            ),
-          ),
-        );
+        return;
       }
+      context.read<BookshelfProvider>().loadBooks();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
+            '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
+          ),
+        ),
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
