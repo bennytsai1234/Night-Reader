@@ -159,11 +159,17 @@ class ThemeSettingsProvider extends ChangeNotifier {
     }
   }
 
+  static SharedPreferences? _registeredPrefs() {
+    if (!getIt.isRegistered<SharedPreferences>()) return null;
+    return getIt<SharedPreferences>();
+  }
+
   static ReaderAreaThemeColors? resolveReaderAreaColors({
     required bool dark,
     required bool menu,
   }) {
-    final prefs = getIt<SharedPreferences>();
+    final prefs = _registeredPrefs();
+    if (prefs == null) return null;
     final useCustom = prefs.getBool(
           menu
               ? (dark ? _kMenuDarkCustom : _kMenuLightCustom)
@@ -203,12 +209,15 @@ class ThemeSettingsProvider extends ChangeNotifier {
   }
 
   static int menuBuiltInIndex(bool dark, int fallback) {
-    final prefs = getIt<SharedPreferences>();
+    final prefs = _registeredPrefs();
+    if (prefs == null) return fallback;
     return prefs.getInt(dark ? _kMenuNightIndex : _kMenuDayIndex) ?? fallback;
   }
 
   static void saveMenuBuiltInIndex(bool dark, int value) {
-    getIt<SharedPreferences>().setInt(dark ? _kMenuNightIndex : _kMenuDayIndex, value);
+    final prefs = _registeredPrefs();
+    if (prefs == null) return;
+    prefs.setInt(dark ? _kMenuNightIndex : _kMenuDayIndex, value);
   }
 }
 
