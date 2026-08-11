@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
@@ -28,10 +29,18 @@ class BookshelfProvider extends BookshelfProviderBase
   @override
   Future<void> loadBooks() async {
     isLoading = true;
+    loadErrorMessage = null;
     notifyListeners();
     try {
       books = await bookDao.getInBookshelf();
       _sortBooks();
+    } catch (error, stackTrace) {
+      AppLog.e(
+        '載入書架失敗: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      loadErrorMessage = '書架載入失敗，請重試';
     } finally {
       isLoading = false;
       notifyListeners();
