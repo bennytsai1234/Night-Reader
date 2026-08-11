@@ -29,10 +29,9 @@ class SettingsPage extends StatelessWidget {
         centerTitle: false,
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         children: [
           _buildProfileCard(context),
-
           _buildSectionTitle(context, '閱讀'),
           _buildPanel(context, [
             _buildListTile(
@@ -63,7 +62,6 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '書源'),
           _buildPanel(context, [
             _buildListTile(
@@ -80,7 +78,6 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '個人化'),
           _buildPanel(context, [
             _buildListTile(
@@ -109,7 +106,6 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '工具與其他'),
           _buildPanel(context, [
             _buildListTile(
@@ -137,17 +133,20 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xxl),
           Center(
-            child: Text(
-              '夜讀 · GPL-3.0',
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                letterSpacing: 2.0,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              child: Text(
+                '夜讀 · GPL-3.0',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.labelSm.copyWith(
+                  height: 1.4,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  letterSpacing: 1.4,
+                ),
               ),
             ),
           ),
@@ -162,8 +161,11 @@ class SettingsPage extends StatelessWidget {
     final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.md,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
         border: Border.all(
@@ -199,7 +201,7 @@ class SettingsPage extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,11 +216,11 @@ class SettingsPage extends StatelessWidget {
                     color: isDark ? AppPalette.ink50 : AppPalette.ink700,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   '閱讀，從這裡開始',
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: AppTextStyles.bodySm.copyWith(
+                    height: 1.4,
                     color: isDark ? AppPalette.ink200 : AppPalette.ink300,
                   ),
                 ),
@@ -226,18 +228,21 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: AppRadius.pillShape,
             ),
             child: Text(
               '本地',
-              style: TextStyle(
-                fontSize: 10,
+              style: AppTextStyles.labelXs.copyWith(
+                height: 1.2,
                 fontWeight: FontWeight.w600,
                 color: accent,
-                letterSpacing: 0.5,
+                letterSpacing: 0.3,
               ),
             ),
           ),
@@ -252,14 +257,19 @@ class SettingsPage extends StatelessWidget {
     final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
 
     return Padding(
-      padding: const EdgeInsets.only(left: 22, right: 22, top: 20, bottom: 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.sm,
+      ),
       child: Text(
         title,
-        style: TextStyle(
-          fontSize: 10,
-          letterSpacing: 2.4,
+        style: AppTextStyles.labelSm.copyWith(
+          height: 1.3,
+          letterSpacing: 1.4,
           color: accent,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -272,7 +282,7 @@ class SettingsPage extends StatelessWidget {
         isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Material(
         color: theme.cardTheme.color ?? theme.colorScheme.surface,
         elevation: theme.cardTheme.elevation ?? 0,
@@ -302,7 +312,10 @@ class SettingsPage extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
         decoration: BoxDecoration(
           border:
               isLast
@@ -327,24 +340,24 @@ class SettingsPage extends StatelessWidget {
               ),
               child: Icon(icon, color: accent, size: 18),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 14,
+                    style: AppTextStyles.bodyBase.copyWith(
+                      height: 1.35,
                       color: isDark ? AppPalette.ink50 : AppPalette.ink700,
                     ),
                   ),
                   if (summary != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       summary,
-                      style: TextStyle(
-                        fontSize: 11,
+                      style: AppTextStyles.bodySm.copyWith(
+                        height: 1.4,
                         color: isDark ? AppPalette.ink200 : AppPalette.ink300,
                       ),
                     ),
@@ -352,6 +365,7 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: AppSpacing.sm),
             Icon(
               Icons.chevron_right,
               color: isDark ? AppPalette.ink200 : AppPalette.ink300,

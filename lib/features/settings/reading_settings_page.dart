@@ -65,77 +65,104 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
               ? const Center(child: CircularProgressIndicator())
               : _loadError != null || prefs == null
               ? _buildLoadError(context)
-              : ListView(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-                children: [
-                  _buildSectionTitle('操作'),
-                  ListTile(
-                    title: const Text('點擊區域設定'),
-                    subtitle: const Text('自訂閱讀畫面各區域的點擊行為'),
-                    leading: const Icon(Icons.touch_app),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ClickActionConfigPage(),
-                        ),
-                      );
-                      _loadPrefs();
-                    },
+              : ListTileTheme(
+                data: const ListTileThemeData(
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xl,
                   ),
-                  const Divider(),
-                  _buildSectionTitle('自動翻頁'),
-                  ReaderV2SettingComponents.buildSliderRow(
-                    label: '速度',
-                    value: prefs.autoPageSpeed,
-                    min: ReaderV2PrefsRepository.minAutoPageSpeed,
-                    max: ReaderV2PrefsRepository.maxAutoPageSpeed,
-                    divisions: 43,
-                    valueFormatter: (value) => '${(value * 100).round()}%',
-                    onChanged: (value) {
-                      _updatePrefs(prefs.copyWith(autoPageSpeed: value));
-                      _prefsRepository.saveAutoPageSpeed(value);
-                    },
-                  ),
-                  const Divider(),
-                  _buildSectionTitle('內容'),
-                  ListTile(
-                    title: const Text('繁簡轉換'),
-                    subtitle: Wrap(
-                      spacing: 8,
-                      children: [
-                        ReaderV2SettingComponents.buildChoiceChip(
-                          label: '不轉換',
-                          value: 0,
-                          groupValue: prefs.chineseConvert,
-                          onSelected: (value) {
-                            _updatePrefs(prefs.copyWith(chineseConvert: value));
-                            _prefsRepository.saveChineseConvert(value);
-                          },
-                        ),
-                        ReaderV2SettingComponents.buildChoiceChip(
-                          label: '簡轉繁',
-                          value: 1,
-                          groupValue: prefs.chineseConvert,
-                          onSelected: (value) {
-                            _updatePrefs(prefs.copyWith(chineseConvert: value));
-                            _prefsRepository.saveChineseConvert(value);
-                          },
-                        ),
-                        ReaderV2SettingComponents.buildChoiceChip(
-                          label: '繁轉簡',
-                          value: 2,
-                          groupValue: prefs.chineseConvert,
-                          onSelected: (value) {
-                            _updatePrefs(prefs.copyWith(chineseConvert: value));
-                            _prefsRepository.saveChineseConvert(value);
-                          },
-                        ),
-                      ],
+                ),
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+                  children: [
+                    _buildSectionTitle('操作'),
+                    ListTile(
+                      title: const Text('點擊區域設定'),
+                      subtitle: Text(
+                        '自訂閱讀畫面各區域的點擊行為',
+                        style: AppTextStyles.bodySm.copyWith(height: 1.4),
+                      ),
+                      leading: const Icon(Icons.touch_app),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ClickActionConfigPage(),
+                          ),
+                        );
+                        _loadPrefs();
+                      },
                     ),
-                  ),
-                ],
+                    const Divider(),
+                    _buildSectionTitle('自動翻頁'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                      ),
+                      child: ReaderV2SettingComponents.buildSliderRow(
+                        label: '速度',
+                        value: prefs.autoPageSpeed,
+                        min: ReaderV2PrefsRepository.minAutoPageSpeed,
+                        max: ReaderV2PrefsRepository.maxAutoPageSpeed,
+                        divisions: 43,
+                        valueFormatter: (value) => '${(value * 100).round()}%',
+                        onChanged: (value) {
+                          _updatePrefs(
+                            prefs.copyWith(autoPageSpeed: value),
+                          );
+                          _prefsRepository.saveAutoPageSpeed(value);
+                        },
+                      ),
+                    ),
+                    const Divider(),
+                    _buildSectionTitle('內容'),
+                    ListTile(
+                      title: const Text('繁簡轉換'),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            ReaderV2SettingComponents.buildChoiceChip(
+                              label: '不轉換',
+                              value: 0,
+                              groupValue: prefs.chineseConvert,
+                              onSelected: (value) {
+                                _updatePrefs(
+                                  prefs.copyWith(chineseConvert: value),
+                                );
+                                _prefsRepository.saveChineseConvert(value);
+                              },
+                            ),
+                            ReaderV2SettingComponents.buildChoiceChip(
+                              label: '簡轉繁',
+                              value: 1,
+                              groupValue: prefs.chineseConvert,
+                              onSelected: (value) {
+                                _updatePrefs(
+                                  prefs.copyWith(chineseConvert: value),
+                                );
+                                _prefsRepository.saveChineseConvert(value);
+                              },
+                            ),
+                            ReaderV2SettingComponents.buildChoiceChip(
+                              label: '繁轉簡',
+                              value: 2,
+                              groupValue: prefs.chineseConvert,
+                              onSelected: (value) {
+                                _updatePrefs(
+                                  prefs.copyWith(chineseConvert: value),
+                                );
+                                _prefsRepository.saveChineseConvert(value);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
     );
   }
@@ -169,16 +196,17 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
         AppSpacing.sm,
       ),
       child: Text(
         title,
-        style: AppTextStyles.bodyXs.copyWith(
+        style: AppTextStyles.bodySm.copyWith(
+          height: 1.3,
           color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

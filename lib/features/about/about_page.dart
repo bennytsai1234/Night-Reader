@@ -38,66 +38,71 @@ class _AboutPageState extends State<AboutPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('關於')),
-      body: ListView(
-        children: [
-          const SizedBox(height: 40),
-          _buildAppLogo(context),
-          const SizedBox(height: 32),
+      body: ListTileTheme(
+        data: const ListTileThemeData(
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+          children: [
+            const SizedBox(height: AppSpacing.xxxl),
+            _buildAppLogo(context),
+            const SizedBox(height: AppSpacing.xxl),
 
-          _buildCategoryHeader(context, '開源與法律'),
-          _buildListTile(
-            context,
-            icon: Icons.code_rounded,
-            title: 'GitHub 開源位址',
-            subtitle: 'github.com/bennytsai1234/Night-Reader',
-            onTap:
-                () => launchExternalUrlWithFeedback(
-                  context,
-                  'https://github.com/bennytsai1234/Night-Reader',
-                ),
-          ),
-          _buildListTile(
-            context,
-            icon: Icons.description_outlined,
-            title: '開源許可證',
-            subtitle: '查看第三方庫協議',
-            onTap:
-                () => showLicensePage(
-                  context: context,
-                  applicationName: '夜讀',
-                  applicationVersion: '$_version ($_buildNumber)',
-                ),
-          ),
-          _buildListTile(
-            context,
-            icon: Icons.gavel_outlined,
-            title: '免責聲明',
-            onTap: () => _showDisclaimer(context),
-          ),
+            _buildCategoryHeader(context, '開源與法律'),
+            _buildListTile(
+              context,
+              icon: Icons.code_rounded,
+              title: 'GitHub 開源位址',
+              subtitle: 'github.com/bennytsai1234/Night-Reader',
+              onTap:
+                  () => launchExternalUrlWithFeedback(
+                    context,
+                    'https://github.com/bennytsai1234/Night-Reader',
+                  ),
+            ),
+            _buildListTile(
+              context,
+              icon: Icons.description_outlined,
+              title: '開源許可證',
+              subtitle: '查看第三方庫協議',
+              onTap:
+                  () => showLicensePage(
+                    context: context,
+                    applicationName: '夜讀',
+                    applicationVersion: '$_version ($_buildNumber)',
+                  ),
+            ),
+            _buildListTile(
+              context,
+              icon: Icons.gavel_outlined,
+              title: '免責聲明',
+              onTap: () => _showDisclaimer(context),
+            ),
 
-          _buildCategoryHeader(context, '系統工具'),
-          _buildListTile(
-            context,
-            icon: Icons.system_update_alt_outlined,
-            title: '檢查更新',
-            subtitle: _checkingUpdate ? '檢查中…' : '目前版本 v$_version',
-            onTap: _checkUpdate,
-          ),
-          _buildListTile(
-            context,
-            icon: Icons.report_problem_outlined,
-            title: '崩潰日誌',
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CrashLogPage()),
-                ),
-          ),
+            _buildCategoryHeader(context, '系統工具'),
+            _buildListTile(
+              context,
+              icon: Icons.system_update_alt_outlined,
+              title: '檢查更新',
+              subtitle: _checkingUpdate ? '檢查中…' : '目前版本 v$_version',
+              onTap: _checkUpdate,
+            ),
+            _buildListTile(
+              context,
+              icon: Icons.report_problem_outlined,
+              title: '崩潰日誌',
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CrashLogPage()),
+                  ),
+            ),
 
-          const SizedBox(height: 40),
-          _buildFooter(context),
-          const SizedBox(height: 24),
-        ],
+            const SizedBox(height: AppSpacing.xxxl),
+            _buildFooter(context),
+          ],
+        ),
       ),
     );
   }
@@ -117,12 +122,13 @@ class _AboutPageState extends State<AboutPage> {
               semanticLabel: '夜讀應用程式圖示',
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const Text('夜讀', style: AppTextStyles.titleMd),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'v$_version',
             style: AppTextStyles.bodySm.copyWith(
+              height: 1.4,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -134,16 +140,17 @@ class _AboutPageState extends State<AboutPage> {
   Widget _buildCategoryHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
         AppSpacing.sm,
       ),
       child: Text(
         title,
-        style: AppTextStyles.labelSm.copyWith(
+        style: AppTextStyles.bodySm.copyWith(
+          height: 1.3,
           color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -162,10 +169,16 @@ class _AboutPageState extends State<AboutPage> {
         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
         size: 22,
       ),
-      title: Text(title, style: const TextStyle(fontSize: 15)),
+      title: Text(
+        title,
+        style: AppTextStyles.bodyBase.copyWith(height: 1.35),
+      ),
       subtitle:
           subtitle != null
-              ? Text(subtitle, style: AppTextStyles.labelSm)
+              ? Text(
+                subtitle,
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              )
               : null,
       trailing: Icon(
         Icons.chevron_right,
@@ -178,11 +191,12 @@ class _AboutPageState extends State<AboutPage> {
 
   Widget _buildFooter(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       child: Text(
         '本專案為開源學習作品，不提供任何內容服務。所有數據由使用者自行導入。',
         textAlign: TextAlign.center,
-        style: AppTextStyles.labelXs.copyWith(
+        style: AppTextStyles.bodySm.copyWith(
+          height: 1.55,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
@@ -195,11 +209,12 @@ class _AboutPageState extends State<AboutPage> {
       builder:
           (ctx) => AlertDialog(
             title: const Text('免責聲明'),
-            content: const SingleChildScrollView(
+            content: SingleChildScrollView(
               child: Text(
                 '1. 本軟體僅作為開源閱讀工具使用，不提供任何書籍、書源或訂閱內容。\n\n'
                 '2. 使用者應遵守當地法律法規，並對所導入的內容承擔全部法律責任。\n\n'
                 '3. 對於使用本軟體產生的任何版權爭議、數據損失，開發者概不負責。',
+                style: AppTextStyles.bodyBase.copyWith(height: 1.55),
               ),
             ),
             actions: [

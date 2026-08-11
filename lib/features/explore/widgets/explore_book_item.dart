@@ -29,13 +29,12 @@ class ExploreBookItem extends StatelessWidget {
       onTap: () => _navigateToDetail(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
+          horizontal: AppSpacing.xl,
           vertical: AppSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 封面 (對標 Android ivCover)
             BookCoverWidget(
               coverUrl: book.coverUrl,
               bookName: book.name,
@@ -45,29 +44,28 @@ class ExploreBookItem extends StatelessWidget {
               borderRadius: AppRadius.cardXs,
             ),
             const SizedBox(width: 12),
-            // 書籍信息
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 書名 (對標 Android tvName)
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           book.name,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isInBookshelf) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppSpacing.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
+                            horizontal: AppSpacing.sm,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
@@ -82,10 +80,11 @@ class ExploreBookItem extends StatelessWidget {
                                 size: 12,
                                 color: theme.colorScheme.onPrimaryContainer,
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: AppSpacing.xs),
                               Text(
                                 '書架',
                                 style: theme.textTheme.labelSmall?.copyWith(
+                                  height: 1.2,
                                   color: theme.colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -96,47 +95,45 @@ class ExploreBookItem extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  // 作者 (對標 Android tvAuthor)
+                  const SizedBox(height: AppSpacing.xs),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
                       '作者: ${book.author}',
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 2),
-                  // 最新章節 (對標 Android tvLasted)
                   if (book.latestChapterTitle != null &&
                       book.latestChapterTitle!.isNotEmpty)
                     Text(
                       '最新: ${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
                         color: context.warning,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   const SizedBox(height: 2),
-                  // 簡介 (對標 Android tvIntroduce)
                   if (book.intro != null && book.intro!.isNotEmpty)
                     Text(
                       book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.45,
                         color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 12,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 4),
-                  // 分類標籤 (對標 Android llKind)
+                  const SizedBox(height: AppSpacing.xs),
                   if (book.kind != null && book.kind!.isNotEmpty)
                     Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: _buildKindTags(theme),
                     ),
                 ],
@@ -148,7 +145,6 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
-  /// 構建分類標籤 (對標 Android llKind.setLabels)
   List<Widget> _buildKindTags(ThemeData theme) {
     final kinds =
         book.kind!
@@ -160,17 +156,20 @@ class ExploreBookItem extends StatelessWidget {
 
     return kinds.map((kind) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 2,
+        ),
         decoration: BoxDecoration(
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.3),
           ),
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: AppRadius.cardXs,
         ),
         child: Text(
           kind,
-          style: TextStyle(
-            fontSize: 10,
+          style: theme.textTheme.labelSmall?.copyWith(
+            height: 1.2,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),

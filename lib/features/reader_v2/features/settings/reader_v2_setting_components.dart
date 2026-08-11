@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 class ReaderV2SettingComponents {
   static Widget buildSliderRow({
@@ -11,30 +13,40 @@ class ReaderV2SettingComponents {
     int? divisions,
     String Function(double value)? valueFormatter,
   }) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 65,
-          child: Text(label, style: const TextStyle(fontSize: 12)),
-        ),
-        Expanded(
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-            onChangeEnd: onChangeEnd,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 65,
+            child: Text(
+              label,
+              style: AppTextStyles.bodySm.copyWith(height: 1.3),
+            ),
           ),
-        ),
-        SizedBox(
-          width: 35,
-          child: Text(
-            valueFormatter?.call(value) ?? value.toStringAsFixed(1),
-            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          Expanded(
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
+            ),
           ),
-        ),
-      ],
+          SizedBox(
+            width: 40,
+            child: Text(
+              valueFormatter?.call(value) ?? value.toStringAsFixed(1),
+              textAlign: TextAlign.end,
+              style: AppTextStyles.labelSm.copyWith(
+                height: 1.3,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -45,7 +57,7 @@ class ReaderV2SettingComponents {
     required Function(T) onSelected,
   }) {
     return ChoiceChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+      label: Text(label, style: AppTextStyles.bodySm.copyWith(height: 1.2)),
       selected: groupValue == value,
       onSelected: (s) => s ? onSelected(value) : null,
       padding: EdgeInsets.zero,

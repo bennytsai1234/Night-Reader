@@ -21,28 +21,39 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('備份與還原')),
-      body: ListView(
-        children: [
-          _buildSectionTitle('本地備份與還原'),
-          ListTile(
-            title: const Text('建立備份'),
-            subtitle: const Text('建立 ZIP 備份後，選擇儲存或分享位置'),
-            leading: const Icon(Icons.backup_outlined),
-            onTap: _isProcessing ? null : _handleManualBackup,
-          ),
-          ListTile(
-            title: const Text('從備份檔還原'),
-            subtitle: const Text('選擇 ZIP 備份檔並匯入書架、書源與設定'),
-            leading: const Icon(Icons.restore),
-            onTap: _isProcessing ? null : _handleManualRestore,
-          ),
-          if (_isProcessing)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              child: Center(child: CircularProgressIndicator()),
+      body: ListTileTheme(
+        data: const ListTileThemeData(
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+          children: [
+            _buildSectionTitle('本地備份與還原'),
+            ListTile(
+              title: const Text('建立備份'),
+              subtitle: Text(
+                '建立 ZIP 備份後，選擇儲存或分享位置',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              leading: const Icon(Icons.backup_outlined),
+              onTap: _isProcessing ? null : _handleManualBackup,
             ),
-          const SizedBox(height: 24),
-        ],
+            ListTile(
+              title: const Text('從備份檔還原'),
+              subtitle: Text(
+                '選擇 ZIP 備份檔並匯入書架、書源與設定',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              leading: const Icon(Icons.restore),
+              onTap: _isProcessing ? null : _handleManualRestore,
+            ),
+            if (_isProcessing)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -50,15 +61,16 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
         AppSpacing.sm,
       ),
       child: Text(
         title,
         style: AppTextStyles.bodySm.copyWith(
-          fontWeight: FontWeight.bold,
+          height: 1.3,
+          fontWeight: FontWeight.w700,
           color: Theme.of(context).colorScheme.primary,
         ),
       ),
@@ -104,8 +116,9 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       builder:
           (dialogContext) => AlertDialog(
             title: const Text('還原這份備份？'),
-            content: const Text(
+            content: Text(
               '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
+              style: AppTextStyles.bodyBase.copyWith(height: 1.5),
             ),
             actions: [
               TextButton(

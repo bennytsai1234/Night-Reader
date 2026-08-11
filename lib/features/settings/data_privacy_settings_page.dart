@@ -29,79 +29,99 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('資料與隱私')),
-      body: ListView(
-        children: [
-          _sectionTitle('Cookie / WebView'),
-          ListTile(
-            leading: const Icon(Icons.cookie_outlined),
-            title: const Text('清除全部 Cookie'),
-            subtitle: const Text('清除 App Cookie、網路請求 Cookie 與 WebView Cookie'),
-            enabled: !_busy,
-            onTap:
-                () => _confirmAndRun(
-                  title: '清除全部 Cookie',
-                  message: '這會移除所有書源登入狀態與驗證 Cookie。',
-                  successMessage: '已清除全部 Cookie',
-                  action: () async {
-                    await _dataService.clearAllCookies();
-                  },
-                ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.storage_outlined),
-            title: const Text('清除 WebView localStorage'),
-            subtitle: const Text('移除網頁儲存的本機資料'),
-            enabled: !_busy,
-            onTap:
-                () => _confirmAndRun(
-                  title: '清除 WebView localStorage',
-                  message: '這可能會讓部分需要網頁驗證的書源重新登入。',
-                  successMessage: '已清除 WebView localStorage',
-                  action: _dataService.clearWebViewLocalStorage,
-                ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.cleaning_services_outlined),
-            title: const Text('清除 WebView cache'),
-            subtitle: const Text('清除 WebView 的網頁快取資料'),
-            enabled: !_busy,
-            onTap:
-                () => _confirmAndRun(
-                  title: '清除 WebView cache',
-                  message: '這只會清除 WebView 快取，不會刪除書籍資料。',
-                  successMessage: '已清除 WebView cache',
-                  action: _dataService.clearWebViewCache,
-                ),
-          ),
-          const Divider(),
-          _sectionTitle('權限狀態'),
-          _buildPermissionSection(),
-          const Divider(),
-          _sectionTitle('說明'),
-          ListTile(
-            leading: const Icon(Icons.privacy_tip_outlined),
-            title: const Text('隱私說明'),
-            subtitle: const Text('本地資料、Cookie、WebView、備份與網路請求'),
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PrivacyNoticePage()),
-                ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.admin_panel_settings_outlined),
-            title: const Text('權限說明'),
-            subtitle: const Text('檔案、通知、背景任務與網路相關權限'),
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const PermissionNoticePage(),
+      body: ListTileTheme(
+        data: const ListTileThemeData(
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+          children: [
+            _sectionTitle('Cookie / WebView'),
+            ListTile(
+              leading: const Icon(Icons.cookie_outlined),
+              title: const Text('清除全部 Cookie'),
+              subtitle: Text(
+                '清除 App Cookie、網路請求 Cookie 與 WebView Cookie',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              enabled: !_busy,
+              onTap:
+                  () => _confirmAndRun(
+                    title: '清除全部 Cookie',
+                    message: '這會移除所有書源登入狀態與驗證 Cookie。',
+                    successMessage: '已清除全部 Cookie',
+                    action: () async {
+                      await _dataService.clearAllCookies();
+                    },
                   ),
-                ),
-          ),
-          const SizedBox(height: 24),
-        ],
+            ),
+            ListTile(
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('清除 WebView localStorage'),
+              subtitle: Text(
+                '移除網頁儲存的本機資料',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              enabled: !_busy,
+              onTap:
+                  () => _confirmAndRun(
+                    title: '清除 WebView localStorage',
+                    message: '這可能會讓部分需要網頁驗證的書源重新登入。',
+                    successMessage: '已清除 WebView localStorage',
+                    action: _dataService.clearWebViewLocalStorage,
+                  ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cleaning_services_outlined),
+              title: const Text('清除 WebView cache'),
+              subtitle: Text(
+                '清除 WebView 的網頁快取資料',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              enabled: !_busy,
+              onTap:
+                  () => _confirmAndRun(
+                    title: '清除 WebView cache',
+                    message: '這只會清除 WebView 快取，不會刪除書籍資料。',
+                    successMessage: '已清除 WebView cache',
+                    action: _dataService.clearWebViewCache,
+                  ),
+            ),
+            const Divider(),
+            _sectionTitle('權限狀態'),
+            _buildPermissionSection(),
+            const Divider(),
+            _sectionTitle('說明'),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip_outlined),
+              title: const Text('隱私說明'),
+              subtitle: Text(
+                '本地資料、Cookie、WebView、備份與網路請求',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PrivacyNoticePage()),
+                  ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('權限說明'),
+              subtitle: Text(
+                '檔案、通知、背景任務與網路相關權限',
+                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+              ),
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PermissionNoticePage(),
+                    ),
+                  ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -109,16 +129,17 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
         AppSpacing.sm,
       ),
       child: Text(
         title,
-        style: AppTextStyles.bodyXs.copyWith(
+        style: AppTextStyles.bodySm.copyWith(
+          height: 1.3,
           color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -135,7 +156,10 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
       builder:
           (context) => AlertDialog(
             title: Text(title),
-            content: Text(message),
+            content: Text(
+              message,
+              style: AppTextStyles.bodyBase.copyWith(height: 1.5),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -189,7 +213,10 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
           return ListTile(
             leading: const Icon(Icons.error_outline),
             title: const Text('權限狀態載入失敗'),
-            subtitle: Text(snapshot.error.toString()),
+            subtitle: Text(
+              snapshot.error.toString(),
+              style: AppTextStyles.bodySm.copyWith(height: 1.4),
+            ),
             trailing: IconButton(
               tooltip: '重試',
               icon: const Icon(Icons.refresh),
@@ -204,12 +231,14 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
             for (final item in items) _permissionTile(item),
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
+                AppSpacing.xl,
                 AppSpacing.xs,
-                AppSpacing.lg,
+                AppSpacing.xl,
                 AppSpacing.sm,
               ),
-              child: Row(
+              child: Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.sm,
                 children: [
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -219,7 +248,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                     icon: const Icon(Icons.settings_outlined),
                     label: const Text('系統設定'),
                   ),
-                  const SizedBox(width: 12),
                   TextButton.icon(
                     onPressed: _refreshPermissionSnapshot,
                     icon: const Icon(Icons.refresh),
@@ -239,13 +267,20 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
     return ListTile(
       leading: Icon(_permissionIcon(item.tone), color: color),
       title: Text(item.title),
-      subtitle: Text(item.description),
+      subtitle: Text(
+        item.description,
+        style: AppTextStyles.bodySm.copyWith(height: 1.4),
+      ),
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 112),
         child: Text(
           item.status,
           textAlign: TextAlign.end,
-          style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          style: AppTextStyles.labelSm.copyWith(
+            height: 1.3,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       onTap: item.actionLabel == null ? null : () => _handlePermissionTap(item),
@@ -380,9 +415,9 @@ class _NoticePage extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: ListView.separated(
         padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.lg,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
           AppSpacing.xxl,
         ),
         itemBuilder: (context, index) {
@@ -392,16 +427,20 @@ class _NoticePage extends StatelessWidget {
             children: [
               Text(
                 section.title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  height: 1.3,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(section.body, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                section.body,
+                style: AppTextStyles.bodyBase.copyWith(height: 1.55),
+              ),
             ],
           );
         },
-        separatorBuilder: (_, _) => const SizedBox(height: 20),
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xl),
         itemCount: sections.length,
       ),
     );

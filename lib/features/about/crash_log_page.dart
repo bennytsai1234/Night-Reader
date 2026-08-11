@@ -111,13 +111,17 @@ class _CrashLogPageState extends State<CrashLogPage> {
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   '崩潰日誌載入失敗',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    height: 1.3,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 SelectableText(
                   _loadError.toString(),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    height: 1.45,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
@@ -152,10 +156,13 @@ class _CrashLogPageState extends State<CrashLogPage> {
           );
         }
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: SelectableText(
             _logs,
-            style: AppTextStyles.labelSm.copyWith(fontFamily: 'monospace'),
+            style: AppTextStyles.labelSm.copyWith(
+              height: 1.45,
+              fontFamily: 'monospace',
+            ),
           ),
         );
     }
