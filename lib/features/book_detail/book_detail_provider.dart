@@ -17,6 +17,7 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/di/injection.dart';
 
@@ -120,6 +121,7 @@ class BookDetailProvider extends ChangeNotifier {
   final ReaderChapterContentDao? _chapterContentDao;
   final BookSourceService _service;
   final BookCoverStorageService _coverStorage;
+  late final SourceSwitchService _sourceSwitchService;
   DownloadService? _downloadService;
 
   late Book _book;
@@ -188,6 +190,7 @@ class BookDetailProvider extends ChangeNotifier {
     BookSourceDao? sourceDao,
     ReaderChapterContentDao? chapterContentDao,
     BookSourceService? service,
+    SourceSwitchService? sourceSwitchService,
     BookCoverStorageService? coverStorage,
     DownloadService? downloadService,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
@@ -201,6 +204,8 @@ class BookDetailProvider extends ChangeNotifier {
        _service = service ?? BookSourceService(),
        _coverStorage = coverStorage ?? BookCoverStorageService(),
        _downloadService = downloadService {
+    _sourceSwitchService = sourceSwitchService ??
+        SourceSwitchService(service: _service, sourceDao: _sourceDao);
     _book =
         searchBook.book is Book
             ? searchBook.book as Book
@@ -478,36 +483,35 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 執行換源：來源切換建立為另一本書，不覆蓋/刪除原書 storage。
   Future<BookDetailOperationResult> changeSource(SearchBook newSource) async {
     _isLoading = true;
     notifyListeners();
+    final oldBook = _book.copyWith();
     try {
-      final oldBook = _book.copyWith();
-      final candidate = newSource.toBook();
-      final source = await _sourceDao.getByUrl(candidate.origin);
-      if (source == null) {
-        throw StateError('找不到對應書源');
-      }
-      _currentSource = source;
-      final hydratedBook = await _service.getBookInfo(source, candidate);
-      final nextBook = oldBook.migrateTo(
-        hydratedBook.copyWith(isInBookshelf: oldBook.isInBookshelf),
-        const <BookChapter>[],
+      final resolution = await _sourceSwitchService.resolveSwitch(
+        oldBook,
+        newSource,
+        targetChapterIndex: oldBook.chapterIndex,
+        targetChapterTitle: oldBook.durChapterTitle,
+        validateTargetContent: true,
       );
-      _book = nextBook;
-      await _loadSource();
-      await _loadBookInfo();
-      _allChapters = [];
-      if (_currentSource != null) {
-        _allChapters = await _service.getChapterList(_currentSource!, _book);
-      }
-      _book = oldBook.migrateTo(_book, _allChapters);
+      await _sourceSwitchService.persistSwitch(
+        oldBook,
+        resolution,
+        bookDao: _bookDao,
+        chapterDao: _chapterDao,
+      );
+
+      _book = resolution.migratedBook;
+      _currentSource = resolution.source;
+      _allChapters = resolution.chapters;
       _isInBookshelf = _book.isInBookshelf;
-      await _chapterDao.deleteByBook(_book.bookUrl);
-      await _bookDao.upsert(_book);
-      await _chapterDao.insertChapters(_allChapters);
-      await _refreshCacheStatus(notify: false);
+      _sourceIssueMessage = null;
+      try {
+        await _refreshCacheStatus(notify: false);
+      } catch (e) {
+        AppLog.e('換源後更新快取狀態失敗: $e', error: e);
+      }
       unawaited(_storeDisplayCover());
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
