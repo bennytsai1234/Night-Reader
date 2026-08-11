@@ -63,6 +63,17 @@ class CoverHeader extends StatelessWidget {
                   provider.isInitialized ? '正在搜尋封面...' : '正在載入封面...',
                   style: AppTextStyles.labelXs,
                 ),
+              ] else if (provider.errorMessage != null) ...[
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    provider.errorMessage!,
+                    style: AppTextStyles.labelXs.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
