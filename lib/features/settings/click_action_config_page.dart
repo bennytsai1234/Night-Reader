@@ -125,9 +125,9 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                   if (_isSaving) const LinearProgressIndicator(minHeight: 2),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
                       AppSpacing.lg,
-                      AppSpacing.lg,
-                      AppSpacing.lg,
+                      AppSpacing.md,
                       AppSpacing.md,
                     ),
                     child: Text(
@@ -143,9 +143,9 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                       ignoring: _isSaving,
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.lg,
                           AppSpacing.md,
-                          AppSpacing.lg,
+                          AppSpacing.md,
+                          AppSpacing.md,
                           AppSpacing.xxl,
                         ),
                         child: GridView.builder(
@@ -153,8 +153,8 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                               const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 3,
                                 childAspectRatio: 0.6,
-                                crossAxisSpacing: AppSpacing.md,
-                                mainAxisSpacing: AppSpacing.md,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
                               ),
                           itemCount: 9,
                           itemBuilder: (ctx, index) {
@@ -258,7 +258,7 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                     ReaderV2TapAction.values.map((entry) {
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg,
+                          horizontal: AppSpacing.md,
                         ),
                         title: Text(entry.label),
                         onTap: () async {
