@@ -53,6 +53,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: '搜尋書籍',
             onPressed:
                 () => Navigator.push(
                   context,
@@ -405,7 +406,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        kind.title,
+                        isError ? '分類載入失敗' : kind.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
@@ -430,7 +431,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text('ERROR'),
+            title: const Text('分類載入錯誤'),
             content: SelectableText(kind.url ?? kind.title),
             actions: [
               TextButton(
@@ -474,8 +475,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       items: [
         const PopupMenuItem<String>(value: 'edit', child: Text('編輯')),
         const PopupMenuItem<String>(value: 'top', child: Text('置頂')),
-        const PopupMenuItem<String>(value: 'search', child: Text('搜索')),
-        const PopupMenuItem<String>(value: 'refresh', child: Text('刷新分類')),
+        const PopupMenuItem<String>(value: 'search', child: Text('搜尋')),
+        const PopupMenuItem<String>(value: 'refresh', child: Text('重新整理分類')),
         const PopupMenuItem<String>(value: 'delete', child: Text('刪除')),
       ],
     );
