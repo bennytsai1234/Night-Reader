@@ -267,8 +267,6 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
-  /// 載入書籍詳情 (對標 Android BookInfoViewModel.loadBookInfo)
-  /// 從書源獲取完整書籍資訊，包含 tocUrl、簡介、封面等
   Future<void> _loadBookInfo() async {
     if (_currentSource == null) return;
     if (!_currentSource!.isReadingEnabledByRuntime) {
@@ -290,8 +288,6 @@ class BookDetailProvider extends ChangeNotifier {
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
       _sourceIssueMessage ??= _bookInfoDegradationMessage;
-      // 即使加載詳情失敗，仍嘗試用已有資訊載入目錄
-      // 若 tocUrl 為空，以 bookUrl 作為備用
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
@@ -558,7 +554,15 @@ class BookDetailProvider extends ChangeNotifier {
         return BookDetailOperationResult.failure('加入書架失敗: $e');
       }
     } else {
-      await _bookDao.upsert(_book);
+      try {
+        await _bookDao.upsert(_book);
+      } catch (e) {
+        AppLog.e('移出書架失敗: $e', error: e);
+        _isInBookshelf = previous;
+        _book.isInBookshelf = previous;
+        notifyListeners();
+        return BookDetailOperationResult.failure('移出書架失敗: $e');
+      }
     }
 
     AppEventBus().fire(AppEventBus.upBookshelf);
@@ -624,12 +628,20 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateCover(String url) async {
-    _book.customCoverUrl = url;
-    _book.customCoverLocalPath = null;
-    await _storeDisplayCover();
-    await _bookDao.upsert(_book);
-    notifyListeners();
+  Future<BookDetailOperationResult> updateCover(String url) async {
+    final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
+    next.customCoverUrl = url.trim();
+    next.customCoverLocalPath = null;
+    try {
+      await _coverStorage.ensureDisplayCoverStored(next);
+      await _bookDao.upsert(next);
+      _book = next;
+      notifyListeners();
+      return BookDetailOperationResult.success('封面已更新');
+    } catch (error) {
+      AppLog.e('更新封面失敗: $error', error: error);
+      return BookDetailOperationResult.failure('更新封面失敗: $error');
+    }
   }
 
   Future<BookDetailOperationResult> clearStoredContent() async {
@@ -755,7 +767,11 @@ class BookDetailProvider extends ChangeNotifier {
     } catch (e) {
       AppLog.e('檢查書籍更新失敗: $e', error: e);
       _book.lastCheckTime = checkedAt;
-      await _bookDao.upsert(_book);
+      try {
+        await _bookDao.upsert(_book);
+      } catch (persistError) {
+        AppLog.e('記錄檢查更新時間失敗: $persistError', error: persistError);
+      }
       return BookDetailUpdateResult(
         success: false,
         newChapterCount: 0,
@@ -841,9 +857,13 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<void> _storeDisplayCover() async {
-    await _coverStorage.ensureDisplayCoverStored(_book);
-    await _bookDao.upsert(_book);
-    if (!_isLoading && !_disposed) notifyListeners();
+    try {
+      await _coverStorage.ensureDisplayCoverStored(_book);
+      await _bookDao.upsert(_book);
+      if (!_isLoading && !_disposed) notifyListeners();
+    } catch (error) {
+      AppLog.e('儲存顯示封面失敗: $error', error: error);
+    }
   }
 
   @override
