@@ -14,6 +14,7 @@ import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
 import 'shared/theme/app_theme.dart';
+import 'shared/navigation/app_route_observer.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
@@ -241,6 +242,7 @@ class _ReaderAppState extends State<ReaderApp> {
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
+          navigatorObservers: [appRouteObserver],
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
