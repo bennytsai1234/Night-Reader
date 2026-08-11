@@ -5,6 +5,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/features/settings/reading_stats_page.dart';
 import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
 import 'package:night_reader/features/about/about_page.dart';
@@ -34,6 +35,19 @@ class SettingsPage extends StatelessWidget {
 
           _buildSectionTitle(context, '閱讀'),
           _buildPanel(context, [
+            _buildListTile(
+              context,
+              icon: Icons.timer_outlined,
+              title: '閱讀統計',
+              summary: '查看每本書的累積閱讀時間',
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ReadingStatsPage(),
+                    ),
+                  ),
+            ),
             _buildListTile(
               context,
               icon: Icons.tune_outlined,
