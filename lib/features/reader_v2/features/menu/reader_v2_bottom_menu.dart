@@ -290,8 +290,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
     final actions = <Widget>[
       _menuIcon(Icons.list, '目錄', onOpenDrawer, menuStyle),
       if (showTts) _menuIcon(Icons.record_voice_over, '朗讀', onTts, menuStyle),
-      _menuIcon(Icons.color_lens, '介面', onInterface, menuStyle),
-      _menuIcon(Icons.settings, '設定', onSettings, menuStyle),
+      _menuIcon(Icons.color_lens, '排版', onInterface, menuStyle),
+      _menuIcon(Icons.settings, '進階', onSettings, menuStyle),
     ];
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
