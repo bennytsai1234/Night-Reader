@@ -56,6 +56,29 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  Future<void> restoreByBookName(ReadRecord record) async {
+    final existing = await getByBookName(record.bookName);
+    if (existing == null) {
+      await into(readRecords).insert(
+        ReadRecordsCompanion.insert(
+          bookName: record.bookName,
+          deviceId: record.deviceId,
+          readTime: Value(record.readTime < 0 ? 0 : record.readTime),
+          lastRead: Value(record.lastRead),
+        ),
+      );
+      return;
+    }
+
+    await (update(readRecords)..where((t) => t.id.equals(existing.id))).write(
+      ReadRecordsCompanion(
+        deviceId: Value(record.deviceId),
+        readTime: Value(record.readTime < 0 ? 0 : record.readTime),
+        lastRead: Value(record.lastRead),
+      ),
+    );
+  }
+
   Future<void> clearAll() => delete(readRecords).go();
 
   Future<List<ReadRecord>> getAllShow() {
