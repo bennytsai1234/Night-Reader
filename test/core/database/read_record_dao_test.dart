@@ -33,6 +33,49 @@ void main() {
       expect(records.map((record) => record.id), everyElement(greaterThan(0)));
     });
 
+    test('recordReadActivity accumulates time by book name', () async {
+      await db.readRecordDao.recordReadActivity(
+        bookName: '書 A',
+        seconds: 4,
+        lastRead: 1000,
+      );
+      await db.readRecordDao.recordReadActivity(
+        bookName: '書 A',
+        seconds: 6,
+        lastRead: 2000,
+      );
+
+      final record = await db.readRecordDao.getByBookName('書 A');
+
+      expect(record, isNotNull);
+      expect(record!.readTime, 10);
+      expect(record.lastRead, 2000);
+    });
+
+    test('restoreByBookName replaces existing totals without doubling', () async {
+      await db.readRecordDao.recordReadActivity(
+        bookName: '書 A',
+        seconds: 10,
+        lastRead: 1000,
+      );
+
+      final backupRecord = ReadRecord(
+        bookName: '書 A',
+        readTime: 25,
+        lastRead: 3000,
+      );
+      await db.readRecordDao.restoreByBookName(backupRecord);
+      await db.readRecordDao.restoreByBookName(backupRecord);
+
+      final records = await db.readRecordDao.getAll();
+      final record = await db.readRecordDao.getByBookName('書 A');
+
+      expect(records, hasLength(1));
+      expect(record, isNotNull);
+      expect(record!.readTime, 25);
+      expect(record.lastRead, 3000);
+    });
+
     test('upsert omits default model id for new records', () async {
       await db.readRecordDao.upsert(ReadRecord(bookName: '書 A'));
       await db.readRecordDao.upsert(ReadRecord(bookName: '書 B'));
