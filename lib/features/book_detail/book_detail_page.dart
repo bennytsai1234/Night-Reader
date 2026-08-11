@@ -59,6 +59,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
             body:
                 provider.isLoading
                     ? const Center(child: CircularProgressIndicator())
+                    : provider.loadErrorMessage != null
+                    ? _buildLoadError(context, provider)
                     : CustomScrollView(
                       controller: _scrollController,
                       slivers: [
@@ -91,14 +93,15 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                   Expanded(
                                     child: Text(provider.sourceIssueMessage!),
                                   ),
-                                  TextButton(
-                                    onPressed:
-                                        () => _showChangeSourceDialog(
-                                          context,
-                                          provider,
-                                        ),
-                                    child: const Text('換源'),
-                                  ),
+                                  if (!currentBook.isLocal)
+                                    TextButton(
+                                      onPressed:
+                                          () => _showChangeSourceDialog(
+                                            context,
+                                            provider,
+                                          ),
+                                      child: const Text('換源'),
+                                    ),
                                 ],
                               ),
                             ),
@@ -208,10 +211,41 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
+  Widget _buildLoadError(BuildContext context, BookDetailProvider provider) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 52,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              provider.loadErrorMessage!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: provider.retryInitialization,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
     BookDetailProvider provider,
   ) {
+    final actionsEnabled = !provider.isLoading && provider.loadErrorMessage == null;
     return AppBar(
       title: const Text('書籍詳情'),
       actions: [
@@ -221,15 +255,27 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 ? Icons.library_add_check
                 : Icons.library_add,
           ),
-          onPressed: () => _handleBookshelfToggle(context, provider),
+          onPressed:
+              actionsEnabled
+                  ? () => _handleBookshelfToggle(context, provider)
+                  : null,
           tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
         ),
         PopupMenuButton<String>(
+          enabled: actionsEnabled,
           onSelected: (v) => _handleMenuSelection(context, provider, v),
           itemBuilder:
               (ctx) => [
-                const PopupMenuItem(value: 'check_update', child: Text('檢查更新')),
-                const PopupMenuItem(value: 'download', child: Text('預下載章節')),
+                if (!provider.book.isLocal)
+                  const PopupMenuItem(
+                    value: 'check_update',
+                    child: Text('檢查更新'),
+                  ),
+                if (!provider.book.isLocal)
+                  const PopupMenuItem(
+                    value: 'download',
+                    child: Text('預下載章節'),
+                  ),
                 const PopupMenuItem(value: 'change_cover', child: Text('換封面')),
                 const PopupMenuItem(value: 'export', child: Text('匯出全書')),
                 const PopupMenuItem(value: 'edit', child: Text('編輯資訊')),
@@ -598,6 +644,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   void _showSourceOptions(BuildContext context, Book b) {
     final provider = context.read<BookDetailProvider>();
+    final source = provider.currentSource;
     showDialog(
       context: context,
       builder:
@@ -616,35 +663,38 @@ class _BookDetailPageState extends State<BookDetailPage> {
             ),
             actions: [
               TextButton(
-                onPressed: () {
-                  final s = provider.currentSource;
-                  Navigator.pop(ctx);
-                  if (s != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SourceEditorPage(source: s),
-                      ),
-                    );
-                  }
-                },
+                onPressed:
+                    source == null
+                        ? null
+                        : () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SourceEditorPage(source: source),
+                            ),
+                          );
+                        },
                 child: const Text('詳情'),
               ),
               TextButton(
-                onPressed: () {
-                  final s = provider.currentSource;
-                  Navigator.pop(ctx);
-                  if (s != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => SourceDebugPage(source: s, debugKey: b.name),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('調試'),
+                onPressed:
+                    source == null
+                        ? null
+                        : () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => SourceDebugPage(
+                                    source: source,
+                                    debugKey: b.name,
+                                  ),
+                            ),
+                          );
+                        },
+                child: const Text('除錯'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -671,12 +721,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
-  void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) =>
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
-      );
+  void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) {
+    if (p.book.isLocal) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
+    );
+  }
 
   void _showSearchTocDialog(BuildContext context, BookDetailProvider p) {
     showDialog<void>(
@@ -708,73 +760,114 @@ class _BookDetailPageState extends State<BookDetailPage> {
         tag = TextEditingController(text: p.book.customTag ?? ''),
         sourceName = TextEditingController(text: p.book.originName),
         toc = TextEditingController(text: p.book.tocUrl);
+    var saving = false;
+    String? errorMessage;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder:
-          (ctx) => AlertDialog(
-            title: const Text('編輯'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: n,
-                    decoration: const InputDecoration(labelText: '書名'),
+          (ctx) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  title: const Text('編輯'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (errorMessage != null) ...[
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              errorMessage!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                        ],
+                        TextField(
+                          controller: n,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '書名'),
+                        ),
+                        TextField(
+                          controller: a,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '作者'),
+                        ),
+                        TextField(
+                          controller: c,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '封面'),
+                        ),
+                        TextField(
+                          controller: k,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '分類'),
+                        ),
+                        TextField(
+                          controller: tag,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '自訂標籤'),
+                        ),
+                        TextField(
+                          controller: sourceName,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '來源名稱'),
+                        ),
+                        TextField(
+                          controller: toc,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '目錄 URL'),
+                        ),
+                        TextField(
+                          controller: i,
+                          enabled: !saving,
+                          decoration: const InputDecoration(labelText: '簡介'),
+                          maxLines: 3,
+                        ),
+                      ],
+                    ),
                   ),
-                  TextField(
-                    controller: a,
-                    decoration: const InputDecoration(labelText: '作者'),
-                  ),
-                  TextField(
-                    controller: c,
-                    decoration: const InputDecoration(labelText: '封面'),
-                  ),
-                  TextField(
-                    controller: k,
-                    decoration: const InputDecoration(labelText: '分類'),
-                  ),
-                  TextField(
-                    controller: tag,
-                    decoration: const InputDecoration(labelText: '自訂標籤'),
-                  ),
-                  TextField(
-                    controller: sourceName,
-                    decoration: const InputDecoration(labelText: '來源名稱'),
-                  ),
-                  TextField(
-                    controller: toc,
-                    decoration: const InputDecoration(labelText: '目錄 URL'),
-                  ),
-                  TextField(
-                    controller: i,
-                    decoration: const InputDecoration(labelText: '簡介'),
-                    maxLines: 3,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  p.updateBookInfo(
-                    n.text,
-                    a.text,
-                    i.text,
-                    c.text,
-                    kind: k.text,
-                    customTag: tag.text,
-                    originName: sourceName.text,
-                    tocUrl: toc.text,
-                  );
-                  Navigator.pop(ctx);
-                },
-                child: const Text('儲存'),
-              ),
-            ],
+                  actions: [
+                    TextButton(
+                      onPressed: saving ? null : () => Navigator.pop(ctx),
+                      child: const Text('取消'),
+                    ),
+                    ElevatedButton(
+                      onPressed:
+                          saving
+                              ? null
+                              : () async {
+                                setDialogState(() {
+                                  saving = true;
+                                  errorMessage = null;
+                                });
+                                final result = await p.updateBookInfo(
+                                  n.text,
+                                  a.text,
+                                  i.text,
+                                  c.text,
+                                  kind: k.text,
+                                  customTag: tag.text,
+                                  originName: sourceName.text,
+                                  tocUrl: toc.text,
+                                );
+                                if (!ctx.mounted) return;
+                                if (result.success) {
+                                  Navigator.pop(ctx);
+                                  return;
+                                }
+                                setDialogState(() {
+                                  saving = false;
+                                  errorMessage = result.message;
+                                });
+                              },
+                      child: Text(saving ? '儲存中…' : '儲存'),
+                    ),
+                  ],
+                ),
           ),
     ).whenComplete(() {
       n.dispose();
