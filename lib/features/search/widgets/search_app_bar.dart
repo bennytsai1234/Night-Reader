@@ -67,37 +67,46 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         Tooltip(
-          message: '選擇搜尋範圍',
-          child: InkWell(
-            onTap: onScopePressed,
-            borderRadius: AppRadius.cardXs,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xs,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    scopeDisplay,
-                    style: AppTextStyles.labelSm.copyWith(
-                      color:
-                          provider.searchScope.isAll
-                              ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
-                              : theme.colorScheme.onSurface,
-                      fontWeight:
-                          provider.searchScope.isAll
-                              ? FontWeight.normal
-                              : FontWeight.bold,
+          message: '選擇搜尋範圍：$scopeDisplay',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 48,
+              minHeight: 48,
+              maxWidth: 104,
+            ),
+            child: InkWell(
+              onTap: onScopePressed,
+              borderRadius: AppRadius.cardXs,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        scopeDisplay,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.labelSm.copyWith(
+                          color:
+                              provider.searchScope.isAll
+                                  ? theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.7,
+                                  )
+                                  : theme.colorScheme.onSurface,
+                          fontWeight:
+                              provider.searchScope.isAll
+                                  ? FontWeight.normal
+                                  : FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                  Icon(
-                    Icons.arrow_drop_down,
-                    size: 16,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  ),
-                ],
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

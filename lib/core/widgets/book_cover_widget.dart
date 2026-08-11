@@ -70,6 +70,10 @@ class BookCoverWidget extends StatelessWidget {
       return _buildTextCover();
     }
 
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = (width * devicePixelRatio).ceil();
+    final cacheHeight = (height * devicePixelRatio).ceil();
+
     if (source.startsWith('memory://')) {
       return FutureBuilder<Uint8List?>(
         future: ResourceService().getMemoryResource(source),
@@ -87,6 +91,8 @@ class BookCoverWidget extends StatelessWidget {
             fit: BoxFit.cover,
             width: width,
             height: height,
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
             errorBuilder: (context, error, stackTrace) {
               _failedCoverSources.add(source);
               return _buildTextCover();
@@ -101,15 +107,13 @@ class BookCoverWidget extends StatelessWidget {
           source.startsWith('local://')
               ? File(source.replaceFirst('local://', ''))
               : File(Uri.parse(source).toFilePath());
-      if (!file.existsSync()) {
-        _failedCoverSources.add(source);
-        return _buildTextCover();
-      }
       return Image.file(
         file,
         fit: BoxFit.cover,
         width: width,
         height: height,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         errorBuilder: (context, error, stackTrace) {
           _failedCoverSources.add(source);
           return _buildTextCover();
@@ -122,6 +126,8 @@ class BookCoverWidget extends StatelessWidget {
       fit: BoxFit.cover,
       width: width,
       height: height,
+      memCacheWidth: cacheWidth,
+      memCacheHeight: cacheHeight,
       fadeInDuration: const Duration(milliseconds: 200),
       placeholder: (context, url) => _buildPlaceholder(),
       errorWidget: (context, url, error) {

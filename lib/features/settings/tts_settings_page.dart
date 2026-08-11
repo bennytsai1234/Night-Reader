@@ -81,6 +81,7 @@ class TtsSettingsPage extends StatelessWidget {
                     child: DropdownButtonFormField<String>(
                       key: ValueKey('engine-$selectedEngine'),
                       initialValue: selectedEngine,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: '語音引擎',
                         border: OutlineInputBorder(),
@@ -93,7 +94,11 @@ class TtsSettingsPage extends StatelessWidget {
                         ...engines.map(
                           (engine) => DropdownMenuItem<String>(
                             value: engine,
-                            child: Text(engine),
+                            child: Text(
+                              engine,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       ],
@@ -121,6 +126,7 @@ class TtsSettingsPage extends StatelessWidget {
                     child: DropdownButtonFormField<String>(
                       key: ValueKey('voice-$selectedVoice-${voices.length}'),
                       initialValue: selectedVoice,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: '音色',
                         border: OutlineInputBorder(),
@@ -133,7 +139,11 @@ class TtsSettingsPage extends StatelessWidget {
                         ...voices.map(
                           (voice) => DropdownMenuItem<String>(
                             value: tts.voiceKeyOf(voice),
-                            child: Text(tts.voiceLabelOf(voice)),
+                            child: Text(
+                              tts.voiceLabelOf(voice),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       ],
