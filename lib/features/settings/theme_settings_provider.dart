@@ -36,6 +36,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   static const _kMenuDarkCustom = 'theme_menu_dark_use_custom';
   static const _kMenuDayIndex = 'theme_menu_day_builtin_index';
   static const _kMenuNightIndex = 'theme_menu_night_builtin_index';
+  static const _kReaderDarkActive = 'theme_reader_active_dark';
 
   final SharedPreferences _prefs;
 
@@ -206,6 +207,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
       backgroundColor: colors.background,
       textColor: colors.text,
     );
+  }
+
+  static bool readerDarkMode(bool fallback) {
+    return _registeredPrefs()?.getBool(_kReaderDarkActive) ?? fallback;
+  }
+
+  static void saveReaderDarkMode(bool dark) {
+    _registeredPrefs()?.setBool(_kReaderDarkActive, dark);
   }
 
   static int menuBuiltInIndex(bool dark, int fallback) {
