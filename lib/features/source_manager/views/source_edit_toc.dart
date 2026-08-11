@@ -10,7 +10,7 @@ class SourceEditToc extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         RuleTextField(controller: controllers['ruleTocChapterList']!, label: '目錄列表規則', hint: '解析出章節列表的容器'),
         RuleTextField(controller: controllers['ruleTocChapterName']!, label: '章節名稱規則'),
