@@ -125,114 +125,123 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                       ),
                     ],
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    0,
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '搜尋書源名稱、網址',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon:
-                          _searchController.text.isNotEmpty
-                              ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  provider.setSearchQuery('');
-                                },
-                              )
-                              : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.sm,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: AppRadius.cardSm,
-                      ),
+                if (provider.totalSourceCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      AppSpacing.sm,
+                      AppSpacing.md,
+                      0,
                     ),
-                    onChanged: provider.setSearchQuery,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: '搜尋書源名稱、網址',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon:
+                            _searchController.text.isNotEmpty
+                                ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    provider.setSearchQuery('');
+                                  },
+                                )
+                                : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.sm,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: AppRadius.cardSm,
+                        ),
+                      ),
+                      onChanged: provider.setSearchQuery,
+                    ),
                   ),
-                ),
                 Expanded(child: _buildMainContent(provider)),
               ],
             ),
-            // 始終顯示 SelectActionBar (對標 legado)
-            bottomNavigationBar: SelectActionBar(
-              provider: provider,
-              externallyBusy: _isImporting,
-              onEnable:
-                  () => _runAction(
-                    () => provider.batchSetEnabled(true),
-                    errorPrefix: '啟用書源失敗',
-                  ),
-              onDisable:
-                  () => _runAction(
-                    () => provider.batchSetEnabled(false),
-                    errorPrefix: '停用書源失敗',
-                  ),
-              onAddGroup:
-                  () => _showSelectionGroupDialog(
-                    context,
-                    provider,
-                    remove: false,
-                  ),
-              onRemoveGroup:
-                  () => _showSelectionGroupDialog(
-                    context,
-                    provider,
-                    remove: true,
-                  ),
-              onEnableExplore:
-                  () => _runAction(
-                    () => provider.batchSetEnabledExplore(true),
-                    errorPrefix: '啟用發現失敗',
-                  ),
-              onDisableExplore:
-                  () => _runAction(
-                    () => provider.batchSetEnabledExplore(false),
-                    errorPrefix: '停用發現失敗',
-                  ),
-              onSelectInterval: provider.checkSelectedInterval,
-              onMoveToTop:
-                  () => _runAction(
-                    provider.moveSelectedToTop,
-                    errorPrefix: '移動書源失敗',
-                  ),
-              onMoveToBottom:
-                  () => _runAction(
-                    provider.moveSelectedToBottom,
-                    errorPrefix: '移動書源失敗',
-                  ),
-              onExport:
-                  () => _runAction(() async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    final copiedToClipboard = await provider.exportSelected();
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出',
-                        ),
-                      ),
-                    );
-                  }, errorPrefix: '匯出書源失敗'),
-              onShare:
-                  () => _runAction(
-                    provider.shareSelectedSources,
-                    errorPrefix: '分享書源失敗',
-                  ),
-              onCheckSource: () {
-                SourceManagerDialogs.showCheckConfigDialog(context, provider);
-              },
-              onDelete: () {
-                _confirmDeleteSelected(context, provider);
-              },
-            ),
+            bottomNavigationBar:
+                provider.totalSourceCount > 0
+                    ? SelectActionBar(
+                      provider: provider,
+                      externallyBusy: _isImporting,
+                      onEnable:
+                          () => _runAction(
+                            () => provider.batchSetEnabled(true),
+                            errorPrefix: '啟用書源失敗',
+                          ),
+                      onDisable:
+                          () => _runAction(
+                            () => provider.batchSetEnabled(false),
+                            errorPrefix: '停用書源失敗',
+                          ),
+                      onAddGroup:
+                          () => _showSelectionGroupDialog(
+                            context,
+                            provider,
+                            remove: false,
+                          ),
+                      onRemoveGroup:
+                          () => _showSelectionGroupDialog(
+                            context,
+                            provider,
+                            remove: true,
+                          ),
+                      onEnableExplore:
+                          () => _runAction(
+                            () => provider.batchSetEnabledExplore(true),
+                            errorPrefix: '啟用發現失敗',
+                          ),
+                      onDisableExplore:
+                          () => _runAction(
+                            () => provider.batchSetEnabledExplore(false),
+                            errorPrefix: '停用發現失敗',
+                          ),
+                      onSelectInterval: provider.checkSelectedInterval,
+                      onMoveToTop:
+                          () => _runAction(
+                            provider.moveSelectedToTop,
+                            errorPrefix: '移動書源失敗',
+                          ),
+                      onMoveToBottom:
+                          () => _runAction(
+                            provider.moveSelectedToBottom,
+                            errorPrefix: '移動書源失敗',
+                          ),
+                      onExport:
+                          () => _runAction(() async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final copiedToClipboard =
+                                await provider.exportSelected();
+                            if (!mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  copiedToClipboard
+                                      ? '已複製至剪貼簿'
+                                      : '書源過多，已改用分享方式匯出',
+                                ),
+                              ),
+                            );
+                          }, errorPrefix: '匯出書源失敗'),
+                      onShare:
+                          () => _runAction(
+                            provider.shareSelectedSources,
+                            errorPrefix: '分享書源失敗',
+                          ),
+                      onCheckSource: () {
+                        SourceManagerDialogs.showCheckConfigDialog(
+                          context,
+                          provider,
+                        );
+                      },
+                      onDelete: () {
+                        _confirmDeleteSelected(context, provider);
+                      },
+                    )
+                    : null,
           ),
         );
       },
@@ -276,7 +285,48 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final list = p.sources;
     if (list.isEmpty) {
       if (p.totalSourceCount == 0) {
-        return const Center(child: Text('暫無書源'));
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.source_outlined,
+                  size: 52,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  '尚未加入書源',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  '匯入書源後，即可搜尋與探索內容。',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton.icon(
+                  onPressed:
+                      _isImporting ? null : () => _showImportDialog(context, true),
+                  icon: const Icon(Icons.link),
+                  label: const Text('從網址匯入'),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton.icon(
+                  onPressed:
+                      _isImporting ? null : () => _importFromFile(context),
+                  icon: const Icon(Icons.file_open_outlined),
+                  label: const Text('從檔案匯入'),
+                ),
+              ],
+            ),
+          ),
+        );
       }
       return Center(
         child: Column(
@@ -304,7 +354,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 .toList(growable: false)
             : const <String>[];
 
-    // 只有在手動排序 (0) 模式下才允許拖拽
     final canReorder = p.canReorder && !_isImporting;
 
     if (canReorder) {
@@ -495,7 +544,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     );
   }
 
-  /// 確認刪除選中書源 (對標 legado onClickSelectBarMainAction)
   void _confirmDeleteSelected(BuildContext context, SourceManagerProvider p) {
     final count = p.selectedUrls.length;
     if (count == 0) return;
