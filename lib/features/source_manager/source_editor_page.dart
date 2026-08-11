@@ -40,7 +40,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   }
 
   void _initControllers() {
-    // 基礎資訊
     _controllers['name'] = TextEditingController(
       text: _editingSource.bookSourceName,
     );
@@ -61,7 +60,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     );
     _controllers['header'] = TextEditingController(text: _editingSource.header);
 
-    // 搜尋規則
     _controllers['searchUrl'] = TextEditingController(
       text: _editingSource.searchUrl,
     );
@@ -90,7 +88,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       text: _editingSource.ruleSearch?.bookUrl,
     );
 
-    // 發現規則
     _controllers['exploreUrl'] = TextEditingController(
       text: _editingSource.exploreUrl,
     );
@@ -119,7 +116,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       text: _editingSource.ruleExplore?.bookUrl,
     );
 
-    // 詳情規則
     _controllers['ruleBookInfoInit'] = TextEditingController(
       text: _editingSource.ruleBookInfo?.init,
     );
@@ -151,7 +147,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       text: _editingSource.ruleBookInfo?.wordCount,
     );
 
-    // 目錄規則
     _controllers['ruleTocChapterList'] = TextEditingController(
       text: _editingSource.ruleToc?.chapterList,
     );
@@ -165,7 +160,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       text: _editingSource.ruleToc?.nextPage,
     );
 
-    // 正文規則
     _controllers['ruleContentContent'] = TextEditingController(
       text: _editingSource.ruleContent?.content,
     );
@@ -291,7 +285,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         title: Text(widget.source == null ? '新建書源' : '編輯書源'),
         actions: [
           IconButton(
-            tooltip: '調試書源',
+            tooltip: '除錯書源',
             icon: const Icon(Icons.bug_report),
             onPressed: _isSaving ? null : _openDebug,
           ),
