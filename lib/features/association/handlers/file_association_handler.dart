@@ -36,7 +36,7 @@ mixin FileAssociationHandler on AssociationBase {
         if (!context.mounted) {
           return;
         }
-        handleSharedBook(context, file.path);
+        await handleSharedBook(context, file.path);
       }
     }
   }
@@ -55,14 +55,26 @@ mixin FileAssociationHandler on AssociationBase {
         await File(path).copy(targetPath);
       }
 
-      if (context.mounted) {
-        context.read<BookshelfProvider>().importLocalBookPath(targetPath);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已將書籍複製並匯入: $fileName')));
-      }
+      if (!context.mounted) return;
+      final imported = await context
+          .read<BookshelfProvider>()
+          .importLocalBookPath(targetPath);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            imported
+                ? '已將書籍加入書架：$fileName'
+                : '檔案已複製，但加入書架失敗：$fileName',
+          ),
+        ),
+      );
     } catch (e) {
       AppLog.e('搬移並匯入書籍失敗: $e', error: e);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('匯入書籍失敗：$e')));
     }
   }
 
