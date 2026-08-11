@@ -146,9 +146,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
+                AppSpacing.lg,
                 AppSpacing.md,
-                AppSpacing.xl,
+                AppSpacing.lg,
                 AppSpacing.sm,
               ),
               child: Column(
@@ -264,7 +264,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.xl,
+            horizontal: AppSpacing.lg,
             vertical: AppSpacing.md,
           ),
           child: TextField(
