@@ -88,17 +88,28 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
   }
 
+  bool get isReaderDarkMode => ThemeSettingsProvider.resolveAreaDarkMode(
+        ThemeArea.reader,
+        fallback: _isThemeDark(themeIndex),
+      );
+
+  bool get isMenuDarkMode => ThemeSettingsProvider.resolveAreaDarkMode(
+        ThemeArea.menu,
+        fallback: isReaderDarkMode,
+      );
+
   ReadingTheme get currentTheme {
-    final dark = _isThemeDark(themeIndex);
+    final dark = isReaderDarkMode;
+    final index = dark ? lastNightThemeIndex : lastDayThemeIndex;
     return ThemeSettingsProvider.resolveReaderTheme(
       dark: dark,
       menu: false,
-      fallback: _themeAt(themeIndex),
+      fallback: _themeAt(index),
     );
   }
 
   ReadingTheme get currentMenuTheme {
-    final dark = isCurrentThemeDark;
+    final dark = isMenuDarkMode;
     final index = _normalizeThemeIndex(
       ThemeSettingsProvider.menuBuiltInIndex(dark, menuThemeIndex),
     );
@@ -188,14 +199,20 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setTheme(int value) {
     themeIndex = _normalizeThemeIndex(value);
     unawaited(_prefsRepository.saveThemeIndex(themeIndex));
-    _rememberDayNightThemeIndex(themeIndex);
+    if (isReaderDarkMode) {
+      lastNightThemeIndex = themeIndex;
+      unawaited(_prefsRepository.saveNightThemeIndex(themeIndex));
+    } else {
+      lastDayThemeIndex = themeIndex;
+      unawaited(_prefsRepository.saveDayThemeIndex(themeIndex));
+    }
     notifyListeners();
   }
 
   void setMenuTheme(int value) {
     menuThemeIndex = _normalizeThemeIndex(value);
     unawaited(_prefsRepository.saveMenuThemeIndex(menuThemeIndex));
-    ThemeSettingsProvider.saveMenuBuiltInIndex(isCurrentThemeDark, menuThemeIndex);
+    ThemeSettingsProvider.saveMenuBuiltInIndex(isMenuDarkMode, menuThemeIndex);
     notifyListeners();
   }
 
@@ -214,39 +231,30 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get isCurrentThemeDark => _isThemeDark(themeIndex);
+  bool get isCurrentThemeDark => isReaderDarkMode;
 
-  int get dayNightToggleTargetThemeIndex => isCurrentThemeDark ? lastDayThemeIndex : lastNightThemeIndex;
+  bool get willToggleToDarkTheme => !isReaderDarkMode;
 
-  bool get willToggleToDarkTheme => _isThemeDark(dayNightToggleTargetThemeIndex);
+  String get dayNightToggleTooltip =>
+      willToggleToDarkTheme ? '切換閱讀深色模式' : '切換閱讀淺色模式';
 
-  String get dayNightToggleTooltip => willToggleToDarkTheme ? '切換到夜間主題' : '切換到白天主題';
-
-  IconData get dayNightToggleIcon => willToggleToDarkTheme ? Icons.dark_mode_rounded : Icons.light_mode_rounded;
+  IconData get dayNightToggleIcon =>
+      willToggleToDarkTheme ? Icons.dark_mode_rounded : Icons.light_mode_rounded;
 
   void toggleDayNightTheme() {
-    final target = dayNightToggleTargetThemeIndex;
-    if (target == themeIndex) {
-      final fallback = isCurrentThemeDark ? _fallbackDayThemeIndex() : _fallbackNightThemeIndex();
-      if (fallback != themeIndex) setTheme(fallback);
-      return;
-    }
-    setTheme(target);
-  }
-
-  void _rememberDayNightThemeIndex(int index) {
-    if (_isThemeDark(index)) {
-      lastNightThemeIndex = index;
-      unawaited(_prefsRepository.saveNightThemeIndex(index));
-    } else {
-      lastDayThemeIndex = index;
-      unawaited(_prefsRepository.saveDayThemeIndex(index));
-    }
+    ThemeSettingsProvider.saveAreaMode(
+      ThemeArea.reader,
+      isReaderDarkMode ? AreaThemeMode.light : AreaThemeMode.dark,
+    );
+    notifyListeners();
   }
 
   bool _isThemeDark(int index) {
     if (AppTheme.readingThemes.isEmpty) return index != 0;
-    return AppTheme.readingThemes[_normalizeThemeIndex(index)].backgroundColor.computeLuminance() < 0.5;
+    return AppTheme.readingThemes[_normalizeThemeIndex(index)]
+            .backgroundColor
+            .computeLuminance() <
+        0.5;
   }
 
   int _normalizeThemeIndex(int index) {
@@ -259,32 +267,15 @@ class ReaderV2SettingsController extends ChangeNotifier {
     return value.clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
   }
 
-  int _fallbackDayThemeIndex() {
-    if (AppTheme.readingThemes.isEmpty) return 0;
-    for (var i = 0; i < AppTheme.readingThemes.length; i++) {
-      if (!_isThemeDark(i)) return i;
-    }
-    return 0;
-  }
-
-  int _fallbackNightThemeIndex() {
-    if (AppTheme.readingThemes.isEmpty) return 1;
-    for (var i = AppTheme.readingThemes.length - 1; i >= 0; i--) {
-      if (_isThemeDark(i)) return i;
-    }
-    return (AppTheme.readingThemes.length - 1).clamp(0, 1 << 20).toInt();
-  }
-
   void _normalizeDayNightThemeIndexes() {
     if (AppTheme.readingThemes.isEmpty) {
       lastDayThemeIndex = 0;
       lastNightThemeIndex = 1;
       return;
     }
-    lastDayThemeIndex = lastDayThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    lastNightThemeIndex = lastNightThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    _rememberDayNightThemeIndex(themeIndex);
-    if (_isThemeDark(lastDayThemeIndex)) lastDayThemeIndex = _fallbackDayThemeIndex();
-    if (!_isThemeDark(lastNightThemeIndex)) lastNightThemeIndex = _fallbackNightThemeIndex();
+    lastDayThemeIndex =
+        lastDayThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
+    lastNightThemeIndex =
+        lastNightThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
   }
 }
