@@ -194,7 +194,7 @@ class SourceSwitchService {
   }) async {
     final books = bookDao ?? getIt<BookDao>();
     final db = books.appDatabase;
-    final chaptersDao = ChapterDao(db);
+    final chaptersDao = chapterDao ?? ChapterDao(db);
     final contentDao = ReaderChapterContentDao(db);
     final migratedBook = resolution.migratedBook;
 
