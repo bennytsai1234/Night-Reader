@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_theme.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
@@ -13,12 +14,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     _initFromCache(ReaderV2PrefsRepository.cachedSnapshot);
   }
 
-  static const double minReadableLineHeight =
-      ReaderV2Style.minReadableLineHeight;
-  static const double minAutoPageSpeed =
-      ReaderV2PrefsRepository.minAutoPageSpeed;
-  static const double maxAutoPageSpeed =
-      ReaderV2PrefsRepository.maxAutoPageSpeed;
+  static const double minReadableLineHeight = ReaderV2Style.minReadableLineHeight;
+  static const double minAutoPageSpeed = ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
 
   final ReaderV2PrefsRepository _prefsRepository;
 
@@ -72,9 +70,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     bool bottomInfoReservedExternally = false,
   }) {
     final top =
-        (topInfoReservedExternally
-            ? 0.0
-            : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
+        (topInfoReservedExternally ? 0.0 : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
     return ReaderV2Style(
@@ -93,11 +89,24 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   ReadingTheme get currentTheme {
-    return _themeAt(themeIndex);
+    final dark = _isThemeDark(themeIndex);
+    return ThemeSettingsProvider.resolveReaderTheme(
+      dark: dark,
+      menu: false,
+      fallback: _themeAt(themeIndex),
+    );
   }
 
   ReadingTheme get currentMenuTheme {
-    return _themeAt(menuThemeIndex);
+    final dark = isCurrentThemeDark;
+    final index = _normalizeThemeIndex(
+      ThemeSettingsProvider.menuBuiltInIndex(dark, menuThemeIndex),
+    );
+    return ThemeSettingsProvider.resolveReaderTheme(
+      dark: dark,
+      menu: true,
+      fallback: _themeAt(index),
+    );
   }
 
   ReadingTheme _themeAt(int index) {
@@ -111,21 +120,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
     return AppTheme.readingThemes[_normalizeThemeIndex(index)];
   }
 
-  void setFontSize(double value) {
-    setTypography(fontSize: value);
-  }
-
-  void setLineHeight(double value) {
-    setTypography(lineHeight: value);
-  }
-
-  void setParagraphSpacing(double value) {
-    setTypography(paragraphSpacing: value);
-  }
-
-  void setLetterSpacing(double value) {
-    setTypography(letterSpacing: value);
-  }
+  void setFontSize(double value) => setTypography(fontSize: value);
+  void setLineHeight(double value) => setTypography(lineHeight: value);
+  void setParagraphSpacing(double value) => setTypography(paragraphSpacing: value);
+  void setLetterSpacing(double value) => setTypography(letterSpacing: value);
 
   void setTypography({
     double? fontSize,
@@ -197,6 +195,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setMenuTheme(int value) {
     menuThemeIndex = _normalizeThemeIndex(value);
     unawaited(_prefsRepository.saveMenuThemeIndex(menuThemeIndex));
+    ThemeSettingsProvider.saveMenuBuiltInIndex(isCurrentThemeDark, menuThemeIndex);
     notifyListeners();
   }
 
@@ -217,27 +216,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   bool get isCurrentThemeDark => _isThemeDark(themeIndex);
 
-  int get dayNightToggleTargetThemeIndex =>
-      isCurrentThemeDark ? lastDayThemeIndex : lastNightThemeIndex;
+  int get dayNightToggleTargetThemeIndex => isCurrentThemeDark ? lastDayThemeIndex : lastNightThemeIndex;
 
-  bool get willToggleToDarkTheme =>
-      _isThemeDark(dayNightToggleTargetThemeIndex);
+  bool get willToggleToDarkTheme => _isThemeDark(dayNightToggleTargetThemeIndex);
 
-  String get dayNightToggleTooltip =>
-      willToggleToDarkTheme ? '切換到夜間主題' : '切換到白天主題';
+  String get dayNightToggleTooltip => willToggleToDarkTheme ? '切換到夜間主題' : '切換到白天主題';
 
-  IconData get dayNightToggleIcon =>
-      willToggleToDarkTheme
-          ? Icons.dark_mode_rounded
-          : Icons.light_mode_rounded;
+  IconData get dayNightToggleIcon => willToggleToDarkTheme ? Icons.dark_mode_rounded : Icons.light_mode_rounded;
 
   void toggleDayNightTheme() {
     final target = dayNightToggleTargetThemeIndex;
     if (target == themeIndex) {
-      final fallback =
-          isCurrentThemeDark
-              ? _fallbackDayThemeIndex()
-              : _fallbackNightThemeIndex();
+      final fallback = isCurrentThemeDark ? _fallbackDayThemeIndex() : _fallbackNightThemeIndex();
       if (fallback != themeIndex) setTheme(fallback);
       return;
     }
@@ -256,9 +246,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   bool _isThemeDark(int index) {
     if (AppTheme.readingThemes.isEmpty) return index != 0;
-    return AppTheme.readingThemes[_normalizeThemeIndex(index)].backgroundColor
-            .computeLuminance() <
-        0.5;
+    return AppTheme.readingThemes[_normalizeThemeIndex(index)].backgroundColor.computeLuminance() < 0.5;
   }
 
   int _normalizeThemeIndex(int index) {
@@ -293,16 +281,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
       lastNightThemeIndex = 1;
       return;
     }
-    lastDayThemeIndex =
-        lastDayThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    lastNightThemeIndex =
-        lastNightThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
+    lastDayThemeIndex = lastDayThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
+    lastNightThemeIndex = lastNightThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
     _rememberDayNightThemeIndex(themeIndex);
-    if (_isThemeDark(lastDayThemeIndex)) {
-      lastDayThemeIndex = _fallbackDayThemeIndex();
-    }
-    if (!_isThemeDark(lastNightThemeIndex)) {
-      lastNightThemeIndex = _fallbackNightThemeIndex();
-    }
+    if (_isThemeDark(lastDayThemeIndex)) lastDayThemeIndex = _fallbackDayThemeIndex();
+    if (!_isThemeDark(lastNightThemeIndex)) lastNightThemeIndex = _fallbackNightThemeIndex();
   }
 }
