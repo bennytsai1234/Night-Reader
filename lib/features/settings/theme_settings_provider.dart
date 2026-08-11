@@ -215,6 +215,15 @@ class ThemeSettingsProvider extends ChangeNotifier {
     return AreaThemeMode.fromStorage(raw);
   }
 
+  static void saveAreaMode(ThemeArea area, AreaThemeMode mode) {
+    final prefs = _registeredPrefs();
+    if (prefs == null || area == ThemeArea.app) return;
+    prefs.setString(
+      area == ThemeArea.reader ? _kReaderMode : _kMenuMode,
+      mode.storageValue,
+    );
+  }
+
   static bool resolveAreaDarkMode(ThemeArea area, {bool fallback = false}) {
     final mode = areaMode(area);
     switch (mode) {
