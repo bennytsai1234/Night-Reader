@@ -870,7 +870,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
       builder:
           (ctx) => AlertDialog(
             title: const Text('確認刪除'),
-            content: Text('是否從書架刪除這 ${_selectedUrls.length} 本書？'),
+            content: Text(
+              '將永久刪除這 ${_selectedUrls.length} 本書，以及本機章節、正文快取、書籤、下載任務與封面資料。此操作無法復原。',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -878,14 +880,26 @@ class _BookshelfPageState extends State<BookshelfPage> {
               ),
               ElevatedButton(
                 onPressed: () async {
+                  final selectedUrls = Set<String>.from(_selectedUrls);
                   Navigator.pop(ctx);
-                  for (var url in _selectedUrls) {
-                    await p.removeFromBookshelf(url);
+                  try {
+                    for (final url in selectedUrls) {
+                      await p.deleteBook(url);
+                    }
+                    if (!mounted) return;
+                    setState(() {
+                      _isMultiSelect = false;
+                      _selectedUrls.clear();
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已刪除 ${selectedUrls.length} 本書')),
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('刪除失敗: $e')));
                   }
-                  setState(() {
-                    _isMultiSelect = false;
-                    _selectedUrls.clear();
-                  });
                 },
                 child: const Text('刪除'),
               ),
