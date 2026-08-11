@@ -49,7 +49,7 @@ class BookInfoHeader extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
