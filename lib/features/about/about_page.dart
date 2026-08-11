@@ -40,7 +40,7 @@ class _AboutPageState extends State<AboutPage> {
       appBar: AppBar(title: const Text('關於')),
       body: ListTileTheme(
         data: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
         ),
         child: ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
@@ -140,9 +140,9 @@ class _AboutPageState extends State<AboutPage> {
   Widget _buildCategoryHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Text(
