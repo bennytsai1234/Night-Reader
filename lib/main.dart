@@ -218,33 +218,8 @@ Future<void> _cleanupLegacyCustomFontArtifacts() async {
   }
 }
 
-class ReaderApp extends StatefulWidget {
+class ReaderApp extends StatelessWidget {
   const ReaderApp({super.key});
-
-  @override
-  State<ReaderApp> createState() => _ReaderAppState();
-}
-
-class _ReaderAppState extends State<ReaderApp> {
-  final AssociationHandlerService _associationHandler =
-      AssociationHandlerService();
-  bool _associationInitialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_associationInitialized) return;
-    _associationInitialized = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _associationHandler.init(context);
-    });
-  }
-
-  @override
-  void dispose() {
-    _associationHandler.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -267,9 +242,44 @@ class _ReaderAppState extends State<ReaderApp> {
           themeMode: settings.themeMode,
           locale: settings.locale,
           builder: (context, child) => child ?? const SizedBox.shrink(),
-          home: const MainPage(),
+          home: const _AssociationLifecycleHost(child: MainPage()),
         );
       },
     );
   }
+}
+
+class _AssociationLifecycleHost extends StatefulWidget {
+  const _AssociationLifecycleHost({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AssociationLifecycleHost> createState() =>
+      _AssociationLifecycleHostState();
+}
+
+class _AssociationLifecycleHostState extends State<_AssociationLifecycleHost> {
+  final AssociationHandlerService _associationHandler =
+      AssociationHandlerService();
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _associationHandler.init(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _associationHandler.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
