@@ -55,7 +55,7 @@ class DownloadManagerPage extends StatelessWidget {
                     child: ListTileTheme(
                       data: const ListTileThemeData(
                         contentPadding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xl,
+                          horizontal: AppSpacing.md,
                         ),
                       ),
                       child: ListView.separated(
@@ -125,9 +125,9 @@ class DownloadManagerPage extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
         AppSpacing.md,
-        AppSpacing.xl,
+        AppSpacing.md,
+        AppSpacing.md,
         AppSpacing.sm,
       ),
       child: Material(
@@ -137,7 +137,7 @@ class DownloadManagerPage extends StatelessWidget {
         borderRadius: AppRadius.cardLg,
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
