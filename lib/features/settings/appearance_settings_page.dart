@@ -40,11 +40,30 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             SegmentedButton<ThemeMode>(
               segments: const [
                 ButtonSegment(value: ThemeMode.system, label: Text('跟隨系統')),
-                ButtonSegment(value: ThemeMode.light, label: Text('日間')),
-                ButtonSegment(value: ThemeMode.dark, label: Text('夜間')),
+                ButtonSegment(value: ThemeMode.light, label: Text('淺色')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
               ],
               selected: {appSettings.themeMode},
               onSelectionChanged: (value) => appSettings.setThemeMode(value.first),
+            ),
+            const SizedBox(height: 16),
+          ] else ...[
+            Text(
+              _area == ThemeArea.reader ? '閱讀顯示模式' : '閱讀選單顯示模式',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<AreaThemeMode>(
+              segments: const [
+                ButtonSegment(value: AreaThemeMode.followApp, label: Text('跟隨 App')),
+                ButtonSegment(value: AreaThemeMode.light, label: Text('淺色')),
+                ButtonSegment(value: AreaThemeMode.dark, label: Text('深色')),
+              ],
+              selected: {
+                _area == ThemeArea.reader ? settings.readerMode : settings.menuMode,
+              },
+              onSelectionChanged: (value) =>
+                  settings.setAreaMode(_area, value.first),
             ),
             const SizedBox(height: 16),
           ],
@@ -53,12 +72,12 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
               ButtonSegment(
                 value: false,
                 icon: Icon(Icons.light_mode_outlined),
-                label: Text('日間設定'),
+                label: Text('淺色設定'),
               ),
               ButtonSegment(
                 value: true,
                 icon: Icon(Icons.dark_mode_outlined),
-                label: Text('夜間設定'),
+                label: Text('深色設定'),
               ),
             ],
             selected: {_dark},
