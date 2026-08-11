@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
 mixin AssociationDialogHelper on AssociationBase {
@@ -25,11 +26,21 @@ mixin AssociationDialogHelper on AssociationBase {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('外部匯入'),
             content: Text(
               '偵測到外部內容：\n$displaySource\n\n'
               '${_typeDescription(type)}',
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.sm,
+              AppSpacing.xl,
+              AppSpacing.xl,
+            ),
+            actionsOverflowButtonSpacing: AppSpacing.md,
             actions: [
               if (type == 'bookSource' || type == 'auto')
                 _btn(context, dialogContext, '匯入書源', () async {
@@ -121,6 +132,9 @@ mixin AssociationDialogHelper on AssociationBase {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('無法辨識檔案'),
             content: Text(
               '「${path.split(RegExp(r'[/\\]')).last}」不是可辨識的 Night Reader 匯入格式。',
