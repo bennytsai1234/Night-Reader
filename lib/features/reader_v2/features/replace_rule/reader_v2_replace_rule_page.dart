@@ -15,6 +15,7 @@ class ReaderV2ReplaceRulePage extends StatefulWidget {
 class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   final ReplaceRuleDao _replaceDao = getIt<ReplaceRuleDao>();
   bool _loading = true;
+  Object? _loadError;
   List<ReplaceRule> _rules = const <ReplaceRule>[];
 
   @override
@@ -26,13 +27,22 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   Future<void> _loadRules() async {
     setState(() {
       _loading = true;
+      _loadError = null;
     });
-    final rules = await _replaceDao.getAll();
-    if (!mounted) return;
-    setState(() {
-      _rules = rules;
-      _loading = false;
-    });
+    try {
+      final rules = await _replaceDao.getAll();
+      if (!mounted) return;
+      setState(() {
+        _rules = rules;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error;
+      });
+    }
   }
 
   Future<void> _openEditor({ReplaceRule? rule}) async {
@@ -46,17 +56,31 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         await _replaceDao.upsert(next);
       },
     );
-    await _loadRules();
+    if (mounted) await _loadRules();
   }
 
   Future<void> _deleteRule(ReplaceRule rule) async {
-    await _replaceDao.deleteById(rule.id);
-    await _loadRules();
+    try {
+      await _replaceDao.deleteById(rule.id);
+      await _loadRules();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('刪除規則失敗：$error')));
+    }
   }
 
   Future<void> _toggleEnabled(ReplaceRule rule, bool enabled) async {
-    await _replaceDao.updateEnabled(rule.id, enabled);
-    await _loadRules();
+    try {
+      await _replaceDao.updateEnabled(rule.id, enabled);
+      await _loadRules();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新規則狀態失敗：$error')));
+    }
   }
 
   @override
@@ -66,7 +90,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         title: const Text('替換規則'),
         actions: [
           IconButton(
-            onPressed: _loading ? null : () => _openEditor(),
+            onPressed: _loading || _loadError != null ? null : () => _openEditor(),
             icon: const Icon(Icons.add),
             tooltip: '新增規則',
           ),
@@ -75,6 +99,8 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       body:
           _loading
               ? const Center(child: CircularProgressIndicator())
+              : _loadError != null
+              ? _buildLoadError(context)
               : _rules.isEmpty
               ? _buildEmptyState(context)
               : ListView.separated(
@@ -97,7 +123,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
                       children: [
                         const SizedBox(height: 4),
                         Text(
-                          '${rule.pattern} -> ${rule.replacement}',
+                          '${rule.pattern} → ${rule.replacement}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -138,6 +164,32 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     );
   }
 
+  Widget _buildLoadError(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 12),
+            const Text('替換規則載入失敗'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _loadRules,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
@@ -168,7 +220,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.12),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label, style: const TextStyle(fontSize: 11)),
