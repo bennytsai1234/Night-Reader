@@ -125,9 +125,9 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                   if (_isSaving) const LinearProgressIndicator(minHeight: 2),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.xl,
                       AppSpacing.lg,
-                      AppSpacing.xl,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
                       AppSpacing.md,
                     ),
                     child: Text(
@@ -143,9 +143,9 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                       ignoring: _isSaving,
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.xl,
+                          AppSpacing.lg,
                           AppSpacing.md,
-                          AppSpacing.xl,
+                          AppSpacing.lg,
                           AppSpacing.xxl,
                         ),
                         child: GridView.builder(
@@ -220,7 +220,7 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
   Widget _buildLoadError(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -258,7 +258,7 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
                     ReaderV2TapAction.values.map((entry) {
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xl,
+                          horizontal: AppSpacing.lg,
                         ),
                         title: Text(entry.label),
                         onTap: () async {
