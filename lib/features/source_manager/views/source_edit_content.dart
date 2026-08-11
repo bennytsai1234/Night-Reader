@@ -10,25 +10,11 @@ class SourceEditContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       children: [
-        RuleTextField(
-          controller: controllers['ruleContentContent']!,
-          label: '正文規則',
-          hint: '解析章節正文內容',
-          maxLines: 5,
-        ),
-        RuleTextField(
-          controller: controllers['ruleContentNextPage']!,
-          label: '下一頁規則',
-          hint: '分頁正文解析',
-        ),
-        RuleTextField(
-          controller: controllers['ruleContentReplace']!,
-          label: '替換規則',
-          hint: '##正則##替換內容',
-          maxLines: 3,
-        ),
+        RuleTextField(controller: controllers['ruleContentContent']!, label: '正文規則', hint: '解析章節正文內容', maxLines: 5),
+        RuleTextField(controller: controllers['ruleContentNextPage']!, label: '下一頁規則', hint: '分頁正文解析'),
+        RuleTextField(controller: controllers['ruleContentReplace']!, label: '替換規則', hint: '##正則##替換內容', maxLines: 3),
       ],
     );
   }

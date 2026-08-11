@@ -51,12 +51,10 @@ class _ExploreShowContent extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
-    // 初始載入中
     if (provider.isLoading && provider.books.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 錯誤且無數據
     if (provider.errorMessage != null && provider.books.isEmpty) {
       return _buildStatePanel(
         context,
@@ -79,7 +77,6 @@ class _ExploreShowContent extends StatelessWidget {
       );
     }
 
-    // 空數據
     if (provider.isEmpty) {
       return _buildStatePanel(
         context,
@@ -95,14 +92,12 @@ class _ExploreShowContent extends StatelessWidget {
       );
     }
 
-    // 書籍列表 (對標 Android ExploreShowActivity RecyclerView)
     return RefreshIndicator(
       onRefresh: () => provider.refresh(),
       child: ListView.builder(
         itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
-            // LoadMore 指示器 (對標 Android LoadMoreView)
             if (provider.errorMessage == null) {
               provider.loadMore();
             }
@@ -118,7 +113,6 @@ class _ExploreShowContent extends StatelessWidget {
     );
   }
 
-  /// 載入更多指示器 (對標 Android LoadMoreView)
   Widget _buildLoadMoreIndicator(
     BuildContext context,
     ExploreShowProvider provider,
@@ -180,11 +174,11 @@ class _ExploreShowContent extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.xl),
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+              spacing: AppSpacing.md,
+              runSpacing: AppSpacing.md,
               children: actions,
             ),
           ],
@@ -198,6 +192,9 @@ class _ExploreShowContent extends StatelessWidget {
       context: context,
       builder:
           (ctx) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('錯誤原因'),
             content: SelectableText(message),
             actions: [

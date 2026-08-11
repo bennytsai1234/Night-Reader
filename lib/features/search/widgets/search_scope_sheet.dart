@@ -146,13 +146,13 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
+                AppSpacing.xl,
                 AppSpacing.md,
-                AppSpacing.lg,
-                0,
+                AppSpacing.xl,
+                AppSpacing.sm,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     '搜尋範圍',
@@ -160,21 +160,27 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          widget.onScopeChanged(SearchScope());
-                          Navigator.pop(context);
-                        },
-                        child: const Text('全部書源'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: _onConfirm,
-                        child: const Text('確定'),
-                      ),
-                    ],
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: AppSpacing.md,
+                      runSpacing: AppSpacing.sm,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            widget.onScopeChanged(SearchScope());
+                            Navigator.pop(context);
+                          },
+                          child: const Text('全部書源'),
+                        ),
+                        FilledButton(
+                          onPressed: _onConfirm,
+                          child: const Text('確定'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -243,7 +249,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('書源載入失敗'),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
             FilledButton.icon(
               onPressed: _loadSources,
               icon: const Icon(Icons.refresh),
@@ -258,8 +264,8 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.sm,
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.md,
           ),
           child: TextField(
             controller: _searchController,
@@ -267,10 +273,12 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
               hintText: '搜尋書源',
               prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
-              border: OutlineInputBorder(borderRadius: AppRadius.cardSm),
+              border: const OutlineInputBorder(
+                borderRadius: AppRadius.cardMd,
+              ),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.md,
               ),
             ),
             onChanged: _filterSources,

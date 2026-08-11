@@ -57,6 +57,7 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
         (_importNew ? p.newSources.length : 0) +
         (_importUpdated ? p.updatedSources.length : 0);
     return AlertDialog(
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
       title: const Text('匯入預覽'),
       content: SingleChildScrollView(
         child: Column(
@@ -75,7 +76,7 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
                   style: AppTextStyles.bodyXs.copyWith(color: context.warning),
                 ),
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.lg),
             if (p.newSources.isNotEmpty)
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
@@ -110,6 +111,13 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xl,
+      ),
+      actionsOverflowButtonSpacing: AppSpacing.md,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

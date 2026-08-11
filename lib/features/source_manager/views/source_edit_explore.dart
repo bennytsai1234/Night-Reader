@@ -10,7 +10,7 @@ class SourceEditExplore extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       children: [
         RuleTextField(
           controller: controllers['exploreUrl']!,
@@ -19,39 +19,14 @@ class SourceEditExplore extends StatelessWidget {
           isUrl: true,
           maxLines: 3,
         ),
-        RuleTextField(
-          controller: controllers['ruleExploreBookList']!,
-          label: '列表規則',
-          hint: 'JSONPath, XPath 或 CSS',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreName']!,
-          label: '書名規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreAuthor']!,
-          label: '作者規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreKind']!,
-          label: '分類規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreWordCount']!,
-          label: '字數規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreLastChapter']!,
-          label: '最新章節',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreCoverUrl']!,
-          label: '封面規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleExploreBookUrl']!,
-          label: '詳情網址規則',
-        ),
+        RuleTextField(controller: controllers['ruleExploreBookList']!, label: '列表規則', hint: 'JSONPath, XPath 或 CSS'),
+        RuleTextField(controller: controllers['ruleExploreName']!, label: '書名規則'),
+        RuleTextField(controller: controllers['ruleExploreAuthor']!, label: '作者規則'),
+        RuleTextField(controller: controllers['ruleExploreKind']!, label: '分類規則'),
+        RuleTextField(controller: controllers['ruleExploreWordCount']!, label: '字數規則'),
+        RuleTextField(controller: controllers['ruleExploreLastChapter']!, label: '最新章節'),
+        RuleTextField(controller: controllers['ruleExploreCoverUrl']!, label: '封面規則'),
+        RuleTextField(controller: controllers['ruleExploreBookUrl']!, label: '詳情網址規則'),
       ],
     );
   }

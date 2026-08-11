@@ -21,7 +21,7 @@ class RuleTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -38,7 +38,7 @@ class RuleTextField extends StatelessWidget {
               _buildHelperButton(context),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.md),
           TextFormField(
             controller: controller,
             maxLines: maxLines,
@@ -47,10 +47,12 @@ class RuleTextField extends StatelessWidget {
               hintText: hint,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.md,
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.lg,
               ),
-              border: OutlineInputBorder(borderRadius: AppRadius.cardSm),
+              border: const OutlineInputBorder(
+                borderRadius: AppRadius.cardMd,
+              ),
             ),
           ),
         ],
@@ -112,7 +114,7 @@ class RuleTextField extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.all(AppSpacing.xl),
                   child: Text(
                     '$label - 規則小幫手',
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -121,6 +123,9 @@ class RuleTextField extends StatelessWidget {
                 const Divider(height: 1),
                 ...helpers.map(
                   (h) => ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                    ),
                     title: Text(h['label']!),
                     subtitle: Text(h['value']!),
                     onTap: () {

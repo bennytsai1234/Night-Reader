@@ -10,7 +10,7 @@ class SourceEditSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       children: [
         RuleTextField(
           controller: controllers['searchUrl']!,
@@ -19,39 +19,14 @@ class SourceEditSearch extends StatelessWidget {
           isUrl: true,
           maxLines: 2,
         ),
-        RuleTextField(
-          controller: controllers['ruleSearchBookList']!,
-          label: '列表規則',
-          hint: 'JSONPath, XPath 或 CSS',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchName']!,
-          label: '書名規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchAuthor']!,
-          label: '作者規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchKind']!,
-          label: '分類規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchWordCount']!,
-          label: '字數規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchLastChapter']!,
-          label: '最新章節',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchCoverUrl']!,
-          label: '封面規則',
-        ),
-        RuleTextField(
-          controller: controllers['ruleSearchNoteUrl']!,
-          label: '詳情網址規則',
-        ),
+        RuleTextField(controller: controllers['ruleSearchBookList']!, label: '列表規則', hint: 'JSONPath, XPath 或 CSS'),
+        RuleTextField(controller: controllers['ruleSearchName']!, label: '書名規則'),
+        RuleTextField(controller: controllers['ruleSearchAuthor']!, label: '作者規則'),
+        RuleTextField(controller: controllers['ruleSearchKind']!, label: '分類規則'),
+        RuleTextField(controller: controllers['ruleSearchWordCount']!, label: '字數規則'),
+        RuleTextField(controller: controllers['ruleSearchLastChapter']!, label: '最新章節'),
+        RuleTextField(controller: controllers['ruleSearchCoverUrl']!, label: '封面規則'),
+        RuleTextField(controller: controllers['ruleSearchNoteUrl']!, label: '詳情網址規則'),
       ],
     );
   }

@@ -37,7 +37,7 @@ class StartupFailurePanel extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
                   title,
@@ -49,17 +49,17 @@ class StartupFailurePanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.md),
           Text(
             message,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onErrorContainer,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.lg),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.md,
             children: [
               FilledButton.icon(
                 onPressed: onRetry,
@@ -96,6 +96,9 @@ class StartupFailurePanel extends StatelessWidget {
       context: context,
       builder:
           (context) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('錯誤詳情'),
             content: SizedBox(
               width: double.maxFinite,

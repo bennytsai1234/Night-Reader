@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/update_service.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'external_url_launcher.dart';
 
 /// 結果類型：呼叫端用來決定是否寫入「忽略此版」。
@@ -20,6 +21,7 @@ class UpdateDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
       title: Text('發現新版 ${info.versionName}'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 360),
@@ -31,6 +33,13 @@ class UpdateDialog extends StatelessWidget {
           ),
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xl,
+      ),
+      actionsOverflowButtonSpacing: AppSpacing.md,
       actions: [
         TextButton(
           onPressed:

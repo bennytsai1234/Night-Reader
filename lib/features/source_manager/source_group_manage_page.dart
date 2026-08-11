@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'source_manager_provider.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
@@ -141,6 +142,9 @@ class SourceGroupManagePage extends StatelessWidget {
             (dialogContext) => StatefulBuilder(
               builder:
                   (context, setDialogState) => AlertDialog(
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: AppRadius.cardXl,
+                    ),
                     title: Text(oldName == null ? '新增分組' : '重新命名分組'),
                     content: TextField(
                       controller: controller,
@@ -203,6 +207,9 @@ class SourceGroupManagePage extends StatelessWidget {
       context: context,
       builder:
           (context) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('刪除分組'),
             content: Text('確定要刪除分組 "$name" 嗎？\n這不會刪除書源，只會移除該分組標籤。'),
             actions: [

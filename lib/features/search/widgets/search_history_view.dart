@@ -26,7 +26,12 @@ class SearchHistoryView extends StatelessWidget {
     final theme = Theme.of(context);
 
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.xxl,
+      ),
       children: [
         if (provider.historyKeywords.isNotEmpty) ...[
           Row(
@@ -48,10 +53,10 @@ class SearchHistoryView extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.md,
             children:
                 provider.historyKeywords.map((keyword) {
                   return GestureDetector(
@@ -101,6 +106,9 @@ class SearchHistoryView extends StatelessWidget {
       context: context,
       builder:
           (ctx) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('刪除記錄'),
             content: Text('確定要刪除「${keyword.word}」嗎？'),
             actions: [
@@ -125,6 +133,9 @@ class SearchHistoryView extends StatelessWidget {
       context: context,
       builder:
           (ctx) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('清空歷史'),
             content: const Text('確定要清空所有搜尋歷史嗎？'),
             actions: [
