@@ -59,7 +59,7 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
 
           return ListTileTheme(
             data: const ListTileThemeData(
-              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
             ),
             child: ListView.separated(
               padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
