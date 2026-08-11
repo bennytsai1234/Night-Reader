@@ -11,7 +11,7 @@ class BookInfoIntro extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
