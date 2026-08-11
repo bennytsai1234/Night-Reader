@@ -167,9 +167,15 @@ final class RenderCachedBlock extends RenderBox {
     }
     _cancelParagraphWait();
     final canvas = context.canvas;
+
+    // Paragraph 的實際像素永遠限制在 DocumentIndex 配給這個 block 的
+    // extent 內。即使快取重建期間幾何短暫失配，也不能把文字畫進下一塊。
+    canvas.save();
+    canvas.clipRect(offset & size);
     if (entry.bakedColor == _textColor) {
       // 熱路徑：色已烘進 Paragraph，直繪零離屏。
       canvas.drawParagraph(entry.paragraph, offset);
+      canvas.restore();
       return;
     }
     // 換色過渡幀：pump 尚未以新色重建本 block，暫以 tint 維持視覺正確。
@@ -179,6 +185,7 @@ final class RenderCachedBlock extends RenderBox {
       Paint()..colorFilter = ColorFilter.mode(_textColor, BlendMode.srcIn),
     );
     canvas.drawParagraph(entry.paragraph, offset);
+    canvas.restore();
     canvas.restore();
   }
 
