@@ -126,6 +126,7 @@ class BookDetailProvider extends ChangeNotifier {
   List<BookChapter> _allChapters = [];
   List<BookChapter> _displayChapters = [];
   bool _isLoading = true;
+  String? _loadErrorMessage;
   bool _isInBookshelf = false;
   BookSource? _currentSource;
   BookSource? get currentSource => _currentSource;
@@ -140,6 +141,7 @@ class BookDetailProvider extends ChangeNotifier {
   List<BookChapter> get allChapters => List.unmodifiable(_allChapters);
   int get totalChapterCount => _allChapters.length;
   bool get isLoading => _isLoading;
+  String? get loadErrorMessage => _loadErrorMessage;
   bool get isInBookshelf => _isInBookshelf;
   BookDetailCacheStatus get cacheStatus => _cacheStatus;
   bool get isCacheStatusLoading => _isCacheStatusLoading;
@@ -215,21 +217,37 @@ class BookDetailProvider extends ChangeNotifier {
     _init();
   }
 
+  Future<void> retryInitialization() => _init();
+
   Future<void> _init() async {
-    final existing = await _bookDao.getByUrl(_book.bookUrl);
-    if (existing != null) {
-      _book = existing;
-      _isInBookshelf = existing.isInBookshelf;
-    } else {
-      _book.isInBookshelf = false;
-      await _bookDao.upsert(_book);
-    }
-    await _loadSource();
-    await _loadBookInfo();
-    await _loadChapters();
-    unawaited(_storeDisplayCover());
-    _isLoading = false;
+    if (_disposed) return;
+    _isLoading = true;
+    _loadErrorMessage = null;
     notifyListeners();
+    try {
+      final existing = await _bookDao.getByUrl(_book.bookUrl);
+      if (existing != null) {
+        _book = existing;
+        _isInBookshelf = existing.isInBookshelf;
+      } else {
+        _book.isInBookshelf = false;
+        await _bookDao.upsert(_book);
+      }
+      await _loadSource();
+      await _loadBookInfo();
+      await _loadChapters();
+      unawaited(_storeDisplayCover());
+    } catch (error, stackTrace) {
+      AppLog.e(
+        '載入書籍詳情失敗: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _loadErrorMessage = '書籍詳情載入失敗，請重試';
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<void> _loadSource() async {
@@ -559,7 +577,7 @@ class BookDetailProvider extends ChangeNotifier {
     _book.durChapterTitle = firstChapter.title;
   }
 
-  Future<void> updateBookInfo(
+  Future<BookDetailOperationResult> updateBookInfo(
     String name,
     String author,
     String intro,
@@ -569,23 +587,37 @@ class BookDetailProvider extends ChangeNotifier {
     String? originName,
     String? tocUrl,
   }) async {
-    _book.name = name.trim();
-    _book.author = author.trim();
-    _book.intro = intro.trim();
-    _book.customIntro = intro.trim();
-    _book.kind = kind?.trim();
-    _book.customTag = customTag?.trim();
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      return BookDetailOperationResult.failure('書名不能為空');
+    }
+
+    final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
+    next.name = normalizedName;
+    next.author = author.trim();
+    next.intro = intro.trim();
+    next.customIntro = intro.trim();
+    next.kind = kind?.trim();
+    next.customTag = customTag?.trim();
     if (originName != null && originName.trim().isNotEmpty) {
-      _book.originName = originName.trim();
+      next.originName = originName.trim();
     }
     if (tocUrl != null) {
-      _book.tocUrl = tocUrl.trim();
+      next.tocUrl = tocUrl.trim();
     }
-    _book.coverUrl = coverUrl.trim();
-    _book.coverLocalPath = null;
-    await _bookDao.upsert(_book);
-    unawaited(_storeDisplayCover());
-    notifyListeners();
+    next.coverUrl = coverUrl.trim();
+    next.coverLocalPath = null;
+
+    try {
+      await _bookDao.upsert(next);
+      _book = next;
+      unawaited(_storeDisplayCover());
+      notifyListeners();
+      return BookDetailOperationResult.success('書籍資訊已儲存');
+    } catch (error) {
+      AppLog.e('儲存書籍資訊失敗: $error', error: error);
+      return BookDetailOperationResult.failure('儲存書籍資訊失敗: $error');
+    }
   }
 
   Future<void> updateCover(String url) async {
