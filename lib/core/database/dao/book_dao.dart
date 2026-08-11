@@ -10,6 +10,8 @@ part 'book_dao.g.dart';
 class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   BookDao(super.db);
 
+  AppDatabase get appDatabase => attachedDatabase;
+
   Future<List<Book>> getAll() => select(books).get();
 
   Stream<List<Book>> watchInBookshelf() {
