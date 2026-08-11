@@ -12,7 +12,9 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
     secondary: colors.secondary,
     surface: colors.surface,
     onSurface: colors.textPrimary,
+    onSurfaceVariant: colors.textSecondary,
     outline: colors.border,
+    outlineVariant: colors.border.withValues(alpha: 0.72),
   );
 
   return ThemeData(
