@@ -39,6 +39,7 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
 
   List<Book> books = [];
   bool isLoading = false;
+  String? loadErrorMessage;
 
   bool isGridView = true;
   bool showLastUpdate = false;
