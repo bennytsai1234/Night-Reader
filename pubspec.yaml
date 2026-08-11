@@ -18,3 +18,121 @@ dependencies:
   event_bus: ^2.0.0
 
   # === Network ===
+  dio: ^5.7.0
+  dio_cookie_manager: ^3.1.2
+  cookie_jar: ^4.0.8
+  convert: ^3.1.1
+
+  # === Database ===
+  drift: ^2.33.0
+  path: ^1.9.0
+  path_provider: ^2.1.5
+
+  # === Media / TTS ===
+  flutter_tts: ^4.2.5
+  audio_service: ^0.18.18
+
+  # === HTML Parsing (replaces Android Jsoup) ===
+  html: ^0.15.5
+  html_unescape: ^2.0.0
+
+  # === JSON Path ===
+  json_path: ^0.9.0
+
+  # === XPath ===
+  xpath_selector: ^3.0.2
+  xpath_selector_html_parser: ^3.0.1
+
+  # === JavaScript Engine (replaces Android Rhino) ===
+  flutter_js: ^0.8.3
+
+  # === Crypto (replaces Android hutool-crypto) ===
+  crypto: ^3.0.6
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
+
+  # === Image Loading ===
+  cached_network_image: ^3.4.1
+
+  # === Image Picker ===
+  image_picker: ^1.1.2
+
+  # === Deep Link & Sharing ===
+  app_links: ^7.2.0
+  receive_sharing_intent: ^1.1.1
+
+  # === Background Tasks ===
+
+  workmanager: ^0.9.0+3
+  pool: ^1.5.2
+
+  # === Local File Support ===
+  file_picker: ^11.0.2
+
+  # === URL Launcher ===
+  url_launcher: ^6.3.1
+
+
+  # === Share ===
+  share_plus: ^13.2.0
+
+  # === WebView (for WebView book sources) ===
+  webview_flutter: ^4.13.0
+
+  # === Local Storage (key-value) ===
+  shared_preferences: ^2.3.4
+  # 鎖 9.x:10.x 要 win32 ^6,會與 file_picker(鎖 win32 ^5.9.0)衝突,
+  # 害 flutter test 在 host 編譯 file_picker 桌面實作時爆掉。本 App 只出
+  # Android/iOS,9.x 的版本資訊 API 與 10.x 完全相同,留在 5.x 線最單純。
+  package_info_plus: ^9.0.1
+
+  # === UUID ===
+  uuid: ^4.5.1
+
+  # === Intl (date formatting, etc.) ===
+  intl: ^0.20.2
+  fast_gbk: ^1.0.0
+  archive: ^4.0.9
+  webview_flutter_wkwebview: ^3.23.0
+  webview_flutter_android: ^4.10.1
+  flutter_native_splash: ^2.4.8
+  synchronized: ^3.3.1
+  get_it: ^9.2.1
+  logger: ^2.6.2
+  permission_handler: ^12.0.1
+
+dependency_overrides:
+  # Flutter SDK 把 meta 精確釘在 1.18.0,但升級後的 analyzer(^1.18.3,build_runner/
+  # drift_dev 帶入)用到 1.18.0 沒有的 TargetKind.importDirective。meta 純註解、
+  # 向後相容,以 override 統一到 1.18.3 同時滿足 SDK 與 analyzer。
+  meta: 1.18.3
+  # win32 僅供 Windows 桌面使用,本專案只出 Android/iOS,實機不會執行;但
+  # flutter test 在 host 上會把 file_picker 的桌面實作一併編譯。file_picker
+  # 最新版仍鎖 win32 ^5.9.0,故統一壓在 5.x,讓該編譯對得上預期 API。
+  win32: ^5.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  build_runner: ^2.4.13
+  drift_dev: ^2.33.0
+  flutter_launcher_icons: ^0.14.1
+
+# Adaptive launcher icon：深棕 #1A1612 底板 + 品牌圖前景，消除桌面/開啟動畫白板。
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/app-icon.png"
+  min_sdk_android: 24
+  adaptive_icon_background: "#1A1612"
+  adaptive_icon_foreground: "assets/app_icon/ic_foreground.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/ui/app_icon.webp
+    - assets/default_sources/
+    - assets/opencc/
