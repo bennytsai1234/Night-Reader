@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -55,6 +56,52 @@ class _FakeBookSourceService extends BookSourceService {
   }
 }
 
+class _SearchTrackingBookSourceService extends BookSourceService {
+  int preciseSearchCalls = 0;
+  int nameOnlySearchCalls = 0;
+
+  @override
+  Future<List<SearchBook>> preciseSearch(
+    BookSource source,
+    String name,
+    String author,
+  ) async {
+    preciseSearchCalls++;
+    return const <SearchBook>[];
+  }
+
+  @override
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) async {
+    nameOnlySearchCalls++;
+    final candidate = SearchBook(
+      bookUrl: '${source.bookSourceUrl}/book/1',
+      name: key,
+      author: '不同作者',
+      origin: source.bookSourceUrl,
+      originName: source.bookSourceName,
+    );
+    return filter?.call(candidate.name, candidate.author ?? '') == false
+        ? const <SearchBook>[]
+        : <SearchBook>[candidate];
+  }
+}
+
+class _EnabledBookSourceDao extends Fake implements BookSourceDao {
+  _EnabledBookSourceDao(this.sources);
+
+  final List<BookSource> sources;
+
+  @override
+  Future<List<BookSource>> getEnabled() async => sources;
+}
+
 BookSource _source(String url, String name) {
   return BookSource(bookSourceUrl: url, bookSourceName: name);
 }
@@ -102,6 +149,44 @@ List<BookChapter> _chapters(String bookUrl, int count) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('SourceSwitchService.searchAlternatives', () {
+    test('停用作者比對時以書名搜尋，不會要求候選作者為空字串', () async {
+      final source = _source('new-origin', '新源');
+      final sourceService = _SearchTrackingBookSourceService();
+      final service = SourceSwitchService(
+        service: sourceService,
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      final results = await service.searchAlternatives(
+        _currentBook(),
+        checkAuthor: false,
+      );
+
+      expect(results, hasLength(1));
+      expect(results.single.author, '不同作者');
+      expect(sourceService.nameOnlySearchCalls, 1);
+      expect(sourceService.preciseSearchCalls, 0);
+    });
+
+    test('原書沒有作者時自動退化為書名搜尋', () async {
+      final source = _source('new-origin', '新源');
+      final sourceService = _SearchTrackingBookSourceService();
+      final service = SourceSwitchService(
+        service: sourceService,
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      final results = await service.searchAlternatives(
+        _currentBook().copyWith(author: '   '),
+      );
+
+      expect(results, hasLength(1));
+      expect(sourceService.nameOnlySearchCalls, 1);
+      expect(sourceService.preciseSearchCalls, 0);
+    });
+  });
 
   group('SourceSwitchService.resolveSwitch', () {
     late AppDatabase db;
@@ -166,10 +251,7 @@ void main() {
       final candidate = _candidate('new-origin');
       final chapters = _chapters(candidate.bookUrl, 100);
       final service = SourceSwitchService(
-        service: _FakeBookSourceService(
-          chapters: chapters,
-          content: '加載章節失敗',
-        ),
+        service: _FakeBookSourceService(chapters: chapters, content: '加載章節失敗'),
         sourceDao: db.bookSourceDao,
       );
 
@@ -182,11 +264,7 @@ void main() {
           validateTargetContent: true,
         ),
         throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            '目標章節內容不可讀',
-          ),
+          isA<StateError>().having((e) => e.message, 'message', '目標章節內容不可讀'),
         ),
       );
     });
@@ -208,11 +286,7 @@ void main() {
           targetChapterIndex: 5,
         ),
         throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            '新來源沒有可用目錄',
-          ),
+          isA<StateError>().having((e) => e.message, 'message', '新來源沒有可用目錄'),
         ),
       );
     });
@@ -227,11 +301,7 @@ void main() {
       expect(
         () => service.resolveSwitch(_currentBook(), candidate),
         throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            '找不到對應書源',
-          ),
+          isA<StateError>().having((e) => e.message, 'message', '找不到對應書源'),
         ),
       );
     });

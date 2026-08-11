@@ -46,7 +46,6 @@ abstract class AnalyzeRuleBase {
   static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(
     maxSize: 200,
   );
-  static final LruMap<String, dynamic> scriptCache = LruMap(maxSize: 100);
 
   static void dispose() {
     debugLogController?.close();

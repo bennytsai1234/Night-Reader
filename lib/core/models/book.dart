@@ -110,7 +110,10 @@ class Book extends BookBase implements RuleDataInterface {
       readerAnchorJson: json['readerAnchorJson'],
       durChapterTime: BookSerialization.toInt(json['durChapterTime']),
       wordCount: json['wordCount'],
-      canUpdate: json['canUpdate'] == 1 || json['canUpdate'] == true,
+      canUpdate:
+          json['canUpdate'] == null ||
+          json['canUpdate'] == 1 ||
+          json['canUpdate'] == true,
       order: BookSerialization.toInt(json['order']),
       originOrder: BookSerialization.toInt(json['originOrder']),
       variable: json['variable'],

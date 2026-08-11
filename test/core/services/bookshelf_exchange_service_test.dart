@@ -107,4 +107,28 @@ void main() {
       expect(sourceDao.sources.single.bookSourceUrl, 'https://source/1');
     },
   );
+
+  test(
+    'list import skips leading non-map entries before detecting books',
+    () async {
+      final service = BookshelfExchangeService();
+      final payload = jsonEncode([
+        null,
+        {'kind': 'metadata'},
+        {
+          'bookUrl': 'https://book/after-null',
+          'name': '有效書籍',
+          'author': '作者',
+          'origin': 'https://source/1',
+          'originName': '來源',
+        },
+      ]);
+
+      final result = await service.importFromText(payload);
+      final bookDao = GetIt.instance<BookDao>() as _FakeBookDao;
+
+      expect(result.books, 1);
+      expect(bookDao.storedBooks.single.name, '有效書籍');
+    },
+  );
 }

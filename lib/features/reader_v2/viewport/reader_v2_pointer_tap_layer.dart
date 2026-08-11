@@ -1,10 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 typedef ReaderV2PointerDownTapPolicy = bool Function(PointerDownEvent event);
 
-const double _stationaryTapTolerance = 2.0;
-const double _stationaryTapToleranceSquared =
-    _stationaryTapTolerance * _stationaryTapTolerance;
+const double _stationaryTapToleranceSquared = kTouchSlop * kTouchSlop;
 
 class ReaderV2PointerTapLayer extends StatefulWidget {
   const ReaderV2PointerTapLayer({
@@ -31,6 +30,10 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
 
   void _handlePointerDown(PointerDownEvent event) {
     if (widget.onTapUp == null) return;
+    if (event.buttons != kPrimaryButton) {
+      _resetTracking();
+      return;
+    }
     if (_pointer != null) {
       _resetTracking();
       return;

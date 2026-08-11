@@ -75,5 +75,27 @@ option={"method":"POST","body":"keyword=我的"};
       },
       skip: quickJsSkip,
     );
+
+    test(
+      'evaluateAsync reports disposal across its async setup gap',
+      () async {
+        final engine = JsEngine();
+        final result = engine.evaluateAsync('java.ajax("https://example.com")');
+
+        engine.dispose();
+
+        await expectLater(
+          result,
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'JsEngine has been disposed',
+            ),
+          ),
+        );
+      },
+      skip: quickJsSkip,
+    );
   });
 }

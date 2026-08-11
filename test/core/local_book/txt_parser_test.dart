@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/local_book/txt_parser.dart';
@@ -73,6 +74,28 @@ void main() {
       }
     });
 
+    test('Malformed UTF-8 bytes preserve exact chapter byte offsets', () async {
+      final file = File('${Directory.systemTemp.path}/malformed_utf8_book.txt');
+      final first = utf8.encode('第一章 測試\n內容甲\n');
+      final second = utf8.encode('\n第二章 測試\n內容乙');
+      final bytes = <int>[0xEF, 0xBB, 0xBF, ...first, 0xFF, ...second];
+      await file.writeAsBytes(bytes, flush: true);
+
+      try {
+        final result = await TxtParser(file).splitChapters();
+        final secondStart = 3 + first.length + 1 + utf8.encode('\n').length;
+
+        expect(result.charset, 'UTF-8');
+        expect(result.chapters, hasLength(2));
+        expect(result.chapters.first['start'], 3);
+        expect(result.chapters.first['end'], secondStart);
+        expect(result.chapters.last['start'], secondStart);
+        expect(result.chapters.last['end'], bytes.length);
+      } finally {
+        if (await file.exists()) await file.delete();
+      }
+    });
+
     test('No Chapter Title Handling', () async {
       final parser = TxtParser(noChapterFile);
       await parser.load();
@@ -113,6 +136,37 @@ void main() {
           if (await largeNoChapter.exists()) {
             await largeNoChapter.delete();
           }
+        }
+      },
+    );
+
+    test(
+      'malformed UTF-8 keeps exact byte ranges across large chunks',
+      () async {
+        final file = File(
+          '${Directory.systemTemp.path}/malformed_utf8_large_book.txt',
+        );
+        final bytes = <int>[
+          0xEF,
+          0xBB,
+          0xBF,
+          ...List<int>.filled(100, 0x61),
+          0xFF,
+          ...List<int>.filled(40000, 0x62),
+        ];
+        await file.writeAsBytes(bytes, flush: true);
+
+        try {
+          final result = await TxtParser(file).splitChapters();
+
+          expect(result.charset, 'UTF-8');
+          expect(result.chapters, hasLength(2));
+          expect(result.chapters.first['start'], 3);
+          expect(result.chapters.first['end'], 3 + 30000);
+          expect(result.chapters.first['end'], result.chapters.last['start']);
+          expect(result.chapters.last['end'], bytes.length);
+        } finally {
+          if (await file.exists()) await file.delete();
         }
       },
     );

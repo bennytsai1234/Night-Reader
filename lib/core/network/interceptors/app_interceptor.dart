@@ -14,6 +14,7 @@ class AppInterceptor extends Interceptor {
   static const String manualRedirectChainKey = '_manualRedirectChain';
   static const String disableManualRedirectHandlingKey =
       '_disableManualRedirectHandling';
+  static const String _manualRedirectVisitedKey = '_manualRedirectVisited';
   static const int _maxManualRedirects = 10;
 
   @override
@@ -115,6 +116,17 @@ class AppInterceptor extends Interceptor {
     }
 
     final resolvedUri = response.realUri.resolve(locationHeader.trim());
+    final visited =
+        ((request.extra[_manualRedirectVisitedKey] as List?) ??
+                const <dynamic>[])
+            .map((item) => item.toString())
+            .toSet()
+          ..add(request.uri.toString());
+    if (visited.contains(resolvedUri.toString())) {
+      return null;
+    }
+    visited.add(resolvedUri.toString());
+
     final redirectedMethod = _redirectMethod(request.method, statusCode);
     final maintainBody = _maintainsRedirectBody(request.method, statusCode);
     final redirectedHeaders = Map<String, dynamic>.from(request.headers);
@@ -137,7 +149,8 @@ class AppInterceptor extends Interceptor {
     final redirectedExtra =
         Map<String, dynamic>.from(request.extra)
           ..[manualRedirectCountKey] = redirectCount + 1
-          ..[manualRedirectChainKey] = redirectChain;
+          ..[manualRedirectChainKey] = redirectChain
+          ..[_manualRedirectVisitedKey] = visited.toList();
 
     final redirectedRequest = RequestOptions(
       method: redirectedMethod,
@@ -181,6 +194,7 @@ class AppInterceptor extends Interceptor {
             .toList();
     redirectedResponse.extra[manualRedirectCountKey] = finalChain.length;
     redirectedResponse.extra[manualRedirectChainKey] = finalChain;
+    redirectedResponse.extra.remove(_manualRedirectVisitedKey);
     return redirectedResponse;
   }
 

@@ -112,6 +112,8 @@ class BookDetailCacheStatus {
 enum BookDetailCacheClearTarget { content, cover, all }
 
 class BookDetailProvider extends ChangeNotifier {
+  static const String _bookInfoDegradationMessage = '書籍資訊更新失敗，目前顯示已儲存內容';
+
   final BookDao _bookDao;
   final ChapterDao _chapterDao;
   final BookSourceDao _sourceDao;
@@ -172,6 +174,8 @@ class BookDetailProvider extends ChangeNotifier {
   bool _isReversed = false;
   bool _disposed = false;
   bool get isReversed => _isReversed;
+  String get tocSearchQuery => _searchQuery;
+  bool get hasActiveTocSearch => _searchQuery.isNotEmpty;
 
   Timer? _debounce;
 
@@ -258,15 +262,23 @@ class BookDetailProvider extends ChangeNotifier {
       updatedBook.customCoverUrl = customCoverUrl;
       updatedBook.customCoverLocalPath = customCoverLocalPath;
       _book = updatedBook;
+      _clearBookInfoDegradation();
       await _bookDao.upsert(_book);
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
+      _sourceIssueMessage ??= _bookInfoDegradationMessage;
       // 即使加載詳情失敗，仍嘗試用已有資訊載入目錄
       // 若 tocUrl 為空，以 bookUrl 作為備用
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
       await _bookDao.upsert(_book);
+    }
+  }
+
+  void _clearBookInfoDegradation() {
+    if (_sourceIssueMessage == _bookInfoDegradationMessage) {
+      _sourceIssueMessage = null;
     }
   }
 
@@ -407,6 +419,12 @@ class BookDetailProvider extends ChangeNotifier {
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _applyFilter();
     });
+  }
+
+  void clearTocSearch() {
+    _searchQuery = '';
+    _debounce?.cancel();
+    _applyFilter();
   }
 
   void toggleSort() {
@@ -682,6 +700,7 @@ class BookDetailProvider extends ChangeNotifier {
       _book = info;
       _isInBookshelf = info.isInBookshelf;
       _allChapters = chapters;
+      _clearBookInfoDegradation();
       await _chapterDao.deleteByBook(_book.bookUrl);
       if (chapters.isNotEmpty) {
         await _chapterDao.insertChapters(chapters);

@@ -106,7 +106,7 @@ class AnalyzeByRegex {
     return res.replaceAllMapped(regExp, (match) {
       var result = replacement;
       // 替換 $0, $1, $2...
-      for (var i = 0; i <= match.groupCount; i++) {
+      for (var i = match.groupCount; i >= 0; i--) {
         result = result.replaceAll('\$$i', match.group(i) ?? '');
       }
       return result;

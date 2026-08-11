@@ -82,12 +82,19 @@ class BookSource extends BookSourceBase {
       bookSourceType: json['bookSourceType'] ?? 0,
       bookUrlPattern: json['bookUrlPattern'],
       customOrder: json['customOrder'] ?? 0,
-      enabled: json['enabled'] == 1 || json['enabled'] == true,
+      enabled:
+          json['enabled'] == null ||
+          json['enabled'] == 1 ||
+          json['enabled'] == true,
       enabledExplore:
-          json['enabledExplore'] == 1 || json['enabledExplore'] == true,
+          json['enabledExplore'] == null ||
+          json['enabledExplore'] == 1 ||
+          json['enabledExplore'] == true,
       jsLib: json['jsLib'],
       enabledCookieJar:
-          json['enabledCookieJar'] == 1 || json['enabledCookieJar'] == true,
+          json['enabledCookieJar'] == null ||
+          json['enabledCookieJar'] == 1 ||
+          json['enabledCookieJar'] == true,
       concurrentRate: json['concurrentRate']?.toString(),
       header: json['header'],
       loginUrl: json['loginUrl'],

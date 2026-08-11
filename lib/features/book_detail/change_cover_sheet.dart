@@ -69,8 +69,8 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: AppRadius.topSheetXl,
       ),
       child: Column(

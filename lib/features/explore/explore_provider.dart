@@ -31,6 +31,7 @@ class ExploreProvider extends ChangeNotifier {
   int _expandedIndex = -1;
   List<ExploreKind> _expandedKinds = [];
   bool _isLoadingKinds = false;
+  int _kindsRequestGeneration = 0;
 
   // --- 分組 ---
   List<String> _groups = [];
@@ -40,6 +41,7 @@ class ExploreProvider extends ChangeNotifier {
   // Legado 以 bookSourceUrl + exploreUrl 作為分類快取鍵，規則變更後會自動
   // 重新解析，不會沿用舊分類。
   final Map<String, List<ExploreKind>> _kindsCache = {};
+  final Map<String, int> _latestKindsRequestByCacheKey = {};
 
   // --- Getters ---
   List<BookSource> get sources => _filteredSources;
@@ -74,10 +76,13 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   void _reloadFromSnapshot(List<BookSource> sources) {
-    final expandedSourceUrl =
+    final expandedSource =
         _expandedIndex >= 0 && _expandedIndex < _filteredSources.length
-            ? _filteredSources[_expandedIndex].bookSourceUrl
+            ? _filteredSources[_expandedIndex]
             : null;
+    final expandedSourceUrl = expandedSource?.bookSourceUrl;
+    final expandedCacheKey =
+        expandedSource == null ? null : _cacheKeyForSource(expandedSource);
 
     _allSources =
         sources.where((source) => source.canParticipateInDiscovery).toList()
@@ -102,7 +107,22 @@ class ExploreProvider extends ChangeNotifier {
       );
       if (newIndex >= 0) {
         _expandedIndex = newIndex;
+        final nextSource = _filteredSources[newIndex];
+        final nextCacheKey = _cacheKeyForSource(nextSource);
+        if (expandedCacheKey != nextCacheKey) {
+          if (expandedCacheKey != null) {
+            _kindsCache.remove(expandedCacheKey);
+            _latestKindsRequestByCacheKey.remove(expandedCacheKey);
+          }
+          final requestGeneration = ++_kindsRequestGeneration;
+          _expandedKinds = [];
+          _isLoadingKinds = true;
+          notifyListeners();
+          unawaited(_loadKindsForSource(nextSource, requestGeneration));
+          return;
+        }
       } else {
+        _invalidateKindsRequest();
         _expandedIndex = -1;
         _expandedKinds = [];
       }
@@ -113,6 +133,7 @@ class ExploreProvider extends ChangeNotifier {
   /// 搜索過濾 (對標 Android SearchView onQueryTextChange)
   void setSearchQuery(String query) {
     _searchQuery = query;
+    _invalidateKindsRequest();
     _expandedIndex = -1;
     _expandedKinds = [];
     _applyFilter();
@@ -127,6 +148,7 @@ class ExploreProvider extends ChangeNotifier {
       _selectedGroup = group;
     }
     _searchQuery = '';
+    _invalidateKindsRequest();
     _expandedIndex = -1;
     _expandedKinds = [];
     _applyFilter();
@@ -162,6 +184,7 @@ class ExploreProvider extends ChangeNotifier {
   Future<void> toggleExpand(int index) async {
     if (_expandedIndex == index) {
       // 收合
+      _invalidateKindsRequest();
       _expandedIndex = -1;
       _expandedKinds = [];
       notifyListeners();
@@ -171,42 +194,64 @@ class ExploreProvider extends ChangeNotifier {
     _expandedIndex = index;
     _expandedKinds = [];
     _isLoadingKinds = true;
+    final requestGeneration = ++_kindsRequestGeneration;
     notifyListeners();
 
     final source = _filteredSources[index];
-    await _loadKindsForSource(source);
+    await _loadKindsForSource(source, requestGeneration);
   }
 
   /// 為書源載入分類標籤 (帶快取，對標 Android exploreKinds())
-  Future<void> _loadKindsForSource(BookSource source) async {
+  Future<void> _loadKindsForSource(
+    BookSource source,
+    int requestGeneration,
+  ) async {
     final cacheKey = _cacheKeyForSource(source);
+    _latestKindsRequestByCacheKey[cacheKey] = requestGeneration;
 
     if (_kindsCache.containsKey(cacheKey)) {
-      _expandedKinds = _kindsCache[cacheKey]!;
-      _isLoadingKinds = false;
-      notifyListeners();
+      if (_isCurrentKindsRequest(source, requestGeneration)) {
+        _expandedKinds = _kindsCache[cacheKey]!;
+        _isLoadingKinds = false;
+        notifyListeners();
+      }
       return;
     }
 
     try {
       final kinds = await _kindsLoader(source.exploreUrl, source: source);
-      _kindsCache[cacheKey] = kinds;
-      // 確認展開狀態仍然有效（用戶可能已經點擊了其他書源）
-      if (_expandedIndex >= 0 &&
-          _expandedIndex < _filteredSources.length &&
-          _filteredSources[_expandedIndex].bookSourceUrl ==
-              source.bookSourceUrl) {
+      if (_latestKindsRequestByCacheKey[cacheKey] == requestGeneration) {
+        _kindsCache[cacheKey] = kinds;
+      }
+      if (_isCurrentKindsRequest(source, requestGeneration)) {
         _expandedKinds = kinds;
       }
     } catch (e) {
       AppLog.e('載入探索分類失敗', error: e);
-      _expandedKinds = [
-        ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString()),
-      ];
+      if (_isCurrentKindsRequest(source, requestGeneration)) {
+        _expandedKinds = [
+          ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString()),
+        ];
+      }
     } finally {
-      _isLoadingKinds = false;
-      notifyListeners();
+      if (_isCurrentKindsRequest(source, requestGeneration)) {
+        _isLoadingKinds = false;
+        notifyListeners();
+      }
     }
+  }
+
+  bool _isCurrentKindsRequest(BookSource source, int requestGeneration) {
+    return requestGeneration == _kindsRequestGeneration &&
+        _expandedIndex >= 0 &&
+        _expandedIndex < _filteredSources.length &&
+        _cacheKeyForSource(_filteredSources[_expandedIndex]) ==
+            _cacheKeyForSource(source);
+  }
+
+  void _invalidateKindsRequest() {
+    _kindsRequestGeneration++;
+    _isLoadingKinds = false;
   }
 
   String _cacheKeyForSource(BookSource source) {
@@ -215,16 +260,19 @@ class ExploreProvider extends ChangeNotifier {
 
   /// 刷新分類快取 (對標 Android menu_refresh / clearExploreKindsCache)
   Future<void> refreshKindsCache(BookSource source) async {
-    _kindsCache.remove(_cacheKeyForSource(source));
+    final cacheKey = _cacheKeyForSource(source);
+    _kindsCache.remove(cacheKey);
+    _latestKindsRequestByCacheKey.remove(cacheKey);
     await ExploreUrlParser.clearCache(source, exploreUrl: source.exploreUrl);
     if (_expandedIndex >= 0 &&
         _expandedIndex < _filteredSources.length &&
         _filteredSources[_expandedIndex].bookSourceUrl ==
             source.bookSourceUrl) {
+      final requestGeneration = ++_kindsRequestGeneration;
       _isLoadingKinds = true;
       _expandedKinds = [];
       notifyListeners();
-      await _loadKindsForSource(source);
+      await _loadKindsForSource(source, requestGeneration);
     }
   }
 
@@ -246,6 +294,9 @@ class ExploreProvider extends ChangeNotifier {
     _kindsCache.removeWhere(
       (cacheKey, _) => cacheKey.startsWith('${source.bookSourceUrl}\n'),
     );
+    _latestKindsRequestByCacheKey.removeWhere(
+      (cacheKey, _) => cacheKey.startsWith('${source.bookSourceUrl}\n'),
+    );
     await _loadSources();
   }
 
@@ -258,6 +309,7 @@ class ExploreProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _kindsRequestGeneration++;
     _sourceSubscription?.cancel();
     super.dispose();
   }

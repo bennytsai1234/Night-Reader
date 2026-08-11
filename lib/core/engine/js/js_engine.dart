@@ -36,6 +36,7 @@ class JsEngine {
   static final Map<String, String> _resolvedJsLibCache = <String, String>{};
   static final Map<String, Future<String>> _pendingJsLibCache =
       <String, Future<String>>{};
+  bool _isDisposed = false;
 
   /// 清除 session 級別的靜態快取，在批次校驗結束後呼叫以釋放記憶體。
   static void clearCaches() {
@@ -74,6 +75,9 @@ class JsEngine {
   /// warning 並仍按原字串執行（結果通常為 Promise 物件，rule 端會拿不到實值）。
   /// 呼叫端請優先使用 [evaluateAsync]。
   dynamic evaluate(String jsCode, {Map<String, dynamic>? context}) {
+    if (_isDisposed) {
+      throw StateError('JsEngine has been disposed');
+    }
     if (!_isAvailable) {
       return _mockEvaluate(jsCode, context);
     }
@@ -104,6 +108,9 @@ class JsEngine {
     String jsCode, {
     Map<String, dynamic>? context,
   }) async {
+    if (_isDisposed) {
+      throw StateError('JsEngine has been disposed');
+    }
     if (!_isAvailable) {
       return _mockEvaluate(jsCode, context);
     }
@@ -118,6 +125,7 @@ class JsEngine {
 
     _injectContext(context);
     await _ensureSourceJsLibLoadedAsync();
+    _throwIfDisposed();
     final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
     final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
     final (callId, future) = _extensions!.registerRuleCall();
@@ -207,6 +215,7 @@ class JsEngine {
       return;
     }
     final resolved = await _resolveSourceJsLibAsync(jsLib);
+    _throwIfDisposed();
     if (resolved.trim().isEmpty) {
       return;
     }
@@ -590,8 +599,20 @@ class JsEngine {
     return 'JS_ERROR: Library not available';
   }
 
+  void _throwIfDisposed() {
+    if (_isDisposed) {
+      throw StateError('JsEngine has been disposed');
+    }
+  }
+
   /// Dispose the JS runtime
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _extensions?.dispose();
     _runtime?.dispose();
+    _extensions = null;
+    _runtime = null;
+    _isAvailable = false;
   }
 }

@@ -28,23 +28,34 @@ class BookCoverWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveBorderRadius = borderRadius ?? AppRadius.cardXs;
+    final trimmedAuthor = author?.trim();
+    final semanticLabel =
+        trimmedAuthor == null || trimmedAuthor.isEmpty
+            ? '《$bookName》封面'
+            : '《$bookName》封面，作者 $trimmedAuthor';
 
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: effectiveBorderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+    return Semantics(
+      image: true,
+      label: semanticLabel,
+      child: ExcludeSemantics(
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: effectiveBorderRadius,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: effectiveBorderRadius,
-        child: _buildCover(context),
+          child: ClipRRect(
+            borderRadius: effectiveBorderRadius,
+            child: _buildCover(context),
+          ),
+        ),
       ),
     );
   }
@@ -138,6 +149,7 @@ class BookCoverWidget extends StatelessWidget {
     // 根據書名生成隨機但固定的背景色
     final int colorIndex = bookName.hashCode.abs() % _coverColors.length;
     final Color color = _coverColors[colorIndex];
+    final Color foregroundColor = _readableForeground(color);
     final String displayChar = bookName.isNotEmpty ? bookName[0] : '書';
 
     return Container(
@@ -148,20 +160,42 @@ class BookCoverWidget extends StatelessWidget {
           children: [
             Text(
               displayChar,
-              style: AppTextStyles.titleSm.copyWith(color: Colors.white),
+              style: AppTextStyles.titleSm.copyWith(color: foregroundColor),
             ),
             const SizedBox(height: 2),
             Text(
-              'No Image',
+              '無封面',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: foregroundColor,
                 fontSize: 8,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Color _readableForeground(Color background) {
+    const lightForeground = Colors.white;
+    const darkForeground = AppPalette.ink700;
+
+    double contrastRatio(Color foreground) {
+      final lighter =
+          foreground.computeLuminance() > background.computeLuminance()
+              ? foreground.computeLuminance()
+              : background.computeLuminance();
+      final darker =
+          foreground.computeLuminance() > background.computeLuminance()
+              ? background.computeLuminance()
+              : foreground.computeLuminance();
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    return contrastRatio(darkForeground) >= contrastRatio(lightForeground)
+        ? darkForeground
+        : lightForeground;
   }
 
   static const List<Color> _coverColors = [

@@ -127,16 +127,23 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 }
 
 class _FakeBookSourceService extends Fake implements BookSourceService {
-  _FakeBookSourceService({this.chapterList = const <BookChapter>[]});
+  _FakeBookSourceService({
+    this.chapterList = const <BookChapter>[],
+    this.bookInfoError,
+  });
 
   final List<BookChapter> chapterList;
+  final Object? bookInfoError;
 
   @override
   Future<Book> getBookInfo(
     BookSource source,
     Book book, {
     dynamic cancelToken,
-  }) async => book;
+  }) async {
+    if (bookInfoError != null) throw bookInfoError!;
+    return book;
+  }
 
   @override
   Future<List<BookChapter>> getChapterList(
@@ -147,6 +154,24 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     dynamic cancelToken,
   }) async {
     return chapterList;
+  }
+}
+
+class _RecoveringBookSourceService extends _FakeBookSourceService {
+  _RecoveringBookSourceService({required super.chapterList});
+
+  var _bookInfoCalls = 0;
+
+  @override
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    dynamic cancelToken,
+  }) async {
+    if (_bookInfoCalls++ == 0) {
+      throw StateError('首次詳情載入失敗');
+    }
+    return book;
   }
 }
 
@@ -258,6 +283,37 @@ void main() {
       final p = await makeProvider();
       expect(p.isInBookshelf, isTrue);
     });
+
+    test('書籍資訊載入失敗會顯示已儲存內容提示', () async {
+      final source = BookSource(bookSourceUrl: 'origin', bookSourceName: '書源');
+      final p = await makeProvider(
+        source: source,
+        chapters: _makeChapters(2),
+        service: _FakeBookSourceService(
+          chapterList: _makeChapters(2),
+          bookInfoError: StateError('詳情載入失敗'),
+        ),
+      );
+
+      expect(p.sourceIssueMessage, '書籍資訊更新失敗，目前顯示已儲存內容');
+    });
+
+    test('後續更新成功會清除已恢復的書籍資訊降級提示', () async {
+      final source = BookSource(bookSourceUrl: 'origin', bookSourceName: '書源');
+      final chapters = _makeChapters(2);
+      final p = await makeProvider(
+        source: source,
+        chapters: chapters,
+        service: _RecoveringBookSourceService(chapterList: chapters),
+      );
+
+      expect(p.sourceIssueMessage, '書籍資訊更新失敗，目前顯示已儲存內容');
+
+      final result = await p.checkForUpdates();
+
+      expect(result.success, isTrue);
+      expect(p.sourceIssueMessage, isNull);
+    });
   });
 
   group('BookDetailProvider - 書架操作', () {
@@ -347,6 +403,21 @@ void main() {
 
       p.setSearchQuery('');
       await Future.delayed(const Duration(milliseconds: 350));
+      expect(p.filteredChapters, hasLength(5));
+    });
+
+    test('目錄搜尋暴露唯讀 query 與 active 狀態，並可立即清除', () async {
+      final p = await makeProvider(chapters: _makeChapters(5));
+
+      p.setSearchQuery('不存在');
+      await Future.delayed(const Duration(milliseconds: 350));
+      expect(p.tocSearchQuery, '不存在');
+      expect(p.hasActiveTocSearch, isTrue);
+      expect(p.filteredChapters, isEmpty);
+
+      p.clearTocSearch();
+      expect(p.tocSearchQuery, isEmpty);
+      expect(p.hasActiveTocSearch, isFalse);
       expect(p.filteredChapters, hasLength(5));
     });
 

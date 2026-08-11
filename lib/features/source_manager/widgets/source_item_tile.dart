@@ -20,6 +20,7 @@ class SourceItemTile extends StatelessWidget {
   final int? index;
   final bool showHostHeader;
   final String hostLabel;
+  final bool mutationEnabled;
 
   const SourceItemTile({
     super.key,
@@ -34,11 +35,12 @@ class SourceItemTile extends StatelessWidget {
     this.index,
     this.showHostHeader = false,
     this.hostLabel = '',
+    this.mutationEnabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final canDrag = provider.sortMode == 0 && !provider.groupByDomain;
+    final canDrag = provider.canReorder && mutationEnabled;
     final hasStatusDot = source.hasExploreUrl;
     final checkProgress = provider.checkService.progressOf(
       source.bookSourceUrl,
@@ -65,7 +67,7 @@ class SourceItemTile extends StatelessWidget {
             ),
           ),
         InkWell(
-          onTap: onTap,
+          onTap: mutationEnabled ? onTap : null,
           onLongPress: onLongPress,
           child: Container(
             color:
@@ -99,24 +101,34 @@ class SourceItemTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    GestureDetector(
+                    Semantics(
+                      label:
+                          '${isSelected ? '取消選取' : '選取'} ${source.bookSourceName}',
+                      button: true,
+                      checked: isSelected,
                       onTap: () => provider.toggleSelect(source.bookSourceUrl),
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          top: 10,
-                          right: AppSpacing.sm,
-                        ),
-                        child: Icon(
-                          isSelected
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                          size: 22,
-                          color:
-                              isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          tooltip:
+                              '${isSelected ? '取消選取' : '選取'} ${source.bookSourceName}',
+                          onPressed:
+                              () => provider.toggleSelect(source.bookSourceUrl),
+                          icon: Icon(
+                            isSelected
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            size: 22,
+                            color:
+                                isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -198,18 +210,18 @@ class SourceItemTile extends StatelessWidget {
                       width: 50,
                       child: Switch(
                         value: source.enabled,
-                        onChanged: onEnabledChanged,
+                        onChanged: mutationEnabled ? onEnabledChanged : null,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                     IconButton(
                       tooltip: '編輯',
-                      onPressed: onEdit,
+                      onPressed: mutationEnabled ? onEdit : null,
                       icon: const Icon(Icons.edit_outlined, size: 20),
                     ),
                     IconButton(
                       tooltip: '更多',
-                      onPressed: onShowMenu,
+                      onPressed: mutationEnabled ? onShowMenu : null,
                       icon: const Icon(Icons.more_vert, size: 20),
                     ),
                   ],

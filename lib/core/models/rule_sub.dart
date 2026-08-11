@@ -23,7 +23,10 @@ class RuleSub {
       name: json['name'] ?? '',
       url: json['url'] ?? '',
       type: json['type'] ?? 0,
-      enabled: json['enabled'] == 1 || json['enabled'] == true,
+      enabled:
+          json['enabled'] == null ||
+          json['enabled'] == 1 ||
+          json['enabled'] == true,
       order: json['customOrder'] ?? json['order'] ?? 0,
     );
   }

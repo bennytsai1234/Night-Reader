@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+
 import '../services/app_log_service.dart';
 import 'app_storage_paths.dart';
 
@@ -17,6 +22,8 @@ class AppCache {
   final Directory cacheDir;
   final int limitSize;
   final int limitCount;
+  bool _isTrimming = false;
+  Completer<void>? _trimCompleted;
 
   AppCache._(this.cacheDir, this.limitSize, this.limitCount);
 
@@ -49,7 +56,7 @@ class AppCache {
       content = _createDateInfo(saveTime) + value;
     }
     await file.writeAsString(content);
-    _trimCache();
+    await _trimCache();
   }
 
   Future<String?> getAsString(String key) async {
@@ -81,7 +88,8 @@ class AppCache {
   // =======================================
 
   File _getFile(String key) {
-    return File(p.join(cacheDir.path, key.hashCode.toString()));
+    final fileName = sha256.convert(utf8.encode(key)).toString();
+    return File(p.join(cacheDir.path, fileName));
   }
 
   String _createDateInfo(int seconds) {
@@ -121,6 +129,10 @@ class AppCache {
       if (spaceIndex > 14) {
         final saveDate = String.fromCharCodes(data.sublist(0, 13));
         final deleteAfter = String.fromCharCodes(data.sublist(14, spaceIndex));
+        if (int.tryParse(saveDate) == null ||
+            int.tryParse(deleteAfter) == null) {
+          return null;
+        }
         return [saveDate, deleteAfter];
       }
     }
@@ -128,27 +140,56 @@ class AppCache {
   }
 
   String? _clearDateInfo(String str) {
+    final prefix = Uint8List.fromList(
+      str.substring(0, str.length > 32 ? 32 : str.length).codeUnits,
+    );
+    if (_getDateInfo(prefix) == null) return str;
     final spaceIndex = str.indexOf(' ');
-    if (spaceIndex > 14 && str.contains('-')) {
+    if (spaceIndex > 14) {
       return str.substring(spaceIndex + 1);
     }
     return str;
   }
 
-  void _trimCache() {
-    // 簡易實現：異步清理
-    Future(() async {
-      final files = cacheDir.listSync().whereType<File>().toList();
-      if (files.length > limitCount) {
-        files.sort(
-          (a, b) => a.statSync().modified.compareTo(b.statSync().modified),
+  Future<void> _trimCache() async {
+    while (_isTrimming) {
+      await _trimCompleted!.future;
+    }
+
+    _isTrimming = true;
+    final completed = Completer<void>();
+    _trimCompleted = completed;
+    try {
+      final files = <_CacheFile>[];
+      var totalSize = 0;
+      for (final file in cacheDir.listSync().whereType<File>()) {
+        final stat = await file.stat();
+        files.add(
+          _CacheFile(file: file, size: stat.size, modified: stat.modified),
         );
-        while (files.length > limitCount) {
-          await files.removeAt(0).delete();
-        }
+        totalSize += stat.size;
       }
-      // 大小清理較耗時，此處僅做簡易筆數限制
-    });
+
+      files.sort((a, b) {
+        final byModified = a.modified.compareTo(b.modified);
+        return byModified != 0
+            ? byModified
+            : a.file.path.compareTo(b.file.path);
+      });
+
+      final effectiveLimitCount = limitCount < 0 ? 0 : limitCount;
+      final effectiveLimitSize = limitSize < 0 ? 0 : limitSize;
+      while (files.length > effectiveLimitCount ||
+          totalSize > effectiveLimitSize) {
+        final oldest = files.removeAt(0);
+        await oldest.file.delete();
+        totalSize -= oldest.size;
+      }
+    } finally {
+      _isTrimming = false;
+      _trimCompleted = null;
+      completed.complete();
+    }
   }
 
   Future<void> clear() async {
@@ -157,4 +198,16 @@ class AppCache {
       await cacheDir.create(recursive: true);
     }
   }
+}
+
+class _CacheFile {
+  const _CacheFile({
+    required this.file,
+    required this.size,
+    required this.modified,
+  });
+
+  final File file;
+  final int size;
+  final DateTime modified;
 }

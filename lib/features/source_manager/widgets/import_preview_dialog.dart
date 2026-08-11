@@ -18,10 +18,7 @@ class ImportPreviewResult {
   });
 
   int get total =>
-      newSources.length +
-      updatedSources.length +
-      unchangedSources.length +
-      unsupportedSources.length;
+      newSources.length + updatedSources.length + unchangedSources.length;
 
   int get importableTotal =>
       newSources.length + updatedSources.length + unchangedSources.length;
@@ -56,52 +53,62 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
   @override
   Widget build(BuildContext context) {
     final p = widget.preview;
+    final selectedCount =
+        (_importNew ? p.newSources.length : 0) +
+        (_importUpdated ? p.updatedSources.length : 0);
     return AlertDialog(
       title: const Text('匯入預覽'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '共解析 ${p.total} 個書源',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          if (p.unsupportedSources.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                '含非小說/不支援來源：${p.unsupportedSources.length} 個（會以停用狀態匯入）',
-                style: AppTextStyles.bodyXs.copyWith(color: context.warning),
-              ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '共解析 ${p.total} 個書源',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-          const SizedBox(height: 12),
-          if (p.newSources.isNotEmpty)
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('新書源：${p.newSources.length} 個'),
-              subtitle: const Text('本地不存在，將新增'),
-              value: _importNew,
-              onChanged: (v) => setState(() => _importNew = v ?? true),
-            ),
-          if (p.updatedSources.isNotEmpty)
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('已有書源：${p.updatedSources.length} 個'),
-              subtitle: const Text('本地已存在，將覆蓋更新'),
-              value: _importUpdated,
-              onChanged: (v) => setState(() => _importUpdated = v ?? true),
-            ),
-          if (p.unchangedSources.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                '無變化：${p.unchangedSources.length} 個（跳過）',
-                style: AppTextStyles.bodyXs.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+            if (p.unsupportedSources.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  '含非小說/不支援來源：${p.unsupportedSources.length} 個（新增或更新時會以停用狀態匯入）',
+                  style: AppTextStyles.bodyXs.copyWith(color: context.warning),
                 ),
               ),
-            ),
-        ],
+            const SizedBox(height: 12),
+            if (p.newSources.isNotEmpty)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('新書源：${p.newSources.length} 個'),
+                subtitle: const Text('本地不存在，將新增'),
+                value: _importNew,
+                onChanged: (v) => setState(() => _importNew = v ?? true),
+              ),
+            if (p.updatedSources.isNotEmpty)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('已有書源：${p.updatedSources.length} 個'),
+                subtitle: const Text('本地已存在，將覆蓋更新'),
+                value: _importUpdated,
+                onChanged: (v) => setState(() => _importUpdated = v ?? true),
+              ),
+            if (p.unchangedSources.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  '無變化：${p.unchangedSources.length} 個（跳過）',
+                  style: AppTextStyles.bodyXs.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            if (p.newSources.isEmpty && p.updatedSources.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: AppSpacing.sm),
+                child: Text('沒有需要匯入的變更'),
+              ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -109,15 +116,16 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
           child: const Text('取消'),
         ),
         ElevatedButton(
-          onPressed: () {
-            final result = <BookSource>[];
-            if (_importNew) result.addAll(p.newSources);
-            if (_importUpdated) result.addAll(p.updatedSources);
-            Navigator.pop(context, result);
-          },
-          child: Text(
-            '匯入 (${(_importNew ? p.newSources.length : 0) + (_importUpdated ? p.updatedSources.length : 0)})',
-          ),
+          onPressed:
+              selectedCount == 0
+                  ? null
+                  : () {
+                    final result = <BookSource>[];
+                    if (_importNew) result.addAll(p.newSources);
+                    if (_importUpdated) result.addAll(p.updatedSources);
+                    Navigator.pop(context, result);
+                  },
+          child: Text('匯入 ($selectedCount)'),
         ),
       ],
     );

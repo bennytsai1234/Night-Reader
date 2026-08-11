@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
@@ -235,6 +236,15 @@ class _PermanentInfoBar extends StatelessWidget {
   }
 
   Widget _buildBar(BuildContext context, HybridProgressSnapshot? progress) {
+    final chapterLabel = progress?.chapterLabel ?? shell.displayPageLabel;
+    final percentLabel =
+        progress?.percentLabel ?? shell.displayChapterPercentLabel;
+    final statusLabel = [
+      shell.book.name,
+      chapterLabel,
+      percentLabel,
+      if (shell.isAutoPaging) '自動翻頁中',
+    ].join('，');
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -246,59 +256,70 @@ class _PermanentInfoBar extends StatelessWidget {
           ],
         ),
       ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          kReaderPermanentInfoTopPadding,
-          16,
-          MediaQuery.of(context).padding.bottom +
-              kReaderPermanentInfoBottomSpacing,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                shell.book.name,
-                style: TextStyle(
-                  color: shell.textColor.withValues(alpha: 0.5),
-                  fontSize: 10,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+      child: Semantics(
+        container: true,
+        label: statusLabel,
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              kReaderPermanentInfoTopPadding,
+              16,
+              MediaQuery.of(context).padding.bottom +
+                  kReaderPermanentInfoBottomSpacing,
             ),
-            Text(
-              progress?.chapterLabel ?? shell.displayPageLabel,
+            child: DefaultTextStyle(
               style: TextStyle(
-                color: shell.textColor.withValues(alpha: 0.5),
-                fontSize: 10,
+                color: shell.textColor.withValues(alpha: 0.68),
+                fontSize: 11,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (shell.isAutoPaging) ...[
+                          Icon(
+                            Icons.auto_stories_outlined,
+                            size: 13,
+                            color: shell.textColor.withValues(alpha: 0.68),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text('自動翻頁中'),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            shell.book.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      chapterLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(percentLabel, maxLines: 1, textAlign: TextAlign.right),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 60,
-              child: Text(
-                progress?.percentLabel ?? shell.displayChapterPercentLabel,
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: shell.textColor.withValues(alpha: 0.5),
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-const double _controlsDismissTapTolerance = 2.0;
-const double _controlsDismissDragTolerance = 18.0;
-const double _controlsDismissTapToleranceSquared =
-    _controlsDismissTapTolerance * _controlsDismissTapTolerance;
-const double _controlsDismissDragToleranceSquared =
-    _controlsDismissDragTolerance * _controlsDismissDragTolerance;
+const double _controlsDismissTapToleranceSquared = kTouchSlop * kTouchSlop;
+const double _controlsDismissDragToleranceSquared = kTouchSlop * kTouchSlop;
 
 class _ReaderV2ControlsDismissLayer extends StatefulWidget {
   const _ReaderV2ControlsDismissLayer({required this.onDismiss});
@@ -317,6 +338,10 @@ class _ReaderV2ControlsDismissLayerState
   bool _dismissed = false;
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (event.buttons != kPrimaryButton) {
+      _resetTracking();
+      return;
+    }
     if (_pointer != null) {
       _resetTracking();
       return;

@@ -60,6 +60,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   final ValueNotifier<HybridProgressSnapshot?> _progress =
       ValueNotifier<HybridProgressSnapshot?>(null);
   Size? _lastViewportSize;
+  String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
 
   @override
@@ -90,6 +91,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _handleControllerChanged() {
     _drainRuntimeNotice();
+    _drainAutoPageNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
   }
@@ -143,7 +145,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           currentChapterIndex: chapterIndex,
           titleFor: _chapterTitleAt,
           listenable: runtime,
-          onChapterTap: _coordinator.jumpToChapter,
+          onChapterTap: _jumpToChapterFromDrawer,
         ),
         backgroundColor: theme.backgroundColor,
         textColor: theme.textColor,
@@ -240,8 +242,24 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _coordinator.handleTap(details, _lastViewportSize);
   }
 
+  Future<bool> _jumpToChapterFromDrawer(int index) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return false;
+    await _coordinator.jumpToChapter(index);
+    return mounted &&
+        identical(_host.runtime, runtime) &&
+        runtime.state.phase == ReaderV2Phase.ready &&
+        runtime.state.visibleLocation.chapterIndex == index;
+  }
+
   void _drainRuntimeNotice() {
     final notice = _host.runtime?.takeUserNotice();
+    if (!mounted || notice == null || notice.isEmpty) return;
+    _showNotice(notice);
+  }
+
+  void _drainAutoPageNotice() {
+    final notice = _host.autoPage?.takeUserNotice();
     if (!mounted || notice == null || notice.isEmpty) return;
     _showNotice(notice);
   }
@@ -249,9 +267,17 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _showNotice(String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (!mounted || messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    if (_visibleNoticeMessage == message) return;
+    _visibleNoticeMessage = message;
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(SnackBar(content: Text(message)));
+    unawaited(
+      controller.closed.then<void>((_) {
+        if (_visibleNoticeMessage == message) {
+          _visibleNoticeMessage = null;
+        }
+      }),
+    );
   }
 
   void _handleExitIntent() {
@@ -419,12 +445,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   String _displayChapterLabel(ReaderV2Runtime? runtime) {
     final snapshot = _progress.value;
     if (snapshot != null) return snapshot.chapterLabel;
-    if (runtime == null || runtime.chapterCount <= 0) return '...';
-    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章';
+    if (runtime == null || runtime.chapterCount <= 0) {
+      return '第 ... 章 · 本章 ...';
+    }
+    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章 · 本章 ...';
   }
 
-  /// D6：章內百分比（未達書尾封頂 99.9%，由 HybridProgress 保證）。
+  /// D6：全書百分比（章內未達章尾封頂 99.9%，由 HybridProgress 保證）。
   String _displayChapterPercentLabel(ReaderV2Runtime? runtime) {
-    return _progress.value?.percentLabel ?? '...%';
+    return _progress.value?.percentLabel ?? '全書 ...%';
   }
 }

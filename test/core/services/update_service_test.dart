@@ -100,6 +100,90 @@ void main() {
       expect(await service.checkLatest(), isNull);
     });
 
+    test('accepts an uppercase APK extension', () async {
+      final service = AppUpdateService(
+        dio: _dioReturning({
+          'tag_name': 'v0.3.0',
+          'assets': [
+            {
+              'name': 'night-reader-v0.3.0.APK',
+              'browser_download_url': 'https://example.com/app.APK',
+              'size': 42,
+            },
+          ],
+        }),
+        currentVersionLoader: () async => '0.2.72',
+      );
+
+      expect((await service.checkLatest())?.assetSize, 42);
+    });
+
+    test(
+      'skips malformed and unusable APK assets before a valid one',
+      () async {
+        final service = AppUpdateService(
+          dio: _dioReturning({
+            'tag_name': 'v0.3.0',
+            'assets': [
+              'unexpected asset shape',
+              {'name': 'empty.apk', 'browser_download_url': '', 'size': 1},
+              {
+                'name': 'valid.apk',
+                'browser_download_url': 'https://example.com/valid.apk',
+                'size': 99,
+              },
+            ],
+          }),
+          currentVersionLoader: () async => '0.2.72',
+        );
+
+        final info = await service.checkLatest();
+
+        expect(info?.downloadUrl, 'https://example.com/valid.apk');
+        expect(info?.assetSize, 99);
+      },
+    );
+
+    test('returns null when APK assets have no usable download URL', () async {
+      final service = AppUpdateService(
+        dio: _dioReturning({
+          'tag_name': 'v0.3.0',
+          'assets': [
+            {'name': 'empty.apk', 'browser_download_url': '', 'size': 1},
+            {
+              'name': 'local.apk',
+              'browser_download_url': 'file:///tmp/app.apk',
+              'size': 2,
+            },
+          ],
+        }),
+        currentVersionLoader: () async => '0.2.72',
+      );
+
+      expect(await service.checkLatest(), isNull);
+    });
+
+    test('normalizes whitespace around a valid APK download URL', () async {
+      final service = AppUpdateService(
+        dio: _dioReturning({
+          'tag_name': 'v0.3.0',
+          'assets': [
+            {
+              'name': 'night-reader.apk',
+              'browser_download_url': '  https://example.com/app.apk  ',
+              'size': 42,
+            },
+          ],
+        }),
+        currentVersionLoader: () async => '0.2.72',
+      );
+
+      expect(
+        (await service.checkLatest())?.downloadUrl,
+        'https://example.com/app.apk',
+      );
+    });
+
     test('returns null on HTTP error', () async {
       final service = AppUpdateService(
         dio: _dioThrowing(),

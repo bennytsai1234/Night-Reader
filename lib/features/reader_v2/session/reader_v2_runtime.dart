@@ -256,6 +256,8 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   String? takeUserNotice() => navigation.takeUserNotice();
 
+  void emitUserNotice(String message) => navigation.emitUserNotice(message);
+
   Future<void> openBook() async {
     var token = stateMachine.beginOpen();
     notifyListeners();

@@ -16,6 +16,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 
+enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
+
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
 
@@ -26,6 +28,7 @@ class BookshelfPage extends StatefulWidget {
 class _BookshelfPageState extends State<BookshelfPage> {
   bool _isMultiSelect = false;
   final Set<String> _selectedUrls = {};
+  _BookshelfBatchAction? _batchAction;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +46,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
         appBar: AppBar(
           title:
               _isMultiSelect
-                  ? Text('已選擇 ${_selectedUrls.length} 本')
+                  ? Text(
+                    _batchAction == null
+                        ? '已選擇 ${_selectedUrls.length} 本'
+                        : _batchProgressTitle(provider),
+                  )
                   : const Text('書架'),
           leading:
               _isMultiSelect
@@ -63,7 +70,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       icon: const Icon(Icons.download_outlined),
                       tooltip: '批次下載',
                       onPressed:
-                          _selectedUrls.isEmpty
+                          _selectedUrls.isEmpty || _batchAction != null
                               ? null
                               : () => _batchDownload(context, provider),
                     ),
@@ -71,7 +78,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       icon: const Icon(Icons.cloud_download_outlined),
                       tooltip: '整本書補下載',
                       onPressed:
-                          _selectedUrls.isEmpty
+                          _selectedUrls.isEmpty || _batchAction != null
                               ? null
                               : () => _batchEnsureComplete(context, provider),
                     ),
@@ -79,28 +86,34 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       icon: const Icon(Icons.update),
                       tooltip: '批次檢查更新',
                       onPressed:
-                          _selectedUrls.isEmpty
+                          _selectedUrls.isEmpty || _batchAction != null
                               ? null
                               : () => _batchCheckUpdate(context, provider),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
                       tooltip: '刪除',
-                      onPressed: () => _showDeleteConfirm(context, provider),
+                      onPressed:
+                          _selectedUrls.isEmpty || _batchAction != null
+                              ? null
+                              : () => _showDeleteConfirm(context, provider),
                     ),
                     IconButton(
                       icon: const Icon(Icons.select_all),
                       tooltip: '全選',
                       onPressed:
-                          () => setState(() {
-                            if (_selectedUrls.length == provider.books.length) {
-                              _selectedUrls.clear();
-                            } else {
-                              _selectedUrls.addAll(
-                                provider.books.map((b) => b.bookUrl),
-                              );
-                            }
-                          }),
+                          _batchAction != null
+                              ? null
+                              : () => setState(() {
+                                if (_selectedUrls.length ==
+                                    provider.books.length) {
+                                  _selectedUrls.clear();
+                                } else {
+                                  _selectedUrls.addAll(
+                                    provider.books.map((b) => b.bookUrl),
+                                  );
+                                }
+                              }),
                     ),
                   ]
                   : [
@@ -243,6 +256,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ),
         body: Column(
           children: [
+            if (_batchAction != null)
+              const LinearProgressIndicator(minHeight: 2),
             Expanded(
               child:
                   provider.isLoading && provider.books.isEmpty
@@ -418,7 +433,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final result = await provider.batchDownload(_selectedUrls);
+      final result = await _runBatchAction(
+        _BookshelfBatchAction.download,
+        provider.batchDownload,
+      );
+      if (result == null) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -444,7 +463,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final result = await provider.batchEnsureComplete(_selectedUrls);
+      final result = await _runBatchAction(
+        _BookshelfBatchAction.ensureComplete,
+        provider.batchEnsureComplete,
+      );
+      if (result == null) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -472,7 +495,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final results = await provider.batchCheckUpdate(_selectedUrls);
+      final results = await _runBatchAction(
+        _BookshelfBatchAction.checkUpdate,
+        provider.batchCheckUpdate,
+      );
+      if (results == null) return;
       final updated = results.where((result) => result.hasUpdate).length;
       final chapters = results.fold<int>(
         0,
@@ -495,6 +522,34 @@ class _BookshelfPageState extends State<BookshelfPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
     }
+  }
+
+  Future<T?> _runBatchAction<T>(
+    _BookshelfBatchAction action,
+    Future<T> Function(Set<String> urls) operation,
+  ) async {
+    if (_batchAction != null || _selectedUrls.isEmpty) return null;
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    setState(() => _batchAction = action);
+    try {
+      return await operation(selectedUrls);
+    } finally {
+      if (mounted) {
+        setState(() => _batchAction = null);
+      }
+    }
+  }
+
+  String _batchProgressTitle(BookshelfProvider provider) {
+    return switch (_batchAction) {
+      _BookshelfBatchAction.download => '正在加入下載佇列…',
+      _BookshelfBatchAction.ensureComplete => '正在檢查缺失章節…',
+      _BookshelfBatchAction.checkUpdate =>
+        provider.updatingCount > 0
+            ? '正在檢查更新（剩 ${provider.updatingCount} 本）'
+            : '正在整理更新結果…',
+      null => '已選擇 ${_selectedUrls.length} 本',
+    };
   }
 
   Widget _buildListView(BookshelfProvider provider) {

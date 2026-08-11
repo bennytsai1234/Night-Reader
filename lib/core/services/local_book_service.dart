@@ -80,10 +80,17 @@ class LocalBookService {
     }
     // 根據章節索引 (start, end) 指標讀取 TXT 部分內容 (對標 Android ReadLocalBook.kt)
     if (chapter.start != null && chapter.end != null) {
+      final start = chapter.start!;
+      final end = chapter.end!;
+      final fileLength = await file.length();
+      if (start < 0 ||
+          end <= start ||
+          start >= fileLength ||
+          end > fileLength) {
+        return '本地 TXT 索引無效，請重新匯入';
+      }
       return _queueTxtRead(() async {
         final accessFile = await _getTxtAccessFile(file, path);
-        final start = chapter.start!;
-        final end = chapter.end!;
         AppLog.d(
           'LocalBookService: Reading bytes from $start to $end (length: ${end - start})',
         );

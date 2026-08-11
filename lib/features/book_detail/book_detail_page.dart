@@ -127,41 +127,79 @@ class _BookDetailPageState extends State<BookDetailPage> {
                           onLocateCurrent:
                               () => _locateCurrentChapter(context, provider),
                         ),
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate((ctx, i) {
-                            final chapter = provider.filteredChapters[i];
-                            final isCurrent =
-                                chapter.index == currentBook.chapterIndex;
-                            return ListTile(
-                              selected: isCurrent,
-                              leading:
-                                  isCurrent
-                                      ? const Icon(Icons.my_location, size: 18)
-                                      : null,
-                              title: Text(
-                                chapter.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                        if (provider.hasActiveTocSearch &&
+                            provider.filteredChapters.isEmpty)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xl,
+                                vertical: AppSpacing.xxxl,
                               ),
-                              trailing:
-                                  isCurrent
-                                      ? const Text(
-                                        '目前',
-                                        style: AppTextStyles.labelSm,
-                                      )
-                                      : null,
-                              onTap:
-                                  () => _navigateToReader(
-                                    context,
-                                    currentBook,
-                                    ReaderV2OpenTarget.chapterStart(
-                                      chapter.index,
-                                    ),
-                                    provider.allChapters,
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 44,
+                                    color:
+                                        Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                   ),
-                            );
-                          }, childCount: provider.filteredChapters.length),
-                        ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  Text(
+                                    '找不到相符章節',
+                                    style:
+                                        Theme.of(context).textTheme.bodyLarge,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  TextButton.icon(
+                                    onPressed: provider.clearTocSearch,
+                                    icon: const Icon(Icons.clear),
+                                    label: const Text('清除搜尋'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate((ctx, i) {
+                              final chapter = provider.filteredChapters[i];
+                              final isCurrent =
+                                  chapter.index == currentBook.chapterIndex;
+                              return ListTile(
+                                selected: isCurrent,
+                                leading:
+                                    isCurrent
+                                        ? const Icon(
+                                          Icons.my_location,
+                                          size: 18,
+                                        )
+                                        : null,
+                                title: Text(
+                                  chapter.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing:
+                                    isCurrent
+                                        ? const Text(
+                                          '目前',
+                                          style: AppTextStyles.labelSm,
+                                        )
+                                        : null,
+                                onTap:
+                                    () => _navigateToReader(
+                                      context,
+                                      currentBook,
+                                      ReaderV2OpenTarget.chapterStart(
+                                        chapter.index,
+                                      ),
+                                      provider.allChapters,
+                                    ),
+                              );
+                            }, childCount: provider.filteredChapters.length),
+                          ),
                       ],
                     ),
           );
@@ -640,21 +678,26 @@ class _BookDetailPageState extends State<BookDetailPage> {
         builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
       );
 
-  void _showSearchTocDialog(BuildContext context, BookDetailProvider p) =>
-      showDialog(
-        context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: const Text('搜尋目錄'),
-              content: TextField(autofocus: true, onChanged: p.setSearchQuery),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('關閉'),
-                ),
-              ],
+  void _showSearchTocDialog(BuildContext context, BookDetailProvider p) {
+    showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('搜尋目錄'),
+            content: TextFormField(
+              initialValue: p.tocSearchQuery,
+              autofocus: true,
+              onChanged: p.setSearchQuery,
             ),
-      );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('關閉'),
+              ),
+            ],
+          ),
+    );
+  }
 
   void _showEditBookInfoDialog(BuildContext context, BookDetailProvider p) {
     final n = TextEditingController(text: p.book.name),

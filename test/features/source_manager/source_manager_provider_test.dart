@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +13,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/features/source_manager/widgets/source_item_tile.dart';
 
 final String _importFromUrlTestJson = jsonEncode(<Map<String, dynamic>>[
   {
@@ -32,10 +35,19 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
   final Map<String, BookSource> store = <String, BookSource>{};
   int getByUrlCallCount = 0;
   int getAllPartCallCount = 0;
+  Future<List<BookSource>> Function()? getAllPartHandler;
+  Completer<void>? deleteByUrlsCompleter;
+  Completer<void>? updateEnabledByUrlsCompleter;
+  Completer<void>? updateEnabledByUrlCompleter;
+  int updateEnabledByUrlsCallCount = 0;
+  int updateEnabledByUrlCallCount = 0;
+  int updateCustomOrderCallCount = 0;
 
   @override
   Future<List<BookSource>> getAllPart() async {
     getAllPartCallCount += 1;
+    final handler = getAllPartHandler;
+    if (handler != null) return handler();
     return store.values.toList();
   }
 
@@ -62,6 +74,8 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 
   @override
   Future<void> updateEnabledByUrl(String url, bool enabled) async {
+    updateEnabledByUrlCallCount += 1;
+    await updateEnabledByUrlCompleter?.future;
     store[url]?.enabled = enabled;
   }
 
@@ -75,6 +89,8 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 
   @override
   Future<void> updateEnabledByUrls(List<String> urls, bool enabled) async {
+    updateEnabledByUrlsCallCount += 1;
+    await updateEnabledByUrlsCompleter?.future;
     for (final url in urls) {
       store[url]?.enabled = enabled;
     }
@@ -99,8 +115,29 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 
   @override
   Future<void> deleteByUrls(List<String> urls) async {
+    await deleteByUrlsCompleter?.future;
     for (final url in urls) {
       store.remove(url);
+    }
+  }
+
+  @override
+  Future<void> deleteByUrl(String url) async {
+    store.remove(url);
+  }
+
+  @override
+  Future<void> updateCustomOrder(List<BookSource> sources) async {
+    updateCustomOrderCallCount += 1;
+    for (var index = 0; index < sources.length; index++) {
+      store[sources[index].bookSourceUrl]?.customOrder = index;
+    }
+  }
+
+  @override
+  Future<void> renameGroup(String oldName, String newName) async {
+    for (final source in store.values) {
+      if (source.bookSourceGroup == oldName) source.bookSourceGroup = newName;
     }
   }
 }
@@ -144,13 +181,22 @@ class _FakeCheckSourceService extends CheckSourceService {
 
   final List<List<String>> checkedUrls = <List<String>>[];
   bool cancelCalled = false;
+  Completer<void>? checkCompleter;
+  bool _checking = false;
+
+  @override
+  bool get isChecking => _checking;
 
   @override
   Future<void> loadConfig() async {}
 
   @override
   Future<SourceCheckReport> check(List<String> urls) async {
+    if (_checking) return SourceCheckReport.empty;
+    _checking = true;
     checkedUrls.add(List<String>.from(urls));
+    await checkCompleter?.future;
+    _checking = false;
     return SourceCheckReport.empty;
   }
 
@@ -236,6 +282,26 @@ void main() {
     final text = provider.importPayloadToTextForTest(payload);
 
     expect(text, '[{"bookSourceName":"A"}]');
+  });
+
+  test('parseSourcesDetailed accepts whitespace before a BOM', () {
+    final provider = SourceManagerProvider();
+
+    final parsed = provider.parseSourcesDetailed(
+      '  \n\uFEFF  [{"bookSourceName":"A","bookSourceUrl":"https://a.test"}]  ',
+    );
+
+    expect(parsed.allSources.single.bookSourceUrl, 'https://a.test');
+  });
+
+  test('parseSourcesDetailedAsync accepts a BOM-prefixed payload', () async {
+    final provider = SourceManagerProvider();
+
+    final parsed = await provider.parseSourcesDetailedAsync(
+      '\uFEFF[{"bookSourceName":"A","bookSourceUrl":"https://a.test"}]',
+    );
+
+    expect(parsed.allSources.single.bookSourceName, 'A');
   });
 
   test(
@@ -344,6 +410,7 @@ void main() {
       );
 
       final provider = SourceManagerProvider();
+      await provider.loadSources();
 
       final count = await provider.importSources([
         BookSource(
@@ -390,6 +457,7 @@ void main() {
     );
 
     final provider = SourceManagerProvider();
+    await provider.loadSources();
     final affected = await provider.deleteNonNovelSources();
 
     expect(affected, 2);
@@ -418,6 +486,7 @@ void main() {
     );
 
     final provider = SourceManagerProvider();
+    await provider.loadSources();
     await provider.clearInvalidSources();
 
     expect(fakeDao.store.keys, contains('https://valid.example.com'));
@@ -453,6 +522,52 @@ void main() {
     expect(provider.sources.map((source) => source.bookSourceUrl), [
       'https://explore-off.example.com',
     ]);
+  });
+
+  test('custom group filter matches a complete group label only', () async {
+    fakeDao.store['https://one.example.com'] = BookSource(
+      bookSourceUrl: 'https://one.example.com',
+      bookSourceName: '精準分組',
+      bookSourceGroup: '待修,常用',
+    );
+    fakeDao.store['https://two.example.com'] = BookSource(
+      bookSourceUrl: 'https://two.example.com',
+      bookSourceName: '相似分組',
+      bookSourceGroup: '待修復,備用',
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+
+    provider.setFilterGroup('待修');
+
+    expect(provider.sources.map((source) => source.bookSourceUrl), [
+      'https://one.example.com',
+    ]);
+    expect(provider.sourceUrlsInGroup('待修'), {'https://one.example.com'});
+  });
+
+  test('sourceUrlsInGroup is not limited by the active list filter', () async {
+    fakeDao.store['https://enabled.example.com'] = BookSource(
+      bookSourceUrl: 'https://enabled.example.com',
+      bookSourceName: '啟用源',
+      bookSourceGroup: '常用',
+      enabled: true,
+    );
+    fakeDao.store['https://disabled.example.com'] = BookSource(
+      bookSourceUrl: 'https://disabled.example.com',
+      bookSourceName: '停用源',
+      bookSourceGroup: '常用',
+      enabled: false,
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    provider.setFilterGroup('已啟用');
+
+    expect(provider.sources, hasLength(1));
+    expect(provider.sourceUrlsInGroup('常用'), {
+      'https://enabled.example.com',
+      'https://disabled.example.com',
+    });
   });
 
   test('source state toggles update local list without full reload', () async {
@@ -525,6 +640,169 @@ void main() {
     },
   );
 
+  test(
+    'select all and invert only change sources visible in the filter',
+    () async {
+      fakeDao.store['https://enabled.example.com'] = BookSource(
+        bookSourceUrl: 'https://enabled.example.com',
+        bookSourceName: '啟用源',
+        enabled: true,
+      );
+      fakeDao.store['https://disabled.example.com'] = BookSource(
+        bookSourceUrl: 'https://disabled.example.com',
+        bookSourceName: '停用源',
+        enabled: false,
+      );
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+      provider.toggleSelect('https://disabled.example.com');
+      provider.setFilterGroup('已啟用');
+
+      provider.selectAll();
+      expect(provider.selectedUrls, {
+        'https://enabled.example.com',
+        'https://disabled.example.com',
+      });
+
+      provider.selectAll();
+      expect(provider.selectedUrls, {'https://disabled.example.com'});
+
+      provider.revertSelection();
+      expect(provider.selectedUrls, {
+        'https://enabled.example.com',
+        'https://disabled.example.com',
+      });
+    },
+  );
+
+  test(
+    'selectedUrls cannot be mutated without provider notification',
+    () async {
+      fakeDao.store['https://one.example.com'] = BookSource(
+        bookSourceUrl: 'https://one.example.com',
+        bookSourceName: '源一',
+      );
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+
+      expect(
+        () => provider.selectedUrls.add('https://outside.example.com'),
+        throwsUnsupportedError,
+      );
+      expect(provider.selectedUrls, isEmpty);
+    },
+  );
+
+  test('a completed reload cannot be overwritten by an older reload', () async {
+    final firstLoad = Completer<List<BookSource>>();
+    final secondLoad = Completer<List<BookSource>>();
+    var call = 0;
+    fakeDao.getAllPartHandler = () {
+      call += 1;
+      return call == 1 ? firstLoad.future : secondLoad.future;
+    };
+    final provider = SourceManagerProvider();
+
+    final latest = provider.loadSources();
+    secondLoad.complete(<BookSource>[
+      BookSource(
+        bookSourceUrl: 'https://latest.example.com',
+        bookSourceName: '最新結果',
+      ),
+    ]);
+    await latest;
+    firstLoad.complete(<BookSource>[
+      BookSource(
+        bookSourceUrl: 'https://stale.example.com',
+        bookSourceName: '過期結果',
+      ),
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.sources.single.bookSourceUrl, 'https://latest.example.com');
+  });
+
+  test('reload removes selections for sources that no longer exist', () async {
+    fakeDao.store['https://one.example.com'] = BookSource(
+      bookSourceUrl: 'https://one.example.com',
+      bookSourceName: '源一',
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    provider.toggleSelect('https://one.example.com');
+    fakeDao.store.clear();
+
+    await provider.loadSources();
+
+    expect(provider.selectedUrls, isEmpty);
+  });
+
+  test(
+    'deleteSelected preserves selections made while deletion is pending',
+    () async {
+      fakeDao.store['https://one.example.com'] = BookSource(
+        bookSourceUrl: 'https://one.example.com',
+        bookSourceName: '源一',
+      );
+      fakeDao.store['https://two.example.com'] = BookSource(
+        bookSourceUrl: 'https://two.example.com',
+        bookSourceName: '源二',
+      );
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+      provider.toggleSelect('https://one.example.com');
+      fakeDao.deleteByUrlsCompleter = Completer<void>();
+
+      final deletion = provider.deleteSelected();
+      provider.toggleSelect('https://two.example.com');
+      fakeDao.deleteByUrlsCompleter!.complete();
+      await deletion;
+
+      expect(provider.selectedUrls, {'https://two.example.com'});
+    },
+  );
+
+  test('batch mutations ignore repeated triggers while pending', () async {
+    fakeDao.store['https://one.example.com'] = BookSource(
+      bookSourceUrl: 'https://one.example.com',
+      bookSourceName: '源一',
+      enabled: false,
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    provider.selectAll();
+    fakeDao.updateEnabledByUrlsCompleter = Completer<void>();
+
+    final first = provider.batchSetEnabled(true);
+    final repeated = provider.batchSetEnabled(true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(fakeDao.updateEnabledByUrlsCallCount, 1);
+    expect(provider.isBatchOperationInProgress, isTrue);
+
+    fakeDao.updateEnabledByUrlsCompleter!.complete();
+    await Future.wait(<Future<void>>[first, repeated]);
+    expect(provider.isBatchOperationInProgress, isFalse);
+  });
+
+  test(
+    'empty batch group input does not clear the current selection',
+    () async {
+      fakeDao.store['https://one.example.com'] = BookSource(
+        bookSourceUrl: 'https://one.example.com',
+        bookSourceName: '源一',
+      );
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+      provider.selectAll();
+
+      await provider.selectionAddToGroups(provider.selectedUrls, '   ');
+
+      expect(provider.selectedUrls, {'https://one.example.com'});
+      expect(fakeDao.store['https://one.example.com']?.bookSourceGroup, isNull);
+    },
+  );
+
   test('selection group changes clear selected urls after applying', () async {
     fakeDao.store['https://one.example.com'] = BookSource(
       bookSourceUrl: 'https://one.example.com',
@@ -590,6 +868,53 @@ void main() {
     },
   );
 
+  test(
+    'checkSelectedSources preserves selections made while checking',
+    () async {
+      fakeDao.store['https://one.example.com'] = BookSource(
+        bookSourceUrl: 'https://one.example.com',
+        bookSourceName: '源一',
+      );
+      fakeDao.store['https://two.example.com'] = BookSource(
+        bookSourceUrl: 'https://two.example.com',
+        bookSourceName: '源二',
+      );
+      final checkService = _FakeCheckSourceService(fakeDao)
+        ..checkCompleter = Completer<void>();
+      final provider = SourceManagerProvider(sourceCheckService: checkService);
+      await provider.loadSources();
+      provider.toggleSelect('https://one.example.com');
+
+      final checking = provider.checkSelectedSources();
+      await Future<void>.delayed(Duration.zero);
+      provider.toggleSelect('https://two.example.com');
+      checkService.checkCompleter!.complete();
+      await checking;
+
+      expect(provider.selectedUrls, {'https://two.example.com'});
+    },
+  );
+
+  test('repeated source checks do not start a second provider flow', () async {
+    fakeDao.store['https://one.example.com'] = BookSource(
+      bookSourceUrl: 'https://one.example.com',
+      bookSourceName: '源一',
+    );
+    final checkService = _FakeCheckSourceService(fakeDao)
+      ..checkCompleter = Completer<void>();
+    final provider = SourceManagerProvider(sourceCheckService: checkService);
+    await provider.loadSources();
+    provider.selectAll();
+
+    final first = provider.checkSelectedSources();
+    await Future<void>.delayed(Duration.zero);
+    await provider.checkSelectedSources();
+
+    expect(checkService.checkedUrls, hasLength(1));
+    checkService.checkCompleter!.complete();
+    await first;
+  });
+
   test('cancelSourceCheck clears selected urls immediately', () async {
     fakeDao.store['https://one.example.com'] = BookSource(
       bookSourceUrl: 'https://one.example.com',
@@ -605,5 +930,230 @@ void main() {
 
     expect(checkService.cancelCalled, isTrue);
     expect(provider.selectedUrls, isEmpty);
+  });
+
+  test('filtered lists cannot overwrite the global custom order', () async {
+    fakeDao.store['https://visible.example.com'] = BookSource(
+      bookSourceUrl: 'https://visible.example.com',
+      bookSourceName: '可見',
+      bookSourceGroup: '顯示',
+      customOrder: 0,
+    );
+    fakeDao.store['https://hidden.example.com'] = BookSource(
+      bookSourceUrl: 'https://hidden.example.com',
+      bookSourceName: '隱藏',
+      bookSourceGroup: '其他',
+      customOrder: 1,
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    provider.setFilterGroup('顯示');
+
+    expect(provider.canReorder, isFalse);
+    await provider.reorderSource(0, 0);
+
+    expect(fakeDao.updateCustomOrderCallCount, 0);
+  });
+
+  test(
+    'descending manual order cannot be persisted through drag reorder',
+    () async {
+      fakeDao.store['https://one.example.com'] = BookSource(
+        bookSourceUrl: 'https://one.example.com',
+        bookSourceName: '第一個',
+        customOrder: 0,
+      );
+      fakeDao.store['https://two.example.com'] = BookSource(
+        bookSourceUrl: 'https://two.example.com',
+        bookSourceName: '第二個',
+        customOrder: 1,
+      );
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+      provider.toggleSortDesc();
+
+      expect(provider.canReorder, isFalse);
+      await provider.reorderSource(0, 1);
+
+      expect(fakeDao.updateCustomOrderCallCount, 0);
+    },
+  );
+
+  test('provider rejects mutations while a source load is pending', () async {
+    final loadCompleter = Completer<List<BookSource>>();
+    fakeDao.getAllPartHandler = () => loadCompleter.future;
+    final provider = SourceManagerProvider();
+
+    expect(provider.isLoading, isTrue);
+    expect(
+      await provider.importSources([
+        BookSource(
+          bookSourceUrl: 'https://new.example.com',
+          bookSourceName: '新書源',
+        ),
+      ]),
+      0,
+    );
+    expect(await provider.deleteNonNovelSources(), 0);
+    expect(fakeDao.store, isEmpty);
+
+    loadCompleter.complete(<BookSource>[]);
+    await Future<void>.delayed(Duration.zero);
+    provider.dispose();
+  });
+
+  test('toggle re-finds the source after an out-of-order reload', () async {
+    const firstUrl = 'https://first.example.com';
+    const secondUrl = 'https://second.example.com';
+    fakeDao.store[firstUrl] = BookSource(
+      bookSourceUrl: firstUrl,
+      bookSourceName: '第一個',
+      enabled: true,
+    );
+    fakeDao.store[secondUrl] = BookSource(
+      bookSourceUrl: secondUrl,
+      bookSourceName: '第二個',
+      enabled: true,
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    fakeDao.updateEnabledByUrlCompleter = Completer<void>();
+
+    final toggling = provider.toggleEnabled(provider.sources.first);
+    await Future<void>.delayed(Duration.zero);
+    fakeDao.store.remove(firstUrl);
+    await provider.loadSources();
+    fakeDao.updateEnabledByUrlCompleter!.complete();
+    await toggling;
+
+    expect(provider.sources.single.bookSourceUrl, secondUrl);
+    expect(provider.sources.single.enabled, isTrue);
+  });
+
+  test(
+    'source mutations are rejected while a source check is running',
+    () async {
+      const url = 'https://source.example.com';
+      fakeDao.store[url] = BookSource(
+        bookSourceUrl: url,
+        bookSourceName: '書源',
+        enabled: true,
+      );
+      final checkService = _FakeCheckSourceService(fakeDao)
+        ..checkCompleter = Completer<void>();
+      final provider = SourceManagerProvider(sourceCheckService: checkService);
+      await provider.loadSources();
+      provider.selectAll();
+
+      final checking = provider.checkSelectedSources();
+      await Future<void>.delayed(Duration.zero);
+      await provider.toggleEnabled(provider.sources.single);
+
+      expect(provider.isMutationBusy, isTrue);
+      expect(fakeDao.updateEnabledByUrlCallCount, 0);
+      checkService.checkCompleter!.complete();
+      await checking;
+    },
+  );
+
+  test('renaming the active group follows the new filter name', () async {
+    fakeDao.store['https://source.example.com'] = BookSource(
+      bookSourceUrl: 'https://source.example.com',
+      bookSourceName: '書源',
+      bookSourceGroup: '待修',
+    );
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    provider.setFilterGroup('待修');
+
+    await provider.renameGroup('待修', '已修');
+
+    expect(provider.filterGroup, '已修');
+    expect(provider.sources, hasLength(1));
+  });
+
+  test('export base names replace path separators and unsafe characters', () {
+    expect(
+      SourceManagerProvider.sanitizeExportBaseName('站點 A/B\\C?.json'),
+      '站點 A_B_C_',
+    );
+    expect(
+      SourceManagerProvider.sanitizeExportBaseName('站點\u0000A\nB'),
+      '站點_A_B',
+    );
+    expect(SourceManagerProvider.sanitizeExportBaseName('..'), 'source');
+  });
+
+  test('clipboard export threshold is measured in UTF-8 bytes', () {
+    final nonAsciiPayload = '繁' * 200000;
+
+    expect(nonAsciiPayload.length, lessThan(512 * 1024));
+    expect(
+      SourceManagerProvider.shouldShareExportPayload(nonAsciiPayload),
+      isTrue,
+    );
+  });
+
+  testWidgets('source selection exposes a labeled 48dp semantics control', (
+    tester,
+  ) async {
+    const url = 'https://source.example.com';
+    fakeDao.store[url] = BookSource(bookSourceUrl: url, bookSourceName: '測試書源');
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+    final semantics = tester.ensureSemantics();
+    Widget buildTile() {
+      return MaterialApp(
+        home: Scaffold(
+          body: SourceItemTile(
+            source: provider.sources.single,
+            provider: provider,
+            isSelected: provider.selectedUrls.contains(url),
+            onTap: () {},
+            onLongPress: () {},
+            onEdit: () {},
+            onShowMenu: () {},
+            onEnabledChanged: (_) {},
+          ),
+        ),
+      );
+    }
+
+    try {
+      await tester.pumpWidget(buildTile());
+
+      final selection = find.byTooltip('選取 測試書源');
+      expect(selection, findsOneWidget);
+      expect(tester.getSize(selection).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(selection).height, greaterThanOrEqualTo(48));
+      expect(
+        find.semantics.byLabel('選取 測試書源'),
+        isSemantics(
+          label: '選取 測試書源',
+          isButton: true,
+          hasCheckedState: true,
+          isChecked: false,
+          hasTapAction: true,
+        ),
+      );
+
+      await tester.tap(selection);
+      await tester.pumpWidget(buildTile());
+      expect(provider.selectedUrls, contains(url));
+      expect(find.byTooltip('取消選取 測試書源'), findsOneWidget);
+      expect(
+        find.semantics.byLabel('取消選取 測試書源'),
+        isSemantics(
+          label: '取消選取 測試書源',
+          isButton: true,
+          hasCheckedState: true,
+          isChecked: true,
+          hasTapAction: true,
+        ),
+      );
+    } finally {
+      semantics.dispose();
+      provider.dispose();
+    }
   });
 }

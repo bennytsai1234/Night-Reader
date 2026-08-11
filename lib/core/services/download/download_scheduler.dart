@@ -9,6 +9,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 mixin DownloadScheduler on DownloadBase {
   StreamSubscription? _refreshStartSub;
   StreamSubscription? _refreshEndSub;
+  final Set<String> _addingTaskUrls = <String>{};
 
   void listenEvents() {
     _refreshStartSub?.cancel();
@@ -53,30 +54,39 @@ mixin DownloadScheduler on DownloadBase {
   }
 
   Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
-    if (chapters.isEmpty) {
-      return;
-    }
-    final task = DownloadTask(
-      bookUrl: book.bookUrl,
-      bookName: book.name,
-      startChapterIndex: chapters.first.index,
-      endChapterIndex: chapters.last.index,
-      totalCount: chapters.length,
-      status: DownloadTask.statusWaiting,
-      lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
-    );
-    await downloadDao.upsert(task);
-    final existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
-    if (existingIndex != -1) {
-      final existing = tasks[existingIndex];
-      if (existing.isWaiting || existing.isDownloading) return;
-      tasks[existingIndex] = task;
-    } else {
-      tasks.add(task);
-    }
-    update();
-    if (!isDownloading) {
-      startDownloads();
+    if (chapters.isEmpty || !_addingTaskUrls.add(book.bookUrl)) return;
+    try {
+      final task = DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        startChapterIndex: chapters.first.index,
+        endChapterIndex: chapters.last.index,
+        totalCount: chapters.length,
+        status: DownloadTask.statusWaiting,
+        lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
+      );
+      if (activeTaskUrls.contains(book.bookUrl)) return;
+      var existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
+      if (existingIndex != -1) {
+        final existing = tasks[existingIndex];
+        if (existing.isWaiting || existing.isDownloading) {
+          return;
+        }
+      }
+
+      await downloadDao.upsert(task);
+      existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
+      if (existingIndex != -1) {
+        tasks[existingIndex] = task;
+      } else {
+        tasks.add(task);
+      }
+      update();
+      if (!isDownloading) {
+        startDownloads();
+      }
+    } finally {
+      _addingTaskUrls.remove(book.bookUrl);
     }
   }
 

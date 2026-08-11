@@ -90,6 +90,7 @@ class HybridReaderScreen extends StatefulWidget {
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
+  static const double _minimumViewportMovement = 0.01;
 
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
   final MeasurementStore _measurementStore = MeasurementStore();
@@ -133,6 +134,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   int _restoreTicket = 0;
   ReaderV2Location? _lastReportedLocation;
   ReaderV2Location? _lastSyncedLocation;
+  String? _lastLoggedErrorMessage;
   bool _initialRestoreCompleted = false;
   bool _capturing = false;
 
@@ -202,6 +204,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
       _lastSyncedLocation = null;
+      _lastLoggedErrorMessage = null;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
       _restoreTicket += 1;
       _initialRestoreCompleted = false;
@@ -323,6 +326,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _onRuntimeChanged() {
     if (!mounted) return;
     final state = widget.runtime.state;
+    final errorMessage = state.errorMessage;
+    if (state.phase != ReaderV2Phase.error) {
+      _lastLoggedErrorMessage = null;
+    } else if (errorMessage != null &&
+        errorMessage.isNotEmpty &&
+        errorMessage != _lastLoggedErrorMessage) {
+      _lastLoggedErrorMessage = errorMessage;
+      debugPrint('ReaderV2 operation failed: $errorMessage');
+    }
     final layoutChanged = _lastLayoutGeneration != state.layoutGeneration;
     if (layoutChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
@@ -1086,7 +1098,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
     final target =
         (before + delta).clamp(position.minScrollExtent, max).toDouble();
-    if ((target - before).abs() < 0.01) return false;
+    if ((target - before).abs() < _minimumViewportMovement) return false;
     position.jumpTo(target);
     return true;
   }
@@ -1117,7 +1129,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
     final target =
         (before + delta).clamp(position.minScrollExtent, max).toDouble();
-    if ((target - before).abs() < 0.01) return false;
+    if ((target - before).abs() < _minimumViewportMovement) return false;
     await position.animateTo(
       target,
       duration: _ensureAnimateDuration,
@@ -1128,13 +1140,33 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return mounted;
   }
 
-  Future<bool> _movePageNow({required bool forward}) {
+  Future<bool> _movePageNow({required bool forward}) async {
     final height = _viewportSize.height;
-    if (height <= 0) return Future<bool>.value(false);
+    if (height <= 0) return false;
     final style = widget.runtime.state.layoutSpec.style;
     final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
     final magnitude = math.max(height * 0.5, height - overlap - 8.0);
-    return _animateByNow(forward ? magnitude : -magnitude);
+    final moved = await _animateByNow(forward ? magnitude : -magnitude);
+    if (!moved) _emitBookBoundaryNotice(forward: forward);
+    return moved;
+  }
+
+  void _emitBookBoundaryNotice({required bool forward}) {
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    final atExtent =
+        forward
+            ? position.pixels >=
+                position.maxScrollExtent - _minimumViewportMovement
+            : position.pixels <=
+                position.minScrollExtent + _minimumViewportMovement;
+    final atBookBoundary =
+        forward
+            ? _admission.atForwardBookBoundary
+            : _admission.atBackwardBookBoundary;
+    if (!atExtent || !atBookBoundary) return;
+    widget.runtime.emitUserNotice(forward ? '已到書尾' : '已到書首');
   }
 
   // ---- D5 條款 6：ensureCharRangeVisible ----
@@ -1484,27 +1516,139 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (state.phase == ReaderV2Phase.error) {
       child = Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          state.errorMessage ?? '章節載入失敗',
-          style: TextStyle(color: widget.textColor, fontSize: 14),
-          textAlign: TextAlign.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: widget.textColor.withValues(alpha: 0.72),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _friendlyErrorMessage,
+              style: TextStyle(color: widget.textColor, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     } else {
-      child = SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: widget.textColor.withValues(alpha: 0.6),
-        ),
+      child = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: widget.textColor.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _phaseMessage(state.phase),
+            style: TextStyle(
+              color: widget.textColor.withValues(alpha: 0.72),
+              fontSize: 13,
+            ),
+          ),
+        ],
       );
     }
     return ColoredBox(
       color: widget.backgroundColor,
       child: ReaderV2PointerTapLayer(
         onTapUp: widget.onContentTapUp,
-        child: Center(child: child),
+        child: Semantics(
+          liveRegion: true,
+          excludeSemantics: true,
+          label:
+              state.phase == ReaderV2Phase.error
+                  ? _friendlyErrorMessage
+                  : _phaseMessage(state.phase),
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+
+  static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
+
+  String _phaseMessage(ReaderV2Phase phase) {
+    return switch (phase) {
+      ReaderV2Phase.cold => '正在準備閱讀內容',
+      ReaderV2Phase.loading => '正在載入章節',
+      ReaderV2Phase.layingOut => '正在整理版面',
+      ReaderV2Phase.restoring => '正在恢復閱讀位置',
+      ReaderV2Phase.switchingMode => '正在套用閱讀設定',
+      ReaderV2Phase.ready => '',
+      ReaderV2Phase.error => _friendlyErrorMessage,
+    };
+  }
+
+  Widget _buildOperationOverlay(ReaderV2State state) {
+    if (state.phase == ReaderV2Phase.ready) return const SizedBox.shrink();
+    final isError = state.phase == ReaderV2Phase.error;
+    final message =
+        isError ? _friendlyErrorMessage : _phaseMessage(state.phase);
+    return IgnorePointer(
+      child: Semantics(
+        liveRegion: true,
+        excludeSemantics: true,
+        label: message,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: SafeArea(
+            minimum: const EdgeInsets.only(top: 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: widget.backgroundColor.withValues(alpha: 0.92),
+                border: Border.all(
+                  color: widget.textColor.withValues(alpha: 0.16),
+                ),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isError)
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 16,
+                        color: widget.textColor.withValues(alpha: 0.72),
+                      )
+                    else
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.textColor.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        message,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.textColor.withValues(alpha: 0.78),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1565,6 +1709,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                       },
                     ),
                   ),
+                if (state.phase != ReaderV2Phase.ready)
+                  Positioned.fill(child: _buildOperationOverlay(state)),
               ],
             ),
           ),

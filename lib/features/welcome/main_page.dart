@@ -52,12 +52,14 @@ class _MainPageState extends State<MainPage> {
   DateTime? _lastBackPressedAt;
 
   // 一段式啟動:main.dart 的 FlutterNativeSplash.preserve() 延後首幀,讓原生
-  // splash(主題色純色底 + AVD 動畫圖示)從點圖標一路撐到書架首批書載完才放行,
-  // 使用者一看到書架就是填好的清單。全程只有原生這一層,無 Flutter 端轉場圖。
-  bool _splashReleaseScheduled = false;
+  // splash(主題色純色底 + AVD 動畫圖示)從點圖標一路撐到書架首批書載完才放行;
+  // 若超過逾時上限，則由不攔截操作的 Flutter loading overlay 接手。
+  bool _nativeSplashReleaseScheduled = false;
+  bool _showStartupLoadingOverlay = false;
   DateTime? _splashHeldAt;
   BookshelfProvider? _splashShelfProvider;
   VoidCallback? _splashShelfListener;
+  Timer? _splashTimeoutTimer;
 
   // 最短顯示時間讓原生圖示動畫(約 1000ms,首幀回呼前已播一段)不被腰斬;
   // 逾時保險避免書架查詢異常卡住開機。
@@ -77,6 +79,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    _splashTimeoutTimer?.cancel();
     _detachSplashShelfListener();
     _pageController.dispose();
     super.dispose();
@@ -86,10 +89,14 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       unawaited(_initDeferredStartupData());
+      final hasShelfProvider = context.read<BookshelfProvider?>() != null;
+      if (widget.destinations == null || hasShelfProvider) {
+        _releaseSplashWhenShelfReady();
+      }
       if (widget.destinations == null) {
         // 僅真實 app 路徑;測試注入 destinations 時不觸碰 platform channel。
-        _releaseSplashWhenShelfReady();
         unawaited(_runAutomaticUpdateCheck());
       }
     });
@@ -104,15 +111,54 @@ class _MainPageState extends State<MainPage> {
         _handleBackIntent();
       },
       child: Scaffold(
-        body: PageView(
-          controller: _pageController,
-          onPageChanged: (idx) {
-            setState(() => _currentIndex = idx);
-          },
-          children: List.generate(
-            _destinations.length,
-            (index) => _KeepAliveWrapper(child: _destinations[index].page),
-          ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView(
+              controller: _pageController,
+              onPageChanged: (idx) {
+                setState(() => _currentIndex = idx);
+              },
+              children: List.generate(
+                _destinations.length,
+                (index) => _KeepAliveWrapper(child: _destinations[index].page),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child:
+                      _showStartupLoadingOverlay
+                          ? ColoredBox(
+                            key: const ValueKey('startup-loading-overlay'),
+                            color: Theme.of(
+                              context,
+                            ).scaffoldBackgroundColor.withValues(alpha: 0.96),
+                            child: Center(
+                              child: Semantics(
+                                liveRegion: true,
+                                label: '正在載入書架',
+                                child: ExcludeSemantics(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(),
+                                      SizedBox(height: 12),
+                                      Text('正在載入書架…'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          : const SizedBox.shrink(
+                            key: ValueKey('startup-loading-overlay-hidden'),
+                          ),
+                ),
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
@@ -163,27 +209,57 @@ class _MainPageState extends State<MainPage> {
   // 原生 splash 一路把持畫面,首幀即為填好的書架、不閃轉圈。
   void _releaseSplashWhenShelfReady() {
     _splashHeldAt = DateTime.now();
-    final shelf = context.read<BookshelfProvider>();
+    final shelf = context.read<BookshelfProvider?>();
+    if (shelf == null) return;
     if (!shelf.isLoading) {
-      _releaseSplashOnce();
+      _completeSplashShelfWait();
       return;
     }
     void listener() {
-      if (!shelf.isLoading) _releaseSplashOnce();
+      if (!shelf.isLoading) _completeSplashShelfWait();
     }
 
     _splashShelfProvider = shelf;
     _splashShelfListener = listener;
     shelf.addListener(listener);
-    Future<void>.delayed(_splashShelfTimeout, _releaseSplashOnce);
+    _splashTimeoutTimer?.cancel();
+    _splashTimeoutTimer = Timer(_splashShelfTimeout, _handleSplashShelfTimeout);
+  }
+
+  void _handleSplashShelfTimeout() {
+    _splashTimeoutTimer = null;
+    final shelf = _splashShelfProvider;
+    if (shelf == null || !shelf.isLoading) {
+      _completeSplashShelfWait();
+      return;
+    }
+
+    if (!mounted) {
+      _releaseNativeSplashOnce();
+      return;
+    }
+    setState(() => _showStartupLoadingOverlay = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _releaseNativeSplashOnce();
+    });
+  }
+
+  void _completeSplashShelfWait() {
+    _splashTimeoutTimer?.cancel();
+    _splashTimeoutTimer = null;
+    _detachSplashShelfListener();
+    if (mounted && _showStartupLoadingOverlay) {
+      setState(() => _showStartupLoadingOverlay = false);
+    }
+    _releaseNativeSplashOnce();
   }
 
   // 書架就緒後放行;若距首幀回呼未滿 _splashMinDisplay 則補足,
   // 讓原生圖示動畫播完、不因小書架瞬間載完而腰斬。
-  void _releaseSplashOnce() {
-    if (_splashReleaseScheduled) return;
-    _splashReleaseScheduled = true;
-    _detachSplashShelfListener();
+  void _releaseNativeSplashOnce() {
+    if (_nativeSplashReleaseScheduled) return;
+    _nativeSplashReleaseScheduled = true;
+    if (widget.destinations != null) return;
     final heldAt = _splashHeldAt;
     final remaining =
         heldAt == null

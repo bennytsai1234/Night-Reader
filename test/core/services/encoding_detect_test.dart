@@ -39,4 +39,26 @@ void main() {
 
     expect(EncodingDetect.decodeWithCharset(bytes, 'UTF-16LE'), '章節切片');
   });
+
+  test('charset 前後空白不會讓 GBK 誤用 UTF-8 解碼', () {
+    final bytes = Uint8List.fromList(<int>[0xD6, 0xD0, 0xCE, 0xC4]);
+
+    expect(EncodingDetect.decodeWithCharset(bytes, '  gbk  '), '中文');
+  });
+
+  test('HTML meta 的 charset 不必是第一個屬性且允許等號空白', () {
+    final bytes = Uint8List.fromList(
+      '<meta http-equiv="x" data-test="1" charset = "GBK">'.codeUnits,
+    );
+
+    expect(EncodingDetect.getHtmlEncode(bytes), 'GBK');
+  });
+
+  test('HTML data-charset 不會遮蔽真正的 charset 屬性', () {
+    final bytes = Uint8List.fromList(
+      '<meta data-charset="GBK"><meta charset="UTF-8">'.codeUnits,
+    );
+
+    expect(EncodingDetect.getHtmlEncode(bytes), 'UTF-8');
+  });
 }

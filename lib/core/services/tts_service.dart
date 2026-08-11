@@ -238,16 +238,19 @@ class TTSService extends ChangeNotifier {
 
   void setSleepTimer(int minutes) {
     _sleepTimer?.cancel();
-    _remainingMinutes = minutes;
-    if (minutes > 0) {
+    _sleepTimer = null;
+    _remainingMinutes = minutes > 0 ? minutes : 0;
+    if (_remainingMinutes > 0) {
       _sleepTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-        if (_remainingMinutes > 0) {
-          _remainingMinutes--;
-          notifyListeners();
-        } else {
-          stop();
+        _remainingMinutes--;
+        if (_remainingMinutes <= 0) {
+          _remainingMinutes = 0;
           timer.cancel();
+          notifyListeners();
+          unawaited(stop());
+          return;
         }
+        notifyListeners();
       });
     }
     notifyListeners();

@@ -13,10 +13,22 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'widgets/import_preview_dialog.dart';
 
+String _normalizeImportJson(String value) {
+  var normalized = value.trim();
+  while (normalized.isNotEmpty && normalized.codeUnitAt(0) == 0xFEFF) {
+    normalized = normalized.substring(1).trim();
+  }
+  return normalized;
+}
+
 Map<String, List<Map<String, dynamic>>> _parseSourcesPayloadForIsolate(
   String jsonStr,
 ) {
-  final decoded = jsonDecode(jsonStr);
+  final normalized = _normalizeImportJson(jsonStr);
+  if (normalized.isEmpty) {
+    throw const FormatException('匯入內容為空');
+  }
+  final decoded = jsonDecode(normalized);
   final List<dynamic> list = decoded is List ? decoded : [decoded];
   final importable = <Map<String, dynamic>>[];
   final unsupported = <Map<String, dynamic>>[];
@@ -89,28 +101,17 @@ class SourceImportService {
   }
 
   ParsedSourceImportResult parseSourcesDetailed(String jsonStr) {
-    final decoded = jsonDecode(jsonStr);
-    final List<dynamic> list = decoded is List ? decoded : [decoded];
-    final result = <BookSource>[];
-    final unsupported = <BookSource>[];
-    for (final e in list) {
-      if (e is! Map<String, dynamic>) continue;
-      final source = BookSource.fromJson(e);
-      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
-        continue;
-      }
-      if (!source.isNovelTextSource) {
-        source.enabled = false;
-        source.enabledExplore = false;
-        source.addGroup(nonNovelSourceGroupTag);
-        unsupported.add(source);
-        continue;
-      }
-      result.add(source);
+    final payload = _parseSourcesPayloadForIsolate(jsonStr);
+    List<BookSource> decodeList(String key) {
+      final rawList = payload[key] ?? const <Map<String, dynamic>>[];
+      return rawList
+          .map((item) => BookSource.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
     }
+
     return ParsedSourceImportResult(
-      importableSources: result,
-      unsupportedSources: unsupported,
+      importableSources: decodeList('importable'),
+      unsupportedSources: decodeList('unsupported'),
     );
   }
 
@@ -221,22 +222,19 @@ class SourceImportService {
   String _importPayloadToText(dynamic data) {
     if (data == null) return '';
     if (data is String) {
-      return _stripBom(data.trim());
+      return _stripBom(data);
     }
     if (data is Uint8List) {
-      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+      return _stripBom(utf8.decode(data, allowMalformed: true));
     }
     if (data is List<int>) {
-      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+      return _stripBom(utf8.decode(data, allowMalformed: true));
     }
     return jsonEncode(data);
   }
 
   String _stripBom(String value) {
-    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
-      return value.substring(1);
-    }
-    return value;
+    return _normalizeImportJson(value);
   }
 }
 
@@ -248,6 +246,9 @@ class SourceManagerProvider with ChangeNotifier {
   List<BookSourcePart> _sources = [];
   List<BookSourcePart>? _visibleSourcesCache;
   bool _visibleSourcesDirty = true;
+  bool _disposed = false;
+  int _loadGeneration = 0;
+  Object? _loadError;
 
   String filterGroup = '全部';
   String _searchQuery = '';
@@ -259,6 +260,7 @@ class SourceManagerProvider with ChangeNotifier {
   bool get hasLastCheckReport => checkService.hasLastReport;
   SourceCheckConfig get checkConfig => checkService.config;
   int get totalSourceCount => _sources.length;
+  String? get loadErrorMessage => _loadError == null ? null : '載入書源失敗，請稍後重試';
 
   List<BookSourcePart> get sources {
     if (_visibleSourcesDirty || _visibleSourcesCache == null) {
@@ -297,16 +299,10 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '無分組') {
       list =
-          list
-              .where(
-                (s) => s.bookSourceGroup == null || s.bookSourceGroup!.isEmpty,
-              )
-              .toList();
+          list.where((s) => _groupLabels(s.bookSourceGroup).isEmpty).toList();
     } else if (filterGroup != '全部') {
       list =
-          list
-              .where((s) => s.bookSourceGroup?.contains(filterGroup) ?? false)
-              .toList();
+          list.where((s) => _hasGroup(s.bookSourceGroup, filterGroup)).toList();
     }
 
     final comparator = _buildComparator();
@@ -328,10 +324,26 @@ class SourceManagerProvider with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  bool _isBatchOperationInProgress = false;
+  bool get isBatchOperationInProgress => _isBatchOperationInProgress;
+  final Set<String> _pendingSourceMutations = <String>{};
+  bool get _hasActiveMutation =>
+      _isBatchOperationInProgress ||
+      checkService.isChecking ||
+      _pendingSourceMutations.isNotEmpty;
+  bool get isMutationBusy => _isLoading || _hasActiveMutation;
+  bool get canReorder =>
+      sortMode == 0 &&
+      !sortDesc &&
+      !groupByDomain &&
+      filterGroup == '全部' &&
+      _searchQuery.isEmpty &&
+      sources.length == _sources.length &&
+      !isMutationBusy;
   final Set<String> _selectedUrls = {};
-  Set<String> get selectedUrls => _selectedUrls;
+  Set<String> get selectedUrls => Set<String>.unmodifiable(_selectedUrls);
   List<String> _allGroups = [];
-  List<String> get allGroups => _allGroups;
+  List<String> get allGroups => List<String>.unmodifiable(_allGroups);
 
   SourceManagerProvider({
     SourceImportService? importService,
@@ -344,6 +356,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   void _handleCheckServiceChanged() {
+    if (_disposed) return;
     if (!checkService.isChecking) {
       _checkNotifyTimer?.cancel();
       _checkNotifyTimer = null;
@@ -360,6 +373,8 @@ class SourceManagerProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _loadGeneration++;
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
     checkService.cancel();
@@ -367,17 +382,36 @@ class SourceManagerProvider with ChangeNotifier {
     super.dispose();
   }
 
+  @override
+  void notifyListeners() {
+    if (!_disposed) {
+      super.notifyListeners();
+    }
+  }
+
   Future<void> loadSources({bool showLoading = true}) async {
+    final generation = ++_loadGeneration;
     if (showLoading) {
       _isLoading = true;
       notifyListeners();
     }
     try {
-      _sources = await _dao.getAllPart();
+      final loadedSources = await _dao.getAllPart();
+      if (_disposed || generation != _loadGeneration) return;
+      _sources = loadedSources;
+      _selectedUrls.retainAll(
+        loadedSources.map((source) => source.bookSourceUrl).toSet(),
+      );
+      _loadError = null;
       _updateGroups();
       _markVisibleSourcesDirty();
+    } catch (error) {
+      if (!_disposed && generation == _loadGeneration) {
+        _loadError = error;
+        _markVisibleSourcesDirty();
+      }
     } finally {
-      if (showLoading) {
+      if (showLoading && !_disposed && generation == _loadGeneration) {
         _isLoading = false;
         notifyListeners();
       }
@@ -391,14 +425,14 @@ class SourceManagerProvider with ChangeNotifier {
     final groupSet = <String>{};
     for (var s in _sources) {
       if (s.bookSourceGroup != null && s.bookSourceGroup!.isNotEmpty) {
-        groupSet.addAll(s.bookSourceGroup!.split(RegExp(r'[,，\s]+')));
+        groupSet.addAll(_groupLabels(s.bookSourceGroup));
       }
     }
     _allGroups = groupSet.toList()..sort();
   }
 
   void setFilterGroup(String group) {
-    filterGroup = group;
+    filterGroup = group.trim();
     _markVisibleSourcesDirty();
     notifyListeners();
   }
@@ -416,7 +450,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query;
+    _searchQuery = query.trim();
     _markVisibleSourcesDirty();
     notifyListeners();
   }
@@ -459,10 +493,12 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   void selectAll() {
-    if (_selectedUrls.length == sources.length) {
-      _selectedUrls.clear();
+    final visibleUrls = sources.map((source) => source.bookSourceUrl).toSet();
+    if (visibleUrls.isEmpty) return;
+    if (visibleUrls.every(_selectedUrls.contains)) {
+      _selectedUrls.removeAll(visibleUrls);
     } else {
-      _selectedUrls.addAll(sources.map((s) => s.bookSourceUrl));
+      _selectedUrls.addAll(visibleUrls);
     }
     notifyListeners();
   }
@@ -480,71 +516,103 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 反選 (對標 legado revertSelection)
   void revertSelection() {
-    final allUrls = sources.map((s) => s.bookSourceUrl).toSet();
-    final newSelection = allUrls.difference(_selectedUrls);
-    _selectedUrls.clear();
-    _selectedUrls.addAll(newSelection);
+    final visibleUrls = sources.map((s) => s.bookSourceUrl).toSet();
+    final selectedVisible = visibleUrls.intersection(_selectedUrls);
+    _selectedUrls.removeAll(selectedVisible);
+    _selectedUrls.addAll(visibleUrls.difference(selectedVisible));
     notifyListeners();
   }
 
   Future<void> toggleEnabled(dynamic source) async {
     final String url = source.bookSourceUrl;
     final index = _sources.indexWhere((s) => s.bookSourceUrl == url);
-    if (index < 0) return;
+    if (index < 0 || !_beginSourceMutation(url)) return;
     final nextEnabled = !_sources[index].enabled;
-    await _dao.updateEnabledByUrl(url, nextEnabled);
-    _sources[index].enabled = nextEnabled;
-    _refreshVisibleSources();
+    try {
+      await _dao.updateEnabledByUrl(url, nextEnabled);
+      final currentIndex = _sources.indexWhere((s) => s.bookSourceUrl == url);
+      if (currentIndex >= 0) {
+        _sources[currentIndex].enabled = nextEnabled;
+        _refreshVisibleSources();
+      }
+    } finally {
+      _endSourceMutation(url);
+    }
   }
 
   Future<void> toggleEnabledExplore(dynamic source) async {
     final String url = source.bookSourceUrl;
     final index = _sources.indexWhere((s) => s.bookSourceUrl == url);
-    if (index < 0) return;
+    if (index < 0 || !_beginSourceMutation(url)) return;
     final nextEnabledExplore = !_sources[index].enabledExplore;
-    await _dao.updateEnabledExploreByUrl(url, nextEnabledExplore);
-    _sources[index].enabledExplore = nextEnabledExplore;
-    _refreshVisibleSources();
+    try {
+      await _dao.updateEnabledExploreByUrl(url, nextEnabledExplore);
+      final currentIndex = _sources.indexWhere((s) => s.bookSourceUrl == url);
+      if (currentIndex >= 0) {
+        _sources[currentIndex].enabledExplore = nextEnabledExplore;
+        _refreshVisibleSources();
+      }
+    } finally {
+      _endSourceMutation(url);
+    }
   }
 
   Future<void> deleteSource(dynamic source) async {
     final String url = source.bookSourceUrl;
-    await _dao.deleteByUrl(url);
-    await loadSources();
+    if (!_beginSourceMutation(url)) return;
+    try {
+      await _dao.deleteByUrl(url);
+      _selectedUrls.remove(url);
+      await loadSources();
+    } finally {
+      _endSourceMutation(url);
+    }
   }
 
   Future<void> deleteSelected() async {
-    if (_selectedUrls.isNotEmpty) {
-      await _dao.deleteByUrls(_selectedUrls.toList());
+    final selected = Set<String>.from(_selectedUrls);
+    if (selected.isEmpty || !_beginBatchOperation()) return;
+    try {
+      await _dao.deleteByUrls(selected.toList(growable: false));
+      _selectedUrls.removeAll(selected);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
     }
-    _selectedUrls.clear();
-    await loadSources();
   }
 
   Future<void> batchSetEnabled(bool enabled) async {
-    if (_selectedUrls.isEmpty) return;
+    if (_selectedUrls.isEmpty || !_beginBatchOperation()) return;
     final urls = _selectedUrls.toList(growable: false);
-    await _dao.updateEnabledByUrls(urls, enabled);
-    final selected = urls.toSet();
-    for (final source in _sources) {
-      if (selected.contains(source.bookSourceUrl)) {
-        source.enabled = enabled;
+    try {
+      await _dao.updateEnabledByUrls(urls, enabled);
+      final selected = urls.toSet();
+      for (final source in _sources) {
+        if (selected.contains(source.bookSourceUrl)) {
+          source.enabled = enabled;
+        }
       }
+      _refreshVisibleSources();
+    } finally {
+      _endBatchOperation();
     }
-    _refreshVisibleSources();
   }
 
   Future<void> batchSetEnabledExplore(bool enabled) async {
-    if (_selectedUrls.isEmpty) return;
+    if (_selectedUrls.isEmpty || !_beginBatchOperation()) return;
     final urls = _selectedUrls.toList(growable: false);
-    await _dao.updateEnabledExploreByUrls(urls, enabled);
-    final selected = urls.toSet();
-    for (final source in _sources) {
-      if (selected.contains(source.bookSourceUrl)) {
-        source.enabledExplore = enabled;
+    try {
+      await _dao.updateEnabledExploreByUrls(urls, enabled);
+      final selected = urls.toSet();
+      for (final source in _sources) {
+        if (selected.contains(source.bookSourceUrl)) {
+          source.enabledExplore = enabled;
+        }
       }
+      _refreshVisibleSources();
+    } finally {
+      _endBatchOperation();
     }
-    _refreshVisibleSources();
   }
 
   void checkSelectedInterval() {
@@ -568,51 +636,71 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<void> moveSelectedToTop() async {
-    if (_selectedUrls.isEmpty) return;
-    final all = await _dao.getAll();
-    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final selected =
-        all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
-    final rest =
-        all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
-    final reordered = [...selected, ...rest];
-    await _dao.updateCustomOrder(reordered);
-    await loadSources();
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    try {
+      final all = await _dao.getAll();
+      all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+      final selected =
+          all.where((s) => selectedUrls.contains(s.bookSourceUrl)).toList();
+      final rest =
+          all.where((s) => !selectedUrls.contains(s.bookSourceUrl)).toList();
+      final reordered = [...selected, ...rest];
+      await _dao.updateCustomOrder(reordered);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   Future<void> moveSelectedToBottom() async {
-    if (_selectedUrls.isEmpty) return;
-    final all = await _dao.getAll();
-    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final selected =
-        all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
-    final rest =
-        all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
-    final reordered = [...rest, ...selected];
-    await _dao.updateCustomOrder(reordered);
-    await loadSources();
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    try {
+      final all = await _dao.getAll();
+      all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+      final selected =
+          all.where((s) => selectedUrls.contains(s.bookSourceUrl)).toList();
+      final rest =
+          all.where((s) => !selectedUrls.contains(s.bookSourceUrl)).toList();
+      final reordered = [...rest, ...selected];
+      await _dao.updateCustomOrder(reordered);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   Future<void> moveToTop(String url) async {
-    final all = await _dao.getAll();
-    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final idx = all.indexWhere((s) => s.bookSourceUrl == url);
-    if (idx <= 0) return;
-    final item = all.removeAt(idx);
-    all.insert(0, item);
-    await _dao.updateCustomOrder(all);
-    await loadSources();
+    if (!_beginSourceMutation(url)) return;
+    try {
+      final all = await _dao.getAll();
+      all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+      final idx = all.indexWhere((s) => s.bookSourceUrl == url);
+      if (idx <= 0) return;
+      final item = all.removeAt(idx);
+      all.insert(0, item);
+      await _dao.updateCustomOrder(all);
+      await loadSources();
+    } finally {
+      _endSourceMutation(url);
+    }
   }
 
   Future<void> moveToBottom(String url) async {
-    final all = await _dao.getAll();
-    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final idx = all.indexWhere((s) => s.bookSourceUrl == url);
-    if (idx < 0 || idx == all.length - 1) return;
-    final item = all.removeAt(idx);
-    all.add(item);
-    await _dao.updateCustomOrder(all);
-    await loadSources();
+    if (!_beginSourceMutation(url)) return;
+    try {
+      final all = await _dao.getAll();
+      all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+      final idx = all.indexWhere((s) => s.bookSourceUrl == url);
+      if (idx < 0 || idx == all.length - 1) return;
+      final item = all.removeAt(idx);
+      all.add(item);
+      await _dao.updateCustomOrder(all);
+      await loadSources();
+    } finally {
+      _endSourceMutation(url);
+    }
   }
 
   /// 通用分享方法：按 URL 集合分享書源 (對標 Android 分享)
@@ -620,10 +708,11 @@ class SourceManagerProvider with ChangeNotifier {
     Set<String> urls, {
     String fileName = 'sources',
   }) async {
-    if (urls.isEmpty) return;
+    final requestedUrls = Set<String>.from(urls);
+    if (requestedUrls.isEmpty) return;
 
     final sources = <BookSource>[];
-    for (var url in urls) {
+    for (var url in requestedUrls) {
       final full = await _dao.getByUrl(url);
       if (full != null) sources.add(full);
     }
@@ -637,7 +726,7 @@ class SourceManagerProvider with ChangeNotifier {
     String fileName = 'sources',
   }) async {
     final jsonStr = jsonEncode(sources.map((s) => s.toJson()).toList());
-    final baseName = fileName.replaceAll(RegExp(r'\.(legado|json)$'), '');
+    final baseName = sanitizeExportBaseName(fileName);
     final file = await AppStoragePaths.shareExportFile('$baseName.json');
     await file.writeAsString(jsonStr);
     await SharePlus.instance.share(
@@ -645,20 +734,38 @@ class SourceManagerProvider with ChangeNotifier {
     );
   }
 
+  @visibleForTesting
+  static String sanitizeExportBaseName(String fileName) {
+    var baseName =
+        fileName
+            .replaceAll(RegExp(r'\.(legado|json)$', caseSensitive: false), '')
+            .trim()
+            .replaceAll(RegExp(r'[\x00-\x1F\x7F\\/:*?"<>|]'), '_')
+            .trim();
+    if (baseName.isEmpty || baseName == '.' || baseName == '..') {
+      baseName = 'source';
+    }
+    return baseName;
+  }
+
   /// 批量分享目前選中的書源
   Future<void> shareSelectedSources() async {
-    final fileName =
-        _selectedUrls.length == 1
-            ? sources
-                .firstWhere((s) => s.bookSourceUrl == _selectedUrls.first)
-                .bookSourceName
-            : 'export_${_selectedUrls.length}_sources';
-    await shareSourcesByUrls(_selectedUrls, fileName: fileName);
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    if (selectedUrls.isEmpty) return;
+    String fileName;
+    if (selectedUrls.length == 1) {
+      final source = await _dao.getByUrl(selectedUrls.single);
+      fileName = source?.bookSourceName ?? 'source';
+    } else {
+      fileName = 'export_${selectedUrls.length}_sources';
+    }
+    await shareSourcesByUrls(selectedUrls, fileName: fileName);
   }
 
   Future<bool> exportSelected() async {
+    final selectedUrls = Set<String>.from(_selectedUrls);
     final selectedFullSources = <BookSource>[];
-    for (var url in _selectedUrls) {
+    for (var url in selectedUrls) {
       final full = await _dao.getByUrl(url);
       if (full != null) selectedFullSources.add(full);
     }
@@ -667,7 +774,7 @@ class SourceManagerProvider with ChangeNotifier {
     );
     // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
     const clipboardSafeBytes = 512 * 1024;
-    if (json.length > clipboardSafeBytes) {
+    if (shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {
       final fileName =
           selectedFullSources.length == 1
               ? selectedFullSources.first.bookSourceName
@@ -679,135 +786,207 @@ class SourceManagerProvider with ChangeNotifier {
     return true; // true = 已複製至剪貼簿
   }
 
+  @visibleForTesting
+  static bool shouldShareExportPayload(
+    String value, {
+    int limitBytes = 512 * 1024,
+  }) => utf8.encode(value).length > limitBytes;
+
   Future<void> reorderSource(int oldIndex, int newIndex) async {
-    if (sortMode != 0 || groupByDomain) return;
     final list = List<BookSourcePart>.from(sources);
-    final item = list.removeAt(oldIndex);
-    list.insert(newIndex, item);
-    await _dao.updateCustomOrder(list);
-    await loadSources();
+    if (!canReorder ||
+        oldIndex < 0 ||
+        oldIndex >= list.length ||
+        newIndex < 0 ||
+        newIndex > list.length ||
+        !_beginBatchOperation()) {
+      return;
+    }
+    try {
+      final item = list.removeAt(oldIndex);
+      list.insert(newIndex.clamp(0, list.length), item);
+      await _dao.updateCustomOrder(list);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   Future<void> addGroup(String name) async {
-    if (name.isEmpty || _allGroups.contains(name)) return;
+    final normalizedName = name.trim();
+    if (isMutationBusy ||
+        normalizedName.isEmpty ||
+        _allGroups.contains(normalizedName)) {
+      return;
+    }
     // 這裡只需要更新本地緩存並刷新即可
-    _allGroups.add(name);
+    _allGroups.add(normalizedName);
     _allGroups.sort();
     notifyListeners();
   }
 
   Future<void> renameGroup(String oldName, String newName) async {
-    if (newName.isEmpty || oldName == newName) return;
-    await _dao.renameGroup(oldName, newName);
-    await loadSources();
+    final normalizedOldName = oldName.trim();
+    final normalizedNewName = newName.trim();
+    if (normalizedNewName.isEmpty || normalizedOldName == normalizedNewName) {
+      return;
+    }
+    if (!_beginBatchOperation()) return;
+    try {
+      await _dao.renameGroup(normalizedOldName, normalizedNewName);
+      if (filterGroup == normalizedOldName) {
+        filterGroup = normalizedNewName;
+      }
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   Future<void> deleteGroup(String name) async {
-    await _dao.removeGroupLabel(name);
-    if (filterGroup == name) filterGroup = '全部';
-    await loadSources();
+    if (!_beginBatchOperation()) return;
+    try {
+      await _dao.removeGroupLabel(name);
+      if (filterGroup == name) filterGroup = '全部';
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   Future<void> checkSelectedSources({SourceCheckConfig? config}) async {
-    if (_selectedUrls.isEmpty) return;
-    if (config != null) {
-      await checkService.updateConfig(config);
-    }
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
     try {
-      await checkService.check(_selectedUrls.toList());
+      if (config != null) {
+        await checkService.updateConfig(config);
+      }
+      await checkService.check(selectedUrls.toList(growable: false));
       await loadSources();
     } finally {
-      clearSelection();
+      _selectedUrls.removeAll(selectedUrls);
+      _endBatchOperation();
     }
   }
 
   List<String> get groups => _allGroups;
 
   Future<void> selectionAddToGroups(Set<String> urls, String g) async {
+    final normalizedGroup = g.trim();
+    if (normalizedGroup.isEmpty) return;
     final selectedUrls = urls.toSet();
-    for (var url in urls) {
-      final s = await _dao.getByUrl(url);
-      if (s != null) {
-        final groups =
-            (s.bookSourceGroup ?? '')
-                .split(RegExp(r'[,，\s]+'))
-                .where((e) => e.isNotEmpty)
-                .toSet();
-        groups.add(g);
-        s.bookSourceGroup = groups.join(',');
-        await _dao.upsert(s);
+    if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    try {
+      for (var url in selectedUrls) {
+        final s = await _dao.getByUrl(url);
+        if (s != null) {
+          final groups =
+              (s.bookSourceGroup ?? '')
+                  .split(RegExp(r'[,，\s]+'))
+                  .where((e) => e.isNotEmpty)
+                  .toSet();
+          groups.add(normalizedGroup);
+          s.bookSourceGroup = groups.join(',');
+          await _dao.upsert(s);
+        }
       }
+      _selectedUrls.removeAll(selectedUrls);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
     }
-    _selectedUrls.removeAll(selectedUrls);
-    await loadSources();
   }
 
   Future<void> selectionRemoveFromGroups(Set<String> urls, String g) async {
+    final normalizedGroup = g.trim();
+    if (normalizedGroup.isEmpty) return;
     final selectedUrls = urls.toSet();
-    for (var url in urls) {
-      final s = await _dao.getByUrl(url);
-      if (s != null) {
-        final groups =
-            (s.bookSourceGroup ?? '')
-                .split(RegExp(r'[,，\s]+'))
-                .where((e) => e.isNotEmpty)
-                .toSet();
-        groups.remove(g);
-        s.bookSourceGroup = groups.join(',');
-        await _dao.upsert(s);
+    if (selectedUrls.isEmpty || !_beginBatchOperation()) return;
+    try {
+      for (var url in selectedUrls) {
+        final s = await _dao.getByUrl(url);
+        if (s != null) {
+          final groups =
+              (s.bookSourceGroup ?? '')
+                  .split(RegExp(r'[,，\s]+'))
+                  .where((e) => e.isNotEmpty)
+                  .toSet();
+          groups.remove(normalizedGroup);
+          s.bookSourceGroup = groups.join(',');
+          await _dao.upsert(s);
+        }
       }
+      _selectedUrls.removeAll(selectedUrls);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
     }
-    _selectedUrls.removeAll(selectedUrls);
-    await loadSources();
   }
 
   Future<void> clearInvalidSources() async {
-    final all = await _dao.getAll();
-    final urlsToDelete = <String>[];
-    for (final s in all) {
-      if (s.isCleanupCandidate) {
-        urlsToDelete.add(s.bookSourceUrl);
+    if (!_beginBatchOperation()) return;
+    try {
+      final all = await _dao.getAll();
+      final urlsToDelete = <String>[];
+      for (final s in all) {
+        if (s.isCleanupCandidate) {
+          urlsToDelete.add(s.bookSourceUrl);
+        }
       }
-    }
-    if (urlsToDelete.isNotEmpty) {
-      await _dao.deleteByUrls(urlsToDelete);
-      await loadSources();
+      if (urlsToDelete.isNotEmpty) {
+        await _dao.deleteByUrls(urlsToDelete);
+        await loadSources();
+      }
+    } finally {
+      _endBatchOperation();
     }
   }
 
   Future<int> deleteNonNovelSources() async {
-    final all = await _dao.getAll();
-    final urlsToDelete = <String>[];
-    for (final source in all) {
-      if (source.isNovelTextSource) continue;
-      urlsToDelete.add(source.bookSourceUrl);
+    if (!_beginBatchOperation()) return 0;
+    try {
+      final all = await _dao.getAll();
+      final urlsToDelete = <String>[];
+      for (final source in all) {
+        if (source.isNovelTextSource) continue;
+        urlsToDelete.add(source.bookSourceUrl);
+      }
+      if (urlsToDelete.isNotEmpty) {
+        await _dao.deleteByUrls(urlsToDelete);
+        await loadSources();
+      }
+      return urlsToDelete.length;
+    } finally {
+      _endBatchOperation();
     }
-    if (urlsToDelete.isNotEmpty) {
-      await _dao.deleteByUrls(urlsToDelete);
-      await loadSources();
-    }
-    return urlsToDelete.length;
   }
 
   Future<void> checkAllSources({SourceCheckConfig? config}) async {
     final urls = _sources.map((s) => s.bookSourceUrl).toList();
-    if (config != null) {
-      await checkService.updateConfig(config);
-    }
+    if (urls.isEmpty || !_beginBatchOperation()) return;
+    final selectedAtStart = Set<String>.from(_selectedUrls);
     try {
+      if (config != null) {
+        await checkService.updateConfig(config);
+      }
       await checkService.check(urls);
       await loadSources();
     } finally {
-      clearSelection();
+      _selectedUrls.removeAll(selectedAtStart);
+      _endBatchOperation();
     }
   }
 
   Future<void> deleteSourcesByUrls(Iterable<String> urls) async {
     final normalized = urls.toSet().toList();
-    if (normalized.isEmpty) return;
-    await _dao.deleteByUrls(normalized);
-    _selectedUrls.removeAll(normalized);
-    await loadSources();
+    if (normalized.isEmpty || !_beginBatchOperation()) return;
+    try {
+      await _dao.deleteByUrls(normalized);
+      _selectedUrls.removeAll(normalized);
+      await loadSources();
+    } finally {
+      _endBatchOperation();
+    }
   }
 
   /// 解析 JSON 字串為書源列表 (不匯入)
@@ -831,7 +1010,7 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 直接匯入書源列表（跳過預覽）
   Future<int> importSources(List<BookSource> sources) async {
-    if (sources.isEmpty) return 0;
+    if (sources.isEmpty || isMutationBusy) return 0;
     _isLoading = true;
     notifyListeners();
     try {
@@ -845,6 +1024,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<int> importFromJson(String jsonStr) async {
+    if (isMutationBusy) return 0;
     _isLoading = true;
     notifyListeners();
     try {
@@ -889,6 +1069,51 @@ class SourceManagerProvider with ChangeNotifier {
     _markVisibleSourcesDirty();
     notifyListeners();
   }
+
+  bool _beginBatchOperation() {
+    if (isMutationBusy) return false;
+    _isBatchOperationInProgress = true;
+    notifyListeners();
+    return true;
+  }
+
+  void _endBatchOperation() {
+    if (!_isBatchOperationInProgress) return;
+    _isBatchOperationInProgress = false;
+    notifyListeners();
+  }
+
+  bool _beginSourceMutation(String url) {
+    if (isMutationBusy || !_pendingSourceMutations.add(url)) return false;
+    notifyListeners();
+    return true;
+  }
+
+  void _endSourceMutation(String url) {
+    if (_pendingSourceMutations.remove(url)) notifyListeners();
+  }
+
+  Set<String> sourceUrlsInGroup(String group) {
+    final normalizedGroup = group.trim();
+    if (normalizedGroup.isEmpty) return const <String>{};
+    return Set<String>.unmodifiable(
+      _sources
+          .where((source) => _hasGroup(source.bookSourceGroup, normalizedGroup))
+          .map((source) => source.bookSourceUrl),
+    );
+  }
+
+  Set<String> _groupLabels(String? value) {
+    if (value == null || value.trim().isEmpty) return const <String>{};
+    return value
+        .split(RegExp(r'[,，\s]+'))
+        .map((group) => group.trim())
+        .where((group) => group.isNotEmpty)
+        .toSet();
+  }
+
+  bool _hasGroup(String? value, String group) =>
+      _groupLabels(value).contains(group);
 
   int Function(BookSourcePart a, BookSourcePart b) _buildComparator() {
     final multiplier = sortDesc ? -1 : 1;

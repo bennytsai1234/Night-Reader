@@ -60,7 +60,7 @@ class CoverGridItem extends StatelessWidget {
                               color:
                                   Theme.of(
                                     context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  ).colorScheme.surfaceContainerHighest,
                               child: Icon(
                                 Icons.broken_image,
                                 color:

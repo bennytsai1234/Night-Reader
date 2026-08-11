@@ -530,6 +530,7 @@ class WebBook {
             _checkLoginRequired(res, stage: stage);
             return res;
           } catch (e) {
+            if (e is DioException && CancelToken.isCancel(e)) rethrow;
             AppLog.e('WebBook: 並發抓取失敗 $url: $e');
             if (!allowPartial) rethrow;
             return null;

@@ -74,10 +74,12 @@ class FlexChildStyle {
   }) {
     final value = json[legadoKey] ?? json[dartKey];
     if (value is num) {
-      return value.toDouble();
+      final parsed = value.toDouble();
+      return parsed.isFinite ? parsed : fallback;
     }
     if (value is String) {
-      return double.tryParse(value) ?? fallback;
+      final parsed = double.tryParse(value);
+      return parsed != null && parsed.isFinite ? parsed : fallback;
     }
     return fallback;
   }

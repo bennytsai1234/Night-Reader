@@ -50,6 +50,7 @@ abstract class JsExtensionsBase {
 
   /// rule-level JS 執行的 pending Completer，鍵為 ruleCallId
   final Map<int, Completer<dynamic>> _pendingRuleCalls = {};
+  bool _isDisposed = false;
 
   /// bridge 是否已經初始化 (防重複 inject)
   bool _bridgeInitialised = false;
@@ -124,6 +125,9 @@ abstract class JsExtensionsBase {
   /// 然後 await 回傳的 future。Completer 會在 JS 端 `sendMessage('__ruleDone', ...)`
   /// 觸發時完成。
   (int, Future<dynamic>) registerRuleCall() {
+    if (_isDisposed) {
+      throw StateError('JS extensions have been disposed');
+    }
     final id = _nextRuleCallId++;
     final completer = Completer<dynamic>();
     _pendingRuleCalls[id] = completer;
@@ -147,6 +151,7 @@ abstract class JsExtensionsBase {
   /// 呼叫本方法後會立刻 pump QuickJS microtask queue，讓等待中的 await
   /// 繼續往下執行。
   void resolveJsPending(int callId, dynamic value) {
+    if (_isDisposed) return;
     final payload = _safeJsonEncode(value);
     runtime.evaluate('__resolvePending($callId, $payload);');
     runtime.executePendingJob();
@@ -154,9 +159,23 @@ abstract class JsExtensionsBase {
 
   /// 從 Dart 主動 reject 一個 JS 側 pending Promise
   void rejectJsPending(int callId, Object error) {
+    if (_isDisposed) return;
     final msg = _safeJsonEncode(error.toString());
     runtime.evaluate('__rejectPending($callId, $msg);');
     runtime.executePendingJob();
+  }
+
+  /// 結束 bridge 生命週期，讓所有等待中的 rule Future 立即失敗。
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    final pending = _pendingRuleCalls.values.toList(growable: false);
+    _pendingRuleCalls.clear();
+    for (final completer in pending) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('JS runtime has been disposed'));
+      }
+    }
   }
 
   /// 從 onMessage handler 收到的 args 中解析出 `[callId, payload]`

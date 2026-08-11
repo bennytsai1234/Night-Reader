@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:io' show gzip;
+import 'dart:io' show Directory, File, gzip;
 
+import 'package:archive/archive.dart';
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
@@ -8,8 +9,23 @@ import 'package:night_reader/core/engine/js/js_extensions.dart';
 import 'package:night_reader/core/engine/js/js_rule_async_wrapper.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import '../../../test_helper.dart';
+
+class _FakePathProvider extends PathProviderPlatform {
+  _FakePathProvider({required this.temporaryPath, required this.documentsPath});
+
+  final String temporaryPath;
+  final String documentsPath;
+
+  @override
+  Future<String?> getTemporaryPath() async => temporaryPath;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => documentsPath;
+}
 
 void main() {
   setupTestDI();
@@ -196,6 +212,95 @@ void main() {
 
       final resolved = await future;
       expect(resolved, 'null');
+    });
+
+    test('java.readTxtFile honors UTF-16LE charset', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final file = File(
+        '${Directory.systemTemp.path}/night_reader_js_utf16_${DateTime.now().microsecondsSinceEpoch}.txt',
+      );
+      final bytes = <int>[0xFF, 0xFE];
+      for (final codeUnit in '夜讀文字'.codeUnits) {
+        bytes
+          ..add(codeUnit & 0xFF)
+          ..add(codeUnit >> 8);
+      }
+      await file.writeAsBytes(bytes, flush: true);
+      addTearDown(() async {
+        if (await file.exists()) await file.delete();
+      });
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      final rewritten = AsyncJsRewriter.rewrite(
+        'java.readTxtFile(${jsonEncode(file.path)}, "UTF-16LE")',
+      );
+      final (callId, future) = ext.registerRuleCall();
+      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+      final evalResult = runtime!.evaluate(wrapped);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      runtime!.executePendingJob();
+
+      expect(await future, '夜讀文字');
+    });
+
+    test('java.unArchiveFile keeps entries inside its output folder', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final root = await Directory.systemTemp.createTemp(
+        'night_reader_js_archive_',
+      );
+      final documents =
+          await Directory(p.join(root.path, 'documents')).create();
+      final temporary =
+          await Directory(p.join(root.path, 'temporary')).create();
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _FakePathProvider(
+        temporaryPath: temporary.path,
+        documentsPath: documents.path,
+      );
+      addTearDown(() async {
+        PathProviderPlatform.instance = previousPathProvider;
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+
+      final archive =
+          Archive()
+            ..addFile(ArchiveFile.string('safe.txt', 'safe'))
+            ..addFile(ArchiveFile.string('../../escape.txt', 'escape'));
+      final zipBytes = ZipEncoder().encode(archive);
+      await File(
+        p.join(documents.path, 'archive.zip'),
+      ).writeAsBytes(zipBytes, flush: true);
+
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      final rewritten = AsyncJsRewriter.rewrite(
+        'java.unArchiveFile("archive.zip")',
+      );
+      final (callId, future) = ext.registerRuleCall();
+      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+      final evalResult = runtime!.evaluate(wrapped);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      runtime!.executePendingJob();
+
+      final relativeOutputPath = (await future).toString();
+      expect(
+        await File(
+          p.join(temporary.path, relativeOutputPath, 'safe.txt'),
+        ).readAsString(),
+        'safe',
+      );
+      expect(
+        await File(p.join(temporary.path, 'escape.txt')).exists(),
+        isFalse,
+      );
     });
 
     test('source bridge is exposed when source exists', () {

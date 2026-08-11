@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
@@ -257,5 +259,81 @@ void main() {
       WebBook.getContentAwait(source, book, chapter),
       throwsA(anything),
     );
+  });
+
+  test('取消平行目錄分頁不會被降級成部分成功', () async {
+    final nextPageStarted = Completer<void>();
+    final releaseNextPages = Completer<void>();
+    requestHandler = (request) async {
+      if (request.uri.path == '/toc/cancel') {
+        request.response.write('''
+<html><body>
+  <ul><li class="chapter"><a href="/chapter/1">第一章</a></li></ul>
+  <a class="next" href="/toc/cancel/2">第二頁</a>
+  <a class="next" href="/toc/cancel/3">第三頁</a>
+</body></html>
+''');
+        await request.response.close();
+        return;
+      }
+      if (request.uri.path == '/toc/cancel/2' ||
+          request.uri.path == '/toc/cancel/3') {
+        if (!nextPageStarted.isCompleted) nextPageStarted.complete();
+        await releaseNextPages.future;
+        try {
+          request.response.write('''
+<html><body>
+  <ul><li class="chapter"><a href="/chapter/2">第二章</a></li></ul>
+</body></html>
+''');
+          await request.response.close();
+        } catch (_) {
+          // 取消請求後測試伺服器可能已失去 client 連線。
+        }
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    };
+
+    final source = BookSource.fromJson({
+      'bookSourceUrl': baseUrl,
+      'bookSourceName': '取消測試書源',
+      'ruleToc': {
+        'chapterList': 'li.chapter',
+        'chapterName': 'a@text',
+        'chapterUrl': 'a@href',
+        'nextTocUrl': 'a.next@href',
+      },
+    });
+    final book = Book(
+      bookUrl: '$baseUrl/book/cancel',
+      tocUrl: '$baseUrl/toc/cancel',
+      origin: baseUrl,
+      originName: '取消測試書源',
+    );
+    final cancelToken = CancelToken();
+    final future = WebBook.getChapterListAwait(
+      source,
+      book,
+      cancelToken: cancelToken,
+    );
+
+    try {
+      await nextPageStarted.future.timeout(const Duration(seconds: 2));
+      cancelToken.cancel('使用者取消目錄載入');
+      releaseNextPages.complete();
+
+      await expectLater(
+        future,
+        throwsA(
+          predicate<Object>(
+            (error) => error is DioException && CancelToken.isCancel(error),
+          ),
+        ),
+      );
+    } finally {
+      if (!releaseNextPages.isCompleted) releaseNextPages.complete();
+    }
   });
 }

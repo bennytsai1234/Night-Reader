@@ -104,7 +104,7 @@ class CookieStore {
       if (parts.length >= 2) {
         final key = parts[0].trim();
         final value = parts.sublist(1).join('=').trim();
-        if (value.isNotEmpty) {
+        if (key.isNotEmpty) {
           cookieMap[key] = value;
         }
       }

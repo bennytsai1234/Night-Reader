@@ -131,6 +131,7 @@ void main() {
     ReaderV2ViewportController controller, {
     ValueNotifier<HybridProgressSnapshot?>? progress,
     ReaderV2TtsHighlight? ttsHighlight,
+    GestureTapUpCallback? onContentTapUp,
     int paragraphCacheCapacity = 512,
   }) async {
     await tester.pumpWidget(
@@ -146,6 +147,7 @@ void main() {
               style: style,
               viewportController: controller,
               ttsHighlight: ttsHighlight,
+              onContentTapUp: onContentTapUp,
               progressListenable: progress,
               preprocessor: const TextPreprocessor(useIsolate: false),
               enableDiskMetrics: false,
@@ -248,8 +250,101 @@ void main() {
     expect(snapshot.chapterCount, 3);
     expect(snapshot.chapterPercent, greaterThan(0));
     expect(snapshot.chapterPercent, lessThanOrEqualTo(99.9));
-    expect(snapshot.chapterLabel, startsWith('第 1 章 '));
+    expect(snapshot.chapterLabel, startsWith('第 1/3 章 · 本章 '));
     expect(snapshot.chapterSegment, inInclusiveRange(0, 9));
+  });
+
+  testWidgets('首次 restore 後非 ready 狀態以不攔截 overlay 回饋', (tester) async {
+    final runtime = makeRuntime(List.generate(2, chapter));
+    final controller = ReaderV2ViewportController();
+    var contentTaps = 0;
+    final logMessages = <String?>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) => logMessages.add(message);
+    addTearDown(() => debugPrint = previousDebugPrint);
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(
+      tester,
+      runtime,
+      controller,
+      onContentTapUp: (_) => contentTaps += 1,
+    );
+    await openAndSettle(tester, runtime);
+    final viewportSize = tester.getSize(find.byType(HybridScrollView));
+
+    final token = runtime.beginJumpOperation();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('正在整理版面'), findsOneWidget);
+    expect(find.byType(HybridScrollView), findsOneWidget);
+    expect(tester.getSize(find.byType(HybridScrollView)), viewportSize);
+    final ignorePointer = tester.widget<IgnorePointer>(
+      find
+          .ancestor(
+            of: find.text('正在整理版面'),
+            matching: find.byType(IgnorePointer),
+          )
+          .first,
+    );
+    expect(ignorePointer.ignoring, isTrue);
+    await tester.tapAt(tester.getCenter(find.byType(HybridScrollView)));
+    await tester.pump();
+    expect(contentTaps, 1);
+
+    runtime.failOperation(token, StateError('internal restore details'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsOneWidget);
+    expect(find.textContaining('internal restore details'), findsNothing);
+    expect(find.byType(HybridScrollView), findsOneWidget);
+    int matchingErrorLogs() =>
+        logMessages
+            .whereType<String>()
+            .where((message) => message.contains('internal restore details'))
+            .length;
+    expect(matchingErrorLogs(), 1);
+
+    runtime.failOperation(token, StateError('internal restore details'));
+    await tester.pump();
+    await tester.pump();
+    expect(matchingErrorLogs(), 1);
+
+    final nextToken = runtime.beginJumpOperation();
+    await tester.pump();
+    await tester.pump();
+    runtime.failOperation(nextToken, StateError('internal restore details'));
+    await tester.pump();
+    await tester.pump();
+    expect(matchingErrorLogs(), 2, reason: '新的 operation 進入 error 時仍須留下技術診斷');
+    debugPrint = previousDebugPrint;
+  });
+
+  testWidgets('hybrid 只在已確認書首書尾時發出邊界通知', (tester) async {
+    final runtime = makeRuntime(<BookChapter>[
+      BookChapter(
+        url: 'chapter_0',
+        title: '短章',
+        bookUrl: 'http://book.test',
+        index: 0,
+        content: '短文。',
+      ),
+    ]);
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(tester, runtime, controller);
+    await openAndSettle(tester, runtime);
+
+    expect(await controller.moveToPrevPage!(), isFalse);
+    expect(runtime.takeUserNotice(), '已到書首');
+    expect(runtime.takeUserNotice(), isNull);
+
+    expect(await controller.moveToNextPage!(), isFalse);
+    expect(runtime.takeUserNotice(), '已到書尾');
+    expect(runtime.takeUserNotice(), isNull);
   });
 
   testWidgets('關閉重開後 capture/restore 幾何誤差不超過 0.01 logical px', (tester) async {

@@ -1,8 +1,12 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/tts_service.dart';
 
 // TTSService 的狀態機測試
 // 這些測試驗證狀態邏輯而不需要實際 TTS 引擎
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('TTSService 睡眠定時器邏輯', () {
     test('設定 0 分鐘代表不計時', () {
       const int minutes = 0;
@@ -22,22 +26,56 @@ void main() {
       expect(remainingMinutes, 4);
     });
 
-    test('倒數至 0 時停止', () {
+    test('倒數至 0 的同一次 tick 就停止', () {
       int remainingMinutes = 1;
       bool stopped = false;
       // 模擬計時器回調
       void onTick() {
         if (remainingMinutes > 0) {
           remainingMinutes--;
-        } else {
+        }
+        if (remainingMinutes <= 0) {
           stopped = true;
         }
       }
 
       onTick(); // remainingMinutes → 0
-      onTick(); // 下次觸發 → should stop
       expect(remainingMinutes, 0);
       expect(stopped, true);
+    });
+
+    test('負分鐘數會正規化為不計時', () {
+      final service = TTSService();
+
+      service.setSleepTimer(-5);
+
+      expect(service.remainingMinutes, 0);
+    });
+
+    testWidgets('一分鐘定時器在第一分鐘到期時呼叫停止', (tester) async {
+      const channel = MethodChannel('flutter_tts');
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        calls.add(call);
+        return 1;
+      });
+      addTearDown(() {
+        TTSService().setSleepTimer(0);
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        );
+      });
+
+      final service = TTSService();
+      service.setSleepTimer(1);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump();
+
+      expect(service.remainingMinutes, 0);
+      expect(calls.where((call) => call.method == 'stop'), hasLength(1));
     });
   });
 

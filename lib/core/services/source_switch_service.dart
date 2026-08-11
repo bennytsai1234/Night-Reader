@@ -62,10 +62,19 @@ class SourceSwitchService {
           enabledSources.map((source) {
             return searchPool.withResource(() async {
               try {
-                return await _service.preciseSearch(
+                final author = book.author.trim();
+                if (checkAuthor && author.isNotEmpty) {
+                  return await _service.preciseSearch(
+                    source,
+                    book.name,
+                    author,
+                  );
+                }
+                return await _service.searchBooks(
                   source,
                   book.name,
-                  checkAuthor ? book.author : '',
+                  filter: (name, _) => name == book.name,
+                  shouldBreak: (size) => size >= 1,
                 );
               } catch (_) {
                 return const <SearchBook>[];

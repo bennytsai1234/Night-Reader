@@ -1,10 +1,14 @@
-import 'package:night_reader/core/di/injection.dart';
-import 'dart:io';
 import 'dart:collection';
-import 'package:path/path.dart' as p;
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/cache.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
+import 'package:path/path.dart' as p;
 
 /// LruMemoryCache - 簡易 LRU 記憶體快取
 /// (原 Android LruCache) (String, Any)
@@ -33,20 +37,18 @@ class LruMemoryCache {
   }
 
   dynamic get(String key) {
+    if (!_cache.containsKey(key)) return null;
     final value = _cache.remove(key);
-    if (value != null) {
-      _cache[key] = value; // 重新插入以更新排序
-    }
+    _cache[key] = value; // 重新插入以更新排序
     return value;
   }
 
   void remove(String key) => _remove(key);
 
   void _remove(String key) {
+    if (!_cache.containsKey(key)) return;
     final value = _cache.remove(key);
-    if (value != null) {
-      _currentSize -= _estimateSize(value);
-    }
+    _currentSize -= _estimateSize(value);
   }
 
   void clear() {
@@ -78,15 +80,48 @@ class CacheManager {
   // 記憶體快取 (50MB)
   final LruMemoryCache _memoryCache = LruMemoryCache(1024 * 1024 * 50);
   final Map<String, int> _memoryDeadlines = <String, int>{};
+  final Map<String, Future<void>> _legacyCleanupByDirectory =
+      <String, Future<void>>{};
+  static final RegExp _digestFileName = RegExp(r'^[0-9a-f]{64}$');
 
   CacheManager._internal();
 
   /// 獲取快取檔案路徑 (對標 js_cache 目錄)
   Future<String> getCachePath(String key) async {
     final cacheDir = await AppStoragePaths.jsCacheDir();
-    final safeKey = key.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    return p.join(cacheDir.path, safeKey);
+    await _ensureLegacyCacheCleanup(cacheDir);
+    final fileName = sha256.convert(utf8.encode(key)).toString();
+    return p.join(cacheDir.path, fileName);
   }
+
+  Future<void> _ensureLegacyCacheCleanup(Directory cacheDir) {
+    return _legacyCleanupByDirectory.putIfAbsent(
+      cacheDir.path,
+      () => _deleteLegacyCacheFiles(cacheDir),
+    );
+  }
+
+  Future<void> _deleteLegacyCacheFiles(Directory cacheDir) async {
+    if (!await cacheDir.exists()) return;
+    await for (final entity in cacheDir.list(followLinks: false)) {
+      if (entity is File &&
+          !_digestFileName.hasMatch(p.basename(entity.path))) {
+        await deleteLegacyFileIfPresent(entity);
+      }
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> deleteLegacyFileIfPresent(File file) async {
+    try {
+      await file.delete();
+    } on FileSystemException {
+      if (await file.exists()) rethrow;
+    }
+  }
+
+  String _legacyFileName(String key) =>
+      key.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
   /// 讀取快取文本 (優先從記憶體，再從磁碟資料庫，最後從檔案系統)
   Future<String?> get(String key) async {
@@ -183,6 +218,11 @@ class CacheManager {
     final file = File(path);
     if (await file.exists()) {
       await file.delete();
+    }
+    final legacyPath = p.join(file.parent.path, _legacyFileName(key));
+    if (legacyPath != path) {
+      final legacyFile = File(legacyPath);
+      if (await legacyFile.exists()) await legacyFile.delete();
     }
   }
 }

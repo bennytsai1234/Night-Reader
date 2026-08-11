@@ -48,7 +48,11 @@ class _ReaderInterfaceSheet extends StatefulWidget {
 }
 
 class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
-  final Map<String, Timer> _debouncers = <String, Timer>{};
+  Timer? _typographyCommitTimer;
+  bool _fontSizeDirty = false;
+  bool _lineHeightDirty = false;
+  bool _letterSpacingDirty = false;
+  bool _paragraphSpacingDirty = false;
   late double _fontSize;
   late double _lineHeight;
   late double _letterSpacing;
@@ -62,24 +66,76 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
     _lineHeight = settings.lineHeight;
     _letterSpacing = settings.letterSpacing;
     _paragraphSpacing = settings.paragraphSpacing;
+    settings.addListener(_syncTypographyFromSettings);
   }
 
   @override
   void dispose() {
-    for (final timer in _debouncers.values) {
-      timer.cancel();
-    }
+    widget.settings.removeListener(_syncTypographyFromSettings);
+    _commitTypographyNow();
     super.dispose();
   }
 
-  void _scheduleCommit(String key, VoidCallback action) {
-    _debouncers.remove(key)?.cancel();
-    _debouncers[key] = Timer(const Duration(milliseconds: 120), action);
+  bool get _hasDirtyTypography =>
+      _fontSizeDirty ||
+      _lineHeightDirty ||
+      _letterSpacingDirty ||
+      _paragraphSpacingDirty;
+
+  void _syncTypographyFromSettings() {
+    if (!mounted) return;
+    final settings = widget.settings;
+    final nextFontSize = _fontSizeDirty ? _fontSize : settings.fontSize;
+    final nextLineHeight = _lineHeightDirty ? _lineHeight : settings.lineHeight;
+    final nextLetterSpacing =
+        _letterSpacingDirty ? _letterSpacing : settings.letterSpacing;
+    final nextParagraphSpacing =
+        _paragraphSpacingDirty ? _paragraphSpacing : settings.paragraphSpacing;
+    if (nextFontSize == _fontSize &&
+        nextLineHeight == _lineHeight &&
+        nextLetterSpacing == _letterSpacing &&
+        nextParagraphSpacing == _paragraphSpacing) {
+      return;
+    }
+    setState(() {
+      _fontSize = nextFontSize;
+      _lineHeight = nextLineHeight;
+      _letterSpacing = nextLetterSpacing;
+      _paragraphSpacing = nextParagraphSpacing;
+    });
   }
 
-  void _commitNow(String key, VoidCallback action) {
-    _debouncers.remove(key)?.cancel();
-    action();
+  void _scheduleTypographyCommit() {
+    _typographyCommitTimer?.cancel();
+    _typographyCommitTimer = Timer(
+      const Duration(milliseconds: 120),
+      _commitTypography,
+    );
+  }
+
+  void _commitTypographyNow() {
+    _typographyCommitTimer?.cancel();
+    _typographyCommitTimer = null;
+    _commitTypography();
+  }
+
+  void _commitTypography() {
+    _typographyCommitTimer = null;
+    if (!_hasDirtyTypography) return;
+    final fontSize = _fontSizeDirty ? _fontSize : null;
+    final lineHeight = _lineHeightDirty ? _lineHeight : null;
+    final letterSpacing = _letterSpacingDirty ? _letterSpacing : null;
+    final paragraphSpacing = _paragraphSpacingDirty ? _paragraphSpacing : null;
+    _fontSizeDirty = false;
+    _lineHeightDirty = false;
+    _letterSpacingDirty = false;
+    _paragraphSpacingDirty = false;
+    widget.settings.setTypography(
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      letterSpacing: letterSpacing,
+      paragraphSpacing: paragraphSpacing,
+    );
   }
 
   @override
@@ -127,10 +183,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 40,
           onChanged: (value) {
             setState(() => _fontSize = value);
-            _scheduleCommit('fontSize', () => settings.setFontSize(_fontSize));
+            _fontSizeDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow('fontSize', () => settings.setFontSize(value));
+            setState(() => _fontSize = value);
+            _fontSizeDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -140,13 +199,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 3.0,
           onChanged: (value) {
             setState(() => _lineHeight = value);
-            _scheduleCommit(
-              'lineHeight',
-              () => settings.setLineHeight(_lineHeight),
-            );
+            _lineHeightDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow('lineHeight', () => settings.setLineHeight(value));
+            setState(() => _lineHeight = value);
+            _lineHeightDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -156,13 +215,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 4.0,
           onChanged: (value) {
             setState(() => _letterSpacing = value);
-            _scheduleCommit(
-              'letterSpacing',
-              () => settings.setLetterSpacing(_letterSpacing),
-            );
+            _letterSpacingDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow('letterSpacing', () => settings.setLetterSpacing(value));
+            setState(() => _letterSpacing = value);
+            _letterSpacingDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -172,16 +231,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 3.0,
           onChanged: (value) {
             setState(() => _paragraphSpacing = value);
-            _scheduleCommit(
-              'paragraphSpacing',
-              () => settings.setParagraphSpacing(_paragraphSpacing),
-            );
+            _paragraphSpacingDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow(
-              'paragraphSpacing',
-              () => settings.setParagraphSpacing(value),
-            );
+            setState(() => _paragraphSpacing = value);
+            _paragraphSpacingDirty = true;
+            _commitTypographyNow();
           },
         ),
         ListenableBuilder(

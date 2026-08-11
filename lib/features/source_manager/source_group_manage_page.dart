@@ -11,9 +11,16 @@ class SourceGroupManagePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('書源分組管理'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showEditDialog(context),
+          Consumer<SourceManagerProvider>(
+            builder:
+                (context, provider, _) => IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: '新增分組',
+                  onPressed:
+                      provider.isMutationBusy
+                          ? null
+                          : () => _showEditDialog(context),
+                ),
           ),
         ],
       ),
@@ -21,6 +28,7 @@ class SourceGroupManagePage extends StatelessWidget {
         builder: (context, provider, child) {
           // 使用 provider.allGroups (已排序且排除 '全部')
           final groups = provider.allGroups;
+          final mutationEnabled = !provider.isMutationBusy;
 
           if (groups.isEmpty) {
             return const Center(child: Text('暫無自訂分組'));
@@ -39,11 +47,18 @@ class SourceGroupManagePage extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.share_outlined, size: 20),
                       tooltip: '分享此分組書源',
-                      onPressed: () => _shareGroup(context, provider, group),
+                      onPressed:
+                          mutationEnabled
+                              ? () => _shareGroup(context, provider, group)
+                              : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: () => _showEditDialog(context, oldName: group),
+                      tooltip: '重新命名分組',
+                      onPressed:
+                          mutationEnabled
+                              ? () => _showEditDialog(context, oldName: group)
+                              : null,
                     ),
                     IconButton(
                       icon: Icon(
@@ -51,7 +66,11 @@ class SourceGroupManagePage extends StatelessWidget {
                         color: Theme.of(context).colorScheme.error,
                         size: 20,
                       ),
-                      onPressed: () => _confirmDelete(context, provider, group),
+                      tooltip: '刪除分組',
+                      onPressed:
+                          mutationEnabled
+                              ? () => _confirmDelete(context, provider, group)
+                              : null,
                     ),
                   ],
                 ),
@@ -68,12 +87,7 @@ class SourceGroupManagePage extends StatelessWidget {
     SourceManagerProvider p,
     String groupName,
   ) async {
-    // 1. 篩選該分組書源
-    final urls =
-        p.sources
-            .where((s) => s.bookSourceGroup?.contains(groupName) ?? false)
-            .map((s) => s.bookSourceUrl)
-            .toSet();
+    final urls = p.sourceUrlsInGroup(groupName);
 
     if (urls.isEmpty) {
       ScaffoldMessenger.of(
@@ -82,47 +96,64 @@ class SourceGroupManagePage extends StatelessWidget {
       return;
     }
 
-    // 2. 調用 Provider 實作的分享邏輯 (重用 batch share 邏輯)
-    // 這裡我們需要一個能接收特定 URL 集合的分享方法
-    await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
+    try {
+      await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享分組失敗：$error')));
+      }
+    }
   }
 
-  void _showEditDialog(BuildContext context, {String? oldName}) {
+  Future<void> _showEditDialog(BuildContext context, {String? oldName}) async {
     final controller = TextEditingController(text: oldName);
     final provider = context.read<SourceManagerProvider>();
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(oldName == null ? '新增分組' : '重新命名分組'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '輸入分組名稱'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
+    final pageContext = context;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder:
+            (dialogContext) => AlertDialog(
+              title: Text(oldName == null ? '新增分組' : '重新命名分組'),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: '輸入分組名稱'),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  final name = controller.text.trim();
-                  if (name.isNotEmpty) {
-                    if (oldName == null) {
-                      provider.addGroup(name);
-                    } else {
-                      provider.renameGroup(oldName, name);
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = controller.text.trim();
+                    if (name.isEmpty) return;
+                    Navigator.pop(dialogContext);
+                    try {
+                      if (oldName == null) {
+                        await provider.addGroup(name);
+                      } else {
+                        await provider.renameGroup(oldName, name);
+                      }
+                    } catch (error) {
+                      if (pageContext.mounted) {
+                        ScaffoldMessenger.of(pageContext).showSnackBar(
+                          SnackBar(content: Text('儲存分組失敗：$error')),
+                        );
+                      }
                     }
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('確定'),
-              ),
-            ],
-          ),
-    );
+                  },
+                  child: const Text('確定'),
+                ),
+              ],
+            ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   void _confirmDelete(
@@ -130,6 +161,7 @@ class SourceGroupManagePage extends StatelessWidget {
     SourceManagerProvider provider,
     String name,
   ) {
+    final pageContext = context;
     showDialog(
       context: context,
       builder:
@@ -142,9 +174,17 @@ class SourceGroupManagePage extends StatelessWidget {
                 child: const Text('取消'),
               ),
               TextButton(
-                onPressed: () {
-                  provider.deleteGroup(name);
+                onPressed: () async {
                   Navigator.pop(context);
+                  try {
+                    await provider.deleteGroup(name);
+                  } catch (error) {
+                    if (pageContext.mounted) {
+                      ScaffoldMessenger.of(
+                        pageContext,
+                      ).showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
+                    }
+                  }
                 },
                 child: Text(
                   '刪除',

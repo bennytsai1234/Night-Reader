@@ -45,10 +45,10 @@ class ReaderV2PageCoordinator {
         _host.menu.showControls();
         return;
       case ReaderV2TapAction.nextPage:
-        _movePage(forward: true);
+        unawaited(_movePage(forward: true));
         return;
       case ReaderV2TapAction.prevPage:
-        _movePage(forward: false);
+        unawaited(_movePage(forward: false));
         return;
       case ReaderV2TapAction.nextChapter:
         unawaited(jumpRelativeChapter(1));
@@ -218,7 +218,7 @@ class ReaderV2PageCoordinator {
     );
   }
 
-  void _movePage({required bool forward}) {
+  Future<void> _movePage({required bool forward}) async {
     final runtime = _host.runtime;
     final viewportSize = _host.runtime?.state.layoutSpec.viewportSize;
     if (runtime == null || viewportSize == null) return;
@@ -227,12 +227,16 @@ class ReaderV2PageCoordinator {
             ? _host.viewportController.moveToNextPage
             : _host.viewportController.moveToPrevPage;
     if (command != null) {
-      unawaited(command());
+      final moved = await command();
+      if (!moved) return;
       return;
     }
     final animateBy = _host.viewportController.animateBy;
     if (animateBy != null) {
-      unawaited(animateBy(viewportSize.height * (forward ? 0.9 : -0.9)));
+      final moved = await animateBy(
+        viewportSize.height * (forward ? 0.9 : -0.9),
+      );
+      if (!moved) return;
       return;
     }
     if (forward) {

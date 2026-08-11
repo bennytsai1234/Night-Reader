@@ -11,7 +11,9 @@ import 'package:night_reader/core/services/book_source_service.dart';
 
 class SourceEditorPage extends StatefulWidget {
   final BookSource? source;
-  const SourceEditorPage({super.key, this.source});
+  final Future<void> Function(BookSource source)? onSave;
+
+  const SourceEditorPage({super.key, this.source, this.onSave});
 
   @override
   State<SourceEditorPage> createState() => _SourceEditorPageState();
@@ -22,11 +24,17 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   late BookSource _editingSource;
   late TabController _tabController;
   final Map<String, TextEditingController> _controllers = {};
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _editingSource = widget.source ?? BookSource(bookSourceUrl: '');
+    _editingSource =
+        widget.source == null
+            ? BookSource(bookSourceUrl: '')
+            : BookSource.fromJson(
+              Map<String, dynamic>.from(widget.source!.toJson()),
+            );
     _tabController = TabController(length: 6, vsync: this);
     _initControllers();
   }
@@ -170,8 +178,8 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   }
 
   void _syncSource() {
-    _editingSource.bookSourceName = _controllers['name']!.text;
-    _editingSource.bookSourceUrl = _controllers['url']!.text;
+    _editingSource.bookSourceName = _controllers['name']!.text.trim();
+    _editingSource.bookSourceUrl = _controllers['url']!.text.trim();
     _editingSource.bookSourceIcon = _controllers['icon']!.text;
     _editingSource.bookSourceGroup = _controllers['group']!.text;
     _editingSource.bookSourceComment = _controllers['comment']!.text;
@@ -230,9 +238,50 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   }
 
   Future<void> _save() async {
+    if (_isSaving) return;
     _syncSource();
-    await BookSourceService().saveSource(_editingSource);
-    if (mounted) Navigator.pop(context);
+    if (!_validateRequiredFields()) return;
+    setState(() => _isSaving = true);
+    try {
+      final saveSource = widget.onSave ?? BookSourceService().saveSource;
+      await saveSource(_editingSource);
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('儲存失敗，請稍後再試')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  bool _validateRequiredFields() {
+    String? message;
+    if (_editingSource.bookSourceName.isEmpty) {
+      message = '請輸入書源名稱';
+    } else if (_editingSource.bookSourceUrl.isEmpty) {
+      message = '請輸入書源網址';
+    }
+    if (message == null) return true;
+    _tabController.animateTo(0);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    return false;
+  }
+
+  void _openDebug() {
+    _syncSource();
+    if (!_validateRequiredFields()) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => SourceDebugPage(source: _editingSource, debugKey: '我的世界'),
+      ),
+    );
   }
 
   @override
@@ -242,22 +291,22 @@ class _SourceEditorPageState extends State<SourceEditorPage>
         title: Text(widget.source == null ? '新建書源' : '編輯書源'),
         actions: [
           IconButton(
+            tooltip: '調試書源',
             icon: const Icon(Icons.bug_report),
-            onPressed: () {
-              _syncSource();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (_) => SourceDebugPage(
-                        source: _editingSource,
-                        debugKey: '我的世界',
-                      ),
-                ),
-              );
-            },
+            onPressed: _isSaving ? null : _openDebug,
           ),
-          IconButton(icon: const Icon(Icons.check), onPressed: _save),
+          IconButton(
+            tooltip: '儲存書源',
+            onPressed: _isSaving ? null : _save,
+            icon:
+                _isSaving
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Icon(Icons.check),
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,

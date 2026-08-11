@@ -17,7 +17,7 @@ class EncodingDetect {
   static String decodeWithCharset(List<int> bytes, String charset) {
     if (bytes.isEmpty) return '';
     final data = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
-    final normalized = charset.toUpperCase().replaceAll('_', '-');
+    final normalized = charset.trim().toUpperCase().replaceAll('_', '-');
 
     try {
       if (normalized == 'UTF-16LE' || normalized == 'UTF16LE') {
@@ -44,7 +44,7 @@ class EncodingDetect {
 
   /// 將字串編成指定格式，不附加 BOM；用於把字元索引映射回檔案位元組位置。
   static Uint8List encodeWithCharset(String text, String charset) {
-    final normalized = charset.toUpperCase().replaceAll('_', '-');
+    final normalized = charset.trim().toUpperCase().replaceAll('_', '-');
     if (normalized == 'UTF-16LE' || normalized == 'UTF16LE') {
       return _encodeUtf16(text, Endian.little);
     }
@@ -75,11 +75,7 @@ class EncodingDetect {
 
       // 1. 尋找 <meta charset="...">
       final charsetMatch = RegExp(
-        r'<meta\s+charset=["'
-        "'"
-        r']?([a-zA-Z0-9_-]+)["'
-        "'"
-        r']?',
+        r'''<meta\b[^>]*?\scharset\s*=\s*["']?([a-zA-Z0-9_-]+)''',
         caseSensitive: false,
       ).firstMatch(content);
       if (charsetMatch != null) {

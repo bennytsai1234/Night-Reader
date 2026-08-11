@@ -42,6 +42,7 @@ class ReaderV2NavigationController {
     if (window == null) return false;
     if (next == null) {
       clearPendingNeighborAdvance();
+      emitUserNotice('已到書尾');
       return false;
     }
     if (next.isPlaceholder) {
@@ -49,7 +50,7 @@ class ReaderV2NavigationController {
         _rememberPendingNeighborAdvance(current: window.current, forward: true);
       } else {
         clearPendingNeighborAdvance();
-        _emitUserNotice('下一章載入失敗，請再試一次或返回目錄');
+        emitUserNotice('下一章載入失敗，請再試一次或返回目錄');
       }
       _scheduleMissingNeighborPreload(forward: true);
       return false;
@@ -82,6 +83,7 @@ class ReaderV2NavigationController {
     if (window == null) return false;
     if (prev == null) {
       clearPendingNeighborAdvance();
+      emitUserNotice('已到書首');
       return false;
     }
     if (prev.isPlaceholder) {
@@ -92,7 +94,7 @@ class ReaderV2NavigationController {
         );
       } else {
         clearPendingNeighborAdvance();
-        _emitUserNotice('上一章載入失敗，請再試一次或返回目錄');
+        emitUserNotice('上一章載入失敗，請再試一次或返回目錄');
       }
       _scheduleMissingNeighborPreload(forward: false);
       return false;
@@ -342,7 +344,7 @@ class ReaderV2NavigationController {
     if (neighbor.isLoading) return;
     if (neighbor.errorMessage != null) {
       clearPendingNeighborAdvance();
-      _emitUserNotice(forward ? '下一章載入失敗，請再試一次或返回目錄' : '上一章載入失敗，請再試一次或返回目錄');
+      emitUserNotice(forward ? '下一章載入失敗，請再試一次或返回目錄' : '上一章載入失敗，請再試一次或返回目錄');
       return;
     }
     if (forward) {
@@ -466,7 +468,7 @@ class ReaderV2NavigationController {
     });
   }
 
-  void _emitUserNotice(String message) {
+  void emitUserNotice(String message) {
     if (_runtime.disposed || message.isEmpty) return;
     _pendingUserNotice = message;
     _runtime.notifySessionChanged();

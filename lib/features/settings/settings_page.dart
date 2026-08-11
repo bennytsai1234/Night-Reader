@@ -254,27 +254,22 @@ class SettingsPage extends StatelessWidget {
   Widget _buildPanel(BuildContext context, List<Widget> children) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final borderColor =
+        isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        border: Border.all(
-          color: isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10),
+      child: Material(
+        color: theme.cardTheme.color ?? theme.colorScheme.surface,
+        elevation: theme.cardTheme.elevation ?? 0,
+        shadowColor: theme.cardTheme.shadowColor,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardLg,
+          side: BorderSide(color: borderColor),
         ),
-        borderRadius: AppRadius.cardLg,
-        boxShadow:
-            theme.cardTheme.shadowColor != null
-                ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : [],
+        child: Column(children: children),
       ),
-      child: Column(children: children),
     );
   }
 

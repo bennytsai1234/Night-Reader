@@ -133,4 +133,42 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(PreferKey.readerLastLineSpacingCompensation), isFalse);
   });
+
+  test('typography batch persists four values with one notification', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final controller = ReaderV2SettingsController();
+    addTearDown(controller.dispose);
+    var notifications = 0;
+    controller.addListener(() => notifications += 1);
+
+    controller.setTypography(
+      fontSize: 20,
+      lineHeight: 1.8,
+      paragraphSpacing: 1.2,
+      letterSpacing: 0.6,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(notifications, 1);
+    expect(controller.fontSize, 20);
+    expect(controller.lineHeight, 1.8);
+    expect(controller.paragraphSpacing, 1.2);
+    expect(controller.letterSpacing, 0.6);
+    expect(prefs.getDouble(PreferKey.readerFontSize), 20);
+    expect(prefs.getDouble(PreferKey.readerLineHeight), 1.8);
+    expect(prefs.getDouble(PreferKey.readerParagraphSpacing), 1.2);
+    expect(prefs.getDouble(PreferKey.readerLetterSpacing), 0.6);
+
+    await prefs.remove(PreferKey.readerFontSize);
+    controller.setTypography(
+      fontSize: 20,
+      lineHeight: 1.8,
+      paragraphSpacing: 1.2,
+      letterSpacing: 0.6,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(notifications, 1);
+    expect(prefs.getDouble(PreferKey.readerFontSize), 20);
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
 
@@ -14,7 +16,7 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   final List<BookChapter> chapters;
   final int currentChapterIndex;
   final String Function(int index) titleFor;
-  final Future<void> Function(int index) onChapterTap;
+  final Future<bool> Function(int index) onChapterTap;
   final Listenable? listenable;
 
   @override
@@ -26,6 +28,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
+  int? _pendingChapterIndex;
 
   @override
   void initState() {
@@ -58,10 +61,57 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   Future<void> _handleChapterTap(int index) async {
-    await widget.onChapterTap(index);
-    if (mounted && Navigator.canPop(context)) {
-      Navigator.pop(context);
+    if (_pendingChapterIndex != null) return;
+    setState(() => _pendingChapterIndex = index);
+
+    late final bool succeeded;
+    try {
+      succeeded = await widget.onChapterTap(index);
+    } finally {
+      if (mounted) {
+        setState(() => _pendingChapterIndex = null);
+      }
     }
+
+    if (!mounted || !succeeded || !Navigator.canPop(context)) return;
+    Navigator.pop(context);
+  }
+
+  Widget _buildPendingIndicator(String chapterTitle) {
+    return Semantics(
+      container: true,
+      label: '正在跳轉至$chapterTitle',
+      child: ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+
+  VoidCallback? _chapterTapHandler(int index) {
+    if (_pendingChapterIndex != null) return null;
+    return () {
+      unawaited(_handleChapterTap(index));
+    };
+  }
+
+  Widget _buildChapterTile(int index) {
+    final chapterTitle = widget.titleFor(index);
+    final isCurrentChapter = widget.currentChapterIndex == index;
+    final isPending = _pendingChapterIndex == index;
+    return ListTile(
+      title: Text(
+        chapterTitle,
+        style: TextStyle(
+          color: isCurrentChapter ? Colors.blue : null,
+          fontWeight: isCurrentChapter ? FontWeight.bold : null,
+        ),
+      ),
+      trailing: isPending ? _buildPendingIndicator(chapterTitle) : null,
+      onTap: _chapterTapHandler(index),
+    );
   }
 
   void _scrollToCurrentChapter() {
@@ -105,19 +155,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
               controller: _scrollController,
               itemCount: widget.chapters.length,
               itemExtent: _tileExtent,
-              itemBuilder: (context, index) {
-                final isCurrentChapter = widget.currentChapterIndex == index;
-                return ListTile(
-                  title: Text(
-                    widget.titleFor(index),
-                    style: TextStyle(
-                      color: isCurrentChapter ? Colors.blue : null,
-                      fontWeight: isCurrentChapter ? FontWeight.bold : null,
-                    ),
-                  ),
-                  onTap: () => _handleChapterTap(index),
-                );
-              },
+              itemBuilder: (context, index) => _buildChapterTile(index),
             ),
           ),
         ],

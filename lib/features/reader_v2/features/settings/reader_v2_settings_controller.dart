@@ -112,27 +112,58 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setFontSize(double value) {
-    fontSize = value;
-    unawaited(_prefsRepository.saveFontSize(value));
-    notifyListeners();
+    setTypography(fontSize: value);
   }
 
   void setLineHeight(double value) {
-    lineHeight = ReaderV2Style.normalizeLineHeight(value);
-    unawaited(_prefsRepository.saveLineHeight(lineHeight));
-    notifyListeners();
+    setTypography(lineHeight: value);
   }
 
   void setParagraphSpacing(double value) {
-    paragraphSpacing = value;
-    unawaited(_prefsRepository.saveParagraphSpacing(value));
-    notifyListeners();
+    setTypography(paragraphSpacing: value);
   }
 
   void setLetterSpacing(double value) {
-    letterSpacing = value;
-    unawaited(_prefsRepository.saveLetterSpacing(value));
-    notifyListeners();
+    setTypography(letterSpacing: value);
+  }
+
+  void setTypography({
+    double? fontSize,
+    double? lineHeight,
+    double? paragraphSpacing,
+    double? letterSpacing,
+  }) {
+    var changed = false;
+    if (fontSize != null) {
+      if (this.fontSize != fontSize) {
+        this.fontSize = fontSize;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveFontSize(fontSize));
+    }
+    if (lineHeight != null) {
+      final normalized = ReaderV2Style.normalizeLineHeight(lineHeight);
+      if (this.lineHeight != normalized) {
+        this.lineHeight = normalized;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveLineHeight(normalized));
+    }
+    if (paragraphSpacing != null) {
+      if (this.paragraphSpacing != paragraphSpacing) {
+        this.paragraphSpacing = paragraphSpacing;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveParagraphSpacing(paragraphSpacing));
+    }
+    if (letterSpacing != null) {
+      if (this.letterSpacing != letterSpacing) {
+        this.letterSpacing = letterSpacing;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveLetterSpacing(letterSpacing));
+    }
+    if (changed) notifyListeners();
   }
 
   void setTextIndent(int value) {

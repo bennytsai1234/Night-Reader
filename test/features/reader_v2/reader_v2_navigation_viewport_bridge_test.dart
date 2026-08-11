@@ -100,6 +100,16 @@ BookChapter _chapter(int index) {
 
 void main() {
   group('ReaderV2 navigation and viewport boundaries', () {
+    test('尚未建立 page window 的暫時失敗不誤報書首或書尾', () {
+      final harness = _makeRuntime();
+      final runtime = harness.runtime;
+      addTearDown(runtime.dispose);
+
+      expect(runtime.navigation.moveToPrevPage(), isFalse);
+      expect(runtime.navigation.moveToNextPage(), isFalse);
+      expect(runtime.takeUserNotice(), isNull);
+    });
+
     test('跳章索引會夾在首末章，且首尾外翻安全地回傳 false', () async {
       final harness = _makeRuntime();
       final runtime = harness.runtime;
@@ -115,6 +125,8 @@ void main() {
         runtime.navigation.moveToPrevPage(saveSettledProgress: false),
         isFalse,
       );
+      expect(runtime.takeUserNotice(), '已到書首');
+      expect(runtime.takeUserNotice(), isNull);
 
       await runtime.navigation.jumpToChapter(100);
       expect(runtime.state.visibleLocation.chapterIndex, 2);
@@ -123,6 +135,8 @@ void main() {
         runtime.navigation.moveToNextPage(saveSettledProgress: false),
         isFalse,
       );
+      expect(runtime.takeUserNotice(), '已到書尾');
+      expect(runtime.takeUserNotice(), isNull);
     });
 
     test(

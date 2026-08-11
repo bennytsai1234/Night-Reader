@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'crash_log_page.dart';
+import 'external_url_launcher.dart';
 import 'update_check_runner.dart';
 
 class AboutPage extends StatefulWidget {
@@ -51,7 +50,11 @@ class _AboutPageState extends State<AboutPage> {
             icon: Icons.code_rounded,
             title: 'GitHub 開源位址',
             subtitle: 'github.com/bennytsai1234/reader',
-            onTap: () => _launchUrl('https://github.com/bennytsai1234/reader'),
+            onTap:
+                () => launchExternalUrlWithFeedback(
+                  context,
+                  'https://github.com/bennytsai1234/reader',
+                ),
           ),
           _buildListTile(
             context,
@@ -106,16 +109,12 @@ class _AboutPageState extends State<AboutPage> {
           Container(
             width: 80,
             height: 80,
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: AppRadius.cardXl,
-            ),
-            child: Icon(
-              Icons.library_books_rounded,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
+            decoration: const BoxDecoration(borderRadius: AppRadius.cardXl),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset(
+              'assets/ui/app_icon.webp',
+              fit: BoxFit.cover,
+              semanticLabel: '夜讀應用程式圖示',
             ),
           ),
           const SizedBox(height: 16),
@@ -230,13 +229,6 @@ class _AboutPageState extends State<AboutPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    }
-  }
-
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      AppLog.d('無法開啟連結: $url');
     }
   }
 }

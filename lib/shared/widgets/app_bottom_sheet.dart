@@ -73,16 +73,26 @@ class AppBottomSheet extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                       ],
-                      Text(
-                        title,
-                        style: AppTextStyles.titleSm.copyWith(
-                          fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.titleSm.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      if (trailing != null) trailing!,
+                      if (trailing != null) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        trailing!,
+                      ],
                       IconButton(
                         onPressed: () => Navigator.pop(context),
+                        tooltip: '關閉',
                         icon: const Icon(Icons.keyboard_arrow_down, size: 28),
                       ),
                     ],

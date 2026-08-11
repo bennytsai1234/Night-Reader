@@ -103,7 +103,9 @@ class _ExploreShowContent extends StatelessWidget {
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
             // LoadMore 指示器 (對標 Android LoadMoreView)
-            provider.loadMore();
+            if (provider.errorMessage == null) {
+              provider.loadMore();
+            }
             return _buildLoadMoreIndicator(context, provider);
           }
           return ExploreBookItem(

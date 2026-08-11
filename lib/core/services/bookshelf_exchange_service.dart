@@ -133,14 +133,44 @@ class BookshelfExchangeService {
         );
       }
     } else if (decoded is List) {
-      if (decoded.isNotEmpty && decoded.first is Map<String, dynamic>) {
-        final first = decoded.first as Map<String, dynamic>;
+      Map<String, dynamic>? first;
+      for (final item in decoded) {
+        if (item is Map<String, dynamic> &&
+            (_looksLikeBook(item) ||
+                _looksLikeChapter(item) ||
+                _looksLikeSource(item))) {
+          first = item;
+          break;
+        }
+      }
+      if (first != null) {
         if (_looksLikeBook(first)) {
-          books.addAll(_parseBooks(decoded));
+          books.addAll(
+            _parseBooks(
+              decoded
+                  .whereType<Map<String, dynamic>>()
+                  .where(_looksLikeBook)
+                  .toList(growable: false),
+            ),
+          );
         } else if (_looksLikeChapter(first)) {
-          chapters.addAll(_parseChapters(decoded));
+          chapters.addAll(
+            _parseChapters(
+              decoded
+                  .whereType<Map<String, dynamic>>()
+                  .where(_looksLikeChapter)
+                  .toList(growable: false),
+            ),
+          );
         } else if (_looksLikeSource(first)) {
-          sources.addAll(_parseSources(decoded));
+          sources.addAll(
+            _parseSources(
+              decoded
+                  .whereType<Map<String, dynamic>>()
+                  .where(_looksLikeSource)
+                  .toList(growable: false),
+            ),
+          );
         }
       }
     }

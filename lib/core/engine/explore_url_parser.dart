@@ -114,10 +114,15 @@ class ExploreUrlParser {
     BookSource source, {
     String? exploreUrl,
   }) async {
-    final cacheKey = _cacheKey(source, exploreUrl ?? source.exploreUrl);
-    if (cacheKey == null) return;
+    final targetExploreUrl = exploreUrl ?? source.exploreUrl;
+    final cacheKey = _cacheKey(source, targetExploreUrl);
+    final legacyCacheKey = _legacyCacheKey(source, targetExploreUrl);
+    if (cacheKey == null && legacyCacheKey == null) return;
     final cache = await AppCache.get(cacheName: _cacheName);
-    await cache.remove(cacheKey);
+    if (cacheKey != null) await cache.remove(cacheKey);
+    if (legacyCacheKey != null && legacyCacheKey != cacheKey) {
+      await cache.remove(legacyCacheKey);
+    }
   }
 
   static dynamic _resolveSync(String exploreUrl, {BookSource? source}) {
@@ -364,6 +369,16 @@ class ExploreUrlParser {
   }
 
   static String? _cacheKey(BookSource? source, String? exploreUrl) {
+    final normalized = exploreUrl?.trim();
+    if (source == null || normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return EncoderUtils.md5Encode(
+      jsonEncode(<String>[source.bookSourceUrl, normalized]),
+    );
+  }
+
+  static String? _legacyCacheKey(BookSource? source, String? exploreUrl) {
     final normalized = exploreUrl?.trim();
     if (source == null || normalized == null || normalized.isEmpty) {
       return null;

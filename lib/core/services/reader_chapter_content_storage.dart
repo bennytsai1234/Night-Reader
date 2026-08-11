@@ -87,9 +87,14 @@ class ReaderChapterContentStorage {
       if (stored != null) return stored;
     }
 
-    final key = ReaderChapterContentStore.contentKeyFor(
+    final key = ReaderChapterContentStore.inFlightKeyFor(
       book: book,
       chapter: chapter,
+      chapterIndex: chapterIndex,
+      sourceOverride: sourceOverride,
+      forceRefresh: forceRefresh,
+      saveChapterMetadata: saveChapterMetadata,
+      maxAttempts: maxAttempts,
     );
     final existing = _inFlight[key];
     if (existing != null) return existing;
@@ -140,7 +145,8 @@ class ReaderChapterContentStorage {
       book: book,
       chapter: chapter,
     );
-    if (entry == null || !entry.hasDisplayContent || entry.isFailed) return null;
+    if (entry == null || !entry.hasDisplayContent || entry.isFailed)
+      return null;
     return ChapterContentPreparationResult.ready(entry.content!);
   }
 }

@@ -34,7 +34,10 @@ class DictRule {
       name: json['name'] ?? '',
       urlRule: json['urlRule'] ?? '',
       showRule: json['showRule'] ?? '',
-      enabled: (json['enabled'] == 1) || (json['enabled'] == true),
+      enabled:
+          json['enabled'] == null ||
+          json['enabled'] == 1 ||
+          json['enabled'] == true,
       sortNumber: json['sortNumber'] ?? 0,
     );
   }

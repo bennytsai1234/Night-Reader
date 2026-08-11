@@ -72,6 +72,54 @@ void main() {
       expect(second.first.url, 'https://example.com/new');
     });
 
+    test(
+      'parseAsync cache identity cannot collide across source boundaries',
+      () async {
+        const sourcePrefix = 'https://cache-collision.example/';
+        const firstRule = '@js:@js:payload';
+        const secondRule = '@js:payload';
+        final firstSource = BookSource(
+          bookSourceUrl: sourcePrefix,
+          bookSourceName: '快取碰撞源一',
+          exploreUrl: firstRule,
+        );
+        final secondSource = BookSource(
+          bookSourceUrl: '${sourcePrefix}@js:',
+          bookSourceName: '快取碰撞源二',
+          exploreUrl: secondRule,
+        );
+        await ExploreUrlParser.clearCache(firstSource, exploreUrl: firstRule);
+        await ExploreUrlParser.clearCache(secondSource, exploreUrl: secondRule);
+        addTearDown(() async {
+          await ExploreUrlParser.clearCache(firstSource, exploreUrl: firstRule);
+          await ExploreUrlParser.clearCache(
+            secondSource,
+            exploreUrl: secondRule,
+          );
+        });
+
+        var secondExecutions = 0;
+        final first = await ExploreUrlParser.parseAsync(
+          firstRule,
+          source: firstSource,
+          jsExecutor:
+              (_) async => '[{"title":"來源一","url":"https://example.com/one"}]',
+        );
+        final second = await ExploreUrlParser.parseAsync(
+          secondRule,
+          source: secondSource,
+          jsExecutor: (_) async {
+            secondExecutions++;
+            return '[{"title":"來源二","url":"https://example.com/two"}]';
+          },
+        );
+
+        expect(first.single.title, '來源一');
+        expect(secondExecutions, 1);
+        expect(second.single.title, '來源二');
+      },
+    );
+
     test('parseAsync supports static explore definitions', () async {
       final kinds = await ExploreUrlParser.parseAsync('''
         最新::https://example.com/new

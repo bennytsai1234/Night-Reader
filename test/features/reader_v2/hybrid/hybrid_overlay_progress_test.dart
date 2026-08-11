@@ -69,10 +69,13 @@ void main() {
       final progress = HybridProgress(documentIndex: index, chapterCount: 3);
       expect(progress.progressForOffset(100).chapterPercent, 0);
       expect(progress.progressForOffset(99.9).chapterPercent, 99.9);
-      expect(progress.progressForOffset(99.9).chapterLabel, '第 1 章 9/10');
-      expect(progress.progressForOffset(99.9).percentLabel, '33.3%');
-      expect(progress.progressForOffset(100).chapterLabel, '第 2 章 0/10');
-      expect(progress.progressForOffset(100).percentLabel, '33.3%');
+      expect(
+        progress.progressForOffset(99.9).chapterLabel,
+        '第 1/3 章 · 本章 9/10',
+      );
+      expect(progress.progressForOffset(99.9).percentLabel, '全書 33.3%');
+      expect(progress.progressForOffset(100).chapterLabel, '第 2/3 章 · 本章 0/10');
+      expect(progress.progressForOffset(100).percentLabel, '全書 33.3%');
     });
 
     test('progress snapshots with the same displayed values compare equal', () {
@@ -92,12 +95,12 @@ void main() {
         chapterPercent: 35.6,
       );
 
-      expect(first.chapterLabel, '第 3 章 3/10');
-      expect(second.chapterLabel, '第 3 章 3/10');
-      expect(changed.chapterLabel, '第 3 章 3/10');
-      expect(first.percentLabel, '23.5%');
-      expect(second.percentLabel, '23.5%');
-      expect(changed.percentLabel, '23.6%');
+      expect(first.chapterLabel, '第 3/10 章 · 本章 3/10');
+      expect(second.chapterLabel, '第 3/10 章 · 本章 3/10');
+      expect(changed.chapterLabel, '第 3/10 章 · 本章 3/10');
+      expect(first.percentLabel, '全書 23.5%');
+      expect(second.percentLabel, '全書 23.5%');
+      expect(changed.percentLabel, '全書 23.6%');
       expect(first, second);
       expect(first, isNot(changed));
     });

@@ -41,6 +41,8 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
       _actions = ReaderV2TapAction.defaultGrid();
     });
     await _saveActions();
+    if (!mounted) return;
+    _showSavedMessage('已恢復預設設定');
   }
 
   Future<void> _updateAction(int index, int action) async {
@@ -48,17 +50,25 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
       _actions[index] = action;
     });
     await _saveActions();
+    if (!mounted) return;
+    _showSavedMessage('已儲存點擊區域設定');
+  }
+
+  void _showSavedMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('點擊區域設置'),
+        title: const Text('點擊區域設定'),
         actions: [
           TextButton(
             onPressed: () => _resetActions(),
-            child: const Text('恢復預設', style: TextStyle(color: Colors.white)),
+            child: const Text('恢復預設'),
           ),
         ],
       ),

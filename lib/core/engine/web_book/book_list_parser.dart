@@ -17,6 +17,25 @@ class BookListParser {
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
   }) async {
+    return _parse(
+      source: source,
+      body: body,
+      baseUrl: baseUrl,
+      isSearch: isSearch,
+      filter: filter,
+      shouldBreak: shouldBreak,
+    );
+  }
+
+  static Future<List<SearchBook>> _parse({
+    required BookSource source,
+    required String body,
+    required String baseUrl,
+    required bool isSearch,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    dynamic listRuleOverride,
+  }) async {
     // 1. 偵測 bookUrlPattern (對標 Android BookList.analyzeBookList)
     if (isSearch && source.bookUrlPattern?.isNotEmpty == true) {
       try {
@@ -36,7 +55,8 @@ class BookListParser {
     final rule = AnalyzeRule(source: source).setContent(body, baseUrl: baseUrl);
     try {
       dynamic listRule =
-          isSearch ? source.ruleSearch : _resolveExploreRule(source);
+          listRuleOverride ??
+          (isSearch ? source.ruleSearch : _resolveExploreRule(source));
       if (listRule == null) return [];
 
       String ruleList = listRule.bookList ?? '';
@@ -109,8 +129,8 @@ class BookListParser {
       final introRuleNeedsAsync = _ruleNeedsAsync(introRule);
       final latestChapterRuleNeedsAsync = _ruleNeedsAsync(latestChapterRule);
       final wordCountRuleNeedsAsync = _ruleNeedsAsync(wordCountRule);
-      // 以 (name|author|bookUrl) 作為去重鍵，對標 Android LinkedHashSet<SearchBook>
-      final seen = <String>{};
+      // 以 (name, author, bookUrl) 作為去重鍵，對標 Android LinkedHashSet<SearchBook>
+      final seen = <(String, String, String)>{};
 
       for (final element in elements) {
         // 建立空的 SearchBook 作為 ruleData，以便儲存解析過程中產生的變數 (@put)
@@ -203,7 +223,7 @@ class BookListParser {
           searchBook.bookUrl = bookUrl;
 
           // 去重：同一個 (name, author, bookUrl) 只保留首次出現
-          final dedupKey = '$name|${searchBook.author ?? ''}|$bookUrl';
+          final dedupKey = (name, searchBook.author ?? '', bookUrl);
           if (!seen.add(dedupKey)) continue;
 
           books.add(searchBook);
@@ -218,20 +238,15 @@ class BookListParser {
       if (!isSearch &&
           books.isEmpty &&
           _shouldFallbackToSearchRule(source, listRule)) {
-        final originalExploreRule = source.ruleExplore;
-        source.ruleExplore = _copySearchRuleAsExploreRule(source.ruleSearch!);
-        try {
-          return parse(
-            source: source,
-            body: body,
-            baseUrl: baseUrl,
-            isSearch: false,
-            filter: filter,
-            shouldBreak: shouldBreak,
-          );
-        } finally {
-          source.ruleExplore = originalExploreRule;
-        }
+        return _parse(
+          source: source,
+          body: body,
+          baseUrl: baseUrl,
+          isSearch: false,
+          filter: filter,
+          shouldBreak: shouldBreak,
+          listRuleOverride: _copySearchRuleAsExploreRule(source.ruleSearch!),
+        );
       }
 
       return isReverse ? books.reversed.toList() : books;

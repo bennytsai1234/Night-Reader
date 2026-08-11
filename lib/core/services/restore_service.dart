@@ -74,12 +74,12 @@ class RestoreService {
         try {
           final dynamic decoded = jsonDecode(data);
           if (decoded is List<dynamic>) {
-            await _importListData(fileName, decoded);
-            restoredAny = true;
+            final restored = await _importListData(fileName, decoded);
+            restoredAny = restoredAny || restored;
           } else if (fileName == 'config.json' &&
               decoded is Map<String, dynamic>) {
-            await _restorePreferences(decoded);
-            restoredAny = true;
+            final restored = await _restorePreferences(decoded);
+            restoredAny = restoredAny || restored;
           }
         } catch (e) {
           AppLog.e('Restore failed for $fileName: $e', error: e);
@@ -93,9 +93,29 @@ class RestoreService {
     }
   }
 
-  Future<void> _importListData(String fileName, List<dynamic> list) async {
+  Future<bool> _importListData(String fileName, List<dynamic> list) async {
+    const supportedFiles = <String>{
+      'books.json',
+      'bookshelf.json',
+      'bookSources.json',
+      'bookSource.json',
+      'replaceRules.json',
+      'replaceRule.json',
+      'bookGroups.json',
+      'bookGroup.json',
+      'bookmarks.json',
+      'bookmark.json',
+      'downloadTask.json',
+      'downloadTasks.json',
+      'readerChapterContent.json',
+      'readerChapterContents.json',
+    };
+    if (!supportedFiles.contains(fileName)) return false;
+
+    var importedAny = false;
     for (var item in list) {
       if (item is Map<String, dynamic>) {
+        importedAny = true;
         switch (fileName) {
           case 'books.json':
           case 'bookshelf.json':
@@ -130,27 +150,32 @@ class RestoreService {
         }
       }
     }
+    return list.isEmpty || importedAny;
   }
 
-  Future<void> _restorePreferences(Map<String, dynamic> values) async {
+  Future<bool> _restorePreferences(Map<String, dynamic> values) async {
+    if (values.isEmpty) return true;
     final prefs = await SharedPreferences.getInstance();
+    var restoredAny = false;
     for (final entry in values.entries) {
       final val = entry.value;
       if (val is String) {
-        await prefs.setString(entry.key, val);
+        restoredAny = await prefs.setString(entry.key, val) || restoredAny;
       } else if (val is int) {
-        await prefs.setInt(entry.key, val);
+        restoredAny = await prefs.setInt(entry.key, val) || restoredAny;
       } else if (val is bool) {
-        await prefs.setBool(entry.key, val);
+        restoredAny = await prefs.setBool(entry.key, val) || restoredAny;
       } else if (val is double) {
-        await prefs.setDouble(entry.key, val);
+        restoredAny = await prefs.setDouble(entry.key, val) || restoredAny;
       } else if (val is List) {
         final strings = val.whereType<String>().toList();
         if (strings.length == val.length) {
-          await prefs.setStringList(entry.key, strings);
+          restoredAny =
+              await prefs.setStringList(entry.key, strings) || restoredAny;
         }
       }
     }
+    return restoredAny;
   }
 
   String _normalizedFileName(String path) => p.basename(path);

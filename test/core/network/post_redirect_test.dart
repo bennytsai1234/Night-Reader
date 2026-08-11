@@ -136,4 +136,30 @@ void main() {
       expect(requests, <String>['POST /submit', 'GET /done?name=redirect']);
     },
   );
+
+  test(
+    'HttpClient stops a redirect loop after visiting each URI once',
+    () async {
+      final requests = <String>[];
+      requestHandler = (request) async {
+        requests.add('${request.method} ${request.uri}');
+        request.response.statusCode = HttpStatus.found;
+        request.response.headers.set(
+          HttpHeaders.locationHeader,
+          request.uri.path == '/loop-a' ? '/loop-b' : '/loop-a',
+        );
+        await request.response.close();
+      };
+
+      await expectLater(
+        HttpClient().client.get<void>(
+          '$baseUrl/loop-a',
+          options: Options(followRedirects: false),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(requests, <String>['GET /loop-a', 'GET /loop-b']);
+    },
+  );
 }

@@ -109,12 +109,10 @@ class ExploreShowProvider extends ChangeNotifier {
       if (e.type == DioExceptionType.cancel) return;
       AppLog.e('探索載入失敗', error: e);
       _errorMessage = e.message ?? '載入失敗';
-      _hasMore = false;
     } catch (e) {
       if (_isDisposed || requestId != _requestSerial) return;
       AppLog.e('探索載入失敗', error: e);
       _errorMessage = e.toString();
-      _hasMore = false;
     } finally {
       final shouldFinalize = !_isDisposed && requestId == _requestSerial;
       if (shouldFinalize) {

@@ -109,6 +109,8 @@ class SourceManagerMenus {
     required VoidCallback onCheckAllSources,
     required Function(SourceManagerProvider) onClearInvalid,
     required Function(SourceManagerProvider) onDeleteNonNovel,
+    bool importEnabled = true,
+    bool mutationEnabled = true,
   }) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert),
@@ -146,13 +148,43 @@ class SourceManagerMenus {
       },
       itemBuilder:
           (context) => [
-            _buildItem('import_url', Icons.language, '網路匯入'),
-            _buildItem('import_file', Icons.file_open_outlined, '本地匯入'),
-            _buildItem('import_clipboard', Icons.content_paste, '剪貼簿匯入'),
-            _buildItem('new_source', Icons.add_circle_outline, '新建書源'),
-            _buildItem('manage_groups', Icons.edit_note_outlined, '管理分組'),
+            _buildItem(
+              'import_url',
+              Icons.language,
+              '網路匯入',
+              enabled: importEnabled && mutationEnabled,
+            ),
+            _buildItem(
+              'import_file',
+              Icons.file_open_outlined,
+              '本地匯入',
+              enabled: importEnabled && mutationEnabled,
+            ),
+            _buildItem(
+              'import_clipboard',
+              Icons.content_paste,
+              '剪貼簿匯入',
+              enabled: importEnabled && mutationEnabled,
+            ),
+            _buildItem(
+              'new_source',
+              Icons.add_circle_outline,
+              '新建書源',
+              enabled: mutationEnabled,
+            ),
+            _buildItem(
+              'manage_groups',
+              Icons.edit_note_outlined,
+              '管理分組',
+              enabled: mutationEnabled,
+            ),
             const PopupMenuDivider(),
-            _buildItem('check_all', Icons.playlist_add_check, '校驗所有書源'),
+            _buildItem(
+              'check_all',
+              Icons.playlist_add_check,
+              '校驗所有書源',
+              enabled: provider.totalSourceCount > 0 && mutationEnabled,
+            ),
             _buildCheckedItem(
               context,
               'group_domain',
@@ -164,11 +196,13 @@ class SourceManagerMenus {
               'clear_invalid',
               Icons.delete_sweep_outlined,
               '清理建議刪除來源',
+              enabled: mutationEnabled,
             ),
             _buildItem(
               'clean_non_novel',
               Icons.delete_forever_outlined,
               '刪除非小說源',
+              enabled: mutationEnabled,
             ),
           ],
     );
@@ -177,10 +211,12 @@ class SourceManagerMenus {
   static PopupMenuItem<String> _buildItem(
     String value,
     IconData icon,
-    String text,
-  ) {
+    String text, {
+    bool enabled = true,
+  }) {
     return PopupMenuItem<String>(
       value: value,
+      enabled: enabled,
       child: Row(
         children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(text)],
       ),

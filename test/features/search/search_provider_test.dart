@@ -205,6 +205,30 @@ void main() {
       expect(p.lastSearchKey, isEmpty);
     });
 
+    test('search 純空白不啟動且不記錄歷史', () async {
+      final p = await makeProvider();
+
+      await p.search('   \n  ');
+
+      expect(p.isSearching, isFalse);
+      expect(p.lastSearchKey, isEmpty);
+      expect(p.history, isEmpty);
+    });
+
+    test('searchInSource 純空白不啟動搜尋', () async {
+      final p = await makeProvider();
+      final source = BookSource(
+        bookSourceUrl: 'source://single',
+        bookSourceName: '單一書源',
+      );
+
+      await p.searchInSource(source, '  \t  ');
+
+      expect(p.isSearching, isFalse);
+      expect(p.lastSearchKey, isEmpty);
+      expect(p.history, isEmpty);
+    });
+
     test('stopSearch 設定 isSearching = false', () async {
       final p = await makeProvider();
       // 直接呼叫 stopSearch，不實際觸發網路
@@ -218,6 +242,16 @@ void main() {
       await p.search('測試');
       expect(p.isSearching, isFalse);
       expect(p.lastSearchKey, '測試');
+    });
+
+    test('search 統一使用 trim 後關鍵字', () async {
+      fakeSourceDao.sources = [];
+      final p = await makeProvider();
+
+      await p.search('  閱讀  ');
+
+      expect(p.lastSearchKey, '閱讀');
+      expect(p.history, ['閱讀']);
     });
   });
 

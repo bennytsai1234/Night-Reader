@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -27,7 +28,7 @@ void main() {
             chapters: const [],
             currentChapterIndex: 0,
             titleFor: (_) => '',
-            onChapterTap: (_) async {},
+            onChapterTap: (_) async => true,
           ),
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -81,7 +82,7 @@ void main() {
   );
 
   testWidgets(
-    'controls overlay slight move does not dismiss or pass through content',
+    'controls overlay light jitter still dismisses without pass through',
     (tester) async {
       var dismissCalls = 0;
       var contentTapCalls = 0;
@@ -99,7 +100,7 @@ void main() {
             chapters: const [],
             currentChapterIndex: 0,
             titleFor: (_) => '',
-            onChapterTap: (_) async {},
+            onChapterTap: (_) async => true,
           ),
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -149,7 +150,7 @@ void main() {
       await gesture.up();
       await tester.pump();
 
-      expect(dismissCalls, 0);
+      expect(dismissCalls, 1);
       expect(contentTapCalls, 0);
     },
   );
@@ -173,7 +174,7 @@ void main() {
             chapters: const [],
             currentChapterIndex: 0,
             titleFor: (_) => '',
-            onChapterTap: (_) async {},
+            onChapterTap: (_) async => true,
           ),
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -228,6 +229,63 @@ void main() {
     },
   );
 
+  testWidgets('controls overlay multi-touch cancels dismiss', (tester) async {
+    final progress = ValueNotifier<HybridProgressSnapshot?>(null);
+    addTearDown(progress.dispose);
+    var dismissCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _progressShell(
+          progress: progress,
+          content: const SizedBox.expand(),
+          controlsVisible: true,
+          onDismissControls: () => dismissCalls += 1,
+        ),
+      ),
+    );
+
+    final first = await tester.startGesture(const Offset(120, 220), pointer: 1);
+    final second = await tester.startGesture(
+      const Offset(180, 220),
+      pointer: 2,
+    );
+    await second.up();
+    await first.up();
+    await tester.pump();
+
+    expect(dismissCalls, 0);
+  });
+
+  testWidgets('controls overlay ignores secondary mouse button', (
+    tester,
+  ) async {
+    final progress = ValueNotifier<HybridProgressSnapshot?>(null);
+    addTearDown(progress.dispose);
+    var dismissCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _progressShell(
+          progress: progress,
+          content: const SizedBox.expand(),
+          controlsVisible: true,
+          onDismissControls: () => dismissCalls += 1,
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      const Offset(120, 220),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(dismissCalls, 0);
+  });
+
   testWidgets('permanent info bar tap shows controls', (tester) async {
     var showCalls = 0;
     var dismissCalls = 0;
@@ -247,7 +305,7 @@ void main() {
             chapters: const [],
             currentChapterIndex: 0,
             titleFor: (_) => '',
-            onChapterTap: (_) async {},
+            onChapterTap: (_) async => true,
           ),
           backgroundColor: Colors.white,
           textColor: Colors.black,
@@ -321,7 +379,7 @@ void main() {
               chapters: const [],
               currentChapterIndex: 0,
               titleFor: (_) => '',
-              onChapterTap: (_) async {},
+              onChapterTap: (_) async => true,
             ),
             backgroundColor: Colors.white,
             textColor: Colors.black,
@@ -394,7 +452,7 @@ void main() {
               chapters: const [],
               currentChapterIndex: 0,
               titleFor: (_) => '',
-              onChapterTap: (_) async {},
+              onChapterTap: (_) async => true,
             ),
             backgroundColor: Colors.white,
             textColor: Colors.black,
@@ -451,50 +509,96 @@ void main() {
   testWidgets('progress updates rebuild only the permanent info bar', (
     tester,
   ) async {
-    final progress = ValueNotifier<HybridProgressSnapshot?>(
-      const HybridProgressSnapshot(
-        chapterIndex: 0,
-        chapterCount: 3,
-        chapterPercent: 10,
-      ),
-    );
-    addTearDown(progress.dispose);
-    var contentBuilds = 0;
+    final semantics = tester.ensureSemantics();
+    try {
+      final progress = ValueNotifier<HybridProgressSnapshot?>(
+        const HybridProgressSnapshot(
+          chapterIndex: 0,
+          chapterCount: 3,
+          chapterPercent: 10,
+        ),
+      );
+      addTearDown(progress.dispose);
+      var contentBuilds = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: _progressShell(
-          progress: progress,
-          content: Builder(
-            builder: (context) {
-              contentBuilds += 1;
-              return const SizedBox.expand();
-            },
+      await tester.pumpWidget(
+        MaterialApp(
+          home: _progressShell(
+            progress: progress,
+            content: Builder(
+              builder: (context) {
+                contentBuilds += 1;
+                return const SizedBox.expand();
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(contentBuilds, 1);
-    expect(find.text('第 1 章 1/10'), findsOneWidget);
-    expect(find.text('3.3%'), findsOneWidget);
+      expect(contentBuilds, 1);
+      expect(find.text('第 1/3 章 · 本章 1/10'), findsOneWidget);
+      expect(find.text('全書 3.3%'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('測試書，第 1/3 章 · 本章 1/10，全書 3.3%'),
+        findsOneWidget,
+      );
 
-    progress.value = const HybridProgressSnapshot(
-      chapterIndex: 1,
-      chapterCount: 3,
-      chapterPercent: 42.3,
-    );
-    await tester.pump();
+      progress.value = const HybridProgressSnapshot(
+        chapterIndex: 1,
+        chapterCount: 3,
+        chapterPercent: 42.3,
+      );
+      await tester.pump();
 
-    expect(contentBuilds, 1);
-    expect(find.text('第 2 章 4/10'), findsOneWidget);
-    expect(find.text('47.4%'), findsOneWidget);
+      expect(contentBuilds, 1);
+      expect(find.text('第 2/3 章 · 本章 4/10'), findsOneWidget);
+      expect(find.text('全書 47.4%'), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('auto page remains visible after controls are hidden', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final progress = ValueNotifier<HybridProgressSnapshot?>(
+        const HybridProgressSnapshot(
+          chapterIndex: 0,
+          chapterCount: 3,
+          chapterPercent: 10,
+        ),
+      );
+      addTearDown(progress.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: _progressShell(
+            progress: progress,
+            content: const SizedBox.expand(),
+            isAutoPaging: true,
+          ),
+        ),
+      );
+
+      expect(find.text('自動翻頁中'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('測試書，第 1/3 章 · 本章 1/10，全書 3.3%，自動翻頁中'),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 }
 
 ReaderV2PageShell _progressShell({
   required ValueListenable<HybridProgressSnapshot?> progress,
   required Widget content,
+  bool isAutoPaging = false,
+  bool controlsVisible = false,
+  VoidCallback? onDismissControls,
 }) {
   return ReaderV2PageShell(
     book: Book(bookUrl: 'test://book', name: '測試書', originName: '本地'),
@@ -504,13 +608,13 @@ ReaderV2PageShell _progressShell({
       chapters: const [],
       currentChapterIndex: 0,
       titleFor: (_) => '',
-      onChapterTap: (_) async {},
+      onChapterTap: (_) async => true,
     ),
     backgroundColor: Colors.white,
     textColor: Colors.black,
     menuBackgroundColor: Colors.white,
     menuTextColor: Colors.black,
-    controlsVisible: false,
+    controlsVisible: controlsVisible,
     showReadTitleAddition: true,
     hasVisibleContent: true,
     isLoading: false,
@@ -527,7 +631,7 @@ ReaderV2PageShell _progressShell({
       scrubPercent: 0,
       titleFor: (_) => '',
     ),
-    isAutoPaging: false,
+    isAutoPaging: isAutoPaging,
     dayNightIcon: Icons.light_mode,
     dayNightTooltip: '日夜切換',
     onExitIntent: () {},
@@ -540,7 +644,7 @@ ReaderV2PageShell _progressShell({
     onToggleDayNight: () {},
     onReplaceRule: () {},
     onShowControls: () {},
-    onDismissControls: () {},
+    onDismissControls: onDismissControls ?? () {},
     onPrevChapter: () {},
     onNextChapter: () {},
     onScrubStart: (_) {},

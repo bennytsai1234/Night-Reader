@@ -59,15 +59,23 @@ class RuleTextField extends StatelessWidget {
   }
 
   Widget _buildHelperButton(BuildContext context) {
-    return IconButton(
-      icon: Icon(
-        Icons.help_outline,
-        size: 20,
-        color: Theme.of(context).colorScheme.primary,
+    final semanticsLabel = '開啟$label小幫手';
+    return Semantics(
+      label: semanticsLabel,
+      button: true,
+      onTap: () => _showHelperMenu(context),
+      child: ExcludeSemantics(
+        child: IconButton(
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          tooltip: semanticsLabel,
+          icon: Icon(
+            Icons.help_outline,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          onPressed: () => _showHelperMenu(context),
+        ),
       ),
-      onPressed: () => _showHelperMenu(context),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
     );
   }
 
@@ -96,40 +104,50 @@ class RuleTextField extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (ctx) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Text(
-                  '$label - 規則小幫手',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Text(
+                    '$label - 規則小幫手',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              ...helpers.map(
-                (h) => ListTile(
-                  title: Text(h['label']!),
-                  subtitle: Text(h['value']!),
-                  onTap: () {
-                    final text = controller.text;
-                    final selection = controller.selection;
-                    final newText = text.replaceRange(
-                      selection.start,
-                      selection.end,
-                      h['value']!,
-                    );
-                    controller.text = newText;
-                    controller.selection = TextSelection.collapsed(
-                      offset: selection.start + h['value']!.length,
-                    );
-                    Navigator.pop(ctx);
-                  },
+                const Divider(height: 1),
+                ...helpers.map(
+                  (h) => ListTile(
+                    title: Text(h['label']!),
+                    subtitle: Text(h['value']!),
+                    onTap: () {
+                      final text = controller.text;
+                      final selection = controller.selection;
+                      final hasValidSelection =
+                          selection.isValid &&
+                          selection.start >= 0 &&
+                          selection.end <= text.length;
+                      final start =
+                          hasValidSelection ? selection.start : text.length;
+                      final end =
+                          hasValidSelection ? selection.end : text.length;
+                      final value = h['value']!;
+                      final newText = text.replaceRange(start, end, value);
+                      controller.value = TextEditingValue(
+                        text: newText,
+                        selection: TextSelection.collapsed(
+                          offset: start + value.length,
+                        ),
+                      );
+                      Navigator.pop(ctx);
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

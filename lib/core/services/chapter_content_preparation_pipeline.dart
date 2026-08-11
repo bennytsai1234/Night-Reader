@@ -84,7 +84,15 @@ class ChapterContentPreparationPipeline {
       }
     }
 
-    final key = _inFlightKey(chapter);
+    final key = ReaderChapterContentStore.inFlightKeyFor(
+      book: book,
+      chapter: chapter,
+      chapterIndex: chapterIndex,
+      sourceOverride: sourceOverride,
+      forceRefresh: forceRefresh,
+      saveChapterMetadata: saveChapterMetadata,
+      maxAttempts: maxAttempts,
+    );
     final existing = _inFlight[key];
     if (existing != null) return existing;
 
@@ -96,22 +104,15 @@ class ChapterContentPreparationPipeline {
       maxAttempts: maxAttempts,
     );
     _inFlight[key] = fetch;
-    return fetch.whenComplete(() => _inFlight.remove(key));
+    return fetch.whenComplete(() {
+      if (identical(_inFlight[key], fetch)) {
+        _inFlight.remove(key);
+      }
+    });
   }
 
   void reset() {
     _inFlight.clear();
-  }
-
-  String _inFlightKey(BookChapter chapter) {
-    final store = contentStore;
-    if (store == null) {
-      return '${book.origin}\n${book.bookUrl}\n${chapter.url}';
-    }
-    return ReaderChapterContentStore.contentKeyFor(
-      book: book,
-      chapter: chapter,
-    );
   }
 
   Future<ChapterContentPreparationResult> _fetchAndStore({
@@ -236,6 +237,7 @@ class ChapterContentPreparationPipeline {
         trimmed.startsWith('無法讀取本地書籍內容') ||
         trimmed.startsWith('檔案不存在:') ||
         trimmed.startsWith('本地 TXT 索引缺失') ||
+        trimmed.startsWith('本地 TXT 索引無效') ||
         trimmed.startsWith('不支援的本地格式:');
   }
 }
