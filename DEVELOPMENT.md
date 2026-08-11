@@ -93,7 +93,7 @@
 
 ## 開發環境需求
 
-- Flutter `3.41.6`
+- Flutter `3.44.0`
 - Dart SDK `^3.7.0`
 - Java `17`
 - Android SDK 與可用裝置 / 模擬器
@@ -174,7 +174,7 @@ git push origin vX.Y.Z
 
 - checkout 原始碼
 - 安裝 Java 17
-- 安裝 Flutter `3.41.6`
+- 安裝 Flutter `3.44.0`
 - `flutter pub get`
 - 執行關鍵 analyze / test
 - 解出 Android release keystore
@@ -215,7 +215,7 @@ git push origin vX.Y.Z
 
 - 本機不做 build；APK 建置與發布一律在 GitHub Actions。
 - 書源、閱讀器、下載、快取與備份彼此有關聯，修改其中一塊通常要檢查其他流程。
-- Reader V2 與 Source Manager 是 release 的重點回歸區域，變更後需加強驗證。
+- Reader V2、Source Manager、主題模式與正文分頁是 release 的重點回歸區域，變更後需加強驗證。
 - 書源驗證流程涉及 WebView、Cookie 與真實網站互動，容易出現只有真機或真實網站才會發生的問題；優先用 `tool/` 腳本重現。
 - 後台任務（`main.dart callbackDispatcher`）在 Isolate 跑，需重新初始化 DI，且不可執行 JS 規則。
 - 改 Drift table/DAO 必須跑 `build_runner` 重新生成 `.g.dart`，並處理 schema migration。
