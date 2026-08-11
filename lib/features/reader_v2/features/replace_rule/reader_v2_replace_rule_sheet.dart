@@ -73,6 +73,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
         _useReplaceRule = previous;
         (widget.book.readConfig ??= ReadConfig()).useReplaceRule = previous;
       });
+      try {
+        await widget.bookDao.upsert(widget.book);
+      } catch (_) {
+        // 原設定回寫失敗時仍保留 UI 的舊值，並由下方錯誤提示告知此次操作失敗。
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('更新替換規則設定失敗：$error')));
