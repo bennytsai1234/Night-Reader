@@ -99,7 +99,7 @@ class _CrashLogPageState extends State<CrashLogPage> {
       case _CrashLogStatus.error:
         return Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.xl),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -156,7 +156,7 @@ class _CrashLogPageState extends State<CrashLogPage> {
           );
         }
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: SelectableText(
             _logs,
             style: AppTextStyles.labelSm.copyWith(
