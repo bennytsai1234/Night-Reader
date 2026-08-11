@@ -28,13 +28,13 @@ void main() {
     await GetIt.instance.reset();
   });
 
-  testWidgets('SourceManagerPage can render with the new check result flow', (
-    tester,
-  ) async {
+  testWidgets('SourceManagerPage shows actionable empty state', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SourceManagerPage()));
     await tester.pumpAndSettle();
 
     expect(find.text('書源管理'), findsOneWidget);
-    expect(find.text('暫無書源'), findsOneWidget);
+    expect(find.text('尚未加入書源'), findsOneWidget);
+    expect(find.text('從網址匯入'), findsOneWidget);
+    expect(find.text('從檔案匯入'), findsOneWidget);
   });
 }
