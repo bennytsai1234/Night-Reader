@@ -132,10 +132,10 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            _chip(rule.isEnabled ? '已啟用' : '已停用'),
-                            _chip(rule.isRegex ? '正則' : '純文字'),
-                            if (rule.scopeContent) _chip('正文'),
-                            if (rule.scopeTitle) _chip('標題'),
+                            _chip(context, rule.isEnabled ? '已啟用' : '已停用'),
+                            _chip(context, rule.isRegex ? '正則' : '純文字'),
+                            if (rule.scopeContent) _chip(context, '正文'),
+                            if (rule.scopeTitle) _chip(context, '標題'),
                           ],
                         ),
                       ],
@@ -216,7 +216,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     );
   }
 
-  Widget _chip(String label) {
+  Widget _chip(BuildContext context, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
