@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
@@ -12,61 +13,65 @@ import 'package:night_reader/core/network/str_response.dart';
 
 /// 正文完整性優先的抓取器。
 ///
-/// 舊流程到達固定頁數上限時會直接把已抓到的前半段當成功正文回傳；
-/// 這裡改成只在 nextContentUrl 真正走完時才回傳成功。若仍有下一頁但已
-/// 達安全上限，直接失敗，讓上層重試／顯示失敗，不把半章寫入快取。
+/// 所有 nextContentUrl 都必須完整走完才回傳成功；多個下一頁會以有限併發抓取，
+/// 任一頁失敗即讓整章失敗，避免把半章寫入快取。
 final class CompleteContentFetcher {
   CompleteContentFetcher._();
 
   static const int _maxPages = 100;
+  static const int _defaultPageConcurrency = 4;
 
   static Future<String> fetch(
     BookSource source,
     Book book,
     BookChapter chapter, {
     String? nextChapterUrl,
+    int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
     final contentParts = <String>[];
-    final visitedUrls = <String>{};
+    final queuedUrls = <String>{chapter.url};
     final pendingUrls = ListQueue<String>()..add(chapter.url);
+    final concurrency = math.max(1, pageConcurrency ?? _defaultPageConcurrency);
     String? lastBaseUrl;
     var fetchedPages = 0;
 
     while (pendingUrls.isNotEmpty) {
-      if (fetchedPages >= _maxPages) {
+      final remainingPages = _maxPages - fetchedPages;
+      if (remainingPages <= 0) {
         throw SourceException(
           '正文分頁超過 $_maxPages 頁，拒絕保存可能不完整的章節',
           sourceUrl: pendingUrls.first,
         );
       }
 
-      final currentUrl = pendingUrls.removeFirst();
-      if (!visitedUrls.add(currentUrl)) continue;
-
-      final analyzeUrl = await AnalyzeUrl.create(
-        currentUrl,
-        source: source,
-        ruleData: book,
+      final batchSize = math.min(
+        math.min(concurrency, pendingUrls.length),
+        remainingPages,
       );
-      var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-      response = _runLoginCheckJs(source, response, ruleData: book);
-      _checkLoginRequired(response);
-
-      final result = await ContentParser.parse(
-        source: source,
-        book: book,
-        chapter: chapter,
-        body: response.body,
-        baseUrl: response.url,
-        nextChapterUrl: nextChapterUrl,
+      final batchUrls = <String>[
+        for (var i = 0; i < batchSize; i++) pendingUrls.removeFirst(),
+      ];
+      final pages = await Future.wait(
+        batchUrls.map(
+          (url) => _fetchPage(
+            source,
+            book,
+            chapter,
+            url,
+            nextChapterUrl: nextChapterUrl,
+            cancelToken: cancelToken,
+          ),
+        ),
       );
-      fetchedPages += 1;
-      if (result.content.isNotEmpty) contentParts.add(result.content);
-      lastBaseUrl = response.url;
 
-      for (final nextUrl in result.nextUrls) {
-        if (!visitedUrls.contains(nextUrl)) pendingUrls.add(nextUrl);
+      fetchedPages += pages.length;
+      for (final page in pages) {
+        if (page.content.isNotEmpty) contentParts.add(page.content);
+        lastBaseUrl = page.baseUrl;
+        for (final nextUrl in page.nextUrls) {
+          if (queuedUrls.add(nextUrl)) pendingUrls.add(nextUrl);
+        }
       }
     }
 
@@ -77,6 +82,38 @@ final class CompleteContentFetcher {
       chapter: chapter,
       contentStr: joined,
       baseUrl: lastBaseUrl,
+    );
+  }
+
+  static Future<_FetchedContentPage> _fetchPage(
+    BookSource source,
+    Book book,
+    BookChapter chapter,
+    String url, {
+    String? nextChapterUrl,
+    CancelToken? cancelToken,
+  }) async {
+    final analyzeUrl = await AnalyzeUrl.create(
+      url,
+      source: source,
+      ruleData: book,
+    );
+    var response = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
+    response = _runLoginCheckJs(source, response, ruleData: book);
+    _checkLoginRequired(response);
+
+    final result = await ContentParser.parse(
+      source: source,
+      book: book,
+      chapter: chapter,
+      body: response.body,
+      baseUrl: response.url,
+      nextChapterUrl: nextChapterUrl,
+    );
+    return _FetchedContentPage(
+      content: result.content,
+      nextUrls: result.nextUrls,
+      baseUrl: response.url,
     );
   }
 
@@ -112,4 +149,16 @@ final class CompleteContentFetcher {
       throw LoginCheckException('正文需要登入後閱讀', sourceUrl: response.url);
     }
   }
+}
+
+class _FetchedContentPage {
+  const _FetchedContentPage({
+    required this.content,
+    required this.nextUrls,
+    required this.baseUrl,
+  });
+
+  final String content;
+  final List<String> nextUrls;
+  final String baseUrl;
 }
