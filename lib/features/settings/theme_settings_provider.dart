@@ -10,14 +10,8 @@ class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
     appLight = _readApp(_kAppLight, AppUiThemeColors.lightDefault);
     appDark = _readApp(_kAppDark, AppUiThemeColors.darkDefault);
-    readerLight = _readArea(
-      _kReaderLight,
-      ReaderAreaThemeColors.contentLightDefault,
-    );
-    readerDark = _readArea(
-      _kReaderDark,
-      ReaderAreaThemeColors.contentDarkDefault,
-    );
+    readerLight = _readArea(_kReaderLight, ReaderAreaThemeColors.contentLightDefault);
+    readerDark = _readArea(_kReaderDark, ReaderAreaThemeColors.contentDarkDefault);
     menuLight = _readArea(_kMenuLight, ReaderAreaThemeColors.menuLightDefault);
     menuDark = _readArea(_kMenuDark, ReaderAreaThemeColors.menuDarkDefault);
     appLightCustom = _prefs.getBool(_kAppLightCustom) ?? false;
@@ -51,7 +45,6 @@ class ThemeSettingsProvider extends ChangeNotifier {
   late ReaderAreaThemeColors readerDark;
   late ReaderAreaThemeColors menuLight;
   late ReaderAreaThemeColors menuDark;
-
   late bool appLightCustom;
   late bool appDarkCustom;
   late bool readerLightCustom;
@@ -59,10 +52,8 @@ class ThemeSettingsProvider extends ChangeNotifier {
   late bool menuLightCustom;
   late bool menuDarkCustom;
 
-  AppUiThemeColors get effectiveAppLight =>
-      appLightCustom ? appLight : AppUiThemeColors.lightDefault;
-  AppUiThemeColors get effectiveAppDark =>
-      appDarkCustom ? appDark : AppUiThemeColors.darkDefault;
+  AppUiThemeColors get effectiveAppLight => appLightCustom ? appLight : AppUiThemeColors.lightDefault;
+  AppUiThemeColors get effectiveAppDark => appDarkCustom ? appDark : AppUiThemeColors.darkDefault;
 
   void setUseCustom(ThemeArea area, bool dark, bool value) {
     final key = switch ((area, dark)) {
@@ -76,16 +67,22 @@ class ThemeSettingsProvider extends ChangeNotifier {
     switch ((area, dark)) {
       case (ThemeArea.app, false):
         appLightCustom = value;
+        break;
       case (ThemeArea.app, true):
         appDarkCustom = value;
+        break;
       case (ThemeArea.reader, false):
         readerLightCustom = value;
+        break;
       case (ThemeArea.reader, true):
         readerDarkCustom = value;
+        break;
       case (ThemeArea.menu, false):
         menuLightCustom = value;
+        break;
       case (ThemeArea.menu, true):
         menuDarkCustom = value;
+        break;
     }
     _prefs.setBool(key, value);
     notifyListeners();
@@ -130,44 +127,25 @@ class ThemeSettingsProvider extends ChangeNotifier {
   void reset(ThemeArea area, bool dark) {
     switch (area) {
       case ThemeArea.app:
-        updateApp(
-          dark,
-          dark ? AppUiThemeColors.darkDefault : AppUiThemeColors.lightDefault,
-        );
+        updateApp(dark, dark ? AppUiThemeColors.darkDefault : AppUiThemeColors.lightDefault);
+        return;
       case ThemeArea.reader:
-        updateArea(
-          area,
-          dark,
-          dark
-              ? ReaderAreaThemeColors.contentDarkDefault
-              : ReaderAreaThemeColors.contentLightDefault,
-        );
+        updateArea(area, dark, dark ? ReaderAreaThemeColors.contentDarkDefault : ReaderAreaThemeColors.contentLightDefault);
+        return;
       case ThemeArea.menu:
-        updateArea(
-          area,
-          dark,
-          dark
-              ? ReaderAreaThemeColors.menuDarkDefault
-              : ReaderAreaThemeColors.menuLightDefault,
-        );
+        updateArea(area, dark, dark ? ReaderAreaThemeColors.menuDarkDefault : ReaderAreaThemeColors.menuLightDefault);
+        return;
     }
   }
 
   AppUiThemeColors _readApp(String key, AppUiThemeColors fallback) {
     final value = _readJson(key);
-    return value == null
-        ? fallback
-        : AppUiThemeColors.fromJson(value, fallback: fallback);
+    return value == null ? fallback : AppUiThemeColors.fromJson(value, fallback: fallback);
   }
 
-  ReaderAreaThemeColors _readArea(
-    String key,
-    ReaderAreaThemeColors fallback,
-  ) {
+  ReaderAreaThemeColors _readArea(String key, ReaderAreaThemeColors fallback) {
     final value = _readJson(key);
-    return value == null
-        ? fallback
-        : ReaderAreaThemeColors.fromJson(value, fallback: fallback);
+    return value == null ? fallback : ReaderAreaThemeColors.fromJson(value, fallback: fallback);
   }
 
   Map<String, dynamic>? _readJson(String key) {
@@ -191,21 +169,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
           menu
               ? (dark ? _kMenuDarkCustom : _kMenuLightCustom)
               : (dark ? _kReaderDarkCustom : _kReaderLightCustom),
-        ) ??
-        false;
+        ) ?? false;
     if (!useCustom) return fallback;
     final raw = prefs.getString(
-      menu
-          ? (dark ? _kMenuDark : _kMenuLight)
-          : (dark ? _kReaderDark : _kReaderLight),
+      menu ? (dark ? _kMenuDark : _kMenuLight) : (dark ? _kReaderDark : _kReaderLight),
     );
     final defaults = menu
-        ? (dark
-            ? ReaderAreaThemeColors.menuDarkDefault
-            : ReaderAreaThemeColors.menuLightDefault)
-        : (dark
-            ? ReaderAreaThemeColors.contentDarkDefault
-            : ReaderAreaThemeColors.contentLightDefault);
+        ? (dark ? ReaderAreaThemeColors.menuDarkDefault : ReaderAreaThemeColors.menuLightDefault)
+        : (dark ? ReaderAreaThemeColors.contentDarkDefault : ReaderAreaThemeColors.contentLightDefault);
     ReaderAreaThemeColors colors = defaults;
     if (raw != null) {
       try {
@@ -228,10 +199,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   }
 
   static void saveMenuBuiltInIndex(bool dark, int value) {
-    getIt<SharedPreferences>().setInt(
-      dark ? _kMenuNightIndex : _kMenuDayIndex,
-      value,
-    );
+    getIt<SharedPreferences>().setInt(dark ? _kMenuNightIndex : _kMenuDayIndex, value);
   }
 }
 
