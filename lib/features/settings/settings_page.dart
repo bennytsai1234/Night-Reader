@@ -17,20 +17,9 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          '我的',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontFamilySerif,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        elevation: 0,
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('我的')),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: [
           _buildProfileCard(context),
           _buildSectionTitle(context, '閱讀'),
@@ -39,7 +28,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.timer_outlined,
               title: '閱讀統計',
-              summary: '查看每本書的累積閱讀時間',
+              summary: '累積閱讀時間',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ReadingStatsPage()),
@@ -49,7 +38,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.tune_outlined,
               title: '閱讀偏好',
-              summary: '調整操作、自動翻頁與內容轉換',
+              summary: '操作、自動翻頁與內容轉換',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ReadingSettingsPage()),
@@ -76,7 +65,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.palette_outlined,
               title: '外觀與主題',
-              summary: '分別自訂全域、閱讀與選單的日夜配色',
+              summary: '介面與閱讀配色',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AppearanceSettingsPage()),
@@ -86,7 +75,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.volume_up_outlined,
               title: '朗讀與語音',
-              summary: '語速、音調、系統語音',
+              summary: '語速、音調與系統語音',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
@@ -96,7 +85,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.backup_outlined,
               title: '備份與還原',
-              summary: '本地備份、數據遷移',
+              summary: '本地備份與資料遷移',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const BackupSettingsPage()),
@@ -110,7 +99,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.download_for_offline_outlined,
               title: '背景下載佇列',
-              summary: '查看、暫停、重試與刪除下載任務',
+              summary: '下載任務',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DownloadManagerPage()),
@@ -127,7 +116,7 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-          const SizedBox(height: AppSpacing.xxl),
+          const SizedBox(height: AppSpacing.xl),
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -135,9 +124,11 @@ class SettingsPage extends StatelessWidget {
                 '夜讀 · GPL-3.0',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.labelSm.copyWith(
-                  height: 1.4,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  letterSpacing: 1.4,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.7),
+                  letterSpacing: 1.2,
                 ),
               ),
             ),
@@ -151,54 +142,77 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? scheme.surface,
         border: Border.all(color: scheme.outlineVariant),
-        borderRadius: AppRadius.cardLg,
+        borderRadius: AppRadius.cardMd,
         boxShadow: theme.cardTheme.shadowColor != null
-            ? [BoxShadow(color: theme.cardTheme.shadowColor!, blurRadius: 6, offset: const Offset(0, 2))]
+            ? [
+                BoxShadow(
+                  color: theme.cardTheme.shadowColor!,
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
             : [],
       ),
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: 0.08), spreadRadius: 1)],
+              borderRadius: AppRadius.cardMd,
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.shadow.withValues(alpha: 0.06),
+                  spreadRadius: 1,
+                ),
+              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
-          const SizedBox(width: AppSpacing.lg),
+          const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                '夜讀',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontFamilySerif,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                  letterSpacing: 2.0,
-                  color: scheme.onSurface,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '夜讀',
+                  style: TextStyle(
+                    fontFamily: AppTextStyles.fontFamilySerif,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    letterSpacing: 1.6,
+                    color: scheme.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                '閱讀，從這裡開始',
-                style: AppTextStyles.bodySm.copyWith(height: 1.4, color: scheme.onSurfaceVariant),
-              ),
-            ]),
+                const SizedBox(height: 2),
+                Text(
+                  '閱讀，從這裡開始',
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: AppRadius.pillShape),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.08),
+              borderRadius: AppRadius.pillShape,
+            ),
             child: Text(
               '本地',
-              style: AppTextStyles.labelXs.copyWith(height: 1.2, fontWeight: FontWeight.w600, color: scheme.primary, letterSpacing: 0.3),
+              style: AppTextStyles.labelXs.copyWith(
+                fontWeight: FontWeight.w600,
+                color: scheme.primary,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],
@@ -209,10 +223,14 @@ class SettingsPage extends StatelessWidget {
   Widget _buildSectionTitle(BuildContext context, String title) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 6),
       child: Text(
         title,
-        style: AppTextStyles.labelSm.copyWith(height: 1.3, letterSpacing: 1.4, color: scheme.primary, fontWeight: FontWeight.w700),
+        style: AppTextStyles.labelXs.copyWith(
+          letterSpacing: 1.8,
+          color: scheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -221,13 +239,15 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Material(
         color: theme.cardTheme.color ?? scheme.surface,
-        elevation: theme.cardTheme.elevation ?? 0,
-        shadowColor: theme.cardTheme.shadowColor,
+        elevation: 0,
         clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardLg, side: BorderSide(color: scheme.outlineVariant)),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardMd,
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
         child: Column(children: children),
       ),
     );
@@ -245,30 +265,56 @@ class SettingsPage extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: scheme.outlineVariant)),
+          border: isLast
+              ? null
+              : Border(bottom: BorderSide(color: scheme.outlineVariant)),
         ),
-        child: Row(children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: AppRadius.cardSm),
-            child: Icon(icon, color: scheme.primary, size: 18),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: AppTextStyles.bodyBase.copyWith(height: 1.35, color: scheme.onSurface)),
-              if (summary != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(summary, style: AppTextStyles.bodySm.copyWith(height: 1.4, color: scheme.onSurfaceVariant)),
-              ],
-            ]),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-        ]),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.08),
+                borderRadius: AppRadius.cardSm,
+              ),
+              child: Icon(icon, color: scheme.primary, size: 17),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.bodyBase.copyWith(
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  if (summary != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyXs.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
       ),
     );
   }
