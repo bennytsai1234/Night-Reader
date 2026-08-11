@@ -13,9 +13,10 @@ import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
-import 'shared/theme/app_theme.dart';
+import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'features/settings/settings_provider.dart';
+import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
@@ -26,17 +27,12 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
-      // 這裡需要重新初始化必要的 DI 服務 (因為後台 Isolate 不共享主執行緒狀態)
       await configureDependencies();
-
       final bookDao = getIt<BookDao>();
       final books = await bookDao.getInBookshelf();
-
       getIt<Logger>().i(
         'Background Task: Checking updates for ${books.length} books',
       );
-      // 這裡可以進一步調用 CheckSourceService 執行真實更新
-
       return Future.value(true);
     } catch (e) {
       return Future.value(false);
@@ -58,15 +54,10 @@ void main() {
 
 Future<void> _startApp() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  // 高刷新率裝置上輸入事件率與顯示刷新率常不同步，重採樣把觸控位移
-  // 對齊 vsync，讓拖曳滾動逐幀位移均勻（官方建議做法，約 5.5ms 取樣位移）。
   GestureBinding.instance.resamplingEnabled = true;
-  // 延後首幀:原生 splash(純主題色 + AVD 動畫圖示)一路撐到書架首批書載完,
-  // 由 MainPage 判定就緒後呼叫 remove() 放行(見 features/welcome/main_page.dart)。
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
 
-  // 自定義錯誤畫面，避免黑屏
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
       'Rendering Error: ${details.exception}',
@@ -236,16 +227,22 @@ class ReaderApp extends StatefulWidget {
 class _ReaderAppState extends State<ReaderApp> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
+    return Consumer2<SettingsProvider, ThemeSettingsProvider>(
+      builder: (context, settings, themeSettings, child) {
         return MaterialApp(
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
           navigatorObservers: [appRouteObserver],
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: buildAppTheme(
+            themeSettings.effectiveAppLight,
+            Brightness.light,
+          ),
+          darkTheme: buildAppTheme(
+            themeSettings.effectiveAppDark,
+            Brightness.dark,
+          ),
           themeMode: settings.themeMode,
           locale: settings.locale,
           builder: (context, child) => child ?? const SizedBox.shrink(),
