@@ -8,12 +8,14 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/book_group.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
@@ -34,6 +36,7 @@ class RestoreService {
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
+  final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
 
@@ -109,6 +112,8 @@ class RestoreService {
       'downloadTasks.json',
       'readerChapterContent.json',
       'readerChapterContents.json',
+      'readRecord.json',
+      'readRecords.json',
     };
     if (!supportedFiles.contains(fileName)) return false;
 
@@ -146,6 +151,10 @@ class RestoreService {
             await _chapterContentDao.upsertEntry(
               ReaderChapterContentEntry.fromJson(item),
             );
+            break;
+          case 'readRecord.json':
+          case 'readRecords.json':
+            await _readRecordDao.restoreByBookName(ReadRecord.fromJson(item));
             break;
         }
       }
