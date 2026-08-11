@@ -26,12 +26,34 @@ class SourceGroupManagePage extends StatelessWidget {
       ),
       body: Consumer<SourceManagerProvider>(
         builder: (context, provider, child) {
-          // 使用 provider.allGroups (已排序且排除 '全部')
           final groups = provider.allGroups;
           final mutationEnabled = !provider.isMutationBusy;
 
           if (groups.isEmpty) {
-            return const Center(child: Text('暫無自訂分組'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.folder_outlined,
+                      size: 52,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('尚未建立自訂分組'),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed:
+                          mutationEnabled ? () => _showEditDialog(context) : null,
+                      icon: const Icon(Icons.add),
+                      label: const Text('新增分組'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           return ListView.separated(
@@ -111,44 +133,59 @@ class SourceGroupManagePage extends StatelessWidget {
     final controller = TextEditingController(text: oldName);
     final provider = context.read<SourceManagerProvider>();
     final pageContext = context;
+    String? inputError;
     try {
       await showDialog<void>(
         context: context,
         builder:
-            (dialogContext) => AlertDialog(
-              title: Text(oldName == null ? '新增分組' : '重新命名分組'),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(hintText: '輸入分組名稱'),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final name = controller.text.trim();
-                    if (name.isEmpty) return;
-                    Navigator.pop(dialogContext);
-                    try {
-                      if (oldName == null) {
-                        await provider.addGroup(name);
-                      } else {
-                        await provider.renameGroup(oldName, name);
-                      }
-                    } catch (error) {
-                      if (pageContext.mounted) {
-                        ScaffoldMessenger.of(pageContext).showSnackBar(
-                          SnackBar(content: Text('儲存分組失敗：$error')),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('確定'),
-                ),
-              ],
+            (dialogContext) => StatefulBuilder(
+              builder:
+                  (context, setDialogState) => AlertDialog(
+                    title: Text(oldName == null ? '新增分組' : '重新命名分組'),
+                    content: TextField(
+                      controller: controller,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: '輸入分組名稱',
+                        errorText: inputError,
+                      ),
+                      onChanged: (_) {
+                        if (inputError != null) {
+                          setDialogState(() => inputError = null);
+                        }
+                      },
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('取消'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final name = controller.text.trim();
+                          if (name.isEmpty) {
+                            setDialogState(() => inputError = '請輸入分組名稱');
+                            return;
+                          }
+                          Navigator.pop(dialogContext);
+                          try {
+                            if (oldName == null) {
+                              await provider.addGroup(name);
+                            } else {
+                              await provider.renameGroup(oldName, name);
+                            }
+                          } catch (error) {
+                            if (pageContext.mounted) {
+                              ScaffoldMessenger.of(pageContext).showSnackBar(
+                                SnackBar(content: Text('儲存分組失敗：$error')),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text('確定'),
+                      ),
+                    ],
+                  ),
             ),
       );
     } finally {
