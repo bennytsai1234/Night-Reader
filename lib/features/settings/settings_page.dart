@@ -187,7 +187,6 @@ class SettingsPage extends StatelessWidget {
                 Text(
                   '夜讀',
                   style: TextStyle(
-                    fontFamily: AppTextStyles.fontFamilySerif,
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
                     height: 1.3,
