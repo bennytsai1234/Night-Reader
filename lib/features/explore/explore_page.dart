@@ -115,13 +115,16 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       children: [
         Icon(
           checked ? Icons.check : Icons.circle_outlined,
-          size: 18,
+          size: AppSpacing.xl,
           color: checked ? theme.colorScheme.primary : null,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.md),
         Text(
           text,
-          style: TextStyle(color: checked ? theme.colorScheme.primary : null),
+          style: TextStyle(
+            height: 1.2,
+            color: checked ? theme.colorScheme.primary : null,
+          ),
         ),
       ],
     );
@@ -140,7 +143,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         actions: [
           TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh, size: 18),
+            icon: const Icon(Icons.refresh),
             label: const Text('重試'),
           ),
         ],
@@ -161,12 +164,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                   context,
                   MaterialPageRoute(builder: (_) => const SourceManagerPage()),
                 ),
-            icon: const Icon(Icons.source_outlined, size: 18),
+            icon: const Icon(Icons.source_outlined),
             label: const Text('管理書源'),
           ),
           TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh, size: 18),
+            icon: const Icon(Icons.refresh),
             label: const Text('重新整理'),
           ),
         ],
@@ -187,12 +190,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 provider.setSearchQuery('');
               }
             },
-            icon: const Icon(Icons.clear, size: 18),
+            icon: const Icon(Icons.clear),
             label: const Text('清除條件'),
           ),
           TextButton.icon(
             onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh, size: 18),
+            icon: const Icon(Icons.refresh),
             label: const Text('重新整理'),
           ),
         ],
@@ -201,7 +204,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.xs, 0, AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+        0,
+        AppSpacing.xs,
+        0,
+        AppSpacing.md,
+      ),
       itemCount: provider.sources.length,
       itemBuilder: (context, index) {
         final source = provider.sources[index];
@@ -219,7 +227,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 280),
           child: Column(
@@ -227,18 +235,19 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
             children: [
               Icon(
                 icon,
-                size: 32,
+                size: AppSpacing.xxl,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.md),
               Text(
                 message,
                 style: theme.textTheme.bodySmall?.copyWith(
+                  height: 1.4,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: AppSpacing.xs,
@@ -263,11 +272,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     final titleForeground = theme.colorScheme.onSurface;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
         0,
         AppSpacing.md,
-        index == provider.sources.length - 1 ? AppSpacing.sm : AppSpacing.sm,
+        AppSpacing.sm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,10 +291,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 ),
             child: Material(
               color: titleBackground,
-              borderRadius: AppRadius.cardSm,
+              borderRadius: AppRadius.cardMd,
               child: InkWell(
                 key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-                borderRadius: AppRadius.cardSm,
+                borderRadius: AppRadius.cardMd,
                 onTap: () {
                   provider.toggleExpand(index);
                   if (!isExpanded) {
@@ -297,7 +306,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
-                    vertical: 8,
+                    vertical: AppSpacing.md,
                   ),
                   child: Row(
                     children: [
@@ -307,6 +316,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
+                            height: 1.3,
                             color: titleForeground,
                             fontWeight: FontWeight.w500,
                           ),
@@ -314,20 +324,20 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       ),
                       if (isExpanded && provider.isLoadingKinds)
                         SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: AppSpacing.xl,
+                          height: AppSpacing.xl,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: theme.colorScheme.primary,
                           ),
                         ),
                       if (isExpanded && provider.isLoadingKinds)
-                        const SizedBox(width: AppSpacing.xs),
+                        const SizedBox(width: AppSpacing.sm),
                       Icon(
                         isExpanded
                             ? Icons.keyboard_arrow_down
                             : Icons.chevron_right,
-                        size: 19,
+                        size: AppSpacing.xl,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ],
@@ -347,7 +357,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,
-                  borderRadius: AppRadius.cardSm,
+                  borderRadius: AppRadius.cardMd,
                   border: Border.all(
                     color: theme.colorScheme.outlineVariant.withValues(
                       alpha: 0.8,
@@ -359,11 +369,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                         ? Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.md,
-                            vertical: 8,
+                            vertical: AppSpacing.md,
                           ),
                           child: Text(
                             '暫無分類',
                             style: theme.textTheme.bodySmall?.copyWith(
+                              height: 1.4,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
@@ -406,9 +417,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
               return Material(
                 color: background,
-                borderRadius: AppRadius.cardSm,
+                borderRadius: AppRadius.cardMd,
                 child: InkWell(
-                  borderRadius: AppRadius.cardSm,
+                  borderRadius: AppRadius.cardMd,
                   onTap:
                       isError
                           ? () => _showKindError(context, kind)
@@ -416,14 +427,14 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           ? () => _navigateToExploreShow(source, kind)
                           : null,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 34),
+                    constraints: const BoxConstraints(minHeight: AppSpacing.xxxl),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
+                        horizontal: AppSpacing.md,
                         vertical: AppSpacing.xs,
                       ),
                       decoration: BoxDecoration(
-                        borderRadius: AppRadius.cardSm,
+                        borderRadius: AppRadius.cardMd,
                         border: Border.all(color: borderColor),
                       ),
                       alignment: Alignment.center,
@@ -433,8 +444,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.labelSmall?.copyWith(
-                          fontSize: 11,
-                          height: 1.1,
+                          height: 1.2,
                           color: textColor,
                           fontWeight: FontWeight.w500,
                         ),
@@ -572,7 +582,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 },
                 child: Text(
                   '刪除',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(
+                    height: 1.2,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
             ],
