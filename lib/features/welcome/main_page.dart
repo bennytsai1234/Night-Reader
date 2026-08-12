@@ -11,6 +11,8 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
@@ -102,6 +104,12 @@ class _MainPageState extends State<MainPage> {
         shelf != null &&
         !shelf.isLoading &&
         shelf.loadErrorMessage != null;
+    final showEmptyShelfAction =
+        isRealShelfTab &&
+        shelf != null &&
+        !shelf.isLoading &&
+        shelf.loadErrorMessage == null &&
+        shelf.books.isEmpty;
 
     return PopScope<void>(
       canPop: false,
@@ -143,7 +151,7 @@ class _MainPageState extends State<MainPage> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       CircularProgressIndicator(),
-                                      SizedBox(height: 12),
+                                      SizedBox(height: AppSpacing.lg),
                                       Text('正在載入書架…'),
                                     ],
                                   ),
@@ -163,7 +171,7 @@ class _MainPageState extends State<MainPage> {
                   color: Theme.of(context).scaffoldBackgroundColor,
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(AppSpacing.xl),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 280),
                         child: Column(
@@ -171,10 +179,10 @@ class _MainPageState extends State<MainPage> {
                           children: [
                             Icon(
                               Icons.error_outline,
-                              size: 32,
+                              size: AppSpacing.xxl,
                               color: Theme.of(context).colorScheme.error,
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppSpacing.md),
                             Text(
                               shelf.loadErrorMessage!,
                               textAlign: TextAlign.center,
@@ -183,10 +191,10 @@ class _MainPageState extends State<MainPage> {
                                     Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppSpacing.md),
                             TextButton.icon(
                               onPressed: shelf.loadBooks,
-                              icon: const Icon(Icons.refresh, size: 18),
+                              icon: const Icon(Icons.refresh),
                               label: const Text('重試'),
                             ),
                           ],
@@ -198,6 +206,18 @@ class _MainPageState extends State<MainPage> {
               ),
           ],
         ),
+        floatingActionButton:
+            showEmptyShelfAction
+                ? FloatingActionButton(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SearchPage()),
+                      ),
+                  tooltip: '搜尋書籍',
+                  child: const Icon(Icons.search),
+                )
+                : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
