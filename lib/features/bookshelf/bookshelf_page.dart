@@ -127,7 +127,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             ),
                           ),
                     ),
-
                     PopupMenuButton<String>(
                       itemBuilder:
                           (context) => [
@@ -590,16 +589,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
     );
   }
 
+  ({Color border, Color primary, Color secondary, Color tertiary})
+  _bookItemColors(ThemeData theme, bool isSelected) {
+    final scheme = theme.colorScheme;
+    return (
+      border: isSelected ? scheme.primary : scheme.outlineVariant,
+      primary: scheme.onSurface,
+      secondary: scheme.onSurfaceVariant,
+      tertiary: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+    );
+  }
+
   Widget _buildGridItem(BuildContext context, Book book) {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final borderColor =
-        isSelected
-            ? theme.colorScheme.primary
-            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
-    final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
+    final colors = _bookItemColors(theme, isSelected);
 
     return InkWell(
       onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
@@ -626,7 +630,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: borderColor,
+                        color: colors.border,
                         width: isSelected ? 2 : 1,
                       ),
                       borderRadius: AppRadius.cardXs,
@@ -662,7 +666,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   height: 1.25,
-                  color: fgPrimary,
+                  color: colors.primary,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -671,7 +675,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
               Container(
                 height: 2,
                 decoration: BoxDecoration(
-                  color: borderColor,
+                  color: colors.border,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Align(
@@ -701,7 +705,16 @@ class _BookshelfPageState extends State<BookshelfPage> {
               top: 4,
               child: Icon(
                 isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: isSelected ? theme.colorScheme.primary : Colors.white,
+                color:
+                    isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface,
+                shadows: [
+                  Shadow(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.9),
+                    blurRadius: AppSpacing.xs,
+                  ),
+                ],
               ),
             ),
         ],
@@ -712,15 +725,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
   Widget _buildBookItem(BuildContext context, Book book) {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final borderColor =
-        isSelected
-            ? theme.colorScheme.primary
-            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
-    final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
-    final fgSecondary = isDark ? AppPalette.ink200 : AppPalette.ink300;
-    final fgTertiary = isDark ? const Color(0xFF847B68) : AppPalette.ink200;
+    final colors = _bookItemColors(theme, isSelected);
 
     return InkWell(
       onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
@@ -741,7 +746,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
         decoration: BoxDecoration(
           color: theme.cardTheme.color,
           borderRadius: AppRadius.cardLg,
-          border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
+          border: Border.all(
+            color: colors.border,
+            width: isSelected ? 2 : 1,
+          ),
           boxShadow:
               theme.cardTheme.shadowColor != null
                   ? [
@@ -776,7 +784,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       fontFamily: AppTextStyles.fontFamilySerif,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: fgPrimary,
+                      color: colors.primary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -784,20 +792,20 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   const SizedBox(height: 2),
                   Text(
                     book.author,
-                    style: TextStyle(fontSize: 11, color: fgTertiary),
+                    style: TextStyle(fontSize: 11, color: colors.tertiary),
                     maxLines: 1,
                   ),
                   const Spacer(),
                   Text(
                     '讀至: ${book.durChapterTitle}',
-                    style: TextStyle(fontSize: 11, color: fgSecondary),
+                    style: TextStyle(fontSize: 11, color: colors.secondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '最新: ${book.latestChapterTitle}',
-                    style: TextStyle(fontSize: 10, color: fgTertiary),
+                    style: TextStyle(fontSize: 10, color: colors.tertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -805,7 +813,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   Container(
                     height: 2,
                     decoration: BoxDecoration(
-                      color: borderColor,
+                      color: colors.border,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Align(
