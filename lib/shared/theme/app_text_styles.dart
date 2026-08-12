@@ -4,11 +4,6 @@ import 'package:flutter/material.dart';
 class AppTextStyles {
   AppTextStyles._();
 
-  // Font family name constants — kept for call-site reference.
-  // Fonts are not bundled; Flutter silently falls back to the system default.
-  static const String fontFamilySerif = 'Noto Serif TC';
-  static const String fontFamilySans = 'Noto Sans TC';
-
   static const TextStyle display = TextStyle(
     fontSize: 88,
     height: 1.15,
