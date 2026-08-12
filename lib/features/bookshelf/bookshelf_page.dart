@@ -13,7 +13,6 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
 
 enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
 
@@ -662,7 +661,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
               Text(
                 book.name,
                 style: TextStyle(
-                  fontFamily: AppTextStyles.fontFamilySerif,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   height: 1.25,
@@ -781,7 +779,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   Text(
                     book.name,
                     style: TextStyle(
-                      fontFamily: AppTextStyles.fontFamilySerif,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: colors.primary,
