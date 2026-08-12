@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_text_styles.dart';
 import 'app_tokens.dart';
 import 'theme_customization.dart';
 
@@ -37,6 +38,21 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
     onSurfaceVariant: colors.textSecondary,
     outline: colors.border,
     outlineVariant: colors.border.withValues(alpha: 0.72),
+  );
+
+  final textTheme = ThemeData(brightness: brightness).textTheme.copyWith(
+    titleLarge: AppTextStyles.titleLg,
+    titleMedium: AppTextStyles.titleMd,
+    titleSmall: AppTextStyles.uiMd,
+    bodyLarge: AppTextStyles.bodyMd,
+    bodyMedium: AppTextStyles.bodyBase,
+    bodySmall: AppTextStyles.bodySm,
+    labelLarge: AppTextStyles.uiSm,
+    labelMedium: AppTextStyles.labelSm,
+    labelSmall: AppTextStyles.labelXs,
+  ).apply(
+    bodyColor: colors.textPrimary,
+    displayColor: colors.textPrimary,
   );
 
   return ThemeData(
@@ -120,9 +136,6 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
         borderSide: BorderSide.none,
       ),
     ),
-    textTheme: ThemeData(brightness: brightness).textTheme.apply(
-      bodyColor: colors.textPrimary,
-      displayColor: colors.textPrimary,
-    ),
+    textTheme: textTheme,
   );
 }
