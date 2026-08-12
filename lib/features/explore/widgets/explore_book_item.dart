@@ -30,7 +30,7 @@ class ExploreBookItem extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
+          vertical: AppSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,8 +39,8 @@ class ExploreBookItem extends StatelessWidget {
               coverUrl: book.coverUrl,
               bookName: book.name,
               author: book.author,
-              width: 54,
-              height: 72,
+              width: 56,
+              height: 75,
               borderRadius: AppRadius.cardXs,
             ),
             const SizedBox(width: AppSpacing.md),
@@ -54,9 +54,10 @@ class ExploreBookItem extends StatelessWidget {
                         child: Text(
                           book.name,
                           style: theme.textTheme.titleSmall?.copyWith(
+                            height: 1.3,
                             fontWeight: FontWeight.w600,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -68,13 +69,14 @@ class ExploreBookItem extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                            color: theme.colorScheme.primaryContainer,
                             borderRadius: AppRadius.pillShape,
                           ),
                           child: Text(
                             '書架',
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
+                              height: 1.2,
+                              color: theme.colorScheme.onPrimaryContainer,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -82,11 +84,12 @@ class ExploreBookItem extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpacing.xs),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
                       '作者: ${book.author}',
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
@@ -94,10 +97,11 @@ class ExploreBookItem extends StatelessWidget {
                     ),
                   if (book.latestChapterTitle != null &&
                       book.latestChapterTitle!.isNotEmpty) ...[
-                    const SizedBox(height: 1),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       '最新: ${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
                         color: context.warning,
                       ),
                       maxLines: 1,
@@ -105,13 +109,14 @@ class ExploreBookItem extends StatelessWidget {
                     ),
                   ],
                   if (book.intro != null && book.intro!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.45,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -145,7 +150,7 @@ class ExploreBookItem extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
-          vertical: 1,
+          vertical: 2,
         ),
         decoration: BoxDecoration(
           border: Border.all(
@@ -156,6 +161,7 @@ class ExploreBookItem extends StatelessWidget {
         child: Text(
           kind,
           style: theme.textTheme.labelSmall?.copyWith(
+            height: 1.2,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
