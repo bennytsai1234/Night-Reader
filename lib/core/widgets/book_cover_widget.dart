@@ -43,11 +43,11 @@ class BookCoverWidget extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             borderRadius: effectiveBorderRadius,
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Color(0x0A241C10),
                 blurRadius: 2,
-                offset: const Offset(0, 1),
+                offset: Offset(0, 1),
               ),
             ],
           ),
@@ -81,7 +81,7 @@ class BookCoverWidget extends StatelessWidget {
           final bytes = snapshot.data;
           if (bytes == null || bytes.isEmpty) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildPlaceholder();
+              return _buildPlaceholder(context);
             }
             _failedCoverSources.add(source);
             return _buildTextCover();
@@ -129,7 +129,7 @@ class BookCoverWidget extends StatelessWidget {
       memCacheWidth: cacheWidth,
       memCacheHeight: cacheHeight,
       fadeInDuration: const Duration(milliseconds: 200),
-      placeholder: (context, url) => _buildPlaceholder(),
+      placeholder: (context, url) => _buildPlaceholder(context),
       errorWidget: (context, url, error) {
         _failedCoverSources.add(source);
         return _buildTextCover();
@@ -137,9 +137,9 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(BuildContext context) {
     return Container(
-      color: Colors.grey.withValues(alpha: 0.1),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: const Center(
         child: SizedBox(
           width: 16,
@@ -152,7 +152,6 @@ class BookCoverWidget extends StatelessWidget {
 
   /// 實作文字封面 (對標 Android 預設文字封面)
   Widget _buildTextCover() {
-    // 根據書名生成隨機但固定的背景色
     final int colorIndex = bookName.hashCode.abs() % _coverColors.length;
     final Color color = _coverColors[colorIndex];
     final Color foregroundColor = _readableForeground(color);
@@ -168,12 +167,11 @@ class BookCoverWidget extends StatelessWidget {
               displayChar,
               style: AppTextStyles.titleSm.copyWith(color: foregroundColor),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               '無封面',
-              style: TextStyle(
+              style: AppTextStyles.labelXs.copyWith(
                 color: foregroundColor,
-                fontSize: 8,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -184,7 +182,7 @@ class BookCoverWidget extends StatelessWidget {
   }
 
   Color _readableForeground(Color background) {
-    const lightForeground = Colors.white;
+    const lightForeground = AppPalette.paper50;
     const darkForeground = AppPalette.ink700;
 
     double contrastRatio(Color foreground) {
@@ -205,18 +203,14 @@ class BookCoverWidget extends StatelessWidget {
   }
 
   static const List<Color> _coverColors = [
-    Color(0xFFE57373),
-    Color(0xFFF06292),
-    Color(0xFFBA68C8),
-    Color(0xFF9575CD),
-    Color(0xFF7986CB),
-    Color(0xFF64B5F6),
-    Color(0xFF4FC3F7),
-    Color(0xFF4DB6AC),
-    Color(0xFF81C784),
-    Color(0xFFAED581),
-    Color(0xFFFFB74D),
-    Color(0xFFD4E157),
+    AppPalette.cinnabar,
+    AppPalette.rust,
+    AppPalette.tea,
+    AppPalette.gold,
+    AppPalette.azurite,
+    AppPalette.moss,
+    AppPalette.ink300,
+    AppPalette.aubergine,
   ];
 
   static final Set<String> _failedCoverSources = <String>{};
