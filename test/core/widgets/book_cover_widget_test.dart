@@ -28,7 +28,7 @@ void main() {
         expect(find.bySemanticsLabel('無封面'), findsNothing);
 
         final fallbackLabel = tester.widget<Text>(find.text('無封面'));
-        expect(fallbackLabel.style?.color, AppPalette.ink700);
+        expect(fallbackLabel.style?.color, AppPalette.paper50);
       } finally {
         semantics.dispose();
       }
