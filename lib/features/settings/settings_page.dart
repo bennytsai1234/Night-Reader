@@ -124,6 +124,7 @@ class SettingsPage extends StatelessWidget {
                 '夜讀 · GPL-3.0',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.labelSm.copyWith(
+                  height: 1.2,
                   color: Theme.of(context)
                       .colorScheme
                       .onSurfaceVariant
@@ -142,18 +143,21 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? scheme.surface,
         border: Border.all(color: scheme.outlineVariant),
-        borderRadius: AppRadius.cardMd,
+        borderRadius: AppRadius.cardLg,
         boxShadow: theme.cardTheme.shadowColor != null
             ? [
                 BoxShadow(
                   color: theme.cardTheme.shadowColor!,
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
+                  blurRadius: AppSpacing.sm,
+                  offset: const Offset(0, 2),
                 ),
               ]
             : [],
@@ -175,7 +179,7 @@ class SettingsPage extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,15 +189,17 @@ class SettingsPage extends StatelessWidget {
                   style: TextStyle(
                     fontFamily: AppTextStyles.fontFamilySerif,
                     fontWeight: FontWeight.w700,
-                    fontSize: 17,
+                    fontSize: 18,
+                    height: 1.3,
                     letterSpacing: 1.6,
                     color: scheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   '閱讀，從這裡開始',
                   style: AppTextStyles.bodySm.copyWith(
+                    height: 1.4,
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
@@ -201,14 +207,18 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
             decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.08),
+              color: scheme.primary.withValues(alpha: 0.12),
               borderRadius: AppRadius.pillShape,
             ),
             child: Text(
               '本地',
               style: AppTextStyles.labelXs.copyWith(
+                height: 1.2,
                 fontWeight: FontWeight.w600,
                 color: scheme.primary,
                 letterSpacing: 0.2,
@@ -223,10 +233,16 @@ class SettingsPage extends StatelessWidget {
   Widget _buildSectionTitle(BuildContext context, String title) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 18, 22, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.sm,
+      ),
       child: Text(
         title,
         style: AppTextStyles.labelXs.copyWith(
+          height: 1.2,
           letterSpacing: 1.8,
           color: scheme.primary,
           fontWeight: FontWeight.w700,
@@ -239,13 +255,14 @@ class SettingsPage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Material(
         color: theme.cardTheme.color ?? scheme.surface,
-        elevation: 0,
+        elevation: theme.cardTheme.elevation ?? 0,
+        shadowColor: theme.cardTheme.shadowColor,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.cardMd,
+          borderRadius: AppRadius.cardLg,
           side: BorderSide(color: scheme.outlineVariant),
         ),
         child: Column(children: children),
@@ -265,7 +282,10 @@ class SettingsPage extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         decoration: BoxDecoration(
           border: isLast
               ? null
@@ -274,15 +294,15 @@ class SettingsPage extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 30,
-              height: 30,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.08),
+                color: scheme.primary.withValues(alpha: 0.12),
                 borderRadius: AppRadius.cardSm,
               ),
-              child: Icon(icon, color: scheme.primary, size: 17),
+              child: Icon(icon, color: scheme.primary, size: 18),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,16 +310,18 @@ class SettingsPage extends StatelessWidget {
                   Text(
                     title,
                     style: AppTextStyles.bodyBase.copyWith(
+                      height: 1.35,
                       color: scheme.onSurface,
                     ),
                   ),
                   if (summary != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       summary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.bodyXs.copyWith(
+                        height: 1.4,
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
@@ -307,7 +329,7 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: AppSpacing.sm),
             Icon(
               Icons.chevron_right,
               size: 20,
