@@ -6,23 +6,27 @@ import 'theme_customization.dart';
 ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
   final primaryContainer = Color.alphaBlend(
     colors.primary.withValues(
-      alpha: brightness == Brightness.light ? 0.09 : 0.16,
+      alpha: brightness == Brightness.light ? 0.14 : 0.24,
     ),
     colors.surface,
   );
   final secondaryContainer = Color.alphaBlend(
     colors.secondary.withValues(
-      alpha: brightness == Brightness.light ? 0.08 : 0.14,
+      alpha: brightness == Brightness.light ? 0.13 : 0.22,
     ),
     colors.surface,
   );
+  final onPrimary =
+      colors.primary.computeLuminance() > 0.5
+          ? AppPalette.ink700
+          : AppPalette.paper50;
 
   final scheme = ColorScheme.fromSeed(
     seedColor: colors.primary,
     brightness: brightness,
   ).copyWith(
     primary: colors.primary,
-    onPrimary: brightness == Brightness.light ? Colors.white : AppPalette.ink600,
+    onPrimary: onPrimary,
     primaryContainer: primaryContainer,
     onPrimaryContainer: colors.textPrimary,
     secondary: colors.secondary,
@@ -52,13 +56,14 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
       ),
     ),
     cardTheme: CardThemeData(
-      elevation: 0,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
+      elevation: brightness == Brightness.light ? 1 : 0,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
       color: colors.surface,
-      shadowColor: null,
+      shadowColor:
+          brightness == Brightness.light ? const Color(0x0A241C10) : null,
     ),
     dialogTheme: DialogThemeData(
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
       backgroundColor: colors.surface,
       titleTextStyle: TextStyle(
         fontSize: 18,
@@ -67,37 +72,38 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
       ),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-      elevation: brightness == Brightness.light ? 2 : 6,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
+      elevation: brightness == Brightness.light ? 3 : 8,
       color: colors.surface,
     ),
     bottomSheetTheme: BottomSheetThemeData(
       clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),
       backgroundColor: colors.surface,
       modalBackgroundColor: colors.surface,
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 64,
       backgroundColor: colors.navigation,
-      indicatorColor: colors.primary.withValues(alpha: 0.10),
+      indicatorColor: colors.primary.withValues(alpha: 0.15),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
-          size: 22,
-          color: states.contains(WidgetState.selected)
-              ? colors.primary
-              : colors.textSecondary,
+          color:
+              states.contains(WidgetState.selected)
+                  ? colors.primary
+                  : colors.textSecondary,
         ),
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
-          fontWeight: states.contains(WidgetState.selected)
-              ? FontWeight.w600
-              : FontWeight.w400,
-          color: states.contains(WidgetState.selected)
-              ? colors.primary
-              : colors.textSecondary,
+          fontWeight:
+              states.contains(WidgetState.selected)
+                  ? FontWeight.w600
+                  : FontWeight.w400,
+          color:
+              states.contains(WidgetState.selected)
+                  ? colors.primary
+                  : colors.textSecondary,
         ),
       ),
     ),
