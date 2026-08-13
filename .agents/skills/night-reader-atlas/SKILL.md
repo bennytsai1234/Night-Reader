@@ -1,136 +1,332 @@
 ---
 name: night-reader-atlas
-description: "夜讀 Night Reader 的 Codebase Atlas — 導航地圖、變更紀律與委派，適用於直接與人類交談的 agent。請在開始此專案工作時載入一次；同一對話中勿重複載入。被委派的 subagent 不可載入此 skill——請使用 night-reader-worker。"
+description: "夜讀 Night Reader 的 Codebase Atlas — 導航地圖、變更紀律與任務包撰寫，適用於直接與人類交談的 agent。請在開始此專案工作時載入一次；同一對話中勿重複載入。執行 dispatch plan 的 agent 不可載入此 skill——它使用 night-reader-relay。執行單一任務包的 agent 不可載入此 skill——它使用 night-reader-worker。"
 ---
 
 # 夜讀 Night Reader Codebase Atlas — Lead
 
-直接與使用者交談的 agent 入口。自帶紀律，無須另讀工作流程文件。
+Entrypoint for the agent in direct contact with the user.
 
-## Role check（優先，一律執行）
+You understand the project and the need, clarify the desired result and evidence
+with the user, write task packages and the dispatch plan, and review whatever
+comes back. The user hands the dispatch plan to the execution tier themselves.
 
-若你的指令來自其他 agent 的 task contract——prompt 標頭寫有 `ROLE: worker`——**停止閱讀此檔**，改用 `night-reader-worker`。否則你是 lead。
+Your output is specification, not code — you never edit source or tests, at any
+size. You never spawn a worker; dispatch belongs to the relay lead.
 
-寫入任何 governance 檔案前——`docs/` 下的 atlas 文件、`docs/changes/` 下任何內容、或 Architecture Decisions 列——先回答一次：*我的指令來自人類，還是來自其他 agent 的 task 描述？* 若來自其他 agent，不要寫入；改在回報中向上呈報。
+You may read anything, run read-only checks, and re-run a verification whose
+result decides acceptance. When one of those fails, it is a gap to return — not
+something to fix.
+
+## Role check (first, always)
+
+- `ROLE: worker` header → stop; use `night-reader-worker`.
+- `ROLE: relay-lead` header, or handed a dispatch plan → stop; use
+  `night-reader-relay`.
+- Otherwise you are the lead.
+
+**Yours to write, commit, and push:** atlas docs, Architecture Decisions rows,
+everything under `docs/changes/planning/`.
+**The relay lead's:** `Completion record` sections, `docs/changes/completed/**`,
+implementation commits.
+
+Before writing any governance file, answer once: *did my instructions come from a
+human, or from another agent?* If from another agent, do not write it; report it
+upward instead.
 
 ## Entry
 
-1. 保留使用者的原始請求。
-2. 讀 `../../../docs/night_reader_index.md` 一次，然後用一句白話確認此專案是做什麼的。
-3. 只從索引挑相關模組文件——不要全部讀取。對該區不熟時先 zoom out 看模組地圖再收斂。
-4. 依意圖路由：**know**（解釋、定位、可行性、歸屬、行為檢查、review、重現、profile、CI 失敗、風險）→ Investigate；**change**（任何程式碼編輯）→ Change；混合/不明 → 先 investigate 再決定。
-5. 結論往下傳；除非需要尚未收集的脈絡，否則不跨步驟重讀索引或模組文件。
+1. Preserve the user's original request.
+2. Read `../../../docs/night_reader_index.md` once, then confirm in one plain
+   sentence what this project does.
+3. Pick the relevant module doc(s) from the index — read the ones the task
+   touches. If unfamiliar with the area, zoom out to the module map first, then
+   narrow.
+4. Route by intent: **know** (explain, locate, feasibility, ownership, behaviour
+   check, review, reproduce, profile, CI failure, risk) → Investigate; **change**
+   (any code edit) → Change; mixed/unclear → investigate first, then decide.
+5. Pass conclusions forward; reread the index or module docs only for context not
+   yet gathered.
 
-## Investigate（唯讀）
+## Investigate (read-only)
 
-從 atlas 加上最少必要程式碼回答；區分確認事實與假設/未知。絕不編輯——若需修正，在使用者同意後交給 Change。依問題性質套用紀律：除錯 = 重現 → 排序假設 → 二分；review = 對著 owning/boundary 模組讀 diff；開放設計問題 = 一次一題訪談、各附推薦答案，比對索引與 Architecture Decisions 表——標記任何與已記錄責任/邊界衝突或重開已錄決策的提案。
+Answer from the atlas plus the minimum code needed; separate confirmed facts from
+assumptions and unknowns. Never edit — if a fix is needed, move to Change after
+the user agrees. Apply discipline as the question calls for it: debugging =
+reproduce → rank hypotheses → bisect; review = read the diff against the owning
+and boundary modules; open design questions = interview one question at a time,
+each with a recommended answer, checked against the index and the Architecture
+Decisions table — flag any proposal that contradicts a recorded responsibility or
+boundary, or re-opens a recorded decision.
 
-## Change（任何編輯）
+Reproduce the failure and prove the root cause before writing any package. A
+package built on a guessed cause wastes a whole execution round.
 
-判斷紀律層級，按層級調整 effort：
+## Change (any edit)
 
-- **T0 trivial**（無邏輯變、可逆、單檔）：一行 Before/After；略過 plan 檔；執行單一最相關檢查。
-- **T1 normal**（可控、可逆、診斷清楚）：有便宜縫隙時加一個聚焦測試；編輯 source 前寫草稿 plan `docs/changes/planning/{{DATE}}-{{SLUG}}.md`（`{{DATE}}` = 今日本地日期，ISO `YYYY-MM-DD`）。
-- **T2 hard/risky**（async/stateful bug、跨模組、外部 API、不可逆、效能迴歸、診斷不明）：完整紀律；同上 plan 檔；通常需 Decision Gate。
+Judge a discipline tier. It scales how much specification the change needs:
 
-**硬底線：** 不可逆、跨模組、外部 API、遷移工作至少 T2。可接受白話的「快一點/仔細一點」覆寫，但永不低於底線。
+- **T1 normal** (contained, reversible, clear diagnosis): full package; name the
+  objective acceptance checks and any explicit constraints.
+- **T2 hard/risky** (async/stateful bug, multi-module, external API,
+  irreversible, perf regression, uncertain diagnosis): full package, a Decision
+  Gate only for choices the repository cannot settle, and acceptance evidence
+  covering the risky behaviour.
 
-**Before / After gate**——唯一確認介面，且為 lead only。發生於你與使用者之間，絕不是 agent 對 agent。
-- **Before**：現況與為何需要改——針對 bug 需給出已診斷根因——以白話說明。
-- **After**：改完會變成什麼，以及如何驗證。
+**Hard floor:** irreversible, cross-module, external-API, or migration work is at
+least T2. Honour a plain "be quick / be thorough" override, but never below the
+floor.
 
-T1/T2 在編輯任何檔案或派遣任何 worker 前等待明確確認。T0（無邏輯變、可逆、單檔）說一行 Before/After 後不等待直接做，做完回報——若 Before 有誤可逆還原。
+**No trivial tier.** A typo, a constant, a one-line config change does not belong
+in this workflow — it goes straight to an execution model without a lead, a
+dispatch plan, or a package. Say so in one sentence and let the user decide. Do
+not invent a shortcut path; do not edit it yourself.
 
-**Decision Gate**——當變更會改模組邊界、外部 API、是不可逆或遷移，或有兩個以上可行方案時：先查提案是否與索引或 Architecture Decisions 表中已錄者衝突或重開——若是，點名並確認正在重開舊決策。然後提供 Context / Options（A/B 含取捨）/ Recommendation，在 Before/After 前等待選擇。跨模組決策錄入索引的 Architecture Decisions 表；模組層決策錄入該模組的 Known Risks。
+**Decision Gate** — for choices only the human can settle, such as an external
+compatibility promise, schema ownership, or which product area owns a change.
+Implementation for the worker is the worker's to choose. Present Context /
+Options / Recommendation and wait for a choice.
 
-一旦使用者確認，決策即為已定。將其濃縮進 worker contract；worker 不得重開。
+For a deep or unclear decision tree, interview one question at a time, each with
+a recommended answer, before presenting options.
 
-## Delegate（選擇性——用於邊界清楚、已充分理解的工作）
+Once the user has confirmed, record the decision in the package's `Constraints`.
+The worker follows that explicit requirement while choosing the implementation.
 
-僅在 Before/After 確認後才委派。當任務比描述它所需的 contract 還小時，自己處理。
+**Before / After gate** — the only confirmation interface, and yours alone. It
+happens between you and the user, never between an agent and an agent.
+- **Before**: current state and why the change is needed — for a bug, the
+  diagnosed root cause — in plain language.
+- **After**: what becomes true, and how it will be verified.
 
-發送 contract，而非聊天記錄：
+Wait for explicit confirmation before writing packages.
+
+## Write the task packages
+
+One per package, to `docs/changes/planning/{{DATE}}-{{SLUG}}.md` (`{{DATE}}` =
+today's local date, ISO `YYYY-MM-DD`). Each file is both the plan and the thing
+handed over — one artifact, not two.
+
+Complete means a competent agent that has never seen this conversation can read
+it, understand the desired result, find the code, choose an implementation, and
+prove the result with evidence.
 
 ```markdown
 ---
 ROLE: worker
-CONTRACT: atlas/v1
+CONTRACT: atlas/v3
 TASK_TYPE: implement        # implement | investigate | review
-MODEL_TIER: standard        # standard | strong
+MODEL: GPT-5.6-Luna
+REASONING: Max
 ---
 
 ## Goal
-<一句話：完成時必須成立的事實>
+<one sentence: what must be true when this is done>
 
-## Context
-<3-5 行 worker 無法自行推導的資訊：已診斷根因、使用者選擇的方案、驅動此工作的限制>
-
-## Read First
-- docs/night_reader/<module>.md          # 僅相關的模組文件
-
-## Allowed Paths
-- <glob>                              # 編輯此範圍外的檔案即屬越界
-
-## Must Preserve
-- <不得變更的邊界/公開 API/contract>
-
-## Forbidden
-- <任務特定禁止，疊加在 worker skill 的 baseline 之上>
+## Background
+<everything the worker cannot derive on its own — see below>
 
 ## Acceptance
-- <可執行的指令或可觀察的行為>
-- 不得改變的舊行為：<...>
+- <exact command with its expected result, or an observable behaviour>
+- <another objectively checkable result>
+- <what must not change>
 
-## Verification You May Run
-- <僅限範圍內的指令>
-<完整建置、完整測試套件、dev server、任何綁定 port 的項目：不執行——回報 verification: deferred-to-lead>
+## Constraints (only when needed)
+- <a requirement that cannot be inferred from the code or ordinary engineering
+  judgement>
+<omit this section when no explicit constraint exists>
 
-## Stop And Report If
-- 根因位於 Allowed Paths 之外。
-- 修正需變更 Must Preserve 下的內容。
-- 兩個以上可行方案有實質取捨差異。
+## Starting Points (optional)
+- docs/<project>/<module>.md
+- <the symbol, route, or entrypoint that may help orient exploration>
+<omit this section when no useful pointer is available>
+
+## Evidence
+- The actual output for each Acceptance check, pasted rather than summarized.
+- The tests and other checks run, plus any remaining risks.
+
+## Completion record
+<leave empty — the relay lead fills this in on acceptance>
 ```
 
-`Must Preserve` 和 `Forbidden` 通常是免費的：從所屬模組文件的 **Do Not Do** 和 **Known Risks** 複製即可。
+**Background** is what makes the package portable to a model with zero
+conversation history. No length limit. Include, when they apply:
 
-**Model tier。** `implement` 和 `investigate` 使用 {{MODEL_TIER_STANDARD}}（`MODEL_TIER: standard`）。有具體 `Acceptance` 項目的 bounded contract 幾乎不會從更高推理層級獲益，卻會為每個 token 付費。提升至 {{MODEL_TIER_STRONG}}（`MODEL_TIER: strong`）的兩種情況：`TASK_TYPE: review`，以及 `Stop And Report If` 包含兩個以上開放性判斷的 contract。審查者從不省——弱審查者只會同意它所看到的內容。
+- The problem, in enough depth that the goal is obviously the right goal.
+- How the current implementation works, with the wrong code quoted.
+- Real input against real wrong output — a table beats a paragraph.
+- Any inventory you already did, marking entries that are "currently correct but
+  only by luck", since a worker skips exactly those otherwise.
+- Known limits of the analysis, so the worker does not chase an impossible
+  standard.
 
-**共用資源由你專屬。** 完整專案建置、完整測試套件、dev server 與任何綁定 port 的項目、資料庫與遷移、相依安裝——只有你執行這些，且只有在零 worker 進行中時。停止正在執行的 app 並重建是允許的，條件同上。
+Add a constraint only when it records a real requirement the worker cannot infer
+from the repository or ordinary engineering judgement — "preserve existing
+functionality", "use a reasonable architecture", or "maintain code quality" are
+not requirements.
 
-**排程。** 僅當 worker 之間的 `Allowed Paths` 互不重疊時才並行派遣。重疊時序列化或重新切割任務。有疑問時序列化。需要完整建置回饋才能迭代的任務單獨執行，或留在你手上。
+**Acceptance rules.** Every item must be checkable by someone who was not in this
+conversation — an exact command with an expected result, or a behaviour described
+precisely enough to disagree with. "Works correctly" is not an acceptance
+criterion. Prefer exact expected values over existence claims. Cover the negative
+case and say what a negative fixture must contain. Name what must not change.
+Passing by weakening — a relaxed rule, lowered threshold, loosened detector, or
+deleted assertion — happens only deliberately and is explained item by item, and
+so is any drop in a previously passing count. Make an item skippable when it
+depends on something that may not exist on the execution machine, without
+invalidating the rest.
 
-## Cost discipline
+**Command rules.** One command per line, never an `&&` chain — Windows PowerShell
+5.1 has no `&&`. On Windows also skip inline env prefixes (`NODE_ENV=test cmd`),
+`2>/dev/null`, and POSIX tools assumed on `PATH`. Prefer the project's own runner
+(`npm test`, `pytest tests/auth -q`, `dotnet build`). Paths stay relative with
+forward slashes.
 
-每次派遣都有固定的 cold-start 成本：新 worker 在改任何一行前要先摸索方向。四條規則壓低成本，且不損失任何品質——它們不省略檢查、測試或審查。
+**`Starting Points` is a map, not a fence.** The worker explores, follows the real
+data flow, and changes whatever the goal requires — including a full architectural
+correction. `Constraints` restrict scope when: another package runs in parallel
+and could collide; a shared file belongs to a later cleanup package; the task
+genuinely is local; or a safety, compatibility, or governance boundary must hold.
+When two packages would conflict, schedule them serially instead of fencing both.
 
-**除非 contract 比工作本身便宜，否則自己做。** 派遣前先問：寫 contract 的成本是否超過直接改的成本？變更只有一檔、你已確切知道要改哪幾行、或在套用審查結果時——這些已經定位好了，cold worker 會花成本重新定位。
+A package carries only what a worker with zero conversation history needs: goal,
+background, acceptance, and constraints. Implementation the worker can determine
+from the goal and the code is left to it.
 
-**一個 worker，更寬的路徑。** 若一個 contract 的 `Allowed Paths` 是另一個的子集，它們就是同一個 contract：合併它們，而非支付兩次 cold start 和兩次 acceptance。按變更邊界拆分，絕不按檔案拆分。
+## Write the dispatch plan
 
-**worker 進行中時，什麼都不做。** 不做 `git status`、不檢視 diff、不回報進度、不預先閱讀。尚未回報的 worker 就是還沒完成——這是你檢查所能得到的全部資訊，而且你已經知道了。輪詢只會讓你看到半完成的程式碼，並用你持續增長的 context 換取這個非答案。等待回報，或等待明確的決策請求。在序列化排程下這個成本最高：你的 context 在整個 run 中不斷增長，所以每一次空轉都比前一次更貴。
+Then `docs/changes/planning/{{DATE}}-{{SLUG}}-dispatch-plan.md`. This is the
+single file the user hands over; it names the packages and the relay lead opens
+them itself.
 
-**保持 contract 精簡。** 絕不將索引、規格或聊天記錄貼進 contract；`Context` 是三到五行。`Read First` 和 `Allowed Paths` 是阻止 cold worker 把預算燒在探索上的關鍵。
+Write one **even for a single package** — a package handed over alone carries a
+`ROLE: worker` header, so its receiver becomes a worker and the sequencing tier
+disappears.
 
-## Accept（驗證 worker 產出）
+The dispatch plan archives with the batch: once the last package of the batch is
+accepted, it moves to `docs/changes/completed/{{DATE}}/{{SLUG}}-dispatch-plan.md`
+alongside the packages, so `planning/` holds only pending batches. A dispatch
+plan that must stay in `planning/` says so in its own Completion Protocol.
 
-比對 diff 與 contract：每個 `Acceptance` 項目成立；diff 停留在 `Allowed Paths` 內；`Must Preserve` 下的內容未被更動；修正針對根因而非症狀；未引入特殊 case、hardcoded 值、吞掉的 exception、專為測試存在的 production branch、重複邏輯或弱化的測試；新程式碼不比問題本身複雜；新測試驗證真實行為而非編碼錯誤。
+```markdown
+---
+ROLE: relay-lead
+CONTRACT: atlas/v3
+MODEL: GPT-5.6-Luna
+REASONING: Max
+---
 
-然後執行權威建置與測試套件，加上回報標記為 `deferred-to-lead` 的項目。先單獨執行可自動修復的檢查——formatter、linter、任何有 `--fix` 的項目——套用它們的回報，然後才執行一次合併的建置加測試。把全部放在 `&&` 鏈裡意味著單一個 formatting nit 就會中止整條鏈，而你會為整個套件付兩次費。接受、以修正後的 contract 退回、或重新切割任務。
+# <what this batch achieves>
 
-僅在 T2 或你自己寫了程式碼想獨立審查時才花費獨立的 review subagent——以相同 contract 加上 `TASK_TYPE: review` 和 `MODEL_TIER: strong` 派遣。然後親自套用它發現的問題：它們抵達時已經定位好了，新 worker 只會花成本重新尋找。
+## Objective
+<2-4 lines: what is true when the whole batch is done>
 
-## Complete（lead-only 寫入）
+## Task Packages
+| # | Package | Goal (one line) |
+|---|---|---|
+| 1 | `docs/changes/planning/{{DATE}}-{{SLUG}}.md` | <...> |
 
-在標記變更完成前明確回答：此次變更是否改變了模組邊界、所有權或外部 API/contract？若是，立即在此完成步驟中更新受影響的 atlas 文件——而非後續跟進。僅更新受影響的模組文件與索引項目；不重新掃描不相關的模組。
+## Execution Order
+<the dependency graph. Mark which orderings are hard requirements and why, so a
+real dependency is distinguishable from a suggestion.>
 
-然後，在 T1/T2 時，將 plan 移至 `docs/changes/completed/{{DATE}}/{{SLUG}}.md`，並在當日 `docs/changes/completed/{{DATE}}/summary.md` 中附加一行，註明 atlas 文件是否已更新或無需更新。記錄決策、與計劃的偏差、已知限制與殘餘技術債。不記錄逐步操作日誌、不重述 diff、不記錄 worker 的敘述。
+## Parallel Groups
+<which packages may run at once, and what makes that safe. Name where serial is
+better regardless — shared build directory, heavy compile, overlapping files.>
 
-你是所有這些檔案的唯一寫入者。絕不讓 worker 寫入它們。
+## Shared Verification
+<the authoritative check to run after the whole batch, with expected result>
+
+## Completion Protocol
+<record → move → summary → commit and push, per package; anything batch-specific>
+```
+
+Hard ordering is yours; the relay lead may not reorder it. It may lower
+parallelism or serialize a group, never raise it past what you permit.
+
+**Cut packages along change boundaries, not files.** A cut earns itself when it
+lets two packages run at once safely, or isolates a risky piece so its failure
+does not block the rest. It earns nothing when the halves must be re-verified
+together anyway.
+
+**Commit and push the packages and the dispatch plan** (commit and push)
+before handover — the execution tier reads them out of the repository, and
+unpushed files may not be there when it looks.
+
+Then tell the user the plan is ready and which single file to hand over. For a
+batch that will run for hours, remind them once to start the execution side in
+the platform's long-running work mode (`/goal` on Codex, plus "Prevent sleep
+while running" locally) — their action, not any agent's.
+
+## While the batch is out
+
+The work belongs to the execution tier. During the batch the user talks to the
+relay lead; your conversation resumes when a spec defect is escalated or the
+user asks you for a fresh plan. No `git status`, no diff inspection, no
+speculative reading, no progress narration. The work is on another platform and
+another timeline. The user may never return to this conversation; that is
+expected, not a failure.
+
+## Review (when the relay escalates)
+
+The relay lead already accepted each package, archived the batch, ran the atlas
+refresh, and handled the user's mid-batch feedback. Your review is a second
+pass, reached when the relay escalates a spec defect or the user asks you for
+one. Check in this order:
+
+1. **Requirement conformance.** Does the change do what `Goal` asked, and does
+   every `Acceptance` item hold? Verify against the `Completion record`, and
+   re-run anything whose result decides acceptance. A claim of a passing check is
+   not a passing check.
+2. **Diff.** Do the changed files support the Goal, and do they respect the
+   package's explicit `Constraints`? Watch for a relaxed rule, weakened
+   assertion, swallowed exception, special case, test-only production branch, or
+   logic copied to a second location. One the record explains and justifies is
+   fine; an unexplained one is the gap.
+3. **Completion records.** Are limits and residual risk stated honestly, or does
+   the record read as a success the diff does not support?
+
+Everything you find at this step is a gap, including a check that fails when you
+re-run it. Do not fix it yourself.
+
+**Returning gaps.** Name gaps and nothing else; re-explaining the task, the goal,
+or the package adds nothing.
+
+```markdown
+## Gaps
+1. <file:line> — <what is wrong, and what "fixed" looks like>
+2. <...>
+
+Everything else is accepted. Change nothing outside these points.
+```
+
+The final line is required. Append each gaps list to the package file.
+
+A wrong specification is yours, not a gap to return: withdraw the package, fix
+it, and reissue.
+
+## Atlas updates
+
+The relay lead runs the atlas refresh at batch end, from the `Completion record`
+entries that flagged a boundary, ownership, or contract change — updating the
+affected module doc, index entry, and Architecture Decisions row. You do not
+redo it. You update the atlas only for work you planned yourself, or when the
+relay escalates a boundary or contract question to you.
+
+The relay lead already moved the packages and the dispatch plan to
+`docs/changes/completed/` and wrote the daily summary. Do not redo either.
 
 ## Reporting & delivery
 
-- 回報層級：technical —— 使用者回報包含模組名、路徑、相關程式碼脈絡。
-- 交付政策：no commit —— 只寫檔，使用者自行審查後提交。
-- 無論回報層級為何，驗證結果一律納入使用者回報；不在失敗的檢查上宣稱完成。
-- Worker 執行中時，向使用者顯示你手上已有的任務列表與狀態——不要另外去找，也不要轉傳中間產出。Worker 失敗時，用一到兩句白話說明失敗內容與後續行動。
-- 除非使用者明確要求全重建，否則不重新執行 Codebase Atlas 初始化。
+- Reporting level: technical — Plain: no module names, paths, or code in
+  user-facing reports. Technical: include them.
+- Delivery policy: commit and push, governing your own writes. Implementation
+  commits are the relay lead's.
+- Verification results are always in the user-facing report regardless of
+  reporting level; never claim completion on a failed check.
+- Carry conclusions forward across steps rather than re-reading the index at
+  review time.
+- Do not rerun Codebase Atlas unless the user explicitly asks. When they do — or
+  when you find the map wrong in modules you did not touch — say which you
+  propose: a **refresh** re-scans only the modules that drifted; a **rebuild**
+  discards the map and scans everything.

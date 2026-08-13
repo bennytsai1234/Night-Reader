@@ -1,72 +1,124 @@
 ---
 name: night-reader-worker
-description: "夜讀 Night Reader 上被委派 subagent 的執行規則。僅當你的指令是以 atlas task contract 送達——prompt 標頭寫有 ROLE: worker——時才載入此 skill。直接與人類工作時絕不載入它；那是 night-reader-atlas。"
+description: "夜讀 Night Reader 上執行 atlas 任務包的 agent 規則。僅當你的指令以任務包送達——prompt 標頭寫有 ROLE: worker——時才載入。與人類直接工作時絕不載入（那是 night-reader-atlas）；從 dispatch plan 依序執行整個批次時絕不載入（那是 night-reader-relay）。"
 ---
 
 # 夜讀 Night Reader Codebase Atlas — Worker
 
-你執行一個 bounded task contract。你不是專案經理。
+You implement one task package, end to end: explore the code, choose the
+implementation, make the change across whatever files it needs, verify
+acceptance, and report with evidence.
 
-若你的指令**並非**以 `ROLE: worker` 標頭的 task contract 送達，此檔不適用於你——請改用 `night-reader-atlas`。
+If your instructions did **not** arrive as a task package with a `ROLE: worker`
+header, this file does not apply to you — use `night-reader-atlas` when
+working with a human, or `night-reader-relay` when running a dispatch plan.
 
 ## Do
 
-1. 讀取 contract。它是你的完整範圍。
-2. 僅讀取 `Read First` 下列出的檔案。不讀 atlas 索引。不瀏覽其他模組文件。
-3. 使用 grep、符號搜尋或呼叫層次定位確切程式碼。地圖告訴你往哪找；搜尋告訴你在哪裡。
-4. 編輯前執行 root-cause preflight——在內部回答以下問題，然後在回報中用一行總結：
-   - 實際原因是什麼，在哪一層？
-   - 是否有既有的 abstraction 可以處理它？
-   - 這個修正是否會把相同邏輯放到第二個位置？
-5. 在 `Allowed Paths` 範圍內進行變更。
-6. 僅執行 `Verification You May Run` 下列出的檢查。
-7. 回傳下方格式的回報。然後停止。
+1. **Read the package.** Start from `Goal`, `Background`, `Acceptance`, and any
+   explicit `Constraints`. The implementation is yours to decide.
+2. **Explore.** Use `Starting Points` when present, then trace whatever code,
+   data flow, call sites, and tests the change requires.
+3. **Answer three questions before editing**, and put the answer in one line of
+   your report:
+   - What actually causes this, and at which layer?
+   - Is there an existing abstraction that already handles it?
+   - Will this fix put the same logic in a second place?
+4. **Design and implement** the change across whatever files are necessary. If
+   the goal calls for a real architectural correction, make it — a local patch
+   that leaves the cause in place is not the fix.
+5. **Verify acceptance.** Add or extend tests when they provide evidence for an
+   acceptance item, and run whatever proves the result — including a
+   whole-project build and the full test suite when that is what the evidence
+   requires. Fix relevant failures until acceptance passes or a concrete blocker
+   remains.
+6. **Check the result directly** against `Goal` and every `Acceptance` item.
+7. **Report** in the format below, with pasted evidence. Then stop.
 
-## Never
+If you are returned a `## Gaps` list, fix exactly those points; everything else
+is already accepted.
 
-- 絕不寫 plan、summary、dated folder、completion doc 或 `docs/changes/` 下的任何內容。
-- 絕不編輯 atlas 文件（`docs/*_index.md`、`docs/night_reader/*.md`）或 Architecture Decisions 列。若變更影響了模組邊界、所有權或外部 contract，在回報中說明，讓 lead 寫入。
-- 絕不對人類呈現 Before / After。那道關卡屬於 lead 且已經發生。
-- 絕不重開 contract 已解決的設計問題。
-- 絕不自行擴大範圍。`Allowed Paths` 外的檔案就是越界——回報而非編輯。
-- 絕不執行完整專案建置、完整測試套件、dev server 或任何綁定 port 的項目；絕不碰資料庫、執行遷移、安裝相依或終止程序。那些屬於 lead，lead 擁有共用的 working tree。若只有這類檢查能驗證你的變更，不執行任何檢查並回報 `verification: deferred-to-lead`。
+If the relay returns the same package with human additions appended — not a gaps
+list but new requirements, format changes, or a different direction — treat them
+as part of the same task: incorporate them, re-run acceptance for the changed
+scope, and report again. Same package, same worker, no new task.
 
-## Forbidden implementation patterns
+## Scope
 
-疊加於 contract 的 `Forbidden` 區段之上：
+Files are not fenced by default. `Starting Points` tells you where to begin, not
+what you may touch — read the map, follow the real dependencies, and change what
+needs changing.
 
-- 不得為讓檢查通過而加入特殊 case、hardcoded 值或跳過的 assertion。
-- 不得 catch 並吞掉 exception 來隱藏症狀。
-- 不得將邏輯複製到第二個位置——先找到既有 abstraction。
-- 不得加入僅為測試存在的 production branch（`if TEST`、`NODE_ENV === 'test'` 等）。
-- 不得在下游層修復上游問題。
-- 不得引入新的全域狀態，或未增加能力的 wrapper。
-- 不得弱化、刪除或重寫既有測試使其通過。
-- 不得變更公開 API、schema 或 wire contract，除非 contract 明確允許。
-- 不得新增相依，除非 contract 明確允許。
+The exception is explicit: when `Constraints` restricts what you may touch —
+usually because another package is running in parallel, or a shared file belongs
+to a later cleanup task — follow it. Otherwise the whole repository is in scope
+for the goal.
 
-## Stop and report instead of deciding
+## What belongs to other tiers
 
-當根因在 `Allowed Paths` 之外、修正需變更 `Must Preserve` 下的內容、兩個以上方案有實質取捨差異、或 contract 基於錯誤前提時停止。帶著明確 blocker 提早回傳是成功。猜測則不是。
+Your output is source and tests, left in the working tree.
+
+- **Records and delivery** are the relay lead's: `Completion record` sections,
+  anything under `docs/changes/`, and the commit (commit and push).
+- **The atlas** is the planning tier's: `docs/*_index.md`,
+  `docs/<project>/*.md`, Architecture Decisions rows. When your change alters a
+  module boundary, ownership, or an external contract, say so in your report and
+  it travels up from there.
+- **The Before / After gate** already happened, between the planning tier and the
+  human, before this package existed.
+- **Settled decisions** stay settled. If you think one is wrong, raise it in
+  `Needs A Decision`.
+
+## Shortcuts
+
+One rule: **do not substitute making the check pass for solving the problem.**
+
+The usual shapes that takes — a special case or hardcoded value that satisfies
+one input; a swallowed exception; logic copied instead of reusing the existing
+abstraction; a production branch that exists only for tests; a fix applied
+downstream of the real cause; a weakened, deleted, or rewritten test; a relaxed
+rule, threshold, or tolerance; new global state or a wrapper that adds no
+capability.
+
+Any of these can be the right call — a test that encodes the old wrong behaviour
+*should* be rewritten, a threshold that was genuinely wrong *should* move. The
+failure is doing one silently to get a green check. Do it deliberately, then say
+so and why in your report.
+
+Changing a public API, schema, or wire contract, or adding a dependency, reaches
+outside this package. If the goal needs it, do it and flag it prominently in
+`Needs A Decision`.
+
+## Stop and report
+
+If the code contradicts the Goal or an explicit `Constraint`, or an explicit
+constraint cannot be satisfied, report the conflict. Returning with a clear
+blocker is a success; silently changing the requirement is not. Otherwise choose
+the implementation and continue.
 
 ## Report format
 
 ```markdown
 ## Changed
-- <file>: <變更內容與原因——每行一項>
+- <file>: <what changed and why — one line each>
 
 ## Root Cause
-<一到兩行：原因是什麼，以及為何此層是修正的正確位置>
+<one or two lines: what caused it, and why this layer is the right place to fix it>
 
 ## Verification
-- <指令> → <結果>
-- deferred-to-lead: <lead 仍需執行的項目及原因>
+- <command>
+  <the actual output, pasted — not "passed">
+- <tests/checks run for Acceptance and their actual output>
 
-## Risks / Blockers
-- <或：無>
+## Risks
+- <what could still be wrong, what was not covered, what is worth watching>
+- <or: none>
 
 ## Needs A Decision
-- <或：無>
+- <or: none>
 ```
 
-無探索敘述、不重述 diff、不自我評估段落。對使用者的回報層級：technical。不 commit 或 push——交付是 lead 的責任（no commit）。
+Evidence is pasted output, never a claim about output. No exploration narrative or
+restatement of the task is needed.
+
+Reporting level for anything user-facing: technical.
