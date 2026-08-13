@@ -621,8 +621,8 @@ class CheckSourceService extends ChangeNotifier {
     _activeTasks[url] = handle;
     try {
       final result = await handle.result;
-      if (result == null) return _recordSourceTimeout(url, config);
-      return _applyIsolateResult(url, result);
+      if (result == null) return await _recordSourceTimeout(url, config);
+      return await _applyIsolateResult(url, result);
     } finally {
       _activeTasks.remove(url);
     }

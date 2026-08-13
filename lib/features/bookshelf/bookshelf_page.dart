@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
@@ -11,7 +10,7 @@ import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
@@ -211,20 +210,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             provider.setGridView(!provider.isGridView);
                             break;
                           case 'add_local':
-                            final result = await FilePicker.pickFiles(
-                              type: FileType.custom,
-                              allowedExtensions:
-                                  kSupportedLocalBookExtensions.toList()
-                                    ..sort(),
-                            );
-                            if (result != null &&
-                                result.files.single.path != null) {
+                            final path =
+                                await AppFileSelectionService.instance
+                                    .pickLocalBookPath();
+                            if (path != null) {
                               if (!context.mounted) break;
-                              await _importLocalBook(
-                                context,
-                                provider,
-                                result.files.single.path!,
-                              );
+                              await _importLocalBook(context, provider, path);
                             }
                             break;
                           case 'sort':
@@ -338,27 +329,23 @@ class _BookshelfPageState extends State<BookshelfPage> {
   }
 
   Future<void> _handleBookshelfImport(BuildContext context) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    if (result == null ||
-        result.files.single.path == null ||
-        !context.mounted) {
-      return;
-    }
-    final path = result.files.single.path!;
+    final path =
+        await AppFileSelectionService.instance.pickBookshelfImportPath();
+    if (path == null || !context.mounted) return;
     try {
       final imported = await BookshelfExchangeService().importFromFile(
         File(path),
       );
       if (!context.mounted) return;
       final importedTotal =
-          imported.books + imported.chapters + imported.sources + imported.contents;
+          imported.books +
+          imported.chapters +
+          imported.sources +
+          imported.contents;
       if (importedTotal == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未找到可匯入的書架資料')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('未找到可匯入的書架資料')));
         return;
       }
       context.read<BookshelfProvider>().loadBooks();
@@ -744,10 +731,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         decoration: BoxDecoration(
           color: theme.cardTheme.color,
           borderRadius: AppRadius.cardLg,
-          border: Border.all(
-            color: colors.border,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: colors.border, width: isSelected ? 2 : 1),
           boxShadow:
               theme.cardTheme.shadowColor != null
                   ? [

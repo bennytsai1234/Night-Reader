@@ -450,11 +450,16 @@ void main() {
         java.HMacHex("hello", "HmacMD5", "key").toString();
       ''');
       final des = runtime!.evaluate(r'''
-        java.desEncodeToBase64String("hello", "12345678", "DES/ECB/PKCS5Padding", "");
+        java.desEncodeToBase64String(
+          "hello",
+          "12345678",
+          "DES/ECB/PKCS5Padding",
+          ""
+        ).toString();
       ''');
 
-      expect(hmac.stringResult, isNotEmpty);
-      expect(des.stringResult, isNotEmpty);
+      expect(hmac.stringResult, '04130747afca4d79e32e87cf2104f087');
+      expect(des.stringResult, 'uhbGoCVxJa8=');
     });
 
     test('java encodeURI uses component-style escaping', () {
@@ -746,10 +751,16 @@ void main() {
         var iv = "6543210987654321";
         var crypto = java.createSymmetricCrypto("AES/CBC/PKCS5Padding", key, iv);
         var encoded = crypto.encryptBase64("hello");
-        java.aesBase64DecodeToString(encoded, key, "AES/CBC/PKCS5Padding", iv);
+        var decoded = java.aesBase64DecodeToString(
+          encoded,
+          key,
+          "AES/CBC/PKCS5Padding",
+          iv
+        );
+        encoded + "|" + decoded;
       ''');
 
-        expect(result.stringResult, 'hello');
+        expect(result.stringResult, 'WcQYnUww0VTFgh1HE4gepg==|hello');
       },
     );
 

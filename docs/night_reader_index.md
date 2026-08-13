@@ -19,7 +19,8 @@
 
 跨模組決策在此記錄。模組層決策寫入該模組的 Known Risks 或 Do Not Do。
 
-_尚無紀錄。_
+- **2026-08-13 全棧主版本升級（方案 B）**：Flutter 3.47 / Dart 3.13；Android AGP 9.1.0 / Gradle 9.3.1 / KGP 2.4.0 / compile+target SDK 37 / built-in Kotlin + 新版公開 DSL；移除舊 `BaseExtension` 路徑，root 改用 `LibraryExtension` 將外掛 compileSdk 只升不降拉齊 37。產品／資料／wire format／公開 API 不變。詳見 `docs/changes/completed/2026-08-13/full-stack-major-upgrade.md`。
+- **受控 fork 策略（built-in Kotlin，經重開後重新確認）**：`third_party/{flutter_tts, flutter_js, file_picker}` 為 vendored 受控 fork，僅做 AGP 9 建置設定／相容 patch（runtime 與上游一致）。曾評估改走 legacy KGP 路線以丟掉 fork，但實測上游最新 hosted 版仍用 AGP 9 已移除的 `android{kotlinOptions}` 且無更新版本，故不可行。移除條件見各 `PATCHES.md`。file_picker 另含 win32 6 相容（供 host `flutter test`）。
 
 ## Module List
 

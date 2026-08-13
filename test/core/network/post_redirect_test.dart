@@ -138,6 +138,64 @@ void main() {
   );
 
   test(
+    'HttpClient sends a 302 response cookie once on the same-origin redirect',
+    () async {
+      final startUri = Uri.parse('$baseUrl/start');
+      final cookieJar = NetworkService().cookieJar;
+      await cookieJar.delete(startUri, true);
+      addTearDown(() => cookieJar.delete(startUri, true));
+
+      final requests = <String>[];
+      List<String>? redirectedCookieHeaders;
+      requestHandler = (request) async {
+        requests.add('${request.method} ${request.uri}');
+        if (request.uri.path == '/start') {
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers
+            ..set(HttpHeaders.locationHeader, '/done')
+            ..set(HttpHeaders.setCookieHeader, 'sid=redirect; Path=/');
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/done') {
+          redirectedCookieHeaders = List<String>.from(
+            request.headers[HttpHeaders.cookieHeader] ?? const <String>[],
+          );
+          request.response.write('redirect complete');
+          await request.response.close();
+          return;
+        }
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      };
+
+      final response = await HttpClient().client.get<String>(
+        startUri.toString(),
+        options: Options(
+          followRedirects: false,
+          persistentConnection: false,
+          responseType: ResponseType.plain,
+        ),
+      );
+
+      final redirectedCookies =
+          (redirectedCookieHeaders ?? const <String>[])
+              .expand((header) => header.split(';'))
+              .map((cookie) => cookie.trim())
+              .where((cookie) => cookie.isNotEmpty)
+              .toList();
+      expect(response.data, 'redirect complete');
+      expect(response.realUri.toString(), '$baseUrl/done');
+      expect(response.extra['_manualRedirectChain'], <String>['$baseUrl/done']);
+      expect(requests, <String>['GET /start', 'GET /done']);
+      expect(
+        redirectedCookies.where((cookie) => cookie == 'sid=redirect'),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'HttpClient stops a redirect loop after visiting each URI once',
     () async {
       final requests = <String>[];

@@ -1,11 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
-import 'dart:io';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:share_plus/share_plus.dart';
 
 class BackupSettingsPage extends StatefulWidget {
   const BackupSettingsPage({super.key});
@@ -102,22 +103,16 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   }
 
   Future<void> _handleManualRestore() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
+    final path = await AppFileSelectionService.instance.pickBackupArchivePath();
     if (!mounted) return;
 
-    final path = result?.files.single.path;
     if (path == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder:
           (dialogContext) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
+            shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
             title: const Text('還原這份備份？'),
             content: Text(
               '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
@@ -143,9 +138,9 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       final success = await RestoreService().restoreFromZip(file);
       if (!mounted) return;
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('還原完成，重新啟動 App 後生效')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('還原完成，重新啟動 App 後生效')));
       } else {
         ScaffoldMessenger.of(
           context,

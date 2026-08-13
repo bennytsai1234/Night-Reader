@@ -24,20 +24,29 @@ import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
+Future<bool> runBackgroundTask<T>({
+  required Future<void> Function() initialize,
+  required Future<List<T>> Function() loadBookshelf,
+  required void Function(String message) logInfo,
+}) async {
+  try {
+    await initialize();
+    final books = await loadBookshelf();
+    logInfo('Background Task: Checking updates for ${books.length} books');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    try {
-      await configureDependencies();
-      final bookDao = getIt<BookDao>();
-      final books = await bookDao.getInBookshelf();
-      getIt<Logger>().i(
-        'Background Task: Checking updates for ${books.length} books',
-      );
-      return Future.value(true);
-    } catch (e) {
-      return Future.value(false);
-    }
+    return runBackgroundTask(
+      initialize: configureDependencies,
+      loadBookshelf: () => getIt<BookDao>().getInBookshelf(),
+      logInfo: (message) => getIt<Logger>().i(message),
+    );
   });
 }
 

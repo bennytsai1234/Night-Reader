@@ -238,7 +238,7 @@ class BookListParser {
       if (!isSearch &&
           books.isEmpty &&
           _shouldFallbackToSearchRule(source, listRule)) {
-        return _parse(
+        return await _parse(
           source: source,
           body: body,
           baseUrl: baseUrl,

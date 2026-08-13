@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
@@ -297,10 +299,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Text(
-                  '尚未加入書源',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text('尚未加入書源', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   '匯入書源後，即可搜尋與探索內容。',
@@ -312,7 +311,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   onPressed:
-                      _isImporting ? null : () => _showImportDialog(context, true),
+                      _isImporting
+                          ? null
+                          : () => _showImportDialog(context, true),
                   icon: const Icon(Icons.link),
                   label: const Text('從網址匯入'),
                 ),
@@ -791,11 +792,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Future<void> _importFromFile(BuildContext context) async {
     await _runImportFlow(() async {
-      final res = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json', 'txt', 'legado'],
-      );
-      final path = res?.files.single.path;
+      final path =
+          await AppFileSelectionService.instance.pickBookSourceImportPath();
       if (path == null) return;
       final content = await File(path).readAsString();
       if (context.mounted) await _importWithPreview(context, content);

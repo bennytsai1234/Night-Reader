@@ -4,6 +4,27 @@ import 'package:permission_handler/permission_handler.dart';
 
 enum AppPermissionStatusTone { ok, attention, blocked, neutral }
 
+enum AppPermissionTarget { notification, photos }
+
+enum AppPermissionState {
+  denied,
+  granted,
+  restricted,
+  limited,
+  permanentlyDenied,
+  provisional,
+}
+
+abstract interface class AppPermissionGateway {
+  Future<AppPermissionState> status(AppPermissionTarget target);
+
+  Future<AppPermissionState> request(AppPermissionTarget target);
+
+  Future<bool> openSystemSettings();
+}
+
+typedef AppPermissionPlatformPredicate = bool Function();
+
 class AppPermissionItem {
   const AppPermissionItem({
     required this.title,
@@ -27,7 +48,17 @@ class AppPermissionSnapshot {
 }
 
 class AppPermissionService {
-  AppPermissionService();
+  AppPermissionService({
+    AppPermissionGateway? gateway,
+    AppPermissionPlatformPredicate? isAndroid,
+    AppPermissionPlatformPredicate? isIOS,
+  }) : _gateway = gateway ?? const _PermissionHandlerGateway(),
+       _isAndroid = isAndroid ?? _isAndroidPlatform,
+       _isIOS = isIOS ?? _isIOSPlatform;
+
+  final AppPermissionGateway _gateway;
+  final AppPermissionPlatformPredicate _isAndroid;
+  final AppPermissionPlatformPredicate _isIOS;
 
   Future<AppPermissionSnapshot> loadSnapshot() async {
     final items = <AppPermissionItem>[
@@ -41,21 +72,21 @@ class AppPermissionService {
   }
 
   Future<bool> requestNotificationForTts() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return true;
-    return _requestIfNeeded(Permission.notification);
+    if (!_isAndroid() && !_isIOS()) return true;
+    return _requestIfNeeded(AppPermissionTarget.notification);
   }
 
   Future<bool> requestPhotoLibraryIfNeeded() async {
-    if (!Platform.isIOS) return true;
-    return _requestIfNeeded(Permission.photos);
+    if (!_isIOS()) return true;
+    return _requestIfNeeded(AppPermissionTarget.photos);
   }
 
   Future<bool> openSystemSettings() {
-    return openAppSettings();
+    return _gateway.openSystemSettings();
   }
 
   Future<AppPermissionItem> _notificationItem() async {
-    if (!Platform.isAndroid && !Platform.isIOS) {
+    if (!_isAndroid() && !_isIOS()) {
       return const AppPermissionItem(
         title: '通知',
         description: '此平台不使用行動系統通知權限。',
@@ -64,7 +95,7 @@ class AppPermissionService {
       );
     }
 
-    final status = await Permission.notification.status;
+    final status = await _gateway.status(AppPermissionTarget.notification);
     return AppPermissionItem(
       title: '通知',
       description: 'TTS 朗讀的媒體控制通知會使用此權限；拒絕後仍可朗讀，但通知列控制可能無法顯示。',
@@ -75,7 +106,7 @@ class AppPermissionService {
   }
 
   Future<AppPermissionItem> _photoLibraryItem() async {
-    if (!Platform.isIOS) {
+    if (!_isIOS()) {
       return const AppPermissionItem(
         title: '相簿',
         description: 'Android 使用系統圖片選取器處理封面更換，不需要夜讀取得整個相簿存取權。',
@@ -84,7 +115,7 @@ class AppPermissionService {
       );
     }
 
-    final status = await Permission.photos.status;
+    final status = await _gateway.status(AppPermissionTarget.photos);
     return AppPermissionItem(
       title: '相簿',
       description: '只在使用者更換書籍封面並選取相簿圖片時使用。',
@@ -113,7 +144,7 @@ class AppPermissionService {
   }
 
   AppPermissionItem _backgroundAudioItem() {
-    if (Platform.isIOS) {
+    if (_isIOS()) {
       return const AppPermissionItem(
         title: '背景音訊',
         description: 'iOS Runner 已啟用 audio background mode，用於 TTS 背景朗讀。',
@@ -121,7 +152,7 @@ class AppPermissionService {
         tone: AppPermissionStatusTone.ok,
       );
     }
-    if (Platform.isAndroid) {
+    if (_isAndroid()) {
       return const AppPermissionItem(
         title: '前台媒體服務',
         description:
@@ -138,35 +169,81 @@ class AppPermissionService {
     );
   }
 
-  Future<bool> _requestIfNeeded(Permission permission) async {
-    final current = await permission.status;
+  Future<bool> _requestIfNeeded(AppPermissionTarget target) async {
+    final current = await _gateway.status(target);
     if (_isUsable(current)) return true;
-    final requested = await permission.request();
+    final requested = await _gateway.request(target);
     return _isUsable(requested);
   }
 
-  bool _isUsable(PermissionStatus status) {
-    return status.isGranted || status.isLimited || status.isProvisional;
+  bool _isUsable(AppPermissionState status) {
+    return status == AppPermissionState.granted ||
+        status == AppPermissionState.limited ||
+        status == AppPermissionState.provisional;
   }
 
-  bool _needsSettings(PermissionStatus status) {
-    return status.isPermanentlyDenied || status.isRestricted;
+  bool _needsSettings(AppPermissionState status) {
+    return status == AppPermissionState.permanentlyDenied ||
+        status == AppPermissionState.restricted;
   }
 
-  String _statusLabel(PermissionStatus status) {
-    if (status.isGranted) return '已允許';
-    if (status.isLimited) return '有限存取';
-    if (status.isProvisional) return '暫時允許';
-    if (status.isPermanentlyDenied) return '已永久拒絕';
-    if (status.isRestricted) return '系統限制';
-    if (status.isDenied) return '未允許';
-    return status.toString();
+  String _statusLabel(AppPermissionState status) {
+    return switch (status) {
+      AppPermissionState.granted => '已允許',
+      AppPermissionState.limited => '有限存取',
+      AppPermissionState.provisional => '暫時允許',
+      AppPermissionState.permanentlyDenied => '已永久拒絕',
+      AppPermissionState.restricted => '系統限制',
+      AppPermissionState.denied => '未允許',
+    };
   }
 
-  AppPermissionStatusTone _statusTone(PermissionStatus status) {
+  AppPermissionStatusTone _statusTone(AppPermissionState status) {
     if (_isUsable(status)) return AppPermissionStatusTone.ok;
     if (_needsSettings(status)) return AppPermissionStatusTone.blocked;
-    if (status.isDenied) return AppPermissionStatusTone.attention;
+    if (status == AppPermissionState.denied) {
+      return AppPermissionStatusTone.attention;
+    }
     return AppPermissionStatusTone.neutral;
+  }
+}
+
+bool _isAndroidPlatform() => Platform.isAndroid;
+
+bool _isIOSPlatform() => Platform.isIOS;
+
+class _PermissionHandlerGateway implements AppPermissionGateway {
+  const _PermissionHandlerGateway();
+
+  @override
+  Future<bool> openSystemSettings() => openAppSettings();
+
+  @override
+  Future<AppPermissionState> request(AppPermissionTarget target) async {
+    return _toAppState(await _permission(target).request());
+  }
+
+  @override
+  Future<AppPermissionState> status(AppPermissionTarget target) async {
+    return _toAppState(await _permission(target).status);
+  }
+
+  Permission _permission(AppPermissionTarget target) {
+    return switch (target) {
+      AppPermissionTarget.notification => Permission.notification,
+      AppPermissionTarget.photos => Permission.photos,
+    };
+  }
+
+  AppPermissionState _toAppState(PermissionStatus status) {
+    return switch (status) {
+      PermissionStatus.denied => AppPermissionState.denied,
+      PermissionStatus.granted => AppPermissionState.granted,
+      PermissionStatus.restricted => AppPermissionState.restricted,
+      PermissionStatus.limited => AppPermissionState.limited,
+      PermissionStatus.permanentlyDenied =>
+        AppPermissionState.permanentlyDenied,
+      PermissionStatus.provisional => AppPermissionState.provisional,
+    };
   }
 }

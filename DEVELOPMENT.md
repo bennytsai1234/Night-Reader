@@ -93,8 +93,8 @@
 
 ## 開發環境需求
 
-- Flutter `3.44.0`
-- Dart SDK `^3.7.0`
+- Flutter `3.47.0`
+- Dart SDK `^3.13.0`
 - Java `17`
 - Android SDK 與可用裝置 / 模擬器
 
@@ -174,7 +174,7 @@ git push origin vX.Y.Z
 
 - checkout 原始碼
 - 安裝 Java 17
-- 安裝 Flutter `3.44.0`
+- 安裝 Flutter `3.47.0`
 - `flutter pub get`
 - 執行關鍵 analyze / test
 - 解出 Android release keystore

@@ -158,7 +158,7 @@ class SourceImportService {
     try {
       final parsed = await parseSourcesDetailedAsync(jsonStr);
       if (parsed.allSources.isEmpty) return 0;
-      return importSources(parsed.allSources);
+      return await importSources(parsed.allSources);
     } catch (_) {
       return 0;
     }

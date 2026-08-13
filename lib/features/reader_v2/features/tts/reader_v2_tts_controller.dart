@@ -209,7 +209,7 @@ class ReaderV2TtsController extends ChangeNotifier
       _segments = segments;
       _segmentIndex = segments.isEmpty ? -1 : 0;
       if (segments.isEmpty) return false;
-      return _speakCurrentSegment(generation);
+      return await _speakCurrentSegment(generation);
     } catch (_) {
       if (!_isActiveGeneration(generation)) return false;
       return false;
