@@ -113,6 +113,7 @@ void main() {
         ),
       );
     }
+
     for (var i = 0; i < 3; i += 1) {
       index.admit(
         BlockKey(chapterIndex: 0, blockIndex: i),
@@ -124,6 +125,13 @@ void main() {
 
     const resetCenter = BlockKey(chapterIndex: 1, blockIndex: 0);
     index.reset(centerKey: resetCenter);
+    // The reset can be observed by the mounted sliver before the next block
+    // has been measured/admitted. Flutter's render implementation force-
+    // unwraps itemExtentBuilder's result, so this transition must stay safe.
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CachedBlockWidget), findsNothing);
+
     index.admit(resetCenter, const BlockMetrics(height: 90, lineCount: 1));
     // 結構性 reset 會由 screen 的 scheduleRebuild 觸發父層 rebuild；
     // generation 變更必須讓既有 sliver child 改用新 key。
@@ -133,6 +141,7 @@ void main() {
       tester.widget<CachedBlockWidget>(find.byType(CachedBlockWidget)).blockKey,
       resetCenter,
     );
+    expect(tester.takeException(), isNull);
 
     cache.dispose();
   });

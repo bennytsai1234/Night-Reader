@@ -46,6 +46,84 @@ flutter emulators --launch <emulator-id>
 flutter run -d <device-id>
 ```
 
+本機目前已建立可直接用於 Night Reader 驗證的 AVD：
+
+- AVD：`NightReader_API37`（Generic Medium Phone）
+- Android：API 37 / Android 17.0，`Google APIs`、`x86_64`
+- SDK：`C:\Android\Sdk`
+- 啟動後的 Flutter device：通常是 `emulator-5554`
+
+啟動這台 AVD 時可使用：
+
+```powershell
+flutter emulators --launch NightReader_API37
+flutter devices
+```
+
+若在另一個開發環境要建立同樣的 AVD，使用已安裝的 system image：
+
+```powershell
+$androidSdk = 'C:\Android\Sdk'
+& "$androidSdk\cmdline-tools\latest\bin\avdmanager.bat" create avd `
+  -n NightReader_API37 `
+  -k 'system-images;android-37.0;google_apis;x86_64' `
+  -d medium_phone
+```
+
+Android Studio 的 Device Manager 若顯示 `Missing system image`，先檢查 Android Studio 的 Android SDK Location 是否指向 `C:\Android\Sdk`；不要在 AVD 設定頁直接按下載／完成來重抓已存在的映像。只要 `flutter emulators`、`flutter devices` 與 `adb devices -l` 都能看到這台 AVD，就可以用 Flutter CLI 執行與驗證。
+
+### 實體 Android 裝置與 Wi-Fi ADB
+
+Android 11 以上的手機可以在「開發人員選項 → 無線偵錯」啟用 ADB。第一次連線通常需要以配對碼完成配對；之後以裝置顯示的 ADB 連線埠建立連線：
+
+```bash
+adb pair <phone-ip>:<pairing-port>
+adb connect <phone-ip>:<adb-port>
+adb devices -l
+flutter devices
+flutter run -d <device-id>
+```
+
+本專案的本機 debug build 使用 `com.inkpage.reader.debug`，正式版仍是 `com.inkpage.reader`。因此可以在同一支手機上保留正式版資料，再以 debug 版測試；debug 版資料目錄與正式版分開。若要以 APK 方式安裝：
+
+```bash
+flutter build apk --debug --build-number=<number>
+adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
+adb -s <device-id> shell am start -n com.inkpage.reader.debug/com.inkpage.reader.MainActivity
+```
+
+vivo 等 ROM 可能會先顯示「未知來源／風險」確認頁。按下「繼續安裝」後安裝器正常關閉是完成後的正常行為；以 ADB 是否回報 `Success`，以及下列 package 查詢是否顯示新 `versionCode` 作為安裝成功判定：
+
+```bash
+adb -s <device-id> shell dumpsys package com.inkpage.reader.debug
+```
+
+這台 vivo 已實測 `adb shell pm install -r` 也會被導向相同的 `PackageInterceptActivity`；Android／vivo 沒有可由一般 ADB shell 使用的通用「強制略過風險確認」旗標。`-r` 只代表保留資料更新、`-d` 只處理降版、`-g` 只處理執行期權限，均不能取消 OEM 確認。若要減少提示，只能在手機的開發者選項／安全設定中尋找廠商提供的 USB 安裝或 ADB 安裝驗證開關；這是裝置設定，不由 App 或 runner 強行修改。
+
+整合測試需要已連線的 Android 裝置或 AVD：
+
+在 vivo V2417A 上，ROM 會把 Flutter logcat 裡的 VM Service URL 遮成星號；標準 runner 可能因此停在 `Waiting for VM Service port to be available...`，但不代表裝置端測試沒有執行。這類裝置請使用 repo 內的 PowerShell runner：
+
+```powershell
+.\tool\run_android_integration_test.ps1 -DeviceId <device-id>
+```
+
+runner 會先建置一般 debug APK 並建立暫存 backup，再建置測試 APK、安裝並以 test flags 啟動，等待該次 process 的 `All tests passed!`。測試成功、失敗或逾時都會進入 restore：優先重建一般 debug，若重建失敗則使用測試前 backup；最後還會驗證 `am start -W` 的 `Status: ok`、前景 Activity 與 `夜讀 Ready to Run`。若 vivo 顯示未知來源／風險確認頁，必須在手機上按「繼續安裝」；runner 只接受 ADB exit code 0 且輸出包含 `Success` 作為安裝成功證據。`integration_test` build 會覆寫 `build/app/outputs/flutter-apk/app-debug.apk`，所以不要中斷 restore 安裝；該步驟若再次出現 vivo 確認頁，也要按「繼續安裝」。runner 會依裝置目前的 `versionCode` 自動避免 downgrade。
+
+`integration_test` 建置產物是測試專用 APK，不能當成一般 App 直接從 launcher／ADB 啟動；它需要 test flags 與測試 VM。若要手動啟動正常 debug App，先重新執行 `flutter build apk --debug`，再安裝 `build/app/outputs/flutter-apk/app-debug.apk`。使用上述 runner 則會自動在測試前備份、測試後重建並還原一般 APK。
+
+不會把 `SkipTestBuild` 或 `SkipRestoreInstall` 暴露成日常流程選項；這是刻意限制，避免把一般 APK／過期 APK 當成測試 APK，或讓測試 APK 留在手機上。
+
+模擬器或不會遮罩 VM Service URL 的裝置，才可使用 Flutter 標準命令：
+
+```bash
+flutter test integration_test/app_boot_test.dart -d <device-id> --disable-service-auth-codes --disable-service-origin-check
+```
+
+目前 `AudioServiceActivity` 在 vivo 實體機上的 cached Flutter engine 會讓 integration test 的 VM service 連線失敗，因此測試啟動需要上述兩個參數；`MainActivity` 會在測試模式使用 fresh engine。一般 `flutter run` 不需要這兩個參數。這個 workaround 的限制是 boot smoke test 的 fresh engine 會刻意不註冊 `audio_service`，所以它驗證的是 App 初始化與書架，不等於 TTS／AudioService 播放鏈已通過真機測試。
+
+這個 boot smoke test 只驗證真實 App 能完成初始化並進入「書架」；Reader V2 的內容、滑動與排版仍須依改動執行相應 Widget 測試與實機流程。TTS／AudioService 屬於可選啟動能力，會在 App 首畫面後背景初始化，不應阻塞原生 Splash 或書架顯示。
+
 變更涉及 UI、閱讀器互動、滾動、動畫、App lifecycle、本機儲存、Android plugin 或執行效能時，除了 analyze／test，還要重現受影響流程。依問題留下相應證據：
 
 | 問題類型 | 驗證證據 |

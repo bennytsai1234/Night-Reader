@@ -63,6 +63,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The phone may already contain the signed release package. Keep
+            // local debug builds installable without replacing its data or
+            // requiring the release keystore.
+            applicationIdSuffix = ".debug"
+        }
         release {
             signingConfig =
                 if (hasReleaseSigning) {

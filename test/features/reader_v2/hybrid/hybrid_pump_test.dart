@@ -34,6 +34,38 @@ void main() {
       cache.dispose();
     });
 
+    test(
+      'trimToCapacity trims unpinned entries after restore pins are replaced',
+      () {
+        final cache = ParagraphCache(capacity: 1);
+        const epoch = LayoutEpoch.initial;
+        const key0 = BlockKey(chapterIndex: 0, blockIndex: 0);
+        const key1 = BlockKey(chapterIndex: 0, blockIndex: 1);
+
+        cache.pinKeys(<BlockKey>[key0, key1], epoch);
+        cache.putGroup(
+          <BlockKey>[key0, key1],
+          const <double>[0.0, 20.0],
+          epoch,
+          _paragraph('ab'),
+        );
+        expect(cache.length, 2);
+
+        cache.unpinAll();
+        // Replacing the old restore pins must not evict the new visible window
+        // before callers have a chance to pin it. Trimming is explicit and
+        // happens after the replacement pin set is applied.
+        expect(cache.length, 2);
+        cache.pinKeys(<BlockKey>[key1], epoch);
+        cache.trimToCapacity();
+
+        expect(cache.length, 1);
+        expect(cache.contains(key0, epoch), isFalse);
+        expect(cache.contains(key1, epoch), isTrue);
+        cache.dispose();
+      },
+    );
+
     test('put 一次性消費 put-waiter，remove 後不再回呼', () {
       final cache = ParagraphCache();
       const epoch = LayoutEpoch.initial;
@@ -206,8 +238,10 @@ void main() {
       expect(await b2Pump.pumpPending(), 1);
       expect(await baselinePump.pumpPending(), 1);
       final paragraph = b2Cache.acquire(key, LayoutEpoch.initial)!;
-      final baselineParagraph =
-          baselineCache.acquire(key, LayoutEpoch.initial)!;
+      final baselineParagraph = baselineCache.acquire(
+        key,
+        LayoutEpoch.initial,
+      )!;
       final lines = paragraph.computeLineMetrics();
       final baselineLines = baselineParagraph.computeLineMetrics();
       expect(lines.length, greaterThan(1));
@@ -388,7 +422,11 @@ void main() {
             inInclusiveRange(0.0, LayoutPump.lastLineLetterSpacingCap),
           );
         } else {
-          expect(box.left, closeTo(expectedLeft, 0.01), reason: '末行 box 必須連續相接');
+          expect(
+            box.left,
+            closeTo(expectedLeft, 0.01),
+            reason: '末行 box 必須連續相接',
+          );
         }
         expect(box.top, greaterThan(lines.first.height - 0.01));
         expectedLeft = box.right;

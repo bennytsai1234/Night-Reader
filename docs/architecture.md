@@ -36,7 +36,7 @@ Hybrid reader 把內容切成可排程的 block，但同一來源段落的延續
 
 ### 背景工作
 
-Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新呼叫 `configureDependencies()`，再讀取書架並執行背景任務。任何新增背景路徑都必須假設 DI 與記憶體單例不會跨 isolate 共用。
+Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新呼叫 `configureDependencies()`，再讀取書架並執行背景任務。前景啟動不會初始化 Workmanager，目前程式碼也沒有註冊週期或一次性工作；callback 仍保留作為背景契約。任何新增背景路徑都必須假設 DI 與記憶體單例不會跨 isolate 共用。
 
 ## 資料與狀態歸屬
 

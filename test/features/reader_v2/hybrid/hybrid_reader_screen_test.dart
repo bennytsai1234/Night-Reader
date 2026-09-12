@@ -45,6 +45,52 @@ class _FakeChapterDao extends Fake implements ChapterDao {}
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 void main() {
+  group('hybrid page completion', () {
+    test('lazy edge partial movement is not a completed page', () {
+      expect(
+        isHybridPageMoveComplete(
+          requestedDistance: 145,
+          actualDistance: 100,
+          atBookBoundary: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('full requested movement is a completed page', () {
+      expect(
+        isHybridPageMoveComplete(
+          requestedDistance: 145,
+          actualDistance: 145,
+          atBookBoundary: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('short final page is valid at a confirmed book boundary', () {
+      expect(
+        isHybridPageMoveComplete(
+          requestedDistance: 145,
+          actualDistance: 100,
+          atBookBoundary: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('no movement is never a completed page', () {
+      expect(
+        isHybridPageMoveComplete(
+          requestedDistance: 145,
+          actualDistance: 0,
+          atBookBoundary: true,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   const style = ReaderV2Style(
     fontSize: 18,
     lineHeight: 1.5,
@@ -300,11 +346,10 @@ void main() {
     expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsOneWidget);
     expect(find.textContaining('internal restore details'), findsNothing);
     expect(find.byType(HybridScrollView), findsOneWidget);
-    int matchingErrorLogs() =>
-        logMessages
-            .whereType<String>()
-            .where((message) => message.contains('internal restore details'))
-            .length;
+    int matchingErrorLogs() => logMessages
+        .whereType<String>()
+        .where((message) => message.contains('internal restore details'))
+        .length;
     expect(matchingErrorLogs(), 1);
 
     runtime.failOperation(token, StateError('internal restore details'));

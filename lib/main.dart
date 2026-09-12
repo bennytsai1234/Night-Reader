@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -22,6 +23,7 @@ import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
+
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 Future<bool> runBackgroundTask<T>({
@@ -41,6 +43,11 @@ Future<bool> runBackgroundTask<T>({
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
+  // This entry point is kept for Workmanager background execution. The
+  // foreground app deliberately does not call Workmanager.initialize on
+  // every first frame: there are currently no registered background tasks,
+  // and Android/vivo can spend several seconds creating WorkManager's native
+  // database on the UI path.
   Workmanager().executeTask((task, inputData) async {
     return runBackgroundTask(
       initialize: configureDependencies,
@@ -137,6 +144,9 @@ Future<void> _startApp() async {
   } catch (e, stack) {
     AppLog.e('Startup Critical Error: $e', error: e, stackTrace: stack);
     CrashHandler.recordError(e, stack);
+    // configureDependencies 失敗時 MainPage 不會建立，不能依賴它釋放原生
+    // Splash；否則錯誤頁會被永久蓋住，看起來像 App 卡在開啟畫面。
+    FlutterNativeSplash.remove();
     runApp(_StartupFailureApp(error: e, stackTrace: stack));
   }
 }
@@ -190,13 +200,6 @@ Future<void> _runPostFirstFrameStartupTasks() async {
   }
 
   unawaited(_cleanupLegacyCustomFontArtifacts());
-
-  try {
-    AppLog.i('Initializing Workmanager...');
-    await Workmanager().initialize(callbackDispatcher);
-  } catch (e, stack) {
-    AppLog.e('Workmanager init failed: $e', error: e, stackTrace: stack);
-  }
 }
 
 Future<void> _cleanupLegacyCustomFontArtifacts() async {

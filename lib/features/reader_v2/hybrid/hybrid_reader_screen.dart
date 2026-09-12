@@ -4,7 +4,8 @@ import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:ui' as ui show FrameTiming, Paragraph, TextBox;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -85,6 +86,27 @@ class HybridReaderScreen extends StatefulWidget {
 
   @override
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
+}
+
+/// 判斷一次「完整翻頁」是否真的完成。
+///
+/// Hybrid 的目前 scroll extent 只包含已 admission 的 block。若排版供給
+/// 落後，`ScrollPosition.animateTo` 會把目標夾到暫時的 extent；這種情況
+/// 畫面雖然有移動，卻不代表完成了呼叫端要求的整頁距離。只有真正到達
+/// 已確認的書首／書尾時，最後不足整頁的移動才是合法成功。
+@visibleForTesting
+bool isHybridPageMoveComplete({
+  required double requestedDistance,
+  required double actualDistance,
+  required bool atBookBoundary,
+}) {
+  if (!requestedDistance.isFinite || requestedDistance <= 0) return false;
+  if (!actualDistance.isFinite || actualDistance <= 0) return false;
+  // animateTo／DocumentIndex 的浮點誤差不應讓完整頁面被誤判為失敗；
+  // 0.5 logical px 遠小於閱讀器一行，且不會掩蓋明顯的 lazy-edge 短移動。
+  const tolerance = 0.5;
+  if (actualDistance + tolerance >= requestedDistance) return true;
+  return atBookBoundary;
 }
 
 class _HybridReaderScreenState extends State<HybridReaderScreen>
@@ -296,6 +318,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _handleEpochRebuild() {
+    // Do not leave a mounted sliver reading the old render tree while the
+    // index and metrics namespace are being replaced. The extent callback has
+    // a defensive fallback as a same-frame guard, but the normal transition
+    // must render the loading state until restore has rebuilt the window.
+    _initialRestoreCompleted = false;
+    _lastSyncedLocation = null;
     // 舊 namespace 的量測 best-effort 落盤後自 store 回收——同款樣式改回
     // 來可直接 warm；不回收的話每次樣式變更都漏一整組 metrics 在記憶體。
     final oldNamespace = _namespace;
@@ -432,19 +460,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         lineTop = (boxTop ?? line.top) - entry.localTop;
         final groupStart = group.first.charRange.start;
         final groupEnd = group.last.charRange.end;
-        charOffset =
-            (groupStart + math.max(0, position.offset - indent))
-                .clamp(groupStart, groupEnd)
-                .toInt();
+        charOffset = (groupStart + math.max(0, position.offset - indent))
+            .clamp(groupStart, groupEnd)
+            .toInt();
       }
     }
-    final visual =
-        (worldY - (hit.blockTop + lineTop))
-            .clamp(
-              ReaderV2Location.minVisualOffsetPx,
-              ReaderV2Location.maxVisualOffsetPx,
-            )
-            .toDouble();
+    final visual = (worldY - (hit.blockTop + lineTop))
+        .clamp(
+          ReaderV2Location.minVisualOffsetPx,
+          ReaderV2Location.maxVisualOffsetPx,
+        )
+        .toDouble();
     return ReaderV2Location(
       chapterIndex: hit.key.chapterIndex,
       charOffset: charOffset,
@@ -482,8 +508,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final ticket = ++_restoreTicket;
     bool still() =>
         mounted && ticket == _restoreTicket && (isCurrent?.call() ?? true);
-    final chapterIndex =
-        location.chapterIndex.clamp(0, runtime.chapterCount - 1).toInt();
+    final chapterIndex = location.chapterIndex
+        .clamp(0, runtime.chapterCount - 1)
+        .toInt();
     _pump.onScrollStateChanged(PumpState.rebuilding);
     try {
       final blocks = await _ensureChapterBlocks(chapterIndex);
@@ -493,6 +520,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         chapterLength: blocks.displayText.length,
       );
       final anchor = _anchorManager.captureFromLocation(normalized, blocks);
+      // reset() invalidates the mounted sliver's old index synchronously.
+      // Hide that sliver on the next frame while the anchor window is rebuilt;
+      // the total extent callback above also protects the current frame.
+      _initialRestoreCompleted = false;
+      _lastSyncedLocation = null;
+      _scheduleRebuild();
       // 重定中心：admitted 度量由 store 回填（經 _ensureWindowTasks 的
       // 連續段 direct-admit），上側走 center 負座標生長（I3）。
       _documentIndex.reset(centerKey: anchor.blockKey);
@@ -884,10 +917,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _pump.submit(
       LayoutTask(
         block: head,
-        continuationBlocks:
-            group.length > 1
-                ? group.sublist(1)
-                : const <ChapterBlock>[],
+        continuationBlocks: group.length > 1
+            ? group.sublist(1)
+            : const <ChapterBlock>[],
         epoch: _epoch,
         fingerprint: _fingerprint,
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
@@ -902,10 +934,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         cellWidth: spec.cellWidth,
         textColor: widget.textColor,
         priority: _priorityFor(headKey, anchor: anchor),
-        direction:
-            headKey < _documentIndex.centerKey
-                ? HybridScrollDirection.backward
-                : HybridScrollDirection.forward,
+        direction: headKey < _documentIndex.centerKey
+            ? HybridScrollDirection.backward
+            : HybridScrollDirection.forward,
         indentChars: _indentCharsFor(head),
         // 只有 group 真正的最後一塊（邏輯段落真正結尾）計入間距；
         // group 內部的效能切點恆為 0（見 _trailingSpacingFor）。
@@ -1181,8 +1212,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final position = controller.position;
     final before = position.pixels;
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target =
-        (before + delta).clamp(position.minScrollExtent, max).toDouble();
+    final target = (before + delta)
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
     if ((target - before).abs() < _minimumViewportMovement) return false;
     position.jumpTo(target);
     return true;
@@ -1212,8 +1244,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final position = controller.position;
     final before = position.pixels;
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target =
-        (before + delta).clamp(position.minScrollExtent, max).toDouble();
+    final target = (before + delta)
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
     if ((target - before).abs() < _minimumViewportMovement) return false;
     await position.animateTo(
       target,
@@ -1228,28 +1261,45 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Future<bool> _movePageNow({required bool forward}) async {
     final height = _viewportSize.height;
     if (height <= 0) return false;
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return false;
+    final before = controller.position.pixels;
     final style = widget.runtime.state.layoutSpec.style;
     final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
     final magnitude = math.max(height * 0.5, height - overlap - 8.0);
     final moved = await _animateByNow(forward ? magnitude : -magnitude);
     if (!moved) _emitBookBoundaryNotice(forward: forward);
-    return moved;
+    if (!moved || !mounted || !controller.hasClients) return false;
+
+    final after = controller.position.pixels;
+    final atBookBoundary = forward
+        ? _admission.atForwardBookBoundary
+        : _admission.atBackwardBookBoundary;
+    final complete = isHybridPageMoveComplete(
+      requestedDistance: magnitude,
+      actualDistance: (after - before).abs(),
+      atBookBoundary: atBookBoundary,
+    );
+    if (!complete) {
+      // 目前只到 lazy edge：不要讓 page coordinator／auto page 把短移動
+      // 當成完整一頁。settle 已安排下一輪 window/pump，這裡再確保尚有
+      // pending task 時會繼續供給；下一次翻頁命令即可重新嘗試。
+      _schedulePump();
+    }
+    return complete;
   }
 
   void _emitBookBoundaryNotice({required bool forward}) {
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return;
     final position = controller.position;
-    final atExtent =
-        forward
-            ? position.pixels >=
-                position.maxScrollExtent - _minimumViewportMovement
-            : position.pixels <=
-                position.minScrollExtent + _minimumViewportMovement;
-    final atBookBoundary =
-        forward
-            ? _admission.atForwardBookBoundary
-            : _admission.atBackwardBookBoundary;
+    final atExtent = forward
+        ? position.pixels >= position.maxScrollExtent - _minimumViewportMovement
+        : position.pixels <=
+              position.minScrollExtent + _minimumViewportMovement;
+    final atBookBoundary = forward
+        ? _admission.atForwardBookBoundary
+        : _admission.atBackwardBookBoundary;
     if (!atExtent || !atBookBoundary) return;
     widget.runtime.emitUserNotice(forward ? '已到書尾' : '已到書首');
   }
@@ -1295,20 +1345,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final preferredTarget = rect.top - preferredTopInset;
     final minTarget = rect.bottom - height + bottomPadding;
     final maxTarget = rect.top - topPadding;
-    final target =
-        minTarget <= maxTarget
-            ? preferredTarget.clamp(minTarget, maxTarget).toDouble()
-            : minTarget;
+    final target = minTarget <= maxTarget
+        ? preferredTarget.clamp(minTarget, maxTarget).toDouble()
+        : minTarget;
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
     final position = controller.position;
-    final bounded =
-        target
-            .clamp(
-              math.min(position.minScrollExtent, position.pixels),
-              math.max(position.maxScrollExtent, position.pixels),
-            )
-            .toDouble();
+    final bounded = target
+        .clamp(
+          math.min(position.minScrollExtent, position.pixels),
+          math.max(position.maxScrollExtent, position.pixels),
+        )
+        .toDouble();
     await position.animateTo(
       bounded,
       duration: _ensureAnimateDuration,
@@ -1405,7 +1453,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final boxes = _blockLocalBoxesForRange(blocks, block, range);
       if (boxes != null && boxes.isNotEmpty) {
         localTop = boxes.first.top;
-        localBottom = boxes.map((box) => box.bottom).reduce(math.max).toDouble();
+        localBottom = boxes
+            .map((box) => box.bottom)
+            .reduce(math.max)
+            .toDouble();
       }
       final rangeTop = blockTop + localTop;
       final rangeBottom = blockTop + localBottom;
@@ -1429,7 +1480,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (range.isEmpty) return const <HybridLineBox>[];
     final result = <HybridLineBox>[];
     final seenLines = <({BlockKey key, double top, double bottom})>{};
-    for (final block in blocks.blocks) {
+    // ChapterBlocks preserves display-text order. Find the first possible
+    // overlap with binary search so a short TTS range does not rescan an
+    // entire long chapter on every scroll frame.
+    final blockList = blocks.blocks;
+    var low = 0;
+    var high = blockList.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (blockList[middle].charRange.end <= range.start) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    for (var index = low; index < blockList.length; index += 1) {
+      final block = blockList[index];
+      if (block.charRange.start >= range.end) break;
       if (!block.charRange.intersects(range)) continue;
       final top = _documentIndex.topOf(block.key);
       if (top == null) continue;
@@ -1605,6 +1672,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _paragraphCache
       ..unpinAll()
       ..pinKeys(_documentIndex.keysInRange(top, bottom), _epoch);
+    _paragraphCache.trimToCapacity();
   }
 
   Widget _buildLoading(ReaderV2State state) {
@@ -1658,10 +1726,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         child: Semantics(
           liveRegion: true,
           excludeSemantics: true,
-          label:
-              state.phase == ReaderV2Phase.error
-                  ? _friendlyErrorMessage
-                  : _phaseMessage(state.phase),
+          label: state.phase == ReaderV2Phase.error
+              ? _friendlyErrorMessage
+              : _phaseMessage(state.phase),
           child: Center(child: child),
         ),
       ),
@@ -1685,8 +1752,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Widget _buildOperationOverlay(ReaderV2State state) {
     if (state.phase == ReaderV2Phase.ready) return const SizedBox.shrink();
     final isError = state.phase == ReaderV2Phase.error;
-    final message =
-        isError ? _friendlyErrorMessage : _phaseMessage(state.phase);
+    final message = isError
+        ? _friendlyErrorMessage
+        : _phaseMessage(state.phase);
     return IgnorePointer(
       child: Semantics(
         liveRegion: true,
@@ -1756,10 +1824,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
         if (!_initialRestoreCompleted) return _buildLoading(state);
-        final controller =
-            _scrollController ??= ScrollController(
-              initialScrollOffset: _pendingScrollOffset ?? 0.0,
-            );
+        final controller = _scrollController ??= ScrollController(
+          initialScrollOffset: _pendingScrollOffset ?? 0.0,
+        );
         _updateParagraphPins();
         final highlight = widget.ttsHighlight;
         return ColoredBox(

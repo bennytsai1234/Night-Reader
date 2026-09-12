@@ -12,6 +12,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
@@ -112,5 +113,37 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.text('書架'), findsOneWidget);
     expect(find.textContaining('檢查完成'), findsOneWidget);
+  });
+
+  testWidgets('窄螢幕網格書架不會在書名區溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(327, 727));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final book = Book(
+      bookUrl: 'local://night-reader-sample',
+      name: 'NightReader-Sample',
+      author: '作者',
+      origin: 'local',
+      originName: '本地',
+      isInBookshelf: true,
+    );
+    final preferences = await SharedPreferences.getInstance();
+    GetIt.instance.registerSingleton<SharedPreferences>(preferences);
+    GetIt.instance.registerLazySingleton<BookDao>(() => _FakeBookDao([book]));
+    GetIt.instance.registerLazySingleton<BookSourceDao>(
+      () => _ControllableSourceDao(),
+    );
+    GetIt.instance.registerLazySingleton<ChapterDao>(() => _FakeChapterDao());
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => BookshelfProvider(),
+        child: const MaterialApp(home: BookshelfPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BookCoverWidget), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

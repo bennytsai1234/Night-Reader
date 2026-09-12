@@ -69,7 +69,13 @@ final class ParagraphCache implements HybridParagraphCache {
     ui.Paragraph paragraph, {
     ui.Color bakedColor = const ui.Color(0xFF000000),
   }) {
-    putGroup(<BlockKey>[key], const <double>[0.0], epoch, paragraph, bakedColor: bakedColor);
+    putGroup(
+      <BlockKey>[key],
+      const <double>[0.0],
+      epoch,
+      paragraph,
+      bakedColor: bakedColor,
+    );
   }
 
   /// 一次放入一個連續排版 group 的所有 block：[keys] 與 [localTops] 一一
@@ -141,6 +147,14 @@ final class ParagraphCache implements HybridParagraphCache {
   @override
   void unpinAll() {
     _pinned.clear();
+  }
+
+  /// Removes unpinned entries beyond [capacity]. Callers that replace a pin
+  /// set should invoke this after the new pins are in place; trimming between
+  /// unpinning the old set and pinning the new visible set can evict the first
+  /// viewport during restore.
+  void trimToCapacity() {
+    _evictIfNeeded();
   }
 
   @override

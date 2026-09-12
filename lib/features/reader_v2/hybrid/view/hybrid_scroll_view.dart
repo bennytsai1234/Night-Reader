@@ -11,6 +11,12 @@ import 'cached_block_widget.dart';
 import 'hybrid_block_sliver.dart';
 
 final class HybridScrollView extends StatelessWidget {
+  /// Flutter's RenderSliverFixedExtentBoxAdaptor force-unwraps the result of
+  /// itemExtentBuilder while laying out active children. DocumentIndex can be
+  /// reset before the old sliver has been removed from the render tree, so the
+  /// callback must remain total during that transition.
+  static const double _fallbackItemExtent = 1.0;
+
   const HybridScrollView({
     super.key,
     required this.centerKey,
@@ -48,15 +54,15 @@ final class HybridScrollView extends StatelessWidget {
   Widget build(BuildContext context) {
     // D4：原生 Scrollbar 停用；無回彈由 HybridScrollPhysics（Clamping 基底）保證。
     return ScrollConfiguration(
-      behavior: ScrollConfiguration.of(
-        context,
-      ).copyWith(scrollbars: false, overscroll: false),
+      behavior: ScrollConfiguration.of(context)
+          .copyWith(scrollbars: false, overscroll: false),
       child: CustomScrollView(
         controller: controller,
         center: centerKey,
         physics: physics,
-        scrollCacheExtent:
-            cacheExtent == null ? null : ScrollCacheExtent.pixels(cacheExtent!),
+        scrollCacheExtent: cacheExtent == null
+            ? null
+            : ScrollCacheExtent.pixels(cacheExtent!),
         slivers: <Widget>[
           _buildSliver(beforeCenter: true),
           _buildSliver(key: centerKey, beforeCenter: false),
@@ -86,17 +92,17 @@ final class HybridScrollView extends StatelessWidget {
           beforeCenter: beforeCenter,
           index: index,
         );
-        if (key == null) return null;
+        if (key == null) return _fallbackItemExtent;
         // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
         // （I1/I3：admit 時已是精確量測且座標凍結）。不可讀 MeasurementStore
         // ——epoch 換代或章節 invalidate 的過渡幀，store 可能已被清而 widget
         // 還抱著舊 namespace closure，會出現座標與 extent 失同步。
         final metrics = documentIndex.metricsFor(key);
-        assert(
-          metrics != null,
-          'I1: Sliver itemExtentBuilder requires admitted metrics for $key.',
-        );
-        return metrics?.height;
+        final extent = metrics?.height;
+        if (extent == null || !extent.isFinite || extent <= 0) {
+          return _fallbackItemExtent;
+        }
+        return extent;
       },
     );
   }
@@ -153,10 +159,9 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
   }
 
   @override
-  int? get estimatedChildCount =>
-      beforeCenter
-          ? documentIndex.beforeCount
-          : documentIndex.centerAndAfterCount;
+  int? get estimatedChildCount => beforeCenter
+      ? documentIndex.beforeCount
+      : documentIndex.centerAndAfterCount;
 
   @override
   bool shouldRebuild(covariant HybridSliverChildDelegate oldDelegate) {
