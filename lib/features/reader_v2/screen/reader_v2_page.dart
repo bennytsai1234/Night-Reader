@@ -62,6 +62,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
 
+  /// Integration workload 的語意 probe 入口；正式頁面不透過它驅動畫面。
+  @visibleForTesting
+  ReaderV2Runtime? get debugRuntime => _host.runtime;
+
   @override
   void initState() {
     super.initState();

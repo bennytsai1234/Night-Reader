@@ -41,6 +41,10 @@ final class DocumentIndex implements HybridDocumentIndex {
   /// 直驅重排——新放行 block 的可見化不需要 widget 層 setState 重建。
   Listenable get revision => _revision;
 
+  /// 目前索引的單調 revision，供 Reader 的連續滾動診斷記錄「這一幀看
+  /// 到的是哪一版座標」。render 層仍只訂閱 [revision]，不依賴這個數值。
+  int get revisionNumber => _revision.value;
+
   /// 結構性 reset 的世代。delegate 用它辨識同一 index 實例內的 key 替換。
   int get resetGeneration => _resetGeneration;
 
@@ -137,10 +141,9 @@ final class DocumentIndex implements HybridDocumentIndex {
   /// （index→key 映射位移，需要比單純幾何替換更重的
   /// [resetGeneration] 訊號）。
   bool invalidateChapter(int chapterIndex) {
-    final staleKeys =
-        _metrics.keys
-            .where((key) => key.chapterIndex == chapterIndex)
-            .toList(growable: false);
+    final staleKeys = _metrics.keys
+        .where((key) => key.chapterIndex == chapterIndex)
+        .toList(growable: false);
     if (staleKeys.isEmpty) return false;
     for (final key in staleKeys) {
       _metrics.remove(key);
@@ -278,8 +281,9 @@ final class DocumentIndex implements HybridDocumentIndex {
       final lo = top < 0 ? 0.0 : top;
       final startIndex = _afterTree.firstPrefixGreaterThan(lo);
       if (startIndex != null) {
-        var blockTop =
-            startIndex == 0 ? 0.0 : _afterTree.prefixSum(startIndex - 1);
+        var blockTop = startIndex == 0
+            ? 0.0
+            : _afterTree.prefixSum(startIndex - 1);
         for (var j = startIndex; j < _centerAndAfter.length; j += 1) {
           if (blockTop >= bottom) break;
           final key = _centerAndAfter[j];
@@ -401,7 +405,14 @@ final class DocumentIndex implements HybridDocumentIndex {
 
 /// 對外只暴露 [Listenable]，bump 收在 [DocumentIndex] 內部。
 final class _DocumentRevision extends ChangeNotifier {
-  void bump() => notifyListeners();
+  int _value = 0;
+
+  int get value => _value;
+
+  void bump() {
+    _value += 1;
+    notifyListeners();
+  }
 }
 
 /// 可增量 append 的 Fenwick tree：append 攤銷 O(log n)（容量翻倍時全量重建）。

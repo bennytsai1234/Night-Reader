@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +24,8 @@ void main() {
       expect(summary['frameP99Micros'], lessThanOrEqualTo(4500));
       expect(summary['jankOver8ms'], 10);
       expect(summary['jankOver16ms'], 10);
+      expect(summary['jankOver33ms'], 0);
+      expect(summary['worstFrameMicros'], 30000);
     });
 
     test('p99 反映尾端慢幀且 summary 可 JSON 序列化', () {
@@ -48,7 +51,110 @@ void main() {
       expect(summary['maxPumpQueueDepth'], 3, reason: '保留 session 峰值');
       expect(summary['minForwardLeadPx'], 1200, reason: '保留 session 最低領先量');
       expect(summary['minBackwardLeadPx'], 800);
+      expect(summary['jankOver33ms'], 0);
+      expect(summary['maxConsecutiveMissedFrames'], 10);
       expect(jsonEncode(summary), isA<String>());
+    });
+
+    test('records >33ms frames and consecutive missed-frame streaks', () {
+      final telemetry = HybridTelemetry();
+
+      telemetry.recordFrameSpanMicros(9000);
+      telemetry.recordFrameSpanMicros(34000);
+      telemetry.recordFrameSpanMicros(35000);
+      telemetry.recordFrameSpanMicros(4000);
+
+      final snapshot = telemetry.snapshot;
+      expect(snapshot.jankOver33ms, 2);
+      expect(snapshot.worstFrameMicros, 35000);
+      expect(snapshot.consecutiveMissedFrames, 0);
+      expect(snapshot.maxConsecutiveMissedFrames, 3);
+
+      final summary = telemetry.sessionSummary();
+      expect(summary['jankOver33ms'], 2);
+      expect(summary['worstFrameMicros'], 35000);
+      expect(summary['maxConsecutiveMissedFrames'], 3);
+    });
+
+    test('120Hz gate 使用嚴格 P99 < 8ms，並保留 layout task 證據', () {
+      final telemetry = HybridTelemetry();
+
+      expect(HybridTelemetry.strict120HzFrameP99TargetMicros, 8000);
+      telemetry.recordFrameSpanMicros(7999);
+      telemetry.recordLayoutTask(
+        elapsedMicros: 9500,
+        predictedMicros: 2000,
+        charCount: 1024,
+      );
+
+      final snapshot = telemetry.snapshot;
+      expect(snapshot.layoutTaskCount, 1);
+      expect(snapshot.layoutTaskP99Micros, greaterThanOrEqualTo(9500));
+      expect(snapshot.worstLayoutTaskMicros, 9500);
+      expect(snapshot.worstLayoutTaskPredictedMicros, 2000);
+      expect(snapshot.worstLayoutTaskCharCount, 1024);
+      expect(snapshot.layoutTasksOver8ms, 1);
+
+      final summary = telemetry.sessionSummary();
+      expect(summary['layoutTaskCount'], 1);
+      expect(summary['layoutTasksOver8ms'], 1);
+      expect(summary['worstLayoutTaskCharCount'], 1024);
+    });
+
+    test('FrameTiming 會分開保留 vsync overhead、build 與 raster 證據', () {
+      final telemetry = HybridTelemetry();
+      telemetry.recordFrameTimings(<ui.FrameTiming>[
+        ui.FrameTiming(
+          vsyncStart: 1000,
+          buildStart: 5000,
+          buildFinish: 8000,
+          rasterStart: 8500,
+          rasterFinish: 11000,
+          rasterFinishWallTime: 11000,
+        ),
+      ]);
+
+      final snapshot = telemetry.snapshot;
+      expect(snapshot.frameP99Micros, 10000);
+      expect(snapshot.vsyncOverheadP99Micros, 4000);
+      expect(snapshot.buildP99Micros, 3000);
+      expect(snapshot.rasterP99Micros, 2500);
+      expect(snapshot.worstVsyncOverheadMicros, 4000);
+      expect(snapshot.worstBuildMicros, 3000);
+      expect(snapshot.worstRasterMicros, 2500);
+
+      final summary = telemetry.sessionSummary();
+      expect(summary['vsyncOverheadP99Micros'], 4500);
+      expect(summary['buildP99Micros'], 3500);
+      expect(summary['rasterP99Micros'], 3000);
+    });
+
+    test('效能 window reset 不影響 queue／lead 功能診斷狀態', () {
+      final telemetry = HybridTelemetry();
+      telemetry
+        ..recordFrameSpanMicros(30000)
+        ..recordLayoutTask(
+          elapsedMicros: 12000,
+          predictedMicros: 2000,
+          charCount: 800,
+        )
+        ..updateRuntimeStats(
+          pumpQueueDepth: 7,
+          forwardLeadPx: 100,
+          backwardLeadPx: 50,
+        );
+
+      telemetry.resetPerformanceWindow();
+      final summary = telemetry.sessionSummary();
+      final heartbeat = telemetry.heartbeatSummary();
+
+      expect(summary['frames'], 0);
+      expect(summary['layoutTaskCount'], 0);
+      expect(summary['worstFrameMicros'], 0);
+      expect(summary['maxPumpQueueDepth'], 7);
+      expect(heartbeat['pumpQueueDepth'], 7);
+      expect(heartbeat['forwardLeadPx'], 100);
+      expect(heartbeat['backwardLeadPx'], 50);
     });
 
     test('尚無觀測值時 lead 為 null、空 session 百分位為 0', () {

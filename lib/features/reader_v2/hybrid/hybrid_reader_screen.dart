@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert' show jsonEncode;
 import 'dart:io' as io;
 import 'dart:math' as math;
-import 'dart:ui' as ui show FrameTiming, Paragraph, TextBox;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kDebugMode, visibleForTesting;
@@ -173,6 +173,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _rebuildQueued = false;
   bool _pumpFramePending = false;
   bool _captureFramePending = false;
+  double? _lastDebugSnapshotOffset;
 
   @override
   void initState() {
@@ -311,11 +312,182 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     AppLog.i('ReaderV2 telemetry heartbeat: ${jsonEncode(summary)}');
   }
 
+  /// 連續滾動／layout race 的語意診斷快照。
+  ///
+  /// 這個 seam 只供 integration workload 讀取，不參與正式畫面建置，也
+  /// 不用 screenshot 去猜內容是否正確。快照把同一時刻的 viewport、runtime
+  /// location、DocumentIndex revision、admission 範圍、ParagraphCache 與
+  /// LayoutPump queue 放在一起，讓短暫的空白或舊座標能和動作歷史對齊。
+  @visibleForTesting
+  Map<String, Object?> debugSnapshot() {
+    final controller = _scrollController;
+    final position = controller != null && controller.hasClients
+        ? controller.position
+        : null;
+    final offset = _effectiveScrollOffset();
+    final viewportHeight = _viewportSize.height;
+    final hasViewport = offset != null && viewportHeight > 0;
+    final visibleKeys = hasViewport
+        ? _documentIndex
+              .keysInRange(offset, offset + viewportHeight)
+              .toList(growable: false)
+        : const <BlockKey>[];
+    final missingParagraphKeys = <BlockKey>[];
+    for (final key in visibleKeys) {
+      if (!_paragraphCache.containsFresh(key, _epoch, widget.textColor)) {
+        missingParagraphKeys.add(key);
+      }
+    }
+
+    String scrollDirection = 'idle';
+    final previousOffset = _lastDebugSnapshotOffset;
+    if (offset != null && previousOffset != null) {
+      final delta = offset - previousOffset;
+      if (delta > 0.5) {
+        scrollDirection = 'forward';
+      } else if (delta < -0.5) {
+        scrollDirection = 'backward';
+      }
+    }
+    _lastDebugSnapshotOffset = offset;
+
+    final captured = _captureVisibleLocation();
+    final runtimeState = widget.runtime.state;
+    final telemetry = _telemetry.snapshot;
+    _telemetry.recordPumpQueueDepth(_pump.queueDepth);
+
+    Map<String, int> keyJson(BlockKey key) => <String, int>{
+      'chapterIndex': key.chapterIndex,
+      'blockIndex': key.blockIndex,
+    };
+
+    double? finiteOrNull(double value) => value.isFinite ? value : null;
+
+    bool isConsecutive(BlockKey previous, BlockKey next) {
+      if (previous.chapterIndex == next.chapterIndex) {
+        return next.blockIndex == previous.blockIndex + 1;
+      }
+      return next.chapterIndex == previous.chapterIndex + 1 &&
+          next.blockIndex == 0;
+    }
+
+    final visibleKeysContiguous = visibleKeys.length < 2
+        ? true
+        : Iterable<int>.generate(visibleKeys.length - 1).every(
+            (index) =>
+                isConsecutive(visibleKeys[index], visibleKeys[index + 1]),
+          );
+    final visibleChapters = <int>[];
+    for (final key in visibleKeys) {
+      if (visibleChapters.isEmpty || visibleChapters.last != key.chapterIndex) {
+        visibleChapters.add(key.chapterIndex);
+      }
+    }
+
+    return <String, Object?>{
+      'capturedAtMs': DateTime.now().millisecondsSinceEpoch,
+      'displayRefreshRate': ui.PlatformDispatcher.instance.views.isEmpty
+          ? null
+          : finiteOrNull(
+              ui.PlatformDispatcher.instance.views.first.display.refreshRate,
+            ),
+      'phase': runtimeState.phase.name,
+      'scrollOffset': finiteOrNull(offset ?? double.nan),
+      'viewportHeight': finiteOrNull(viewportHeight),
+      'viewportBottom': hasViewport
+          ? finiteOrNull(offset + viewportHeight)
+          : null,
+      'scrollDirection': scrollDirection,
+      'isScrolling': position?.isScrollingNotifier.value ?? false,
+      'dragging': _dragging,
+      'restoreLocked': _anchorManager.restoreLocked,
+      'initialRestoreCompleted': _initialRestoreCompleted,
+      'runtimeLocationRevision': _runtimeLocationRevision,
+      'pendingChapterJumpTarget': widget.runtime.pendingChapterJumpTarget
+          ?.toJson(),
+      'runtimeVisibleLocation': runtimeState.visibleLocation.toJson(),
+      'runtimeCommittedLocation': runtimeState.committedLocation.toJson(),
+      'capturedLocation': captured?.toJson(),
+      'layoutGeneration': runtimeState.layoutGeneration,
+      'epoch': _epoch.value,
+      'documentIndexRevision': _documentIndex.revisionNumber,
+      'documentIndexResetGeneration': _documentIndex.resetGeneration,
+      'documentIndexCenter': keyJson(_documentIndex.centerKey),
+      'admittedCount': _documentIndex.admittedCount,
+      'beforeCount': _documentIndex.beforeCount,
+      'centerAndAfterCount': _documentIndex.centerAndAfterCount,
+      'beforeExtent': finiteOrNull(_documentIndex.beforeExtent),
+      'afterExtent': finiteOrNull(_documentIndex.afterExtent),
+      'backwardEdge': _documentIndex.backwardEdgeKey == null
+          ? null
+          : keyJson(_documentIndex.backwardEdgeKey!),
+      'forwardEdge': _documentIndex.forwardEdgeKey == null
+          ? null
+          : keyJson(_documentIndex.forwardEdgeKey!),
+      'visibleKeys': [for (final key in visibleKeys) keyJson(key)],
+      'visibleChapters': visibleChapters,
+      'visibleKeysContiguous': visibleKeysContiguous,
+      'missingParagraphKeys': [
+        for (final key in missingParagraphKeys) keyJson(key),
+      ],
+      'paragraphCacheLength': _paragraphCache.length,
+      'loadedChapterCount': _blocks.length,
+      'chaptersInFlight': _blocksInFlight.keys.toList(growable: false),
+      'enqueuedCount': _enqueued.length,
+      'pumpQueueDepth': _pump.queueDepth,
+      'forwardLeadPx': finiteOrNull(_admission.latestForwardLead),
+      'backwardLeadPx': finiteOrNull(_admission.latestBackwardLead),
+      'rollingFrameP50Micros': telemetry.frameP50Micros,
+      'rollingFrameP95Micros': telemetry.frameP95Micros,
+      'rollingFrameP99Micros': telemetry.frameP99Micros,
+      'rollingJankOver8ms': telemetry.jankOver8ms,
+      'rollingJankOver16ms': telemetry.jankOver16ms,
+      'rollingJankOver33ms': telemetry.jankOver33ms,
+      'worstFrameMicros': telemetry.worstFrameMicros,
+      'consecutiveMissedFrames': telemetry.consecutiveMissedFrames,
+      'maxConsecutiveMissedFrames': telemetry.maxConsecutiveMissedFrames,
+      'layoutTaskCount': telemetry.layoutTaskCount,
+      'layoutTaskP99Micros': telemetry.layoutTaskP99Micros,
+      'worstLayoutTaskMicros': telemetry.worstLayoutTaskMicros,
+      'worstLayoutTaskPredictedMicros':
+          telemetry.worstLayoutTaskPredictedMicros,
+      'worstLayoutTaskCharCount': telemetry.worstLayoutTaskCharCount,
+      'layoutTasksOver8ms': telemetry.layoutTasksOver8ms,
+      'vsyncOverheadP99Micros': telemetry.vsyncOverheadP99Micros,
+      'buildP99Micros': telemetry.buildP99Micros,
+      'rasterP99Micros': telemetry.rasterP99Micros,
+      'worstVsyncOverheadMicros': telemetry.worstVsyncOverheadMicros,
+      'worstBuildMicros': telemetry.worstBuildMicros,
+      'worstRasterMicros': telemetry.worstRasterMicros,
+    };
+  }
+
+  /// 連續 workload 的效能 window seam；正式畫面不讀取這個方法。
+  @visibleForTesting
+  Map<String, Object?> debugPerformanceSummary() {
+    _telemetry.recordPumpQueueDepth(_pump.queueDepth);
+    return Map<String, Object?>.from(_telemetry.sessionSummary());
+  }
+
+  /// 初始開書完成後開始計算 scroll/chapter workload 的效能 window。
+  @visibleForTesting
+  void debugResetPerformanceWindow() {
+    _telemetry.resetPerformanceWindow();
+  }
+
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
     if (!mounted || timings.isEmpty) return;
     widget.runtime.recordFrameTimings(timings);
     _governor.recordFrameTimings(timings);
     _telemetry.recordFrameTimings(timings);
+  }
+
+  void _handleLayoutTaskCompleted(LayoutPumpTaskStats stats) {
+    _telemetry.recordLayoutTask(
+      elapsedMicros: stats.elapsed.inMicroseconds.toDouble(),
+      predictedMicros: stats.predicted.inMicroseconds.toDouble(),
+      charCount: stats.charCount,
+    );
   }
 
   // ---- epoch / namespace（D9：epoch 對齊 layoutGeneration） ----
@@ -334,6 +506,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       measurementStore: _measurementStore,
       namespace: _namespace,
       governor: _governor,
+      onTaskCompleted: _handleLayoutTaskCompleted,
     );
     _admission.reset(epoch: _epoch, chapterCount: widget.runtime.chapterCount);
     _admission.attach(_pump.completed);
@@ -612,6 +785,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         cacheExtent: _viewportSize.height,
       );
       _initialRestoreCompleted = true;
+      // Restore changes the document coordinate system and can complete
+      // without a scroll notification. Publish the new chapter immediately
+      // through the narrow progress channel; otherwise the page shell can
+      // keep showing the previous chapter label while the new content is
+      // already visible.
+      _publishProgress();
       _scheduleRebuild();
       _schedulePump();
       return true;

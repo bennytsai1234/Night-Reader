@@ -47,9 +47,13 @@ class MainActivity : AudioServiceActivity() {
                         it.physicalHeight == currentMode.physicalHeight
                 }
                 .maxByOrNull { it.refreshRate } ?: return
-            if (best.modeId == currentMode.modeId) return
             val attributes = window.attributes
             attributes.preferredDisplayModeId = best.modeId
+            // A display mode can expose more than one render rate. On the
+            // emulator (and on some high-refresh devices), the best mode can
+            // already be active while the framework still selects 60Hz for
+            // the app window. Keep the mode hint and add the actual rate hint.
+            attributes.preferredRefreshRate = best.refreshRate
             window.attributes = attributes
         } catch (_: Exception) {
             // 拿不到 display 或 OEM 拒絕時維持系統預設，不影響啟動。

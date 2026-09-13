@@ -193,10 +193,12 @@ void main() {
         epoch: LayoutEpoch.initial,
         fingerprint: _fingerprint(),
       );
+      LayoutPumpTaskStats? taskStats;
       final pump = LayoutPump(
         paragraphCache: cache,
         measurementStore: store,
         namespace: namespace,
+        onTaskCompleted: (stats) => taskStats = stats,
       );
       const key = BlockKey(chapterIndex: 0, blockIndex: 0);
       final ready = expectLater(
@@ -227,6 +229,10 @@ void main() {
 
       expect(await pump.pumpPending(), 1);
       await ready;
+      expect(taskStats, isNotNull);
+      expect(taskStats!.charCount, greaterThan(0));
+      expect(taskStats!.groupBlockCount, 1);
+      expect(taskStats!.predicted, greaterThan(Duration.zero));
       expect(store.get(namespace, key), isNotNull);
       expect(cache.contains(key, LayoutEpoch.initial), isTrue);
       expect(

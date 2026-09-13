@@ -46,6 +46,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/key.properties
+# Gradle 產生的 Android build 產物
+android/build/
 *.jks
 *.keystore
 

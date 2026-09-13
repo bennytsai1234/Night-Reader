@@ -69,6 +69,14 @@ android {
             // requiring the release keystore.
             applicationIdSuffix = ".debug"
         }
+        maybeCreate("profile").apply {
+            // Keep profile validation in the same isolated package as debug.
+            // Flutter's default profile variant otherwise uses the release
+            // applicationId, which can make `flutter drive --profile` remove
+            // or replace a user's release app before the test starts.
+            applicationIdSuffix = ".debug"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             signingConfig =
                 if (hasReleaseSigning) {

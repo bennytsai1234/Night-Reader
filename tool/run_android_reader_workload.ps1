@@ -3,8 +3,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DeviceId,
 
-    [ValidateSet('journey', 'monkey')]
+    [ValidateSet('journey', 'monkey', 'continuous')]
     [string]$Scenario = 'journey',
+
+    [ValidateSet('debug', 'profile')]
+    [string]$BuildMode = 'debug',
 
     [string]$FixtureHostPath,
 
@@ -18,6 +21,9 @@ param(
     [ValidateRange(0, 86400)]
     [int]$DurationSeconds = 0,
 
+    [ValidateSet('', 'slow_read_forward', 'small_correction', 'fling_forward_then_reverse', 'fling_reverse_then_continue', 'next_or_previous_chapter', 'chapter_switch_while_ballistic', 'directory_jump_then_immediate_read')]
+    [string]$Action = '',
+
     [string]$ReportDir,
 
     [int]$BuildNumber = 3000,
@@ -25,7 +31,7 @@ param(
     [ValidateRange(30, 86400)]
     [int]$TimeoutSeconds = 900,
 
-    [ValidateRange(600, 900)]
+    [ValidateRange(30, 900)]
     [int]$SampleIntervalSeconds = 900
 )
 
@@ -34,7 +40,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packageName = 'com.inkpage.reader.debug'
 $activityName = "$packageName/com.inkpage.reader.MainActivity"
-$apkPath = Join-Path $repoRoot 'build/app/outputs/flutter-apk/app-debug.apk'
+$normalApkPath = Join-Path $repoRoot 'build/app/outputs/flutter-apk/app-debug.apk'
+$workloadApkPath = Join-Path $repoRoot "build/app/outputs/flutter-apk/app-$BuildMode.apk"
 $fixtureHostPath = if ([string]::IsNullOrWhiteSpace($FixtureHostPath)) {
     Join-Path $repoRoot 'samples/西游记.txt'
 }
@@ -47,11 +54,10 @@ $reportDir = if ([string]::IsNullOrWhiteSpace($ReportDir)) {
 else {
     $ReportDir
 }
-$testTarget = if ($Scenario -eq 'journey') {
-    'integration_test/reader_journey_test.dart'
-}
-else {
-    'integration_test/reader_monkey_test.dart'
+$testTarget = switch ($Scenario) {
+    'journey' { 'integration_test/reader_journey_test.dart' }
+    'monkey' { 'integration_test/reader_monkey_test.dart' }
+    'continuous' { 'integration_test/reader_continuous_test.dart' }
 }
 $backupApkPath = Join-Path ([System.IO.Path]::GetTempPath()) (
     "night-reader-debug-before-reader-workload-{0}.apk" -f [Guid]::NewGuid()
@@ -127,16 +133,19 @@ function Get-WorkloadProgress([string]$Log) {
     $completed = $null
     $actionMatches = [regex]::Matches(
         $Log,
-        'READER_MONKEY_ACTION seed=\d+ #(\d+) [^\r\n]+'
+        'READER_(MONKEY|CONTINUOUS)_ACTION seed=\d+ #(\d+) [^\r\n]+'
     )
     if ($actionMatches.Count -gt 0) {
-        $lastActionNumber = [int]$actionMatches[$actionMatches.Count - 1].Groups[1].Value
+        $lastActionNumber = [int]$actionMatches[$actionMatches.Count - 1].Groups[2].Value
         $completed = $lastActionNumber + 1
     }
 
-    $resultMatch = [regex]::Match($Log, 'READER_MONKEY_RESULT[^\r\n]*\bcompleted=(\d+)')
+    $resultMatch = [regex]::Match(
+        $Log,
+        'READER_(MONKEY|CONTINUOUS)_RESULT[^\r\n]*\bcompleted=(\d+)'
+    )
     if ($resultMatch.Success) {
-        $completed = [int]$resultMatch.Groups[1].Value
+        $completed = [int]$resultMatch.Groups[2].Value
     }
 
     $lastActions = @($actionMatches |
@@ -157,10 +166,32 @@ function Get-WorkloadProgress([string]$Log) {
         }
     }
 
+    $performance = $null
+    $performanceMatch = [regex]::Match(
+        $Log,
+        'READER_CONTINUOUS_PERFORMANCE\s+status=(passed|failed)\s+targetP99Micros=([0-9.]+)\s+actualP99Micros=([0-9.]+)\s+frames=(\d+)\s+taskP99Micros=([0-9.]+)\s+worstTaskMicros=([0-9.]+)\s+worstTaskChars=(\d+)\s+tasksOver8ms=(\d+)\s+vsyncP99=([0-9.]+)\s+buildP99=([0-9.]+)\s+rasterP99=([0-9.]+)'
+    )
+    if ($performanceMatch.Success) {
+        $performance = [ordered]@{
+            status = $performanceMatch.Groups[1].Value
+            targetP99Micros = [double]$performanceMatch.Groups[2].Value
+            actualP99Micros = [double]$performanceMatch.Groups[3].Value
+            frames = [int]$performanceMatch.Groups[4].Value
+            taskP99Micros = [double]$performanceMatch.Groups[5].Value
+            worstTaskMicros = [double]$performanceMatch.Groups[6].Value
+            worstTaskChars = [int]$performanceMatch.Groups[7].Value
+            tasksOver8ms = [int]$performanceMatch.Groups[8].Value
+            vsyncP99Micros = [double]$performanceMatch.Groups[9].Value
+            buildP99Micros = [double]$performanceMatch.Groups[10].Value
+            rasterP99Micros = [double]$performanceMatch.Groups[11].Value
+        }
+    }
+
     return [ordered]@{
         completedActions = $completed
         lastActions = $lastActions
         telemetryHeartbeat = $telemetryHeartbeat
+        performance = $performance
     }
 }
 
@@ -316,7 +347,7 @@ function Restore-NormalApk([int]$EffectiveBuildNumber) {
         finally {
             Pop-Location
         }
-        $restoreSucceeded = Test-Path -LiteralPath $apkPath
+        $restoreSucceeded = Test-Path -LiteralPath $normalApkPath
     }
     catch {
         Write-Warning "一般 debug APK 重建失敗，改用 workload 前 backup：$($_.Exception.Message)"
@@ -326,11 +357,11 @@ function Restore-NormalApk([int]$EffectiveBuildNumber) {
         if (-not (Test-Path -LiteralPath $backupApkPath)) {
             throw '一般 debug APK 重建失敗，且沒有 workload 前 backup 可恢復。'
         }
-        Copy-Item -LiteralPath $backupApkPath -Destination $apkPath -Force
+        Copy-Item -LiteralPath $backupApkPath -Destination $normalApkPath -Force
     }
 
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
-    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) | ForEach-Object { Write-Host $_ }
+    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $normalApkPath) | ForEach-Object { Write-Host $_ }
     Invoke-Adb @('-s', $DeviceId, 'logcat', '-c') | Out-Null
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'start', '-W', '-n', $activityName) | ForEach-Object { Write-Host $_ }
     Wait-ForNormalReady
@@ -343,6 +374,15 @@ Assert-Command 'flutter'
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
 $samplesPath = Join-Path $reportDir 'samples.jsonl'
 New-Item -ItemType File -Path $samplesPath -Force | Out-Null
+$continuousSamplesPath = if ($Scenario -eq 'continuous') {
+    Join-Path $reportDir 'continuous-samples.jsonl'
+}
+else {
+    $null
+}
+if ($null -ne $continuousSamplesPath) {
+    New-Item -ItemType File -Path $continuousSamplesPath -Force | Out-Null
+}
 $effectiveTimeoutSeconds = $TimeoutSeconds
 if ($DurationSeconds -gt 0) {
     $effectiveTimeoutSeconds = [Math]::Max(
@@ -383,7 +423,7 @@ try {
         throw "裝置 $DeviceId 沒有以 device 狀態連線。"
     }
 
-    # The fixed NightReader_API37 emulator is a userdebug image; root adb lets
+    # The NightReader_120Hz emulator is a userdebug image; root adb lets
     # the deterministic fixture be owned by the debug package UID, matching
     # Android's app-specific external-files view instead of shell's view.
     Invoke-Captured 'adb' @('-s', $DeviceId, 'root') | ForEach-Object { Write-Host $_ }
@@ -392,16 +432,24 @@ try {
     # Clear before pushing: pm clear also removes the app-specific external
     # directory used as the deterministic fixture destination.
     Write-Host '清除 app data（在 fixture push 前）。'
-    Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
-    Invoke-Adb @('-s', $DeviceId, 'shell', 'pm', 'clear', $packageName) | ForEach-Object { Write-Host $_ }
+    $installedPackagePath = & adb -s $DeviceId shell pm path $packageName 2>$null
+    $packageInstalled = $LASTEXITCODE -eq 0 -and ($installedPackagePath -match '^package:')
+    if ($packageInstalled) {
+        Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
+        Invoke-Adb @('-s', $DeviceId, 'shell', 'pm', 'clear', $packageName) |
+            ForEach-Object { Write-Host $_ }
+    }
+    else {
+        Write-Host "尚未安裝 $packageName，略過 pm clear；稍後先安裝一般 debug APK。"
+    }
 
     # Let the installed app create its package-owned external directory before
     # adb pushes the fixture.  On some API 37 emulator images a shell-created
     # Android/data subtree is visible to `adb shell ls` but filtered from the
     # app's dart:io File.exists until the app has initialized its own path.
-    if (Test-Path -LiteralPath $apkPath) {
+    if (Test-Path -LiteralPath $normalApkPath) {
         Write-Host '啟動一般 debug APK 建立 app-specific external directory。'
-        Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) |
+        Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $normalApkPath) |
             ForEach-Object { Write-Host $_ }
         Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'start', '-W', '-n', $activityName) |
             ForEach-Object { Write-Host $_ }
@@ -420,15 +468,15 @@ try {
     $effectiveBuildNumber = [Math]::Max($BuildNumber, $installedBuildNumber + 1)
     Write-Host "使用 Android versionCode=$effectiveBuildNumber。"
 
-    if (Test-Path -LiteralPath $apkPath) {
-        Copy-Item -LiteralPath $apkPath -Destination $backupApkPath -Force
+    if (Test-Path -LiteralPath $normalApkPath) {
+        Copy-Item -LiteralPath $normalApkPath -Destination $backupApkPath -Force
     }
 
     Write-Host "建置 Android integration workload：$testTarget"
     Push-Location $repoRoot
     try {
         $buildArguments = @(
-            'build', 'apk', '--debug', "--target=$testTarget",
+            'build', 'apk', "--$BuildMode", "--target=$testTarget",
             "--build-number=$effectiveBuildNumber",
             "--dart-define=NIGHT_READER_FIXTURE_PATH=$FixtureDevicePath",
             "--dart-define=NIGHT_READER_FIXTURE_HOST_PATH=$fixtureHostPath"
@@ -438,18 +486,26 @@ try {
             $buildArguments += "--dart-define=NIGHT_READER_MONKEY_ITERATIONS=$Iterations"
             $buildArguments += "--dart-define=NIGHT_READER_MONKEY_DURATION_SECONDS=$DurationSeconds"
         }
+        if ($Scenario -eq 'continuous') {
+            $buildArguments += "--dart-define=NIGHT_READER_CONTINUOUS_SEED=$Seed"
+            $buildArguments += "--dart-define=NIGHT_READER_CONTINUOUS_ITERATIONS=$Iterations"
+            $buildArguments += "--dart-define=NIGHT_READER_CONTINUOUS_DURATION_SECONDS=$DurationSeconds"
+            if (-not [string]::IsNullOrWhiteSpace($Action)) {
+                $buildArguments += "--dart-define=NIGHT_READER_CONTINUOUS_ACTION=$Action"
+            }
+        }
         Invoke-Captured 'flutter' $buildArguments | ForEach-Object { Write-Host $_ }
     }
     finally {
         Pop-Location
     }
-    if (-not (Test-Path -LiteralPath $apkPath)) {
-        throw "找不到 integration workload APK：$apkPath"
+    if (-not (Test-Path -LiteralPath $workloadApkPath)) {
+        throw "找不到 integration workload APK：$workloadApkPath"
     }
 
     Write-Host '清除 app data 並安裝 workload APK。'
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
-    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) | ForEach-Object { Write-Host $_ }
+    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $workloadApkPath) | ForEach-Object { Write-Host $_ }
     $testApkInstalled = $true
     # TTS uses audio_service's Android notification channel on API 33+.
     # Grant the declared runtime notification permission before the workload
@@ -516,13 +572,13 @@ try {
             if ($null -ne $sample) { $sampleCount += 1 }
             $nextSampleAt = $now.AddSeconds($SampleIntervalSeconds)
         }
-        if ($log -match 'READER_(E2E|MONKEY)_RESULT status=passed') {
+        if ($log -match 'READER_(E2E|MONKEY|CONTINUOUS)_RESULT status=passed') {
             $passed = $true
             break
         }
-        if ($log -match 'READER_(E2E|MONKEY)_FAILURE|Some tests failed|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT|Null check operator used on a null value|Unhandled exception') {
+        if ($log -match 'READER_(E2E|MONKEY|CONTINUOUS)_(FAILURE|ANOMALY)|Some tests failed|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT|Null check operator used on a null value|Unhandled exception') {
             $failure = ($log -split "`r?`n" | Where-Object {
-                $_ -match 'READER_(E2E|MONKEY)_FAILURE|Some tests failed|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT|Null check operator used on a null value|Unhandled exception'
+                $_ -match 'READER_(E2E|MONKEY|CONTINUOUS)_(FAILURE|ANOMALY)|Some tests failed|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT|Null check operator used on a null value|Unhandled exception'
             } | Select-Object -Last 1)
             break
         }
@@ -537,6 +593,23 @@ try {
     Write-ReportFile 'workload-logcat.txt' $finalLog | Out-Null
     $finalFilteredLog = Get-WorkloadLogcat
     $lastWorkloadLog = $finalFilteredLog
+    if ($null -ne $continuousSamplesPath) {
+        $sampleLines = @(
+            $finalFilteredLog -split "`r?`n" | ForEach-Object {
+                $sampleMatch = [regex]::Match(
+                    [string]$_,
+                    'READER_CONTINUOUS_SAMPLE\s+(\{.*\})'
+                )
+                if ($sampleMatch.Success) {
+                    $sampleMatch.Groups[1].Value
+                }
+            }
+        )
+        if ($sampleLines.Count -gt 0) {
+            Set-Content -LiteralPath $continuousSamplesPath `
+                -Value $sampleLines -Encoding utf8
+        }
+    }
     $endElapsedSeconds = [int]([Math]::Floor(($workloadFinishedAt - $workloadStartedAt).TotalSeconds))
     $endSample = Capture-PerformanceSnapshot `
         -Name 'end' `
@@ -578,9 +651,11 @@ finally {
         fixtureDevicePath = $FixtureDevicePath
         fixtureBytes = if ($null -ne $fixtureSize) { $fixtureSize } else { $null }
         avdDeviceId = $DeviceId
+        buildMode = $BuildMode
         package = $packageName
         activity = $activityName
-        apkPath = $apkPath
+        apkPath = $workloadApkPath
+        normalApkPath = $normalApkPath
         startedAt = $startedAt.ToString('o')
         finishedAt = $finishedAt.ToString('o')
         actualDurationSeconds = ($finishedAt - $startedAt).TotalSeconds
@@ -604,8 +679,10 @@ finally {
         }
         sampleCount = $sampleCount
         samplesPath = $samplesPath
+        continuousSamplesPath = $continuousSamplesPath
         completedActions = $workloadProgress.completedActions
         lastActions = $workloadProgress.lastActions
+        performance = $workloadProgress.performance
         effectiveBuildNumber = $effectiveBuildNumber
         testError = if ($null -ne $testError) { $testError.ToString() } else { $null }
         restoreError = $null

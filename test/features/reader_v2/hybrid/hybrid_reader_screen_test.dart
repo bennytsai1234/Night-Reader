@@ -448,6 +448,29 @@ void main() {
     expect(captured!.chapterIndex, 1);
   });
 
+  testWidgets('runtime.jumpToChapter 後窄通道進度不會沿用上一章', (tester) async {
+    final runtime = makeRuntime(List.generate(3, chapter));
+    final controller = ReaderV2ViewportController();
+    final progress = ValueNotifier<HybridProgressSnapshot?>(null);
+    addTearDown(runtime.dispose);
+    addTearDown(progress.dispose);
+
+    await pumpScreen(tester, runtime, controller, progress: progress);
+    await openAndSettle(tester, runtime);
+    expect(progress.value, isNotNull);
+    expect(progress.value!.chapterIndex, 0);
+
+    await runtime.jumpToChapter(1);
+    await tester.pumpAndSettle();
+
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+    expect(
+      progress.value?.chapterIndex,
+      1,
+      reason: '章節內容已切換時，底部資訊列不能保留上一章的進度 label',
+    );
+  });
+
   testWidgets('runtime 從後一章回跳到前一章後 viewport 跟隨', (tester) async {
     final runtime = makeRuntime(List.generate(3, chapter));
     final controller = ReaderV2ViewportController();
@@ -479,19 +502,14 @@ void main() {
       content: '短前言',
     );
     final viewportSize = const Size(432, 824);
-    final runtime = makeRuntime(
-      [shortChapter, chapter(1, paragraphCount: 40)],
-      viewportSize: viewportSize,
-    );
+    final runtime = makeRuntime([
+      shortChapter,
+      chapter(1, paragraphCount: 40),
+    ], viewportSize: viewportSize);
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
 
-    await pumpScreen(
-      tester,
-      runtime,
-      controller,
-      viewportSize: viewportSize,
-    );
+    await pumpScreen(tester, runtime, controller, viewportSize: viewportSize);
     await openAndSettle(tester, runtime);
     await runtime.jumpToChapter(1);
     await tester.pumpAndSettle();
@@ -516,19 +534,14 @@ void main() {
       content: '短前言',
     );
     final viewportSize = const Size(432, 824);
-    final runtime = makeRuntime(
-      [shortChapter, chapter(1, paragraphCount: 40)],
-      viewportSize: viewportSize,
-    );
+    final runtime = makeRuntime([
+      shortChapter,
+      chapter(1, paragraphCount: 40),
+    ], viewportSize: viewportSize);
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
 
-    await pumpScreen(
-      tester,
-      runtime,
-      controller,
-      viewportSize: viewportSize,
-    );
+    await pumpScreen(tester, runtime, controller, viewportSize: viewportSize);
     await openAndSettle(tester, runtime);
 
     expect(

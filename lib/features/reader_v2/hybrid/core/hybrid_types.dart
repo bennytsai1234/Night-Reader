@@ -533,7 +533,7 @@ final class HybridBlockTextStyle {
 }
 
 final class LayoutTask {
-  const LayoutTask({
+  LayoutTask({
     required this.block,
     this.continuationBlocks = const <ChapterBlock>[],
     required this.epoch,
@@ -559,14 +559,18 @@ final class LayoutTask {
   final List<ChapterBlock> continuationBlocks;
 
   /// [block] 加上 [continuationBlocks]，依排版順序排列的完整 group。
-  List<ChapterBlock> get groupBlocks =>
-      continuationBlocks.isEmpty
-          ? <ChapterBlock>[block]
-          : <ChapterBlock>[block, ...continuationBlocks];
+  List<ChapterBlock> get groupBlocks => continuationBlocks.isEmpty
+      ? <ChapterBlock>[block]
+      : <ChapterBlock>[block, ...continuationBlocks];
 
   /// group 內所有切塊文字接成的完整邏輯段落文字；即使 [block] 只是效能
   /// 切塊的一部分，排版永遠以此為準，不會在切點斷字。
-  String get combinedText {
+  /// 建立一次後重用。連續排版 group 會在 cost prediction、Paragraph
+  /// builder 與 metrics 回寫路徑被讀多次；每次 getter 都重新串接整段文字
+  /// 會把不屬於 ui.Paragraph 的額外配置成本帶進 120Hz frame。
+  late final String combinedText = _buildCombinedText();
+
+  String _buildCombinedText() {
     if (continuationBlocks.isEmpty) return block.text;
     final buffer = StringBuffer(block.text);
     for (final continuation in continuationBlocks) {

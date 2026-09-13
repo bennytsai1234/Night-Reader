@@ -16,6 +16,7 @@ import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:provider/provider.dart';
 
 import 'package:night_reader/main.dart' as app;
@@ -53,6 +54,42 @@ class ReaderTestHarness {
 
   late Book book;
   late List<BookChapter> chapters;
+
+  /// Read the runtime through the test-only seam on ReaderV2Page. Keeping the
+  /// lookup here lets the continuous workload exercise the same runtime jump
+  /// path as the chapter drawer without making the old Drawer harness its
+  /// dependency.
+  ReaderV2Runtime get runtimeForTesting {
+    final dynamic pageState = tester.state(find.byType(ReaderV2Page));
+    final runtime = pageState.debugRuntime as ReaderV2Runtime?;
+    if (runtime == null) fail('Reader runtime 尚未建立');
+    return runtime;
+  }
+
+  /// Read the semantic Reader snapshot exposed by HybridReaderScreen for the
+  /// continuous layout/scroll race workload.
+  Map<String, Object?> debugSnapshot() {
+    final dynamic screenState = tester.state(
+      find.byType(HybridReaderScreen).first,
+    );
+    final snapshot = screenState.debugSnapshot();
+    return Map<String, Object?>.from(snapshot as Map);
+  }
+
+  Map<String, Object?> debugPerformanceSummary() {
+    final dynamic screenState = tester.state(
+      find.byType(HybridReaderScreen).first,
+    );
+    final summary = screenState.debugPerformanceSummary();
+    return Map<String, Object?>.from(summary as Map);
+  }
+
+  void resetPerformanceWindow() {
+    final dynamic screenState = tester.state(
+      find.byType(HybridReaderScreen).first,
+    );
+    screenState.debugResetPerformanceWindow();
+  }
 
   Future<void> startAndProvision() async {
     app.main();
@@ -201,6 +238,57 @@ class ReaderTestHarness {
       () => !scaffoldState.isDrawerOpen,
       reason: 'Reader 章節 Drawer 沒有關閉',
     );
+  }
+
+  /// Exercise a real directory selection without depending on the controls
+  /// overlay. This keeps the continuous workload focused on Reader content
+  /// races while still covering the production Drawer -> runtime jump path.
+  Future<void> jumpToChapterFromDirectory(int index) async {
+    if (index < 0 || index >= chapters.length) {
+      throw ArgumentError.value(index, 'index');
+    }
+    await dismissControls();
+    final scaffoldState = _readerScaffoldState();
+    scaffoldState.openDrawer();
+    await pumpUntil(
+      tester,
+      () => scaffoldState.isDrawerOpen,
+      reason: '章節 Drawer 未開啟',
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final drawer = find.byType(ReaderV2ChaptersDrawer);
+    final drawerScrollables = find.descendant(
+      of: drawer,
+      matching: find.byType(Scrollable),
+    );
+    expect(drawerScrollables, findsOneWidget);
+    final scrollableState = tester.state<ScrollableState>(
+      drawerScrollables.last,
+    );
+    final targetOffset = (index * 56.0)
+        .clamp(
+          scrollableState.position.minScrollExtent,
+          scrollableState.position.maxScrollExtent,
+        )
+        .toDouble();
+    scrollableState.position.jumpTo(targetOffset);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final title = chapters[index].title;
+    final tile = find.descendant(of: drawer, matching: find.text(title));
+    expect(tile, findsOneWidget, reason: 'Drawer 找不到章節 $index：$title');
+    await tester.ensureVisible(tile);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(tile);
+    await tester.pump(const Duration(milliseconds: 120));
+    await pumpUntil(
+      tester,
+      () => !scaffoldState.isDrawerOpen,
+      timeout: const Duration(seconds: 60),
+      reason: '章節 Drawer 沒有關閉',
+    );
+    expectNoFlutterException();
   }
 
   Future<void> tapNextChapter() async {

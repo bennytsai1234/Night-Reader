@@ -12,6 +12,29 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
+/// 一個 LayoutTask 從開始建立 Paragraph 到 metrics 回寫完成的實測資料。
+///
+/// 這不是功能邏輯的另一條路徑，只是把既有 pump 的同步工作切點暴露給
+/// telemetry，讓 120Hz 的 P99 掉幀可以回溯到「哪種 task、多少字、預估錯
+/// 多少」，而不是只看到 frame 已經超時。
+final class LayoutPumpTaskStats {
+  const LayoutPumpTaskStats({
+    required this.elapsed,
+    required this.predicted,
+    required this.charCount,
+    required this.groupBlockCount,
+    required this.layoutPasses,
+    required this.state,
+  });
+
+  final Duration elapsed;
+  final Duration predicted;
+  final int charCount;
+  final int groupBlockCount;
+  final double layoutPasses;
+  final PumpState state;
+}
+
 final class LayoutPump implements HybridLayoutPump {
   @visibleForTesting
   static void Function()? debugOnIntermediateParagraphDisposed;
@@ -82,17 +105,20 @@ final class LayoutPump implements HybridLayoutPump {
     required MeasurementNamespace namespace,
     BudgetGovernor? governor,
     LayoutCostModel? costModel,
+    void Function(LayoutPumpTaskStats stats)? onTaskCompleted,
   }) : _paragraphCache = paragraphCache,
        _measurementStore = measurementStore,
        _namespace = namespace,
        _governor = governor ?? BudgetGovernor(),
-       _costModel = costModel ?? LayoutCostModel();
+       _costModel = costModel ?? LayoutCostModel(),
+       _onTaskCompleted = onTaskCompleted;
 
   final ParagraphCache _paragraphCache;
   final HybridMeasurementStore _measurementStore;
   final MeasurementNamespace _namespace;
   final BudgetGovernor _governor;
   final LayoutCostModel _costModel;
+  final void Function(LayoutPumpTaskStats stats)? _onTaskCompleted;
   final Queue<LayoutTask> _queue = Queue<LayoutTask>();
   final StreamController<BlockReady> _completed =
       StreamController<BlockReady>.broadcast(sync: true);
@@ -141,6 +167,7 @@ final class LayoutPump implements HybridLayoutPump {
         if (stopwatch.elapsedMicroseconds + predicted > budgetMicros) break;
       }
       final task = _nextTask();
+      final predicted = _costModel.predict(task);
       final started = Stopwatch()..start();
       final layoutPasses = _costModel.layoutPassesFor(task);
       final paragraph = _buildParagraph(task);
@@ -162,10 +189,21 @@ final class LayoutPump implements HybridLayoutPump {
       for (var i = 0; i < keys.length; i += 1) {
         _measurementStore.put(_namespace, keys[i], metricsList[i]);
       }
+      final elapsed = started.elapsed;
       _costModel.record(
         charCount: task.combinedText.length,
-        elapsed: started.elapsed,
+        elapsed: elapsed,
         layoutPasses: layoutPasses,
+      );
+      _onTaskCompleted?.call(
+        LayoutPumpTaskStats(
+          elapsed: elapsed,
+          predicted: predicted,
+          charCount: task.combinedText.length,
+          groupBlockCount: groupBlocks.length,
+          layoutPasses: layoutPasses,
+          state: _state,
+        ),
       );
       for (var i = 0; i < keys.length; i += 1) {
         _completed.add(

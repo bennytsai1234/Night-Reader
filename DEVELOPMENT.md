@@ -48,16 +48,20 @@ flutter run -d <device-id>
 
 本機目前已建立可直接用於 Night Reader 驗證的 AVD：
 
-- AVD：`NightReader_API37`（Generic Medium Phone）
+- AVD：`NightReader_120Hz`（Pixel 10 Pro）
 - Android：API 37 / Android 17.0，`Google APIs`、`x86_64`
 - SDK：`C:\Android\Sdk`
-- 啟動後的 Flutter device：通常是 `emulator-5554`
+- 目前啟動後的 Flutter device serial：`emulator-5556`
+- 目標更新頻率：以 `SurfaceFlinger` 的 `activeMode.vsyncRate=120.00 Hz` 為驗證依據；ADB serial 可能因重新啟動而改變，執行命令前仍要以 `adb devices -l` 取得當次 serial。
 
-啟動這台 AVD 時可使用：
+啟動這台 AVD 並覆寫 guest display 更新頻率時可使用：
 
 ```powershell
-flutter emulators --launch NightReader_API37
+$androidSdk = 'C:\Android\Sdk'
+& "$androidSdk\emulator\emulator.exe" -avd NightReader_120Hz `
+  -no-snapshot-load -no-snapshot-save -vsync-rate 120
 flutter devices
+adb devices -l
 ```
 
 若在另一個開發環境要建立同樣的 AVD，使用已安裝的 system image：
@@ -65,10 +69,41 @@ flutter devices
 ```powershell
 $androidSdk = 'C:\Android\Sdk'
 & "$androidSdk\cmdline-tools\latest\bin\avdmanager.bat" create avd `
-  -n NightReader_API37 `
+  -n NightReader_120Hz `
   -k 'system-images;android-37.0;google_apis;x86_64' `
-  -d medium_phone
+  -d pixel_10_pro
 ```
+
+Reader Android 驗證目前以 `NightReader_120Hz` 為唯一偏好 AVD；不要再把已移除的 `NightReader_API37` 或固定的 `emulator-5554` 當成目標。執行 repo 內的 Android workload runner 時，先確認新 AVD 的當次 serial，再明確傳入 `-DeviceId`，例如：
+
+```powershell
+.\tool\run_android_reader_workload.ps1 -DeviceId emulator-5556 -Scenario journey
+```
+
+Reader 120Hz smooth度驗收使用 `continuous` scenario；初始開書／restore 完成
+後才開始計算效能 window，嚴格門檻是 frame `P99 < 8000µs`。`>8333µs` 是
+120Hz missed-frame budget，`>16667µs` 與 `>33333µs` 另外作為較嚴重的
+jank 分類，不能拿它們取代 P99 gate。測試同時記錄 `LayoutPump` 單一同步
+task 的實際／預估耗時與字數，方便區分 framework／emulator 負載和 Reader
+排版 task 本身的瓶頸：
+
+```powershell
+.\tool\run_android_reader_workload.ps1 `
+  -DeviceId emulator-5556 `
+  -Scenario continuous `
+  -BuildMode profile `
+  -Seed 9132026 `
+  -Iterations 12 `
+  -TimeoutSeconds 900 `
+  -ReportDir artifacts/android-reader/continuous-120hz-profile
+```
+
+`debug` workload 用於功能與 race 語意驗證；`profile` workload 才能作為
+效能判定依據。profile test APK 會使用獨立的 `com.inkpage.reader.debug`
+application id，避免 Flutter driver 為安裝 profile APK 而移除正式版
+`com.inkpage.reader` 的資料。若只用 `flutter run`／`flutter attach`，才可
+使用 Hot Reload；profile／release APK 與直接 `adb am start` 不支援 Hot
+Reload。
 
 Android Studio 的 Device Manager 若顯示 `Missing system image`，先檢查 Android Studio 的 Android SDK Location 是否指向 `C:\Android\Sdk`；不要在 AVD 設定頁直接按下載／完成來重抓已存在的映像。只要 `flutter emulators`、`flutter devices` 與 `adb devices -l` 都能看到這台 AVD，就可以用 Flutter CLI 執行與驗證。
 
