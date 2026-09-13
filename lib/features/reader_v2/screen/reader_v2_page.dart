@@ -125,13 +125,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDarkBackground ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDarkBackground ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: isDarkBackground
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: isDarkBackground
+            ? Brightness.dark
+            : Brightness.light,
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            isDarkBackground ? Brightness.light : Brightness.dark,
+        systemNavigationBarIconBrightness: isDarkBackground
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: ReaderV2PageShell(
         book: widget.book,
@@ -168,15 +171,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         onMore: _showMore,
         onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
         onTts: _showTts,
-        onInterface:
-            () =>
-                ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
-        onSettings:
-            () => ReaderV2SettingsSheets.showAdvancedSettings(
-              context,
-              settings,
-              onChangeSource: widget.book.isLocal ? null : _showChangeSource,
-            ),
+        onInterface: () =>
+            ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
+        onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
+          context,
+          settings,
+          onChangeSource: widget.book.isLocal ? null : _showChangeSource,
+        ),
         onAutoPage: _coordinator.toggleAutoPage,
         onToggleDayNight: settings.toggleDayNightTheme,
         onReplaceRule: () => _coordinator.openReplaceRule(context),
@@ -290,10 +291,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final runtime = _host.runtime;
     if (runtime == null) return false;
     await _coordinator.jumpToChapter(index);
-    return mounted &&
+    final succeeded =
+        mounted &&
         identical(_host.runtime, runtime) &&
         runtime.state.phase == ReaderV2Phase.ready &&
         runtime.state.visibleLocation.chapterIndex == index;
+    return succeeded;
   }
 
   void _drainRuntimeNotice() {
@@ -330,7 +333,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         context: context,
         provider: this,
         isDrawerOpen: () => _scaffoldKey.currentState?.isDrawerOpen ?? false,
-        popNavigator: () => Navigator.of(context).pop(),
+        // The reader is always opened as an app-level route from the
+        // bookshelf.  A Scaffold drawer can leave a LocalHistoryEntry on the
+        // reader route while its closing animation settles; popUntil applies
+        // the predicate to the same route again until that local history is
+        // consumed, then removes only the reader route itself.
+        popNavigator: () {
+          final navigator = Navigator.of(context, rootNavigator: true);
+          final readerRoute = ModalRoute.of(context);
+          if (readerRoute == null) {
+            navigator.pop();
+            return;
+          }
+          navigator.popUntil((route) => !identical(route, readerRoute));
+        },
       ),
     );
   }
@@ -370,15 +386,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder:
-          (sheetContext) => ChangeSourceSheet(
-            book: widget.book,
-            onSelectSource:
-                (candidate) => _handleChangeSourceSelected(
-                  candidate,
-                  onSuccess: (resolution) => switchedResolution = resolution,
-                ),
-          ),
+      builder: (sheetContext) => ChangeSourceSheet(
+        book: widget.book,
+        onSelectSource: (candidate) => _handleChangeSourceSelected(
+          candidate,
+          onSuccess: (resolution) => switchedResolution = resolution,
+        ),
+      ),
     );
 
     final resolution = switchedResolution;
@@ -402,8 +416,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final currentTitle = _chapterTitleAt(currentIndex);
     final switchingBook = widget.book.copyWith(
       chapterIndex: currentIndex,
-      durChapterTitle:
-          currentTitle.isEmpty ? widget.book.durChapterTitle : currentTitle,
+      durChapterTitle: currentTitle.isEmpty
+          ? widget.book.durChapterTitle
+          : currentTitle,
       charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
       visualOffsetPx:
           currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,

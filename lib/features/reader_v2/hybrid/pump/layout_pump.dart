@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
@@ -12,6 +13,9 @@ import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
 final class LayoutPump implements HybridLayoutPump {
+  @visibleForTesting
+  static void Function()? debugOnIntermediateParagraphDisposed;
+
   /// 避免短末行因少數字元而被拉得過鬆；單位為 logical pixels。
   static const double lastLineLetterSpacingCap = 2.0;
 
@@ -57,8 +61,8 @@ final class LayoutPump implements HybridLayoutPump {
             ),
           )
           ..addText('一一');
-    final paragraph =
-        builder.build()..layout(ui.ParagraphConstraints(width: fontSize * 8));
+    final paragraph = builder.build()
+      ..layout(ui.ParagraphConstraints(width: fontSize * 8));
     double? cell;
     final first = paragraph.getBoxesForRange(0, 1);
     final second = paragraph.getBoxesForRange(1, 2);
@@ -182,6 +186,11 @@ final class LayoutPump implements HybridLayoutPump {
     unawaited(_completed.close());
   }
 
+  void _disposeIntermediateParagraph(ui.Paragraph paragraph) {
+    paragraph.dispose();
+    debugOnIntermediateParagraphDisposed?.call();
+  }
+
   /// 與 [_nextTask] 同一套計分的唯讀預覽（平手取先入者，兩者一致）。
   LayoutTask _peekTask() {
     if (_queue.length <= 1) return _queue.first;
@@ -222,8 +231,9 @@ final class LayoutPump implements HybridLayoutPump {
       LayoutTaskPriority.visible => 10,
       LayoutTaskPriority.prefetch => 20,
     };
-    final directionScore =
-        task.direction == HybridScrollDirection.forward ? 0 : 1;
+    final directionScore = task.direction == HybridScrollDirection.forward
+        ? 0
+        : 1;
     return priorityScore + directionScore;
   }
 
@@ -249,104 +259,107 @@ final class LayoutPump implements HybridLayoutPump {
       textAlignOverride: ui.TextAlign.start,
     );
 
-    final lines = paragraph.computeLineMetrics();
-    if (lines.length < 2) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
+    try {
+      final lines = paragraph.computeLineMetrics();
+      if (lines.length < 2) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
+      final lastLineIndex = lines.lastIndexWhere((line) => line.hardBreak);
+      if (lastLineIndex <= 0) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
+      final lineRanges = _lineRanges(
+        paragraph,
+        _indentFor(task).length + task.combinedText.length,
+        lines.length,
       );
-    }
-    final lastLineIndex = lines.lastIndexWhere((line) => line.hardBreak);
-    if (lastLineIndex <= 0) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
-    final lineRanges = _lineRanges(
-      paragraph,
-      _indentFor(task).length + task.combinedText.length,
-      lines.length,
-    );
-    if (lineRanges.length <= lastLineIndex) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
+      if (lineRanges.length <= lastLineIndex) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
 
-    final extraLetterSpacing = _averageJustifyExpansion(
-      paragraph,
-      lines,
-      lineRanges,
-      '${_indentFor(task)}${task.combinedText}',
-      lastLineIndex,
-      task,
-    );
-    if (extraLetterSpacing <= 0) {
-      return _buildParagraphWithLetterSpacing(
+      final extraLetterSpacing = _averageJustifyExpansion(
+        paragraph,
+        lines,
+        lineRanges,
+        '${_indentFor(task)}${task.combinedText}',
+        lastLineIndex,
         task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
       );
-    }
+      if (extraLetterSpacing <= 0) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
 
-    final indent = _indentFor(task);
-    final textLength = indent.length + task.combinedText.length;
-    final lastLine = lineRanges[lastLineIndex];
-    final renderedText = '$indent${task.combinedText}';
-    final lastLineBoxes = _boxesForTextClusters(
-      paragraph,
-      renderedText,
-      lastLine,
-    );
-    final lastLineGaps = lastLineBoxes.length - 1;
-    if (lastLineGaps <= 0) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
+      final indent = _indentFor(task);
+      final textLength = indent.length + task.combinedText.length;
+      final lastLine = lineRanges[lastLineIndex];
+      final renderedText = '$indent${task.combinedText}';
+      final lastLineBoxes = _boxesForTextClusters(
+        paragraph,
+        renderedText,
+        lastLine,
       );
-    }
-    // letterSpacing 加在範圍內每個字元之後（含末字），總增量是
-    // spacing × 字數而非 × 間隙數；分母若用 gaps，近滿末行會超寬
-    // 一個 spacing 而把末字擠到下一行。
-    final lastLineHeadroom =
-        (task.contentWidth - lines[lastLineIndex].width) /
-        lastLineBoxes.length.toDouble();
-    final safeExtraLetterSpacing =
-        extraLetterSpacing
-            .clamp(0.0, lastLineHeadroom > 0 ? lastLineHeadroom : 0.0)
-            .toDouble();
-    if (safeExtraLetterSpacing <= 0) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
-    final start = lastLine.start.clamp(indent.length, textLength).toInt();
-    final end = lastLine.end.clamp(start, textLength).toInt();
-    if (end <= start) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
+      final lastLineGaps = lastLineBoxes.length - 1;
+      if (lastLineGaps <= 0) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
+      // letterSpacing 加在範圍內每個字元之後（含末字），總增量是
+      // spacing × 字數而非 × 間隙數；分母若用 gaps，近滿末行會超寬
+      // 一個 spacing 而把末字擠到下一行。
+      final lastLineHeadroom =
+          (task.contentWidth - lines[lastLineIndex].width) /
+          lastLineBoxes.length.toDouble();
+      final safeExtraLetterSpacing = extraLetterSpacing
+          .clamp(0.0, lastLineHeadroom > 0 ? lastLineHeadroom : 0.0)
+          .toDouble();
+      if (safeExtraLetterSpacing <= 0) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
+      final start = lastLine.start.clamp(indent.length, textLength).toInt();
+      final end = lastLine.end.clamp(start, textLength).toInt();
+      if (end <= start) {
+        return _buildParagraphWithLetterSpacing(
+          task,
+          extraLetterSpacing: 0,
+          textAlignOverride: task.textStyle.textAlign,
+        );
+      }
 
-    // Pass 2：只對末行字元範圍增加 letterSpacing，文字與 displayText 完全
-    // 不變；因此 TTS range、錨點與 contentHash 仍在同一座標系。
-    return _buildParagraphWithLetterSpacing(
-      task,
-      extraLetterSpacing: safeExtraLetterSpacing,
-      extraStart: start,
-      extraEnd: end,
-      textAlignOverride: task.textStyle.textAlign,
-    );
+      // Pass 2：只對末行字元範圍增加 letterSpacing，文字與 displayText 完全
+      // 不變；因此 TTS range、錨點與 contentHash 仍在同一座標系。
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: safeExtraLetterSpacing,
+        extraStart: start,
+        extraEnd: end,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    } finally {
+      _disposeIntermediateParagraph(paragraph);
+    }
   }
 
   /// group 內每個效能切塊各自的 Y 窗邊界，長度為
@@ -362,7 +375,8 @@ final class LayoutPump implements HybridLayoutPump {
       final groupStart = blocks.first.charRange.start;
       final totalTextLength = indentLength + task.combinedText.length;
       for (var i = 1; i < blocks.length; i += 1) {
-        final localOffset = indentLength + (blocks[i].charRange.start - groupStart);
+        final localOffset =
+            indentLength + (blocks[i].charRange.start - groupStart);
         final top =
             _lineTopForOffset(paragraph, localOffset, totalTextLength) ??
             ys.last;
@@ -400,8 +414,9 @@ final class LayoutPump implements HybridLayoutPump {
           for (final line in paragraph.computeLineMetrics())
             line.baseline - line.ascent,
         ];
-        lineCount =
-            lineTops.where((t) => t >= top - 0.01 && t < bottom - 0.01).length;
+        lineCount = lineTops
+            .where((t) => t >= top - 0.01 && t < bottom - 0.01)
+            .length;
       }
       result.add(
         BlockMetrics(
@@ -467,8 +482,9 @@ final class LayoutPump implements HybridLayoutPump {
     while (offset < range.end) {
       final codeUnit = renderedText.codeUnitAt(offset);
       final isHighSurrogate = codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
-      final clusterEnd =
-          (offset + (isHighSurrogate ? 2 : 1)).clamp(0, range.end).toInt();
+      final clusterEnd = (offset + (isHighSurrogate ? 2 : 1))
+          .clamp(0, range.end)
+          .toInt();
       if (clusterEnd <= offset) break;
       boxes.addAll(paragraph.getBoxesForRange(offset, clusterEnd));
       offset = clusterEnd;
@@ -547,9 +563,8 @@ final class LayoutPump implements HybridLayoutPump {
     } else {
       builder.addText(body);
     }
-    final paragraph =
-        builder.build()
-          ..layout(ui.ParagraphConstraints(width: task.contentWidth));
+    final paragraph = builder.build()
+      ..layout(ui.ParagraphConstraints(width: task.contentWidth));
     return paragraph;
   }
 
@@ -566,8 +581,9 @@ final class LayoutPump implements HybridLayoutPump {
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,
       letterSpacing: letterSpacing ?? task.textStyle.letterSpacing,
-      fontWeight:
-          task.textStyle.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
+      fontWeight: task.textStyle.bold
+          ? ui.FontWeight.bold
+          : ui.FontWeight.normal,
       fontFeatures: kReaderV2CjkFontFeatures,
     );
   }

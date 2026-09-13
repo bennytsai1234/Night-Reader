@@ -112,6 +112,62 @@ void main() {
   });
 
   group('LayoutPump', () {
+    test(
+      'B2 intermediate paragraph is disposed after the replacement pass',
+      () async {
+        var disposedIntermediateParagraphs = 0;
+        final previousObserver =
+            LayoutPump.debugOnIntermediateParagraphDisposed;
+        LayoutPump.debugOnIntermediateParagraphDisposed = () {
+          disposedIntermediateParagraphs += 1;
+        };
+        addTearDown(() {
+          LayoutPump.debugOnIntermediateParagraphDisposed = previousObserver;
+        });
+
+        final store = MeasurementStore();
+        final cache = ParagraphCache();
+        final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
+        final pump = LayoutPump(
+          paragraphCache: cache,
+          measurementStore: store,
+          namespace: MeasurementNamespace(
+            epoch: LayoutEpoch.initial,
+            fingerprint: fingerprint,
+          ),
+        );
+        addTearDown(() {
+          pump.dispose();
+          cache.dispose();
+        });
+
+        const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+        pump.submit(
+          LayoutTask(
+            block: const ChapterBlock(
+              key: key,
+              text: '衝在最前面的妖怪頭顱便滾落在地面上。',
+              charRange: HybridTextRange(0, 18),
+              sourceParagraphIndex: 0,
+            ),
+            epoch: LayoutEpoch.initial,
+            fingerprint: fingerprint,
+            textStyle: const HybridBlockTextStyle(
+              fontSize: 20,
+              lineHeight: 1.5,
+              letterSpacing: 0,
+              textAlign: ui.TextAlign.justify,
+            ),
+            contentWidth: 20 * 16.4,
+            indentChars: 2,
+          ),
+        );
+
+        expect(await pump.pumpPending(), 1);
+        expect(disposedIntermediateParagraphs, 1);
+      },
+    );
+
     test('asserts instead of laying out while dragging', () async {
       final store = MeasurementStore();
       final cache = ParagraphCache();

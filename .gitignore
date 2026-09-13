@@ -54,6 +54,9 @@ actionlint
 .codex
 android/.kotlin/
 
+# Local Android reader workload reports and failure artifacts
+artifacts/
+
 # Reasonix
 .reasonix/
 reasonix.toml

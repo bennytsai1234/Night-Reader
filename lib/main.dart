@@ -23,6 +23,7 @@ import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
+import 'core/startup/startup_retry_gate.dart';
 
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -61,6 +62,7 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 const String kAppDisplayName = '夜讀';
+final StartupRetryGate _startupRetryGate = StartupRetryGate();
 
 void main() {
   runZonedGuarded(_startApp, (error, stack) {
@@ -82,37 +84,7 @@ Future<void> _startApp() async {
       stackTrace: details.stack,
     );
     CrashHandler.recordFlutterError(details);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Detected an Error:',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                details.exceptionAsString(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                details.stack.toString(),
-                style: const TextStyle(color: Colors.grey, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return buildFlutterErrorWidget(details);
   };
 
   try {
@@ -121,6 +93,9 @@ Future<void> _startApp() async {
     AppLog.i('Dependencies Configured Successfully');
 
     FlutterError.onError = (details) {
+      // Ensure a Flutter build/provider failure cannot leave the native splash
+      // covering the ErrorWidget returned above.
+      FlutterNativeSplash.remove();
       FlutterError.presentError(details);
       AppLog.e(
         'Flutter Error: ${details.exception}',
@@ -151,13 +126,57 @@ Future<void> _startApp() async {
   }
 }
 
-Future<void> _retryCriticalStartup() async {
-  try {
-    await getIt.reset();
-  } catch (e, stack) {
-    AppLog.e('Dependency reset failed: $e', error: e, stackTrace: stack);
-  }
-  await _startApp();
+Widget buildFlutterErrorWidget(
+  FlutterErrorDetails details, {
+  VoidCallback? releaseNativeSplash,
+}) {
+  // A provider/widget build failure can happen after runApp(), so the
+  // dependency try/catch cannot release the native splash for this path.
+  (releaseNativeSplash ?? FlutterNativeSplash.remove)();
+  return Scaffold(
+    backgroundColor: Colors.black,
+    body: Container(
+      padding: const EdgeInsets.all(16),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Detected an Error:',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              details.exceptionAsString(),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              details.stack.toString(),
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _retryCriticalStartup() {
+  return _startupRetryGate.run(
+    reset: () async {
+      try {
+        await getIt.reset();
+      } catch (e, stack) {
+        AppLog.e('Dependency reset failed: $e', error: e, stackTrace: stack);
+      }
+    },
+    start: _startApp,
+  );
 }
 
 class _StartupFailureApp extends StatelessWidget {

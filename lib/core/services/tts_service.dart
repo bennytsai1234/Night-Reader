@@ -10,6 +10,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 
 import 'app_permission_service.dart';
 import 'audio_handler.dart';
+import 'tts_speech_coordinator.dart';
 
 /// TTSService - 系統 TTS 朗讀服務（單例）
 /// 對應 Android TTSReadAloudService.kt
@@ -30,6 +31,7 @@ class TTSService extends ChangeNotifier {
   ReaderAudioHandler? _audioHandler;
   final FlutterTts _flutterTts = FlutterTts();
   final AppPermissionService _permissionService = AppPermissionService();
+  final TtsSpeechCoordinator _speechCoordinator = TtsSpeechCoordinator();
 
   bool _isPlaying = false;
   double _pitch = 1.0;
@@ -201,35 +203,46 @@ class TTSService extends ChangeNotifier {
 
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
-    await init();
-    if (!_isInitialized) return;
-    if (!_notificationPermissionChecked) {
-      _notificationPermissionChecked = true;
-      await _permissionService.requestNotificationForTts();
-      await _ensureAudioHandler();
-    }
-    _resumeOffset = 0;
-    currentSpokenText = text;
-    // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
-    currentWordStart = -1;
-    currentWordEnd = -1;
-    _isPlaying = true;
-    _audioHandler?.setPlaying(true);
-    notifyListeners();
-    await _flutterTts.speak(text);
+    await _speechCoordinator.speak(
+      prepare: () async {
+        await init();
+        if (!_isInitialized) return false;
+        if (!_notificationPermissionChecked) {
+          _notificationPermissionChecked = true;
+          await _permissionService.requestNotificationForTts();
+          await _ensureAudioHandler();
+        }
+        return _isInitialized;
+      },
+      speak: () async {
+        _resumeOffset = 0;
+        currentSpokenText = text;
+        // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
+        currentWordStart = -1;
+        currentWordEnd = -1;
+        _isPlaying = true;
+        _audioHandler?.setPlaying(true);
+        notifyListeners();
+        await _flutterTts.speak(text);
+      },
+    );
   }
 
   Future<void> stop() async {
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _remainingMinutes = 0;
-    try {
-      // 保留 stop() 的 platform call 契約；沒有可用 TTS engine 時，
-      // 只記錄降級，不讓清理動作冒出未處理例外。
-      await _flutterTts.stop();
-    } catch (e) {
-      AppLog.e('TTSService: stop failed while TTS is unavailable: $e');
-    }
+    await _speechCoordinator.stop(
+      stop: () async {
+        try {
+          // 保留 stop() 的 platform call 契約；沒有可用 TTS engine 時，
+          // 只記錄降級，不讓清理動作冒出未處理例外。
+          await _flutterTts.stop();
+        } catch (e) {
+          AppLog.e('TTSService: stop failed while TTS is unavailable: $e');
+        }
+      },
+    );
     currentSpokenText = '';
     currentWordStart = -1;
     currentWordEnd = -1;

@@ -4,6 +4,7 @@ import 'dart:ui' show FrameTiming;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
@@ -23,8 +24,9 @@ import 'reader_v2_navigation_controller.dart';
 import 'reader_v2_viewport_bridge.dart';
 
 typedef ReaderV2VisibleLocationCapture = ReaderV2Location? Function();
-typedef ReaderV2ViewportRestore =
-    Future<bool> Function(ReaderV2Location location);
+typedef ReaderV2ViewportRestore = Future<bool> Function(
+  ReaderV2Location location,
+);
 
 class ReaderV2Runtime extends ChangeNotifier {
   factory ReaderV2Runtime({
@@ -476,8 +478,9 @@ class ReaderV2Runtime extends ChangeNotifier {
       chapterCount: repository.chapterCount,
     );
     final content = await loadContentForTts(location);
-    final safeOffset =
-        location.charOffset.clamp(0, content.displayText.length).toInt();
+    final safeOffset = location.charOffset
+        .clamp(0, content.displayText.length)
+        .toInt();
     return content.displayText.substring(safeOffset).trim();
   }
 
@@ -493,6 +496,11 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> _jumpHybridToChapter(int chapterIndex) async {
+    AppLog.d(
+      'Reader hybrid jump start target=$chapterIndex '
+      'active=$hybridViewportActive phase=${state.phase} '
+      'visible=${state.visibleLocation.chapterIndex}',
+    );
     final location = ReaderV2Location(
       chapterIndex: chapterIndex,
       charOffset: 0,
@@ -503,6 +511,11 @@ class ReaderV2Runtime extends ChangeNotifier {
       await _jumpHybridToLocation(location, immediateSave: false);
       final normalized = location.normalized(
         chapterCount: repository.chapterCount,
+      );
+      AppLog.d(
+        'Reader hybrid jump positioned target=$chapterIndex '
+        'phase=${state.phase} visible=${state.visibleLocation.chapterIndex} '
+        'matches=${state.visibleLocation == normalized}',
       );
       if (disposed ||
           state.phase != ReaderV2Phase.ready ||
@@ -522,10 +535,19 @@ class ReaderV2Runtime extends ChangeNotifier {
     required bool immediateSave,
   }) async {
     final token = beginJumpOperation();
+    AppLog.d(
+      'Reader hybrid jump operation id=${token.id} '
+      'target=${location.chapterIndex}',
+    );
     try {
       final positioned = await _positionHybridViewport(
         location: location,
         token: token,
+      );
+      AppLog.d(
+        'Reader hybrid jump operation id=${token.id} positioned=$positioned '
+        'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
+        'visible=${state.visibleLocation.chapterIndex}',
       );
       if (!positioned) {
         if (stateMachine.isCurrent(token)) {
@@ -549,22 +571,43 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (!stateMachine.isCurrent(token)) return false;
     final chapterCount = repository.chapterCount;
     if (chapterCount <= 0) return false;
-    final chapterIndex =
-        location.chapterIndex.clamp(0, chapterCount - 1).toInt();
+    final chapterIndex = location.chapterIndex
+        .clamp(0, chapterCount - 1)
+        .toInt();
     final content = await repository.loadContent(chapterIndex);
     if (!stateMachine.isCurrent(token)) return false;
-    final normalized = ReaderV2Location(
-      chapterIndex: chapterIndex,
-      charOffset: location.charOffset,
-      visualOffsetPx: location.visualOffsetPx,
-    ).normalized(
-      chapterCount: chapterCount,
-      chapterLength: content.displayText.length,
-    );
+    final normalized =
+        ReaderV2Location(
+          chapterIndex: chapterIndex,
+          charOffset: location.charOffset,
+          visualOffsetPx: location.visualOffsetPx,
+        ).normalized(
+          chapterCount: chapterCount,
+          chapterLength: content.displayText.length,
+        );
     final restore = viewportBridge.viewportRestore;
-    if (restore == null || !await restore(normalized)) return false;
+    if (restore == null) return false;
+    AppLog.d(
+      'Reader hybrid viewport restore start op=${token.id} '
+      'target=${normalized.chapterIndex}',
+    );
+    final restored = await restore(normalized);
+    AppLog.d(
+      'Reader hybrid viewport restore done op=${token.id} restored=$restored '
+      'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
+      'visible=${state.visibleLocation.chapterIndex}',
+    );
+    if (!restored) return false;
     if (!stateMachine.isCurrent(token)) return false;
-    return completeReadyOperation(token, visibleLocation: normalized);
+    final completed = completeReadyOperation(
+      token,
+      visibleLocation: normalized,
+    );
+    AppLog.d(
+      'Reader hybrid viewport complete op=${token.id} completed=$completed '
+      'phase=${state.phase} visible=${state.visibleLocation.chapterIndex}',
+    );
+    return completed;
   }
 
   void _attachPerformanceLayoutObserver() {

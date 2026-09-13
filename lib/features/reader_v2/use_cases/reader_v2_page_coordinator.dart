@@ -6,7 +6,7 @@ import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight_follower.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 typedef ReaderV2NoticeSink = void Function(String message);
@@ -16,7 +16,19 @@ class ReaderV2PageCoordinator {
     required ReaderV2ControllerHost host,
     required ReaderV2NoticeSink showNotice,
   }) : _host = host,
-       _showNotice = showNotice;
+       _showNotice = showNotice {
+    _ttsFollower = ReaderV2TtsHighlightFollower(
+      ensureHighlightVisible: (highlight) {
+        final ensureVisible = _host.viewportController.ensureCharRangeVisible;
+        if (ensureVisible == null) return Future<bool>.value(false);
+        return ensureVisible(
+          chapterIndex: highlight.chapterIndex,
+          startCharOffset: highlight.highlightStart,
+          endCharOffset: highlight.highlightEnd,
+        );
+      },
+    );
+  }
 
   final ReaderV2ControllerHost _host;
   final ReaderV2NoticeSink _showNotice;
@@ -25,9 +37,7 @@ class ReaderV2PageCoordinator {
   static const Duration _scrubPreviewDebounce = Duration(milliseconds: 180);
   Timer? _scrubPreviewTimer;
 
-  bool _followingTtsHighlight = false;
-  ReaderV2TtsHighlight? _lastFollowedTtsHighlight;
-  ReaderV2TtsHighlight? _pendingTtsHighlight;
+  late final ReaderV2TtsHighlightFollower _ttsFollower;
 
   void handleTap(TapUpDetails details, Size? viewportSize) {
     final runtime = _host.runtime;
@@ -84,8 +94,9 @@ class ReaderV2PageCoordinator {
   Future<void> jumpToChapter(int index) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
-    final safeIndex =
-        index.clamp(0, (runtime.chapterCount - 1).clamp(0, 1 << 20)).toInt();
+    final safeIndex = index
+        .clamp(0, (runtime.chapterCount - 1).clamp(0, 1 << 20))
+        .toInt();
     await runtime.jumpToChapter(safeIndex);
   }
 
@@ -116,10 +127,9 @@ class ReaderV2PageCoordinator {
   }) async {
     final runtime = _host.runtime;
     if (runtime == null || runtime.chapterCount <= 0) return;
-    final chapterIndex =
-        runtime.state.visibleLocation.chapterIndex
-            .clamp(0, runtime.chapterCount - 1)
-            .toInt();
+    final chapterIndex = runtime.state.visibleLocation.chapterIndex
+        .clamp(0, runtime.chapterCount - 1)
+        .toInt();
     final ratio = (percent / 100).clamp(0.0, 1.0).toDouble();
     if (ratio <= 0) {
       await runtime.jumpToLocation(
@@ -164,37 +174,7 @@ class ReaderV2PageCoordinator {
   }
 
   void maybeFollowTtsHighlight() {
-    final highlight = _host.tts?.currentHighlight;
-    if (highlight == null || !highlight.isValid) {
-      _lastFollowedTtsHighlight = null;
-      _pendingTtsHighlight = null;
-      return;
-    }
-    if (highlight == _lastFollowedTtsHighlight) return;
-    _pendingTtsHighlight = highlight;
-    if (_followingTtsHighlight) return;
-    _followNextTtsHighlight();
-  }
-
-  void _followNextTtsHighlight() {
-    final target = _pendingTtsHighlight;
-    if (target == null) return;
-    final ensureVisible = _host.viewportController.ensureCharRangeVisible;
-    if (ensureVisible == null) return;
-
-    _pendingTtsHighlight = null;
-    _lastFollowedTtsHighlight = target;
-    _followingTtsHighlight = true;
-    unawaited(
-      ensureVisible(
-        chapterIndex: target.chapterIndex,
-        startCharOffset: target.highlightStart,
-        endCharOffset: target.highlightEnd,
-      ).whenComplete(() {
-        _followingTtsHighlight = false;
-        _followNextTtsHighlight();
-      }),
-    );
+    _ttsFollower.update(_host.tts?.currentHighlight);
   }
 
   void openReplaceRule(BuildContext context) {
@@ -207,15 +187,14 @@ class ReaderV2PageCoordinator {
     AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
-      builder:
-          (_) => ReaderV2ReplaceRuleSheet(
-            book: _host.book,
-            bookDao: _host.dependencies.bookDao,
-            replaceDao: replaceDao,
-            onReload: () async {
-              await _host.runtime?.reloadContentPreservingLocation();
-            },
-          ),
+      builder: (_) => ReaderV2ReplaceRuleSheet(
+        book: _host.book,
+        bookDao: _host.dependencies.bookDao,
+        replaceDao: replaceDao,
+        onReload: () async {
+          await _host.runtime?.reloadContentPreservingLocation();
+        },
+      ),
     );
   }
 
@@ -223,10 +202,9 @@ class ReaderV2PageCoordinator {
     final runtime = _host.runtime;
     final viewportSize = _host.runtime?.state.layoutSpec.viewportSize;
     if (runtime == null || viewportSize == null) return;
-    final command =
-        forward
-            ? _host.viewportController.moveToNextPage
-            : _host.viewportController.moveToPrevPage;
+    final command = forward
+        ? _host.viewportController.moveToNextPage
+        : _host.viewportController.moveToPrevPage;
     if (command != null) {
       final moved = await command();
       if (!moved) return;

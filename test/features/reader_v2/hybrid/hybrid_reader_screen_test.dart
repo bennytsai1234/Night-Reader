@@ -103,9 +103,9 @@ void main() {
     textIndent: 2,
   );
 
-  ReaderV2LayoutSpec spec() {
+  ReaderV2LayoutSpec spec({Size viewportSize = const Size(220, 180)}) {
     return ReaderV2LayoutSpec.fromViewport(
-      viewportSize: const Size(220, 180),
+      viewportSize: viewportSize,
       style: const ReaderV2LayoutStyle(
         fontSize: 18,
         lineHeight: 1.5,
@@ -137,6 +137,7 @@ void main() {
   ReaderV2Runtime makeRuntime(
     List<BookChapter> chapters, {
     _FakeBookDao? bookDao,
+    Size viewportSize = const Size(220, 180),
     ReaderV2Location initialLocation = const ReaderV2Location(
       chapterIndex: 0,
       charOffset: 0,
@@ -166,7 +167,7 @@ void main() {
         repository: repository,
         bookDao: dao,
       ),
-      initialLayoutSpec: spec(),
+      initialLayoutSpec: spec(viewportSize: viewportSize),
       initialLocation: initialLocation,
     );
   }
@@ -179,13 +180,14 @@ void main() {
     ReaderV2TtsHighlight? ttsHighlight,
     GestureTapUpCallback? onContentTapUp,
     int paragraphCacheCapacity = 512,
+    Size viewportSize = const Size(220, 180),
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
           child: SizedBox(
-            width: 220,
-            height: 180,
+            width: viewportSize.width,
+            height: viewportSize.height,
             child: HybridReaderScreen(
               runtime: runtime,
               backgroundColor: const Color(0xFFFFFFFF),
@@ -446,6 +448,99 @@ void main() {
     expect(captured!.chapterIndex, 1);
   });
 
+  testWidgets('runtime 從後一章回跳到前一章後 viewport 跟隨', (tester) async {
+    final runtime = makeRuntime(List.generate(3, chapter));
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(tester, runtime, controller);
+    await openAndSettle(tester, runtime);
+
+    await runtime.jumpToChapter(1);
+    await tester.pumpAndSettle();
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+
+    await runtime.jumpToChapter(0);
+    await tester.pumpAndSettle();
+
+    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.visibleLocation.chapterIndex, 0);
+    final captured = runtime.captureVisibleLocation(notifyIfChanged: false);
+    expect(captured, isNotNull);
+    expect(captured!.chapterIndex, 0);
+  });
+
+  testWidgets('短章節位於 anchor 線前時，回跳仍保留目標章節', (tester) async {
+    final shortChapter = BookChapter(
+      url: 'chapter_0',
+      title: '前言',
+      bookUrl: 'http://book.test',
+      index: 0,
+      content: '短前言',
+    );
+    final viewportSize = const Size(432, 824);
+    final runtime = makeRuntime(
+      [shortChapter, chapter(1, paragraphCount: 40)],
+      viewportSize: viewportSize,
+    );
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(
+      tester,
+      runtime,
+      controller,
+      viewportSize: viewportSize,
+    );
+    await openAndSettle(tester, runtime);
+    await runtime.jumpToChapter(1);
+    await tester.pumpAndSettle();
+
+    await runtime.jumpToChapter(0);
+    await tester.pumpAndSettle();
+
+    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(
+      runtime.state.visibleLocation.chapterIndex,
+      0,
+      reason: '短章節在 anchor 線前時，不應被 motion capture 改成下一章',
+    );
+  });
+
+  testWidgets('開書初始定位在短章節時，不被 anchor 線改成下一章', (tester) async {
+    final shortChapter = BookChapter(
+      url: 'chapter_0',
+      title: '前言',
+      bookUrl: 'http://book.test',
+      index: 0,
+      content: '短前言',
+    );
+    final viewportSize = const Size(432, 824);
+    final runtime = makeRuntime(
+      [shortChapter, chapter(1, paragraphCount: 40)],
+      viewportSize: viewportSize,
+    );
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(
+      tester,
+      runtime,
+      controller,
+      viewportSize: viewportSize,
+    );
+    await openAndSettle(tester, runtime);
+
+    expect(
+      runtime.state.visibleLocation.chapterIndex,
+      0,
+      reason: '開書要求前言章首時，短前言不能因 anchor 線落到下一章而改變目前章節',
+    );
+    final captured = runtime.captureVisibleLocation(notifyIfChanged: false);
+    expect(captured, isNotNull);
+    expect(captured!.chapterIndex, 0);
+  });
+
   testWidgets('ensureCharRangeVisible 已可見不動、離屏會捲動', (tester) async {
     final dao = _FakeBookDao();
     final runtime = makeRuntime(
@@ -626,6 +721,40 @@ void main() {
     await tester.drag(find.byType(HybridScrollView), const Offset(0, -80));
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('拖曳期間 TTS ensure 會延後到手勢結束後執行', (tester) async {
+    final runtime = makeRuntime(
+      List.generate(3, (i) => chapter(i, paragraphCount: 18)),
+    );
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(tester, runtime, controller);
+    await openAndSettle(tester, runtime);
+    final content = await runtime.loadContentAt(0);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(HybridScrollView)),
+    );
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+
+    var completed = false;
+    final ensure = controller.ensureCharRangeVisible!(
+      chapterIndex: 0,
+      startCharOffset: content.displayText.length - 40,
+      endCharOffset: content.displayText.length - 20,
+    );
+    ensure.whenComplete(() => completed = true);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(completed, isFalse);
+    expect(tester.takeException(), isNull);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(await ensure, isTrue);
     expect(tester.takeException(), isNull);
   });
 

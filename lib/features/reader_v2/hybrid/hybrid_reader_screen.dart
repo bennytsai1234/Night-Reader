@@ -35,6 +35,7 @@ import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_view.dart';
+import 'view/hybrid_ensure_gate.dart';
 
 /// 方案 B 混合架構的閱讀主面（W3 整合層）。
 ///
@@ -123,6 +124,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   final BudgetGovernor _governor = BudgetGovernor();
   final HybridTelemetry _telemetry = HybridTelemetry();
   final _HybridCommandQueue _commands = _HybridCommandQueue();
+  final HybridEnsureGate _ensureGate = HybridEnsureGate();
 
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
@@ -262,6 +264,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     unawaited(_writeDiskMetrics(_measurementStore.snapshot(_namespace)));
     unawaited(_chapterRepo.dispose());
     _admission.dispose();
+    _ensureGate.dispose();
     _pump.dispose();
     _paragraphCache.dispose();
     _scrollController?.dispose();
@@ -427,8 +430,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _viewportSize.height,
     );
     final worldY = offset + anchorLine;
-    final hit =
-        _documentIndex.hitTest(worldY) ?? _documentIndex.hitTest(offset);
+    final anchorHit = _documentIndex.hitTest(worldY);
+    final scrollTopHit = _documentIndex.hitTest(offset);
+    final preserved = _preserveShortChapterAtBoundary(
+      anchorHit: anchorHit,
+      scrollOffset: offset,
+    );
+    if (preserved != null) return preserved;
+    final hit = anchorHit ?? scrollTopHit;
     if (hit == null) return null;
     final blocks = _blocks[hit.key.chapterIndex];
     if (blocks == null || hit.key.blockIndex >= blocks.blocks.length) {
@@ -481,6 +490,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
+  /// A short chapter can end before the visual anchor line while the viewport
+  /// is still at that chapter's physical start.  In that transition the
+  /// anchor hit points at the next chapter, but the reader has not scrolled
+  /// past the current chapter yet.  Keep the last reported chapter until the
+  /// scroll offset leaves its admitted range; otherwise opening a book at a
+  /// one-line preface is immediately persisted as chapter 1.
+  ReaderV2Location? _preserveShortChapterAtBoundary({
+    required DocumentOffsetHit? anchorHit,
+    required double scrollOffset,
+  }) {
+    final previous = _lastReportedLocation;
+    if (previous == null ||
+        anchorHit == null ||
+        anchorHit.key.chapterIndex != previous.chapterIndex + 1) {
+      return null;
+    }
+    final range = _documentIndex.chapterRange(previous.chapterIndex);
+    if (range == null || scrollOffset > range.bottom + 0.5) return null;
+    return previous;
+  }
+
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
     if (!mounted || widget.runtime.chapterCount <= 0) return false;
     // 拖曳中拒絕 restore——settle-restore 硬拉回目標會跟手勢打架。
@@ -491,6 +521,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _scheduleRebuild();
       final captured = _captureVisibleLocation();
       if (captured == null) return false;
+      // _lastReportedLocation is intentionally set to the requested anchor
+      // below, before runtime.completeReady() publishes the new state.  Bump
+      // the revision here as well so a scroll callback queued by the old
+      // viewport cannot run after that publication and overwrite the target.
+      _runtimeLocationRevision += 1;
       _lastSyncedLocation = location;
       _lastReportedLocation = location;
       return true;
@@ -1011,6 +1046,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _updateLeadTelemetry() {
+    // A pump that started before a chapter restore may resume after
+    // DocumentIndex.reset() but before the new viewport offset is installed.
+    // Its old scroll position is not meaningful in the new centered world;
+    // reading it here can trip AdmissionController I5 during a large jump.
+    if (!_initialRestoreCompleted || _anchorManager.restoreLocked) return;
     final offset = _effectiveScrollOffset();
     if (offset == null || _viewportSize.height <= 0) return;
     _admission.updateLead(
@@ -1033,6 +1073,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (notification.dragDetails != null) {
         _dragging = true;
         _sawUserScroll = true;
+        _ensureGate.beginUserScroll();
         _setPumpState(PumpState.dragging);
       }
     } else if (notification is ScrollUpdateNotification) {
@@ -1048,7 +1089,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _sawUserScroll = false;
       _setPumpState(PumpState.idle);
       _schedulePump();
-      if (wasUser) unawaited(_handleScrollSettled());
+      if (wasUser) {
+        unawaited(_settleUserScrollAndFlushEnsures());
+      } else {
+        unawaited(_ensureGate.releaseAndFlush());
+      }
     }
     return false;
   }
@@ -1056,9 +1101,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _scheduleMotionCapture() {
     if (_captureFramePending || !mounted) return;
     _captureFramePending = true;
+    final scheduledRevision = _runtimeLocationRevision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureFramePending = false;
       if (!mounted) return;
+      if (!_initialRestoreCompleted || _anchorManager.restoreLocked) return;
+      // Programmatic restore/jump can emit a scroll notification before the
+      // runtime publishes its target location.  That callback belongs to the
+      // old viewport address; letting it capture after completeReady would
+      // replace a short target chapter with the next chapter at the anchor
+      // line (for example the 34-byte preface followed by chapter 1).
+      if (scheduledRevision != _runtimeLocationRevision) return;
+      if (widget.runtime.pendingChapterJumpTarget != null) return;
       // 動作中一律靜默 capture：runtime notify 會連鎖 ReaderV2Page 與本
       // screen 的整面 setState（fling 中的節奏性重活）。頁面層滾動中需要
       // 跟動的顯示走 progressListenable 窄通道；完整 notify 留給 settle。
@@ -1094,7 +1148,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Future<void> _handleScrollSettled() async {
-    if (!mounted || _dragging) return;
+    if (!mounted ||
+        _dragging ||
+        !_initialRestoreCompleted ||
+        _anchorManager.restoreLocked) {
+      return;
+    }
     final location = _captureAndReport(notify: true);
     if (location != null) {
       // settle 即刻落盤：背景 flush 靠不住（app 可能被系統回收）。
@@ -1112,6 +1171,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _updateLeadTelemetry();
     _ensureWindowTasks();
     _schedulePump();
+  }
+
+  Future<void> _settleUserScrollAndFlushEnsures() async {
+    try {
+      await _handleScrollSettled();
+    } finally {
+      if (mounted) await _ensureGate.releaseAndFlush();
+    }
   }
 
   void _publishProgress() {
@@ -1186,10 +1253,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     required int endCharOffset,
   }) {
     return _enqueueCommand(
-      () => _ensureCharRangeVisibleNow(
-        chapterIndex: chapterIndex,
-        startCharOffset: startCharOffset,
-        endCharOffset: endCharOffset,
+      () => _ensureGate.submit(
+        () => _ensureCharRangeVisibleNow(
+          chapterIndex: chapterIndex,
+          startCharOffset: startCharOffset,
+          endCharOffset: endCharOffset,
+        ),
       ),
     );
   }

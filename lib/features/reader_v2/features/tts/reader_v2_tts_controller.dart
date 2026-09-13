@@ -5,6 +5,7 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -102,14 +103,11 @@ class ReaderV2TtsController extends ChangeNotifier
   final bool _ownsTtsEngine;
   late final StreamSubscription<String> _eventSubscription;
   ReaderV2Location? _speechStartLocation;
-  List<_ReaderV2TtsSegment> _segments = const <_ReaderV2TtsSegment>[];
+  List<ReaderV2TtsSegment> _segments = const <ReaderV2TtsSegment>[];
   int _segmentIndex = -1;
   int _speechGeneration = 0;
   bool _handlingCompletion = false;
   bool _disposed = false;
-
-  static const int _minSegmentLength = 24;
-  static const int _maxSegmentLength = 220;
 
   @override
   bool get isPlaying => _tts.isPlaying;
@@ -136,12 +134,12 @@ class ReaderV2TtsController extends ChangeNotifier
       );
     }
     final boundedWordStart = wordStart.clamp(0, segmentLength - 1).toInt();
-    final wordEnd =
-        _tts.currentWordEnd > boundedWordStart
-            ? _tts.currentWordEnd
-            : boundedWordStart + 1;
-    final boundedWordEnd =
-        wordEnd.clamp(boundedWordStart + 1, segmentLength).toInt();
+    final wordEnd = _tts.currentWordEnd > boundedWordStart
+        ? _tts.currentWordEnd
+        : boundedWordStart + 1;
+    final boundedWordEnd = wordEnd
+        .clamp(boundedWordStart + 1, segmentLength)
+        .toInt();
     return ReaderV2TtsHighlight(
       chapterIndex: segment.chapterIndex,
       highlightStart: segment.startCharOffset + boundedWordStart,
@@ -198,8 +196,9 @@ class ReaderV2TtsController extends ChangeNotifier
   }) async {
     try {
       final content = await runtime.loadContentForTts(location);
-      final safeOffset =
-          location.charOffset.clamp(0, content.displayText.length).toInt();
+      final safeOffset = location.charOffset
+          .clamp(0, content.displayText.length)
+          .toInt();
       final segments = _segmentsFor(
         text: content.displayText,
         chapterIndex: location.chapterIndex,
@@ -331,7 +330,7 @@ class ReaderV2TtsController extends ChangeNotifier
     return !_disposed && generation == _speechGeneration;
   }
 
-  _ReaderV2TtsSegment? get _currentSegment {
+  ReaderV2TtsSegment? get _currentSegment {
     final index = _segmentIndex;
     if (index < 0 || index >= _segments.length) return null;
     return _segments[index];
@@ -365,105 +364,20 @@ class ReaderV2TtsController extends ChangeNotifier
 
   void _clearSpeechStateWithoutNotify() {
     _speechStartLocation = null;
-    _segments = const <_ReaderV2TtsSegment>[];
+    _segments = const <ReaderV2TtsSegment>[];
     _segmentIndex = -1;
   }
 
-  List<_ReaderV2TtsSegment> _segmentsFor({
+  List<ReaderV2TtsSegment> _segmentsFor({
     required String text,
     required int chapterIndex,
     required int startOffset,
   }) {
-    final span = _readableSpan(text, startOffset);
-    if (span == null) return const <_ReaderV2TtsSegment>[];
-    final segments = <_ReaderV2TtsSegment>[];
-    var cursor = span.start;
-    while (cursor < span.end) {
-      while (cursor < span.end && _isWhitespace(text.codeUnitAt(cursor))) {
-        cursor += 1;
-      }
-      if (cursor >= span.end) break;
-      var end = _segmentEnd(text, cursor, span.end);
-      while (end > cursor && _isWhitespace(text.codeUnitAt(end - 1))) {
-        end -= 1;
-      }
-      if (end <= cursor) {
-        cursor += 1;
-        continue;
-      }
-      segments.add(
-        _ReaderV2TtsSegment(
-          chapterIndex: chapterIndex,
-          startCharOffset: cursor,
-          endCharOffset: end,
-          text: text.substring(cursor, end),
-        ),
-      );
-      cursor = end;
-    }
-    return segments;
-  }
-
-  int _segmentEnd(String text, int start, int chapterEnd) {
-    final preferredLimit =
-        (start + _maxSegmentLength).clamp(start + 1, chapterEnd).toInt();
-    for (var index = start; index < preferredLimit; index += 1) {
-      final length = index - start + 1;
-      if (length < _minSegmentLength && index + 1 < chapterEnd) continue;
-      final codeUnit = text.codeUnitAt(index);
-      if (_isSegmentBoundary(codeUnit)) return index + 1;
-    }
-    for (var index = preferredLimit - 1; index > start; index -= 1) {
-      if (_isWhitespace(text.codeUnitAt(index))) return index;
-    }
-    return preferredLimit;
-  }
-
-  bool _isSegmentBoundary(int codeUnit) {
-    switch (codeUnit) {
-      case 0x0A: // \n
-      case 0x21: // !
-      case 0x2E: // .
-      case 0x3B: // ;
-      case 0x3F: // ?
-      case 0x3002: // 。
-      case 0xFF01: // ！
-      case 0xFF1B: // ；
-      case 0xFF1F: // ？
-        return true;
-    }
-    return false;
-  }
-
-  ({int start, int end})? _readableSpan(String text, int offset) {
-    var start = offset.clamp(0, text.length).toInt();
-    var end = text.length;
-    while (start < end && _isWhitespace(text.codeUnitAt(start))) {
-      start += 1;
-    }
-    while (end > start && _isWhitespace(text.codeUnitAt(end - 1))) {
-      end -= 1;
-    }
-    if (start >= end) return null;
-    return (start: start, end: end);
-  }
-
-  bool _isWhitespace(int codeUnit) {
-    switch (codeUnit) {
-      case 0x09:
-      case 0x0A:
-      case 0x0B:
-      case 0x0C:
-      case 0x0D:
-      case 0x20:
-      case 0x85:
-      case 0xA0:
-      case 0x2028:
-      case 0x2029:
-      case 0x3000:
-        return true;
-    }
-    return false;
+    return const ReaderV2TtsSegmenter().segment(
+      text: text,
+      chapterIndex: chapterIndex,
+      startOffset: startOffset,
+    );
   }
 
   @override
@@ -477,18 +391,4 @@ class ReaderV2TtsController extends ChangeNotifier
     if (_ownsTtsEngine) _tts.dispose();
     super.dispose();
   }
-}
-
-class _ReaderV2TtsSegment {
-  const _ReaderV2TtsSegment({
-    required this.chapterIndex,
-    required this.startCharOffset,
-    required this.endCharOffset,
-    required this.text,
-  });
-
-  final int chapterIndex;
-  final int startCharOffset;
-  final int endCharOffset;
-  final String text;
 }
