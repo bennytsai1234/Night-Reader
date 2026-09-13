@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui show FrameTiming, Paragraph, TextBox;
 
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, visibleForTesting;
+    show defaultTargetPlatform, kDebugMode, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -113,6 +113,7 @@ bool isHybridPageMoveComplete({
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
+  static const Duration _telemetryHeartbeatInterval = Duration(seconds: 15);
   static const double _minimumViewportMovement = 0.01;
 
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
@@ -147,6 +148,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       <({MeasurementNamespace namespace, int chapter, String contentHash})>{};
 
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
+  Timer? _telemetryHeartbeatTimer;
   ScrollController? _scrollController;
   MetricsDiskCache? _metricsDiskCache;
 
@@ -197,6 +199,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _attachController();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
+    if (kDebugMode) {
+      _telemetryHeartbeatTimer = Timer.periodic(
+        _telemetryHeartbeatInterval,
+        (_) => _logTelemetryHeartbeat(),
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // 冷開機由 runtime.openBook() 經 restore 鏈進來；熱掛載（runtime 已
@@ -252,6 +260,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   void dispose() {
+    _telemetryHeartbeatTimer?.cancel();
     _logTelemetrySessionSummary();
     widget.runtime.unregisterHybridViewport(this);
     widget.runtime.removeListener(_onRuntimeChanged);
@@ -290,6 +299,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     summary['lastLineSpacingCompensation'] =
         _fingerprint.lastLineSpacingCompensation;
     AppLog.i('ReaderV2 telemetry session: ${jsonEncode(summary)}');
+  }
+
+  void _logTelemetryHeartbeat() {
+    if (!mounted) return;
+    _telemetry.recordPumpQueueDepth(_pump.queueDepth);
+    final summary = _telemetry.heartbeatSummary();
+    summary['fontSize'] = _fingerprint.fontSize;
+    summary['lastLineSpacingCompensation'] =
+        _fingerprint.lastLineSpacingCompensation;
+    AppLog.i('ReaderV2 telemetry heartbeat: ${jsonEncode(summary)}');
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {

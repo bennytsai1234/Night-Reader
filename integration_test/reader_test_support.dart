@@ -325,10 +325,33 @@ class ReaderTestHarness {
       await tester.tap(start);
       await tester.pump(const Duration(milliseconds: 350));
     }
+
+    // The TTS sheet owns the controls surface, so close only the sheet after
+    // starting playback.  This leaves the real Reader/TTS controller active
+    // while the viewport receives slow, large, and reverse scroll input.
+    if (find.text('朗讀').evaluate().length > 1) {
+      final sheetTitle = find.text('朗讀').last;
+      Navigator.of(tester.element(sheetTitle)).pop();
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    await dismissControls();
+    final reader = find.byType(HybridReaderScreen).first;
+    await tester.drag(reader, const Offset(0, -260));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.fling(reader, const Offset(0, 1500), 3600);
+    await tester.pump(const Duration(milliseconds: 750));
+
+    // Reopen the sheet and stop after the scroll work.  The stop tap is
+    // intentionally exercised even when the platform test engine cannot
+    // provide audio_service; that exception is logged by the existing
+    // harness and is not treated as production Android TTS evidence.
+    await showControls();
+    await tester.tap(find.text('朗讀').last);
+    await tester.pump(const Duration(milliseconds: 250));
     final stop = find.text('停止');
     if (stop.evaluate().isNotEmpty) {
       await tester.tap(stop);
-      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 350));
     }
     // Close the TTS sheet if the platform TTS implementation kept it open.
     if (find.text('朗讀').evaluate().length > 1) {

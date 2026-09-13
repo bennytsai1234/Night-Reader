@@ -142,6 +142,26 @@ final class HybridTelemetry extends ChangeNotifier {
     };
   }
 
+  /// 低頻率長時間觀測用摘要；保留 session 累計值，另外補上當下 rolling
+  /// frame、queue、lead 與 cache 狀態，讓外部 runner 能判斷 backlog 是否
+  /// 在某個時間點排空，而不必等到 Reader dispose 才看到最後摘要。
+  Map<String, Object?> heartbeatSummary() {
+    final rolling = snapshot;
+    final summary = sessionSummary();
+    summary.addAll(<String, Object?>{
+      'rollingFrameP50Micros': rolling.frameP50Micros,
+      'rollingFrameP95Micros': rolling.frameP95Micros,
+      'rollingFrameP99Micros': rolling.frameP99Micros,
+      'pumpQueueDepth': rolling.pumpQueueDepth,
+      'maxPumpQueueDepth': _maxPumpQueueDepth,
+      'forwardLeadPx': _finiteOrNull(rolling.forwardLeadPx),
+      'backwardLeadPx': _finiteOrNull(rolling.backwardLeadPx),
+      'paragraphCacheHitRate': rolling.paragraphCacheHitRate,
+      'diskMetricsHitRate': rolling.diskMetricsHitRate,
+    });
+    return summary;
+  }
+
   void recordParagraphCacheHit(bool hit) {
     hit ? _cacheHits += 1 : _cacheMisses += 1;
     notifyListeners();
@@ -152,15 +172,24 @@ final class HybridTelemetry extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 更新 pump queue 的目前與峰值，不觸發 overlay rebuild。
+  ///
+  /// heartbeat 會定期取樣這個值；在 lead 尚未可計算或沒有新 layout
+  /// 完成的期間，也能觀察 queue 是否持續堆積。
+  void recordPumpQueueDepth(int depth) {
+    final normalized = depth < 0 ? 0 : depth;
+    _pumpQueueDepth = normalized;
+    if (normalized > _maxPumpQueueDepth) {
+      _maxPumpQueueDepth = normalized;
+    }
+  }
+
   void updateRuntimeStats({
     required int pumpQueueDepth,
     required double forwardLeadPx,
     required double backwardLeadPx,
   }) {
-    _pumpQueueDepth = pumpQueueDepth;
-    if (pumpQueueDepth > _maxPumpQueueDepth) {
-      _maxPumpQueueDepth = pumpQueueDepth;
-    }
+    recordPumpQueueDepth(pumpQueueDepth);
     _forwardLead = forwardLeadPx;
     _backwardLead = backwardLeadPx;
     if (forwardLeadPx < _minForwardLead) _minForwardLead = forwardLeadPx;
@@ -168,3 +197,5 @@ final class HybridTelemetry extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+double? _finiteOrNull(double value) => value.isFinite ? value : null;

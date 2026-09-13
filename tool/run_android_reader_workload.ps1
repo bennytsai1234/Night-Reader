@@ -22,8 +22,11 @@ param(
 
     [int]$BuildNumber = 3000,
 
-    [ValidateRange(30, 3600)]
-    [int]$TimeoutSeconds = 900
+    [ValidateRange(30, 86400)]
+    [int]$TimeoutSeconds = 900,
+
+    [ValidateRange(600, 900)]
+    [int]$SampleIntervalSeconds = 900
 )
 
 $ErrorActionPreference = 'Stop'
@@ -99,6 +102,68 @@ function Get-Logcat {
     return ($output -join [Environment]::NewLine)
 }
 
+function Get-WorkloadLogcat {
+    # Poll only the Flutter workload markers and crash-relevant tags.  The
+    # complete logcat is still saved at the end and on failure, but repeatedly
+    # transferring the emulator's system log would make a multi-hour run
+    # unnecessarily expensive and can hide the workload's own progress.
+    $output = Invoke-Captured 'adb' @(
+        '-s', $DeviceId, 'logcat', '-d', '-v', 'brief', '-s',
+        'flutter:I',
+        'AndroidRuntime:E',
+        'ActivityManager:E',
+        'ActivityTaskManager:E',
+        'libc:E',
+        'DEBUG:E',
+        'audio_service:D',
+        'AudioService:D',
+        'GoogleTTSServiceImpl:D',
+        'NightReader:D'
+    )
+    return ($output -join [Environment]::NewLine)
+}
+
+function Get-WorkloadProgress([string]$Log) {
+    $completed = $null
+    $actionMatches = [regex]::Matches(
+        $Log,
+        'READER_MONKEY_ACTION seed=\d+ #(\d+) [^\r\n]+'
+    )
+    if ($actionMatches.Count -gt 0) {
+        $lastActionNumber = [int]$actionMatches[$actionMatches.Count - 1].Groups[1].Value
+        $completed = $lastActionNumber + 1
+    }
+
+    $resultMatch = [regex]::Match($Log, 'READER_MONKEY_RESULT[^\r\n]*\bcompleted=(\d+)')
+    if ($resultMatch.Success) {
+        $completed = [int]$resultMatch.Groups[1].Value
+    }
+
+    $lastActions = @($actionMatches |
+        Select-Object -Last 20 |
+        ForEach-Object { $_.Value.Trim() })
+    $telemetryHeartbeat = $null
+    $heartbeatMatches = [regex]::Matches(
+        $Log,
+        '(?m)ReaderV2 telemetry heartbeat:\s*(\{.*\})\s*$'
+    )
+    if ($heartbeatMatches.Count -gt 0) {
+        $heartbeatJson = $heartbeatMatches[$heartbeatMatches.Count - 1].Groups[1].Value
+        try {
+            $telemetryHeartbeat = $heartbeatJson | ConvertFrom-Json
+        }
+        catch {
+            Write-Warning "解析 telemetry heartbeat 失敗：$($_.Exception.Message)"
+        }
+    }
+
+    return [ordered]@{
+        completedActions = $completed
+        lastActions = $lastActions
+        telemetryHeartbeat = $telemetryHeartbeat
+    }
+}
+
 function Get-InstalledVersionCode {
     $dump = Invoke-Adb @('-s', $DeviceId, 'shell', 'dumpsys', 'package', $packageName)
     foreach ($line in $dump) {
@@ -133,10 +198,40 @@ function Write-ReportFile([string]$Name, [string]$Content) {
     return $path
 }
 
-function Capture-PerformanceSnapshot([string]$Name) {
+function Capture-PerformanceSnapshot([string]$Name, [int]$ElapsedSeconds = 0, [string]$WorkloadLog = '') {
+    $meminfoPath = $null
+    $gfxinfoPath = $null
+    $pssKb = $null
+    $rssKb = $null
+    $nativeHeapKb = $null
+    $dalvikHeapKb = $null
+
     try {
         $meminfo = Invoke-Adb @('-s', $DeviceId, 'shell', 'dumpsys', 'meminfo', $packageName)
-        Write-ReportFile "meminfo-$Name.txt" ($meminfo -join [Environment]::NewLine) | Out-Null
+        $meminfoText = $meminfo -join [Environment]::NewLine
+        $meminfoPath = Write-ReportFile "meminfo-$Name.txt" $meminfoText
+        $totalMatch = [regex]::Match(
+            $meminfoText,
+            '(?m)^\s*TOTAL PSS:\s*(\d+)\s+TOTAL RSS:\s*(\d+)'
+        )
+        if ($totalMatch.Success) {
+            $pssKb = [long]$totalMatch.Groups[1].Value
+            $rssKb = [long]$totalMatch.Groups[2].Value
+        }
+        $nativeMatch = [regex]::Match(
+            $meminfoText,
+            '(?m)^\s*Native Heap\s+(\d+)\s+'
+        )
+        if ($nativeMatch.Success) {
+            $nativeHeapKb = [long]$nativeMatch.Groups[1].Value
+        }
+        $dalvikMatch = [regex]::Match(
+            $meminfoText,
+            '(?m)^\s*Dalvik Heap\s+(\d+)\s+'
+        )
+        if ($dalvikMatch.Success) {
+            $dalvikHeapKb = [long]$dalvikMatch.Groups[1].Value
+        }
     }
     catch {
         Write-Warning "保存 meminfo-$Name.txt 失敗：$($_.Exception.Message)"
@@ -144,11 +239,40 @@ function Capture-PerformanceSnapshot([string]$Name) {
 
     try {
         $gfxinfo = Invoke-Adb @('-s', $DeviceId, 'shell', 'dumpsys', 'gfxinfo', $packageName)
-        Write-ReportFile "gfxinfo-$Name.txt" ($gfxinfo -join [Environment]::NewLine) | Out-Null
+        $gfxinfoPath = Write-ReportFile "gfxinfo-$Name.txt" (
+            $gfxinfo -join [Environment]::NewLine
+        )
     }
     catch {
         Write-Warning "保存 gfxinfo-$Name.txt 失敗：$($_.Exception.Message)"
     }
+
+    $progress = Get-WorkloadProgress $WorkloadLog
+    $sample = [ordered]@{
+        snapshot = $Name
+        capturedAt = (Get-Date).ToString('o')
+        elapsedSeconds = $ElapsedSeconds
+        memory = [ordered]@{
+            pssKb = $pssKb
+            rssKb = $rssKb
+            nativeHeapKb = $nativeHeapKb
+            dalvikHeapKb = $dalvikHeapKb
+            dartHeapKb = $null
+            dartHeapNote = '未使用 VM service；adb dumpsys meminfo 未提供 Dart heap。'
+        }
+        meminfoPath = $meminfoPath
+        gfxinfoPath = $gfxinfoPath
+        actionsCompleted = $progress.completedActions
+        lastActions = $progress.lastActions
+        telemetryHeartbeat = $progress.telemetryHeartbeat
+    }
+    $sample | ConvertTo-Json -Compress -Depth 8 |
+        Add-Content -LiteralPath $samplesPath -Encoding utf8
+    Write-Host (
+        "sample={0} elapsed={1}s pssKb={2} rssKb={3} actions={4}" -f
+        $Name, $ElapsedSeconds, $pssKb, $rssKb, $progress.completedActions
+    )
+    return $sample
 }
 
 function Capture-FailureArtifacts {
@@ -206,7 +330,7 @@ function Restore-NormalApk([int]$EffectiveBuildNumber) {
     }
 
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
-    Invoke-Adb @('-s', $DeviceId, 'install', '-r', $apkPath) | ForEach-Object { Write-Host $_ }
+    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) | ForEach-Object { Write-Host $_ }
     Invoke-Adb @('-s', $DeviceId, 'logcat', '-c') | Out-Null
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'start', '-W', '-n', $activityName) | ForEach-Object { Write-Host $_ }
     Wait-ForNormalReady
@@ -217,6 +341,18 @@ Assert-Command 'adb'
 Assert-Command 'flutter'
 
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
+$samplesPath = Join-Path $reportDir 'samples.jsonl'
+New-Item -ItemType File -Path $samplesPath -Force | Out-Null
+$effectiveTimeoutSeconds = $TimeoutSeconds
+if ($DurationSeconds -gt 0) {
+    $effectiveTimeoutSeconds = [Math]::Max(
+        $TimeoutSeconds,
+        $DurationSeconds + 300
+    )
+}
+if ($effectiveTimeoutSeconds -gt 86400) {
+    throw "workload timeout $effectiveTimeoutSeconds 秒超過 runner 上限 86400 秒。"
+}
 $fixture = Resolve-Path -LiteralPath $fixtureHostPath -ErrorAction Stop
 if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
     throw "找不到 fixture：$fixtureHostPath"
@@ -227,6 +363,10 @@ $effectiveBuildNumber = $null
 $testApkInstalled = $false
 $testError = $null
 $restoreError = $null
+$workloadStartedAt = $null
+$workloadFinishedAt = $null
+$sampleCount = 0
+$lastWorkloadLog = ''
 
 try {
     $emulators = Invoke-Captured 'flutter' @('emulators')
@@ -261,7 +401,7 @@ try {
     # app's dart:io File.exists until the app has initialized its own path.
     if (Test-Path -LiteralPath $apkPath) {
         Write-Host '啟動一般 debug APK 建立 app-specific external directory。'
-        Invoke-Adb @('-s', $DeviceId, 'install', '-r', $apkPath) |
+        Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) |
             ForEach-Object { Write-Host $_ }
         Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'start', '-W', '-n', $activityName) |
             ForEach-Object { Write-Host $_ }
@@ -309,7 +449,7 @@ try {
 
     Write-Host '清除 app data 並安裝 workload APK。'
     Invoke-Adb @('-s', $DeviceId, 'shell', 'am', 'force-stop', $packageName) | Out-Null
-    Invoke-Adb @('-s', $DeviceId, 'install', '-r', $apkPath) | ForEach-Object { Write-Host $_ }
+    Invoke-Adb @('-s', $DeviceId, 'install', '-r', '-d', $apkPath) | ForEach-Object { Write-Host $_ }
     $testApkInstalled = $true
     # TTS uses audio_service's Android notification channel on API 33+.
     # Grant the declared runtime notification permission before the workload
@@ -348,25 +488,34 @@ try {
     }
     if ($null -eq $processId) { throw 'workload APK 啟動後沒有取得 process PID。' }
     Write-Host "workload process PID=$processId。"
-    Capture-PerformanceSnapshot 'start'
+    $workloadStartedAt = Get-Date
+    $startLog = Get-WorkloadLogcat
+    $lastWorkloadLog = $startLog
+    $startSample = Capture-PerformanceSnapshot `
+        -Name 'sample-000-start' `
+        -ElapsedSeconds 0 `
+        -WorkloadLog $startLog
+    if ($null -ne $startSample) { $sampleCount += 1 }
 
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    $middleCaptured = $false
-    $middleDeadline = if ($DurationSeconds -gt 0) {
-        (Get-Date).AddSeconds([Math]::Max(1, [Math]::Floor($DurationSeconds / 2)))
-    }
-    else {
-        $null
-    }
+    $deadline = $workloadStartedAt.AddSeconds($effectiveTimeoutSeconds)
+    $nextSampleAt = $workloadStartedAt.AddSeconds($SampleIntervalSeconds)
     $passed = $false
     $failure = $null
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 1000
-        if (-not $middleCaptured -and $null -ne $middleDeadline -and (Get-Date) -ge $middleDeadline) {
-            Capture-PerformanceSnapshot 'middle'
-            $middleCaptured = $true
+        $now = Get-Date
+        $log = Get-WorkloadLogcat
+        $lastWorkloadLog = $log
+        if ($now -ge $nextSampleAt) {
+            $elapsedSeconds = [int]([Math]::Floor(($now - $workloadStartedAt).TotalSeconds))
+            $sampleName = 'sample-{0:D3}-{1}s' -f $sampleCount, $elapsedSeconds
+            $sample = Capture-PerformanceSnapshot `
+                -Name $sampleName `
+                -ElapsedSeconds $elapsedSeconds `
+                -WorkloadLog $log
+            if ($null -ne $sample) { $sampleCount += 1 }
+            $nextSampleAt = $now.AddSeconds($SampleIntervalSeconds)
         }
-        $log = Get-Logcat
         if ($log -match 'READER_(E2E|MONKEY)_RESULT status=passed') {
             $passed = $true
             break
@@ -383,11 +532,21 @@ try {
         }
     }
 
+    $workloadFinishedAt = Get-Date
     $finalLog = Get-Logcat
     Write-ReportFile 'workload-logcat.txt' $finalLog | Out-Null
-    Capture-PerformanceSnapshot 'end'
+    $finalFilteredLog = Get-WorkloadLogcat
+    $lastWorkloadLog = $finalFilteredLog
+    $endElapsedSeconds = [int]([Math]::Floor(($workloadFinishedAt - $workloadStartedAt).TotalSeconds))
+    $endSample = Capture-PerformanceSnapshot `
+        -Name 'end' `
+        -ElapsedSeconds $endElapsedSeconds `
+        -WorkloadLog $finalFilteredLog
+    if ($null -ne $endSample) { $sampleCount += 1 }
     if (-not $passed) {
-        if ($null -eq $failure) { $failure = "在 $TimeoutSeconds 秒內沒有看到 workload passed marker。" }
+        if ($null -eq $failure) {
+            $failure = "在 $effectiveTimeoutSeconds 秒內沒有看到 workload passed marker。"
+        }
         throw "Android $Scenario workload 失敗：$failure"
     }
     Write-Host "Android $Scenario workload 通過。"
@@ -398,11 +557,23 @@ catch {
 }
 finally {
     $finishedAt = Get-Date
+    $workloadProgress = Get-WorkloadProgress $lastWorkloadLog
+    $workloadEndAt = if ($null -ne $workloadFinishedAt) {
+        $workloadFinishedAt
+    }
+    elseif ($null -ne $workloadStartedAt) {
+        $finishedAt
+    }
+    else {
+        $null
+    }
     $metadata = [ordered]@{
         scenario = $Scenario
         seed = $Seed
         requestedIterations = $Iterations
         requestedDurationSeconds = $DurationSeconds
+        sampleIntervalSeconds = $SampleIntervalSeconds
+        effectiveTimeoutSeconds = $effectiveTimeoutSeconds
         fixtureHostPath = $fixtureHostPath
         fixtureDevicePath = $FixtureDevicePath
         fixtureBytes = if ($null -ne $fixtureSize) { $fixtureSize } else { $null }
@@ -413,6 +584,28 @@ finally {
         startedAt = $startedAt.ToString('o')
         finishedAt = $finishedAt.ToString('o')
         actualDurationSeconds = ($finishedAt - $startedAt).TotalSeconds
+        workloadStartedAt = if ($null -ne $workloadStartedAt) {
+            $workloadStartedAt.ToString('o')
+        }
+        else {
+            $null
+        }
+        workloadFinishedAt = if ($null -ne $workloadEndAt) {
+            $workloadEndAt.ToString('o')
+        }
+        else {
+            $null
+        }
+        workloadDurationSeconds = if ($null -ne $workloadStartedAt -and $null -ne $workloadEndAt) {
+            ($workloadEndAt - $workloadStartedAt).TotalSeconds
+        }
+        else {
+            $null
+        }
+        sampleCount = $sampleCount
+        samplesPath = $samplesPath
+        completedActions = $workloadProgress.completedActions
+        lastActions = $workloadProgress.lastActions
         effectiveBuildNumber = $effectiveBuildNumber
         testError = if ($null -ne $testError) { $testError.ToString() } else { $null }
         restoreError = $null

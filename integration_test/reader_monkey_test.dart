@@ -168,7 +168,7 @@ void main() {
       ErrorWidget.builder = previousErrorWidgetBuilder;
       FlutterError.onError = previousFlutterErrorHandler;
     }
-  }, timeout: const Timeout(Duration(minutes: 30)));
+  }, timeout: const Timeout(Duration(hours: 6)));
 }
 
 Future<void> _drag(WidgetTester tester, Offset delta) async {

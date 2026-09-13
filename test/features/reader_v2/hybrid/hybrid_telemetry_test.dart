@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:night_reader/features/reader_v2/hybrid/telemetry/hybrid_telemetry.dart';
 
 void main() {
@@ -56,6 +57,51 @@ void main() {
       expect(summary['frameP99Micros'], 0);
       expect(summary['minForwardLeadPx'], isNull);
       expect(jsonEncode(summary), isA<String>());
+    });
+  });
+
+  group('HybridTelemetry heartbeat', () {
+    test('heartbeat exposes current and peak queue depth', () {
+      final telemetry = HybridTelemetry();
+
+      telemetry.recordFrameSpanMicros(10000);
+      telemetry.recordPumpQueueDepth(3);
+      telemetry.updateRuntimeStats(
+        pumpQueueDepth: 8,
+        forwardLeadPx: 100,
+        backwardLeadPx: 50,
+      );
+      telemetry.recordPumpQueueDepth(2);
+
+      final heartbeat = telemetry.heartbeatSummary();
+
+      expect(heartbeat['frames'], 1);
+      expect(heartbeat['pumpQueueDepth'], 2);
+      expect(heartbeat['maxPumpQueueDepth'], 8);
+      expect(heartbeat['forwardLeadPx'], 100);
+      expect(heartbeat['backwardLeadPx'], 50);
+      expect(heartbeat['rollingFrameP50Micros'], 10000);
+    });
+
+    test('heartbeat represents unobserved lead values as null', () {
+      final heartbeat = HybridTelemetry().heartbeatSummary();
+
+      expect(heartbeat['forwardLeadPx'], isNull);
+      expect(heartbeat['backwardLeadPx'], isNull);
+      expect(heartbeat['minForwardLeadPx'], isNull);
+      expect(heartbeat['minBackwardLeadPx'], isNull);
+    });
+
+    test('negative queue depth is clamped and does not lower the peak', () {
+      final telemetry = HybridTelemetry();
+
+      telemetry.recordPumpQueueDepth(4);
+      telemetry.recordPumpQueueDepth(-1);
+
+      final heartbeat = telemetry.heartbeatSummary();
+
+      expect(heartbeat['pumpQueueDepth'], 0);
+      expect(heartbeat['maxPumpQueueDepth'], 4);
     });
   });
 }
