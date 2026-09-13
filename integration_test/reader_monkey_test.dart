@@ -105,6 +105,7 @@ void main() {
             );
             await tester.pump(const Duration(milliseconds: 400));
           case 'reopen_reader':
+            await harness.closeChapterDrawerIfOpen();
             await harness.showControls();
             final backButton = find.byIcon(Icons.arrow_back).hitTestable();
             expect(backButton, findsOneWidget, reason: 'Reader 返回按鈕未顯示');

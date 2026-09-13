@@ -558,6 +558,43 @@ void main() {
     }
   });
 
+  testWidgets('chapter drawer title is not a visible controls marker', (
+    tester,
+  ) async {
+    final progress = ValueNotifier<HybridProgressSnapshot?>(
+      const HybridProgressSnapshot(
+        chapterIndex: 0,
+        chapterCount: 1,
+        chapterPercent: 0,
+      ),
+    );
+    addTearDown(progress.dispose);
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: _progressShell(
+          progress: progress,
+          content: const SizedBox.expand(),
+          scaffoldKey: scaffoldKey,
+        ),
+      ),
+    );
+    scaffoldKey.currentState!.openDrawer();
+    await tester.pumpAndSettle();
+
+    expect(find.text('目錄').hitTestable(), findsOneWidget);
+    expect(
+      find
+          .descendant(
+            of: find.byType(ReaderV2BottomMenu),
+            matching: find.text('目錄'),
+          )
+          .hitTestable(),
+      findsNothing,
+    );
+  });
+
   testWidgets('auto page remains visible after controls are hidden', (
     tester,
   ) async {
@@ -599,10 +636,11 @@ ReaderV2PageShell _progressShell({
   bool isAutoPaging = false,
   bool controlsVisible = false,
   VoidCallback? onDismissControls,
+  GlobalKey<ScaffoldState>? scaffoldKey,
 }) {
   return ReaderV2PageShell(
     book: Book(bookUrl: 'test://book', name: '測試書', originName: '本地'),
-    scaffoldKey: GlobalKey<ScaffoldState>(),
+    scaffoldKey: scaffoldKey ?? GlobalKey<ScaffoldState>(),
     content: content,
     drawer: ReaderV2ChaptersDrawer(
       chapters: const [],

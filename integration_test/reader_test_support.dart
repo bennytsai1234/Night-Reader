@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
@@ -160,6 +161,9 @@ class ReaderTestHarness {
         reason: 'Reader 章節 Drawer 沒有關閉',
       );
     }
+    if (_readerControlsVisible()) {
+      return;
+    }
     // The top safe-area info bar calls onShowControls directly.  It is a more
     // deterministic control entry point than a content-zone tap because the
     // Reader's persisted 3x3 tap grid is user configurable.
@@ -168,8 +172,34 @@ class ReaderTestHarness {
     await tester.pump(const Duration(milliseconds: 250));
     await pumpUntil(
       tester,
-      () => find.text('目錄').hitTestable().evaluate().isNotEmpty,
+      _readerControlsVisible,
       reason: 'Reader controls 未顯示',
+    );
+  }
+
+  /// The chapter drawer has its own hit-testable `目錄` title. Limit the
+  /// selector to the actual bottom menu so a still-open drawer cannot be
+  /// mistaken for the Reader controls during a repeated reopen action.
+  bool _readerControlsVisible() {
+    final menus = find.byType(ReaderV2BottomMenu);
+    if (menus.evaluate().isEmpty) return false;
+    final menu = tester.widget<ReaderV2BottomMenu>(menus.last);
+    if (!menu.controlsVisible) return false;
+    return find
+        .descendant(of: menus.last, matching: find.text('目錄'))
+        .hitTestable()
+        .evaluate()
+        .isNotEmpty;
+  }
+
+  Future<void> closeChapterDrawerIfOpen() async {
+    final scaffoldState = _readerScaffoldState();
+    if (!scaffoldState.isDrawerOpen) return;
+    scaffoldState.closeDrawer();
+    await pumpUntil(
+      tester,
+      () => !scaffoldState.isDrawerOpen,
+      reason: 'Reader 章節 Drawer 沒有關閉',
     );
   }
 
