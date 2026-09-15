@@ -106,12 +106,16 @@ final class LayoutPump implements HybridLayoutPump {
     BudgetGovernor? governor,
     LayoutCostModel? costModel,
     void Function(LayoutPumpTaskStats stats)? onTaskCompleted,
+    bool Function(LayoutTask task)? isTaskStillDesired,
+    void Function(LayoutTask task)? onTaskDiscarded,
   }) : _paragraphCache = paragraphCache,
        _measurementStore = measurementStore,
        _namespace = namespace,
        _governor = governor ?? BudgetGovernor(),
        _costModel = costModel ?? LayoutCostModel(),
-       _onTaskCompleted = onTaskCompleted;
+       _onTaskCompleted = onTaskCompleted,
+       _isTaskStillDesired = isTaskStillDesired,
+       _onTaskDiscarded = onTaskDiscarded;
 
   final ParagraphCache _paragraphCache;
   final HybridMeasurementStore _measurementStore;
@@ -119,6 +123,17 @@ final class LayoutPump implements HybridLayoutPump {
   final BudgetGovernor _governor;
   final LayoutCostModel _costModel;
   final void Function(LayoutPumpTaskStats stats)? _onTaskCompleted;
+
+  /// 「這個 task 現在還需要嗎？」——由呼叫端依當前 viewport 需求回答。
+  /// 佇列本身只記得「歷史上誰要求過排版」；沒有這個述詞時，跳章後屬於
+  /// 舊中心的 task 仍會被完整排版，其 metrics 再也接不上重定中心後的
+  /// DocumentIndex（連續性要求，見 AdmissionController._flushPending），
+  /// 等於整段排版時間白費並卡住 settle 契約。
+  final bool Function(LayoutTask task)? _isTaskStillDesired;
+
+  /// 被 [purgeUndesiredTasks] 丟棄的 task；呼叫端據此回收自己的
+  /// 「已投放」記錄，否則同一個 group 之後回到視窗內時無法重新投放。
+  final void Function(LayoutTask task)? _onTaskDiscarded;
   final Queue<LayoutTask> _queue = Queue<LayoutTask>();
   final StreamController<BlockReady> _completed =
       StreamController<BlockReady>.broadcast(sync: true);
@@ -147,8 +162,34 @@ final class LayoutPump implements HybridLayoutPump {
     _state = state;
   }
 
+  /// 丟棄已不在當前需求視窗內的 task。純記帳、不做排版，因此在 dragging
+  /// 期間呼叫也不違反 I4。回傳丟棄數量。
+  int purgeUndesiredTasks() {
+    final predicate = _isTaskStillDesired;
+    if (predicate == null || _queue.isEmpty) return 0;
+    final retained = <LayoutTask>[];
+    var discarded = 0;
+    for (final task in _queue) {
+      if (predicate(task)) {
+        retained.add(task);
+        continue;
+      }
+      discarded += 1;
+      _onTaskDiscarded?.call(task);
+    }
+    if (discarded == 0) return 0;
+    _queue
+      ..clear()
+      ..addAll(retained);
+    return discarded;
+  }
+
   Future<int> pumpPending() async {
-    if (_disposed || _state == PumpState.dragging) {
+    if (_disposed) return 0;
+    // 先讓佇列反映「現在需要什麼」再談預算：queueDepth 是 restore settle
+    // 契約的判準之一，帶著陳舊 task 的深度會讓它永遠等不到 0。
+    purgeUndesiredTasks();
+    if (_state == PumpState.dragging) {
       assert(
         _state != PumpState.dragging,
         'I4: LayoutPump must not layout while dragging.',

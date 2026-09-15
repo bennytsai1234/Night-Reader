@@ -1399,6 +1399,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   // is released but before ReaderV2Runtime clears pendingChapterJumpTarget.
   // Only a new drag that starts after the restore may release the barrier.
   bool _restoreUserScrollObserved = false;
+  /// 累計被需求失效丟棄的排版工作數（整個 session，不隨 epoch 重置）。
+  /// 沒有這個計數就無從得知「舊工作撤不掉」在真機上還發生多少次——
+  /// 之前正是因為沒人量，這條路徑才一直只能靠旗標猜。
+  int _discardedLayoutTaskCount = 0;
   bool _capturing = false;
 
   /// restore 進行中旗標：此期間投放的 block 於建置「之前」即 pin 進
@@ -1723,6 +1727,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       'chaptersInFlight': _blocksInFlight.keys.toList(growable: false),
       'enqueuedCount': _enqueued.length,
       'pumpQueueDepth': _pump.queueDepth,
+      'discardedLayoutTasks': _discardedLayoutTaskCount,
       'forwardLeadPx': finiteOrNull(_admission.latestForwardLead),
       'backwardLeadPx': finiteOrNull(_admission.latestBackwardLead),
       'rollingFrameP50Micros': telemetry.frameP50Micros,
@@ -2396,6 +2401,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       namespace: _namespace,
       governor: _governor,
       onTaskCompleted: _handleLayoutTaskCompleted,
+      isTaskStillDesired: _isLayoutTaskStillDesired,
+      onTaskDiscarded: _handleLayoutTaskDiscarded,
     );
     _admission.reset(epoch: _epoch, chapterCount: widget.runtime.chapterCount);
     _admission.attach(_pump.completed);
@@ -3176,6 +3183,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     _submitGroupTask(blocks, group, anchor: anchor);
     return true;
+  }
+
+  /// 排版需求的唯一判準：`(epoch, fingerprint, windowCenter)`。
+  ///
+  /// 投放端（[_ensureWindowTasks]／[_onChapterEvent]）已經用同一組條件決定
+  /// 「要不要送」；這裡是它的對偶——送出去之後中心移動了，同一組條件回答
+  /// 「還要不要做」。兩邊用同一個半徑，才不會出現投放端願意送、drain 端
+  /// 立刻丟的來回震盪。
+  ///
+  /// epoch／fingerprint 改變時 [_handleEpochRebuild] 會整個換掉 pump，理論上
+  /// 走不到這裡；仍然檢查，讓失效鍵在單一處完整表達。
+  bool _isLayoutTaskStillDesired(LayoutTask task) {
+    if (task.epoch != _epoch || task.fingerprint != _fingerprint) return false;
+    final chapter = task.block.key.chapterIndex;
+    return (chapter - _windowCenter).abs() <= _chapterRepo.windowRadius;
+  }
+
+  /// 丟棄的 task 必須同時撤銷 [_enqueued] 記錄，否則 [_submitGroupTask] 的
+  /// 去重會讓這個 group 在重新進入視窗後永遠無法再投放。
+  void _handleLayoutTaskDiscarded(LayoutTask task) {
+    _discardedLayoutTaskCount += 1;
+    for (final block in task.groupBlocks) {
+      _enqueued.remove(block.key);
+    }
   }
 
   void _submitGroupTask(

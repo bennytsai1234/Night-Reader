@@ -561,6 +561,189 @@ void main() {
       cache.dispose();
     });
   });
+
+  group('LayoutPump 需求失效', () {
+    LayoutTask task(int chapterIndex, StyleFingerprint fingerprint) {
+      return LayoutTask(
+        block: ChapterBlock(
+          key: BlockKey(chapterIndex: chapterIndex, blockIndex: 0),
+          text: '這是一段測試文字。',
+          charRange: const HybridTextRange(0, 9),
+          sourceParagraphIndex: 0,
+        ),
+        continuationBlocks: <ChapterBlock>[
+          ChapterBlock(
+            key: BlockKey(chapterIndex: chapterIndex, blockIndex: 1),
+            text: '這是續塊。',
+            charRange: const HybridTextRange(9, 14),
+            sourceParagraphIndex: 0,
+          ),
+        ],
+        epoch: LayoutEpoch.initial,
+        fingerprint: fingerprint,
+        textStyle: const HybridBlockTextStyle(
+          fontSize: 18,
+          lineHeight: 1.5,
+          letterSpacing: 0,
+          textAlign: ui.TextAlign.start,
+        ),
+        contentWidth: 240,
+      );
+    }
+
+    test('中心移開後，舊中心的 task 在排版前被丟棄', () async {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final namespace = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      // 模擬 HybridReaderScreen 的需求視窗：半徑 2，中心可移動。
+      var center = 10;
+      final discarded = <BlockKey>[];
+      final completedKeys = <BlockKey>[];
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: namespace,
+        isTaskStillDesired: (task) =>
+            (task.block.key.chapterIndex - center).abs() <= 2,
+        onTaskDiscarded: (task) => discarded.addAll(
+          <BlockKey>[for (final block in task.groupBlocks) block.key],
+        ),
+      );
+      final sub = pump.completed.listen(
+        (event) => completedKeys.add(event.key),
+      );
+      addTearDown(() async {
+        await sub.cancel();
+        pump.dispose();
+        cache.dispose();
+      });
+
+      pump
+        ..submit(task(10, namespace.fingerprint))
+        ..submit(task(11, namespace.fingerprint));
+      expect(pump.queueDepth, 2);
+
+      // 跳章：新中心 200。兩個 task 都已不在需求視窗內。
+      center = 200;
+
+      expect(
+        await pump.pumpPending(),
+        0,
+        reason: '已失效的 task 不得被排版',
+      );
+      expect(pump.queueDepth, 0, reason: 'queueDepth 必須反映當前需求');
+      expect(completedKeys, isEmpty);
+      expect(
+        store.get(namespace, const BlockKey(chapterIndex: 10, blockIndex: 0)),
+        isNull,
+      );
+      expect(
+        cache.contains(
+          const BlockKey(chapterIndex: 10, blockIndex: 0),
+          LayoutEpoch.initial,
+        ),
+        isFalse,
+      );
+      // 丟棄必須回報整個 group，呼叫端才能完整撤銷「已投放」記錄。
+      expect(discarded, <BlockKey>[
+        const BlockKey(chapterIndex: 10, blockIndex: 0),
+        const BlockKey(chapterIndex: 10, blockIndex: 1),
+        const BlockKey(chapterIndex: 11, blockIndex: 0),
+        const BlockKey(chapterIndex: 11, blockIndex: 1),
+      ]);
+    });
+
+    test('仍在需求視窗內的 task 不受影響', () async {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final namespace = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      var center = 10;
+      final discarded = <BlockKey>[];
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: namespace,
+        isTaskStillDesired: (task) =>
+            (task.block.key.chapterIndex - center).abs() <= 2,
+        onTaskDiscarded: (task) => discarded.addAll(
+          <BlockKey>[for (final block in task.groupBlocks) block.key],
+        ),
+      );
+      addTearDown(() {
+        pump.dispose();
+        cache.dispose();
+      });
+
+      // 中心從 10 走到 11：chapter 12 由 delta +2 變成 +1，仍在視窗內；
+      // 投放端與 drain 端用同一個半徑，不得來回震盪。
+      pump.submit(task(12, namespace.fingerprint));
+      center = 11;
+
+      expect(await pump.pumpPending(), 1);
+      expect(discarded, isEmpty);
+      expect(
+        store.get(namespace, const BlockKey(chapterIndex: 12, blockIndex: 0)),
+        isNotNull,
+      );
+    });
+
+    test('fingerprint 改變的 task 同樣失效', () async {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final namespace = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: namespace,
+        isTaskStillDesired: (task) =>
+            task.fingerprint == namespace.fingerprint &&
+            task.block.key.chapterIndex == 0,
+      );
+      addTearDown(() {
+        pump.dispose();
+        cache.dispose();
+      });
+
+      pump.submit(
+        task(0, _fingerprint(lastLineSpacingCompensation: true)),
+      );
+      expect(await pump.pumpPending(), 0);
+      expect(pump.queueDepth, 0);
+    });
+
+    test('purgeUndesiredTasks 在 dragging 期間可安全呼叫（I4）', () {
+      final store = MeasurementStore();
+      final cache = ParagraphCache();
+      final namespace = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: store,
+        namespace: namespace,
+        isTaskStillDesired: (task) => false,
+      )..onScrollStateChanged(PumpState.dragging);
+      addTearDown(() {
+        pump.dispose();
+        cache.dispose();
+      });
+
+      pump.submit(task(0, namespace.fingerprint));
+      // 純記帳，不做排版，因此不觸發 I4 assert。
+      expect(pump.purgeUndesiredTasks(), 1);
+      expect(pump.queueDepth, 0);
+    });
+  });
 }
 
 ui.Paragraph _paragraph(String text) {

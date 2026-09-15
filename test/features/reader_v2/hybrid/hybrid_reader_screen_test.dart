@@ -973,6 +973,76 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('遠距離跳章會撤銷舊中心的排版工作，而不是照樣把它排完', (tester) async {
+    // 失效鍵是 (epoch, fingerprint, windowCenter)。跳章不改變 epoch，所以在
+    // 加入 center 之前，投放時屬於舊中心的 LayoutTask 仍會被完整排版，其
+    // metrics 再也接不上重定中心後的 DocumentIndex（I3 連續性），等於整段
+    // 排版時間白費並讓 restore 的 settle 契約等在後面。
+    final runtime = makeRuntime(<BookChapter>[
+      chapter(0, paragraphCount: 240),
+      for (var i = 1; i <= 11; i += 1) chapter(i, paragraphCount: 8),
+    ]);
+    final controller = ReaderV2ViewportController();
+    addTearDown(runtime.dispose);
+
+    await pumpScreen(tester, runtime, controller);
+    await openAndSettle(tester, runtime);
+    final state = tester.state(find.byType(HybridReaderScreen));
+
+    // 先用一次真實的 user settle，在舊中心（第 0 章）留下尚未 drain 的
+    // progressive batch；這是跳章當下佇列裡真的有舊工作的唯一自然來源。
+    final reader = find.byType(HybridScrollView);
+    final gesture = await tester.startGesture(tester.getCenter(reader));
+    await moveVsyncPaced(
+      tester,
+      gesture,
+      const Offset(0, -40),
+      duration: const Duration(milliseconds: 64),
+    );
+    await gesture.up();
+
+    Map<String, Object?> snapshot() => Map<String, Object?>.from(
+      (state as dynamic).debugSnapshot() as Map,
+    );
+
+    var beforeJump = snapshot();
+    for (var i = 0; i < 16; i += 1) {
+      beforeJump = snapshot();
+      if ((beforeJump['pumpQueueDepth'] as int) > 0) break;
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    expect(
+      beforeJump['pumpQueueDepth'] as int,
+      greaterThan(0),
+      reason: '這個回歸需要跳章當下佇列裡真的有屬於舊中心的工作',
+    );
+    expect(beforeJump['discardedLayoutTasks'], 0);
+
+    // 跳到遠離舊中心超過需求半徑的章節。
+    await runtime.jumpToChapter(9);
+    await tester.pump();
+    final afterJump = snapshot();
+
+    expect(afterJump['phase'], 'ready');
+    expect(afterJump['initialRestoreCompleted'], true);
+    expect(
+      afterJump['discardedLayoutTasks'] as int,
+      greaterThan(0),
+      reason: '舊中心的工作必須被撤銷，而不是照樣排完',
+    );
+    // restore 返回後可以有屬於「新中心」的少量後續需求；要保證的是佇列
+    // 只反映當前需求視窗，不是舊中心留下的長尾（C6 觀察到的是 931）。
+    expect(
+      afterJump['pumpQueueDepth'] as int,
+      lessThanOrEqualTo(32),
+      reason: 'restore 返回時佇列必須是當前需求的有界 frontier',
+    );
+    expect(afterJump['visibleKeys'], isNotEmpty);
+    expect(afterJump['visibleKeysContiguous'], true);
+    expect(afterJump['missingParagraphKeys'], isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'ordinary prefetch drops a chapter load that completes during a drag',
     (tester) async {
