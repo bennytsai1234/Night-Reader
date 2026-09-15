@@ -130,4 +130,56 @@ meta-data 位置本身確實可疑，但「要不要修位置」與「值該是�
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Result
+
+P1 accepted by Relay. The baseline was created on `main` as the single package commit;
+P2-P6 remain uncommitted and will continue from this tree.
+
+### Actual changes
+
+- Added `android/build/` to `.gitignore` with a Gradle-generated-output note.
+- Restored `android/app/src/main/AndroidManifest.xml` and
+  `lib/features/reader_v2/hybrid/view/cached_block_widget.dart` to `HEAD`, so the
+  unvalidated renderer opt-out and `isRepaintBoundary=false` changes were not
+  included in the baseline.
+- Confirmed there was no coupled `hybrid_scroll_view.dart` or
+  `cached_block_repaint_test.dart` change to revert.
+- Kept the diagnostic/harness changes, continuous integration test, existing
+  Reader progress fix, regression coverage, and planning documents in the
+  baseline commit.
+- Updated the ledger: L-04 and L-06 record that P1 extracted and restored the
+  changes, and L-11 records the ineffective `<activity>` placement of
+  `EnableImpeller`.
+
+### Route adjustment
+
+The package requested `claude-p`, which was unavailable in this environment. An
+equivalent current coding worker executed the package without changing its Goal,
+Recommended Solution, Acceptance, or Constraints.
+
+### Verification evidence
+
+- `flutter analyze` — passed: `No issues found! (ran in 22.2s)` in Relay's
+  independent rerun.
+- `flutter test test/features/reader_v2` — passed: `207` tests, including the
+  `runtime.jumpToChapter 後窄通道進度不會沿用上一章` regression test.
+- `flutter test` — passed in Relay's independent machine-output rerun:
+  `flutter_test_exit=0`, `visible_test_done=1028`, `successful_tests=1028`,
+  `failed_tests=0`.
+- `git diff --exit-code HEAD~1 HEAD -- android/app/src/main/AndroidManifest.xml`
+  and the equivalent check for `cached_block_widget.dart` both returned exit code
+  `0` (empty diffs).
+- `git status --short --untracked-files=all` — empty after commit;
+  `git check-ignore -v android/build` confirms `android/build/` is ignored.
+- Baseline commit: `466ddaed5e303f32e6d920f9f68a8c4b23cfedf7`, subject
+  `chore(reader): establish Reader V2 diagnostics baseline`, with the required
+  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` trailer.
+
+### Unavailable / residual risk
+
+- No Android `flutter run`, continuous debug run, or valid profile driver run was
+  performed by P1; 120Hz performance remains intentionally unverified for P2/P4.
+- `EnableImpeller=false` remains in its ineffective `HEAD` location and
+  `RenderCachedBlock.isRepaintBoundary` remains `true`; both decisions are
+  intentionally deferred to valid P4 experiments.
+- The repository is one commit ahead of `origin/main`; nothing was pushed.

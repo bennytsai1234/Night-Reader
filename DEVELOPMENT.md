@@ -29,6 +29,35 @@ flutter test test/features/source_manager
 flutter test test/shared/theme/theme_customization_test.dart
 ```
 
+## Reader V2 狀態轉換驗證入口
+
+要調查閱讀器的樣式、viewport／旋轉、簡繁內容或換源問題，先從
+[Reader 模組地圖](docs/night_reader/reader.md) 的 `State-transition contracts` 與
+`Known Risks` 了解結構語意，再用下列測試路徑；不要只跑一般 smoke 而漏掉對應的
+位置、世代或頁面編排斷言。
+
+| 目的 | 測試入口 |
+|---|---|
+| 共用語意 anchor、世代／epoch／metrics 斷言與換源 fake | `test/features/reader_v2/reader_v2_state_transition_test_support.dart`；自我保護測試在 `reader_v2_state_transition_test_support_test.dart` |
+| T1 四路徑 seam smoke | `test/features/reader_v2/reader_v2_state_transition_smoke_test.dart` |
+| T2 樣式維度、clamp、組合、rapid coalescing、未 settle restore | `test/features/reader_v2/reader_v2_style_change_test.dart` |
+| T3 連續 viewport／inset 與旋轉 anchor | `test/features/reader_v2/reader_v2_rotation_viewport_test.dart` |
+| T4 簡繁長度、語意重映射與 reload | `test/features/reader_v2/reader_v2_chinese_convert_loop_test.dart`；四層 freshness 在 `test/features/reader_v2/hybrid/reader_v2_content_conversion_cache_freshness_test.dart`，轉換長度基線在 `test/core/engine/reader/chinese_text_converter_length_test.dart` |
+| T5 page-layer flush／失敗／新 session 競爭 | `test/features/reader_v2/reader_v2_source_switch_loop_test.dart` |
+| T5 service-layer regression test path | `test/core/services/source_switch_service_test.dart` 與 `test/core/services/source_switch_progress_test.dart` |
+
+最小整合覆核是在 repo 根目錄執行：
+
+```powershell
+flutter test test/features/reader_v2 --reporter compact
+```
+
+這會遞迴涵蓋上述 Reader V2 subtree；若變更觸及簡繁 converter 長度，另跑
+`flutter test test/core/engine/reader/chinese_text_converter_length_test.dart`。測試中的
+`ReaderAnchorProbe` 預設做 exact anchor 比對；只有內容轉換預期改變字形時，才在 T4
+使用 `equivalentText` 模式。Android debug／profile runner 的操作與效能判定仍依本文件
+下方的 Android 段落，這裡的 widget tests 不代表真機旋轉、網路換源或效能 pass。
+
 ## Android 執行驗證
 
 先確認 Flutter 版本與 Android 目標：
@@ -88,22 +117,78 @@ task 的實際／預估耗時與字數，方便區分 framework／emulator 負�
 排版 task 本身的瓶頸：
 
 ```powershell
-.\tool\run_android_reader_workload.ps1 `
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\tool\run_android_reader_workload.ps1 `
   -DeviceId emulator-5556 `
   -Scenario continuous `
   -BuildMode profile `
   -Seed 9132026 `
-  -Iterations 12 `
-  -TimeoutSeconds 900 `
+  -Iterations 35 `
+  -TimeoutSeconds 600 `
   -ReportDir artifacts/android-reader/continuous-120hz-profile
 ```
 
-`debug` workload 用於功能與 race 語意驗證；`profile` workload 才能作為
-效能判定依據。profile test APK 會使用獨立的 `com.inkpage.reader.debug`
+有效的 Reader 效能窗口必須同時滿足：初始開書／restore 已排除、輸入是
+vsync-paced、有效窗口（指定操作時為 category-filtered window）至少 300 frames、
+`SurfaceFlinger` active mode 的 `vsyncRate=120.00 Hz`、有 `READER_CONTINUOUS_ACTION`
+marker 且 `completedActions > 0`、app telemetry 與 driver `TimelineSummary` 的
+frame/build/raster 在容許差異內，以及 `invariantHookEnabled=false`。runner 會在
+JSON／telemetry／TimelineSummary 缺席、marker 或 category/window 不符、任一來源
+frame 不足、120Hz 未確認、兩來源不一致、hook 開啟、逾時或 watchdog 中止時
+fail closed：寫入 `performance.status=invalid` 與 `performance.invalidReasons`，並以
+非零 exit 結束。frame 不足時不得用整個 session 或其他操作類別的 frame 補數。
+
+`debug` workload 用於功能、race 與逐幀 invariant 語意驗證；`profile` + driver
+且 hook 關閉才作效能判定，debug continuous 即使 frame 數足夠也只能是
+observed，不能成為 performance pass。若要檢查操作類別，傳入 `-Action`；marker、
+seed、exclusive action window 與 category frame 下限都必須對得上該操作。profile
+test APK 會使用獨立的 `com.inkpage.reader.debug`。`adb logcat`／`flutter logs` 路徑
+只用於例外、lifecycle、plugin、GC、ANR 與 workload marker 診斷，不能取代 Flutter
+FrameTiming 或 driver TimelineSummary 的效能來源。
 application id，避免 Flutter driver 為安裝 profile APK 而移除正式版
 `com.inkpage.reader` 的資料。若只用 `flutter run`／`flutter attach`，才可
 使用 Hot Reload；profile／release APK 與直接 `adb am start` 不支援 Hot
-Reload。
+Reload。continuous runner 會用標準 `flutter drive --debug/--profile`
+`--driver=test_driver/integration_test.dart`、`--target=integration_test/reader_continuous_test.dart`
+路徑，並加上 `--no-dds` 讓 app 內 `watchPerformance()` 的 VM service
+Timeline tracing 可連線；它在 workload APK 重裝後重新 push
+`samples/西游记.txt` 到 app-specific external-files 路徑。每次報告目錄會留下
+`metadata.json`、`driver-output.txt`、`driver-response-data.json`、
+`workload-logcat.txt`、`continuous-samples.jsonl` 與 ancillary `gfxinfo`/
+`meminfo` 輸出；`build/integration_response_data.json` 是 driver callback 的
+原始 response。若要驗證缺少 driver JSON 的 fail-closed 行為，可用
+`-DriverResponsePathOverride <不存在的路徑>`；這只改變 runner 讀取位置，不會
+放寬有效性判定。
+
+P6 Reader monkey final gate 使用 debug workload、P3 invariant hook 開啟與有限迭代；
+每次完整執行至少以第一個 seeded permutation 覆蓋全部 28 個安全 action，再以同一 seed
+繼續抽樣。建議每個 seed 使用 56 iterations、`TimeoutSeconds 1800`；兩個不同 seed
+都必須保留完整 action log、`READER_MONKEY_RESULT_SUMMARY`、`metadata.json` 與
+`workload-logcat.txt`。此 gate 是 emulator-only 的功能／race／invariant 證據，不能用來
+宣稱效能通過；profile continuous 必須另行以 hook=false 執行。若 action 沒有現成的
+`@visibleForTesting` seam，應記錄 skip 原因，不要為了 monkey gate 增加產品 UI 或 runtime
+開關。所有 action 之間都要回到 settled checkpoint，runner 的 fixture watcher 與 120 秒
+no-progress watchdog 不得移除。
+
+執行上述 workload runner 時必須使用 PowerShell 7 的 `pwsh -NoProfile`，不要
+從 Windows PowerShell 5.1 的 `powershell -NoProfile` 啟動。5.1 下
+`.NET ProcessStartInfo.ArgumentList` 會是 `null`，runner 在 adding arguments
+階段會因 null-valued expression 失敗；這是 shell/runtime 相容性問題，不是
+Reader production bug，也不代表 P2 的量測資料失效。直接執行 `flutter drive`
+可能仍然成功，因為它繞過了這個 PowerShell supervisor。切換 `pwsh` 不能移除
+既有的 package-replacement watcher 或 120 秒 no-progress watchdog；兩者分別
+處理 workload APK 重裝時的 fixture race，以及 process 存在但 action marker
+停止更新的安全中止條件。所有 workload 仍須使用有限 iterations、duration 與
+timeout，不得改成無上限長跑。
+
+不要採用以下判定方式：
+
+- 不要再試 `context.setIsComplexHint()`（L-05 已否證，曾使 raster 惡化）。
+- 不要從 AVD `config.ini` 的 `hw.gpu.enabled` 推論 runtime GPU；改用
+  `adb -s <device-id> shell dumpsys SurfaceFlinger` 的 `GLES:` 行確認實際路徑。
+- 不要用 `dumpsys gfxinfo` 的 `Total frames rendered` 判斷 Flutter timing；它不是
+  Flutter 自有 `FrameTiming` 的來源。
+- 不要在不足 300 frames 的樣本上判 P99；少量樣本不能代表 P99。
+- 不要在同一個效能迭代同時改多個變因；每次只改一個變因，否則差異無法歸因。
 
 Android Studio 的 Device Manager 若顯示 `Missing system image`，先檢查 Android Studio 的 Android SDK Location 是否指向 `C:\Android\Sdk`；不要在 AVD 設定頁直接按下載／完成來重抓已存在的映像。只要 `flutter emulators`、`flutter devices` 與 `adb devices -l` 都能看到這台 AVD，就可以用 Flutter CLI 執行與驗證。
 

@@ -98,7 +98,26 @@ class ReaderV2LayoutSpec {
             .clamp(1.0, double.infinity)
             .toDouble();
     var contentWidth = rawContentWidth;
-    var effectiveStyle = style;
+    final normalizedLineHeight = ReaderV2LayoutStyle.normalizeLineHeight(
+      style.lineHeight,
+    );
+    // Keep the value used by the signature/cache key identical to the value
+    // used by the layout engine's effectiveLineHeight calculation.
+    var effectiveStyle = normalizedLineHeight == style.lineHeight
+        ? style
+        : ReaderV2LayoutStyle(
+            fontSize: style.fontSize,
+            lineHeight: normalizedLineHeight,
+            letterSpacing: style.letterSpacing,
+            paragraphSpacing: style.paragraphSpacing,
+            paddingTop: style.paddingTop,
+            paddingBottom: style.paddingBottom,
+            paddingLeft: style.paddingLeft,
+            paddingRight: style.paddingRight,
+            bold: style.bold,
+            textIndent: style.textIndent,
+            lastLineSpacingCompensation: style.lastLineSpacingCompensation,
+          );
     double? effectiveCell;
     if (cellWidth != null && cellWidth.isFinite && cellWidth > 0) {
       final cells = ((rawContentWidth + _cellCountEpsilon) / cellWidth).floor();
@@ -106,22 +125,22 @@ class ReaderV2LayoutSpec {
         // em-grid 鎖寬：寬度取 cell 乘積而非減法回推，每列殘差歸零，
         // justify／斷行都沒有零頭可攤；殘差平分回左右 padding 維持置中。
         contentWidth = cells * cellWidth + _cellWidthSlack;
-        final sidePadding =
-            ((rawContentWidth - contentWidth) / 2)
-                .clamp(0.0, double.infinity)
-                .toDouble();
+        final sidePadding = ((rawContentWidth - contentWidth) / 2)
+            .clamp(0.0, double.infinity)
+            .toDouble();
         effectiveStyle = ReaderV2LayoutStyle(
-          fontSize: style.fontSize,
-          lineHeight: style.lineHeight,
-          letterSpacing: style.letterSpacing,
-          paragraphSpacing: style.paragraphSpacing,
-          paddingTop: style.paddingTop,
-          paddingBottom: style.paddingBottom,
-          paddingLeft: style.paddingLeft + sidePadding,
-          paddingRight: style.paddingRight + sidePadding,
-          bold: style.bold,
-          textIndent: style.textIndent,
-          lastLineSpacingCompensation: style.lastLineSpacingCompensation,
+          fontSize: effectiveStyle.fontSize,
+          lineHeight: effectiveStyle.lineHeight,
+          letterSpacing: effectiveStyle.letterSpacing,
+          paragraphSpacing: effectiveStyle.paragraphSpacing,
+          paddingTop: effectiveStyle.paddingTop,
+          paddingBottom: effectiveStyle.paddingBottom,
+          paddingLeft: effectiveStyle.paddingLeft + sidePadding,
+          paddingRight: effectiveStyle.paddingRight + sidePadding,
+          bold: effectiveStyle.bold,
+          textIndent: effectiveStyle.textIndent,
+          lastLineSpacingCompensation:
+              effectiveStyle.lastLineSpacingCompensation,
         );
         effectiveCell = cellWidth;
       }

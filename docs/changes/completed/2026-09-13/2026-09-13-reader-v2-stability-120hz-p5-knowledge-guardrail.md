@@ -116,4 +116,61 @@ Known Risks 段中已被本批次證實或否證的項目要對應更新。
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Relay acceptance — 2026-09-14
+
+Status: **accepted**.
+
+Worker: Lagrange (`01a09cc3-5ee7-7582-9460-1c6d9d6fcf9c`), GPT subagent,
+`reasoning_effort=high`. P5 stayed within its documentation and runner-review
+scope: it did not modify `lib/` production behavior, did not reopen P1–P4 or
+the gap-package history, and did not commit, push, reset, clean, stash, or
+discard shared changes. The P5 package itself was left in planning for Relay.
+
+Accepted durable changes:
+
+- `DEVELOPMENT.md` now gives a runnable, fail-closed 120Hz procedure: use
+  `pwsh -NoProfile`, profile + driver + hook=false for performance, debug/hook
+  only for semantic/race/invariant observations, exclude initial restore,
+  require vsync-paced input, 120Hz SurfaceFlinger evidence, action markers,
+  category-scoped frames >=300 where applicable, app/driver cross-source
+  agreement, and preserve finite iterations/duration/timeout plus fixture
+  watcher and 120-second no-progress watchdog. It documents the distinction
+  between Flutter timing and logcat diagnostics, the PowerShell 5.1
+  `ProcessStartInfo.ArgumentList` null failure, and the durable L-05/L-07/L-08,
+  insufficient-sample, and one-variable do-not rules.
+- `docs/night_reader/reader.md` now records only durable Reader facts: the
+  debug-only I1–I8 seam and enablement, P3 progress/restore/ballistic/drawer
+  race fixes, the safe P4V rollback state
+  `RenderCachedBlock.isRepaintBoundary=true`, P4O H1 reversion and H2–H5
+  non-execution boundaries, and the bounded emulator-only residual
+  raster/overall frame-tail conclusion. It cross-references `DEVELOPMENT.md`
+  for commands and timing interpretation instead of copying ledger tables.
+- The runner review and small guardrail patch retain the existing
+  `performance.invalidReasons` shape and fail-closed semantics. Automated
+  checks cover 120Hz, overall and category frame lower bounds, marker seed/action
+  identity, category exclusivity, hook/performance separation, app/driver
+  cross-source validation, and finite watchdog behavior. Debug continuous is
+  explicitly `observed`, never a performance pass. Non-automatable experimental
+  design rules remain documented rather than being misrepresented as runtime
+  validity checks.
+- The stability ledger has an append-only P5 section containing the L1/L2/L3
+  mapping, automated-versus-document-only guardrail table, durable/batch-local
+  split, duplicate-fact review, and the fresh-reader practical check. It also
+  states the remaining external dependencies: real 120Hz hardware,
+  navigation/entry baselines, platform TTS callbacks, and fine-grained
+  cache/overdraw/layer attribution.
+
+Relay independently checked that the required durable phrases and ledger P5
+section are present, ran the PowerShell parser check (`PWSH_PARSE_OK`), and ran
+`git diff --check` (no whitespace errors; only existing LF/CRLF conversion
+warnings). Worker validation also passed `flutter analyze` with no issues,
+the Reader V2 suite with 220 tests, the full suite with 1041 tests,
+`GUARDRAIL_BEHAVIOR_OK`, `P5_DOC_GUARDRAILS_OK`, and
+`P5_FINAL_DOC_CHECKS_OK`. No new Android workload was needed for this
+documentation/guardrail package; existing P4/P4O performance failure and
+emulator-only boundaries remain truthfully documented.
+
+The package is accepted with the explicit limitation that P5 itself provides
+no new runtime or real-device evidence. Proceed to P6; P6 must consume the
+documented `pwsh` path and preserve the P4V safe `true` state and unchanged 8ms
+interpretation.

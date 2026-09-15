@@ -148,4 +148,95 @@ scroll 變體、章節導航、pause、background / foreground、reopen reader�
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Relay acceptance — 2026-09-14
+
+**Status: ACCEPTED as the final functional/invariant gate.** P6 is accepted for its
+seeded Reader action breadth, settled-state checks, and production I1–I8 correctness
+evidence. It is not a performance pass: the independent profile run remains a valid
+failure of the unchanged strict `totalSpan P99 < 8000µs` gate.
+
+### Delivered scope
+
+- Preserved the existing 17 monkey actions and added the reachable, bounded actions
+  required by the package. The final permutation covered 28/28 executable actions in
+  each gate run, with action-to-risk mapping and seeded action logs retained in the
+  ledger and Android artifacts.
+- Every executed action returned through the existing settled checkpoint contract:
+  `phase=ready`, `initialRestoreCompleted=true`, no scrolling or dragging,
+  `pumpQueueDepth=0`, contiguous visible keys, no missing paragraph, and no pending
+  jump. The runner remained finite and kept the fixture watcher, 120-second
+  no-progress watchdog, and bounded ADB command timeout.
+- Kept the three unsupported routes explicit rather than inventing product/runtime
+  seams: `font_family_change`, `rotation_pair`, and `different_source_switch`.
+  Typography, padding, theme/textColor, simplified/traditional conversion, reload,
+  lifecycle, TTS toggle, drawer competition, ballistic chapter switching, chapter
+  boundaries, and cache pressure were exercised through existing seams.
+
+### Functional gate evidence
+
+Two independent complete seeded runs passed the functional/semantic gate:
+
+| Seed | Completed | Coverage | Production I1–I8 | Harness-only result | Final state |
+|---|---:|---:|---:|---|---|
+| `9260108` | 28/28 | full | 0 | 0 | `ready`, queue 0 |
+| `9260109` | 28/28 | full | 0 | `I7=1` retained and reported | `ready`, queue 0 |
+
+Both runs had `semanticStatus=passed`, `suspectedAnomalies=0`, and preserved the
+complete raw summary/action artifacts. The second run's harness-only I7 is not hidden
+or reclassified as a production pass/failure; it is a harness observation, while the
+production invariant count remained zero.
+
+The bounded journey artifact `p6-journey-final` passed and the normal debug APK was
+restored. The final finite profile continuous artifact `p6-continuous-profile-9260403`
+completed 35 actions with `appFrames=8315`, `driverFrames=8165`, valid 120Hz and
+app/driver cross-source evidence, `hook=false`, `semanticStatus=passed`,
+`suspectedAnomalies=0`, `finalPhase=ready`, and queue depth 0.
+
+### Production fixes found by P6
+
+1. A real settled `textColor` update could expose stale visible `ParagraphCache`
+   paragraphs and produce production I2. The minimal production fix uses the existing
+   epoch-rebuild path and restores the captured location from `didUpdateWidget`; no
+   runtime knob or product UI was added. The regression test
+   `textColor 變更先隔離舊 ParagraphCache 再 restore` failed against a temporary
+   pre-fix source with `Expected: empty / Actual: [{chapterIndex: 0, blockIndex: 0},
+   {chapterIndex: 0, blockIndex: 1}]`, then passed with the fix.
+2. I8 was tightened to compare ballistic motion only inside the same epoch,
+   layout-generation, reset-generation, and index-binding world. A cross-epoch reload
+   restore therefore cannot be misreported as one continuing physical ballistic
+   stream; the dedicated regression test passed.
+
+The continuous harness also clears its previous snapshot at an action boundary so a
+new chapter jump is not compared with the previous action's coordinate world. The
+invariant checks and suspected-anomaly reporting remain enabled; this is a harness
+boundary correction, not a weakened invariant.
+
+### Independent Relay verification
+
+- `flutter analyze`: passed, no issues.
+- `flutter test test/features/reader_v2`: passed, 222 tests.
+- `flutter test --reporter compact`: passed, 1043 tests.
+- `git diff --check`: passed; only the repository's existing LF/CRLF conversion
+  warnings were emitted.
+- Source inspection confirmed
+  `lib/features/reader_v2/hybrid/view/cached_block_widget.dart:199` remains
+  `bool get isRepaintBoundary => true;`, preserving the P4V rollback decision.
+
+### Evidence boundary and performance disposition
+
+The app telemetry profile P99 was `45000µs` total span (`5000µs` build,
+`22000µs` raster, `13500µs` vsync, `3000µs` layout task); driver raster P99 was
+`21.855ms`. This is valid emulator/profile evidence and remains a failure of the
+unchanged strict `<8000µs` gate, consistent with P4's residual raster/overall-frame
+tail. P6 does not claim a performance improvement or use hook-on timing as a
+performance result.
+
+Unverified boundaries remain explicit: no real-device result; no font-family mutation,
+in-process rotation, or second-source switch; no real TTS platform playback/following
+validation; and no additional layer/overdraw/per-frame raster causal attribution.
+The emulator was left running for later local work, but no workload process or test APK
+was intentionally left after restoration.
+
+P4 and its archived report/ledger history were not reopened or rewritten. P4V's
+rollback state and revert decision remain authoritative. No commit, push, reset, clean,
+or stash was performed.

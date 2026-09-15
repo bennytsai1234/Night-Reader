@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show FrameTiming;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -29,6 +30,16 @@ typedef ReaderV2ViewportRestore = Future<bool> Function(
 );
 
 class ReaderV2Runtime extends ChangeNotifier {
+  /// Optional transition observation for deterministic state-transition tests.
+  ///
+  /// The production path leaves this null, and the dispatch is debug-only, so
+  /// no counter or history is allocated unless a test explicitly opts in.
+  @visibleForTesting
+  static VoidCallback? debugOnApplyPresentationTriggered;
+
+  @visibleForTesting
+  static VoidCallback? debugOnReloadContentTriggered;
+
   factory ReaderV2Runtime({
     required Book book,
     required ReaderV2ChapterRepository repository,
@@ -298,6 +309,9 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
     final needLayout = state.layoutSpec.layoutSignature != spec.layoutSignature;
     if (!needLayout) return;
+    if (kDebugMode) {
+      debugOnApplyPresentationTriggered?.call();
+    }
 
     navigation.clearPendingNeighborAdvance();
     final location =
@@ -359,10 +373,17 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> reloadContentPreservingLocation() async {
+    if (kDebugMode) {
+      debugOnReloadContentTriggered?.call();
+    }
     final location =
         pendingChapterJumpTarget ??
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
+    // The repository cache still contains the displayed content at this
+    // point. Keep it so a conversion-triggered reload can map the old UTF-16
+    // offset into the new display text instead of clamping the old offset.
+    final previousContent = repository.cachedContent(location.chapterIndex);
     if (hybridViewportActive) {
       repository.clearContentCache();
       final token = stateMachine.beginContentReload(
@@ -370,8 +391,14 @@ class ReaderV2Runtime extends ChangeNotifier {
       );
       notifyListeners();
       try {
-        final positioned = await _positionHybridViewport(
+        final remappedLocation = await _remapReloadLocation(
           location: location,
+          previousContent: previousContent,
+          token: token,
+        );
+        if (!stateMachine.isCurrent(token)) return;
+        final positioned = await _positionHybridViewport(
+          location: remappedLocation,
           token: token,
         );
         if (!positioned && stateMachine.isCurrent(token)) {
@@ -387,10 +414,32 @@ class ReaderV2Runtime extends ChangeNotifier {
     resolver.clearCachedLayouts();
     final token = stateMachine.beginContentReload(layoutGeneration: generation);
     notifyListeners();
+    final remappedLocation = await _remapReloadLocation(
+      location: location,
+      previousContent: previousContent,
+      token: token,
+    );
+    if (!stateMachine.isCurrent(token)) return;
     await navigation.jumpToLocation(
-      location,
+      remappedLocation,
       immediateSave: false,
       operationToken: token,
+    );
+  }
+
+  Future<ReaderV2Location> _remapReloadLocation({
+    required ReaderV2Location location,
+    required ReaderV2Content? previousContent,
+    required ReaderV2OperationToken token,
+  }) async {
+    final before = previousContent;
+    if (before == null) return location;
+    final after = await repository.loadContent(location.chapterIndex);
+    if (!stateMachine.isCurrent(token)) return location;
+    return ReaderV2ContentLocationMapper.remap(
+      location: location,
+      before: before,
+      after: after,
     );
   }
 

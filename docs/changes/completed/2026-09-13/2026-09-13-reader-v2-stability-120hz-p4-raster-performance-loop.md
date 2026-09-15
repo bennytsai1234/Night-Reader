@@ -163,4 +163,104 @@ EXECUTION_ROUTE: claude-p
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Status: ACCEPTED
+
+- **Accepted by:** Relay
+- **Executor:** GPT coding worker（`claude-p` 只保留為既有 package route metadata；本環境未使用 Claude CLI）
+- **Commit / push:** 無；符合本 package 的 no-commit constraint
+- **Acceptance date:** 2026-09-13
+
+### 結論
+
+P4 沒有達成 strict `totalSpan P99 < 8000µs`。依本 package 的第二條出口，已
+建立受限於目前 emulator/control 條件的 raster ceiling attribution；因此不得
+把 `performance.status=failed` 改寫成 `passed`，也沒有放寬
+`strict120HzFrameP99TargetMicros = 8000`。
+
+有效 Reader run 顯示 `RenderCachedBlock.isRepaintBoundary = false` 比 P2
+baseline 有實際改善，但不同有效 run 仍有 emulator/workload noise，且
+`totalSpan` 仍遠高於 8ms。renderer A/B 與 paint-path clip-elision 沒有證明
+改善，均已回退。等 viewport、同一份 fixture 與相同 action 規模的 lazy
+chunked `ListView` control，其 build/task 已低於 budget 而 raster 仍遠高於
+budget，支持「目前 emulator/control 的 raster ceiling」這個有限結論；這不
+是 Reader strict pass，也不宣稱所有真機都有相同物理上限。
+
+### Delivered
+
+- 依 P2 有效性條件執行 P4 迭代：120Hz SurfaceFlinger、至少 300 app/driver
+  frames、35 actions、app/driver cross-source validation、hook 關閉。
+- 保留 `RenderCachedBlock.isRepaintBoundary => false`，並同步修正 sliver 的
+  layer composition 註解。
+- 暫時嘗試 renderer A/B；沒有證明 Skia 改善 raster，已還原
+  `AndroidManifest.xml` 到 P1 baseline。
+- 暫時嘗試對單一 block 省略冗餘 `clipRect`；結果惡化，已回退 paint-path 改動。
+- 新增只供量測的 lazy chunked equal-area `SimpleScrollControl`，沒有把 control
+  route 帶入 production Reader。
+- 保留 package replacement watcher、每 2 秒 action progress 觀測與 120 秒
+  no-progress watchdog；continuous runner 維持有限 iterations、duration 與
+  timeout，不允許無上限長跑。
+- 將 PowerShell 5.1 / PowerShell 7 的 runner 相容性根因記入 shared ledger，並
+  同步補進 Android 操作 skill 與 `DEVELOPMENT.md`。
+
+### Iteration evidence
+
+所有下列有效列均為 profile、120Hz、hook=false、35 actions、semantic passed、
+cross-source valid；`performance.status=failed` 僅表示 strict P99 gate 未達，
+不是量測窗口無效。
+
+| 迭代 | 有效 frames（app / driver） | app total / build / raster / vsync / task P99 | 判定與處理 |
+|---|---:|---|---|
+| 0 baseline | 2106 / 2074 | 100500 / 11500 / 118500 / 29000 / 3500µs | valid、strict failed；保留 baseline |
+| 1a `isRepaintBoundary=false`, seed 9132050 | — | — | INVALID：PowerShell 5.1 runner 在 `ProcessStartInfo.ArgumentList` 加參數時失敗；後續 pwsh 重跑另有 semantic anomaly，未取數字作效能結論 |
+| 1b boundary change, seed 9132026 | 9550 / 9377 | 41000 / 4000 / 21000 / 11000 / 3000µs | valid、strict failed；相對 baseline 有改善，保留 |
+| 1c boundary change, seed 9132073 | — | — | INVALID：`previous-chapter-start-target-26` reverse-jump anomaly；不分類為效能 regression |
+| 1d boundary final reproduction, seed 9132026 | 5898 / 5801 | 75000 / 6000 / 40500 / 19500 / 4000µs | valid、strict failed；保留已證明優於 baseline 的變更 |
+| 2 renderer A/B（Skia） | 9335 / 9189 | 40000 / 3500 / 21000 / 11500 / 2500µs | valid、strict failed；raster 未改善，manifest 回退 |
+| 3 paint clip-elision | 10214 / 10056 | 42000 / 4000 / 21500 / 13500 / 3000µs | valid、strict failed；相對 1b 惡化，回退 |
+| 4 chapter-jump attribution | 4867 / 4683 | 45500 / 4500 / 19500 / 22000 / 2000µs | valid、strict failed；jump window build/task 已低於 budget，保留 attribution |
+| 5a giant `Text` control | — | — | INVALID／主動中止：單一 53MB `Text` 每個 action 約 30 秒，不適合作為有限 control；沒有使用任何 P99 |
+| 5b lazy chunked equal-area control | 1351 / 1259 | 100500 / 7000 / 56500 / 18000 / 0µs | valid control、strict failed；build/task <8ms 而 raster 遠超 budget，保留為 emulator-only ceiling evidence |
+
+Reader 的 valid run 中，build 與 layout task 都低於 8ms；超標集中在 raster，
+另外的 vsync overhead 也被單獨保留為 framework/emulator timing layer，不能
+被誤寫成 Reader layout/task 問題。5b control 在相同 emulator/viewport/fixture
+下以 lazy `ListView` 顯示約 2000 字 chunks、執行 35 個 simple-scroll actions，
+driver TimelineSummary 為 `build P99=6.672ms`、`raster P99=56.174ms`，並以
+app telemetry 交叉驗證。這支持的是 emulator/control ceiling attribution，
+不是所有硬體與真機的物理定理。
+
+### Runner shell handoff
+
+初始 runner 是由 Windows PowerShell 5.1 的 `powershell -NoProfile` 啟動；該
+版本的 `.NET ProcessStartInfo.ArgumentList` 為 `null`，所以在 adding arguments
+階段出現 null-valued expression。後續所有有效 driver run 改用 PowerShell 7：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\tool\run_android_reader_workload.ps1 ...
+```
+
+這是 shell/runtime compatibility pitfall，不是 production bug，也不是 P2
+measurement 根因。直接 `flutter drive` 可以成功，是因為它繞過了這個 supervisor
+path。watcher/no-progress harness patch 仍必要，不能因切換 `pwsh` 而移除。
+
+### Verification
+
+- `flutter analyze`：Relay independent run `No issues found! (ran in 22.1s)`。
+- `flutter test test/features/reader_v2`：Relay independent run `212 tests passed`。
+- `flutter test --reporter compact`：Relay independent run `1033 tests passed`。
+- `git diff --check`：無 whitespace error；僅有既有 LF/CRLF conversion warnings。
+- P3 的 post-fix debug continuous 與 `journey` 證據仍保留；P4 沒有修改 P3
+  invariant 語義，效能 run 全部 hook-off。
+- `AndroidManifest.xml` 的 renderer 暫時變更已回退；沒有新增 release APK、
+  publish、commit 或 push。
+
+### Verified / unverified / inference
+
+- **Verified:** P4 每個迭代的有效性／無效性分類、boundary improvement、renderer
+  與 paint-path 的 negative result、lazy control 的 cross-source ceiling
+  evidence、host analyze/full tests，以及 120Hz emulator evidence。
+- **Unverified:** strict Reader `totalSpan P99 <8000µs`、真機 raster 結果，以及
+  control ceiling 是否可代表其他 GPU／解析度／Android 裝置。
+- **Inference:** 在目前 emulator、viewport、fixture 與 control 條件下，raster／
+  compositor 或 emulator timing layer 是主要剩餘限制；這不等同於已證明 Reader
+  paint path 在所有真機上沒有可優化空間。

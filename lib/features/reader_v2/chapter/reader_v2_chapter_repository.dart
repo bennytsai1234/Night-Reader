@@ -17,6 +17,11 @@ import 'reader_v2_content.dart';
 import 'reader_v2_content_transformer.dart';
 import 'reader_v2_processed_chapter.dart';
 
+typedef ReaderV2TestContentLoader = Future<String?> Function(
+  int chapterIndex,
+  BookChapter chapter,
+);
+
 class ReaderV2ChapterRepositoryException implements Exception {
   const ReaderV2ChapterRepositoryException(this.message);
 
@@ -37,6 +42,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    this.contentLoader,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
        replaceDao =
@@ -62,6 +68,11 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+
+  /// Test-only seam. When absent, the production content pipeline is
+  /// unchanged. A supplied loader may hold a chapter future to reproduce a
+  /// deterministic in-flight state without changing rendering behaviour.
+  final ReaderV2TestContentLoader? contentLoader;
   final ReaderV2ContentTransformer _contentTransformer =
       const ReaderV2ContentTransformer();
 
@@ -158,6 +169,19 @@ class ReaderV2ChapterRepository {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
       throw const ReaderV2ChapterRepositoryException('章節內容載入失敗: 找不到章節');
+    }
+    final testLoader = contentLoader;
+    if (testLoader != null) {
+      final rawContent = await testLoader(chapterIndex, chapter);
+      final content = ReaderV2Content.fromRaw(
+        chapterIndex: chapterIndex,
+        title: chapter.title,
+        rawText: rawContent ?? chapter.content ?? '',
+      );
+      if (cacheGeneration == _contentCacheGeneration) {
+        _writeToContentCache(chapterIndex, content);
+      }
+      return content;
     }
     final loaded = await _loadViaV2ContentPipeline(
       chapterIndex,

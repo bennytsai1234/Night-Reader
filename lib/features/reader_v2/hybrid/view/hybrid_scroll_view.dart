@@ -113,7 +113,8 @@ final class HybridScrollView extends StatelessWidget {
 /// 取代 `SliverChildBuilderDelegate`：childCount 不在 build 時凍結，
 /// 新放行 block 由 [DocumentIndex.revision] → render 層 markNeedsLayout
 /// 直接材料化，不需要 setState 重建整棵滾動子樹（fling 幀 build 歸零）。
-/// [RenderCachedBlock] 自身即 repaint boundary，故不再額外包
+/// [RenderCachedBlock] 不建立獨立 repaint boundary，讓共用的 scroll surface
+/// 在滾動時以較少的 layer composition 成本重繪；故不再額外包
 /// RepaintBoundary / AutomaticKeepAlive。
 final class HybridSliverChildDelegate extends SliverChildDelegate {
   const HybridSliverChildDelegate({

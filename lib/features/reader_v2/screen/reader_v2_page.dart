@@ -17,6 +17,7 @@ import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
@@ -33,11 +34,17 @@ class ReaderV2Page extends StatefulWidget {
     required this.book,
     this.openTarget,
     this.initialChapters = const <BookChapter>[],
+    @visibleForTesting this.sourceSwitchService,
   });
 
   final Book book;
   final ReaderV2OpenTarget? openTarget;
   final List<BookChapter> initialChapters;
+
+  /// Test-only service injection. Normal app routes leave this null and keep
+  /// constructing the same concrete service in the page state.
+  @visibleForTesting
+  final SourceSwitchService? sourceSwitchService;
 
   @override
   State<ReaderV2Page> createState() => _ReaderV2PageState();
@@ -47,7 +54,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
-  final SourceSwitchService _sourceSwitchService = SourceSwitchService();
+  late final SourceSwitchService _sourceSwitchService;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ReaderV2PageExitCoordinator _exitCoordinator =
@@ -66,9 +73,44 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @visibleForTesting
   ReaderV2Runtime? get debugRuntime => _host.runtime;
 
+  @visibleForTesting
+  ReaderV2SettingsController get debugSettings => _host.settings;
+
+  @visibleForTesting
+  SourceSwitchService get debugSourceSwitchService => _sourceSwitchService;
+
+  @visibleForTesting
+  Future<ChangeSourceOutcome> debugSelectSourceForTesting(
+    SearchBook candidate,
+  ) {
+    return _handleChangeSourceSelected(candidate);
+  }
+
+  /// Test-only equivalent of the successful reader source-switch route.
+  ///
+  /// The normal UI calls the same replacement helper after the source sheet
+  /// closes; keeping this seam in the page lets widget tests exercise the
+  /// actual replacement/dispose ordering without opening a network-backed
+  /// source sheet.
+  @visibleForTesting
+  Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
+    SearchBook candidate,
+  ) async {
+    SourceSwitchResolution? resolution;
+    final outcome = await _handleChangeSourceSelected(
+      candidate,
+      onSuccess: (value) => resolution = value,
+    );
+    if (mounted && outcome.success && resolution != null) {
+      _pushReplacementForResolution(resolution!);
+    }
+    return outcome;
+  }
+
   @override
   void initState() {
     super.initState();
+    _sourceSwitchService = widget.sourceSwitchService ?? SourceSwitchService();
     _host = ReaderV2ControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
@@ -401,34 +443,33 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
     final resolution = switchedResolution;
     if (!mounted || resolution == null) return;
-    Navigator.of(context).pushReplacement(
-      BookOpenRoute(
-        book: resolution.migratedBook,
-        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
-        initialChapters: resolution.chapters,
-      ),
-    );
+    _pushReplacementForResolution(resolution);
   }
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate, {
     void Function(SourceSwitchResolution resolution)? onSuccess,
   }) async {
-    final runtime = _host.runtime;
-    final currentLocation = runtime?.state.visibleLocation;
-    final currentIndex = _currentChapterIndex(runtime);
-    final currentTitle = _chapterTitleAt(currentIndex);
-    final switchingBook = widget.book.copyWith(
-      chapterIndex: currentIndex,
-      durChapterTitle: currentTitle.isEmpty
-          ? widget.book.durChapterTitle
-          : currentTitle,
-      charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
-      visualOffsetPx:
-          currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
-    );
     try {
-      await _host.flushProgress();
+      // The flush returns the exact snapshot that was captured and persisted.
+      // Use that snapshot for source alignment; reading runtime state after
+      // the await would allow a scroll/TTS update during the DAO write to
+      // disagree with the progress that is authoritative for this switch.
+      final flushedLocation = await _host.flushProgress();
+      final runtime = _host.runtime;
+      final currentLocation = flushedLocation ?? runtime?.state.visibleLocation;
+      final currentIndex =
+          currentLocation?.chapterIndex ?? _currentChapterIndex(runtime);
+      final currentTitle = _chapterTitleAt(currentIndex);
+      final switchingBook = widget.book.copyWith(
+        chapterIndex: currentIndex,
+        durChapterTitle: currentTitle.isEmpty
+            ? widget.book.durChapterTitle
+            : currentTitle,
+        charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
+        visualOffsetPx:
+            currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
+      );
       final resolution = await _sourceSwitchService.resolveSwitch(
         switchingBook,
         candidate,
@@ -451,6 +492,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     } catch (e) {
       return (success: false, message: '換源失敗: $e');
     }
+  }
+
+  void _pushReplacementForResolution(SourceSwitchResolution resolution) {
+    Navigator.of(context).pushReplacement(
+      BookOpenRoute(
+        book: resolution.migratedBook,
+        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
+        initialChapters: resolution.chapters,
+      ),
+    );
   }
 
   @override

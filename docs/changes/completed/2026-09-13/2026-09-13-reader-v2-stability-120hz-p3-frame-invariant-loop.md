@@ -177,4 +177,59 @@ chapter title 與正文短暫不同步、stale layout / revision 污染目前狀
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Status: ACCEPTED
+
+- **Accepted by:** Relay
+- **Executor:** GPT coding worker（package metadata 的 claude-p route 在目前環境不可用；依使用者指示改由 GPT 執行）
+- **Commit / push:** 無；符合本 package 的 no-commit constraint
+- **Acceptance date:** 2026-09-13
+
+#### Delivered
+
+- 在 production Reader V2 加入 debug-only、預設關閉的逐幀 invariant hook。
+- 完成 compact frame record、bounded violation history（上限 256）、I1–I8 evaluator，以及真實的 invariantHookEnabled wiring。
+- hook 關閉時不建立逐幀 history、不執行 evaluator；hook 內捕捉例外，不直接 throw。
+- 修正短前言／anchor line 造成的 progress publication race，並補上 regression test。
+- 修正 ballistic 尾端 explicit chapter jump 的 viewport ownership race。
+- 修正 restore transaction 被 stale dragging notification 阻塞、造成 LayoutPump pump starvation 的 production race，並補上 ballistic jump regression test。
+- 修正共用 integration harness 在 drawer logical close 後立即點擊所造成的 transition timing race；沒有把該 harness failure 誤判為 production Reader failure。
+- 保留既有 settle assertions、missing paragraph checks、pending jump checks 與 suspectedAnomalies checks；未作 P4 效能優化或效能結論。
+
+#### Acceptance evidence
+
+1. Hook unit / widget evidence:
+   - 人為構造 I1 visible-key 缺口的 evaluator test 通過：1 test passed。
+   - hook enabled / disabled test 通過；disabled path history 為空，1 test passed。
+   - hybrid targeted suite 通過：28 tests passed。
+2. First-iteration evidence:
+   - seed 9132027 的完整清單已寫入 shared ledger：I6 × 1 production（短前言 progress publication）、I6 × 1 harness semantic boundary；其餘 I1–I8 為 0。
+   - 每一筆分類均保留 raw anchor、runtime published location、reset／pending transition 等依據。
+3. Production regression evidence:
+   - 修正前的 progress regression 具體失敗為 Expected chapter 0 / Actual chapter 1，修正後通過。
+   - 修正前的 ballistic restore failure 具體記錄 Hybrid jump restore failed，並由 post-fix regression test 證明 restore 成功、runtime 回到 ready、目標章節一致。
+   - 修正前 9132043 的 restore pump starvation failure 已保留；修正後同一 failure path 重跑成功。
+4. Three independent post-fix Android continuous seeds:
+
+   | Seed | Device / refresh | Actions | App / driver frames | Hook | Production violations | Suspected anomalies | Watchdog | Final state |
+   |---|---|---:|---:|---|---:|---:|---|---|
+   | 9132043 | emulator-5556 / 120Hz | 18 | 412 / 397 | true | 0 | 0 | not triggered | ready / queue 0 |
+   | 9132044 | emulator-5556 / 120Hz | 18 | 376 / 364 | true | 0 | 0 | not triggered | ready / queue 0 |
+   | 9132045 | emulator-5556 / 120Hz | 18 | 422 / 410 | true | 0 | 0 | not triggered | ready / queue 0 |
+
+   Each run reported semantic passed, completed 18 actions, invariantViolations=0, suspectedAnomalies=0, finalPhase=ready, and finalQueueDepth=0. Each run has a complete artifact directory under artifacts/android-reader/p3-postfix-seed-*.
+5. Existing journey scenario:
+   - post-fix journey seed 9132047 passed on emulator-5556 at 120Hz.
+   - It covered sequential and random chapter jumps, scroll matrix, lifecycle/reopen, and chapter sequence 0, 1, 50, 3, 100, 99, 0.
+   - Final marker was READER_E2E_RESULT status=passed; driverTimedOut=false; workload completed in 43.0749768 seconds with a 300-second hard timeout.
+   - The first 9132046 failure was classified as drawer transition timing in the shared harness; it was fixed with a bounded wait for both logical close and hit-testability, then 9132047 passed.
+6. Host verification:
+   - flutter analyze: No issues found.
+   - flutter test --reporter compact: 1033 tests passed.
+   - git diff --check: no whitespace errors; only existing LF/CRLF conversion warnings.
+
+#### Verified / unverified / inference
+
+- **Verified:** P3 hook, I1–I8 evaluator tests, production regression tests, three post-fix hook-on continuous seeds, post-fix journey, full host tests, static analysis, 120Hz emulator state, and absence of active workload after cleanup.
+- **Not part of P3 / deferred:** renderer and raster performance decisions; hook-on timing is observation only. P4 must run hook-off valid profile measurements.
+- **Remaining risk:** journey debug output still contains the known audio/TTS MissingPluginException and emulator launch timing noise; Reader assertions passed and these were not classified as P3 production failures.
+- **Inference:** three forced ballistic/chapter-jump seeds establish the repaired path is stable for those seeds; they do not prove every possible random action distribution or the P4 frame-budget target.

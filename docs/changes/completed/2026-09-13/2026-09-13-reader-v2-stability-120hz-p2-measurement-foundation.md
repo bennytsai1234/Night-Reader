@@ -214,4 +214,104 @@ metadata 的 `performance.status` 寫 `invalid`（**不是** `passed` 也不是 
 
 ## Completion record
 
-_(Relay 在驗收後填寫)_
+### Result
+
+P2 accepted by Relay. The measurement foundation is in place and the valid
+profile runs correctly report `failed` when the strict performance gate is not
+met; that is a valid measurement result, not an invalid-window result. No
+commit or push was made.
+
+### Actual changes
+
+- Added shared 8ms `pumpVsyncPaced()` and `moveVsyncPaced()` helpers and changed
+  continuous slow drag, fling, race, jump, and settle progression to use a
+  vsync-paced window while preserving action semantics.
+- Set the continuous integration binding to
+  `LiveTestWidgetsFlutterBindingFramePolicy.benchmarkLive` and wrapped the
+  action loop (after warm-up/reset) in `watchPerformance(reportKey: 'timeline')`.
+- Added app-side `reportData` for `appTelemetry` and `continuousResult`, with
+  strict `8000µs` P99 evaluation only when at least 300 frames exist.
+- Added the driver `responseDataCallback` and failure response writing to
+  `build/integration_response_data.json`.
+- Added the real `invariantHookEnabled: false` shape required by the future P3
+  hook, without introducing a performance optimization.
+- Completed the continuous runner's standard `flutter drive --debug/--profile
+  --no-dds` route, fixture re-push watcher, TimelineSummary parsing,
+  app/driver cross-source tolerance checks, three-state performance result, and
+  `performance.invalidReasons` fail-closed behavior. `gfxinfo` remains
+  ancillary only.
+- Updated `DEVELOPMENT.md` with the driver route, fixture behavior, artifacts,
+  and negative-case invocation.
+- Updated the shared ledger with valid L-03/L-04 A/B observations and P4
+  iteration 0 baseline data. The temporary application-level Impeller manifest
+  change used for A/B was restored; no manifest semantic change remains.
+
+### Route adjustment
+
+The package requested `claude-p`, which was unavailable in this environment. An
+equivalent current coding worker completed the package without changing its
+Goal, Recommended Solution, Acceptance, or Constraints.
+
+### Verification evidence
+
+- `dart format --output=none --set-exit-if-changed ...` — passed: `Formatted 4
+  files (0 changed)`.
+- PowerShell parser check for `tool/run_android_reader_workload.ps1` — passed:
+  `PARSE_OK`.
+- Relay independent `flutter analyze` — passed: `No issues found! (ran in
+  21.4s)`.
+- Relay independent `flutter test test/features/reader_v2` — passed: `207`
+  tests; final output `00:10 +207: All tests passed!`.
+- Relay independent full suite — passed: `flutter_test_exit=0`,
+  `visible_test_done=1028`, `successful_tests=1028`, `failed_tests=0`.
+- Device evidence: `emulator-5556` was `device`; SurfaceFlinger reported
+  `activeMode ... vsyncRate=120.00 Hz`; workload cleanup restored the normal
+  `com.inkpage.reader.debug` APK and foreground `MainActivity`.
+- Debug semantic run
+  ([metadata.json](../../../../artifacts/android-reader/continuous-p2-debug-20260913-current/metadata.json)):
+  `35/35` actions, app `2299` frames, driver `2263` frames, `277` continuous
+  samples, `suspectedAnomalies=0`, `finalPhase=ready`, `finalQueueDepth=0`,
+  `invariantHookEnabled=false`, and `performance.status=failed` solely because
+  the strict frame P99 gate was not met.
+- Valid Impeller-effective profile run
+  ([metadata.json](../../../../artifacts/android-reader/continuous-p2-profile-20260913-valid-window/metadata.json)):
+  app `2106` / driver `2074` frames, `35` completed actions, `277` samples,
+  `vsyncRate=120.00 Hz`, hook `false`, cross-source `valid`, app build/raster
+  P99 `11.5ms/118.5ms`, driver build/raster P99
+  `11.223ms/118.359ms`, app task P99 `3.5ms`, and total frame P99 `100.5ms`.
+  The runner recorded `performance.status=failed` because the strict `8ms`
+  target was not met, not because the measurement was invalid.
+- Valid Skia A/B run
+  ([metadata.json](../../../../artifacts/android-reader/continuous-p2-profile-20260913-skia-ab/metadata.json)):
+  app `2106` / driver `2069` frames, `35` completed actions, cross-source
+  `valid`, app build/raster P99 `8.5ms/119.5ms`, driver build/raster P99
+  `8.301ms/118.087ms`, and hook `false`. The observed result did not prove a
+  raster improvement, so no renderer decision was made.
+- `build/integration_response_data.json` was inspected and contains
+  `timeline,appTelemetry,continuousResult`; its timeline has `2074` frames,
+  app telemetry has `2106` frames, and `continuousResult.completedActions=35`.
+- Negative case 1
+  ([metadata.json](../../../../artifacts/android-reader/continuous-p2-negative-under-300/metadata.json)):
+  app `57` / driver `24` frames; runner metadata contains
+  `performance.status=invalid` and reasons for both frame counts below 300 and
+  the cross-source frame mismatch. The runner exited nonzero while the child
+  driver exit was `0`.
+- Negative case 2
+  ([metadata.json](../../../../artifacts/android-reader/continuous-p2-negative-missing-json/metadata.json)):
+  missing driver response produced `performance.status=invalid` with reasons
+  covering missing JSON, TimelineSummary, app telemetry, continuous result,
+  frame count, action marker, hook, and metric fields; the runner exited
+  nonzero.
+
+### Unavailable / residual risk
+
+- The valid profile runs do not meet `totalSpan/frame P99 < 8000µs`; the observed
+  raster P99 remains about `118–119ms`. P4 owns optimization or the evidence-
+  based ceiling decision.
+- The driver route was initially run before fixture provisioning and correctly
+  failed with the missing fixture path; the later runner-managed runs supplied
+  the fixture and completed. This initial failure is retained as harness
+  evidence, not treated as a valid measurement.
+- The A/B and all Android workload conclusions are emulator-only and were not
+  verified on a physical device. The final normal debug APK was restored, and
+  no test/profile APK was intentionally left installed.
