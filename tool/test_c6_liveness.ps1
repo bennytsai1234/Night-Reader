@@ -163,6 +163,16 @@ Assert-SystemHealthSemantic (
     [string]$readerAnrObservation.classification -ceq 'app_workload_failure'
 ) 'Reader app ANR must be app_workload_failure'
 Assert-SystemHealthSemantic (@($readerAnrObservation.anr.readerApp).Count -eq 1) 'Reader app ANR must classify as reader/app'
+$launcherDialogObservation = Get-SystemHealthSemanticAnr 'WindowStateAnimator{123 Application Not Responding: com.google.android.apps.nexuslauncher}:'
+Assert-SystemHealthSemantic (
+    [string]$launcherDialogObservation.classification -ceq 'unknown_anr'
+) 'non-Reader dialog must fail closed as unknown_anr even while Reader is foreground'
+Assert-SystemHealthSemantic (
+    @($launcherDialogObservation.anr.readerApp).Count -eq 0
+) 'non-Reader dialog must not be attributed to Reader via foreground fallback'
+Assert-SystemHealthSemantic (
+    [string]$launcherDialogObservation.anr.unknown[0].target -ceq 'com.google.android.apps.nexuslauncher'
+) 'non-Reader dialog must retain its explicit package owner'
 $unknownAnrObservation = Get-SystemHealthSemanticAnr 'ANR in com.example.unknown'
 Assert-SystemHealthSemantic (
     [string]$unknownAnrObservation.classification -ceq 'unknown_anr'

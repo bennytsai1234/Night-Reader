@@ -151,13 +151,13 @@ void main() {
           before = harness.debugSnapshot();
           runtimeFrames.addAll(harness.debugFrameInvariantRecords());
 
-          if (_captureGolden && _shouldCaptureGolden(item)) {
+          final initialGoldenCheckpoint = _initialGoldenCheckpoint(item);
+          if (_captureGolden && initialGoldenCheckpoint != null) {
             if (!screenshotSurfaceReady) {
               await binding.convertFlutterSurfaceToImage();
               screenshotSurfaceReady = true;
             }
-            final name =
-                'c6-golden-seed-${item.seed}-${item.positionAnchor.name}';
+            final name = 'c6-golden-seed-${item.seed}-$initialGoldenCheckpoint';
             await tester.pump();
             final screenshotBytes = await binding.takeScreenshot(name);
             await evidenceWriter.writeGoldenPng(item, name, screenshotBytes);
@@ -309,6 +309,23 @@ void main() {
           after = harness.debugSnapshot();
           runtimeFrames.addAll(harness.debugFrameInvariantRecords());
           final visualEvidence = _visualEvidenceFields(harness);
+          if (_captureGolden && _shouldCaptureFarJumpCheckpoint(item)) {
+            if (!screenshotSurfaceReady) {
+              await binding.convertFlutterSurfaceToImage();
+              screenshotSurfaceReady = true;
+            }
+            const checkpoint = 'farLocationAfterJump';
+            final name = 'c6-golden-seed-${item.seed}-$checkpoint';
+            await tester.pump();
+            final screenshotBytes = await binding.takeScreenshot(name);
+            await evidenceWriter.writeGoldenPng(item, name, screenshotBytes);
+            goldenNames.add(name);
+            debugPrint(
+              'READER_C6_GOLDEN name=$name caseId=${item.id} '
+              'checkpoint=settled-ready-after-far-jump '
+              'bytes=${screenshotBytes.length}',
+            );
+          }
           final entryStateStatus = requestedState == 'ready'
               ? 'observed'
               : 'not_verified';
@@ -823,9 +840,27 @@ String _entryState(Map<String, Object?>? snapshot) {
       : snapshot['phase']?.toString() ?? 'unknown';
 }
 
-bool _shouldCaptureGolden(ReaderCorrectnessCase item) {
+String? _initialGoldenCheckpoint(ReaderCorrectnessCase item) {
+  if (item.state != ReaderCaseState.ready ||
+      item.layer != ReaderCaseLayer.singleOperation ||
+      item.operationIds.length != 1 ||
+      item.operationIds.single != 'drag_forward_micro') {
+    return null;
+  }
+  return switch (item.positionAnchor) {
+    ReaderTopologyAnchor.bookStart => 'bookStart',
+    ReaderTopologyAnchor.firstRegularChapter => 'firstRegularChapter',
+    ReaderTopologyAnchor.finalChapterBottom => 'finalChapterBottom',
+    _ => null,
+  };
+}
+
+bool _shouldCaptureFarJumpCheckpoint(ReaderCorrectnessCase item) {
   return item.state == ReaderCaseState.ready &&
-      item.layer == ReaderCaseLayer.singleOperation;
+      item.layer == ReaderCaseLayer.singleOperation &&
+      item.positionAnchor == ReaderTopologyAnchor.bookStart &&
+      item.operationIds.length == 1 &&
+      item.operationIds.single == 'navigation_far_location';
 }
 
 Map<String, Object?> _visualEvidenceFields(ReaderTestHarness harness) {

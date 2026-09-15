@@ -456,12 +456,25 @@ candidate for C6 replay. C5 therefore claims no real-device, Android-raster,
 
 | 項目 | 結論 | 依據 |
 |---|---|---|
-| 子集選取規則產出的 case 數 | _(由 C6 worker 填寫)_ | |
-| 批次拆分結果（批數 / 總耗時） | | |
-| 兩個 seed 的四類違反數 | | |
-| host 失敗回放結果 | | |
-| golden 數量與容差依據 | | |
-| watchdog 誤判排除依據 | | |
+| 子集選取規則產出的 case 數 | **current generator 已驗證**：兩 seed 都是 `279` cases；36 ops、10 positions、12 states、3 race phases、60 mixed journeys、0 supplied host failures。各 seed 連跑兩次 byte-identical；SHA-256 分別為 `cc27815100e5c5634f33560fbd119a1319ae88bd21302654dcb6ce10b57a1484` 與 `15287fb9ee428f0934817a75b6198f2c0570c9aa8533124ad0ca736379e734ff`。 | `docs/changes/evidence/2026-09-14-reader-v2-c6-subset-selection-policy-audit.json`、兩份 `*-subset-coverage-*-v2.json`、`artifacts/android-reader/c6-subset-repro-current-20260915/`。 |
+| 批次拆分結果（批數 / 總耗時） | **planner contract 已驗證；current Android acceptance 未完成**。current dry-run 把 279 cases 拆成 46 批，保留 runner `60 iterations / 300s` hard cap；既有完整 seed1 也是 46/46 批、總 elapsed `6352.260921700002s`、workload `2457.1610851s`。歷史 60-case batch 在 `297.7628288s` 僅完成 45 cases，明確 `failed_or_invalid`，未被聚合。 | `tool/test_c6_batch_planner.ps1` 通過；`artifacts/android-reader/c6-dry-run-current-20260915/batch-plan.json`；歷史 `c6-subset-seed-9132051-final-r13/aggregate.json`。 |
+| 兩個 seed 的四類違反數 | **未達 C6 acceptance／環境阻擋**。可重用歷史 seed1：`279/279`、runtime/temporal/visual/cross `0/0/0/0`、visual `5096/6828`、coverage `0.746339`，但早於 current system-health contract。seed2 最多只到 `277/279` 且 aggregate 是 `failed_or_invalid`。本輪 current-source 首 case 被 system／SystemUI ANR sentinel 判為 `environment_invalid` 後停止，不能以部分綠燈替代兩 seed 完整 pass。 | `artifacts/android-reader/c6-subset-seed-9132051-final-r13/aggregate.json`（僅歷史可重用）、`c6-subset-seed-9132052-final-r18-max36-complete/aggregate.json`、`c6-system-health-current-source-20260915/system-health.json`；完整說明見 `docs/changes/evidence/2026-09-15-reader-v2-c6-worker-closeout.md`。 |
+| host 失敗回放結果 | C5 兩 seed first-violation list 都是 `[]`，supplied host-failure list 為空；C6 是 `0/0`，沒有漏掉 id，但沒有正數分母可提供額外 replay 證明。 | C5 completion record、兩份 C6 coverage JSON 的 `hostFailureCaseIds=[]`、Android artifacts 內 `c6-host-failures-empty.json`。 |
+| golden 數量與容差依據 | **comparator 已驗證、完整新 checkpoint artifacts 尚未驗證**。既有 bookStart Android run3/run4 在 tolerance `8`、max bad ratio `0.001` 下，1px probe 以 `10255` bad pixels／ratio `0.0028052236519607843` 失敗並保存 diff；未修改輸入連續兩次為 0 pixels pass。本輪把重複 capture 收斂為 `bookStart`、`firstRegularChapter`、`finalChapterBottom`、`farLocationAfterJump` 四個 checkpoint；第四個改為遠距離跳章 settle 後，但因 emulator system ANR 尚未生成新的四張完整 evidence。 | `artifacts/android-reader/c6-golden-current-probe-fail.json`、`c6-golden-current-restored-pass-{1,2}.json`、`integration_test/reader_correctness_android_subset_test.dart`。 |
+| watchdog 誤判排除依據 | **六面語意與 system sentinel 已驗證**。15s all-six-quiet positive 會 abort 並帶六面 evidence；progress 會 reset，停手 idle 與 waiting-for-load 不會誤判。實際 current run 保存 system-health baseline／failure observation並在 system、SystemUI、Launcher ANR 時 fail closed。另修正明確屬於 Launcher 的 dialog 不再因 Reader foreground 被誤標為 reader；未知 owner 仍 fail closed。 | `flutter test ...reader_correctness_watchdog_test.dart` 5 passed；`pwsh -NoProfile -File tool/test_c6_liveness.ps1` passed；`artifacts/android-reader/c6-system-health-current-source-20260915/system-health.json`。 |
+
+### C6 worker evidence boundary（2026-09-15）
+
+C6 **尚不可由 worker 宣告 accepted**。case-id/shared-operation 對照、PowerShell
+pass-through、batch fail-closed、subset hashes、watchdog、bundle schema、golden
+comparator 與最終 debug APK residue 都已有證據；但 current-source 兩 seed 的完整
+Android aggregate 與新四-checkpoint golden set 仍缺。指定 `emulator-5556` 在本輪
+current-source workload 出現 system／SystemUI／Launcher ANR，sentinel 於 bounded
+run 內停止並保存 bundle；依 package 規則沒有換 serial、沒有繼續長批次，也沒有把
+歷史 seed1 或部分 seed2 結果冒充 acceptance。詳細命令、artifact 路徑、實際
+semantic failure tree、golden 數字與 Relay 重跑步驟見
+`docs/changes/evidence/2026-09-15-reader-v2-c6-worker-closeout.md`。本節沒有任何
+performance pass、P99 或真機外推聲明。
 
 ## C7 知識沉澱 — 覆核
 

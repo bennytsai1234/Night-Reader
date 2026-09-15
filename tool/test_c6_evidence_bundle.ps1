@@ -532,6 +532,19 @@ try {
     $visualCompleteResult = Test-C6BundleDirectory -Directory $visualComplete -ExpectedCaseId 'visual-complete-case' -Failure
     Assert-True $visualCompleteResult.complete ("visual failure with all C4 evidence should be complete: " + (@($visualCompleteResult.errors) -join '; '))
 
+    $invariantComplete = Join-Path $tempRoot 'invariant-complete'
+    Write-BaseCase $invariantComplete 'invariant-complete-case' 'failed' 'invariant-violation'
+    Write-TestText (Join-Path $invariantComplete 'invariant-violations.jsonl') '{"invariant":"I1"}'
+    $invariantCompleteSummary = Get-Content -Raw -LiteralPath (Join-Path $invariantComplete 'summary.json') | ConvertFrom-Json
+    $invariantCompleteSummary | Add-Member -Force -MemberType NoteProperty -Name firstBadFrameSource -Value 'C4-retained-raw-frame-window-middle'
+    $invariantCompleteSummary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $invariantComplete 'summary.json') -Encoding utf8
+    foreach ($screenshotName in @('screenshot-before.png', 'screenshot-violation.png', 'screenshot-after.png')) {
+        Write-TestPng (Join-Path $invariantComplete $screenshotName)
+    }
+    $invariantCompleteResult = Test-C6BundleDirectory -Directory $invariantComplete -ExpectedCaseId 'invariant-complete-case' -Failure
+    Assert-True $invariantCompleteResult.complete ("invariant failure with all C4 evidence should be complete: " + (@($invariantCompleteResult.errors) -join '; '))
+    Assert-True ($invariantCompleteResult.firstBadFrameSource -eq 'C4-retained-raw-frame-window-middle') 'invariant failure must retain the C4 first-bad frame source'
+
     $pngBytes = [IO.File]::ReadAllBytes((Join-Path $visualComplete 'screenshot-before.png'))
     $pngBytes[29] = [byte]($pngBytes[29] -bxor 1)
     [IO.File]::WriteAllBytes((Join-Path $visualComplete 'screenshot-before.png'), $pngBytes)

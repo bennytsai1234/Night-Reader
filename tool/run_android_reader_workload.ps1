@@ -826,6 +826,10 @@ function Parse-SystemHealthObservation {
             )
             $isAmAnr = $lineText -match '(?i)\bam_anr\b'
             $dialogMatches = [regex]::Matches($lineText, $dialogPattern)
+            $dialogTargetMatch = [regex]::Match(
+                $lineText,
+                '(?i)Application\s+Not\s+Responding\s*:\s*(?<target>[A-Za-z0-9._/-]+)'
+            )
             $windowOwnerAnr = $lineText -match '(?i)(?:AppNotRespondingDialog|AnrDialog|ApplicationErrorReport\$AnrInfo|ANR\s+dialog|application[_\s-]*not[_\s-]*responding)'
             if (-not $lineAnrMatch.Success -and -not $isAmAnr -and
                 $dialogMatches.Count -eq 0 -and -not $windowOwnerAnr) {
@@ -910,6 +914,13 @@ function Parse-SystemHealthObservation {
                 elseif ($lineText -match "(?i)Process\s+System|Application\s+Not\s+Responding\s*:\s*(?:system_server|system)\b|System\s+is(?:n['’]t| not)\s+responding") {
                     $target = 'system'
                     $classification = 'system'
+                }
+                elseif ($dialogTargetMatch.Success) {
+                    # A dialog can belong to any package while Reader remains the
+                    # foreground activity. Preserve that explicit owner instead of
+                    # attributing it to Reader via the foreground fallback.
+                    $target = $dialogTargetMatch.Groups['target'].Value
+                    $classification = 'unknown'
                 }
                 elseif ($foregroundText -match "(?i)$escapedPackageName") {
                     $target = $PackageName
