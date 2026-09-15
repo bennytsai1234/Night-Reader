@@ -11,10 +11,13 @@ void main(List<String> arguments) {
   final manifestPath =
       options['manifest'] ??
       'docs/changes/evidence/2026-09-14-reader-v2-c5-manifest-seed-9132051.json';
+  final laneSuffix = (options['lane'] ?? 'smoke') == 'acceptance'
+      ? ''
+      : '-smoke';
   final outputPath =
       options['output'] ??
       'docs/changes/evidence/2026-09-14-reader-v2-c6-android-subset-seed-'
-          '${_manifestSeed(manifestPath)}.json';
+          '${_manifestSeed(manifestPath)}$laneSuffix.json';
   final failurePath = options['host-failures'];
   final manifest = ReaderCorrectnessManifest.fromJsonString(
     File(manifestPath).readAsStringSync(),
@@ -22,9 +25,16 @@ void main(List<String> arguments) {
   final hostFailures = failurePath == null
       ? const <String>[]
       : _readFailureIds(failurePath);
+  final laneName = options['lane'] ?? 'smoke';
+  final lane = switch (laneName) {
+    'smoke' => ReaderCorrectnessAndroidLane.smoke,
+    'acceptance' => ReaderCorrectnessAndroidLane.acceptance,
+    _ => throw ArgumentError('Unknown --lane $laneName'),
+  };
   final selection = selectReaderCorrectnessAndroidSubset(
     manifest,
     hostFailureCaseIds: hostFailures,
+    lane: lane,
   );
   Directory(File(outputPath).parent.path).createSync(recursive: true);
   File(outputPath).writeAsStringSync(selection.canonicalJson);
@@ -34,6 +44,7 @@ void main(List<String> arguments) {
     'outputPath': outputPath,
     'manifestSha256': manifest.sha256,
     'subsetSha256': selection.sha256,
+    'lane': lane.wireName,
     'caseCount': selection.cases.length,
     'hostFailureCaseIds': selection.hostFailureCaseIds,
     'ruleCoverage': selection.ruleCoverage,
@@ -41,7 +52,7 @@ void main(List<String> arguments) {
   final summaryPath =
       options['summary'] ??
       'docs/changes/evidence/2026-09-14-reader-v2-c6-subset-coverage-seed-'
-          '${selection.seed}.json';
+          '${selection.seed}$laneSuffix.json';
   Directory(File(summaryPath).parent.path).createSync(recursive: true);
   File(summaryPath).writeAsStringSync(jsonEncode(summary));
   stdout.writeln(jsonEncode(summary));

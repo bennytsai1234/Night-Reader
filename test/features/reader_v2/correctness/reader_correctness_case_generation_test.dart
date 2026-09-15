@@ -159,6 +159,108 @@ void main() {
     },
   );
 
+  test('C6 smoke lane 維度覆蓋與 acceptance 相同但不跑 mixed journey', () {
+    for (final seed in <int>[9132051, 9132052]) {
+      final manifest = generateReaderCorrectnessManifest(seed: seed);
+      final acceptance = selectReaderCorrectnessAndroidSubset(
+        manifest,
+        lane: ReaderCorrectnessAndroidLane.acceptance,
+      );
+      final first = selectReaderCorrectnessAndroidSubset(
+        manifest,
+        lane: ReaderCorrectnessAndroidLane.smoke,
+      );
+      final second = selectReaderCorrectnessAndroidSubset(
+        manifest,
+        lane: ReaderCorrectnessAndroidLane.smoke,
+      );
+
+      expect(first.canonicalJson, second.canonicalJson);
+      expect(first.sha256, second.sha256);
+
+      // Smoke lane 存在的理由就是「同樣的維度覆蓋、少一個數量級的成本」。
+      // 這四條斷言是那個理由本身；任何一條鬆掉，降級就失去正當性。
+      for (final rule in <String>[
+        'operations',
+        'positions',
+        'states',
+        'racePhases',
+      ]) {
+        expect(
+          first.ruleCoverage[rule],
+          hasLength(acceptance.ruleCoverage[rule]!.length),
+          reason: 'smoke lane 的 $rule 覆蓋必須與 acceptance 相同（seed $seed）',
+        );
+      }
+
+      expect(
+        first.cases.where((item) => item.layer == ReaderCaseLayer.mixedJourney),
+        isEmpty,
+        reason: 'mixed journey 是被刻意排除的成本來源',
+      );
+      expect(first.ruleCoverage['mixedJourneys'], isEmpty);
+
+      // 每個 operation 恰好一個代表 single-operation case。
+      final singles = first.cases
+          .where((item) => item.layer == ReaderCaseLayer.singleOperation)
+          .toList(growable: false);
+      final representedOperations = <String>{
+        for (final item in singles) ...item.operationIds,
+      };
+      expect(
+        representedOperations,
+        hasLength(readerCorrectnessOperationCatalog.length),
+      );
+
+      expect(
+        first.cases.length,
+        lessThan(acceptance.cases.length ~/ 4),
+        reason: 'smoke lane 必須比 acceptance 小一個數量級才值得存在',
+      );
+
+      // acceptance lane 必須逐位元不變，否則既有 evidence 的 subset hash 失效。
+      final acceptanceAgain = selectReaderCorrectnessAndroidSubset(
+        manifest,
+        lane: ReaderCorrectnessAndroidLane.acceptance,
+      );
+      expect(acceptanceAgain.sha256, acceptance.sha256);
+      expect(acceptance.cases, hasLength(279));
+
+      final hostFailure = manifest.cases.last.id;
+      final smokeWithFailure = selectReaderCorrectnessAndroidSubset(
+        manifest,
+        lane: ReaderCorrectnessAndroidLane.smoke,
+        hostFailureCaseIds: <String>[hostFailure],
+      );
+      expect(
+        smokeWithFailure.cases.map((item) => item.id),
+        contains(hostFailure),
+        reason: 'host failure 在兩條 lane 都是硬納入',
+      );
+    }
+  });
+
+  test('C6 smoke lane 的 subset hash 在兩個 seed 上固定', () {
+    // 釘住 hash 是為了讓 Android run 的輸入可以被第三方重現；改動選取政策
+    // 本來就該讓這條紅，屆時連同 evidence 一起更新。
+    const expected = <int, String>{
+      9132051:
+          '97310352a6713129177f4c0b24f4e59507d03849e3e8b085a7b117ec2f8cbf13',
+      9132052:
+          'be49a58e04af788a7d40375ba971c1e8382371858d63df00b7ed0b41569a7aeb',
+    };
+    for (final entry in expected.entries) {
+      expect(
+        selectReaderCorrectnessAndroidSubset(
+          generateReaderCorrectnessManifest(seed: entry.key),
+          lane: ReaderCorrectnessAndroidLane.smoke,
+        ).sha256,
+        entry.value,
+        reason: 'seed ${entry.key}',
+      );
+    }
+  });
+
   test('C5 state dimension names every C2 waitUntil entry condition', () {
     final report = generateReaderCorrectnessManifest(seed: 9132051).coverage;
     expect(

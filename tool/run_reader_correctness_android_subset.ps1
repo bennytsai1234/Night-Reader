@@ -5,6 +5,14 @@ param(
 
     [int]$Seed = 9132051,
 
+    # 'smoke' 是預設的 C6 lane：每個 operation 一個代表 case、不跑 mixed
+    # journey，維度覆蓋與舊的 acceptance lane 相同（36 ops / 10 positions /
+    # 12 states / 3 race phases），但兩 seed 各 58 cases 而非 279。
+    # 'acceptance' 保留 279-case 的原始選取，只為重現既有 evidence 與其
+    # subset hash，不再是驗收門。
+    [ValidateSet('smoke', 'acceptance')]
+    [string]$Lane = 'smoke',
+
     [string]$ManifestHostPath = '',
 
     [string]$HostFailureCaseList = '',
@@ -144,11 +152,12 @@ if ($RemainderFromBatchIndex -eq 0) {
     throw 'RemainderFromBatchIndex=0 不保留任何原 planner prefix；請使用一般 MaxCasesPerBatch budget。'
 }
 
-$subsetPath = Join-Path $reportRoot "subset-seed-$Seed.json"
-$coveragePath = Join-Path $reportRoot "subset-coverage-seed-$Seed.json"
+$subsetPath = Join-Path $reportRoot "subset-seed-$Seed-$Lane.json"
+$coveragePath = Join-Path $reportRoot "subset-coverage-seed-$Seed-$Lane.json"
 $generateArguments = @(
     'run', 'tool/generate_reader_correctness_android_subset.dart',
     '--manifest', $manifestPath,
+    '--lane', $Lane,
     '--output', $subsetPath,
     '--summary', $coveragePath
 )

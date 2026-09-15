@@ -661,19 +661,50 @@ final class ReaderCorrectnessAndroidSubsetSelection {
   String get sha256 => sha256Digest(canonicalJson);
 }
 
+/// Android 子集的兩條 lane。
+///
+/// 兩條 lane 的差別只在硬納入集合；greedy set-cover、witness 產生與
+/// canonical JSON 格式完全相同，因此 [ReaderCorrectnessAndroidLane.acceptance]
+/// 產出的 subset hash 與既有 evidence 逐位元相同。
+enum ReaderCorrectnessAndroidLane {
+  /// 原始 C6 驗收 lane：完整 single-operation 層 + 全部 mixed journey。
+  /// 兩 seed 各 279 cases，單 seed 完整跑一次實測 elapsed 約 6,352 秒。
+  /// 保留此 lane 是為了讓既有 artifact 與 hash 仍可重現，不再作為驗收門。
+  acceptance,
+
+  /// Smoke lane：每個 operation 只取一個代表 case，不納入 mixed journey。
+  ///
+  /// 理由記錄在此以免日後又被當成「覆蓋不足」而擴回去：host full sweep
+  /// 每個 seed 已經以 4,308 cases 涵蓋 ordered pair、three-way、state
+  /// interruption 與 race timing，且兩 seed 的 first-violation list 都是空的。
+  /// Android lane 唯一不能被 host 取代的是真實 raster 與真實 Android 生命
+  /// 週期，證明那件事需要的是每個 operation category 各過一次，不是把
+  /// 60 個 mixed journey 在一個會 ANR 的環境裡重跑一遍——那 60 個正是
+  /// 執行時間與不穩定的主要來源。
+  smoke,
+}
+
+extension ReaderCorrectnessAndroidLaneWireName on ReaderCorrectnessAndroidLane {
+  String get wireName => switch (this) {
+    ReaderCorrectnessAndroidLane.acceptance => 'acceptance',
+    ReaderCorrectnessAndroidLane.smoke => 'smoke',
+  };
+}
+
 /// Select a reproducible Android subset from a C5 manifest.
 ///
-/// The complete C5 single-operation layer is the finite Android representative
-/// matrix: each operation keeps the topology positions selected by the host
-/// generator.  Mixed journeys and host failures are hard inclusion sets.  Any
-/// remaining dimensions are covered by a deterministic greedy set-cover pass.
-/// This deliberately produces a hundreds-scale subset without running the
-/// pairwise/three-way Cartesian layers in full.  The algorithm consumes only
-/// case metadata; it never reimplements operation semantics or makes a
-/// PowerShell-side interpretation of an id.
+/// [ReaderCorrectnessAndroidLane.acceptance] keeps the complete C5
+/// single-operation layer plus every mixed journey as hard inclusion sets.
+/// [ReaderCorrectnessAndroidLane.smoke] keeps one representative
+/// single-operation case per operation id and no mixed journeys.  Host
+/// failures are a hard inclusion set in both lanes, and any dimension still
+/// uncovered afterwards is filled by the same deterministic greedy set-cover
+/// pass.  The algorithm consumes only case metadata; it never reimplements
+/// operation semantics or makes a PowerShell-side interpretation of an id.
 ReaderCorrectnessAndroidSubsetSelection selectReaderCorrectnessAndroidSubset(
   ReaderCorrectnessManifest manifest, {
   Iterable<String> hostFailureCaseIds = const <String>[],
+  ReaderCorrectnessAndroidLane lane = ReaderCorrectnessAndroidLane.acceptance,
 }) {
   final requestedFailures = <String>{
     for (final value in hostFailureCaseIds)
@@ -695,15 +726,28 @@ ReaderCorrectnessAndroidSubsetSelection selectReaderCorrectnessAndroidSubset(
   final selectedIds = <String>{};
   void select(ReaderCorrectnessCase item) => selectedIds.add(item.id);
 
-  // Representative matrix: keep every single-operation case.  C5 already
-  // expands each operation over its declared six topology positions, so this
-  // is still finite and purposeful rather than an unbounded Cartesian product.
-  for (final item in manifest.cases) {
-    if (item.layer == ReaderCaseLayer.singleOperation) select(item);
-  }
-  // Rule 6: every mixed journey, including every topology rotation, is kept.
-  for (final item in manifest.cases) {
-    if (item.layer == ReaderCaseLayer.mixedJourney) select(item);
+  // Representative matrix.  acceptance keeps every single-operation case (C5
+  // expands each operation over its declared topology positions); smoke keeps
+  // the lowest-ordinal case per operation id, which is deterministic because
+  // the manifest is ordinal-ordered.
+  if (lane == ReaderCorrectnessAndroidLane.acceptance) {
+    for (final item in manifest.cases) {
+      if (item.layer == ReaderCaseLayer.singleOperation) select(item);
+    }
+    // Rule 6: every mixed journey, including every topology rotation, is kept.
+    for (final item in manifest.cases) {
+      if (item.layer == ReaderCaseLayer.mixedJourney) select(item);
+    }
+  } else {
+    final seenOperations = <String>{};
+    final ordered = [...manifest.cases]
+      ..sort((left, right) => left.ordinal.compareTo(right.ordinal));
+    for (final item in ordered) {
+      if (item.layer != ReaderCaseLayer.singleOperation) continue;
+      if (item.operationIds.length != 1) continue;
+      if (!seenOperations.add(item.operationIds.single)) continue;
+      select(item);
+    }
   }
   // Rule 5: preserve every host failure before reducing the other dimensions.
   for (final caseId in requestedFailures) select(byId[caseId]!);

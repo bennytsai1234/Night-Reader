@@ -33,17 +33,24 @@ if (-not $goldenContract.Success) {
 # result marker is later in the same try body, while the catch branch rethrows
 # after writing fail-closed evidence; this prevents an ordinary PixelCopy
 # failure from being converted to a passed case.
-$goldenStart = $subset.IndexOf('if (_captureGolden && _shouldCaptureGolden(item))', [StringComparison]::Ordinal)
+# 四個 checkpoint 由兩個捕捉點產生（三個 operation 前的 checkpoint 走
+# initialGoldenCheckpoint，farLocationAfterJump 走自己的述詞），所以這裡不綁
+# 任何單一 guard 的字面寫法，只要求「每一個捕捉點都在 case try 內」。
+$goldenStarts = @([regex]::Matches($subset, 'if \(_captureGolden') | ForEach-Object { $_.Index })
 $caseResult = $subset.IndexOf("debugPrint('READER_C6_CASE_RESULT", [StringComparison]::Ordinal)
 $caseCatch = $subset.IndexOf(
     '        } catch (error, stackTrace) {',
     [StringComparison]::Ordinal
 )
 $rethrow = $subset.IndexOf('          rethrow;', [StringComparison]::Ordinal)
-if ($goldenStart -lt 0 -or $caseResult -lt 0 -or $rethrow -lt 0 -or
-    $caseCatch -lt 0 -or $goldenStart -ge $caseCatch -or
-    $caseResult -ge $caseCatch -or $rethrow -le $caseCatch) {
+if ($goldenStarts.Count -lt 1 -or $caseResult -lt 0 -or $rethrow -lt 0 -or
+    $caseCatch -lt 0 -or $caseResult -ge $caseCatch -or $rethrow -le $caseCatch) {
     throw 'C6 failure contract changed: golden capture must be inside the case try and the enclosing catch must rethrow.'
+}
+foreach ($goldenStart in $goldenStarts) {
+    if ($goldenStart -ge $caseCatch) {
+        throw "C6 failure contract changed: a golden capture at offset $goldenStart is outside the case try."
+    }
 }
 
 # The runner may enable or disable golden capture only through the explicit

@@ -476,6 +476,68 @@ semantic failure tree、golden 數字與 Relay 重跑步驟見
 `docs/changes/evidence/2026-09-15-reader-v2-c6-worker-closeout.md`。本節沒有任何
 performance pass、P99 或真機外推聲明。
 
+### C6 範圍縮減：acceptance → smoke lane（2026-09-16）
+
+**決定**：C6 不再以「兩 seed × 279 cases 完整 pass」作為驗收門。改以 smoke
+lane（兩 seed 各 `58` cases）驗證真機語意，acceptance lane 保留為可重現的
+歷史選取，不再是 gate。
+
+**理由（以既有證據為準，不是偏好）**：
+
+| 事實 | 數字 | 依據 |
+|---|---|---|
+| 單 seed 完整跑一次 | 46 批、elapsed `6352.26` 秒 | `c6-subset-seed-9132051-final-r13/aggregate.json` |
+| 已投入的嘗試 | `42` 個 subset run root、`109` 個 `c6-*` artifact 目錄、5.2 GB | `artifacts/android-reader/` 盤點 |
+| seed `9132052` 進度 | 跑到 `r18` 仍未完成，最好 `277/279` | `c6-subset-seed-9132052-final-r18-max36-complete/aggregate.json` |
+| **C6 至今找到的 correctness violation** | **`0`** | 歷史完整 seed1 四類違反 `0/0/0/0`；C5 兩 seed first-violation list 皆 `[]`；host-failure replay `0/0`（分母為 0） |
+
+C6 唯一的真實發現是 batch-027 的 settle failure，本檔既有記錄已將其分類為
+`production-bottleneck` 而非 correctness violation。該問題的根因
+（`LayoutPump` 沒有任何取消機制；跳章不改變 epoch，因此舊中心的 task 仍被
+完整排版）已於 2026-09-15 修正，定位與回歸驗證**全部在 host 端完成**，見
+`docs/changes/evidence/2026-09-15-reader-v2-layout-work-cancellation.md`。
+
+**smoke lane 的覆蓋與成本**：
+
+| 項目 | acceptance | smoke |
+|---|---:|---:|
+| cases／seed | `279` | `58` |
+| operations | `36` | `36` |
+| positions | `10` | `10` |
+| states | `12` | `12` |
+| race phases | `3` | `3` |
+| mixed journeys | `60` | `0` |
+
+維度覆蓋相同；差別只在不把 60 個 mixed journey 在 Android 上重跑一遍。那
+60 個是執行時間與 ANR 中斷的主要來源，而 host full sweep 已用每 seed
+`4308` cases 涵蓋 ordered pair、three-way、state interruption 與 race timing，
+且兩 seed 的 first-violation list 都是空的。
+
+smoke subset SHA-256（連跑兩次 byte-identical）：
+
+- seed `9132051`：`97310352a6713129177f4c0b24f4e59507d03849e3e8b085a7b117ec2f8cbf13`
+- seed `9132052`：`be49a58e04af788a7d40375ba971c1e8382371858d63df00b7ed0b41569a7aeb`
+
+acceptance lane 逐位元未變，既有 evidence 的 subset hash 仍可重現：
+`cc27815100e5c5634f33560fbd119a1319ae88bd21302654dcb6ce10b57a1484` 與
+`15287fb9ee428f0934817a75b6198f2c0570c9aa8533124ad0ca736379e734ff`。
+
+**新的 C6 驗收標準**：
+
+1. 兩個 seed 的 smoke lane 在 current source、指定 device、健康 Android
+   system 上完整跑完，四類違反皆為 `0`，且具 system-health evidence。
+2. 四個 golden checkpoint（`bookStart`、`firstRegularChapter`、
+   `finalChapterBottom`、`farLocationAfterJump`）各產出並通過 comparator，
+   保留 deliberate-shift fail 作為負向證明。
+3. fail-closed 規則不變：sentinel 觸發即停止該 batch，不 carry invalid
+   prefix，不換 serial，不以部分綠燈或歷史 run 冒充 acceptance。
+
+已驗證項目（subset 決定性、planner contract、watchdog 六面語意、bundle
+schema、golden comparator、transport contract）全部沿用，不需重做。
+
+**未變更**：host lane（C1–C5）、oracle 語意、invariant 規則、`_settleTimeout`、
+runner 的 `60 iterations / 300 秒` hard cap、fail-closed 判定。
+
 ## C7 知識沉澱 — 覆核
 
 | Guardrail 事項 | 狀態（已自動化 / 本次補上 / 無法自動化＋理由） | 負面驗證 |
