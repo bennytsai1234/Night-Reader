@@ -1403,6 +1403,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 沒有這個計數就無從得知「舊工作撤不掉」在真機上還發生多少次——
   /// 之前正是因為沒人量，這條路徑才一直只能靠旗標猜。
   int _discardedLayoutTaskCount = 0;
+  /// 見 [HybridScrollView.onFallbackItemExtent]。
+  int _fallbackItemExtentCount = 0;
   bool _capturing = false;
 
   /// restore 進行中旗標：此期間投放的 block 於建置「之前」即 pin 進
@@ -1728,6 +1730,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       'enqueuedCount': _enqueued.length,
       'pumpQueueDepth': _pump.queueDepth,
       'discardedLayoutTasks': _discardedLayoutTaskCount,
+      'fallbackItemExtentHits': _fallbackItemExtentCount,
       'forwardLeadPx': finiteOrNull(_admission.latestForwardLead),
       'backwardLeadPx': finiteOrNull(_admission.latestBackwardLead),
       'rollingFrameP50Micros': telemetry.frameP50Micros,
@@ -2668,8 +2671,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       final anchor = _anchorManager.captureFromLocation(normalized, blocks);
       // reset() invalidates the mounted sliver's old index synchronously.
-      // Hide that sliver on the next frame while the anchor window is rebuilt;
-      // the total extent callback above also protects the current frame.
+      // Hide that sliver on the next frame while the anchor window is rebuilt.
+      // _scheduleRebuild defers setState to a post-frame callback, so the
+      // loading build only arrives later; the current frame is covered by
+      // HybridScrollView's total itemExtentBuilder, not by a separate
+      // total-extent callback (no such callback exists).
       _initialRestoreCompleted = false;
       _lastSyncedLocation = null;
       _scheduleRebuild();
@@ -3202,6 +3208,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// 丟棄的 task 必須同時撤銷 [_enqueued] 記錄，否則 [_submitGroupTask] 的
   /// 去重會讓這個 group 在重新進入視窗後永遠無法再投放。
+  /// layout 熱路徑：只遞增，不配置、不組字串、不 log。
+  void _handleFallbackItemExtent() {
+    _fallbackItemExtentCount += 1;
+  }
+
   void _handleLayoutTaskDiscarded(LayoutTask task) {
     _discardedLayoutTaskCount += 1;
     for (final block in task.groupBlocks) {
@@ -4324,6 +4335,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               right: state.layoutSpec.style.paddingRight,
             ),
             physics: _physics,
+            onFallbackItemExtent: _handleFallbackItemExtent,
           ),
         );
         if (kDebugMode &&

@@ -15,6 +15,13 @@ final class HybridScrollView extends StatelessWidget {
   /// itemExtentBuilder while laying out active children. DocumentIndex can be
   /// reset before the old sliver has been removed from the render tree, so the
   /// callback must remain total during that transition.
+  ///
+  /// 這個值不會污染滾動幾何：`scrollExtent`、`maxPaintExtent`、各 child 的
+  /// `layoutOffset` 與 `firstIndex`/`targetLastIndex` 全部由
+  /// [RenderHybridBlockSliver] 的 Fenwick 覆寫算出，那些路徑不呼叫
+  /// itemExtentBuilder。它只會成為某個下一幀就會被回收的殘留 child 的
+  /// BoxConstraints。真正可見的位移來自索引本身合法地變空（I3 漸進重建），
+  /// 不是這個值。
   static const double _fallbackItemExtent = 1.0;
 
   const HybridScrollView({
@@ -30,6 +37,7 @@ final class HybridScrollView extends StatelessWidget {
     this.horizontalPadding = EdgeInsets.zero,
     this.physics = const HybridScrollPhysics(),
     this.textColor = const Color(0xFF000000),
+    this.onFallbackItemExtent,
   });
 
   /// center sliver 的 key。必須由呼叫端持有並跨 rebuild 穩定——
@@ -49,6 +57,12 @@ final class HybridScrollView extends StatelessWidget {
   /// 動態狀態（領先量摩擦）由 physics 內部即時查詢，不靠重建傳遞。
   final ScrollPhysics physics;
   final Color textColor;
+
+  /// 索引查無此 sliver index、必須回傳 [_fallbackItemExtent] 時回呼一次。
+  /// 這條路徑在 380 個 reader 測試裡零觸發，真機頻率至今無人量過；沒有
+  /// 計數就只能靠設計氣味爭論它該不該存在。回呼在 layout 熱路徑上，
+  /// 實作必須是單純遞增，不得配置或組字串。
+  final void Function()? onFallbackItemExtent;
 
   @override
   Widget build(BuildContext context) {
@@ -92,14 +106,21 @@ final class HybridScrollView extends StatelessWidget {
           beforeCenter: beforeCenter,
           index: index,
         );
-        if (key == null) return _fallbackItemExtent;
+        if (key == null) {
+          onFallbackItemExtent?.call();
+          return _fallbackItemExtent;
+        }
         // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
         // （I1/I3：admit 時已是精確量測且座標凍結）。不可讀 MeasurementStore
         // ——epoch 換代或章節 invalidate 的過渡幀，store 可能已被清而 widget
         // 還抱著舊 namespace closure，會出現座標與 extent 失同步。
         final metrics = documentIndex.metricsFor(key);
         final extent = metrics?.height;
+        // 這一支目前結構上不可達：`_metrics` 與兩側清單在每個可觀察點都
+        // 一致，且 BlockMetrics 保證 height > 0（兩個生產者都有 guard）。
+        // 保留是因為 itemExtentBuilder 被框架強制解包，必須是全函式。
         if (extent == null || !extent.isFinite || extent <= 0) {
+          onFallbackItemExtent?.call();
           return _fallbackItemExtent;
         }
         return extent;
