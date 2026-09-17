@@ -319,7 +319,7 @@ void main() {
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
 
-    await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 4);
+    await pumpScreen(tester, runtime, controller);
     await openAndSettle(tester, runtime);
     expect(runtime.state.phase, ReaderV2Phase.ready);
 
