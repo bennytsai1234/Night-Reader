@@ -174,12 +174,6 @@ final class AdmissionController extends ChangeNotifier {
     return true;
   }
 
-  bool _isContiguousEdge(BlockKey key) {
-    return key < documentIndex.centerKey
-        ? _nextBackwardKey() == key
-        : _nextForwardKey() == key;
-  }
-
   BlockKey? _nextForwardKey() {
     final edge = documentIndex.forwardEdgeKey ?? documentIndex.centerKey;
     final count = _chapterBlockCounts[edge.chapterIndex];

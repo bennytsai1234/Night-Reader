@@ -22,7 +22,7 @@ final class _SharedParagraph {
 
 /// 快取條目：Paragraph 連同建置時烘入的文字色，以及此 block 在共用
 /// Paragraph 裡自己的 Y 窗起點（非 group 或 group 頭塊為 0）。
-/// paint 熱路徑以色相等與否決定「直繪」或「過渡 tint」。
+/// 條目在目前 layout epoch 內保留；cache miss 不再是可等待的 render state。
 final class ParagraphEntry {
   ParagraphEntry._(this._shared, this.bakedColor, this.localTop);
 
@@ -88,13 +88,11 @@ final class ParagraphCache implements HybridParagraphCache {
     assert(keys.isNotEmpty);
     assert(keys.length == localTops.length);
     final shared = _SharedParagraph(paragraph, keys.length);
-    final touchedWaiterKeys = <_ParagraphCacheKey>[];
     for (var i = 0; i < keys.length; i += 1) {
       final cacheKey = _ParagraphCacheKey(keys[i], epoch);
       final previous = _entries.remove(cacheKey);
       previous?._shared.release();
       _entries[cacheKey] = ParagraphEntry._(shared, bakedColor, localTops[i]);
-      touchedWaiterKeys.add(cacheKey);
     }
   }
 

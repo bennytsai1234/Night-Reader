@@ -1559,7 +1559,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         return false;
       }
 
-      final restoreOnly = _restorePrefetchBarrierActive;
       _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
 
       while (isCurrent()) {

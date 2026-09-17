@@ -11,7 +11,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ParagraphCache', () {
-    test('keeps pinned paragraphs past capacity until unpinned', () {
+    test('keeps laid-out paragraphs available for the layout epoch', () {
       final cache = ParagraphCache(capacity: 1);
       const epoch = LayoutEpoch.initial;
       const key0 = BlockKey(chapterIndex: 0, blockIndex: 0);
@@ -20,74 +20,28 @@ void main() {
 
       cache
         ..put(key0, epoch, _paragraph('a'))
-        ..pinRange(const BlockRange(first: key0, last: key0))
-        ..put(key1, epoch, _paragraph('b'));
-
-      expect(cache.contains(key0, epoch), isTrue);
-      expect(cache.contains(key1, epoch), isFalse);
-
-      cache
-        ..unpinAll()
+        ..put(key1, epoch, _paragraph('b'))
         ..put(key2, epoch, _paragraph('c'));
 
-      expect(cache.contains(key0, epoch), isFalse);
+      expect(cache.contains(key0, epoch), isTrue);
+      expect(cache.contains(key1, epoch), isTrue);
+      expect(cache.contains(key2, epoch), isTrue);
       cache.dispose();
     });
 
-    test(
-      'trimToCapacity trims unpinned entries after restore pins are replaced',
-      () {
-        final cache = ParagraphCache(capacity: 1);
-        const epoch = LayoutEpoch.initial;
-        const key0 = BlockKey(chapterIndex: 0, blockIndex: 0);
-        const key1 = BlockKey(chapterIndex: 0, blockIndex: 1);
-
-        cache.pinKeys(<BlockKey>[key0, key1], epoch);
-        cache.putGroup(
-          <BlockKey>[key0, key1],
-          const <double>[0.0, 20.0],
-          epoch,
-          _paragraph('ab'),
-        );
-        expect(cache.length, 2);
-
-        cache.unpinAll();
-        // Replacing the old restore pins must not evict the new visible window
-        // before callers have a chance to pin it. Trimming is explicit and
-        // happens after the replacement pin set is applied.
-        expect(cache.length, 2);
-        cache.pinKeys(<BlockKey>[key1], epoch);
-        cache.trimToCapacity();
-
-        expect(cache.length, 1);
-        expect(cache.contains(key0, epoch), isFalse);
-        expect(cache.contains(key1, epoch), isTrue);
-        cache.dispose();
-      },
-    );
-
-    test('put 一次性消費 put-waiter，remove 後不再回呼', () {
+    test('semantic invalidation removes only the invalidated chapter', () {
       final cache = ParagraphCache();
       const epoch = LayoutEpoch.initial;
-      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
-      var calls = 0;
-      void waiter() => calls += 1;
+      const chapter0 = BlockKey(chapterIndex: 0, blockIndex: 0);
+      const chapter1 = BlockKey(chapterIndex: 1, blockIndex: 0);
 
       cache
-        ..addPutWaiter(key, epoch, waiter)
-        ..put(key, epoch, _paragraph('a'));
-      expect(calls, 1);
+        ..put(chapter0, epoch, _paragraph('a'))
+        ..put(chapter1, epoch, _paragraph('b'))
+        ..invalidateChapter(0);
 
-      // 一次性：put 已消費註冊，再 put 不重複回呼。
-      cache.put(key, epoch, _paragraph('b'));
-      expect(calls, 1);
-
-      // remove 後 put 不回呼。
-      cache
-        ..addPutWaiter(key, epoch, waiter)
-        ..removePutWaiter(key, epoch, waiter)
-        ..put(key, epoch, _paragraph('c'));
-      expect(calls, 1);
+      expect(cache.contains(chapter0, epoch), isFalse);
+      expect(cache.contains(chapter1, epoch), isTrue);
       cache.dispose();
     });
 
@@ -217,7 +171,7 @@ void main() {
       },
     );
 
-    test('asserts instead of laying out while dragging', () async {
+    test('continues laying out while dragging', () async {
       final store = MeasurementStore();
       final cache = ParagraphCache();
       final namespace = MeasurementNamespace(
@@ -229,8 +183,29 @@ void main() {
         measurementStore: store,
         namespace: namespace,
       )..onScrollStateChanged(PumpState.dragging);
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      pump.submit(
+        LayoutTask(
+          block: const ChapterBlock(
+            key: key,
+            text: 'drag layout',
+            charRange: HybridTextRange(0, 11),
+            sourceParagraphIndex: 0,
+          ),
+          epoch: namespace.epoch,
+          fingerprint: namespace.fingerprint,
+          textStyle: const HybridBlockTextStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+          ),
+          contentWidth: 240,
+        ),
+      );
 
-      expect(pump.pumpPending, throwsA(isA<AssertionError>()));
+      expect(await pump.pumpPending(), 1);
+      expect(store.get(namespace, key), isNotNull);
+      expect(cache.contains(key, namespace.epoch), isTrue);
       pump.dispose();
       cache.dispose();
     });
@@ -657,9 +632,9 @@ void main() {
         namespace: namespace,
         isTaskStillDesired: (task) =>
             (task.block.key.chapterIndex - center).abs() <= 2,
-        onTaskDiscarded: (task) => discarded.addAll(
-          <BlockKey>[for (final block in task.groupBlocks) block.key],
-        ),
+        onTaskDiscarded: (task) => discarded.addAll(<BlockKey>[
+          for (final block in task.groupBlocks) block.key,
+        ]),
       );
       final sub = pump.completed.listen(
         (event) => completedKeys.add(event.key),
@@ -678,11 +653,7 @@ void main() {
       // 跳章：新中心 200。兩個 task 都已不在需求視窗內。
       center = 200;
 
-      expect(
-        await pump.pumpPending(),
-        0,
-        reason: '已失效的 task 不得被排版',
-      );
+      expect(await pump.pumpPending(), 0, reason: '已失效的 task 不得被排版');
       expect(pump.queueDepth, 0, reason: 'queueDepth 必須反映當前需求');
       expect(completedKeys, isEmpty);
       expect(
@@ -720,9 +691,9 @@ void main() {
         namespace: namespace,
         isTaskStillDesired: (task) =>
             (task.block.key.chapterIndex - center).abs() <= 2,
-        onTaskDiscarded: (task) => discarded.addAll(
-          <BlockKey>[for (final block in task.groupBlocks) block.key],
-        ),
+        onTaskDiscarded: (task) => discarded.addAll(<BlockKey>[
+          for (final block in task.groupBlocks) block.key,
+        ]),
       );
       addTearDown(() {
         pump.dispose();
@@ -762,9 +733,7 @@ void main() {
         cache.dispose();
       });
 
-      pump.submit(
-        task(0, _fingerprint(lastLineSpacingCompensation: true)),
-      );
+      pump.submit(task(0, _fingerprint(lastLineSpacingCompensation: true)));
       expect(await pump.pumpPending(), 0);
       expect(pump.queueDepth, 0);
     });
