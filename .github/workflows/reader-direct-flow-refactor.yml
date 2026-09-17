@@ -1,4 +1,4 @@
-name: Reader direct-flow refactor
+name: Reader direct-flow validation
 
 on:
   push:
@@ -7,15 +7,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: reader-direct-flow-refactor
-  cancel-in-progress: false
+  group: reader-direct-flow-validation
+  cancel-in-progress: true
 
 jobs:
-  refactor-and-validate:
-    if: github.actor != 'github-actions[bot]'
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -28,34 +27,6 @@ jobs:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
-
-      - name: Apply reader direct-flow refactor
-        run: |
-          python3 tool/fix_reader_direct_flow_driver.py
-          python3 tool/reader_direct_flow_refactor.py
-
-      - name: Format changed Dart sources
-        run: |
-          dart format \
-            lib/features/reader_v2/hybrid/pump/budget_governor.dart \
-            lib/features/reader_v2/hybrid/pump/layout_pump.dart \
-            lib/features/reader_v2/hybrid/view/admission_controller.dart \
-            lib/features/reader_v2/hybrid/view/hybrid_scroll_view.dart \
-            lib/features/reader_v2/hybrid/paragraph/paragraph_cache.dart \
-            lib/features/reader_v2/hybrid/view/cached_block_widget.dart \
-            lib/features/reader_v2/session/reader_v2_preload_scheduler.dart \
-            lib/features/reader_v2/hybrid/hybrid_reader_screen.dart \
-            test/features/reader_v2/hybrid/hybrid_scroll_behavior_test.dart
-
-      - name: Commit refactor result
-        run: |
-          git config user.name "reader-refactor-bot"
-          git config user.email "reader-refactor-bot@users.noreply.github.com"
-          git add lib test/features/reader_v2/hybrid/hybrid_scroll_behavior_test.dart
-          if ! git diff --cached --quiet; then
-            git commit -m "refactor(reader): remove layout readiness gates"
-            git push origin HEAD:reader-direct-flow
-          fi
 
       - run: flutter pub get
 
