@@ -452,7 +452,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterRepo.invalidateLoaded(emitEvents: false);
     _pump.dispose();
     final oldCache = _paragraphCache;
-    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
+    _paragraphCache = ParagraphCache();
     WidgetsBinding.instance.addPostFrameCallback((_) => oldCache.dispose());
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
 

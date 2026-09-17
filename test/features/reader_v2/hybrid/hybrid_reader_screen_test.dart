@@ -198,7 +198,6 @@ void main() {
     ValueNotifier<HybridProgressSnapshot?>? progress,
     ReaderV2TtsHighlight? ttsHighlight,
     GestureTapUpCallback? onContentTapUp,
-    int paragraphCacheCapacity = 512,
     HybridTextPreprocessor preprocessor = const TextPreprocessor(
       useIsolate: false,
     ),
@@ -223,7 +222,6 @@ void main() {
               progressListenable: progress,
               preprocessor: preprocessor,
               enableDiskMetrics: false,
-              paragraphCacheCapacity: paragraphCacheCapacity,
             ),
           ),
         ),
