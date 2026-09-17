@@ -30,7 +30,9 @@ jobs:
           cache: true
 
       - name: Apply reader direct-flow refactor
-        run: python3 tool/reader_direct_flow_refactor.py
+        run: |
+          python3 tool/fix_reader_direct_flow_driver.py
+          python3 tool/reader_direct_flow_refactor.py
 
       - name: Format changed Dart sources
         run: |
