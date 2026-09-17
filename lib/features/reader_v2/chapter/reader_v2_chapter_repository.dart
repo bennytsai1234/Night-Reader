@@ -153,6 +153,11 @@ class ReaderV2ChapterRepository {
   ReaderV2Content? cachedContent(int chapterIndex) =>
       _contentCache[chapterIndex];
 
+  /// Monotonic identity for the currently materialized semantic content.
+  /// Consumers that retain UTF-16 coordinates across async work must bind
+  /// those coordinates to this generation.
+  int get contentGeneration => _contentCacheGeneration;
+
   void clearContentCache() {
     _contentCacheGeneration += 1;
     _source = null;
@@ -280,8 +285,8 @@ class ReaderV2ChapterRepository {
       ),
       sourceDao: sourceDao,
       service: service,
-      getSource:
-          () => cacheGeneration == _contentCacheGeneration ? _source : null,
+      getSource: () =>
+          cacheGeneration == _contentCacheGeneration ? _source : null,
       setSource: (source) {
         if (cacheGeneration == _contentCacheGeneration) {
           _source = source;

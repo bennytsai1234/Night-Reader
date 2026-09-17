@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,9 +11,10 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
-class _FakeCoverStorageService extends Fake
-    implements BookCoverStorageService {
+class _FakeCoverStorageService extends Fake implements BookCoverStorageService {
   @override
   Future<void> ensureDisplayCoverStored(Book book) async {}
 
@@ -146,6 +149,21 @@ void main() {
     provider.book.charOffset = 17;
     provider.book.visualOffsetPx = 24.5;
     provider.book.durChapterTitle = '第2章';
+    final oldContent = ReaderV2Content.fromRaw(
+      chapterIndex: 1,
+      title: '第2章',
+      rawText: '這是一段足夠長的測試正文內容，用來確認換源前會先驗證目標章節可讀。',
+    );
+    provider.book.readerAnchorJson = jsonEncode(
+      ReaderV2ContentLocationMapper.capture(
+        location: const ReaderV2Location(
+          chapterIndex: 1,
+          charOffset: 17,
+          visualOffsetPx: 24.5,
+        ),
+        content: oldContent,
+      ).toJson(),
+    );
     await db.bookDao.upsert(provider.book);
 
     final result = await provider.changeSource(_newSourceCandidate());

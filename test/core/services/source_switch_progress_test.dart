@@ -48,7 +48,7 @@ class _FakeBookSourceService extends BookSourceService {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('resolveSwitch 會把目前章節內位置帶到新來源', () async {
+  test('resolveSwitch 不會把沒有內容 identity 的章內座標帶到新來源', () async {
     final source = BookSource(
       bookSourceUrl: 'https://new-source.example',
       bookSourceName: '新源',
@@ -95,7 +95,8 @@ void main() {
     );
 
     expect(resolution.targetChapterIndex, 1);
-    expect(resolution.migratedBook.charOffset, 123);
-    expect(resolution.migratedBook.visualOffsetPx, 45.5);
+    expect(resolution.migratedBook.charOffset, 0);
+    expect(resolution.migratedBook.visualOffsetPx, 0);
+    expect(resolution.migratedBook.readerAnchorJson, isNull);
   });
 }

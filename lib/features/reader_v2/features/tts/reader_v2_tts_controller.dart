@@ -94,6 +94,8 @@ class ReaderV2TtsController extends ChangeNotifier
   ReaderV2TtsController({required this.runtime, ReaderV2TtsEngine? tts})
     : _tts = tts ?? ReaderV2SystemTtsEngine(),
       _ownsTtsEngine = tts == null {
+    _observedContentGeneration = runtime.repository.contentGeneration;
+    runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
     _eventSubscription = _tts.events.listen(_handleTtsEvent);
   }
@@ -106,6 +108,7 @@ class ReaderV2TtsController extends ChangeNotifier
   List<ReaderV2TtsSegment> _segments = const <ReaderV2TtsSegment>[];
   int _segmentIndex = -1;
   int _speechGeneration = 0;
+  late int _observedContentGeneration;
   bool _handlingCompletion = false;
   bool _disposed = false;
 
@@ -250,6 +253,20 @@ class ReaderV2TtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  void _handleRuntimeChanged() {
+    final contentGeneration = runtime.repository.contentGeneration;
+    if (contentGeneration == _observedContentGeneration) return;
+    _observedContentGeneration = contentGeneration;
+
+    // Segments and highlights are UTF-16 coordinates in one concrete content
+    // generation. Once that generation changes, fence every in-flight speech
+    // continuation and remove coordinates owned by the old display text.
+    _speechGeneration += 1;
+    _clearSpeechStateWithoutNotify();
+    unawaited(_tts.stop());
+    notifyListeners();
+  }
+
   void _handleTtsEvent(String event) {
     switch (event) {
       case 'onComplete':
@@ -383,6 +400,7 @@ class ReaderV2TtsController extends ChangeNotifier
   @override
   void dispose() {
     _disposed = true;
+    runtime.removeListener(_handleRuntimeChanged);
     _speechGeneration += 1;
     _clearSpeechStateWithoutNotify();
     unawaited(_eventSubscription.cancel());

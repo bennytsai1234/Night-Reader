@@ -20,9 +20,8 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
   final ReaderV2ChapterRepository? _repository;
   final ReaderV2ContentLoader _loadContent;
 
-  /// Compatibility/default prefetch size for callers that only provide a
-  /// center. Correctness does not depend on this count: the screen may widen
-  /// the resident range according to admitted viewport geometry.
+  /// Minimum prefetch radius. The screen may widen the resident range from
+  /// admitted viewport and lead geometry.
   final int windowRadius;
   final StreamController<ChapterEvent> _events =
       StreamController<ChapterEvent>.broadcast();
@@ -84,14 +83,10 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     return task;
   }
 
-  @override
-  void setPrefetchCenter(ChapterId id) {
-    setResidentRange(id - windowRadius, id + windowRadius);
-  }
-
   /// Transfers raw-chapter residency ownership to an explicit contiguous
   /// range. The caller chooses the range from viewport/lead geometry; this
   /// repository only caches exactly that ownership set.
+  @override
   void setResidentRange(int first, int last) {
     if (_disposed) return;
     var safeFirst = first < 0 ? 0 : first;

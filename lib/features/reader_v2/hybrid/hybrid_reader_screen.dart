@@ -137,6 +137,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _pumpFramePending = false;
   bool _captureFramePending = false;
   double? _lastDebugSnapshotOffset;
+  int _discardedLayoutTaskCount = 0;
+  int _fallbackItemExtentCount = 0;
 
   @override
   void initState() {
@@ -567,10 +569,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         )
         .toDouble();
     return ReaderV2Location(
-      chapterIndex: hit.key.chapterIndex,
-      charOffset: charOffset,
-      visualOffsetPx: visual,
-    )
+          chapterIndex: hit.key.chapterIndex,
+          charOffset: charOffset,
+          visualOffsetPx: visual,
+        )
         .normalized(
           chapterCount: widget.runtime.chapterCount,
           chapterLength: blocks.displayText.length,
@@ -669,7 +671,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         ..unpinAll()
         ..pinKeys(<BlockKey>[anchor.blockKey], _epoch);
       _windowCenter = chapterIndex;
-      _chapterRepo.setPrefetchCenter(chapterIndex);
+      final initialRadius = _chapterRepo.windowRadius;
+      _chapterRepo.setResidentRange(
+        math.max(0, chapterIndex - initialRadius),
+        math.min(runtime.chapterCount - 1, chapterIndex + initialRadius),
+      );
       _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
       final ready = await _pumpUntilAnchorReady(anchor, stillCurrent: still);
       if (!ready || !still()) return false;
@@ -763,12 +769,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final needsBackward =
         -_documentIndex.beforeExtent > target && !_isBookStartAdmitted();
     final needsForward =
-        _documentIndex.afterExtent < target + viewport &&
-        !_isBookEndAdmitted();
-    return _expandResidentRange(
-      backward: needsBackward,
-      forward: needsForward,
-    );
+        _documentIndex.afterExtent < target + viewport && !_isBookEndAdmitted();
+    return _expandResidentRange(backward: needsBackward, forward: needsForward);
   }
 
   bool _isBookStartAdmitted() {
@@ -1014,10 +1016,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterRepo.setResidentRange(first, last);
   }
 
-  bool _expandResidentRange({
-    required bool backward,
-    required bool forward,
-  }) {
+  bool _expandResidentRange({required bool backward, required bool forward}) {
     if (!backward && !forward) return false;
     final chapterCount = widget.runtime.chapterCount;
     if (chapterCount <= 0) return false;
@@ -1047,7 +1046,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final last = (_chapterRepo.residentLast ?? _windowCenter)
         .clamp(first, chapterCount - 1)
         .toInt();
-    final chapters = <int>[for (var index = first; index <= last; index++) index];
+    final chapters = <int>[
+      for (var index = first; index <= last; index++) index,
+    ];
     chapters.sort((a, b) {
       final da = (a - _windowCenter).abs();
       final db = (b - _windowCenter).abs();
@@ -1237,33 +1238,26 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return true;
   }
 
-  /// 排版需求的唯一判準：`(epoch, fingerprint, windowCenter)`。
+  /// 排版需求的唯一判準：`(epoch, fingerprint, residentRange)`。
   ///
-  /// 投放端（[_ensureWindowTasks]／[_onChapterEvent]）已經用同一組條件決定
-  /// 「要不要送」；這裡是它的對偶——送出去之後中心移動了，同一組條件回答
-  /// 「還要不要做」。兩邊用同一個半徑，才不會出現投放端願意送、drain 端
-  /// 立刻丟的來回震盪。
+  /// 投放端（[_ensureWindowTasks]／[_onChapterEvent]）與 drain 端都查同一個
+  /// geometry-owned resident range，避免 viewport 擴張後投放、卻被固定半徑
+  /// 立即丟棄的震盪。
   ///
   /// epoch／fingerprint 改變時 [_handleEpochRebuild] 會整個換掉 pump，理論上
   /// 走不到這裡；仍然檢查，讓失效鍵在單一處完整表達。
   bool _isLayoutTaskStillDesired(LayoutTask task) {
     if (task.epoch != _epoch || task.fingerprint != _fingerprint) return false;
-    final chapter = task.block.key.chapterIndex;
-    return (chapter - _windowCenter).abs() <= _chapterRepo.windowRadius;
+    return _chapterRepo.isResident(task.block.key.chapterIndex);
   }
 
-  /// 丟棄的 task 必須同時撤銷 [_enqueued] 記錄，否則 [_submitGroupTask] 的
-  /// 去重會讓這個 group 在重新進入視窗後永遠無法再投放。
   /// layout 熱路徑：只遞增，不配置、不組字串、不 log。
   void _handleFallbackItemExtent() {
     _fallbackItemExtentCount += 1;
   }
 
-  void _handleLayoutTaskDiscarded(LayoutTask task) {
+  void _handleLayoutTaskDiscarded(LayoutTask _) {
     _discardedLayoutTaskCount += 1;
-    for (final block in task.groupBlocks) {
-      _enqueued.remove(block.key);
-    }
   }
 
   void _submitGroupTask(
@@ -1521,50 +1515,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _publishProgress() {
     final notifier = widget.progressListenable;
     if (notifier == null) return;
-    final offset = _effectiveScrollOffset();
-    if (offset == null || _viewportSize.height <= 0) return;
-    final worldY =
-        offset + AnchorManager.anchorOffsetInViewport(_viewportSize.height);
-    final progress = HybridProgress(
-      documentIndex: _documentIndex,
-      chapterCount: widget.runtime.chapterCount,
-    ).progressForOffset(worldY);
-    final runtimeLocation = widget.runtime.state.visibleLocation;
+
+    // Chapter progress is semantic content progress, not materialized layout
+    // progress. DocumentIndex intentionally contains only the admitted window.
     final runtimeLocationIsPublished =
         _initialRestoreCompleted &&
         widget.runtime.state.phase == ReaderV2Phase.ready &&
         !_restorePinning;
-    if (runtimeLocationIsPublished &&
-        runtimeLocation.chapterIndex != progress.chapterIndex) {
-      final blocks = _blocks[runtimeLocation.chapterIndex];
-      if (blocks != null) {
-        final length = math.max(1, blocks.displayText.length);
-        notifier.value = HybridProgressSnapshot(
-          chapterIndex: runtimeLocation.chapterIndex,
-          chapterCount: widget.runtime.chapterCount,
-          chapterPercent: (runtimeLocation.charOffset / length * 100)
-              .clamp(0.0, 100.0)
-              .toDouble(),
-        );
-        return;
-      }
-    }
-    final captured = _captureVisibleLocation();
-    if (captured != null && captured.chapterIndex != progress.chapterIndex) {
-      final blocks = _blocks[captured.chapterIndex];
-      if (blocks != null) {
-        final length = math.max(1, blocks.displayText.length);
-        notifier.value = HybridProgressSnapshot(
-          chapterIndex: captured.chapterIndex,
-          chapterCount: widget.runtime.chapterCount,
-          chapterPercent: (captured.charOffset / length * 100)
-              .clamp(0.0, 100.0)
-              .toDouble(),
-        );
-        return;
-      }
-    }
-    notifier.value = progress;
+    final location = runtimeLocationIsPublished
+        ? widget.runtime.state.visibleLocation
+        : _captureVisibleLocation();
+    if (location == null) return;
+    final blocks = _blocks[location.chapterIndex];
+    if (blocks == null) return;
+
+    notifier.value = HybridProgress(
+      chapterCount: widget.runtime.chapterCount,
+    ).progressForLocation(location, chapterLength: blocks.displayText.length);
   }
 
   void _attachController() {
@@ -1741,10 +1708,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           : _admission.atBackwardBookBoundary;
       if (available + 0.5 >= distance || atBookBoundary) return true;
 
-      if (!_expandResidentRange(
-        backward: !forward,
-        forward: forward,
-      )) {
+      if (!_expandResidentRange(backward: !forward, forward: forward)) {
         return false;
       }
 

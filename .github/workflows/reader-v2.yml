@@ -1,7 +1,5 @@
 name: Reader V2
 on:
-  push:
-    branches: [fix/reader-v2-ownership-20260917]
   workflow_dispatch:
 permissions:
   contents: read

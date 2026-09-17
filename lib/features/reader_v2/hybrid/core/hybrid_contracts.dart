@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import '../../session/reader_v2_location.dart';
 import 'hybrid_types.dart';
 
 abstract interface class HybridMeasurementStore {
@@ -19,7 +20,7 @@ abstract interface class HybridDocumentIndex {
 
 abstract interface class HybridChapterTextRepository {
   Future<ChapterText> load(ChapterId id);
-  void setPrefetchCenter(ChapterId id);
+  void setResidentRange(int first, int last);
   Stream<ChapterEvent> get events;
 }
 
@@ -49,7 +50,10 @@ abstract interface class HybridLayoutPump {
 }
 
 abstract interface class HybridProgressCalculator {
-  HybridProgressSnapshot progressForOffset(double offset);
+  HybridProgressSnapshot progressForLocation(
+    ReaderV2Location location, {
+    required int chapterLength,
+  });
 }
 
 final class HybridProgressSnapshot {

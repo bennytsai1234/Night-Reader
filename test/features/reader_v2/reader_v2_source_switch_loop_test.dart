@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -141,6 +143,15 @@ void main() {
           ),
         )
         .toList(growable: false);
+    final oldContent = ReaderV2Content.fromRaw(
+      chapterIndex: location.chapterIndex,
+      title: chapters[location.chapterIndex].title,
+      rawText: chapters[location.chapterIndex].content ?? '',
+    );
+    final boundLocation = ReaderV2ContentLocationMapper.capture(
+      location: location,
+      content: oldContent,
+    );
     return SourceSwitchResolution(
       searchBook: sourceCandidate,
       source: BookSource(
@@ -154,6 +165,7 @@ void main() {
         chapterIndex: location.chapterIndex,
         charOffset: location.charOffset,
         visualOffsetPx: location.visualOffsetPx,
+        readerAnchorJson: jsonEncode(boundLocation.toJson()),
         durChapterTitle: chapters[location.chapterIndex].title,
       ),
       chapters: newChapters,

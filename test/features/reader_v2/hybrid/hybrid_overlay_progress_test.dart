@@ -4,10 +4,10 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highl
 import 'package:night_reader/features/reader_v2/hybrid/anchor/anchor_manager.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
-import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/progress/hybrid_progress.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 
 void main() {
   group('Hybrid overlay/progress helpers', () {
@@ -52,30 +52,32 @@ void main() {
       expect(rects.single.bottom, 43);
     });
 
-    test('caps non-terminal chapter percent at 99.9', () {
-      final index = DocumentIndex(
-        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
-      )..admitAll({
-        const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
-          height: 100,
-          lineCount: 1,
-        ),
-        const BlockKey(chapterIndex: 1, blockIndex: 0): const BlockMetrics(
-          height: 100,
-          lineCount: 1,
-        ),
-      });
+    test('uses semantic chapter length instead of admitted geometry', () {
+      const progress = HybridProgress(chapterCount: 3);
 
-      final progress = HybridProgress(documentIndex: index, chapterCount: 3);
-      expect(progress.progressForOffset(100).chapterPercent, 0);
-      expect(progress.progressForOffset(99.9).chapterPercent, 99.9);
-      expect(
-        progress.progressForOffset(99.9).chapterLabel,
-        '第 1/3 章 · 本章 9/10',
+      final quarter = progress.progressForLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 50),
+        chapterLength: 200,
       );
-      expect(progress.progressForOffset(99.9).percentLabel, '全書 33.3%');
-      expect(progress.progressForOffset(100).chapterLabel, '第 2/3 章 · 本章 0/10');
-      expect(progress.progressForOffset(100).percentLabel, '全書 33.3%');
+      expect(quarter.chapterPercent, 25);
+      expect(quarter.chapterLabel, '第 1/3 章 · 本章 2/10');
+      expect(quarter.percentLabel, '全書 8.3%');
+
+      final end = progress.progressForLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 200),
+        chapterLength: 200,
+      );
+      expect(end.chapterPercent, 100);
+      expect(end.chapterLabel, '第 1/3 章 · 本章 10/10');
+      expect(end.percentLabel, '全書 33.3%');
+
+      final next = progress.progressForLocation(
+        const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        chapterLength: 500,
+      );
+      expect(next.chapterPercent, 0);
+      expect(next.chapterLabel, '第 2/3 章 · 本章 0/10');
+      expect(next.percentLabel, '全書 33.3%');
     });
 
     test('progress snapshots with the same displayed values compare equal', () {
