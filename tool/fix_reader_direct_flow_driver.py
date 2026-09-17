@@ -19,14 +19,27 @@ if cache_target_tail not in s:
     raise RuntimeError('expected cache target tail not found')
 s = s.replace(cache_target_tail, '''      return;\n    }\n""",''', 1)
 
-restore_target = '''      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {\n        _restorePinning = false;\n        _pump.onScrollStateChanged('''
-if restore_target not in s:
-    raise RuntimeError('expected restore finalizer target not found')
-s = s.replace(
-    restore_target,
-    '''      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {\n        _pump.onScrollStateChanged(''',
-    1,
+start = s.find('s = replace_once(\n    s,\n    """    } finally {')
+if start < 0:
+    raise RuntimeError('restore finalizer transform start not found')
+end_marker = '    "restore finalizer",\n)\n'
+end = s.find(end_marker, start)
+if end < 0:
+    raise RuntimeError('restore finalizer transform end not found')
+end += len(end_marker)
+replacement = r'''s = sub_once(
+    s,
+    r"    \\} finally \\{\\n      if \\(mounted && identical\\(_pump, binding\\) && ticket == _restoreTicket\\) \\{\\n(?:        _restorePinning = false;\\n)?        _pump\\.onScrollStateChanged\\(\\n[\\s\\S]*?        \\);\\n      \\}\\n    \\}\\n",
+    """    } finally {
+      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {
+        _pump.onScrollStateChanged(PumpState.idle);
+      }
+    }
+""",
+    "restore finalizer",
 )
+'''
+s = s[:start] + replacement + s[end:]
 
 path.write_text(s, encoding='utf-8')
 print('refactor driver repaired')
