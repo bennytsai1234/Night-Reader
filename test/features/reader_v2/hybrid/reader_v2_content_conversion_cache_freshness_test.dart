@@ -86,7 +86,9 @@ void main() {
           bookUrl: 'book://conversion',
           fingerprint: fingerprint,
           metrics: metrics,
-          chapterContentHashes: const <int, String>{0: 'content-hash-before'},
+          chapterLayoutIdentities: const <int, String>{
+            0: 'content-hash-before',
+          },
         ),
         1,
       );
@@ -94,7 +96,9 @@ void main() {
         await cache.read(
           bookUrl: 'book://conversion',
           fingerprint: fingerprint,
-          chapterContentHashes: const <int, String>{0: 'content-hash-before'},
+          chapterLayoutIdentities: const <int, String>{
+            0: 'content-hash-before',
+          },
         ),
         metrics,
       );
@@ -102,7 +106,7 @@ void main() {
         await cache.read(
           bookUrl: 'book://conversion',
           fingerprint: fingerprint,
-          chapterContentHashes: const <int, String>{0: 'content-hash-after'},
+          chapterLayoutIdentities: const <int, String>{0: 'content-hash-after'},
         ),
         isEmpty,
       );

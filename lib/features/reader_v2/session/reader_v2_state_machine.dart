@@ -11,31 +11,41 @@ class ReaderV2StateMachine {
   ReaderV2State state;
   int _nextOperationId = 0;
   ReaderV2OperationToken? _currentOperation;
-  bool _restoreInProgress = false;
 
   ReaderV2OperationToken? get currentOperation => _currentOperation;
-  bool get restoreInProgress => _restoreInProgress;
+  bool get restoreInProgress => state.phase == ReaderV2Phase.restoring;
 
-  ReaderV2OperationToken beginOpen() {
+  ReaderV2Location? get pendingLocation => switch (state.phase) {
+    ReaderV2Phase.loading ||
+    ReaderV2Phase.layingOut ||
+    ReaderV2Phase.restoring ||
+    ReaderV2Phase.switchingMode => _currentOperation?.targetLocation,
+    _ => null,
+  };
+
+  ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
     return _beginOperation(
       ReaderV2OperationKind.open,
+      targetLocation: location,
       phase: ReaderV2Phase.loading,
       clearError: true,
     );
   }
 
-  ReaderV2OperationToken beginJump() {
+  ReaderV2OperationToken beginJump({ReaderV2Location? location}) {
     return _beginOperation(
       ReaderV2OperationKind.jump,
+      targetLocation: location,
       phase: ReaderV2Phase.layingOut,
       clearError: true,
       clearPageWindow: true,
     );
   }
 
-  ReaderV2OperationToken beginRestore() {
+  ReaderV2OperationToken beginRestore({ReaderV2Location? location}) {
     return _beginOperation(
       ReaderV2OperationKind.restore,
+      targetLocation: location,
       phase: ReaderV2Phase.restoring,
       clearError: true,
       clearPageWindow: true,
@@ -44,10 +54,12 @@ class ReaderV2StateMachine {
 
   ReaderV2OperationToken beginPresentation({
     required ReaderV2LayoutSpec spec,
+    ReaderV2Location? location,
     required int layoutGeneration,
   }) {
     return _beginOperation(
       ReaderV2OperationKind.presentation,
+      targetLocation: location,
       phase: ReaderV2Phase.switchingMode,
       layoutSpec: spec,
       layoutGeneration: layoutGeneration,
@@ -56,9 +68,13 @@ class ReaderV2StateMachine {
     );
   }
 
-  ReaderV2OperationToken beginContentReload({required int layoutGeneration}) {
+  ReaderV2OperationToken beginContentReload({
+    required int layoutGeneration,
+    ReaderV2Location? location,
+  }) {
     return _beginOperation(
       ReaderV2OperationKind.contentReload,
+      targetLocation: location,
       phase: ReaderV2Phase.layingOut,
       layoutGeneration: layoutGeneration,
       clearError: true,
@@ -71,10 +87,7 @@ class ReaderV2StateMachine {
   }
 
   void commitLocation(ReaderV2Location location) {
-    state = state.copyWith(
-      visibleLocation: location,
-      committedLocation: location,
-    );
+    state = state.copyWith(committedLocation: location);
   }
 
   void updateReadyPosition({
@@ -128,6 +141,7 @@ class ReaderV2StateMachine {
   ReaderV2OperationToken _beginOperation(
     ReaderV2OperationKind kind, {
     required ReaderV2Phase phase,
+    ReaderV2Location? targetLocation,
     ReaderV2LayoutSpec? layoutSpec,
     int? layoutGeneration,
     bool clearError = false,
@@ -135,12 +149,13 @@ class ReaderV2StateMachine {
   }) {
     final generation = layoutGeneration ?? state.layoutGeneration;
     final token = ReaderV2OperationToken(
+      targetLocation:
+          targetLocation ?? pendingLocation ?? state.visibleLocation,
       id: ++_nextOperationId,
       kind: kind,
       layoutGeneration: generation,
     );
     _currentOperation = token;
-    _restoreInProgress = kind == ReaderV2OperationKind.restore;
     state = state.copyWith(
       phase: phase,
       layoutSpec: layoutSpec,
@@ -149,12 +164,5 @@ class ReaderV2StateMachine {
       clearPageWindow: clearPageWindow,
     );
     return token;
-  }
-
-  void endRestore(ReaderV2OperationToken token) {
-    if (_currentOperation?.id == token.id &&
-        _currentOperation?.kind == ReaderV2OperationKind.restore) {
-      _restoreInProgress = false;
-    }
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +102,40 @@ BookChapter _chapter(int index) {
 
 void main() {
   group('ReaderV2 navigation and viewport boundaries', () {
+    test(
+      'navigation positions once before publishing ready and saving',
+      () async {
+        final harness = _makeRuntime();
+        final runtime = harness.runtime;
+        addTearDown(runtime.dispose);
+        await runtime.openBook();
+        final entered = Completer<void>();
+        final positioned = Completer<bool>();
+        var restoreCalls = 0;
+        runtime.registerViewportRestore(Object(), (location) {
+          restoreCalls += 1;
+          expect(location.chapterIndex, 1);
+          entered.complete();
+          return positioned.future;
+        });
+        final jump = runtime.jumpToChapter(1);
+        await entered.future;
+        expect(runtime.state.phase, ReaderV2Phase.layingOut);
+        expect(runtime.state.visibleLocation.chapterIndex, 0);
+        expect(harness.bookDao.savedLocations, isEmpty);
+        positioned.complete(true);
+        await jump;
+        expect(runtime.state.phase, ReaderV2Phase.ready);
+        expect(runtime.state.visibleLocation.chapterIndex, 1);
+        expect(harness.bookDao.savedLocations.single.chapterIndex, 1);
+        await runtime.saveProgress(
+          location: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+        );
+        expect(restoreCalls, 1);
+        expect(runtime.state.visibleLocation.chapterIndex, 1);
+      },
+    );
+
     test('尚未建立 page window 的暫時失敗不誤報書首或書尾', () {
       final harness = _makeRuntime();
       final runtime = harness.runtime;

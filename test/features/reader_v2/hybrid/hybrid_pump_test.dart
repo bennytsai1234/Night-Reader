@@ -112,6 +112,55 @@ void main() {
   });
 
   group('LayoutPump', () {
+    test('pending group identity is deduplicated but a completed group can repaint', () async {
+      final cache = ParagraphCache();
+      final namespace = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: MeasurementStore(),
+        namespace: namespace,
+      );
+      addTearDown(() {
+        pump.dispose();
+        cache.dispose();
+      });
+      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
+      LayoutTask task(ui.Color color) => LayoutTask(
+        block: const ChapterBlock(
+          key: key,
+          text: 'abcd',
+          charRange: HybridTextRange(0, 4),
+          sourceParagraphIndex: 0,
+        ),
+        epoch: namespace.epoch,
+        fingerprint: namespace.fingerprint,
+        textStyle: const HybridBlockTextStyle(
+          fontSize: 18,
+          lineHeight: 1.5,
+          letterSpacing: 0,
+        ),
+        contentWidth: 240,
+        textColor: color,
+      );
+      const black = ui.Color(0xFF000000);
+      const green = ui.Color(0xFF244739);
+      pump
+        ..submit(task(black))
+        ..submit(task(green));
+      expect(pump.queueDepth, 1);
+      expect(await pump.pumpPending(), 1);
+      expect(cache.containsFresh(key, namespace.epoch, green), true);
+      pump.submit(task(black));
+      expect(await pump.pumpPending(), 1);
+      expect(cache.containsFresh(key, namespace.epoch, black), true);
+      pump.submit(task(green));
+      pump.invalidateChapter(0);
+      expect(pump.queueDepth, 0);
+    });
+
     test(
       'B2 intermediate paragraph is disposed after the replacement pass',
       () async {
