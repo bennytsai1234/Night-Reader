@@ -19,5 +19,14 @@ if cache_target_tail not in s:
     raise RuntimeError('expected cache target tail not found')
 s = s.replace(cache_target_tail, '''      return;\n    }\n""",''', 1)
 
+restore_target = '''      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {\n        _restorePinning = false;\n        _pump.onScrollStateChanged('''
+if restore_target not in s:
+    raise RuntimeError('expected restore finalizer target not found')
+s = s.replace(
+    restore_target,
+    '''      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {\n        _pump.onScrollStateChanged(''',
+    1,
+)
+
 path.write_text(s, encoding='utf-8')
 print('refactor driver repaired')
