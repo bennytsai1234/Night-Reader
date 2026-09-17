@@ -36,8 +36,6 @@ abstract interface class HybridParagraphCache {
     ui.Paragraph paragraph, {
     ui.Color bakedColor,
   });
-  void pinRange(BlockRange range);
-  void unpinAll();
   void dispose();
 }
 

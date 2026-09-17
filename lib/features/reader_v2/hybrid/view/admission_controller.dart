@@ -46,10 +46,6 @@ final class AdmissionController extends ChangeNotifier {
         null;
   }
 
-  bool get hasLeadDeficit => false;
-
-  double frictionScaleToward({required bool forward}) => 0.0;
-
   void reset({required LayoutEpoch epoch, required int chapterCount}) {
     _epoch = epoch;
     _chapterCount = chapterCount;

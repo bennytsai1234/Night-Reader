@@ -220,16 +220,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     return navigation.moveToPrevPage(saveSettledProgress: saveSettledProgress);
   }
 
-  void beginInteractivePreloadPause() {
-    navigation.beginInteractivePreloadPause();
-  }
-
-  void endInteractivePreloadPause() {
-    navigation.endInteractivePreloadPause();
-  }
-
-  bool get debugIsPreloadLayoutPaused => navigation.debugIsPreloadLayoutPaused;
-
   Future<void> preloadDirectionalForVelocity({
     required int chapterIndex,
     required bool forward,

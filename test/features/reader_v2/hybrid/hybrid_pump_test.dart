@@ -12,7 +12,7 @@ void main() {
 
   group('ParagraphCache', () {
     test('keeps laid-out paragraphs available for the layout epoch', () {
-      final cache = ParagraphCache(capacity: 1);
+      final cache = ParagraphCache();
       const epoch = LayoutEpoch.initial;
       const key0 = BlockKey(chapterIndex: 0, blockIndex: 0);
       const key1 = BlockKey(chapterIndex: 0, blockIndex: 1);

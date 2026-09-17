@@ -50,7 +50,6 @@ class HybridReaderScreen extends StatefulWidget {
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
     this.enableDiskMetrics = true,
-    this.paragraphCacheCapacity = 512,
   });
 
   final ReaderV2Runtime runtime;
@@ -64,7 +63,6 @@ class HybridReaderScreen extends StatefulWidget {
   final String? bookUrl;
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskMetrics;
-  final int paragraphCacheCapacity;
 
   @override
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
@@ -141,7 +139,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex);
     _physics = const HybridScrollPhysics();
-    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
+    _paragraphCache = ParagraphCache();
     _refreshEpochBinding();
 
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
@@ -1341,7 +1339,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return location;
   }
 
-  Future<void> _handleScrollSettled({bool allowFullPrefetch = false}) async {
+  Future<void> _handleScrollSettled() async {
     if (!mounted || !_initialRestoreCompleted) return;
     final settleRestoreTicket = _restoreTicket;
     final location = _captureAndReport(notify: true);
@@ -1497,7 +1495,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   Future<bool> _scrollByNow(double delta, bool Function() isCurrent) async {
     if (!isCurrent() || !_jumpBy(delta)) return false;
-    await _handleScrollSettled(allowFullPrefetch: true);
+    await _handleScrollSettled();
     return isCurrent();
   }
 
@@ -1532,7 +1530,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       curve: Curves.easeOutCubic,
     );
     if (!isCurrent()) return false;
-    await _handleScrollSettled(allowFullPrefetch: true);
+    await _handleScrollSettled();
     return isCurrent();
   }
 
@@ -1695,7 +1693,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       curve: Curves.easeOutCubic,
     );
     if (!isCurrent()) return false;
-    await _handleScrollSettled(allowFullPrefetch: true);
+    await _handleScrollSettled();
     return isCurrent();
   }
 

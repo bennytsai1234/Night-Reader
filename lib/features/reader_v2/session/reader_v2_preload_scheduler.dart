@@ -51,14 +51,6 @@ class ReaderV2PreloadScheduler {
 
   static const int boundaryPreloadPageDistance = 4;
 
-  bool get isInteractive => false;
-
-  int get debugInteractiveDepth => 0;
-
-  void beginInteractive() {}
-
-  void endInteractive() {}
-
   int bumpGeneration() {
     _generation += 1;
     _clearQueued(layout: true, content: false);

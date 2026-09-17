@@ -125,19 +125,6 @@ class ReaderV2NavigationController {
     );
   }
 
-  void beginInteractivePreloadPause() {
-    if (_runtime.disposed) return;
-    _runtime.preloadScheduler.beginInteractive();
-  }
-
-  void endInteractivePreloadPause() {
-    if (_runtime.disposed) return;
-    _runtime.preloadScheduler.endInteractive();
-  }
-
-  bool get debugIsPreloadLayoutPaused =>
-      _runtime.preloadScheduler.isInteractive;
-
   Future<void> preloadDirectionalForVelocity({
     required int chapterIndex,
     required bool forward,

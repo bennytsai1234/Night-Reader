@@ -37,9 +37,7 @@ final class ParagraphEntry {
 }
 
 final class ParagraphCache implements HybridParagraphCache {
-  ParagraphCache({this.capacity = 512}) : assert(capacity > 0);
-
-  final int capacity;
+  ParagraphCache();
   final LinkedHashMap<_ParagraphCacheKey, ParagraphEntry> _entries =
       LinkedHashMap<_ParagraphCacheKey, ParagraphEntry>();
 
@@ -95,16 +93,6 @@ final class ParagraphCache implements HybridParagraphCache {
       _entries[cacheKey] = ParagraphEntry._(shared, bakedColor, localTops[i]);
     }
   }
-
-  @override
-  void pinRange(BlockRange range) {}
-
-  void pinKeys(Iterable<BlockKey> keys, LayoutEpoch epoch) {}
-
-  @override
-  void unpinAll() {}
-
-  void trimToCapacity() {}
 
   @override
   void dispose() {

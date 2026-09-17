@@ -415,8 +415,8 @@ final class LayoutPump implements HybridLayoutPump {
     _state = state;
   }
 
-  /// 丟棄已不在當前需求視窗內的 task。純記帳、不做排版，因此在 dragging
-  /// 期間呼叫也不違反 I4。回傳丟棄數量。
+  /// 丟棄已不屬於目前 layout epoch / fingerprint 的 task。純記帳、
+  /// 不做排版；互動狀態不參與 task 是否有效。回傳丟棄數量。
   int purgeUndesiredTasks() {
     final predicate = _isTaskStillDesired;
     if (predicate == null || _queue.isEmpty) return 0;
