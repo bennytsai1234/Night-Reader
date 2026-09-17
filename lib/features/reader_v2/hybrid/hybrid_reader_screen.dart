@@ -22,7 +22,6 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 import 'anchor/anchor_manager.dart';
 import 'core/hybrid_contracts.dart';
 import 'core/hybrid_types.dart';
-
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'measure/metrics_disk_cache.dart';
@@ -37,16 +36,6 @@ import 'text/text_preprocessor.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
-/// 方案 B 混合架構的閱讀主面（W3 整合層）。
-///
-/// 取代 `EngineReaderV2Screen`：對上維持 D5 的三個契約面——
-/// 1. `ReaderV2ViewportController` 七閉包 attach/detach（前六個經 FIFO 佇列，
-///    settleScroll 直達）；
-/// 2. runtime 的 capture / restore 註冊（owner 語意照舊）；
-/// 3. settle 點（拖曳結束、fling 停止、跳章完成、epoch 重建完成）一律
-///    capture + saveProgress。
-/// 對下組裝 hybrid 各模組：text→measure→paragraph/pump→view，錨點換算
-/// 全部經 [HybridAnchor]（I6），epoch 對齊 runtime 的 layoutGeneration（D9）。
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
     super.key,
@@ -71,18 +60,10 @@ class HybridReaderScreen extends StatefulWidget {
   final GestureTapUpCallback? onContentTapUp;
   final ReaderV2ViewportController? viewportController;
   final ReaderV2TtsHighlight? ttsHighlight;
-
-  /// D6：章序 + 章內百分比的對外通道（頁面組裝層讀取顯示）。
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
-
-  /// D10 磁碟 metrics 的檔名 key；null 時停用磁碟快取。
   final String? bookUrl;
-
-  /// 測試可注入 `TextPreprocessor(useIsolate: false)` 避免真 isolate。
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskMetrics;
-
-  /// 測試 seam：縮小 ParagraphCache 容量以重現 LRU 逐出；正式路徑用預設。
   final int paragraphCacheCapacity;
 
   @override
@@ -96,8 +77,6 @@ bool isHybridPageMoveComplete({
 }) {
   if (!requestedDistance.isFinite || requestedDistance <= 0) return false;
   if (!actualDistance.isFinite || actualDistance <= 0) return false;
-  // animateTo／DocumentIndex 的浮點誤差不應讓完整頁面被誤判為失敗；
-  // 0.5 logical px 遠小於閱讀器一行，且不會掩蓋明顯的 lazy-edge 短移動。
   const tolerance = 0.5;
   if (actualDistance + tolerance >= requestedDistance) return true;
   return atBookBoundary;
@@ -105,20 +84,8 @@ bool isHybridPageMoveComplete({
 
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
-  /// Restore only needs the anchor and the bounded guaranteed viewport window.
-  /// Keep each restore pass small; [_pumpUntilAnchorReady] checks the actual
-  /// admitted geometry and asks for another pass only when it is still short.
-  /// This prevents a long chapter's complete prefetch tail from sitting in the
-  /// queue after the anchor is already presentable.
   static const int _restoreGroupsPerSide = 8;
-
-  /// Ordinary scrolling uses the same bounded frontier.  Each user-owned
-  /// settle submits one bounded batch; a later settle can advance the frontier
-  /// again while the admission controller still reports a lead deficit.  A
-  /// queue drain must not recursively submit the next batch, because a long
-  /// chapter would turn one harmless release into an unbounded settle backlog.
   static const int _progressiveGroupsPerSide = 8;
-
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
 
@@ -133,9 +100,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
-
-  /// 單一穩定實例：`Scrollable` 只認 physics 的 runtimeType 鏈，position
-  /// 抱的是第一顆——動態摩擦由 physics 透過 [_admission] 即時查詢。
   late final HybridScrollPhysics _physics;
   late ParagraphCache _paragraphCache;
   late LayoutPump _pump;
@@ -157,10 +121,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Size _viewportSize = Size.zero;
   double? _pendingScrollOffset;
   int _windowCenter = 0;
-  // Invalidates async ordinary-prefetch continuations when the viewport
-  // center, epoch, or restore transaction changes.  The repository has its
-  // own cache generation, but this screen also needs to protect the later
-  // enqueue side effect, which can run after a user drag has started.
   int _prefetchGeneration = 0;
   int _lastLayoutGeneration = 0;
   int _runtimeLocationRevision = 0;
@@ -169,15 +129,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   String? _lastLoggedErrorMessage;
   bool _initialRestoreCompleted = false;
   bool _restorePrefetchBarrierActive = false;
-  // A ScrollEnd inherited from the gesture/ballistic stream that triggered a
-  // jump is not an ordinary user settle. It can arrive after restoreLocked
-  // is released but before ReaderV2Runtime clears pendingLocation.
-  // Only a new drag that starts after the restore may release the barrier.
   bool _restoreUserScrollObserved = false;
-
-  /// restore 進行中旗標：此期間投放的 block 於建置「之前」即 pin 進
-  /// ParagraphCache（見 [_admitOrSubmitGroup]），防止初始視窗建置量超過
-  /// 快取容量時 LRU 把首屏段落逐出。
   bool _restorePinning = false;
   bool _dragging = false;
   bool _sawUserScroll = false;
@@ -185,6 +137,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _pumpFramePending = false;
   bool _captureFramePending = false;
   double? _lastDebugSnapshotOffset;
+
   @override
   void initState() {
     super.initState();
@@ -192,9 +145,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       repository: widget.runtime.repository,
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
-    // 放行不再驅動 widget 層 setState：新 block 的材料化由
-    // DocumentIndex.revision → RenderHybridBlockSliver.markNeedsLayout
-    // 直驅（fling 幀 build 成本歸零的關鍵）。
     _admission = AdmissionController(documentIndex: _documentIndex);
     _physics = HybridScrollPhysics(admission: _admission);
     _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
@@ -213,8 +163,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // 冷開機由 runtime.openBook() 經 restore 鏈進來；熱掛載（runtime 已
-      // ready）沒有人會再叫 restore，這裡自己補一次同步。
       if (widget.runtime.state.phase == ReaderV2Phase.ready) {
         _restoreAttachedRuntime();
       }
@@ -241,7 +189,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       widget.runtime.registerViewportRestore(this, _restoreToLocation);
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
-
       _lastLoggedErrorMessage = null;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
       _restoreTicket += 1;
@@ -304,8 +251,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  /// session 結束時把 telemetry 累計摘要寫入 AppLog（設定頁日誌可回收），
-  /// 附帶影響幀成本的關鍵樣式脈絡，供真機驗收劇本對比（如 B2 開/關）。
   void _logTelemetrySessionSummary() {
     final summary = _telemetry.sessionSummary();
     if ((summary['frames'] as int? ?? 0) == 0) return;
@@ -434,6 +379,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         for (final entry in _blocks.entries) entry.key: entry.value.contentHash,
       },
       'chaptersInFlight': _blocksInFlight.keys.toList(growable: false),
+      'residentFirstChapter': _chapterRepo.residentFirst,
+      'residentLastChapter': _chapterRepo.residentLast,
       'pumpQueueDepth': _pump.queueDepth,
       'discardedLayoutTasks': _discardedLayoutTaskCount,
       'fallbackItemExtentHits': _fallbackItemExtentCount,
@@ -479,8 +426,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  // ---- epoch / namespace（D9：epoch 對齊 layoutGeneration） ----
-
   void _refreshEpochBinding() {
     _epoch = LayoutEpoch(widget.runtime.state.layoutGeneration);
     _fingerprint = StyleFingerprint.fromLayoutSpec(
@@ -504,18 +449,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _handleEpochRebuild(String? previousBookUrl) {
-    // Do not leave a mounted sliver reading the old render tree while the
-    // index and metrics namespace are being replaced. The extent callback has
-    // a defensive fallback as a same-frame guard, but the normal transition
-    // must render the loading state until restore has rebuilt the window.
     _prefetchGeneration += 1;
     _runtimeLocationRevision += 1;
     _restoreTicket += 1;
     _restorePinning = false;
     _initialRestoreCompleted = false;
 
-    // 舊 namespace 的量測 best-effort 落盤後自 store 回收——同款樣式改回
-    // 來可直接 warm；不回收的話每次樣式變更都漏一整組 metrics 在記憶體。
     final oldNamespace = _namespace;
     unawaited(
       _writeDiskMetrics(
@@ -532,15 +471,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final oldCache = _paragraphCache;
     _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     WidgetsBinding.instance.addPostFrameCallback((_) => oldCache.dispose());
-    // 舊索引的 extent 屬於已回收的舊 namespace；不清空的話重建到 restore
-    // 完成之間的幀會拿舊座標配空 metrics 觸發 I1。restore 會重定中心。
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
 
     _refreshEpochBinding();
     _warmedChapters.clear();
   }
-
-  // ---- runtime 事件 ----
 
   void _onRuntimeChanged() {
     if (!mounted) return;
@@ -572,8 +507,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  // ---- capture / restore（D5 條款 2；I6：一切重建以 HybridAnchor 為基準） ----
-
   ReaderV2Location? _captureForBridge() {
     final location = _captureVisibleLocation();
     if (location != null) _lastReportedLocation = location;
@@ -603,9 +536,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final block = blocks.blocks[hit.key.blockIndex];
     var lineTop = 0.0;
     var charOffset = block.charRange.start;
-    // hit.key 的 Paragraph 可能與同一連續排版 group 內的其他 block 共用；
-    // hit.offsetInBlock 是「這個 block 自己 Y 窗」內的座標，要先平移回
-    // 共用 Paragraph 的座標系（+entry.localTop）才能查行／查字元。
     final entry = _paragraphCache.acquireEntry(hit.key, _epoch);
     if (entry != null) {
       final paragraph = entry.paragraph;
@@ -622,7 +552,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           position.offset,
           groupTextLength,
         );
-        // 換算回這個 block 自己的 Y 窗座標，才能跟 hit.blockTop 相加。
         lineTop = (boxTop ?? line.top) - entry.localTop;
         final groupStart = group.first.charRange.start;
         final groupEnd = group.last.charRange.end;
@@ -641,18 +570,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       chapterIndex: hit.key.chapterIndex,
       charOffset: charOffset,
       visualOffsetPx: visual,
-    ).normalized(
-      chapterCount: widget.runtime.chapterCount,
-      chapterLength: blocks.displayText.length,
-    );
+    )
+        .normalized(
+          chapterCount: widget.runtime.chapterCount,
+          chapterLength: blocks.displayText.length,
+        )
+        .withContentIdentity(
+          contentHash: blocks.contentHash,
+          displayText: blocks.displayText,
+        );
   }
 
-  /// A short chapter can end before the visual anchor line while the viewport
-  /// is still at that chapter's physical start.  In that transition the
-  /// anchor hit points at the next chapter, but the reader has not scrolled
-  /// past the current chapter yet.  Keep the last reported chapter until the
-  /// scroll offset leaves its admitted range; otherwise opening a book at a
-  /// one-line preface is immediately persisted as chapter 1.
   ReaderV2Location? _preserveShortChapterAtBoundary({
     required DocumentOffsetHit? anchorHit,
     required double scrollOffset,
@@ -680,7 +608,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         revision == _runtimeLocationRevision &&
         (operation == null || runtime.isCurrentOperationToken(operation));
     if (!current() || runtime.chapterCount <= 0) return false;
-    // The explicit runtime intent owns the viewport, including a drag handoff.
     final controller = _scrollController;
     if (controller != null && controller.hasClients) {
       controller.position.jumpTo(controller.position.pixels);
@@ -704,10 +631,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final binding = _pump;
     _restorePinning = true;
     _prefetchGeneration += 1;
-    // Chapter repository prefetch is asynchronous and its loaded event can
-    // arrive after _restorePinning is released. Keep that event on the same
-    // bounded restore path until an ordinary settled scroll explicitly asks
-    // for the full lead window.
     _restorePrefetchBarrierActive = true;
     _restoreUserScrollObserved = false;
     bool still() =>
@@ -734,10 +657,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       // HybridScrollView's total itemExtentBuilder, not by a separate
       // total-extent callback (no such callback exists).
       _initialRestoreCompleted = false;
-
       _scheduleRebuild();
-      // 重定中心：admitted 度量由 store 回填（經 _ensureWindowTasks 的
-      // 連續段 direct-admit），上側走 center 負座標生長（I3）。
       _documentIndex.reset(centerKey: anchor.blockKey);
 
       _admission.reset(epoch: _epoch, chapterCount: runtime.chapterCount);
@@ -745,11 +665,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       for (final loadedBlocks in _blocks.values) {
         _admission.registerChapter(loadedBlocks);
       }
-      // restore 期間畫面停在 loading，_updateParagraphPins 不會執行；先清
-      // 舊 pin、預 pin 錨點，並開啟 submit-time pinning——不 pin 的話初始
-      // 視窗建置量超過快取容量時，LRU 會把首屏段落逐出（開書只剩錨點
-      // 一行、其餘佔位空白）。正式 build 的 _updateParagraphPins 會接手
-      // 重整 pin 集合。
       _paragraphCache
         ..unpinAll()
         ..pinKeys(<BlockKey>[anchor.blockKey], _epoch);
@@ -766,12 +681,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         visibleBottom: target + _viewportSize.height,
         cacheExtent: _viewportSize.height,
       );
+      _syncResidentRangeToViewport(
+        fallbackCenter: chapterIndex,
+        includeLead: false,
+      );
       _initialRestoreCompleted = true;
-      // Restore changes the document coordinate system and can complete
-      // without a scroll notification. Publish the new chapter immediately
-      // through the narrow progress channel; otherwise the page shell can
-      // keep showing the previous chapter label while the new content is
-      // already visible.
       _publishProgress();
       _scheduleRebuild();
       _schedulePump();
@@ -799,13 +713,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final target = blocks == null ? null : _offsetForAnchor(anchor, blocks);
       if (target == null) return false;
       final viewport = math.max(1.0, _viewportSize.height);
-      // Initial restore only needs enough admitted geometry to present the
-      // target viewport.  The full 3000/6000 logical-pixel lead is a normal
-      // scrolling safety window, not an initial-restore prerequisite.  A
-      // multi-chapter book can legitimately have only the bounded nearby
-      // chapters loaded at first open; requiring the full lead here makes a
-      // drained, presentable first viewport report `restored=false` before
-      // ordinary settled scrolling gets a chance to grow that window.
       final requiredTop = target;
       final requiredBottom = target + viewport;
       final hasTop = -_documentIndex.beforeExtent <= requiredTop;
@@ -814,45 +721,54 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           (hasBottom || _isBookEndAdmitted());
     }
 
-    var guard = 0;
-    while (guard++ < 600) {
-      if (!stillCurrent()) return false;
-      // A jump owns the viewport for the whole restore transaction.  The
-      // final drag/ballistic notifications from the old scroll position can
-      // still arrive while an async chapter load is completing; they must not
-      // change the pump back to dragging and starve the anchor task.  Ordinary
-      // user-drag restores never enter this method because beginRestore rejects
-      // them above.
+    while (stillCurrent()) {
       _pump.onScrollStateChanged(PumpState.rebuilding);
-      // A restore must not return with a tail of non-visible work already in
-      // the pump.  The old all-chapter enqueue path made the anchor ready
-      // while hundreds of groups still drained in the background, which is
-      // observable as real frame starvation and trips the existing bounded
-      // settle contract.  Restore batches are intentionally small, so drain
-      // the current batch before publishing completion.
       if (initialWindowReady() && _pump.queueDepth == 0) return true;
+
       final completed = await _pump.pumpPending();
+      if (!stillCurrent()) return false;
       if (completed != 0) continue;
-      // A zero result is only terminal when there is no queued work.  The
-      // governor may have observed the stale scroll state in the same turn;
-      // reasserting rebuilding above makes the next bounded pass eligible to
-      // consume the already-submitted anchor task.
       if (_pump.queueDepth > 0) continue;
+
       final pendingLoads = _blocksInFlight.values.toList(growable: false);
-      if (pendingLoads.isEmpty) {
-        final admittedBefore = _documentIndex.admittedCount;
+      if (pendingLoads.isNotEmpty) {
+        await Future.wait(pendingLoads);
+        if (!stillCurrent()) return false;
         _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
-        if (_pump.queueDepth == 0 &&
-            _documentIndex.admittedCount == admittedBefore) {
-          return initialWindowReady();
-        }
         continue;
       }
-      await Future.wait(pendingLoads);
-      if (!stillCurrent()) return false;
+
+      final admittedBefore = _documentIndex.admittedCount;
       _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+      if (_pump.queueDepth > 0 ||
+          _documentIndex.admittedCount != admittedBefore) {
+        continue;
+      }
+      if (initialWindowReady()) return true;
+
+      if (_expandRestoreResidency(anchor)) {
+        _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+        continue;
+      }
+      return false;
     }
-    return anchorReady();
+    return false;
+  }
+
+  bool _expandRestoreResidency(HybridAnchor anchor) {
+    final blocks = _blocks[anchor.chapterIndex];
+    final target = blocks == null ? null : _offsetForAnchor(anchor, blocks);
+    if (target == null) return false;
+    final viewport = math.max(1.0, _viewportSize.height);
+    final needsBackward =
+        -_documentIndex.beforeExtent > target && !_isBookStartAdmitted();
+    final needsForward =
+        _documentIndex.afterExtent < target + viewport &&
+        !_isBookEndAdmitted();
+    return _expandResidentRange(
+      backward: needsBackward,
+      forward: needsForward,
+    );
   }
 
   bool _isBookStartAdmitted() {
@@ -880,14 +796,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return top + lineTop - anchorLine + anchor.visualOffsetPx;
   }
 
-  /// 把「章節絕對 charOffset」換算成視覺上真正落點的
-  /// `(BlockKey, 這個 block 自己 Y 窗內的 local top)`。
-  ///
-  /// 純文字模型的 `blockForCharOffset` 只看 charRange；當人工效能切點落
-  /// 在一行中間時，那一整行仍完整畫在前一個切塊的 Y 窗裡（見
-  /// [LayoutPump._groupSplitYs]），此時字元的視覺歸屬與 charRange 歸屬
-  /// 不同。DocumentIndex 的座標以視覺歸屬為準，兩者不一致時必須以此為準
-  /// 才能讓 restore／TTS／ensureCharRangeVisible 卷到正確的世界座標。
   ({BlockKey key, double localTop})? _visualPositionForChar(
     ChapterBlocks blocks,
     int charOffsetInChapter,
@@ -952,8 +860,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return _pendingScrollOffset;
   }
 
-  // ---- 章節文字 → block 管線 ----
-
   Future<ChapterBlocks?> _ensureChapterBlocks(int chapterIndex) {
     final cached = _blocks[chapterIndex];
     if (cached != null) return Future<ChapterBlocks?>.value(cached);
@@ -974,9 +880,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       try {
         final text = await repository.load(chapterIndex);
         if (!current()) return null;
-        final blocks = await preprocessor.process(
+        final preprocessed = await preprocessor.process(
           text,
           maxBlockChars: maxBlockChars,
+        );
+        if (!current()) return null;
+        final spec = widget.runtime.state.layoutSpec;
+        final blocks = await binding.alignChapterBlocksToVisualLines(
+          preprocessed,
+          maxBlockChars: maxBlockChars,
+          bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
+            spec.style,
+            justify: AppConfig.readerV2ContentJustify,
+          ),
+          contentWidth: spec.contentWidth,
+          cellWidth: spec.cellWidth,
+          textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
         );
         if (!current()) return null;
         await _warmDiskMetricsForChapter(blocks);
@@ -1002,8 +921,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     switch (event.kind) {
       case ChapterEventKind.loaded:
         if (_restorePinning) return;
-        if ((event.chapterId - _windowCenter).abs() <=
-            _chapterRepo.windowRadius) {
+        if (_chapterRepo.isResident(event.chapterId)) {
           final restoreOnly = _restorePrefetchBarrierActive;
           final prefetchGeneration = _prefetchGeneration;
           final restoreTicket = _restoreTicket;
@@ -1027,13 +945,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         }
       case ChapterEventKind.evicted:
       case ChapterEventKind.invalidated:
-        // maxBlockChars 由 LayoutCostModel 即時校準推導，同一章重新載入時
-        // 可能切出不同的 block 邊界；evicted 與 invalidated 因此都必須清掉
-        // 舊 metrics／Paragraph，否則同一個 BlockKey 換到新切法後可能重用
-        // 舊切法量到的高度／文字（見任務規劃文件 Background）。DocumentIndex
-        // 與 AdmissionController 也要同步清該章已放行的座標與記住的舊章節
-        // 形狀，否則新 segmentation 缺席的舊高 blockIndex 會永遠殘留，錯誤
-        // 貢獻文檔幾何。
         _blocks.remove(event.chapterId);
         _blocksInFlight.remove(event.chapterId);
         _warmedChapters.removeWhere(
@@ -1053,12 +964,99 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (chapterIndex == _windowCenter) return;
     _windowCenter = chapterIndex;
     _prefetchGeneration += 1;
-    _chapterRepo.setPrefetchCenter(chapterIndex);
+    _syncResidentRangeToViewport(fallbackCenter: chapterIndex);
     _ensureWindowTasks();
     _schedulePump();
   }
 
-  // ---- 排版任務投放（admit 保持每側自 center 起連續，I2/I3 前提） ----
+  void _syncResidentRangeToViewport({
+    int? fallbackCenter,
+    bool includeLead = true,
+  }) {
+    final chapterCount = widget.runtime.chapterCount;
+    if (chapterCount <= 0) return;
+    final center = (fallbackCenter ?? _windowCenter)
+        .clamp(0, chapterCount - 1)
+        .toInt();
+    final radius = _chapterRepo.windowRadius;
+    var first = math.max(0, center - radius);
+    var last = math.min(chapterCount - 1, center + radius);
+
+    final offset = _effectiveScrollOffset();
+    if (offset != null &&
+        _viewportSize.height > 0 &&
+        _documentIndex.admittedCount > 0) {
+      final top = includeLead
+          ? offset - _admission.backwardGuaranteedWindow
+          : offset;
+      final bottom = includeLead
+          ? offset + _viewportSize.height + _admission.guaranteedWindow
+          : offset + _viewportSize.height;
+      for (final key in _documentIndex.keysInRange(top, bottom)) {
+        first = math.min(first, key.chapterIndex);
+        last = math.max(last, key.chapterIndex);
+      }
+      if (top < -_documentIndex.beforeExtent &&
+          !_admission.atBackwardBookBoundary) {
+        final edge = _documentIndex.backwardEdgeKey;
+        if (edge != null && edge.chapterIndex > 0) {
+          first = math.min(first, edge.chapterIndex - 1);
+        }
+      }
+      if (bottom > _documentIndex.afterExtent &&
+          !_admission.atForwardBookBoundary) {
+        final edge = _documentIndex.forwardEdgeKey;
+        if (edge != null && edge.chapterIndex + 1 < chapterCount) {
+          last = math.max(last, edge.chapterIndex + 1);
+        }
+      }
+    }
+    _chapterRepo.setResidentRange(first, last);
+  }
+
+  bool _expandResidentRange({
+    required bool backward,
+    required bool forward,
+  }) {
+    if (!backward && !forward) return false;
+    final chapterCount = widget.runtime.chapterCount;
+    if (chapterCount <= 0) return false;
+    final currentFirst = (_chapterRepo.residentFirst ?? _windowCenter)
+        .clamp(0, chapterCount - 1)
+        .toInt();
+    final currentLast = (_chapterRepo.residentLast ?? _windowCenter)
+        .clamp(currentFirst, chapterCount - 1)
+        .toInt();
+    final nextFirst = backward && currentFirst > 0
+        ? currentFirst - 1
+        : currentFirst;
+    final nextLast = forward && currentLast + 1 < chapterCount
+        ? currentLast + 1
+        : currentLast;
+    if (nextFirst == currentFirst && nextLast == currentLast) return false;
+    _chapterRepo.setResidentRange(nextFirst, nextLast);
+    return true;
+  }
+
+  List<int> _residentChaptersNearestCenter() {
+    final chapterCount = widget.runtime.chapterCount;
+    if (chapterCount <= 0) return const <int>[];
+    final first = (_chapterRepo.residentFirst ?? _windowCenter)
+        .clamp(0, chapterCount - 1)
+        .toInt();
+    final last = (_chapterRepo.residentLast ?? _windowCenter)
+        .clamp(first, chapterCount - 1)
+        .toInt();
+    final chapters = <int>[for (var index = first; index <= last; index++) index];
+    chapters.sort((a, b) {
+      final da = (a - _windowCenter).abs();
+      final db = (b - _windowCenter).abs();
+      final distance = da.compareTo(db);
+      if (distance != 0) return distance;
+      return b.compareTo(a);
+    });
+    return chapters;
+  }
 
   void _ensureWindowTasks({BlockKey? anchorKey, bool restoreOnly = false}) {
     if (restoreOnly) {
@@ -1069,14 +1067,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final prefetchGeneration = _prefetchGeneration;
     final restoreTicket = _restoreTicket;
     final requestCenter = _windowCenter;
-    // Restore still needs the nearest chapters when the current chapter is
-    // shorter than the guaranteed window. They use the same bounded group
-    // batches below; only the old unbounded whole-chapter submission is
-    // excluded.
-    final deltas = const <int>[0, 1, -1, 2, -2];
-    for (final delta in deltas) {
-      final chapter = _windowCenter + delta;
-      if (chapter < 0 || chapter >= widget.runtime.chapterCount) continue;
+    for (final chapter in _residentChaptersNearestCenter()) {
       final blocks = _blocks[chapter];
       if (blocks == null) {
         unawaited(
@@ -1091,7 +1082,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 )) {
               return;
             }
-            _enqueueChapterTasks(loaded, restoreOnly: restoreOnly);
+            _enqueueChapterTasks(
+              loaded,
+              anchorKey: loaded.chapterIndex == _windowCenter
+                  ? anchorKey
+                  : null,
+              restoreOnly: restoreOnly,
+            );
             _schedulePump();
           }),
         );
@@ -1099,7 +1096,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       _enqueueChapterTasks(
         blocks,
-        anchorKey: delta == 0 ? anchorKey : null,
+        anchorKey: chapter == _windowCenter ? anchorKey : null,
         restoreOnly: restoreOnly,
       );
     }
@@ -1125,7 +1122,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         prefetchGeneration != _prefetchGeneration ||
         restoreTicket != _restoreTicket ||
         requestCenter != _windowCenter ||
-        (chapterIndex - _windowCenter).abs() > _chapterRepo.windowRadius) {
+        !_chapterRepo.isResident(chapterIndex)) {
       return false;
     }
     if (restoreOnly) return _restorePrefetchBarrierActive;
@@ -1143,9 +1140,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     List<List<ChapterBlock>> forward;
     List<List<ChapterBlock>> backward;
     if (blocks.chapterIndex == centerKey.chapterIndex) {
-      // center 可能落在某個 group 中間；該 group 不可切半送 forward/
-      // backward 兩側（會破壞「group 只用一個 ui.Paragraph 連續排版」的
-      // 前提），因此整個含 center 的 group 一律算進 forward。
       var centerGroupIndex = groups.indexWhere(
         (group) => group.first.key <= centerKey && centerKey <= group.last.key,
       );
@@ -1194,11 +1188,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     List<List<ChapterBlock>> groups,
     int limit,
   ) {
-    // Skip groups that are already both admitted and fresh.  This makes a
-    // subsequent bounded pass advance its frontier instead of repeatedly
-    // looking at the first batch when metrics came from disk/cache.  The same
-    // frontier rule is used for restore and ordinary progressive prefetch so a
-    // queue drain can safely request the next batch without duplicating work.
     final firstPending = groups.indexWhere(
       (group) => group.any(
         (block) =>
@@ -1210,19 +1199,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return groups.skip(firstPending).take(limit).toList(growable: false);
   }
 
-  /// group 內每個 block 就緒（有 metrics + paragraph）且同側尚未斷檔 →
-  /// 整組直接 admit；否則整組送 pump（連續排版必須整組一起重建，不能
-  /// 只補其中一塊，否則會在切點退回獨立 Paragraph 的硬換行）。回傳
-  /// 「此側是否已斷檔」（斷檔後不得再 direct-admit，否則 DocumentIndex
-  /// 會出現中間洞，補齊時可見內容會位移，違反 I3）。
   bool _admitOrSubmitGroup(
     ChapterBlocks blocks,
     List<ChapterBlock> group, {
     required bool blocked,
     BlockKey? anchorKey,
   }) {
-    // pin 必須發生在建置之前：pumpPending 單一批次就可能建掉整個初始
-    // 視窗，put 之後才 pin 救不回批次途中已被 LRU 逐出的條目。
     if (_restorePinning) {
       _paragraphCache.pinKeys(<BlockKey>[for (final b in group) b.key], _epoch);
     }
@@ -1231,8 +1213,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         .where((b) => _documentIndex.metricsFor(b.key) == null)
         .toList(growable: false);
     if (notYetAdmitted.isEmpty) {
-      // 整組已 admit，只可能缺 paragraph（被 LRU 逐出）；缺就整組重建，
-      // 不影響既有座標與斷檔狀態。
       final missingParagraph = group.any(
         (b) => !_paragraphCache.containsFresh(b.key, _epoch, widget.textColor),
       );
@@ -1306,9 +1286,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: head.isTitle,
-          // em-grid 鎖寬後滿列天生切齊右緣，justify 只剩把避頭尾列殘差
-          // 攤進字距、破壞直行格線的副作用，內文預設 start 對齊；
-          // AppConfig 開關僅供真機對照。
           justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
         contentWidth: spec.contentWidth,
@@ -1319,11 +1296,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             ? HybridScrollDirection.backward
             : HybridScrollDirection.forward,
         indentChars: _indentCharsFor(head),
-        // 只有 group 真正的最後一塊（邏輯段落真正結尾）計入間距；
-        // group 內部的效能切點恆為 0（見 _trailingSpacingFor）。
         trailingSpacing: _trailingSpacingFor(blocks, last),
+        trailingLayoutLookahead: _layoutLookaheadAfter(blocks, last),
       ),
     );
+  }
+
+  String _layoutLookaheadAfter(ChapterBlocks blocks, ChapterBlock block) {
+    final nextIndex = block.blockIndex + 1;
+    if (nextIndex >= blocks.blocks.length) return '';
+    final next = blocks.blocks[nextIndex];
+    if (!next.isContinuation ||
+        !next.layoutBreakBefore ||
+        next.sourceParagraphIndex != block.sourceParagraphIndex ||
+        next.text.isEmpty) {
+      return '';
+    }
+    return String.fromCharCode(next.text.runes.first);
   }
 
   LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {
@@ -1341,8 +1330,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return widget.runtime.state.layoutSpec.style.textIndent.clamp(0, 8).toInt();
   }
 
-  /// 沿用舊引擎間距規則：標題後 = paragraphSpacing*8px（硬編碼特例）；
-  /// 段落後 = fontSize×行高×paragraphSpacing；超長段切塊之間零間距（D2）。
   double _trailingSpacingFor(ChapterBlocks blocks, ChapterBlock block) {
     final style = widget.runtime.state.layoutSpec.style;
     if (block.isTitle) return style.paragraphSpacing * 8;
@@ -1356,8 +1343,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     return style.fontSize * style.effectiveLineHeight * style.paragraphSpacing;
   }
-
-  // ---- pump 驅動 ----
 
   void _setPumpState(PumpState state) {
     _pump.onScrollStateChanged(state);
@@ -1375,39 +1360,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Future<void> _pumpOnce() async {
-    // 已排定的 post-frame pump 可能剛好撞上使用者開始拖曳；
-    // I4 在這裡硬停，待 ScrollEnd 再恢復，不能讓 debug assert 擊穿手勢。
     if (_dragging) return;
     final prefetchGeneration = _prefetchGeneration;
     await _pump.pumpPending();
     if (!mounted || _dragging || prefetchGeneration != _prefetchGeneration) {
-      // The pump may have yielded while a drag, restore, or epoch rebuild
-      // changed ownership of the viewport. Do not clear the new generation's
-      // admission set or refill it from the stale completion.
       return;
     }
     if (_pump.queueDepth > 0) {
       _schedulePump();
     } else {
-      // 佇列見底 → 允許之後的視窗掃描重新投放（處理段落被 LRU 逐出的重排）。
       if (!_canStartOrdinaryPrefetch()) return;
       _updateLeadTelemetry();
-      // A normal settled prefetch is progressive, but its next batch belongs
-      // to the next user-owned settle.  Do not recursively refill here just
-      // because the lead is still below its target: doing so makes a long
-      // chapter's bounded batches behave like one unbounded settle backlog.
-      // The next settle will call [_ensureWindowTasks] again, and the existing
-      // generation/ticket checks still reject callbacks from the old frontier.
     }
-    // 完成的排版經 admission 放行時由 DocumentIndex.revision 直驅 sliver
-    // relayout，這裡不再 setState 世界重建。
   }
 
   void _updateLeadTelemetry() {
-    // A pump that started before a chapter restore may resume after
-    // DocumentIndex.reset() but before the new viewport offset is installed.
-    // Its old scroll position is not meaningful in the new centered world;
-    // reading it here can trip AdmissionController I5 during a large jump.
     if (!_initialRestoreCompleted || _restorePinning) return;
     final offset = _effectiveScrollOffset();
     if (offset == null || _viewportSize.height <= 0) return;
@@ -1423,26 +1390,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  // ---- 滾動事件 / settle（D5 條款 3） ----
-
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
     if (notification is ScrollStartNotification) {
       if (notification.dragDetails != null) {
         if (_initialRestoreCompleted && !_restorePinning) {
-          // Invalidate ordinary async admissions that were started before the
-          // pointer went down.  The state check in the continuation protects
-          // the active drag; this generation bump also protects the case in
-          // which that continuation resumes after the drag has already been
-          // released.
           _prefetchGeneration += 1;
         }
         _dragging = true;
         _sawUserScroll = true;
         if (_restorePrefetchBarrierActive) {
-          // This drag began after the restore transaction. Its later
-          // ScrollEnd is the first ordinary user-owned settle allowed to
-          // request the full lead window.
           _restoreUserScrollObserved = true;
         }
         _runtimeLocationRevision += 1;
@@ -1472,24 +1429,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (_captureFramePending ||
         !mounted ||
         _restorePinning ||
-        widget.runtime.pendingLocation != null)
+        widget.runtime.pendingLocation != null) {
       return;
+    }
     _captureFramePending = true;
     final scheduledRevision = _runtimeLocationRevision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureFramePending = false;
       if (!mounted) return;
       if (!_initialRestoreCompleted || _restorePinning) return;
-      // Programmatic restore/jump can emit a scroll notification before the
-      // runtime publishes its target location.  That callback belongs to the
-      // old viewport address; letting it capture after completeReady would
-      // replace a short target chapter with the next chapter at the anchor
-      // line (for example the 34-byte preface followed by chapter 1).
       if (scheduledRevision != _runtimeLocationRevision) return;
       if (widget.runtime.pendingLocation != null) return;
-      // 動作中一律靜默 capture：runtime notify 會連鎖 ReaderV2Page 與本
-      // screen 的整面 setState（fling 中的節奏性重活）。頁面層滾動中需要
-      // 跟動的顯示走 progressListenable 窄通道；完整 notify 留給 settle。
       final location = _captureAndReport(notify: false);
       final offset = _effectiveScrollOffset();
       if (offset != null) {
@@ -1520,14 +1470,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!mounted || _dragging || !_initialRestoreCompleted || _restorePinning) {
       return;
     }
-    // A programmatic restore can emit ScrollEnd from _applyScrollOffset. The
-    // notification may be delivered after restoreLocked is released while
-    // the runtime still owns the viewport through pendingLocation.
-    // Treat that callback, and any inherited callback while the barrier is
-    // active, as restore-owned. The bounded restore pump has already drained
-    // the anchor/guaranteed viewport work; reopening the full lead here would
-    // recreate the long-chapter queue that C6 caught. A new post-restore drag
-    // (or an explicit ordinary movement) is the only release path.
     final restoreOwnedSettle =
         widget.runtime.pendingLocation != null ||
         (_restorePrefetchBarrierActive &&
@@ -1539,15 +1481,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final settleBarrier = _restorePrefetchBarrierActive;
     final location = _captureAndReport(notify: true);
     if (location != null) {
-      // settle 即刻落盤：背景 flush 靠不住（app 可能被系統回收）。
       final saved = await widget.runtime.saveProgress(
         location: location,
         immediate: true,
       );
       if (saved != null) _lastReportedLocation = saved;
-      // saveProgress yields.  A restore, a new drag, or a window shift can
-      // take ownership of the viewport while it is suspended; in that case
-      // this settle must not reopen ordinary prefetch from its old state.
       if (!mounted ||
           _dragging ||
           _restorePinning ||
@@ -1565,6 +1503,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _publishProgress();
     _updateLeadTelemetry();
     if (restoreOwnedSettle) {
+      _syncResidentRangeToViewport(includeLead: false);
       _ensureWindowTasks(
         anchorKey: _documentIndex.centerKey,
         restoreOnly: true,
@@ -1574,6 +1513,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     _restorePrefetchBarrierActive = false;
     _restoreUserScrollObserved = false;
+    _syncResidentRangeToViewport();
     _ensureWindowTasks();
     _schedulePump();
   }
@@ -1626,8 +1566,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     notifier.value = progress;
   }
-
-  // ---- D5 條款 1：七閉包 attach/detach（前六個經 FIFO 佇列） ----
 
   void _attachController() {
     widget.viewportController
@@ -1709,8 +1647,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final owner = _captureCommandOwner();
     bool current() => owner() && !_commands.isBusy;
     if (!current()) return Future<bool>.value(false);
-    // The TTS follower already owns the latest pending highlight. Returning
-    // false yields to user input without replaying obsolete work after a jump.
     return _ensureCharRangeVisibleNow(
       chapterIndex: chapterIndex,
       startCharOffset: startCharOffset,
@@ -1719,7 +1655,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
-  /// settleScroll 不經佇列（D5）：先停住殘餘慣性再走 settle。
   Future<void> _settleScroll() async {
     _runtimeLocationRevision += 1;
     final controller = _scrollController;
@@ -1787,6 +1722,62 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return isCurrent();
   }
 
+  Future<bool> _ensurePageDistanceAvailable({
+    required bool forward,
+    required double distance,
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent() || distance <= 0) return false;
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return false;
+
+    while (isCurrent()) {
+      final pixels = controller.position.pixels;
+      final available = forward
+          ? _documentIndex.afterExtent - pixels
+          : pixels + _documentIndex.beforeExtent;
+      final atBookBoundary = forward
+          ? _admission.atForwardBookBoundary
+          : _admission.atBackwardBookBoundary;
+      if (available + 0.5 >= distance || atBookBoundary) return true;
+
+      if (!_expandResidentRange(
+        backward: !forward,
+        forward: forward,
+      )) {
+        return false;
+      }
+
+      final restoreOnly = _restorePrefetchBarrierActive;
+      _ensureWindowTasks(
+        anchorKey: _documentIndex.centerKey,
+        restoreOnly: restoreOnly,
+      );
+
+      while (isCurrent()) {
+        final pendingLoads = _blocksInFlight.values.toList(growable: false);
+        if (pendingLoads.isNotEmpty) {
+          await Future.wait(pendingLoads);
+          if (!isCurrent()) return false;
+          _ensureWindowTasks(
+            anchorKey: _documentIndex.centerKey,
+            restoreOnly: restoreOnly,
+          );
+          continue;
+        }
+        if (_pump.queueDepth == 0) break;
+        final completed = await _pump.pumpPending();
+        if (!isCurrent()) return false;
+        if (completed == 0 && _pump.queueDepth > 0) return false;
+      }
+
+      WidgetsBinding.instance.ensureVisualUpdate();
+      await WidgetsBinding.instance.endOfFrame;
+      if (!isCurrent()) return false;
+    }
+    return false;
+  }
+
   Future<bool> _movePageNow({
     required bool forward,
     required bool Function() isCurrent,
@@ -1796,34 +1787,35 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (height <= 0) return false;
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
-    final before = controller.position.pixels;
     final style = widget.runtime.state.layoutSpec.style;
     final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
     final magnitude = math.max(height * 0.5, height - overlap - 8.0);
+
+    final reachable = await _ensurePageDistanceAvailable(
+      forward: forward,
+      distance: magnitude,
+      isCurrent: isCurrent,
+    );
+    if (!reachable || !isCurrent() || !controller.hasClients) return false;
+
+    final before = controller.position.pixels;
     final moved = await _animateByNow(
       forward ? magnitude : -magnitude,
       isCurrent,
     );
     if (!isCurrent()) return false;
     if (!moved) _emitBookBoundaryNotice(forward: forward);
-    if (!moved || !isCurrent() || !controller.hasClients) return false;
+    if (!moved || !controller.hasClients) return false;
 
     final after = controller.position.pixels;
     final atBookBoundary = forward
         ? _admission.atForwardBookBoundary
         : _admission.atBackwardBookBoundary;
-    final complete = isHybridPageMoveComplete(
+    return isHybridPageMoveComplete(
       requestedDistance: magnitude,
       actualDistance: (after - before).abs(),
       atBookBoundary: atBookBoundary,
     );
-    if (!complete) {
-      // 目前只到 lazy edge：不要讓 page coordinator／auto page 把短移動
-      // 當成完整一頁。settle 已安排下一輪 window/pump，這裡再確保尚有
-      // pending task 時會繼續供給；下一次翻頁命令即可重新嘗試。
-      _schedulePump();
-    }
-    return complete;
   }
 
   void _emitBookBoundaryNotice({required bool forward}) {
@@ -1841,8 +1833,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     widget.runtime.emitUserNotice(forward ? '已到書尾' : '已到書首');
   }
 
-  // ---- D5 條款 6：ensureCharRangeVisible ----
-
   Future<bool> _ensureCharRangeVisibleNow({
     required int chapterIndex,
     required int startCharOffset,
@@ -1858,14 +1848,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final end = math.max(startCharOffset, endCharOffset);
     final anchorKey = blocks.blockForCharOffset(start).key;
     if (_documentIndex.topOf(anchorKey) == null) {
-      // 目標不在目前 world（跨窗跳讀）：以 restore 流程重定中心過去。
       final ok = await _restoreCore(
         ReaderV2Location(chapterIndex: safeChapter, charOffset: start),
         isCurrent: isCurrent,
       );
-      // This is still the restore-owned transaction. Its bounded pump has
-      // already established the target; do not reopen the full lead window
-      // before the caller gives the viewport back to ordinary scrolling.
       if (ok && isCurrent()) await _handleScrollSettled();
       return ok && isCurrent();
     }
@@ -1922,8 +1908,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               (range.isEmpty && block.charRange.containsOffset(range.start));
         })
         .toList(growable: false);
-    // 逐 block 讀 ready 狀態，但缺件時整個 group 一起送 pump——只補其中
-    // 一塊會退回獨立 Paragraph，重新產生已修正的硬換行問題。
     final seenGroupHeads = <BlockKey>{};
     for (final block in targets) {
       if (_paragraphCache.contains(block.key, _epoch) &&
@@ -1945,10 +1929,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  /// [block] 內、與 [range] 相交的字元對應的 boxes；y 座標已從共用
-  /// Paragraph 的座標系換算回「這個 block 自己 Y 窗」座標（減去
-  /// entry.localTop），呼叫端不需要知道 block 是否與同 group 其他 block
-  /// 共用 ui.Paragraph。回傳 null 表示 Paragraph 尚未就緒。
   List<ui.TextBox>? _blockLocalBoxesForRange(
     ChapterBlocks blocks,
     ChapterBlock block,
@@ -2009,8 +1989,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return Rect.fromLTRB(0, top, 0, bottom);
   }
 
-  // ---- D5 條款 5：TTS 高亮 ----
-
   List<HybridLineBox> _ttsLineBoxes(ReaderV2TtsHighlight highlight) {
     final offset = _effectiveScrollOffset();
     final blocks = _blocks[highlight.chapterIndex];
@@ -2022,9 +2000,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (range.isEmpty) return const <HybridLineBox>[];
     final result = <HybridLineBox>[];
     final seenLines = <({BlockKey key, double top, double bottom})>{};
-    // ChapterBlocks preserves display-text order. Find the first possible
-    // overlap with binary search so a short TTS range does not rescan an
-    // entire long chapter on every scroll frame.
     final blockList = blocks.blocks;
     var low = 0;
     var high = blockList.length;
@@ -2071,8 +2046,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return result;
   }
 
-  // ---- D10：磁碟 metrics ----
-
   Future<void> _warmDiskMetricsForChapter(ChapterBlocks blocks) async {
     final bookUrl = widget.bookUrl;
     if (!widget.enableDiskMetrics || bookUrl == null) return;
@@ -2098,11 +2071,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           }
         },
       );
-      if (mounted && identical(binding, _pump))
+      if (mounted && identical(binding, _pump)) {
         _telemetry.recordDiskMetricsHit(count > 0);
-    } catch (_) {
-      // Disk metrics are disposable; live layout remains authoritative.
-    }
+      }
+    } catch (_) {}
   }
 
   Future<void> _writeDiskMetrics(
@@ -2110,8 +2082,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     required String? bookUrl,
     StyleFingerprint? fingerprint,
   }) async {
-    if (!widget.enableDiskMetrics || bookUrl == null || snapshot.isEmpty)
+    if (!widget.enableDiskMetrics || bookUrl == null || snapshot.isEmpty) {
       return;
+    }
     final targetFingerprint = fingerprint ?? _fingerprint;
     final chapterLayoutIdentities = <int, String>{
       for (final blocks in _blocks.values)
@@ -2125,9 +2098,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         metrics: snapshot,
         chapterLayoutIdentities: chapterLayoutIdentities,
       );
-    } catch (_) {
-      // Disk metrics are disposable; live layout remains authoritative.
-    }
+    } catch (_) {}
   }
 
   Future<MetricsDiskCache> _obtainDiskCache() async {
@@ -2136,8 +2107,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final directory = await getApplicationSupportDirectory();
     return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
   }
-
-  // ---- 建構 ----
 
   void _scheduleRebuild() {
     if (!mounted || _rebuildQueued) return;
@@ -2157,17 +2126,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _runtimeLocationRevision += 1;
       final pixels = controller.position.pixels;
       controller.position.jumpTo(pixels);
-      return true; // 動畫中的點擊只用來停住，不觸發分區動作。
+      return true;
     }
     return false;
   }
 
-  /// 找 dy 所在行（超出末行時回末行）。每個滾動幀都會進來——用單行查詢
-  /// API，不可用 computeLineMetrics（整串 LineMetrics 配置進熱路徑）。
   ({double top, double bottom})? _lineAt(ui.Paragraph paragraph, double dy) {
     final lineCount = paragraph.numberOfLines;
     if (lineCount <= 0) return null;
-    // x=0 取該行行首字元；y 由引擎 clamp 到首/末行。
     final position = paragraph.getPositionForOffset(Offset(0, dy));
     final lineNumber =
         (paragraph.getLineNumberAt(math.max(0, position.offset)) ??
@@ -2180,8 +2146,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return (top: lineTop, bottom: lineTop + line.height);
   }
 
-  /// capture 與 restore 必須共用同一種文字 box 幾何；混用 LineMetrics.top
-  /// 與 TextBox.top 會把字型 leading 的差值寫進 visualOffsetPx。
   double? _textBoxTopForOffset(
     ui.Paragraph paragraph,
     int textOffset,
@@ -2195,8 +2159,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return boxes.first.top;
   }
 
-  /// 高亮 overlay 的水平 padding 必須用 spec 調整後的值：em-grid 鎖寬把
-  /// 殘差平分回左右 padding，widget.style 仍是使用者原始設定。
   ReaderV2Style _overlayStyle() {
     final specStyle = widget.runtime.state.layoutSpec.style;
     return widget.style.copyWith(
@@ -2371,7 +2333,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         );
         _updateParagraphPins();
         final highlight = widget.ttsHighlight;
-        Widget visualContent = NotificationListener<ScrollNotification>(
+        final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
           child: HybridScrollView(
             centerKey: _centerKey,
@@ -2383,8 +2345,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             controller: controller,
             cacheExtent: _viewportSize.height,
             textColor: widget.textColor,
-            // 鎖寬後的置中殘差在 spec.style 的 padding 裡，
-            // 不可用 widget.style（使用者原始 padding）。
             horizontalPadding: EdgeInsets.only(
               left: state.layoutSpec.style.paddingLeft,
               right: state.layoutSpec.style.paddingRight,
@@ -2428,8 +2388,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 }
 
-/// Relative page/scroll commands are serial within one captured viewport owner.
-/// Semantic navigation, a new runtime, or a user gesture expires queued work.
 final class _HybridCommandQueue {
   Future<void>? _tail;
   bool get isBusy => _tail != null;

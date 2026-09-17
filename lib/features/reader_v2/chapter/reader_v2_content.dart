@@ -75,83 +75,182 @@ class ReaderV2Content {
   }
 }
 
-/// Remaps a reader location when the displayed content is re-materialized.
+/// Maps a persisted UTF-16 location between concrete `displayText` versions.
 ///
-/// Content conversion can change Dart's UTF-16 code-unit length (for example,
-/// a BMP character can become a supplementary CJK code point).  A raw
-/// `charOffset` therefore cannot be reused as a location in the new text.
-/// Sentence ordinal is stable across the existing replacement/conversion
-/// pipeline, while the proportional in-sentence offset preserves the user's
-/// approximate reading position without falling back to the chapter start.
+/// A scalar offset is only meaningful for the content identity it was captured
+/// against. The mapper stores a short two-sided text anchor with the content
+/// hash and length. When identity changes it resolves that anchor in the new
+/// text; sentence ordinals are deliberately not part of the contract, because
+/// replacement rules may insert/delete punctuation and line breaks.
 final class ReaderV2ContentLocationMapper {
   const ReaderV2ContentLocationMapper._();
 
-  static const String _sentenceTerminators = '。！？!?；;';
+  static const int _contextCodeUnits = 48;
   static const ChineseTextConverter _converter = ChineseTextConverter();
+
+  static ReaderV2Location capture({
+    required ReaderV2Location location,
+    required ReaderV2Content content,
+  }) {
+    return location
+        .normalized(chapterLength: content.displayText.length)
+        .withContentIdentity(
+          contentHash: content.contentHash,
+          displayText: content.displayText,
+          contextRadius: _contextCodeUnits,
+        );
+  }
+
+  static ReaderV2Location resolve({
+    required ReaderV2Location location,
+    required ReaderV2Content target,
+  }) {
+    final text = target.displayText;
+    if (location.contentHash == target.contentHash) {
+      return capture(location: location, content: target);
+    }
+
+    final oldLength = location.contentLength;
+    final projected = oldLength != null && oldLength > 0
+        ? (location.charOffset * text.length / oldLength)
+              .round()
+              .clamp(0, text.length)
+              .toInt()
+        : location.charOffset.clamp(0, text.length).toInt();
+    final mapped = _resolveTextAnchor(
+      text: text,
+      before: location.anchorBefore,
+      after: location.anchorAfter,
+      projectedOffset: projected,
+    );
+    final resolved = location.copyWith(
+      charOffset: mapped ?? projected,
+      clearContentIdentity: true,
+    );
+    return capture(location: resolved, content: target);
+  }
 
   static ReaderV2Location remap({
     required ReaderV2Location location,
     required ReaderV2Content before,
     required ReaderV2Content after,
   }) {
-    if (before.chapterIndex != after.chapterIndex ||
-        before.displayText == after.displayText) {
-      return location.normalized(chapterLength: after.displayText.length);
+    if (before.chapterIndex != after.chapterIndex) {
+      return resolve(
+        location: capture(location: location, content: before),
+        target: after,
+      );
     }
-
-    final oldSpans = _sentenceSpans(before.displayText);
-    final newSpans = _sentenceSpans(after.displayText);
-    if (oldSpans.isEmpty || newSpans.isEmpty) {
-      return location.normalized(chapterLength: after.displayText.length);
+    if (before.contentHash == after.contentHash) {
+      return capture(location: location, content: after);
     }
 
     final oldOffset = location.charOffset
         .clamp(0, before.displayText.length)
         .toInt();
-    final oldIndex = _spanIndexAt(oldSpans, oldOffset);
-    if (oldIndex < 0 || oldIndex >= newSpans.length) {
-      return location.normalized(chapterLength: after.displayText.length);
+    // Chinese conversion may change UTF-16 length while leaving the canonical
+    // text identical. Preserve the exact canonical prefix in that case before
+    // falling back to the content anchor used for arbitrary replacements.
+    final canonicalOffset = _mapCanonicalEquivalent(
+      before: before.displayText,
+      after: after.displayText,
+      oldOffset: oldOffset,
+    );
+    if (canonicalOffset != null) {
+      return capture(
+        location: location.copyWith(
+          charOffset: canonicalOffset,
+          clearContentIdentity: true,
+        ),
+        content: after,
+      );
     }
 
-    final oldSpan = oldSpans[oldIndex];
-    final newSpan = newSpans[oldIndex];
-    final oldLength = oldSpan.end - oldSpan.start;
-    final relativeOffset = (oldOffset - oldSpan.start)
-        .clamp(0, oldLength)
-        .toInt();
-    final mappedRelativeOffset = _mapWithinEquivalentSentence(
-      oldSentence: before.displayText.substring(oldSpan.start, oldSpan.end),
-      newSentence: after.displayText.substring(newSpan.start, newSpan.end),
-      oldRelativeOffset: relativeOffset,
+    return resolve(
+      location: capture(location: location, content: before),
+      target: after,
     );
-
-    return location
-        .copyWith(charOffset: newSpan.start + mappedRelativeOffset)
-        .normalized(chapterLength: after.displayText.length);
   }
 
-  static int _mapWithinEquivalentSentence({
-    required String oldSentence,
-    required String newSentence,
-    required int oldRelativeOffset,
+  static int? _resolveTextAnchor({
+    required String text,
+    required String? before,
+    required String? after,
+    required int projectedOffset,
+  }) {
+    final left = before ?? '';
+    final right = after ?? '';
+    if (left.isEmpty && right.isEmpty) return null;
+
+    if (left.isNotEmpty && right.isNotEmpty) {
+      final combined = '$left$right';
+      final matches = _allOccurrences(text, combined)
+          .map((start) => start + left.length)
+          .toList(growable: false);
+      if (matches.isNotEmpty) return _nearest(matches, projectedOffset);
+    }
+
+    final candidates = <int>[];
+    if (left.isNotEmpty) {
+      candidates.addAll(
+        _allOccurrences(text, left).map((start) => start + left.length),
+      );
+    }
+    if (right.isNotEmpty) {
+      candidates.addAll(_allOccurrences(text, right));
+    }
+    if (candidates.isEmpty) return null;
+    return _nearest(candidates, projectedOffset);
+  }
+
+  static Iterable<int> _allOccurrences(String text, String needle) sync* {
+    if (needle.isEmpty) return;
+    var start = 0;
+    while (start <= text.length - needle.length) {
+      final found = text.indexOf(needle, start);
+      if (found < 0) return;
+      yield found;
+      start = found + 1;
+    }
+  }
+
+  static int _nearest(Iterable<int> candidates, int target) {
+    var best = candidates.first;
+    var bestDistance = (best - target).abs();
+    for (final candidate in candidates.skip(1)) {
+      final distance = (candidate - target).abs();
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  static int? _mapCanonicalEquivalent({
+    required String before,
+    required String after,
+    required int oldOffset,
   }) {
     for (final canonicalType in <int>[1, 2]) {
       final oldCanonical = _converter.convert(
-        oldSentence,
+        before,
         convertType: canonicalType,
       );
       final newCanonical = _converter.convert(
-        newSentence,
+        after,
         convertType: canonicalType,
       );
       if (oldCanonical != newCanonical) continue;
 
-      final oldPrefix = _converter.convert(
-        oldSentence.substring(0, oldRelativeOffset),
-        convertType: canonicalType,
-      );
-      final canonicalOffset = oldPrefix.length;
-      final boundaries = _codeUnitBoundaries(newSentence);
+      final safeOldOffset = _safeBoundaryAtOrBefore(before, oldOffset);
+      final canonicalPrefixLength = _converter
+          .convert(
+            before.substring(0, safeOldOffset),
+            convertType: canonicalType,
+          )
+          .length;
+      final boundaries = _codeUnitBoundaries(after);
       var low = 0;
       var high = boundaries.length - 1;
       while (low <= high) {
@@ -159,32 +258,21 @@ final class ReaderV2ContentLocationMapper {
         final rawOffset = boundaries[middle];
         final canonicalLength = _converter
             .convert(
-              newSentence.substring(0, rawOffset),
+              after.substring(0, rawOffset),
               convertType: canonicalType,
             )
             .length;
-        if (canonicalLength < canonicalOffset) {
+        if (canonicalLength < canonicalPrefixLength) {
           low = middle + 1;
-        } else if (canonicalLength > canonicalOffset) {
+        } else if (canonicalLength > canonicalPrefixLength) {
           high = middle - 1;
         } else {
           return rawOffset;
         }
       }
-      // A malformed or ambiguous conversion boundary should still stay in
-      // the matched sentence, but is not allowed to split a surrogate pair.
-      final nearestIndex = high.clamp(0, boundaries.length - 1).toInt();
-      return boundaries[nearestIndex];
+      return boundaries[high.clamp(0, boundaries.length - 1).toInt()];
     }
-
-    // Replacement rules are not expected to alter sentence boundaries. This
-    // proportional fallback is only for a changed sentence that cannot be
-    // normalized to a common Chinese conversion form.
-    if (oldSentence.isEmpty) return 0;
-    return (oldRelativeOffset * newSentence.length / oldSentence.length)
-        .round()
-        .clamp(0, newSentence.length)
-        .toInt();
+    return null;
   }
 
   static List<int> _codeUnitBoundaries(String text) {
@@ -197,24 +285,16 @@ final class ReaderV2ContentLocationMapper {
     return boundaries;
   }
 
-  static List<({int start, int end})> _sentenceSpans(String text) {
-    if (text.isEmpty) return const <({int start, int end})>[];
-    final spans = <({int start, int end})>[];
-    var start = 0;
-    for (var index = 0; index < text.length; index += 1) {
-      if (!_sentenceTerminators.contains(text[index])) continue;
-      spans.add((start: start, end: index + 1));
-      start = index + 1;
-    }
-    if (start < text.length) spans.add((start: start, end: text.length));
-    return spans;
+  static int _safeBoundaryAtOrBefore(String text, int offset) {
+    final safe = offset.clamp(0, text.length).toInt();
+    if (safe <= 0 || safe >= text.length) return safe;
+    final previous = text.codeUnitAt(safe - 1);
+    final next = text.codeUnitAt(safe);
+    return _isHighSurrogate(previous) && _isLowSurrogate(next)
+        ? safe - 1
+        : safe;
   }
 
-  static int _spanIndexAt(List<({int start, int end})> spans, int offset) {
-    for (var index = 0; index < spans.length; index += 1) {
-      final span = spans[index];
-      if (offset >= span.start && offset < span.end) return index;
-    }
-    return offset == spans.last.end ? spans.length - 1 : -1;
-  }
+  static bool _isHighSurrogate(int value) => value >= 0xD800 && value <= 0xDBFF;
+  static bool _isLowSurrogate(int value) => value >= 0xDC00 && value <= 0xDFFF;
 }

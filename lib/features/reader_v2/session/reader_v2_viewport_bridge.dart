@@ -80,8 +80,15 @@ class ReaderV2ViewportBridge {
       chapterCount: _runtime.repository.chapterCount,
     );
     if (normalized == _runtime.state.committedLocation) {
+      // ReaderV2Location equality intentionally describes viewport geometry,
+      // not the persisted content identity. The same chapter/offset can now
+      // point into a new displayText version, so an unchanged viewport must
+      // still pass through ProgressController: it enriches readerAnchorJson
+      // from the exact cached ReaderV2Content before writing.
       if (immediate) {
-        await _runtime.progressController.flush();
+        await _runtime.progressController.saveImmediately(normalized);
+      } else {
+        _runtime.progressController.schedule(normalized);
       }
       return normalized;
     }

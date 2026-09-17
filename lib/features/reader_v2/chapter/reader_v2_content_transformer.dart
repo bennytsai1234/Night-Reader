@@ -26,28 +26,45 @@ import 'reader_v2_processed_chapter.dart';
 String normalizeTypography(String input, {bool preserveCjkSpaces = false}) {
   if (input.isEmpty) return input;
 
-  final cleaned = StringBuffer();
   final lineNormalized = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-  for (final rune in lineNormalized.runes) {
-    if (rune == 0x0A) {
-      cleaned.write('\n');
-      continue;
-    }
+  return lineNormalized
+      .split('\n')
+      .map(
+        (line) => _normalizeTypographyLine(
+          line,
+          preserveCjkSpaces: preserveCjkSpaces,
+        ),
+      )
+      .join('\n');
+}
+
+String _normalizeTypographyLine(
+  String line, {
+  required bool preserveCjkSpaces,
+}) {
+  final sourceRunes = line.runes.toList(growable: false);
+  // The public contract is intentionally asymmetric: CJK text is normalized
+  // for the em-grid, while a Western/other-script line remains source text.
+  // Ambiguous punctuation such as a single ellipsis/em-dash is not enough to
+  // classify the whole line as CJK; otherwise Western spacing/control/emoji
+  // shaping can be changed before the local punctuation rules even run.
+  if (!_hasCjkLineContext(sourceRunes)) return line;
+
+  final cleaned = StringBuffer();
+  for (final rune in sourceRunes) {
     if (rune == 0x09 || rune == 0x00A0 || rune == 0x3000) {
       cleaned.write(' ');
       continue;
     }
-    if (_isInvisibleTypographyRune(rune) || _isControlRune(rune)) {
-      continue;
-    }
+    if (_isControlRune(rune)) continue;
+    // Keep the historical cleanup of zero-width spacing/BOM noise in CJK
+    // material, but never delete ZWNJ/ZWJ: those code points participate in
+    // shaping and emoji clusters and are therefore source semantics.
+    if (rune == 0x200B || rune == 0xFEFF) continue;
     cleaned.write(String.fromCharCode(rune));
   }
 
-  var result = cleaned
-      .toString()
-      .split('\n')
-      .map((line) => line.replaceAll(RegExp(r' +'), ' '))
-      .join('\n');
+  var result = cleaned.toString().replaceAll(RegExp(r' +'), ' ');
   result = _normalizeEllipsis(result);
   result = _normalizeDashes(result);
   result = _normalizeCjkPunctuation(result);
@@ -62,11 +79,41 @@ String normalizeTypography(String input, {bool preserveCjkSpaces = false}) {
   return result;
 }
 
-bool _isInvisibleTypographyRune(int rune) {
-  return rune == 0x200B || // ZERO WIDTH SPACE
-      rune == 0x200C || // ZERO WIDTH NON-JOINER
-      rune == 0x200D || // ZERO WIDTH JOINER
-      rune == 0xFEFF; // ZERO WIDTH NO-BREAK SPACE / BOM
+bool _hasCjkLineContext(List<int> runes) {
+  if (runes.any(_isStrongCjkLineRune)) return true;
+
+  // `…` and `—` are shared Western/CJK punctuation and cannot by themselves
+  // claim ownership of an entire line. Keep the existing punctuation-only
+  // Chinese-dialogue contract for the conventional “……” / “——” forms, but
+  // only when the line has no Latin letter/digit that would make the context
+  // genuinely ambiguous.
+  if (runes.any(_isLatinLetterOrDigit)) return false;
+  final hasCurlyQuote = runes.any((rune) => rune == 0x201C || rune == 0x201D);
+  if (!hasCurlyQuote) return false;
+  for (var index = 0; index + 1 < runes.length; index += 1) {
+    final rune = runes[index];
+    final next = runes[index + 1];
+    final doubleEllipsis =
+        (rune == 0x2026 || rune == 0x22EF) &&
+        (next == 0x2026 || next == 0x22EF);
+    final doubleEmDash = rune == 0x2014 && next == 0x2014;
+    if (doubleEllipsis || doubleEmDash) return true;
+  }
+  return false;
+}
+
+bool _isStrongCjkLineRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x1100 && rune <= 0x11FF) || // Hangul Jamo
+      (rune >= 0x3000 && rune <= 0x303F) || // CJK punctuation
+      (rune >= 0x3040 && rune <= 0x30FF) || // Hiragana/Katakana
+      (rune >= 0x3100 && rune <= 0x312F) || // Bopomofo
+      (rune >= 0x3130 && rune <= 0x318F) || // Hangul compatibility Jamo
+      (rune >= 0x31A0 && rune <= 0x31BF) || // Bopomofo extended
+      (rune >= 0x31F0 && rune <= 0x31FF) || // Katakana extensions
+      (rune >= 0xAC00 && rune <= 0xD7AF) || // Hangul syllables
+      (rune >= 0xFF00 && rune <= 0xFF60); // Full-width/CJK forms
 }
 
 bool _isControlRune(int rune) {
@@ -79,28 +126,43 @@ String _normalizeEllipsis(String input) {
   final output = StringBuffer();
   for (var index = 0; index < runes.length; index += 1) {
     final rune = runes[index];
-    if (_isEllipsisDot(rune)) {
-      var end = index + 1;
-      while (end < runes.length && _isEllipsisDot(runes[end])) {
-        end += 1;
-      }
-      if (end - index >= 3) {
-        output.write('……');
-        index = end - 1;
-        continue;
-      }
-    }
-    if (rune == 0x2026 || rune == 0x22EF) {
-      output.write('……');
-      if (index + 1 < runes.length &&
-          (runes[index + 1] == 0x2026 || runes[index + 1] == 0x22EF)) {
-        index += 1;
-      }
+    if (!_isEllipsisRune(rune)) {
+      output.write(String.fromCharCode(rune));
       continue;
     }
-    output.write(String.fromCharCode(rune));
+
+    var end = index + 1;
+    while (end < runes.length && _isEllipsisRune(runes[end])) {
+      end += 1;
+    }
+    final runLength = end - index;
+    final containsGlyph = runes
+        .sublist(index, end)
+        .any((value) => value == 0x2026 || value == 0x22EF);
+    final containsCjkSpecificDot = runes
+        .sublist(index, end)
+        .any((value) => value == 0xFF0E || value == 0x3002);
+    final candidate = containsGlyph || runLength >= 3;
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, end - 1, 1);
+    final hasCjkContext =
+        containsCjkSpecificDot ||
+        _isCjkContextRune(previous) ||
+        _isCjkContextRune(next);
+    if (candidate && hasCjkContext) {
+      output.write('……');
+    } else {
+      for (var cursor = index; cursor < end; cursor += 1) {
+        output.write(String.fromCharCode(runes[cursor]));
+      }
+    }
+    index = end - 1;
   }
   return output.toString();
+}
+
+bool _isEllipsisRune(int rune) {
+  return _isEllipsisDot(rune) || rune == 0x2026 || rune == 0x22EF;
 }
 
 bool _isEllipsisDot(int rune) {
@@ -594,9 +656,6 @@ class ReaderV2ContentTransformer {
       'chineseConvertType': chineseConvertType,
     };
 
-    // 首選：常駐 worker isolate。免去每章 compute spawn，且簡繁轉換也在
-    // worker 內完成（字典由主 isolate 送入初始化一次），主執行緒只剩訊息
-    // 收發——fling 減速期間的內容預載不再佔用幀預算。
     final workerResult = await ReaderV2ContentTransformWorker.instance.process(
       args,
     );
@@ -604,8 +663,6 @@ class ReaderV2ContentTransformer {
       return _decodeProcessed(workerResult);
     }
 
-    // 退回路徑（worker 不可用）：行為與舊版完全相同——compute 一次性
-    // isolate 做替換/重分段，簡繁轉換因字典只在主 isolate 而留在主執行緒。
     final result = await compute(_processInBackground, args);
     final processed = _decodeProcessed(result);
     if (chineseConvertType == 0) return processed;
@@ -890,13 +947,10 @@ class ReaderV2ContentTransformWorker {
         ChineseUtils.dictionaryAssetPaths.map(rootBundle.loadString),
       );
     } catch (_) {
-      // 測試環境或 asset 缺失：worker 內簡繁轉換退化為直通（與主 isolate
-      // 字典未初始化時的行為一致）。
       return null;
     }
   }
 
-  /// 轉換一章；回傳 null 代表 worker 不可用，呼叫端應退回 compute 路徑。
   Future<Map<String, Object?>?> process(Map<String, Object?> args) async {
     if (debugDisableWorker || _broken) return null;
     SendPort? commands;
@@ -946,8 +1000,6 @@ class ReaderV2ContentTransformWorker {
         );
         return;
       }
-      // onError（List）或 onExit（null）：worker 已不可信，讓所有等待者
-      // 退回 compute 路徑。
       if (!handshake.isCompleted) handshake.complete(null);
       _markBroken();
     });
@@ -967,8 +1019,6 @@ class ReaderV2ContentTransformWorker {
     }
     final commands = await handshake.future;
     if (commands == null) return null;
-    // 字典訊息先於任何 process 訊息送出（同一 port 依序送達），worker 收到
-    // 第一章之前必已完成初始化。
     final dictionaryData = await dictionaryDataLoader();
     if (dictionaryData != null && dictionaryData.length == 4) {
       commands.send(<String, Object?>{'type': 'dict', 'data': dictionaryData});
@@ -989,7 +1039,6 @@ class ReaderV2ContentTransformWorker {
     _isolate = null;
   }
 
-  /// 測試鉤子：關掉現有 worker 並重設狀態，讓下一次 process 重新 spawn。
   @visibleForTesting
   void debugReset() {
     _markBroken();

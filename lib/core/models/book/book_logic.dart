@@ -30,6 +30,11 @@ extension BookLogic on Book {
               : durChapterTitle,
       charOffset: charOffset,
       visualOffsetPx: visualOffsetPx,
+      // The text context still describes the same semantic reading point, but
+      // chapter alignment may assign it a different index in the new source.
+      // Rewrite only that ownership coordinate; the target Reader V2 runtime
+      // will resolve the old content identity/context against the new text.
+      readerAnchorJson: _migratedReaderAnchor(alignedIndex),
       durChapterTime: durChapterTime,
       group: group,
       order: order,
@@ -40,6 +45,22 @@ extension BookLogic on Book {
       readConfig: readConfig,
       isInBookshelf: isInBookshelf,
     );
+  }
+
+  String? _migratedReaderAnchor(int alignedIndex) {
+    final encoded = readerAnchorJson;
+    if (encoded == null || encoded.isEmpty) return encoded;
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) return encoded;
+      final anchor = Map<String, dynamic>.from(decoded);
+      anchor['chapterIndex'] = alignedIndex;
+      anchor['charOffset'] = charOffset;
+      anchor['visualOffsetPx'] = visualOffsetPx;
+      return jsonEncode(anchor);
+    } catch (_) {
+      return encoded;
+    }
   }
 
   int _getDurChapter(

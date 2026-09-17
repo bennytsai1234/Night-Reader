@@ -265,8 +265,9 @@ class ReaderV2Runtime extends ChangeNotifier {
         location: location,
         token: token,
       );
-      if (!restored)
+      if (!restored) {
         failOperation(token, StateError('Hybrid viewport restore failed.'));
+      }
       return restored;
     } catch (error) {
       failOperation(token, error);
@@ -310,8 +311,9 @@ class ReaderV2Runtime extends ChangeNotifier {
         );
         if (restored ||
             !isCurrentOperationToken(token) ||
-            state.phase == ReaderV2Phase.error)
+            state.phase == ReaderV2Phase.error) {
           return;
+        }
       }
       await navigation.jumpToLocation(
         location,
@@ -623,22 +625,27 @@ class ReaderV2Runtime extends ChangeNotifier {
         .toInt();
     final content = await repository.loadContent(chapterIndex);
     if (!isCurrentOperationToken(token)) return false;
-    final normalized =
-        ReaderV2Location(
-          chapterIndex: chapterIndex,
-          charOffset: location.charOffset,
-          visualOffsetPx: location.visualOffsetPx,
-        ).normalized(
-          chapterCount: chapterCount,
-          chapterLength: content.displayText.length,
-        );
+
+    // `charOffset` is meaningful only in the display-text identity that owned
+    // it when captured. Resume/source-switch locations carry that identity and
+    // a two-sided text anchor. Resolve it against the exact target content
+    // before the viewport sees the coordinate. Plain chapter/bookmark jumps
+    // have no identity, so resolve() preserves their scalar offset.
+    final resolved = ReaderV2ContentLocationMapper.resolve(
+      location: location.copyWith(chapterIndex: chapterIndex),
+      target: content,
+    ).normalized(
+      chapterCount: chapterCount,
+      chapterLength: content.displayText.length,
+    );
+
     final restore = viewportBridge.viewportRestore;
     if (restore == null) return false;
     AppLog.d(
       'Reader hybrid viewport restore start op=${token.id} '
-      'target=${normalized.chapterIndex}',
+      'target=${resolved.chapterIndex}',
     );
-    final restored = await restore(normalized);
+    final restored = await restore(resolved);
     AppLog.d(
       'Reader hybrid viewport restore done op=${token.id} restored=$restored '
       'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
@@ -648,7 +655,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (!isCurrentOperationToken(token)) return false;
     final completed = completeReadyOperation(
       token,
-      visibleLocation: normalized,
+      visibleLocation: resolved,
     );
     AppLog.d(
       'Reader hybrid viewport complete op=${token.id} completed=$completed '

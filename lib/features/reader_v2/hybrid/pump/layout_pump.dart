@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
@@ -12,11 +13,6 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
-/// 一個 LayoutTask 從開始建立 Paragraph 到 metrics 回寫完成的實測資料。
-///
-/// 這不是功能邏輯的另一條路徑，只是把既有 pump 的同步工作切點暴露給
-/// telemetry，讓 120Hz 的 P99 掉幀可以回溯到「哪種 task、多少字、預估錯
-/// 多少」，而不是只看到 frame 已經超時。
 final class LayoutPumpTaskStats {
   const LayoutPumpTaskStats({
     required this.elapsed,
@@ -39,24 +35,10 @@ final class LayoutPump implements HybridLayoutPump {
   @visibleForTesting
   static void Function()? debugOnIntermediateParagraphDisposed;
 
-  /// 避免短末行因少數字元而被拉得過鬆；單位為 logical pixels。
   static const double lastLineLetterSpacingCap = 2.0;
-
-  /// group 內多個效能切點同落在同一實體行時，切點之間的 own height 合法
-  /// 為 0（該行整行畫在別的切塊視窗裡，見 [_groupSplitYs]）。`BlockMetrics`
-  /// 要求 height > 0（sliver extent／admission 需要每個 block 佔據可辨識的
-  /// 座標），因此改用遠低於既有幾何測試容差（0.01px）的極小正值頂住，不能
-  /// 像過去那樣頂到 1.0px——多個零高度切點疊加會讓整組總高度多出好幾個
-  /// 人工像素，使切法之後的世界座標系統性偏移於連續排版。
   static const double _minBlockHeight = 1e-6;
-
   static final Map<String, double> _cellWidthCache = <String, double>{};
 
-  /// em-grid 鎖寬的 cell 來源：以真實引擎量「一一」兩字的 x 差取得目前
-  /// 內文樣式下單一全形字的 advance（含 letterSpacing）。必須與 [_textStyle]
-  /// 同一組字型鏈與 fontFeatures，否則鎖出來的格與實排不同步；也因此
-  /// 不可用 fontSize + letterSpacing 公式推算（次像素差乘上每列字數會
-  /// 累積回漂移）。量測失敗回 null（呼叫端不鎖寬）。
   static double? measureCellWidth({
     required double fontSize,
     required double letterSpacing,
@@ -138,11 +120,280 @@ final class LayoutPump implements HybridLayoutPump {
   final StreamController<BlockReady> _completed =
       StreamController<BlockReady>.broadcast(sync: true);
   PumpState _state = PumpState.idle;
+  int _stateRevision = 0;
   bool _disposed = false;
 
   int get queueDepth => _queue.length;
 
   int maxCharsForBudget(Duration budget) => _costModel.maxCharsFor(budget);
+
+  /// Converts arbitrary preprocessor chunks into actual layout transactions.
+  ///
+  /// Preprocessing is allowed to split at UTF-16-safe text boundaries for
+  /// scheduling, but those boundaries are not layout boundaries. A long
+  /// logical paragraph is measured in bounded probes and is only separated at
+  /// visual line starts. This keeps wrapping identical while preventing
+  /// `paragraphGroups()` from reconstructing the entire logical paragraph into
+  /// one synchronous ui.Paragraph.layout transaction.
+  ///
+  /// `maxBlockChars` is a target transaction size rather than permission to
+  /// split a visual line. If one visual line itself exceeds the target, the
+  /// smallest correct transaction is that line; correctness wins over an
+  /// artificial code-unit cut.
+  Future<ChapterBlocks> alignChapterBlocksToVisualLines(
+    ChapterBlocks source, {
+    required int maxBlockChars,
+    required HybridBlockTextStyle bodyStyle,
+    required double contentWidth,
+    required double? cellWidth,
+    required int textIndent,
+  }) async {
+    if (_disposed || maxBlockChars <= 0) return source;
+    final ownerRevision = _stateRevision;
+
+    void ensureLayoutOwnership() {
+      if (_disposed ||
+          _state == PumpState.dragging ||
+          _stateRevision != ownerRevision) {
+        throw StateError('Reader V2 layout ownership changed during segmentation.');
+      }
+    }
+
+    ensureLayoutOwnership();
+    final result = <ChapterBlock>[];
+    var blockIndex = 0;
+    var frameWork = Stopwatch()..start();
+
+    Future<void> yieldIfBudgetConsumed() async {
+      ensureLayoutOwnership();
+      final budget = math.max(
+        1,
+        _governor.frameBudgetMicros(PumpState.rebuilding),
+      );
+      if (frameWork.elapsedMicroseconds < budget) return;
+      _governor.recordPumpWork(frameWork.elapsed);
+      SchedulerBinding.instance.ensureVisualUpdate();
+      await SchedulerBinding.instance.endOfFrame;
+      ensureLayoutOwnership();
+      frameWork = Stopwatch()..start();
+    }
+
+    for (final semanticGroup in source.paragraphGroups()) {
+      ensureLayoutOwnership();
+      final head = semanticGroup.first;
+      final text = semanticGroup.map((block) => block.text).join();
+      final groupStart = semanticGroup.first.charRange.start;
+      final groupEnd = semanticGroup.last.charRange.end;
+      if (head.isTitle || text.length <= maxBlockChars) {
+        result.add(
+          ChapterBlock(
+            key: BlockKey(
+              chapterIndex: source.chapterIndex,
+              blockIndex: blockIndex++,
+            ),
+            text: text,
+            charRange: HybridTextRange(groupStart, groupEnd),
+            sourceParagraphIndex: head.sourceParagraphIndex,
+            isTitle: head.isTitle,
+            isContinuation: head.isContinuation,
+            layoutBreakBefore: head.layoutBreakBefore,
+          ),
+        );
+        continue;
+      }
+
+      final segments = await _visualLineSegments(
+        text: text,
+        maxBlockChars: maxBlockChars,
+        textStyle: bodyStyle,
+        contentWidth: contentWidth,
+        cellWidth: cellWidth,
+        textIndent: head.isContinuation ? 0 : textIndent,
+        ensureLayoutOwnership: ensureLayoutOwnership,
+        yieldIfBudgetConsumed: yieldIfBudgetConsumed,
+      );
+      ensureLayoutOwnership();
+      for (var index = 0; index < segments.length; index += 1) {
+        final segment = segments[index];
+        result.add(
+          ChapterBlock(
+            key: BlockKey(
+              chapterIndex: source.chapterIndex,
+              blockIndex: blockIndex++,
+            ),
+            text: text.substring(segment.start, segment.end),
+            charRange: HybridTextRange(
+              groupStart + segment.start,
+              groupStart + segment.end,
+            ),
+            sourceParagraphIndex: head.sourceParagraphIndex,
+            isTitle: false,
+            isContinuation: head.isContinuation || index > 0,
+            layoutBreakBefore: head.layoutBreakBefore || index > 0,
+          ),
+        );
+      }
+    }
+
+    ensureLayoutOwnership();
+    _governor.recordPumpWork(frameWork.elapsed);
+    return ChapterBlocks(
+      chapterIndex: source.chapterIndex,
+      title: source.title,
+      displayText: source.displayText,
+      contentHash: source.contentHash,
+      blocks: result,
+    );
+  }
+
+  Future<List<({int start, int end})>> _visualLineSegments({
+    required String text,
+    required int maxBlockChars,
+    required HybridBlockTextStyle textStyle,
+    required double contentWidth,
+    required double? cellWidth,
+    required int textIndent,
+    required void Function() ensureLayoutOwnership,
+    required Future<void> Function() yieldIfBudgetConsumed,
+  }) async {
+    final segments = <({int start, int end})>[];
+    final preserveLastLineCompensation =
+        _namespace.fingerprint.lastLineSpacingCompensation &&
+        textStyle.textAlign == ui.TextAlign.justify;
+    var cursor = 0;
+    while (cursor < text.length) {
+      ensureLayoutOwnership();
+      final remaining = text.length - cursor;
+      if (remaining <= maxBlockChars) {
+        if (preserveLastLineCompensation && segments.isNotEmpty) {
+          final candidate = text.substring(cursor);
+          final probeBlock = ChapterBlock(
+            key: const BlockKey(chapterIndex: 0, blockIndex: 0),
+            text: candidate,
+            charRange: HybridTextRange(0, candidate.length),
+            sourceParagraphIndex: 0,
+            isContinuation: true,
+            layoutBreakBefore: true,
+          );
+          final probeTask = LayoutTask(
+            block: probeBlock,
+            epoch: _namespace.epoch,
+            fingerprint: _namespace.fingerprint,
+            textStyle: textStyle,
+            contentWidth: contentWidth,
+            cellWidth: cellWidth,
+          );
+          final paragraph = _buildParagraphWithLetterSpacing(
+            probeTask,
+            extraLetterSpacing: 0,
+            textAlignOverride: ui.TextAlign.start,
+          );
+          final tailLineCount = paragraph.numberOfLines;
+          paragraph.dispose();
+          await yieldIfBudgetConsumed();
+          ensureLayoutOwnership();
+          if (tailLineCount < 2) {
+            final previous = segments.removeLast();
+            segments.add((start: previous.start, end: text.length));
+            break;
+          }
+        }
+        segments.add((start: cursor, end: text.length));
+        break;
+      }
+
+      var probeChars = math.min(
+        remaining,
+        math.max(maxBlockChars + 1, maxBlockChars * 2),
+      );
+      int? cut;
+      while (cut == null) {
+        ensureLayoutOwnership();
+        final probeEnd = _safeUtf16BoundaryAtOrBefore(
+          text,
+          math.min(text.length, cursor + probeChars),
+        );
+        if (probeEnd <= cursor) {
+          segments.add((start: cursor, end: text.length));
+          return segments;
+        }
+        final candidate = text.substring(cursor, probeEnd);
+        final probeBlock = ChapterBlock(
+          key: const BlockKey(chapterIndex: 0, blockIndex: 0),
+          text: candidate,
+          charRange: HybridTextRange(0, candidate.length),
+          sourceParagraphIndex: 0,
+          isContinuation: cursor > 0,
+          layoutBreakBefore: cursor > 0,
+        );
+        final probeTask = LayoutTask(
+          block: probeBlock,
+          epoch: _namespace.epoch,
+          fingerprint: _namespace.fingerprint,
+          textStyle: textStyle,
+          contentWidth: contentWidth,
+          cellWidth: cellWidth,
+          indentChars: cursor == 0 ? textIndent : 0,
+        );
+        final paragraph = _buildParagraphWithLetterSpacing(
+          probeTask,
+          extraLetterSpacing: 0,
+          textAlignOverride: ui.TextAlign.start,
+        );
+        try {
+          final indentLength = _indentFor(probeTask).length;
+          final lineRanges = _lineRanges(
+            paragraph,
+            indentLength + candidate.length,
+            paragraph.numberOfLines,
+          );
+          int? preferred;
+          int? firstInterior;
+          for (final range in lineRanges) {
+            final bodyEnd = (range.end - indentLength)
+                .clamp(0, candidate.length)
+                .toInt();
+            if (bodyEnd <= 0 || bodyEnd >= candidate.length) continue;
+            firstInterior ??= bodyEnd;
+            if (bodyEnd <= maxBlockChars) preferred = bodyEnd;
+          }
+          cut = preferred ?? firstInterior;
+        } finally {
+          paragraph.dispose();
+        }
+        await yieldIfBudgetConsumed();
+        ensureLayoutOwnership();
+        if (cut != null) break;
+        if (probeEnd >= text.length) {
+          cut = text.length - cursor;
+          break;
+        }
+        probeChars = math.min(remaining, probeChars + maxBlockChars);
+      }
+
+      final end = _safeUtf16BoundaryAtOrBefore(text, cursor + cut);
+      if (end <= cursor) {
+        segments.add((start: cursor, end: text.length));
+        break;
+      }
+      segments.add((start: cursor, end: end));
+      cursor = end;
+    }
+    return segments;
+  }
+
+  int _safeUtf16BoundaryAtOrBefore(String text, int offset) {
+    final safe = offset.clamp(0, text.length).toInt();
+    if (safe <= 0 || safe >= text.length) return safe;
+    final previous = text.codeUnitAt(safe - 1);
+    final next = text.codeUnitAt(safe);
+    final splitsSurrogatePair =
+        previous >= 0xD800 &&
+        previous <= 0xDBFF &&
+        next >= 0xDC00 &&
+        next <= 0xDFFF;
+    return splitsSurrogatePair ? safe - 1 : safe;
+  }
 
   @override
   Stream<BlockReady> get completed => _completed.stream;
@@ -150,8 +401,6 @@ final class LayoutPump implements HybridLayoutPump {
   @override
   void submit(LayoutTask task) {
     if (_disposed) return;
-    // Only pending work is deduplicated. A later cache miss is new work,
-    // even when the same group was laid out earlier in this epoch.
     _queue.removeWhere((queued) => queued.block.key == task.block.key);
     if (task.priority == LayoutTaskPriority.anchor) {
       _queue.addFirst(task);
@@ -166,7 +415,9 @@ final class LayoutPump implements HybridLayoutPump {
 
   @override
   void onScrollStateChanged(PumpState state) {
+    if (_state == state) return;
     _state = state;
+    _stateRevision += 1;
   }
 
   /// 丟棄已不在當前需求視窗內的 task。純記帳、不做排版，因此在 dragging
@@ -203,9 +454,6 @@ final class LayoutPump implements HybridLayoutPump {
       );
       return 0;
     }
-    // 預算消費制：governor 給出本幀可用 µs，逐 task 以 cost model 預測
-    // 打包；首片只要預算 > 0 就執行（block 已按 ballisticSliceBudget
-    // 預先切塊，單片有界；歸零起跑會讓 idle/rebuilding 供給停擺）。
     final budgetMicros = _governor.frameBudgetMicros(_state);
     var completed = 0;
     final stopwatch = Stopwatch()..start();
@@ -220,9 +468,6 @@ final class LayoutPump implements HybridLayoutPump {
       final layoutPasses = _costModel.layoutPassesFor(task);
       final paragraph = _buildParagraph(task);
       final groupBlocks = task.groupBlocks;
-      // group 內每個效能切塊各自的 Y 窗邊界；單一 block 時等同
-      // [0, paragraph.height]。切塊本身從不新增排版單位之外的間距，只有
-      // group 真正的最後一塊才計入 trailingSpacing（呼叫端已依此設值）。
       final splitYs = _groupSplitYs(task, paragraph);
       final metricsList = _metricsFromSplitYs(task, paragraph, splitYs);
       final keys = <BlockKey>[for (final block in groupBlocks) block.key];
@@ -239,7 +484,7 @@ final class LayoutPump implements HybridLayoutPump {
       }
       final elapsed = started.elapsed;
       _costModel.record(
-        charCount: task.combinedText.length,
+        charCount: task.layoutText.length,
         elapsed: elapsed,
         layoutPasses: layoutPasses,
       );
@@ -247,7 +492,7 @@ final class LayoutPump implements HybridLayoutPump {
         LayoutPumpTaskStats(
           elapsed: elapsed,
           predicted: predicted,
-          charCount: task.combinedText.length,
+          charCount: task.layoutText.length,
           groupBlockCount: groupBlocks.length,
           layoutPasses: layoutPasses,
           state: _state,
@@ -268,6 +513,7 @@ final class LayoutPump implements HybridLayoutPump {
   @override
   void dispose() {
     _disposed = true;
+    _stateRevision += 1;
     _queue.clear();
     unawaited(_completed.close());
   }
@@ -277,7 +523,6 @@ final class LayoutPump implements HybridLayoutPump {
     debugOnIntermediateParagraphDisposed?.call();
   }
 
-  /// 與 [_nextTask] 同一套計分的唯讀預覽（平手取先入者，兩者一致）。
   LayoutTask _peekTask() {
     if (_queue.length <= 1) return _queue.first;
     var best = _queue.first;
@@ -324,9 +569,6 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   ui.Paragraph _buildParagraph(LayoutTask task) {
-    // 條件含單行寬度上界估算：必為單行的 block（對白短句為大宗）
-    // 不進兩段式路徑，維持單次 layout；與 cost model 的
-    // layoutPassesFor 共用同一判斷，成本預測不失準。
     if (!LayoutCostModel.mayCompensateLastLine(task)) {
       return _buildParagraphWithLetterSpacing(
         task,
@@ -335,10 +577,6 @@ final class LayoutPump implements HybridLayoutPump {
       );
     }
 
-    // Flutter 的 LineMetrics 沒有字元索引，而 justify 後的 TextBox 寬度也
-    // 可能已包含引擎分配的額外間距。先用 start 建立自然寬度的 Pass 1，
-    // 再以同一組斷行範圍建立 justify + 末行補償的 Pass 2；對齊方式不參與
-    // 斷行，因此兩個 Paragraph 的 line boundary 相同。
     final paragraph = _buildParagraphWithLetterSpacing(
       task,
       extraLetterSpacing: 0,
@@ -362,11 +600,10 @@ final class LayoutPump implements HybridLayoutPump {
           textAlignOverride: task.textStyle.textAlign,
         );
       }
-      final lineRanges = _lineRanges(
-        paragraph,
-        _indentFor(task).length + task.combinedText.length,
-        lines.length,
-      );
+      final indent = _indentFor(task);
+      final renderedText = '$indent${task.layoutText}';
+      final textLength = renderedText.length;
+      final lineRanges = _lineRanges(paragraph, textLength, lines.length);
       if (lineRanges.length <= lastLineIndex) {
         return _buildParagraphWithLetterSpacing(
           task,
@@ -379,7 +616,7 @@ final class LayoutPump implements HybridLayoutPump {
         paragraph,
         lines,
         lineRanges,
-        '${_indentFor(task)}${task.combinedText}',
+        renderedText,
         lastLineIndex,
         task,
       );
@@ -391,10 +628,7 @@ final class LayoutPump implements HybridLayoutPump {
         );
       }
 
-      final indent = _indentFor(task);
-      final textLength = indent.length + task.combinedText.length;
       final lastLine = lineRanges[lastLineIndex];
-      final renderedText = '$indent${task.combinedText}';
       final lastLineBoxes = _boxesForTextClusters(
         paragraph,
         renderedText,
@@ -408,9 +642,6 @@ final class LayoutPump implements HybridLayoutPump {
           textAlignOverride: task.textStyle.textAlign,
         );
       }
-      // letterSpacing 加在範圍內每個字元之後（含末字），總增量是
-      // spacing × 字數而非 × 間隙數；分母若用 gaps，近滿末行會超寬
-      // 一個 spacing 而把末字擠到下一行。
       final lastLineHeadroom =
           (task.contentWidth - lines[lastLineIndex].width) /
           lastLineBoxes.length.toDouble();
@@ -434,8 +665,6 @@ final class LayoutPump implements HybridLayoutPump {
         );
       }
 
-      // Pass 2：只對末行字元範圍增加 letterSpacing，文字與 displayText 完全
-      // 不變；因此 TTS range、錨點與 contentHash 仍在同一座標系。
       return _buildParagraphWithLetterSpacing(
         task,
         extraLetterSpacing: safeExtraLetterSpacing,
@@ -448,34 +677,47 @@ final class LayoutPump implements HybridLayoutPump {
     }
   }
 
-  /// group 內每個效能切塊各自的 Y 窗邊界，長度為
-  /// `task.groupBlocks.length + 1`：`ys[i]`/`ys[i+1]` 是第 i 個切塊在
-  /// [paragraph] 座標系裡的頂／底。邊界一律落在切塊第一個字元所在行的
-  /// 行頂——同一實體行只會整行畫在其中一個切塊的視窗裡，不會被垂直
-  /// 切一半。單一 block（非 group）時直接回傳 `[0, paragraph.height]`。
+  double _visibleParagraphBottom(LayoutTask task, ui.Paragraph paragraph) {
+    if (task.trailingLayoutLookahead.isEmpty) return paragraph.height;
+    final indentLength = _indentFor(task).length;
+    final semanticEnd = indentLength + task.combinedText.length;
+    final lookaheadLineNumber = paragraph.getLineNumberAt(semanticEnd);
+    final lookaheadLine = lookaheadLineNumber == null
+        ? null
+        : paragraph.getLineMetricsAt(lookaheadLineNumber);
+    final lookaheadLineTop = lookaheadLine == null
+        ? null
+        : lookaheadLine.baseline - lookaheadLine.ascent;
+    assert(
+      lookaheadLineTop != null && lookaheadLineTop > 0,
+      'A visual-segment lookahead must begin on the following visual line.',
+    );
+    return lookaheadLineTop != null && lookaheadLineTop > 0
+        ? lookaheadLineTop
+        : paragraph.height;
+  }
+
   List<double> _groupSplitYs(LayoutTask task, ui.Paragraph paragraph) {
     final blocks = task.groupBlocks;
     final ys = <double>[0.0];
+    final indentLength = _indentFor(task).length;
+    final semanticTextLength = indentLength + task.combinedText.length;
     if (blocks.length > 1) {
-      final indentLength = _indentFor(task).length;
       final groupStart = blocks.first.charRange.start;
-      final totalTextLength = indentLength + task.combinedText.length;
       for (var i = 1; i < blocks.length; i += 1) {
         final localOffset =
             indentLength + (blocks[i].charRange.start - groupStart);
         final top =
-            _lineTopForOffset(paragraph, localOffset, totalTextLength) ??
+            _lineTopForOffset(paragraph, localOffset, semanticTextLength) ??
             ys.last;
         ys.add(math.max(ys.last, top));
       }
     }
-    ys.add(math.max(ys.last, paragraph.height));
+    final visibleBottom = _visibleParagraphBottom(task, paragraph);
+    ys.add(math.max(ys.last, visibleBottom));
     return ys;
   }
 
-  /// 依 [splitYs] 把整個 group 的高度／行數分回每個切塊自己的
-  /// [BlockMetrics]；只有 group 真正的最後一塊計入 `task.trailingSpacing`
-  /// （呼叫端已依「是否為邏輯段落真正結尾」決定這個值，切塊之間恆為 0）。
   List<BlockMetrics> _metricsFromSplitYs(
     LayoutTask task,
     ui.Paragraph paragraph,
@@ -483,6 +725,8 @@ final class LayoutPump implements HybridLayoutPump {
   ) {
     final blocks = task.groupBlocks;
     List<double>? lineTops;
+    final needsExplicitLineCount =
+        blocks.length > 1 || task.trailingLayoutLookahead.isNotEmpty;
     final result = <BlockMetrics>[];
     for (var i = 0; i < blocks.length; i += 1) {
       final top = splitYs[i];
@@ -491,9 +735,7 @@ final class LayoutPump implements HybridLayoutPump {
       final ownHeight = math.max(0.0, bottom - top);
       final height = isLast ? ownHeight + task.trailingSpacing : ownHeight;
       final int lineCount;
-      if (blocks.length == 1) {
-        // numberOfLines 是 O(1) getter；computeLineMetrics 會配置整串
-        // LineMetrics，單一 block 時不需要，避免多一次配置進 ballistic 切片。
+      if (!needsExplicitLineCount) {
         lineCount = paragraph.numberOfLines;
       } else {
         lineTops ??= [
@@ -514,9 +756,6 @@ final class LayoutPump implements HybridLayoutPump {
     return result;
   }
 
-  /// 與 [_HybridReaderScreenState._textBoxTopForOffset] 同款幾何：以
-  /// `getBoxesForRange` 取單一字元的 box top 作為所在行的行頂，供 group
-  /// 內切點的視覺邊界與呼叫端（capture／restore／TTS）共用同一套座標。
   double? _lineTopForOffset(
     ui.Paragraph paragraph,
     int offset,
@@ -525,7 +764,10 @@ final class LayoutPump implements HybridLayoutPump {
     if (textLength <= 0) return 0.0;
     final safeOffset = offset.clamp(0, textLength).toInt();
     final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
-    final boxes = paragraph.getBoxesForRange(start, start + 1);
+    var boxes = paragraph.getBoxesForRange(start, start + 1);
+    if (boxes.isEmpty && start + 1 < textLength) {
+      boxes = paragraph.getBoxesForRange(start, math.min(textLength, start + 2));
+    }
     if (boxes.isEmpty) return null;
     return boxes.first.top;
   }
@@ -611,17 +853,10 @@ final class LayoutPump implements HybridLayoutPump {
       height: task.textStyle.lineHeight,
     );
     final indentLength = _indentFor(task).length;
-    final body = task.combinedText;
+    final body = task.layoutText;
     final textLength = indentLength + body.length;
     final builder = ui.ParagraphBuilder(paragraphStyle)
       ..pushStyle(_textStyle(task));
-    // 縮排以 placeholder 而非 U+3000 文字送進 Paragraph：justify 會把
-    // 行首全形空白視為可分配空白——縮排被壓成 0 寬、其寬度平攤進整行
-    // 字距，造成 soft-wrap 行字距異常放大且失去縮排。placeholder 不是
-    // 空白字元故不受影響；每個仍佔 1 code unit（U+FFFC），因此
-    // charOffset / TTS / 錨點的座標換算與 U+3000 前綴完全相同。
-    // placeholder 寬用鎖寬 cell（= 全形字 advance 含 letterSpacing），
-    // 縮排才恰好佔整數格；未鎖寬時退回 fontSize 舊行為。
     final indentCellWidth = task.cellWidth ?? task.textStyle.fontSize;
     for (var i = 0; i < indentLength; i += 1) {
       builder.addPlaceholder(
@@ -649,14 +884,10 @@ final class LayoutPump implements HybridLayoutPump {
     } else {
       builder.addText(body);
     }
-    final paragraph = builder.build()
+    return builder.build()
       ..layout(ui.ParagraphConstraints(width: task.contentWidth));
-    return paragraph;
   }
 
-  /// 縮排在座標系上的替身字串：實際 Paragraph 以等量 placeholder 呈現
-  /// （見 [_buildParagraphWithLetterSpacing]），此字串只用來計算前綴
-  /// 長度與逐字 cluster 邊界，兩者每字元都佔 1 code unit，座標一致。
   String _indentFor(LayoutTask task) {
     return task.indentChars <= 0 ? '' : '　' * task.indentChars.clamp(0, 8);
   }

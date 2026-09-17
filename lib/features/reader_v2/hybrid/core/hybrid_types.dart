@@ -173,8 +173,6 @@ final class StyleFingerprint {
     lastLineSpacingCompensation,
   );
 
-  /// 跨程序穩定的磁碟 key 材料。`Object.hash` 只適合記憶體 hashCode，
-  /// 不保證不同 Dart process 仍產生相同值。
   String get stableKey => jsonEncode(<Object>[
     viewportWidth,
     viewportHeight,
@@ -309,6 +307,7 @@ final class ChapterBlock {
     required this.sourceParagraphIndex,
     this.isTitle = false,
     this.isContinuation = false,
+    this.layoutBreakBefore = false,
   });
 
   final BlockKey key;
@@ -316,7 +315,16 @@ final class ChapterBlock {
   final HybridTextRange charRange;
   final int sourceParagraphIndex;
   final bool isTitle;
+
+  /// Semantic paragraph identity. A continuation still belongs to the same
+  /// source paragraph and therefore gets no paragraph spacing/indent.
   final bool isContinuation;
+
+  /// True only when this continuation begins at a visual line boundary that
+  /// was measured with the current layout style. Unlike an arbitrary
+  /// preprocessing chunk, this boundary may safely start a new ui.Paragraph
+  /// transaction without introducing a new visible line break.
+  final bool layoutBreakBefore;
 
   int get chapterIndex => key.chapterIndex;
   int get blockIndex => key.blockIndex;
@@ -346,8 +354,6 @@ final class ChapterBlocks {
   final String contentHash;
   final List<ChapterBlock> blocks;
 
-  /// A block index is meaningful only with its text and segmentation. The
-  /// adaptive cost model may split identical text differently on the next load.
   late final String layoutIdentity = jsonEncode([
     contentHash,
     title,
@@ -359,6 +365,7 @@ final class ChapterBlocks {
         block.sourceParagraphIndex,
         block.isTitle,
         block.isContinuation,
+        block.layoutBreakBefore,
       ],
   ]);
 
@@ -385,12 +392,10 @@ final class ChapterBlocks {
     return block.charRange.start;
   }
 
-  /// [key] 所屬的連續排版 group：與其相鄰、`isContinuation` 串成一串「且」
-  /// `sourceParagraphIndex` 相同的效能切塊，全部共用同一個邏輯段落。單靠
-  /// `isContinuation` 不足以保證這點——`sourceParagraphIndex` 必須逐一核對
-  /// ，才不會把兩個獨立語意段落的效能切塊誤併進同一個 `ui.Paragraph`。
-  /// 標題與未被切塊的一般段落固定回傳單一元素的 list。呼叫端必須把整個
-  /// group 一起送進同一個 `ui.Paragraph`，才不會在人工切點多出硬換行。
+  /// Returns the blocks that still require one continuous ui.Paragraph. An
+  /// arbitrary preprocessor chunk remains grouped; a measured visual-line
+  /// boundary starts a new layout transaction while keeping semantic
+  /// continuation metadata intact.
   List<ChapterBlock> groupContaining(BlockKey key) {
     final index = blocks.indexWhere((block) => block.key == key);
     if (index < 0) return const <ChapterBlock>[];
@@ -398,21 +403,20 @@ final class ChapterBlocks {
     var start = index;
     while (start > 0 &&
         blocks[start].isContinuation &&
+        !blocks[start].layoutBreakBefore &&
         blocks[start - 1].sourceParagraphIndex == sourceParagraphIndex) {
       start -= 1;
     }
     var end = index;
     while (end + 1 < blocks.length &&
         blocks[end + 1].isContinuation &&
+        !blocks[end + 1].layoutBreakBefore &&
         blocks[end + 1].sourceParagraphIndex == sourceParagraphIndex) {
       end += 1;
     }
     return blocks.sublist(start, end + 1);
   }
 
-  /// 依 `isContinuation` 且同一 `sourceParagraphIndex` 把 [blocks] 切成連續
-  /// 排版 group 的列表，由上而下保序；每個 group 內部順序即排版順序。見
-  /// [groupContaining] 對 `sourceParagraphIndex` 核對必要性的說明。
   List<List<ChapterBlock>> paragraphGroups() {
     final groups = <List<ChapterBlock>>[];
     var i = 0;
@@ -421,6 +425,7 @@ final class ChapterBlocks {
       var j = i + 1;
       while (j < blocks.length &&
           blocks[j].isContinuation &&
+          !blocks[j].layoutBreakBefore &&
           blocks[j].sourceParagraphIndex == sourceParagraphIndex) {
         j += 1;
       }
@@ -561,29 +566,19 @@ final class LayoutTask {
     this.direction = HybridScrollDirection.forward,
     this.indentChars = 0,
     this.trailingSpacing = 0.0,
+    this.trailingLayoutLookahead = '',
     this.cellWidth,
   }) : assert(indentChars >= 0),
        assert(trailingSpacing >= 0),
        assert(cellWidth == null || cellWidth > 0);
 
   final ChapterBlock block;
-
-  /// 與 [block] 同一個連續排版 group、緊接其後的效能切塊（若有）。
-  /// LayoutPump 把 [block] 與這些切塊的文字接成一個 `ui.Paragraph` 連續
-  /// 排版，事後才依各切塊自己的 charRange 切回各自的 [BlockMetrics]——
-  /// 人工切點因此不會產生獨立於文字內容之外的硬換行。
   final List<ChapterBlock> continuationBlocks;
 
-  /// [block] 加上 [continuationBlocks]，依排版順序排列的完整 group。
   List<ChapterBlock> get groupBlocks => continuationBlocks.isEmpty
       ? <ChapterBlock>[block]
       : <ChapterBlock>[block, ...continuationBlocks];
 
-  /// group 內所有切塊文字接成的完整邏輯段落文字；即使 [block] 只是效能
-  /// 切塊的一部分，排版永遠以此為準，不會在切點斷字。
-  /// 建立一次後重用。連續排版 group 會在 cost prediction、Paragraph
-  /// builder 與 metrics 回寫路徑被讀多次；每次 getter 都重新串接整段文字
-  /// 會把不屬於 ui.Paragraph 的額外配置成本帶進 120Hz frame。
   late final String combinedText = _buildCombinedText();
 
   String _buildCombinedText() {
@@ -595,29 +590,25 @@ final class LayoutTask {
     return buffer.toString();
   }
 
+  /// A visual-line-aligned non-final transaction lays out one following rune
+  /// only as context. The render object clips that following line; it exists so
+  /// justify/shaping semantics of the visible last line match the unsplit
+  /// paragraph rather than treating every transaction as a paragraph end.
+  final String trailingLayoutLookahead;
+
+  late final String layoutText = trailingLayoutLookahead.isEmpty
+      ? combinedText
+      : '$combinedText$trailingLayoutLookahead';
+
   final LayoutEpoch epoch;
   final StyleFingerprint fingerprint;
   final HybridBlockTextStyle textStyle;
   final double contentWidth;
-
-  /// 烘進 ui.Paragraph 的文字色。不影響幾何，因此不屬於
-  /// StyleFingerprint——換色只重建 Paragraph，metrics 全部保留。
   final ui.Color textColor;
   final LayoutTaskPriority priority;
   final HybridScrollDirection direction;
-
-  /// 段首縮排的字元數（沿用舊引擎「排版時動態前綴」規則；
-  /// 續塊與標題恆為 0）。Paragraph 內以等寬 placeholder 呈現（每個佔
-  /// 1 code unit，justify 不會像對 U+3000 那樣折疊它）。前綴不屬於
-  /// 章節 displayText，charOffset 換算時必須扣除。
   final int indentChars;
-
-  /// 排在本 block 之後的垂直間距（px），計入 BlockMetrics.height。
-  /// 標題塊 = paragraphSpacing*8；段落末塊 = fontSize*行高*paragraphSpacing。
   final double trailingSpacing;
-
-  /// em-grid 鎖寬的實測全形字 advance（`ReaderV2LayoutSpec.cellWidth`）；
-  /// 縮排 placeholder 以此為寬，null 時退回 fontSize（未鎖寬的舊行為）。
   final double? cellWidth;
 
   BlockKey get key => block.key;

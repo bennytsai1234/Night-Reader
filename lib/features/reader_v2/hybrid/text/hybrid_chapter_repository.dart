@@ -19,18 +19,32 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
 
   final ReaderV2ChapterRepository? _repository;
   final ReaderV2ContentLoader _loadContent;
+
+  /// Compatibility/default prefetch size for callers that only provide a
+  /// center. Correctness does not depend on this count: the screen may widen
+  /// the resident range according to admitted viewport geometry.
   final int windowRadius;
   final StreamController<ChapterEvent> _events =
       StreamController<ChapterEvent>.broadcast();
   final LinkedHashMap<int, ChapterText> _window =
       LinkedHashMap<int, ChapterText>();
   final Map<int, Future<ChapterText>> _inFlight = <int, Future<ChapterText>>{};
-  int? _prefetchCenter;
+  int? _residentFirst;
+  int? _residentLast;
   int _generation = 0;
   bool _disposed = false;
 
   @override
   Stream<ChapterEvent> get events => _events.stream;
+
+  int? get residentFirst => _residentFirst;
+  int? get residentLast => _residentLast;
+
+  bool isResident(ChapterId id) {
+    final first = _residentFirst;
+    final last = _residentLast;
+    return first != null && last != null && id >= first && id <= last;
+  }
 
   @override
   Future<ChapterText> load(ChapterId id) {
@@ -56,7 +70,9 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
       _events.add(
         ChapterEvent.loaded(chapterId: id, contentHash: text.contentHash),
       );
-      _evictOutsideWindow();
+      // A semantic load is not a residency transfer. In particular a far jump
+      // must be able to acquire its target while the old viewport still owns
+      // the prefetch range. Eviction happens only in setResidentRange.
       return text;
     }();
     _inFlight[id] = task;
@@ -70,15 +86,25 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
 
   @override
   void setPrefetchCenter(ChapterId id) {
-    _prefetchCenter = id;
+    setResidentRange(id - windowRadius, id + windowRadius);
+  }
+
+  /// Transfers raw-chapter residency ownership to an explicit contiguous
+  /// range. The caller chooses the range from viewport/lead geometry; this
+  /// repository only caches exactly that ownership set.
+  void setResidentRange(int first, int last) {
+    if (_disposed) return;
+    var safeFirst = first < 0 ? 0 : first;
+    var safeLast = last < safeFirst ? safeFirst : last;
+    final count = _repository?.chapterCount;
+    if (count != null && count > 0) {
+      safeFirst = safeFirst.clamp(0, count - 1).toInt();
+      safeLast = safeLast.clamp(safeFirst, count - 1).toInt();
+    }
+    _residentFirst = safeFirst;
+    _residentLast = safeLast;
     _evictOutsideWindow();
-    for (
-      var index = id - windowRadius;
-      index <= id + windowRadius;
-      index += 1
-    ) {
-      if (index < 0) continue;
-      if (_repository != null && index >= _repository.chapterCount) continue;
+    for (var index = safeFirst; index <= safeLast; index += 1) {
       unawaited(load(index).then<void>((_) {}, onError: (_, _) {}));
     }
   }
@@ -114,13 +140,12 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
   }
 
   void _evictOutsideWindow() {
-    final center = _prefetchCenter;
-    if (center == null) return;
-    final min = center - windowRadius;
-    final max = center + windowRadius;
+    final first = _residentFirst;
+    final last = _residentLast;
+    if (first == null || last == null) return;
     final evicted = <int>[];
     _window.removeWhere((id, _) {
-      final shouldEvict = id < min || id > max;
+      final shouldEvict = id < first || id > last;
       if (shouldEvict) evicted.add(id);
       return shouldEvict;
     });
