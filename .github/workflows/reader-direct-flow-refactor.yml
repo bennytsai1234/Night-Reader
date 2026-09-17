@@ -1,4 +1,4 @@
-name: Reader direct-flow final repair
+name: Reader direct-flow final validation
 
 on:
   push:
@@ -28,37 +28,40 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Remove final capacity remnants
+      - name: Remove capacity-era test contract
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          screen = Path('lib/features/reader_v2/hybrid/hybrid_reader_screen.dart')
-          text = screen.read_text(encoding='utf-8')
-          old = '    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);'
-          if old not in text:
-              raise SystemExit('screen capacity remnant not found')
-          screen.write_text(text.replace(old, '    _paragraphCache = ParagraphCache();', 1), encoding='utf-8')
-
-          test = Path('test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart')
-          text = test.read_text(encoding='utf-8')
-          old_param = '    int paragraphCacheCapacity = 512,\n'
-          old_arg = '              paragraphCacheCapacity: paragraphCacheCapacity,\n'
-          if old_param not in text or old_arg not in text:
-              raise SystemExit('screen test capacity remnants not found')
-          text = text.replace(old_param, '', 1).replace(old_arg, '', 1)
-          test.write_text(text, encoding='utf-8')
+          path = Path('test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart')
+          text = path.read_text(encoding='utf-8')
+          old = """  testWidgets('開書建置量超過 ParagraphCache 容量時，首屏 block 不空白', (tester) async {
+    // 回歸守門員：容量遠小於初始視窗所需 block 數時，修復前 restore 期間
+    // 無 pin 保護，LRU 會把錨點周圍（首屏可見）的段落逐出——開書只剩
+    // 錨點一行、其餘佔位空白，滑動後才恢復。
+"""
+          new = """  testWidgets('開書建置大量 Paragraph 時，首屏 block 保持完整', (tester) async {
+    // Direct-flow invariant：Paragraph 在 block admission 前已存在，且不會因
+    // readiness/LRU 狀態被逐出；大量初始 block 也不應產生空白佔位。
+"""
+          call = '    await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 4);'
+          if old not in text or call not in text:
+              raise SystemExit('capacity-era test contract not found')
+          text = text.replace(old, new, 1).replace(
+              call,
+              '    await pumpScreen(tester, runtime, controller);',
+              1,
+          )
+          path.write_text(text, encoding='utf-8')
           PY
-          dart format \
-            lib/features/reader_v2/hybrid/hybrid_reader_screen.dart \
-            test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
+          dart format test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
 
       - name: Commit repair
         run: |
           git config user.name "reader-refactor-bot"
           git config user.email "reader-refactor-bot@users.noreply.github.com"
-          git add lib/features/reader_v2/hybrid/hybrid_reader_screen.dart test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
-          git commit -m "refactor(reader): remove paragraph cache capacity remnants"
+          git add test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
+          git commit -m "test(reader): remove paragraph cache capacity contract"
           git push origin HEAD:reader-direct-flow
 
       - run: flutter pub get
