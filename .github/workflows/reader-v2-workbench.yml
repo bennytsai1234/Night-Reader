@@ -7,6 +7,9 @@ permissions:
 concurrency:
   group: reader-v2-workbench
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -24,17 +27,21 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Format changed Dart files
-        run: git diff --name-only --diff-filter=AM -- '*.dart' | xargs -r dart format
+        run: |
+          git diff --name-only --diff-filter=AM -- '*.dart' | xargs -r dart format
+          git diff --check
       - name: Analyze
         id: analyze
         continue-on-error: true
         run: |
+          set -o pipefail
           mkdir -p "$RUNNER_TEMP/reader-output"
           flutter analyze 2>&1 | tee "$RUNNER_TEMP/reader-output/analyze.txt"
       - name: Reader and source-switch tests
         id: tests
         continue-on-error: true
         run: |
+          set -o pipefail
           flutter test test/features/reader_v2 test/core/services/source_switch_service_test.dart test/core/services/source_switch_progress_test.dart test/core/engine/reader/chinese_text_converter_length_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/reader-output/tests.txt"
       - name: Require checks to pass
         if: steps.analyze.outcome != 'success' || steps.tests.outcome != 'success'
@@ -43,7 +50,6 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/reader-output"
-          cp .github/reader-v2-edits.b64 "$RUNNER_TEMP/reader-output/transport.b64"
           git diff --check > "$RUNNER_TEMP/reader-output/diff-check.txt" || true
           git diff --stat > "$RUNNER_TEMP/reader-output/stat.txt"
           git diff --binary > "$RUNNER_TEMP/reader-output/applied.patch"
@@ -60,4 +66,57 @@ jobs:
         with:
           name: reader-workbench-output
           path: ${{ runner.temp }}/reader-output
+          retention-days: 3
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - run: python3 .github/reader-v2-apply.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Prepare bounded device journey
+        run: |
+          mkdir -p "$RUNNER_TEMP/reader-android"
+          cat > "$RUNNER_TEMP/run-reader-journey.sh" <<'SH'
+          set -u
+          export NIGHT_READER_SCREENSHOT_DIR="$RUNNER_TEMP/reader-android"
+          flutter drive --debug --no-dds --driver=test_driver/integration_test.dart --target=integration_test/reader_journey_test.dart -d emulator-5554 > "$RUNNER_TEMP/reader-android/journey.txt" 2>&1
+          status=$?
+          adb -s emulator-5554 logcat -d > "$RUNNER_TEMP/reader-android/logcat.txt" 2>&1 || true
+          if [ -f build/integration_response_data.json ]; then cp build/integration_response_data.json "$RUNNER_TEMP/reader-android/"; fi
+          cat "$RUNNER_TEMP/reader-android/journey.txt"
+          exit "$status"
+          SH
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash "$RUNNER_TEMP/run-reader-journey.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-android-output
+          path: ${{ runner.temp }}/reader-android
           retention-days: 3
