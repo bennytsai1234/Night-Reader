@@ -1,0 +1,22 @@
+name: Reader V2 workbench
+on:
+  push:
+    branches: [fix/reader-v2-ownership-20260917]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export tracked history for offline inspection
+        run: git bundle create "$RUNNER_TEMP/reader-history.bundle" HEAD refs/remotes/origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reader-v2-source-history
+          path: ${{ runner.temp }}/reader-history.bundle
+          retention-days: 1
