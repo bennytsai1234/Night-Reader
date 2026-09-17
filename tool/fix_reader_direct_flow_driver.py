@@ -27,16 +27,13 @@ end = s.find(end_marker, start)
 if end < 0:
     raise RuntimeError('restore finalizer transform end not found')
 end += len(end_marker)
-replacement = r'''s = sub_once(
+replacement = '''s = replace_once(
     s,
-    r"    \\} finally \\{\\n      if \\(mounted && identical\\(_pump, binding\\) && ticket == _restoreTicket\\) \\{\\n(?:        _restorePinning = false;\\n)?        _pump\\.onScrollStateChanged\\(\\n[\\s\\S]*?        \\);\\n      \\}\\n    \\}\\n",
-    """    } finally {
-      if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {
-        _pump.onScrollStateChanged(PumpState.idle);
-      }
-    }
-""",
-    "restore finalizer",
+    """        _pump.onScrollStateChanged(
+          _dragging ? PumpState.dragging : PumpState.idle,
+        );""",
+    """        _pump.onScrollStateChanged(PumpState.idle);""",
+    "restore finalizer state",
 )
 '''
 s = s[:start] + replacement + s[end:]
