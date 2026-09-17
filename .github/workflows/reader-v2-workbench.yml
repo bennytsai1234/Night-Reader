@@ -4,19 +4,24 @@ on:
     branches: [fix/reader-v2-ownership-20260917]
 permissions:
   contents: read
+concurrency:
+  group: reader-v2-workbench
+  cancel-in-progress: true
 jobs:
-  source:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - name: Export tracked history for offline inspection
-        run: git bundle create "$RUNNER_TEMP/reader-history.bundle" HEAD refs/remotes/origin/main
-      - uses: actions/upload-artifact@v4
+      - uses: subosito/flutter-action@v2
         with:
-          name: reader-v2-source-history
-          path: ${{ runner.temp }}/reader-history.bundle
-          retention-days: 1
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze Reader
+        run: flutter analyze lib/features/reader_v2 test/features/reader_v2 integration_test
+      - name: Reader tests
+        run: flutter test test/features/reader_v2 --reporter expanded
