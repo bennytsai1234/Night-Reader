@@ -135,11 +135,18 @@ final class LayoutPump implements HybridLayoutPump {
   @override
   void submit(LayoutTask task) {
     if (_disposed) return;
+    // Only pending work is deduplicated. A later cache miss is new work,
+    // even when the same group was laid out earlier in this epoch.
+    _queue.removeWhere((queued) => queued.block.key == task.block.key);
     if (task.priority == LayoutTaskPriority.anchor) {
       _queue.addFirst(task);
     } else {
       _queue.add(task);
     }
+  }
+
+  void invalidateChapter(int chapterIndex) {
+    _queue.removeWhere((task) => task.block.chapterIndex == chapterIndex);
   }
 
   @override

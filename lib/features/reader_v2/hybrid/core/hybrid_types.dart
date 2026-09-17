@@ -346,6 +346,22 @@ final class ChapterBlocks {
   final String contentHash;
   final List<ChapterBlock> blocks;
 
+  /// A block index is meaningful only with its text and segmentation. The
+  /// adaptive cost model may split identical text differently on the next load.
+  late final String layoutIdentity = jsonEncode([
+    contentHash,
+    title,
+    for (final block in blocks)
+      [
+        block.blockIndex,
+        block.charRange.start,
+        block.charRange.end,
+        block.sourceParagraphIndex,
+        block.isTitle,
+        block.isContinuation,
+      ],
+  ]);
+
   ChapterBlock blockForCharOffset(int charOffset) {
     final safeOffset = charOffset.clamp(0, displayText.length).toInt();
     for (final block in blocks) {

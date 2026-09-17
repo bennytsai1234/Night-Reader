@@ -1,3 +1,5 @@
+import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,26 +12,27 @@ import 'package:night_reader/features/reader_v2/hybrid/view/admission_controller
 void main() {
   group('DocumentIndex', () {
     test('maps offsets to exact admitted block extents across center', () {
-      final index = DocumentIndex(
-        centerKey: const BlockKey(chapterIndex: 1, blockIndex: 0),
-      )..admitAll({
-        const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
-          height: 100,
-          lineCount: 3,
-        ),
-        const BlockKey(chapterIndex: 0, blockIndex: 1): const BlockMetrics(
-          height: 50,
-          lineCount: 2,
-        ),
-        const BlockKey(chapterIndex: 1, blockIndex: 0): const BlockMetrics(
-          height: 80,
-          lineCount: 2,
-        ),
-        const BlockKey(chapterIndex: 1, blockIndex: 1): const BlockMetrics(
-          height: 60,
-          lineCount: 2,
-        ),
-      });
+      final index =
+          DocumentIndex(
+            centerKey: const BlockKey(chapterIndex: 1, blockIndex: 0),
+          )..admitAll({
+            const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
+              height: 100,
+              lineCount: 3,
+            ),
+            const BlockKey(chapterIndex: 0, blockIndex: 1): const BlockMetrics(
+              height: 50,
+              lineCount: 2,
+            ),
+            const BlockKey(chapterIndex: 1, blockIndex: 0): const BlockMetrics(
+              height: 80,
+              lineCount: 2,
+            ),
+            const BlockKey(chapterIndex: 1, blockIndex: 1): const BlockMetrics(
+              height: 60,
+              lineCount: 2,
+            ),
+          });
 
       expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 1)), -50);
       expect(index.topOf(const BlockKey(chapterIndex: 0, blockIndex: 0)), -150);
@@ -99,18 +102,19 @@ void main() {
 
     test('keysInRange returns exactly the intersecting blocks in order', () {
       const center = BlockKey(chapterIndex: 1, blockIndex: 0);
-      final index = DocumentIndex(centerKey: center)..admitAll({
-        for (var i = 0; i < 4; i += 1)
-          BlockKey(chapterIndex: 0, blockIndex: i): const BlockMetrics(
-            height: 25,
-            lineCount: 1,
-          ),
-        for (var i = 0; i < 4; i += 1)
-          BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
-            height: 25,
-            lineCount: 1,
-          ),
-      });
+      final index = DocumentIndex(centerKey: center)
+        ..admitAll({
+          for (var i = 0; i < 4; i += 1)
+            BlockKey(chapterIndex: 0, blockIndex: i): const BlockMetrics(
+              height: 25,
+              lineCount: 1,
+            ),
+          for (var i = 0; i < 4; i += 1)
+            BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
+              height: 25,
+              lineCount: 1,
+            ),
+        });
       // 文檔佔據 [-100, 100)，每塊 25px。
       List<BlockKey> naive(double top, double bottom) {
         if (bottom <= top) return const <BlockKey>[]; // 空區間 → 空（契約）
@@ -143,21 +147,22 @@ void main() {
 
     test('chapterRange spans both sides when the chapter crosses center', () {
       const center = BlockKey(chapterIndex: 1, blockIndex: 2);
-      final index = DocumentIndex(centerKey: center)..admitAll({
-        const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
-          height: 40,
-          lineCount: 1,
-        ),
-        for (var i = 0; i < 4; i += 1)
-          BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
-            height: 30,
+      final index = DocumentIndex(centerKey: center)
+        ..admitAll({
+          const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
+            height: 40,
             lineCount: 1,
           ),
-        const BlockKey(chapterIndex: 2, blockIndex: 0): const BlockMetrics(
-          height: 50,
-          lineCount: 1,
-        ),
-      });
+          for (var i = 0; i < 4; i += 1)
+            BlockKey(chapterIndex: 1, blockIndex: i): const BlockMetrics(
+              height: 30,
+              lineCount: 1,
+            ),
+          const BlockKey(chapterIndex: 2, blockIndex: 0): const BlockMetrics(
+            height: 50,
+            lineCount: 1,
+          ),
+        });
       // before: ch0b0(-100..-60) ch1b0(-60..-30) ch1b1(-30..0)
       // after: ch1b2(0..30) ch1b3(30..60) ch2b0(60..110)
       final range = index.chapterRange(1)!;
@@ -171,107 +176,102 @@ void main() {
       expect(index.chapterRange(3), isNull);
     });
 
-    test(
-      'invalidateChapter drops only that chapter\'s admitted keys and bumps resetGeneration',
-      () {
-        final index = DocumentIndex(
-          centerKey: const BlockKey(chapterIndex: 1, blockIndex: 0),
-        )..admitAll({
-          const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
-            height: 40,
-            lineCount: 1,
-          ),
-          const BlockKey(chapterIndex: 0, blockIndex: 1): const BlockMetrics(
-            height: 30,
-            lineCount: 1,
-          ),
-          const BlockKey(chapterIndex: 1, blockIndex: 0): const BlockMetrics(
-            height: 80,
-            lineCount: 2,
-          ),
-          const BlockKey(chapterIndex: 2, blockIndex: 0): const BlockMetrics(
-            height: 50,
-            lineCount: 1,
-          ),
-        });
-        final generationBefore = index.resetGeneration;
-
-        final changed = index.invalidateChapter(0);
-
-        expect(changed, isTrue);
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 0, blockIndex: 0)),
-          isNull,
-        );
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 0, blockIndex: 1)),
-          isNull,
-        );
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 1, blockIndex: 0)),
-          isNotNull,
-          reason: '未被 invalidate 的章節不得受影響',
-        );
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 2, blockIndex: 0)),
-          isNotNull,
-        );
-        expect(index.beforeExtent, 0);
-        expect(index.chapterExtent(0), 0);
-        expect(
-          index.resetGeneration,
-          generationBefore + 1,
-          reason: 'index→key 映射位移，sliver 需要以 resetGeneration 強制整批重建',
-        );
-
-        // 沒有殘留 key 時應是 no-op，不做多餘的 rebuild／revision bump。
-        expect(index.invalidateChapter(0), isFalse);
-        expect(index.resetGeneration, generationBefore + 1);
-      },
-    );
-
-    test(
-      '章節 evicted 後以不同 segmentation 重新 admit：不殘留舊切法的高度',
-      () {
-        const center = BlockKey(chapterIndex: 5, blockIndex: 0);
-        final index = DocumentIndex(centerKey: center);
-        // 舊 segmentation：chapter 4 被切成 5 塊，總高 100。
-        index.admitAll({
-          for (var i = 0; i < 5; i += 1)
-            BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
-              height: 20,
+    test('invalidateChapter drops only that chapter\'s admitted keys and bumps resetGeneration', () {
+      final index =
+          DocumentIndex(
+            centerKey: const BlockKey(chapterIndex: 1, blockIndex: 0),
+          )..admitAll({
+            const BlockKey(chapterIndex: 0, blockIndex: 0): const BlockMetrics(
+              height: 40,
               lineCount: 1,
             ),
-          center: const BlockMetrics(height: 60, lineCount: 2),
-        });
-        expect(index.chapterExtent(4), 100);
-
-        // 章節 4 evicted／invalidated：DocumentIndex 端必須整批丟棄，否則
-        // 新 segmentation 缺席的舊 blockIndex 會一直錯誤貢獻文檔幾何。
-        expect(index.invalidateChapter(4), isTrue);
-        expect(index.chapterExtent(4), 0);
-
-        // 重新載入後 maxBlockChars 變大，chapter 4 只剩 2 塊。
-        index.admitAll({
-          for (var i = 0; i < 2; i += 1)
-            BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
-              height: 45,
-              lineCount: 3,
+            const BlockKey(chapterIndex: 0, blockIndex: 1): const BlockMetrics(
+              height: 30,
+              lineCount: 1,
             ),
-        });
+            const BlockKey(chapterIndex: 1, blockIndex: 0): const BlockMetrics(
+              height: 80,
+              lineCount: 2,
+            ),
+            const BlockKey(chapterIndex: 2, blockIndex: 0): const BlockMetrics(
+              height: 50,
+              lineCount: 1,
+            ),
+          });
+      final generationBefore = index.resetGeneration;
 
-        // 只有新 segmentation 的高度；舊切法遺留的 blockIndex 2..4 不殘留。
-        expect(index.chapterExtent(4), 90);
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 2)),
-          isNull,
-        );
-        expect(
-          index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 4)),
-          isNull,
-        );
-      },
-    );
+      final changed = index.invalidateChapter(0);
+
+      expect(changed, isTrue);
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 0, blockIndex: 0)),
+        isNull,
+      );
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 0, blockIndex: 1)),
+        isNull,
+      );
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 1, blockIndex: 0)),
+        isNotNull,
+        reason: '未被 invalidate 的章節不得受影響',
+      );
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 2, blockIndex: 0)),
+        isNotNull,
+      );
+      expect(index.beforeExtent, 0);
+      expect(index.chapterExtent(0), 0);
+      expect(
+        index.resetGeneration,
+        generationBefore + 1,
+        reason: 'index→key 映射位移，sliver 需要以 resetGeneration 強制整批重建',
+      );
+
+      // 沒有殘留 key 時應是 no-op，不做多餘的 rebuild／revision bump。
+      expect(index.invalidateChapter(0), isFalse);
+      expect(index.resetGeneration, generationBefore + 1);
+    });
+
+    test('章節 evicted 後以不同 segmentation 重新 admit：不殘留舊切法的高度', () {
+      const center = BlockKey(chapterIndex: 5, blockIndex: 0);
+      final index = DocumentIndex(centerKey: center);
+      // 舊 segmentation：chapter 4 被切成 5 塊，總高 100。
+      index.admitAll({
+        for (var i = 0; i < 5; i += 1)
+          BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
+            height: 20,
+            lineCount: 1,
+          ),
+        center: const BlockMetrics(height: 60, lineCount: 2),
+      });
+      expect(index.chapterExtent(4), 100);
+
+      // 章節 4 evicted／invalidated：DocumentIndex 端必須整批丟棄，否則
+      // 新 segmentation 缺席的舊 blockIndex 會一直錯誤貢獻文檔幾何。
+      expect(index.invalidateChapter(4), isTrue);
+      expect(index.chapterExtent(4), 0);
+
+      // 重新載入後 maxBlockChars 變大，chapter 4 只剩 2 塊。
+      index.admitAll({
+        for (var i = 0; i < 2; i += 1)
+          BlockKey(chapterIndex: 4, blockIndex: i): const BlockMetrics(
+            height: 45,
+            lineCount: 3,
+          ),
+      });
+
+      // 只有新 segmentation 的高度；舊切法遺留的 blockIndex 2..4 不殘留。
+      expect(index.chapterExtent(4), 90);
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 2)),
+        isNull,
+      );
+      expect(
+        index.metricsFor(const BlockKey(chapterIndex: 4, blockIndex: 4)),
+        isNull,
+      );
+    });
   });
 
   group('MeasurementStore', () {
@@ -301,11 +301,10 @@ void main() {
       final index = DocumentIndex(
         centerKey: const BlockKey(chapterIndex: 0, blockIndex: 1),
       );
-      final admission =
-          AdmissionController(documentIndex: index)
-            ..reset(epoch: LayoutEpoch.initial, chapterCount: 2)
-            ..registerChapter(_chapterBlocks(0, 3))
-            ..registerChapter(_chapterBlocks(1, 1));
+      final admission = AdmissionController(documentIndex: index)
+        ..reset(epoch: LayoutEpoch.initial, chapterCount: 2)
+        ..registerChapter(_chapterBlocks(0, 3))
+        ..registerChapter(_chapterBlocks(1, 1));
       addTearDown(admission.dispose);
 
       admission.offer(_ready(1, 0));
@@ -333,16 +332,15 @@ void main() {
         final index = DocumentIndex(
           centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
         );
-        final admission =
-            AdmissionController(documentIndex: index)
-              ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-              ..registerChapter(_chapterBlocks(0, 2))
-              ..offer(_ready(0, 0))
-              ..activateViewport(
-                visibleTop: 0,
-                visibleBottom: 100,
-                cacheExtent: 50,
-              );
+        final admission = AdmissionController(documentIndex: index)
+          ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+          ..registerChapter(_chapterBlocks(0, 2))
+          ..offer(_ready(0, 0))
+          ..activateViewport(
+            visibleTop: 0,
+            visibleBottom: 100,
+            cacheExtent: 50,
+          );
         addTearDown(admission.dispose);
 
         final originalTop = index.topOf(
@@ -366,16 +364,11 @@ void main() {
       final index = DocumentIndex(
         centerKey: const BlockKey(chapterIndex: 0, blockIndex: 1),
       );
-      final admission =
-          AdmissionController(documentIndex: index)
-            ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-            ..registerChapter(_chapterBlocks(0, 3))
-            ..offer(_ready(0, 1))
-            ..activateViewport(
-              visibleTop: 0,
-              visibleBottom: 100,
-              cacheExtent: 50,
-            );
+      final admission = AdmissionController(documentIndex: index)
+        ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+        ..registerChapter(_chapterBlocks(0, 3))
+        ..offer(_ready(0, 1))
+        ..activateViewport(visibleTop: 0, visibleBottom: 100, cacheExtent: 50);
       addTearDown(admission.dispose);
 
       admission.offer(_ready(0, 0));
@@ -391,16 +384,15 @@ void main() {
         final index = DocumentIndex(
           centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
         );
-        final admission =
-            AdmissionController(documentIndex: index)
-              ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-              ..registerChapter(_chapterBlocks(0, 2))
-              ..offer(_ready(0, 0))
-              ..activateViewport(
-                visibleTop: 0,
-                visibleBottom: 120,
-                cacheExtent: 50,
-              );
+        final admission = AdmissionController(documentIndex: index)
+          ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+          ..registerChapter(_chapterBlocks(0, 2))
+          ..offer(_ready(0, 0))
+          ..activateViewport(
+            visibleTop: 0,
+            visibleBottom: 120,
+            cacheExtent: 50,
+          );
         addTearDown(admission.dispose);
 
         admission.offer(_ready(0, 1));
@@ -415,53 +407,97 @@ void main() {
       },
     );
 
-    test(
-      'invalidateChapter（連同 DocumentIndex）讓舊 segmentation 重新載入後'
-      '不與新高度混疊——重現章節 evicted／invalidated 後 maxBlockChars '
-      '改變的實際路徑',
-      () {
-        final index = DocumentIndex(
-          centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
-        );
-        final admission =
-            AdmissionController(documentIndex: index)
-              ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
-              ..registerChapter(_chapterBlocks(0, 3)); // 舊 segmentation：3 塊
-        addTearDown(admission.dispose);
+    test('invalidateChapter（連同 DocumentIndex）讓舊 segmentation 重新載入後'
+        '不與新高度混疊——重現章節 evicted／invalidated 後 maxBlockChars '
+        '改變的實際路徑', () {
+      final index = DocumentIndex(
+        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+      );
+      final admission = AdmissionController(documentIndex: index)
+        ..reset(epoch: LayoutEpoch.initial, chapterCount: 1)
+        ..registerChapter(_chapterBlocks(0, 3)); // 舊 segmentation：3 塊
+      addTearDown(admission.dispose);
 
-        admission
-          ..offer(_ready(0, 0))
-          ..offer(_ready(0, 1))
-          ..offer(_ready(0, 2));
-        expect(index.admittedCount, 3);
-        expect(index.chapterExtent(0), 300); // _ready 固定 height: 100
+      admission
+        ..offer(_ready(0, 0))
+        ..offer(_ready(0, 1))
+        ..offer(_ready(0, 2));
+      expect(index.admittedCount, 3);
+      expect(index.chapterExtent(0), 300); // _ready 固定 height: 100
 
-        // 章節 evicted／invalidated：與 HybridReaderScreen._onChapterEvent
-        // 同款兩步——DocumentIndex 丟棄已放行座標，AdmissionController 丟棄
-        // 記住的舊章節形狀與尚未 admit 的殘留 pending。
-        final indexChanged = index.invalidateChapter(0);
-        admission.invalidateChapter(0);
-        expect(indexChanged, isTrue);
-        expect(index.admittedCount, 0);
+      // 章節 evicted／invalidated：與 HybridReaderScreen._onChapterEvent
+      // 同款兩步——DocumentIndex 丟棄已放行座標，AdmissionController 丟棄
+      // 記住的舊章節形狀與尚未 admit 的殘留 pending。
+      final indexChanged = index.invalidateChapter(0);
+      admission.invalidateChapter(0);
+      expect(indexChanged, isTrue);
+      expect(index.admittedCount, 0);
 
-        // 重新載入：maxBlockChars 變大，chapter 0 只剩 1 塊。
-        admission.registerChapter(_chapterBlocks(0, 1));
-        admission.offer(
-          BlockReady(
-            key: const BlockKey(chapterIndex: 0, blockIndex: 0),
-            epoch: LayoutEpoch.initial,
-            metrics: const BlockMetrics(height: 42, lineCount: 5),
-          ),
-        );
+      // 重新載入：maxBlockChars 變大，chapter 0 只剩 1 塊。
+      admission.registerChapter(_chapterBlocks(0, 1));
+      admission.offer(
+        BlockReady(
+          key: const BlockKey(chapterIndex: 0, blockIndex: 0),
+          epoch: LayoutEpoch.initial,
+          metrics: const BlockMetrics(height: 42, lineCount: 5),
+        ),
+      );
 
-        // 只有新 segmentation 的高度，沒有舊切法遺留的 blockIndex 1/2。
-        expect(index.admittedCount, 1);
-        expect(index.chapterExtent(0), 42);
-      },
-    );
+      // 只有新 segmentation 的高度，沒有舊切法遺留的 blockIndex 1/2。
+      expect(index.admittedCount, 1);
+      expect(index.chapterExtent(0), 42);
+    });
   });
 
   group('MetricsDiskCache', () {
+    test('identical content with different block boundaries cannot share disk metrics', () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'reader_segmentation_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final cache = MetricsDiskCache(baseDirectory: temp);
+      final text = ChapterText(
+        id: 0,
+        title: '',
+        paragraphs: const ['abcdefgh'],
+        displayText: 'abcdefgh',
+        contentHash: 'same-content',
+      );
+      const preprocessor = TextPreprocessor(useIsolate: false);
+      final small = await preprocessor.process(text, maxBlockChars: 2);
+      final large = await preprocessor.process(text, maxBlockChars: 4);
+      final repeated = await preprocessor.process(text, maxBlockChars: 2);
+      expect(small.contentHash, large.contentHash);
+      expect(small.layoutIdentity, isNot(large.layoutIdentity));
+      expect(small.layoutIdentity, repeated.layoutIdentity);
+      final metrics = {
+        small.blocks.first.key: const BlockMetrics(height: 40, lineCount: 2),
+      };
+      final fingerprint = _fingerprint(width: 360);
+      await cache.write(
+        bookUrl: 'book://segmentation',
+        fingerprint: fingerprint,
+        metrics: metrics,
+        chapterLayoutIdentities: {0: small.layoutIdentity},
+      );
+      expect(
+        await cache.read(
+          bookUrl: 'book://segmentation',
+          fingerprint: fingerprint,
+          chapterLayoutIdentities: {0: repeated.layoutIdentity},
+        ),
+        metrics,
+      );
+      expect(
+        await cache.read(
+          bookUrl: 'book://segmentation',
+          fingerprint: fingerprint,
+          chapterLayoutIdentities: {0: large.layoutIdentity},
+        ),
+        isEmpty,
+      );
+    });
+
     test('round-trips versioned binary metrics', () async {
       final temp = await Directory.systemTemp.createTemp(
         'night_reader_metrics_',
@@ -483,7 +519,7 @@ void main() {
           bookUrl: 'book://1',
           fingerprint: fp,
           metrics: metrics,
-          chapterContentHashes: const <int, String>{2: 'content-v1'},
+          chapterLayoutIdentities: const <int, String>{2: 'content-v1'},
         ),
         1,
       );
@@ -491,14 +527,14 @@ void main() {
       final restored = await cache.read(
         bookUrl: 'book://1',
         fingerprint: fp,
-        chapterContentHashes: const <int, String>{2: 'content-v1'},
+        chapterLayoutIdentities: const <int, String>{2: 'content-v1'},
       );
       expect(restored, metrics);
       expect(
         await cache.read(
           bookUrl: 'book://1',
           fingerprint: fp,
-          chapterContentHashes: const <int, String>{2: 'content-v2'},
+          chapterLayoutIdentities: const <int, String>{2: 'content-v2'},
         ),
         isEmpty,
       );

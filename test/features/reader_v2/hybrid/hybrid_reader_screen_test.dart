@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +25,6 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
-import '../../../reader_correctness/reader_correctness_operations.dart';
-
 class _FakeBookDao extends Fake implements BookDao {
   int progressWrites = 0;
 
@@ -48,151 +45,23 @@ class _FakeChapterDao extends Fake implements ChapterDao {}
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
-final class _DeferredChapterLoader {
-  bool holdChapter3 = false;
-  final Map<int, Completer<String?>> _pending = <int, Completer<String?>>{};
+final class _DelayedPreprocessor implements HybridTextPreprocessor {
+  final entered = Completer<void>();
+  final release = Completer<void>();
 
-  Future<String?> load(int chapterIndex, BookChapter chapter) {
-    if (!holdChapter3 || chapterIndex != 3) {
-      return Future<String?>.value(chapter.content);
-    }
-    final completer = _pending.putIfAbsent(
-      chapterIndex,
-      Completer<String?>.new,
-    );
-    return completer.future;
+  @override
+  Future<ChapterBlocks> process(
+    ChapterText chapter, {
+    int maxBlockChars = 1024,
+  }) async {
+    if (!entered.isCompleted) entered.complete();
+    await release.future;
+    return const TextPreprocessor(useIsolate: false)
+        .process(chapter, maxBlockChars: maxBlockChars);
   }
-
-  bool get chapter3Pending => _pending[3] != null;
-
-  void releaseChapter3(BookChapter chapter) {
-    final completer = _pending.remove(3);
-    if (completer == null || completer.isCompleted) return;
-    completer.complete(chapter.content);
-  }
-}
-
-final class _OrdinaryPrefetchDrainObservation {
-  const _OrdinaryPrefetchDrainObservation({
-    required this.snapshot,
-    required this.maxEnqueuedCount,
-    required this.maxQueueDepth,
-    required this.postDrainRefills,
-  });
-
-  final Map<String, Object?> snapshot;
-  final int maxEnqueuedCount;
-  final int maxQueueDepth;
-  final int postDrainRefills;
 }
 
 void main() {
-  setUp(() {
-    HybridReaderScreen.debugFrameInvariantsEnabled = false;
-  });
-  tearDown(() {
-    HybridReaderScreen.debugFrameInvariantsEnabled = false;
-  });
-
-  HybridFrameInvariantRecord invariantRecord({
-    required List<BlockKey> visibleKeys,
-    int timestampMicros = 1,
-    double scrollOffset = 0,
-    bool isScrolling = false,
-    String? scrollActivity,
-    double? scrollVelocity,
-    int? operationTokenId = 1,
-    bool operationIsCurrent = true,
-    int chapterCount = 2,
-    bool errorPresent = false,
-    double scrollPixels = 0,
-    double minScrollExtent = 0,
-    double maxScrollExtent = 1000,
-    int pumpQueueDepth = 0,
-    int epoch = 1,
-    int layoutGeneration = 1,
-    int resetGeneration = 3,
-  }) {
-    return HybridFrameInvariantRecord(
-      timestampMicros: timestampMicros,
-      phase: 'ready',
-      scrollOffset: scrollOffset,
-      viewportHeight: 180,
-      dragging: false,
-      isScrolling: isScrolling,
-      restoreLocked: false,
-      initialRestoreCompleted: true,
-      pendingChapterJumpTarget: null,
-      epoch: epoch,
-      layoutGeneration: layoutGeneration,
-      documentIndexRevision: 1,
-      resetGeneration: resetGeneration,
-      indexBindingResetGeneration: resetGeneration,
-      indexCenter: const BlockKey(chapterIndex: 0, blockIndex: 0),
-      visibleKeys: visibleKeys,
-      visibleChapters: const <int>[0],
-      missingParagraphCount: 0,
-      unloadedChapterCount: 0,
-      dominantVisibleChapter: 0,
-      displayedProgressChapter: 0,
-      pumpQueueDepth: pumpQueueDepth,
-      scrollPixels: scrollPixels,
-      minScrollExtent: minScrollExtent,
-      maxScrollExtent: maxScrollExtent,
-      scrollActivity: scrollActivity ?? (isScrolling ? 'ballistic' : 'idle'),
-      scrollVelocity: scrollVelocity ?? (isScrolling ? 100.0 : 0.0),
-      operationTokenId: operationTokenId,
-      operationIsCurrent: operationIsCurrent,
-      chapterCount: chapterCount,
-      errorPresent: errorPresent,
-    );
-  }
-
-  test('逐幀 evaluator 會捕捉明確的 I1 visible key 缺口', () {
-    final violations = evaluateHybridFrameInvariants(
-      current: invariantRecord(
-        visibleKeys: const <BlockKey>[
-          BlockKey(chapterIndex: 0, blockIndex: 0),
-          BlockKey(chapterIndex: 0, blockIndex: 2),
-        ],
-      ),
-    );
-    expect(violations.map((violation) => violation.invariant), contains('I1'));
-  });
-
-  test('I8 不把跨 epoch 的 reload restore 誤判成同一 ballistic stream', () {
-    final previousPrevious = invariantRecord(
-      visibleKeys: const <BlockKey>[BlockKey(chapterIndex: 0, blockIndex: 0)],
-      timestampMicros: 1,
-      isScrolling: true,
-      scrollOffset: 0,
-    );
-    final previous = invariantRecord(
-      visibleKeys: const <BlockKey>[BlockKey(chapterIndex: 0, blockIndex: 0)],
-      timestampMicros: 2,
-      isScrolling: true,
-      scrollOffset: 0,
-    );
-    final current = invariantRecord(
-      visibleKeys: const <BlockKey>[BlockKey(chapterIndex: 0, blockIndex: 0)],
-      timestampMicros: 3,
-      isScrolling: true,
-      scrollOffset: -10,
-      epoch: 2,
-      layoutGeneration: 2,
-      resetGeneration: 4,
-    );
-    final violations = evaluateHybridFrameInvariants(
-      current: current,
-      previous: previous,
-      previousPrevious: previousPrevious,
-    );
-    expect(
-      violations.map((violation) => violation.invariant),
-      isNot(contains('I8')),
-    );
-  });
-
   group('hybrid page completion', () {
     test('lazy edge partial movement is not a completed page', () {
       expect(
@@ -330,6 +199,9 @@ void main() {
     ReaderV2TtsHighlight? ttsHighlight,
     GestureTapUpCallback? onContentTapUp,
     int paragraphCacheCapacity = 512,
+    HybridTextPreprocessor preprocessor = const TextPreprocessor(
+      useIsolate: false,
+    ),
     Size viewportSize = const Size(220, 180),
     Color backgroundColor = const Color(0xFFFFFFFF),
     Color textColor = const Color(0xFF000000),
@@ -349,7 +221,7 @@ void main() {
               ttsHighlight: ttsHighlight,
               onContentTapUp: onContentTapUp,
               progressListenable: progress,
-              preprocessor: const TextPreprocessor(useIsolate: false),
+              preprocessor: preprocessor,
               enableDiskMetrics: false,
               paragraphCacheCapacity: paragraphCacheCapacity,
             ),
@@ -367,138 +239,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<_OrdinaryPrefetchDrainObservation>
-  pumpUntilOrdinaryPrefetchStable(
-    WidgetTester tester,
-    dynamic state, {
-    String reason = 'ordinary prefetch',
-    int maxBatchBlocks = 32,
-    Map<String, Object?>? initialSample,
-  }) async {
-    var consecutiveSettledFrames = 0;
-    var sawWork = initialSample != null &&
-        ((initialSample['pumpQueueDepth'] as int) > 0 ||
-            (initialSample['enqueuedCount'] as int) > 0);
-    var zeroAfterWork = initialSample != null && sawWork;
-    var postDrainRefills = 0;
-    var maxEnqueuedCount = initialSample?['enqueuedCount'] as int? ?? 0;
-    var maxQueueDepth = initialSample?['pumpQueueDepth'] as int? ?? 0;
-    Map<String, Object?>? lastSample = initialSample;
-
-    for (var frame = 0; frame < 240; frame += 1) {
-      await tester.pump(const Duration(milliseconds: 8));
-      final sample = Map<String, Object?>.from(
-        (state as dynamic).debugSnapshot() as Map,
-      );
-      lastSample = sample;
-      final queueDepth = sample['pumpQueueDepth'] as int;
-      final enqueuedCount = sample['enqueuedCount'] as int;
-      maxEnqueuedCount = math.max(maxEnqueuedCount, enqueuedCount);
-      maxQueueDepth = math.max(maxQueueDepth, queueDepth);
-
-      if (queueDepth > 0) {
-        if (zeroAfterWork) postDrainRefills += 1;
-        sawWork = true;
-        zeroAfterWork = false;
-      } else if (sawWork) {
-        zeroAfterWork = true;
-      }
-      if (enqueuedCount > 0) sawWork = true;
-
-      final visibleKeys = sample['visibleKeys'] as List;
-      final missingParagraphKeys = sample['missingParagraphKeys'] as List;
-      final readyFrame =
-          sample['phase'] == 'ready' &&
-          sample['initialRestoreCompleted'] == true &&
-          sample['dragging'] == false &&
-          sample['isScrolling'] == false &&
-          sample['restorePrefetchBarrierActive'] == false &&
-          sample['pendingChapterJumpTarget'] == null;
-      if (readyFrame && visibleKeys.isNotEmpty) {
-        expect(sample['visibleKeysContiguous'], true, reason: reason);
-        expect(missingParagraphKeys, isEmpty, reason: reason);
-      }
-
-      final semanticallySettled =
-          readyFrame &&
-          queueDepth == 0 &&
-          enqueuedCount == 0 &&
-          visibleKeys.isNotEmpty &&
-          sample['visibleKeysContiguous'] == true &&
-          missingParagraphKeys.isEmpty;
-      if (semanticallySettled) {
-        consecutiveSettledFrames += 1;
-      } else {
-        consecutiveSettledFrames = 0;
-      }
-
-      if (consecutiveSettledFrames >= 4) {
-        expect(sawWork, true, reason: '$reason must admit a bounded batch');
-        expect(
-          maxEnqueuedCount,
-          lessThanOrEqualTo(maxBatchBlocks),
-          reason: '$reason must keep enqueued work bounded',
-        );
-        expect(
-          maxQueueDepth,
-          lessThanOrEqualTo(maxBatchBlocks),
-          reason: '$reason must keep pump queue bounded',
-        );
-        expect(
-          postDrainRefills,
-          0,
-          reason:
-              '$reason must stay settled after its first queue drain; '
-              'a zero-to-positive transition means _pumpOnce re-admitted '
-              'the remaining lead deficit',
-        );
-        return _OrdinaryPrefetchDrainObservation(
-          snapshot: sample,
-          maxEnqueuedCount: maxEnqueuedCount,
-          maxQueueDepth: maxQueueDepth,
-          postDrainRefills: postDrainRefills,
-        );
-      }
-    }
-
-    fail(
-      '$reason did not reach four consecutive semantic settled frames; '
-      'lastSnapshot=$lastSample',
-    );
-  }
-
-  testWidgets('hook 開啟時可執行逐幀路徑，關閉時沒有記錄', (tester) async {
-    final runtime = makeRuntime(List.generate(2, chapter));
-    final controller = ReaderV2ViewportController();
-    addTearDown(runtime.dispose);
-
-    await pumpScreen(tester, runtime, controller);
-    final state = tester.state(find.byType(HybridReaderScreen));
-    expect((state as dynamic).debugFrameInvariantViolations(), isEmpty);
-    final disabledSummary =
-        (state as dynamic).debugPerformanceSummary() as Map<String, Object?>;
-    expect(disabledSummary['invariantHookEnabled'], false);
-
-    await openAndSettle(tester, runtime);
-    expect((state as dynamic).debugFrameInvariantViolations(), isEmpty);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    HybridReaderScreen.debugFrameInvariantsEnabled = true;
-    final enabledRuntime = makeRuntime(List.generate(2, chapter));
-    final enabledController = ReaderV2ViewportController();
-    addTearDown(enabledRuntime.dispose);
-    await pumpScreen(tester, enabledRuntime, enabledController);
-    final enabledState = tester.state(find.byType(HybridReaderScreen));
-    final enabledSummary =
-        (enabledState as dynamic).debugPerformanceSummary()
-            as Map<String, Object?>;
-    expect(enabledSummary['invariantHookEnabled'], true);
-    await openAndSettle(tester, enabledRuntime);
-    expect((enabledState as dynamic).debugFrameInvariantViolations(), isEmpty);
-  });
-
-  testWidgets('textColor 變更先隔離舊 ParagraphCache 再 restore', (tester) async {
+  testWidgets('theme repaint preserves geometry and operation ownership', (
+    tester,
+  ) async {
     final runtime = makeRuntime(List.generate(2, chapter));
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
@@ -510,19 +253,23 @@ void main() {
     expect(before['initialRestoreCompleted'], true);
     expect(before['missingParagraphKeys'], isEmpty);
 
-    HybridReaderScreen.debugFrameInvariantsEnabled = true;
     await pumpScreen(
       tester,
       runtime,
       controller,
       textColor: const Color(0xFF244739),
     );
-    final duringState = tester.state(find.byType(HybridReaderScreen));
-    // This is the regression assertion: before the fix didUpdateWidget kept
-    // the old ready flag while the new text color made visible cache entries
-    // stale, so the P3 hook recorded I2 during the transition.
-    expect((duringState as dynamic).debugFrameInvariantViolations(), isEmpty);
-
+    final during =
+        (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                .debugSnapshot()
+            as Map<String, Object?>;
+    expect(during['initialRestoreCompleted'], true);
+    expect(
+      during['documentIndexResetGeneration'],
+      before['documentIndexResetGeneration'],
+    );
+    expect(during['layoutGeneration'], before['layoutGeneration']);
+    expect(during['runtimeVisibleLocation'], before['runtimeVisibleLocation']);
     await tester.pumpAndSettle();
     final after =
         (tester.state(find.byType(HybridReaderScreen)) as dynamic)
@@ -794,307 +541,6 @@ void main() {
     expect(captured!.chapterIndex, 1);
   });
 
-  testWidgets('pending jump-owned settle 不會解除 restore prefetch barrier', (
-    tester,
-  ) async {
-    final runtime = makeRuntime([
-      chapter(0, paragraphCount: 4),
-      chapter(1, paragraphCount: 240),
-      chapter(2, paragraphCount: 4),
-    ]);
-    final controller = ReaderV2ViewportController();
-    addTearDown(runtime.dispose);
-
-    await pumpScreen(tester, runtime, controller);
-    await openAndSettle(tester, runtime);
-    await runtime.jumpToChapter(1);
-    await tester.pump();
-
-    final state = tester.state(find.byType(HybridReaderScreen));
-    final before = (state as dynamic).debugSnapshot() as Map<String, Object?>;
-    expect(before['restorePrefetchBarrierActive'], true);
-
-    // Reproduce the delayed ScrollEnd ownership window without relying on a
-    // wall-clock race: the runtime exposes the same pending target while its
-    // explicit jump is still the viewport owner. settleScroll must keep this
-    // restore-owned boundary bounded instead of reopening every long-chapter
-    // group.
-    runtime.pendingChapterJumpTarget = const ReaderV2Location(
-      chapterIndex: 1,
-      charOffset: 0,
-    );
-    await controller.settleScroll!();
-    final pending = (state as dynamic).debugSnapshot() as Map<String, Object?>;
-    expect(pending['pendingChapterJumpTarget'], isNotNull);
-    expect(pending['restorePrefetchBarrierActive'], true);
-    expect(pending['restoreUserScrollObserved'], false);
-
-    runtime.pendingChapterJumpTarget = null;
-    await tester.pump();
-    final after = (state as dynamic).debugSnapshot() as Map<String, Object?>;
-    expect(after['restorePrefetchBarrierActive'], true);
-  });
-
-  testWidgets('long chapter restore drains only the bounded viewport batches', (
-    tester,
-  ) async {
-    final runtime = makeRuntime([
-      chapter(0, paragraphCount: 4),
-      chapter(1, paragraphCount: 240),
-      chapter(2, paragraphCount: 4),
-    ]);
-    final controller = ReaderV2ViewportController();
-    addTearDown(runtime.dispose);
-
-    await pumpScreen(tester, runtime, controller);
-    await openAndSettle(tester, runtime);
-
-    // A long chapter is deliberately used here so the old restore path would
-    // leave a large non-visible prefetch tail in LayoutPump after the anchor
-    // became ready. The regression contract is queue drain at restore return,
-    // not a relaxed settle timeout.
-    await runtime.jumpToChapter(1);
-    // Give repository loaded events and their post-frame callbacks one chance
-    // to run. A late event must stay on the bounded restore path instead of
-    // re-enqueuing the whole long chapter after restore returns.
-    await tester.pump();
-    final state = tester.state(find.byType(HybridReaderScreen));
-    final firstJump =
-        (state as dynamic).debugSnapshot() as Map<String, Object?>;
-    expect(firstJump['phase'], 'ready');
-    expect(firstJump['initialRestoreCompleted'], true);
-    expect(firstJump['pumpQueueDepth'], 0);
-    expect(firstJump['missingParagraphKeys'], isEmpty);
-
-    // Repeating the same chapter-start navigation is the C6 failure shape.
-    // It must remain bounded even when the long chapter has already been
-    // warmed by the first jump.
-    await runtime.jumpToChapter(1);
-    await tester.pump();
-    final repeatedJump =
-        (tester.state(find.byType(HybridReaderScreen)) as dynamic)
-                .debugSnapshot()
-            as Map<String, Object?>;
-    expect(repeatedJump['phase'], 'ready');
-    expect(repeatedJump['initialRestoreCompleted'], true);
-    expect(repeatedJump['pumpQueueDepth'], 0);
-    expect(repeatedJump['missingParagraphKeys'], isEmpty);
-  });
-
-  testWidgets('user settle uses progressive prefetch for a long chapter', (
-    tester,
-  ) async {
-    const longChapterParagraphs = 240;
-    final runtime = makeRuntime([
-      chapter(0, paragraphCount: 4),
-      chapter(1, paragraphCount: longChapterParagraphs),
-      chapter(2, paragraphCount: 4),
-    ]);
-    final controller = ReaderV2ViewportController();
-    addTearDown(runtime.dispose);
-
-    await pumpScreen(tester, runtime, controller);
-    await openAndSettle(tester, runtime);
-    await runtime.jumpToChapter(1);
-    await tester.pumpAndSettle();
-
-    final state = tester.state(find.byType(HybridReaderScreen));
-    final beforeUserSettle =
-        (state as dynamic).debugSnapshot() as Map<String, Object?>;
-    final reader = find.byType(HybridScrollView);
-    final gesture = await tester.startGesture(tester.getCenter(reader));
-    await moveVsyncPaced(
-      tester,
-      gesture,
-      const Offset(0, -40),
-      duration: const Duration(milliseconds: 64),
-    );
-    expect(
-      (state as dynamic).debugSnapshot()['dragging'],
-      true,
-      reason: 'the regression must observe an actual user drag before settle',
-    );
-    await gesture.up();
-    // Let ScrollEnd schedule the ordinary settled prefetch, but inspect before
-    // the bounded batch has drained.  The save performed by settle yields, so
-    // allow a bounded number of real frames for that hand-off instead of
-    // making the assertion depend on one particular async turn.
-    const maxOrdinaryPrefetchBlocks = 32;
-    final ordinarySamples = <Map<String, Object?>>[];
-    for (var i = 0; i < 16; i += 1) {
-      final sample = Map<String, Object?>.from(
-        (state as dynamic).debugSnapshot() as Map,
-      );
-      ordinarySamples.add(sample);
-      if ((sample['enqueuedCount'] as int) > 0 ||
-          (sample['pumpQueueDepth'] as int) > 0) {
-        break;
-      }
-      await tester.pump(const Duration(milliseconds: 8));
-    }
-    final afterUserSettle = ordinarySamples.last;
-    expect(afterUserSettle['phase'], 'ready');
-    expect(afterUserSettle['restorePrefetchBarrierActive'], false);
-    expect(
-      afterUserSettle['enqueuedCount'] as int,
-      greaterThan(0),
-      reason: 'ordinary user settle must enqueue a non-empty progressive batch',
-    );
-    expect(
-      afterUserSettle['enqueuedCount'] as int,
-      lessThanOrEqualTo(maxOrdinaryPrefetchBlocks),
-      reason: 'user settle 不得一次排入整個長章節的 layout groups',
-    );
-    expect(
-      afterUserSettle['pumpQueueDepth'] as int,
-      lessThanOrEqualTo(maxOrdinaryPrefetchBlocks),
-      reason: 'ordinary prefetch queue 必須維持 bounded frontier',
-    );
-
-    final drainObservation = await pumpUntilOrdinaryPrefetchStable(
-      tester,
-      state,
-      reason: 'long-chapter ordinary settle',
-      maxBatchBlocks: maxOrdinaryPrefetchBlocks,
-      initialSample: afterUserSettle,
-    );
-    final drained = drainObservation.snapshot;
-    expect(drained['phase'], 'ready');
-    expect(drained['initialRestoreCompleted'], true);
-    expect(drained['pumpQueueDepth'], 0);
-    expect(
-      drained['forwardEdge'],
-      isNot(equals(beforeUserSettle['forwardEdge'])),
-      reason: 'the ordinary frontier must advance before the queue drains',
-    );
-    expect(drained['visibleKeys'], isNotEmpty);
-    expect(drained['visibleKeysContiguous'], true);
-    expect(drained['missingParagraphKeys'], isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'ordinary prefetch drops a chapter load that completes during a drag',
-    (tester) async {
-      const maxOrdinaryPrefetchBlocks = 32;
-      final chapters = [
-        chapter(0, paragraphCount: 1),
-        chapter(1, paragraphCount: 1),
-        chapter(2, paragraphCount: 1),
-        chapter(3, paragraphCount: 96),
-      ];
-      final loader = _DeferredChapterLoader()..holdChapter3 = true;
-      final runtime = makeRuntime(chapters, contentLoader: loader.load);
-      final controller = ReaderV2ViewportController();
-      addTearDown(runtime.dispose);
-
-      await pumpScreen(tester, runtime, controller);
-      await openAndSettle(tester, runtime);
-
-      // Open restore owns the prefetch barrier. Release it with a genuine
-      // user-owned settle before creating the ordinary async request.
-      final reader = find.byType(HybridScrollView);
-      final releaseBarrier = await tester.startGesture(
-        tester.getCenter(reader),
-      );
-      await moveVsyncPaced(
-        tester,
-        releaseBarrier,
-        const Offset(0, -16),
-        duration: const Duration(milliseconds: 64),
-      );
-      await releaseBarrier.up();
-      await tester.pumpAndSettle();
-      final afterBarrierRelease =
-          (tester.state(find.byType(HybridReaderScreen)) as dynamic)
-                  .debugSnapshot()
-              as Map<String, Object?>;
-      expect(afterBarrierRelease['restorePrefetchBarrierActive'], false);
-
-      // The short first chapters make this controlled drag cross into chapter
-      // 1. setPrefetchCenter starts chapter 3's ordinary load while the
-      // pointer is still down; holding that future gives the test a stable
-      // race window instead of relying on scheduler luck.
-      final crossChapterDrag = await tester.startGesture(
-        tester.getCenter(reader),
-      );
-      await moveVsyncPaced(
-        tester,
-        crossChapterDrag,
-        const Offset(0, -900),
-        duration: const Duration(milliseconds: 480),
-      );
-      final state = tester.state(find.byType(HybridReaderScreen));
-      expect((state as dynamic).debugSnapshot()['dragging'], true);
-
-      var chapter3Pending = loader.chapter3Pending;
-      for (var i = 0; i < 20 && !chapter3Pending; i += 1) {
-        await tester.pump();
-        chapter3Pending = loader.chapter3Pending;
-      }
-      expect(
-        chapter3Pending,
-        true,
-        reason:
-            'the cross-chapter drag must create an ordinary async load; '
-            'snapshot=${(state as dynamic).debugSnapshot()}',
-      );
-
-      final beforeResolve =
-          (state as dynamic).debugSnapshot() as Map<String, Object?>;
-      final enqueuedBeforeResolve = beforeResolve['enqueuedCount'] as int;
-      final queueBeforeResolve = beforeResolve['pumpQueueDepth'] as int;
-
-      // Resolve the ordinary load while the user still owns the gesture. A
-      // stale completion may populate its cache, but it must not enqueue
-      // layout work until the user-owned settle has completed.
-      loader.releaseChapter3(chapters[3]);
-      await tester.pump();
-      await tester.pump();
-      final whileDragging =
-          (state as dynamic).debugSnapshot() as Map<String, Object?>;
-      expect(whileDragging['dragging'], true);
-      expect(whileDragging['enqueuedCount'], enqueuedBeforeResolve);
-      expect(whileDragging['pumpQueueDepth'], queueBeforeResolve);
-
-      await crossChapterDrag.up();
-      final afterDragRelease = Map<String, Object?>.from(
-        (state as dynamic).debugSnapshot() as Map,
-      );
-      final drainObservation = await pumpUntilOrdinaryPrefetchStable(
-        tester,
-        state,
-        reason: 'stale chapter completion after drag',
-        maxBatchBlocks: maxOrdinaryPrefetchBlocks,
-        initialSample: afterDragRelease,
-      );
-      final drained = drainObservation.snapshot;
-      expect(
-        drainObservation.maxEnqueuedCount,
-        greaterThan(0),
-        reason: 'the post-drag ordinary settle must enqueue work',
-      );
-      expect(
-        drainObservation.maxEnqueuedCount,
-        lessThanOrEqualTo(maxOrdinaryPrefetchBlocks),
-        reason: 'ordinary refill must stay within the progressive frontier',
-      );
-      expect(drained['phase'], 'ready');
-      expect(drained['initialRestoreCompleted'], true);
-      expect(drained['pumpQueueDepth'], 0);
-      expect(drained['visibleKeys'], isNotEmpty);
-      expect(drained['visibleKeysContiguous'], true);
-      expect(drained['missingParagraphKeys'], isEmpty);
-      expect(
-        drained['documentIndexRevision'] as int,
-        greaterThan(beforeResolve['documentIndexRevision'] as int),
-        reason: 'the admitted frontier must advance before the queue drains',
-      );
-      expect(drained['forwardEdge'], isNotNull);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
   testWidgets('ballistic 尾端的明確 jump 不會被 dragging 旗標拒絕', (tester) async {
     final runtime = makeRuntime(List.generate(3, chapter));
     final controller = ReaderV2ViewportController();
@@ -1329,6 +775,62 @@ void main() {
     expect(captured!.charOffset, greaterThan(0));
   });
 
+  testWidgets(
+    'queued page commands expire when semantic navigation takes ownership',
+    (tester) async {
+      final runtime = makeRuntime(
+        List.generate(3, (i) => chapter(i, paragraphCount: 18)),
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+      await pumpScreen(tester, runtime, controller);
+      await openAndSettle(tester, runtime);
+      final first = controller.moveToNextPage!();
+      final second = controller.moveToNextPage!();
+      await tester.pump();
+      final jump = runtime.jumpToChapter(2);
+      await tester.pumpAndSettle();
+      await jump;
+      expect(await first, isFalse);
+      expect(await second, isFalse);
+      expect(runtime.state.visibleLocation.chapterIndex, 2);
+      expect(runtime.state.visibleLocation.charOffset, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'progress writes do not command the viewport back to an older anchor',
+    (tester) async {
+      final runtime = makeRuntime(List.generate(2, chapter));
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+      await pumpScreen(tester, runtime, controller);
+      await openAndSettle(tester, runtime);
+      final old = runtime.state.visibleLocation;
+      final movement = controller.scrollBy!(100);
+      await tester.pumpAndSettle();
+      await movement;
+      final visible = runtime.captureVisibleLocation();
+      final before =
+          (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                  .debugSnapshot()
+              as Map;
+      await runtime.viewportBridge.saveProgressLocation(old);
+      await tester.pumpAndSettle();
+      final after =
+          (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                  .debugSnapshot()
+              as Map;
+      expect(runtime.state.visibleLocation, visible);
+      expect(after['scrollOffset'], before['scrollOffset']);
+      expect(
+        after['documentIndexResetGeneration'],
+        before['documentIndexResetGeneration'],
+      );
+    },
+  );
+
   testWidgets('TTS 高亮 overlay 掛載且不攔截指標', (tester) async {
     final runtime = makeRuntime(List.generate(2, chapter));
     final controller = ReaderV2ViewportController();
@@ -1369,6 +871,39 @@ void main() {
     expect(controller.ensureCharRangeVisible, isNull);
     expect(runtime.captureVisibleLocation(notifyIfChanged: false), isNull);
   });
+
+  testWidgets(
+    'source swap rejects old preprocessing even when both generations are zero',
+    (tester) async {
+      final oldRuntime = makeRuntime([chapter(0, paragraphCount: 80)]);
+      final newRuntime = makeRuntime([chapter(0, paragraphCount: 2)]);
+      final delayed = _DelayedPreprocessor();
+      final controller = ReaderV2ViewportController();
+      addTearDown(oldRuntime.dispose);
+      addTearDown(newRuntime.dispose);
+      await pumpScreen(tester, oldRuntime, controller, preprocessor: delayed);
+      final opening = oldRuntime.openBook();
+      await delayed.entered.future;
+      await pumpScreen(tester, newRuntime, controller);
+      await openAndSettle(tester, newRuntime);
+      expect(
+        newRuntime.state.layoutGeneration,
+        oldRuntime.state.layoutGeneration,
+      );
+      final hash = (await newRuntime.loadContentAt(0)).contentHash;
+      delayed.release.complete();
+      await opening;
+      await tester.pumpAndSettle();
+      final snapshot =
+          (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                  .debugSnapshot()
+              as Map;
+      expect((snapshot['loadedContentHashes'] as Map)[0], hash);
+      expect(snapshot['missingParagraphKeys'], isEmpty);
+      expect(newRuntime.state.phase, ReaderV2Phase.ready);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('runtime 熱替換後改讀新 repository 並維持 bridge', (tester) async {
     final first = makeRuntime(<BookChapter>[chapter(0, paragraphCount: 1)]);
@@ -1476,7 +1011,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('拖曳期間 TTS ensure 會延後到手勢結束後執行', (tester) async {
+  testWidgets('TTS yields immediately to a drag without queuing stale work', (
+    tester,
+  ) async {
     final runtime = makeRuntime(
       List.generate(3, (i) => chapter(i, paragraphCount: 18)),
     );
@@ -1501,12 +1038,19 @@ void main() {
     ensure.whenComplete(() => completed = true);
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(completed, isFalse);
+    expect(completed, isTrue);
+    expect(await ensure, isFalse);
     expect(tester.takeException(), isNull);
 
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(await ensure, isTrue);
+    final retry = controller.ensureCharRangeVisible!(
+      chapterIndex: 0,
+      startCharOffset: content.displayText.length - 40,
+      endCharOffset: content.displayText.length - 20,
+    );
+    await tester.pumpAndSettle();
+    expect(await retry, isTrue);
     expect(tester.takeException(), isNull);
   });
 

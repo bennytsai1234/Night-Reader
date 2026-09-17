@@ -105,7 +105,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   late final ReaderV2ViewportBridge viewportBridge;
 
   bool disposed = false;
-  ReaderV2Location? pendingChapterJumpTarget;
+  ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
   Object? _hybridViewportOwner;
 
   ReaderV2LayoutStatsObserver? _previousLayoutStatsObserver;
@@ -257,8 +257,21 @@ class ReaderV2Runtime extends ChangeNotifier {
     return navigation.jumpToLocation(location, immediateSave: immediateSave);
   }
 
-  Future<bool> restoreFromLocation(ReaderV2Location location) {
-    return navigation.restoreFromLocation(location);
+  Future<bool> restoreFromLocation(ReaderV2Location location) async {
+    if (!hybridViewportActive) return navigation.restoreFromLocation(location);
+    final token = beginRestoreOperation(location: location);
+    try {
+      final restored = await _positionHybridViewport(
+        location: location,
+        token: token,
+      );
+      if (!restored)
+        failOperation(token, StateError('Hybrid viewport restore failed.'));
+      return restored;
+    } catch (error) {
+      failOperation(token, error);
+      return false;
+    }
   }
 
   Future<void> refreshNeighbors() {
@@ -272,10 +285,11 @@ class ReaderV2Runtime extends ChangeNotifier {
   void emitUserNotice(String message) => navigation.emitUserNotice(message);
 
   Future<void> openBook() async {
-    var token = stateMachine.beginOpen();
+    final token = stateMachine.beginOpen(location: _initialLocation);
     notifyListeners();
     try {
       await repository.ensureChapters();
+      if (!isCurrentOperationToken(token)) return;
       final location = _initialLocation.normalized(
         chapterCount: repository.chapterCount,
       );
@@ -290,10 +304,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         return;
       }
       if (viewportBridge.viewportRestore != null) {
-        final restored = await navigation.restoreFromLocation(location);
-        if (restored || state.phase == ReaderV2Phase.error) return;
-        token = stateMachine.beginOpen();
-        notifyListeners();
+        final restored = await navigation.restoreFromLocation(
+          location,
+          operationToken: token,
+        );
+        if (restored ||
+            !isCurrentOperationToken(token) ||
+            state.phase == ReaderV2Phase.error)
+          return;
       }
       await navigation.jumpToLocation(
         location,
@@ -302,7 +320,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       );
       unawaited(preloadScheduler.scheduleOpen(location.chapterIndex));
     } catch (e) {
-      if (stateMachine.fail(token, e)) notifyListeners();
+      failOperation(token, e);
     }
   }
 
@@ -315,13 +333,14 @@ class ReaderV2Runtime extends ChangeNotifier {
 
     navigation.clearPendingNeighborAdvance();
     final location =
-        pendingChapterJumpTarget ??
+        pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
 
     if (hybridViewportActive) {
       final token = stateMachine.beginPresentation(
         spec: spec,
+        location: location,
         layoutGeneration: state.layoutGeneration + 1,
       );
       notifyListeners();
@@ -346,6 +365,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     resolver.updateLayoutSpec(spec);
     final token = stateMachine.beginPresentation(
       spec: spec,
+      location: location,
       layoutGeneration: generation,
     );
     notifyListeners();
@@ -377,7 +397,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       debugOnReloadContentTriggered?.call();
     }
     final location =
-        pendingChapterJumpTarget ??
+        pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
     // The repository cache still contains the displayed content at this
@@ -387,6 +407,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (hybridViewportActive) {
       repository.clearContentCache();
       final token = stateMachine.beginContentReload(
+        location: location,
         layoutGeneration: state.layoutGeneration + 1,
       );
       notifyListeners();
@@ -396,7 +417,7 @@ class ReaderV2Runtime extends ChangeNotifier {
           previousContent: previousContent,
           token: token,
         );
-        if (!stateMachine.isCurrent(token)) return;
+        if (!isCurrentOperationToken(token)) return;
         final positioned = await _positionHybridViewport(
           location: remappedLocation,
           token: token,
@@ -412,14 +433,17 @@ class ReaderV2Runtime extends ChangeNotifier {
     final generation = preloadScheduler.bumpGeneration();
     repository.clearContentCache();
     resolver.clearCachedLayouts();
-    final token = stateMachine.beginContentReload(layoutGeneration: generation);
+    final token = stateMachine.beginContentReload(
+      layoutGeneration: generation,
+      location: location,
+    );
     notifyListeners();
     final remappedLocation = await _remapReloadLocation(
       location: location,
       previousContent: previousContent,
       token: token,
     );
-    if (!stateMachine.isCurrent(token)) return;
+    if (!isCurrentOperationToken(token)) return;
     await navigation.jumpToLocation(
       remappedLocation,
       immediateSave: false,
@@ -435,7 +459,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     final before = previousContent;
     if (before == null) return location;
     final after = await repository.loadContent(location.chapterIndex);
-    if (!stateMachine.isCurrent(token)) return location;
+    if (!isCurrentOperationToken(token)) return location;
     return ReaderV2ContentLocationMapper.remap(
       location: location,
       before: before,
@@ -447,20 +471,16 @@ class ReaderV2Runtime extends ChangeNotifier {
     return !disposed && stateMachine.isCurrent(token);
   }
 
-  ReaderV2OperationToken beginJumpOperation() {
-    final token = stateMachine.beginJump();
+  ReaderV2OperationToken beginJumpOperation({ReaderV2Location? location}) {
+    final token = stateMachine.beginJump(location: location);
     notifyListeners();
     return token;
   }
 
-  ReaderV2OperationToken beginRestoreOperation() {
-    final token = stateMachine.beginRestore();
+  ReaderV2OperationToken beginRestoreOperation({ReaderV2Location? location}) {
+    final token = stateMachine.beginRestore(location: location);
     notifyListeners();
     return token;
-  }
-
-  void endRestoreOperation(ReaderV2OperationToken token) {
-    stateMachine.endRestore(token);
   }
 
   bool completeReadyOperation(
@@ -468,6 +488,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     ReaderV2Location? visibleLocation,
     ReaderV2PageWindow? pageWindow,
   }) {
+    if (!isCurrentOperationToken(token)) return false;
     final completed = stateMachine.completeReady(
       token,
       visibleLocation: visibleLocation,
@@ -478,6 +499,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   bool failOperation(ReaderV2OperationToken token, Object error) {
+    if (!isCurrentOperationToken(token)) return false;
     final failed = stateMachine.fail(token, error);
     if (failed) notifyListeners();
     return failed;
@@ -544,46 +566,22 @@ class ReaderV2Runtime extends ChangeNotifier {
     return repository.loadContent(chapterIndex);
   }
 
-  Future<void> _jumpHybridToChapter(int chapterIndex) async {
-    AppLog.d(
-      'Reader hybrid jump start target=$chapterIndex '
-      'active=$hybridViewportActive phase=${state.phase} '
-      'visible=${state.visibleLocation.chapterIndex}',
+  Future<void> _jumpHybridToChapter(int chapterIndex) {
+    return _jumpHybridToLocation(
+      ReaderV2Location(
+        chapterIndex: chapterIndex,
+        charOffset: 0,
+        visualOffsetPx: state.layoutSpec.anchorOffsetInViewport,
+      ),
+      immediateSave: true,
     );
-    final location = ReaderV2Location(
-      chapterIndex: chapterIndex,
-      charOffset: 0,
-      visualOffsetPx: state.layoutSpec.anchorOffsetInViewport,
-    );
-    pendingChapterJumpTarget = location;
-    try {
-      await _jumpHybridToLocation(location, immediateSave: false);
-      final normalized = location.normalized(
-        chapterCount: repository.chapterCount,
-      );
-      AppLog.d(
-        'Reader hybrid jump positioned target=$chapterIndex '
-        'phase=${state.phase} visible=${state.visibleLocation.chapterIndex} '
-        'matches=${state.visibleLocation == normalized}',
-      );
-      if (disposed ||
-          state.phase != ReaderV2Phase.ready ||
-          state.visibleLocation != normalized) {
-        return;
-      }
-      await viewportBridge.saveProgressLocation(normalized);
-    } finally {
-      if (identical(pendingChapterJumpTarget, location)) {
-        pendingChapterJumpTarget = null;
-      }
-    }
   }
 
   Future<void> _jumpHybridToLocation(
     ReaderV2Location location, {
     required bool immediateSave,
   }) async {
-    final token = beginJumpOperation();
+    final token = beginJumpOperation(location: location);
     AppLog.d(
       'Reader hybrid jump operation id=${token.id} '
       'target=${location.chapterIndex}',
@@ -599,7 +597,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         'visible=${state.visibleLocation.chapterIndex}',
       );
       if (!positioned) {
-        if (stateMachine.isCurrent(token)) {
+        if (isCurrentOperationToken(token)) {
           failOperation(token, StateError('Hybrid jump restore failed.'));
         }
         return;
@@ -617,14 +615,14 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2OperationToken token,
   }) async {
     await repository.ensureChapters();
-    if (!stateMachine.isCurrent(token)) return false;
+    if (!isCurrentOperationToken(token)) return false;
     final chapterCount = repository.chapterCount;
     if (chapterCount <= 0) return false;
     final chapterIndex = location.chapterIndex
         .clamp(0, chapterCount - 1)
         .toInt();
     final content = await repository.loadContent(chapterIndex);
-    if (!stateMachine.isCurrent(token)) return false;
+    if (!isCurrentOperationToken(token)) return false;
     final normalized =
         ReaderV2Location(
           chapterIndex: chapterIndex,
@@ -647,7 +645,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       'visible=${state.visibleLocation.chapterIndex}',
     );
     if (!restored) return false;
-    if (!stateMachine.isCurrent(token)) return false;
+    if (!isCurrentOperationToken(token)) return false;
     final completed = completeReadyOperation(
       token,
       visibleLocation: normalized,

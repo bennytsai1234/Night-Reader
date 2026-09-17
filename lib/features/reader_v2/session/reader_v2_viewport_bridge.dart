@@ -1,9 +1,4 @@
-import 'dart:async';
-
-import 'package:flutter/widgets.dart';
-
 import 'reader_v2_location.dart';
-import 'reader_v2_operation_token.dart';
 import 'reader_v2_runtime.dart';
 import 'reader_v2_state.dart';
 
@@ -71,46 +66,10 @@ class ReaderV2ViewportBridge {
     return _saveProgressLocation(location);
   }
 
-  Future<ReaderV2Location?> saveJumpAfterSettled(
-    ReaderV2Location location, {
-    required ReaderV2OperationToken token,
-  }) {
-    return _saveVisibleAnchorAfterViewportSettled(
-      fallbackLocation: location,
-      restoreLocation: location,
-      isCurrent: () => _runtime.isCurrentOperationToken(token),
-    );
-  }
-
   Future<ReaderV2Location?> saveProgressLocation(
     ReaderV2Location location, {
     bool immediate = true,
   }) => _saveProgressLocation(location, immediate: immediate);
-
-  Future<ReaderV2Location?> _saveVisibleAnchorAfterViewportSettled({
-    required ReaderV2Location fallbackLocation,
-    ReaderV2Location? restoreLocation,
-    bool Function()? isCurrent,
-    bool immediateSave = true,
-  }) async {
-    if (WidgetsBinding.instance.hasScheduledFrame) {
-      await WidgetsBinding.instance.endOfFrame;
-    }
-    if (_runtime.disposed || _runtime.restoreInProgress) return null;
-    if (isCurrent != null && !isCurrent()) return null;
-    final restore = _viewportRestore;
-    if (restoreLocation != null && restore != null) {
-      final restored = await restore(restoreLocation);
-      if (_runtime.disposed || _runtime.restoreInProgress) return null;
-      if (isCurrent != null && !isCurrent()) return null;
-      if (!restored) return null;
-    }
-    final saved = await saveProgress(immediate: immediateSave);
-    if (saved != null) return saved;
-    if (_runtime.disposed || _runtime.restoreInProgress) return null;
-    if (isCurrent != null && !isCurrent()) return null;
-    return _saveProgressLocation(fallbackLocation, immediate: immediateSave);
-  }
 
   Future<ReaderV2Location?> _saveProgressLocation(
     ReaderV2Location location, {
@@ -121,9 +80,6 @@ class ReaderV2ViewportBridge {
       chapterCount: _runtime.repository.chapterCount,
     );
     if (normalized == _runtime.state.committedLocation) {
-      if (normalized != _runtime.state.visibleLocation) {
-        _runtime.updateVisibleLocation(normalized);
-      }
       if (immediate) {
         await _runtime.progressController.flush();
       }
@@ -142,7 +98,8 @@ class ReaderV2ViewportBridge {
     bool allowDuringRestore = false,
     bool notifyIfChanged = true,
   }) {
-    if (_runtime.disposed || _runtime.state.phase != ReaderV2Phase.ready) {
+    if (_runtime.disposed ||
+        (_runtime.state.phase != ReaderV2Phase.ready && !allowDuringRestore)) {
       return null;
     }
     if (_runtime.restoreInProgress && !allowDuringRestore) return null;

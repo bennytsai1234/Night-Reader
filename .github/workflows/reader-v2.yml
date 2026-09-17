@@ -1,11 +1,12 @@
-name: Reader V2 workbench
+name: Reader V2
 on:
   push:
     branches: [fix/reader-v2-ownership-20260917]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: reader-v2-workbench
+  group: reader-v2-${{ github.ref }}
   cancel-in-progress: true
 defaults:
   run:
@@ -18,55 +19,30 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Apply source edits with base verification
-        run: python3 .github/reader-v2-apply.py
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Format changed Dart files
-        run: |
-          git diff --name-only --diff-filter=AM -- '*.dart' | xargs -r dart format
-          git diff --check
-      - name: Analyze
-        id: analyze
-        continue-on-error: true
+      - name: Analyze committed source
         run: |
           set -o pipefail
-          mkdir -p "$RUNNER_TEMP/reader-output"
-          flutter analyze 2>&1 | tee "$RUNNER_TEMP/reader-output/analyze.txt"
+          mkdir -p "$RUNNER_TEMP/reader-checks"
+          flutter analyze 2>&1 | tee "$RUNNER_TEMP/reader-checks/analyze.txt"
       - name: Reader and source-switch tests
-        id: tests
-        continue-on-error: true
         run: |
           set -o pipefail
-          flutter test test/features/reader_v2 test/core/services/source_switch_service_test.dart test/core/services/source_switch_progress_test.dart test/core/engine/reader/chinese_text_converter_length_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/reader-output/tests.txt"
-      - name: Require checks to pass
-        if: steps.analyze.outcome != 'success' || steps.tests.outcome != 'success'
-        run: exit 1
-      - name: Collect applied changes
+          flutter test test/features/reader_v2 test/core/services/source_switch_service_test.dart test/core/services/source_switch_progress_test.dart test/core/engine/reader/chinese_text_converter_length_test.dart --reporter expanded 2>&1 | tee "$RUNNER_TEMP/reader-checks/tests.txt"
+      - name: Verify validation did not modify tracked source
         if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/reader-output"
-          git diff --check > "$RUNNER_TEMP/reader-output/diff-check.txt" || true
-          git diff --stat > "$RUNNER_TEMP/reader-output/stat.txt"
-          git diff --binary > "$RUNNER_TEMP/reader-output/applied.patch"
-          python3 - <<'PY'
-          import os, subprocess, tarfile
-          from pathlib import Path
-          paths = subprocess.check_output(['git', 'diff', '--name-only', '--diff-filter=AM'], text=True).splitlines()
-          with tarfile.open(Path(os.environ['RUNNER_TEMP']) / 'reader-output' / 'changed-files.tgz', 'w:gz') as archive:
-              for path in paths:
-                  archive.add(path, arcname=path)
-          PY
+        run: git diff --exit-code
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reader-workbench-output
-          path: ${{ runner.temp }}/reader-output
-          retention-days: 3
+          name: reader-checks
+          path: ${{ runner.temp }}/reader-checks
+          retention-days: 7
   android:
     needs: check
     runs-on: ubuntu-latest
@@ -75,7 +51,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - run: python3 .github/reader-v2-apply.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -91,7 +66,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Prepare bounded device journey
+      - name: Prepare device validation
         run: |
           mkdir -p "$RUNNER_TEMP/reader-android"
           cat > "$RUNNER_TEMP/run-reader-journey.sh" <<'SH'
@@ -114,9 +89,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash "$RUNNER_TEMP/run-reader-journey.sh"
+      - name: Verify validation did not modify tracked source
+        if: always()
+        run: git diff --exit-code
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reader-android-output
+          name: reader-android
           path: ${{ runner.temp }}/reader-android
-          retention-days: 3
+          retention-days: 7

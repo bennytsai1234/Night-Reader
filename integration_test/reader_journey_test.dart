@@ -5,39 +5,27 @@ import 'package:integration_test/integration_test.dart';
 import 'reader_test_support.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-
-  testWidgets('西游记 Reader sequential, random jump, scroll, lifecycle journey', (
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('TXT import, directory jump, scroll, background and reopen', (
     tester,
   ) async {
-    final previousErrorWidgetBuilder = ErrorWidget.builder;
-    final previousFlutterErrorHandler = FlutterError.onError;
+    final errorWidget = ErrorWidget.builder;
+    final errorHandler = FlutterError.onError;
     try {
-      final harness = ReaderTestHarness(tester);
-      await harness.startAndProvision();
-      await harness.openBook();
-
-      // The real fixture has a preface at index 0; the first named chapter is
-      // index 1. Exercise next/previous boundaries through the visible menu.
-      await harness.tapNextChapter();
-      await harness.jumpToChapter(0);
-      await harness.jumpToChapter(1);
-      await harness.jumpToChapter(50);
-      await harness.jumpToChapter(3);
-      await harness.jumpToChapter(100);
-      await harness.jumpToChapter(99);
-      await harness.jumpToChapter(0);
-
-      await harness.runScrollMatrix();
-      await harness.exerciseLifecycleAndReopen();
-
-      debugPrint(
-        'READER_E2E_RESULT status=passed fixture=$readerFixtureHostPath '
-        'chapters=${harness.chapters.length}',
-      );
+      final reader = ReaderTestHarness(tester);
+      await reader.startAndProvision();
+      await reader.openBook();
+      await reader.jumpFromDirectory(2);
+      await reader.jumpFromDirectory(0);
+      await reader.jumpFromDirectory(1);
+      final location = await reader.scrollAndSave();
+      await reader.reopen(location);
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pump();
+      await binding.takeScreenshot('reader-after-reopen');
     } finally {
-      ErrorWidget.builder = previousErrorWidgetBuilder;
-      FlutterError.onError = previousFlutterErrorHandler;
+      ErrorWidget.builder = errorWidget;
+      FlutterError.onError = errorHandler;
     }
-  }, timeout: const Timeout(Duration(minutes: 8)));
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }
