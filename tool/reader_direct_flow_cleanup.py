@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 
+# One-shot branch cleanup; production behavior is validated separately.
 ROOT = Path(__file__).resolve().parents[1]
 
 
