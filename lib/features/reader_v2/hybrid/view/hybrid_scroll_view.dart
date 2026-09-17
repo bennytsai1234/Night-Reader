@@ -6,7 +6,6 @@ import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.da
 import 'package:night_reader/features/reader_v2/hybrid/measure/measurement_store.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
 
-import 'admission_controller.dart';
 import 'cached_block_widget.dart';
 import 'hybrid_block_sliver.dart';
 
@@ -199,87 +198,13 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
   }
 }
 
-/// Clamping 基底的閱讀器捲動物理。
-///
-/// [admission] 供**即時**查詢領先量狀態——`Scrollable` 只有 physics
-/// runtimeType 鏈改變才會重建 position，用建構參數傳布林旗標的話，
-/// position 永遠抱著第一顆實例、旗標永不更新（死代碼）。因此這裡持
-/// controller 參考，於 [applyPhysicsToUserOffset] / [createBallisticSimulation]
-/// 呼叫當下讀取現值。
+/// Reader V2 使用原生 clamping 物理。排版／快取狀態不得修改手指位移或
+/// fling；內容準備是 materialization 的責任，不是 scroll physics 的責任。
 final class HybridScrollPhysics extends ClampingScrollPhysics {
-  const HybridScrollPhysics({
-    super.parent,
-    this.admission,
-    this.unreadyFriction = 0.45,
-    this.deficitFlingFriction = 0.09,
-    this.baseFlingFriction = 0.015,
-  });
-
-  final AdmissionController? admission;
-
-  /// 領先量完全耗盡時拖曳位移的衰減倍率下限。
-  final double unreadyFriction;
-
-  /// 領先量完全耗盡時 fling 模擬的摩擦係數上限（框架預設 0.015 的 6 倍）。
-  final double deficitFlingFriction;
-
-  /// 框架 [ClampingScrollSimulation] 的預設摩擦，作為連續內插的下端。
-  final double baseFlingFriction;
+  const HybridScrollPhysics({super.parent});
 
   @override
   HybridScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return HybridScrollPhysics(
-      parent: buildParent(ancestor),
-      admission: admission,
-      unreadyFriction: unreadyFriction,
-      deficitFlingFriction: deficitFlingFriction,
-      baseFlingFriction: baseFlingFriction,
-    );
-  }
-
-  /// 0=領先量充足、1=完全耗盡。admission 提供含遲滯的 smoothstep 曲線，
-  /// 讓 admission 增長觸發 simulation 重建時，摩擦連續過渡而非二態跳變。
-  double _scaleToward({required bool forward}) {
-    return admission?.frictionScaleToward(forward: forward) ?? 0.0;
-  }
-
-  @override
-  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
-    // offset 為指針位移：負值 = 內容前進（pixels 增加）。
-    final scale = _scaleToward(forward: offset < 0);
-    if (scale > 0) {
-      return offset * (1.0 + (unreadyFriction - 1.0) * scale);
-    }
-    return super.applyPhysicsToUserOffset(position, offset);
-  }
-
-  @override
-  Simulation? createBallisticSimulation(
-    ScrollMetrics position,
-    double velocity,
-  ) {
-    // velocity > 0 = pixels 增加 = 向前。行進方向領先量偏低時以連續加重
-    // 的摩擦收斂；領先量充足或已到書首/書尾邊界則維持框架行為。
-    if (!position.outOfRange &&
-        velocity.abs() >= toleranceFor(position).velocity) {
-      final scale = _scaleToward(forward: velocity > 0);
-      if (scale > 0) {
-        if (velocity > 0.0 && position.pixels >= position.maxScrollExtent) {
-          return null;
-        }
-        if (velocity < 0.0 && position.pixels <= position.minScrollExtent) {
-          return null;
-        }
-        return ClampingScrollSimulation(
-          position: position.pixels,
-          velocity: velocity,
-          friction:
-              baseFlingFriction +
-              (deficitFlingFriction - baseFlingFriction) * scale,
-          tolerance: toleranceFor(position),
-        );
-      }
-    }
-    return super.createBallisticSimulation(position, velocity);
+    return HybridScrollPhysics(parent: buildParent(ancestor));
   }
 }

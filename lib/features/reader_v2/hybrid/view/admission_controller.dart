@@ -20,10 +20,6 @@ final class AdmissionController extends ChangeNotifier {
   final Map<int, int> _chapterBlockCounts = <int, int>{};
   LayoutEpoch _epoch = LayoutEpoch.initial;
   int _chapterCount = 0;
-  bool _initializing = true;
-  double? _visibleTop;
-  double? _visibleBottom;
-  double _cacheExtent = 0;
   double _latestForwardLead = double.infinity;
   double _latestBackwardLead = double.infinity;
   bool _notifyScheduled = false;
@@ -50,60 +46,17 @@ final class AdmissionController extends ChangeNotifier {
         null;
   }
 
-  bool get needsForwardFriction =>
-      !atForwardBookBoundary && _latestForwardLead < guaranteedWindow;
+  bool get hasLeadDeficit => false;
 
-  bool get needsBackwardFriction =>
-      !atBackwardBookBoundary && _latestBackwardLead < backwardGuaranteedWindow;
-
-  bool get hasLeadDeficit => needsForwardFriction || needsBackwardFriction;
-
-  static const double _frictionEngageFraction = 0.8;
-  static const double _frictionReleaseFraction = 1.0;
-  static const double _frictionFloorFraction = 0.25;
-  bool _forwardFrictionLatched = false;
-  bool _backwardFrictionLatched = false;
-
-  double frictionScaleToward({required bool forward}) {
-    final latched =
-        forward ? _forwardFrictionLatched : _backwardFrictionLatched;
-    if (!latched) return 0.0;
-    if (forward ? atForwardBookBoundary : atBackwardBookBoundary) return 0.0;
-    final window = forward ? guaranteedWindow : backwardGuaranteedWindow;
-    final lead = forward ? _latestForwardLead : _latestBackwardLead;
-    final floor = window * _frictionFloorFraction;
-    final release = window * _frictionReleaseFraction;
-    if (lead <= floor) return 1.0;
-    if (lead >= release) return 0.0;
-    final t = (release - lead) / (release - floor);
-    return t * t * (3 - 2 * t);
-  }
-
-  bool _updateFrictionLatch({
-    required bool latched,
-    required double lead,
-    required double window,
-    required bool atBoundary,
-  }) {
-    if (atBoundary) return false;
-    if (lead < window * _frictionEngageFraction) return true;
-    if (lead >= window * _frictionReleaseFraction) return false;
-    return latched;
-  }
+  double frictionScaleToward({required bool forward}) => 0.0;
 
   void reset({required LayoutEpoch epoch, required int chapterCount}) {
     _epoch = epoch;
     _chapterCount = chapterCount;
     _pending.clear();
     _chapterBlockCounts.clear();
-    _initializing = true;
-    _visibleTop = null;
-    _visibleBottom = null;
-    _cacheExtent = 0;
     _latestForwardLead = double.infinity;
     _latestBackwardLead = double.infinity;
-    _forwardFrictionLatched = false;
-    _backwardFrictionLatched = false;
   }
 
   void registerChapter(ChapterBlocks blocks) {
@@ -150,12 +103,7 @@ final class AdmissionController extends ChangeNotifier {
     required double visibleBottom,
     required double cacheExtent,
   }) {
-    _initializing = false;
-    updateViewport(
-      visibleTop: visibleTop,
-      visibleBottom: visibleBottom,
-      cacheExtent: cacheExtent,
-    );
+    _flushPending();
   }
 
   void updateViewport({
@@ -163,32 +111,7 @@ final class AdmissionController extends ChangeNotifier {
     required double visibleBottom,
     required double cacheExtent,
   }) {
-    _visibleTop = visibleTop;
-    _visibleBottom = visibleBottom;
-    _cacheExtent = cacheExtent;
     _flushPending();
-  }
-
-  bool canAdmitOutsideVisible({
-    required BlockKey key,
-    required double visibleTop,
-    required double visibleBottom,
-    required double cacheExtent,
-  }) {
-    final beforeCenter = key < documentIndex.centerKey;
-    final height = _pending[key]?.height ?? 0;
-    final double top;
-    final double bottom;
-    if (beforeCenter) {
-      bottom = -documentIndex.beforeExtent;
-      top = bottom - height;
-    } else {
-      top = documentIndex.afterExtent;
-      bottom = top + height;
-    }
-    final safeTop = visibleTop - cacheExtent;
-    final safeBottom = visibleBottom + cacheExtent;
-    return bottom <= safeTop || top >= safeBottom;
   }
 
   void _flushPending() {
@@ -227,28 +150,6 @@ final class AdmissionController extends ChangeNotifier {
   bool _admitIfReady(BlockKey key) {
     final metrics = _pending[key];
     if (metrics == null) return false;
-    if (!_initializing) {
-      final visibleTop = _visibleTop;
-      final visibleBottom = _visibleBottom;
-      if (visibleTop == null || visibleBottom == null) return false;
-      final outsideVisibleCache = canAdmitOutsideVisible(
-        key: key,
-        visibleTop: visibleTop,
-        visibleBottom: visibleBottom,
-        cacheExtent: _cacheExtent,
-      );
-      final outsideVisible = canAdmitOutsideVisible(
-        key: key,
-        visibleTop: visibleTop,
-        visibleBottom: visibleBottom,
-        cacheExtent: 0,
-      );
-      if (!outsideVisible) return false;
-      assert(
-        outsideVisibleCache || _isContiguousEdge(key),
-        'I2: cache recovery is only safe at a contiguous document edge.',
-      );
-    }
     Map<BlockKey, double>? previousTops;
     assert(() {
       previousTops = <BlockKey, double>{
@@ -317,23 +218,6 @@ final class AdmissionController extends ChangeNotifier {
   }) {
     _latestForwardLead = documentIndex.afterExtent - viewportBottom;
     _latestBackwardLead = documentIndex.beforeExtent + viewportTop;
-    _forwardFrictionLatched = _updateFrictionLatch(
-      latched: _forwardFrictionLatched,
-      lead: _latestForwardLead,
-      window: guaranteedWindow,
-      atBoundary: atForwardBookBoundary,
-    );
-    _backwardFrictionLatched = _updateFrictionLatch(
-      latched: _backwardFrictionLatched,
-      lead: _latestBackwardLead,
-      window: backwardGuaranteedWindow,
-      atBoundary: atBackwardBookBoundary,
-    );
-    assert(
-      (atForwardBookBoundary || _latestForwardLead >= 0) &&
-          (atBackwardBookBoundary || _latestBackwardLead >= 0),
-      'I5: an admitted boundary became physically reachable.',
-    );
   }
 
   @override

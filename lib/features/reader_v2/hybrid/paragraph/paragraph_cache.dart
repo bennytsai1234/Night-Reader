@@ -42,9 +42,6 @@ final class ParagraphCache implements HybridParagraphCache {
   final int capacity;
   final LinkedHashMap<_ParagraphCacheKey, ParagraphEntry> _entries =
       LinkedHashMap<_ParagraphCacheKey, ParagraphEntry>();
-  final Set<_ParagraphCacheKey> _pinned = <_ParagraphCacheKey>{};
-  final Map<_ParagraphCacheKey, List<ui.VoidCallback>> _putWaiters =
-      <_ParagraphCacheKey, List<ui.VoidCallback>>{};
 
   int get length => _entries.length;
 
@@ -99,63 +96,17 @@ final class ParagraphCache implements HybridParagraphCache {
       _entries[cacheKey] = ParagraphEntry._(shared, bakedColor, localTops[i]);
       touchedWaiterKeys.add(cacheKey);
     }
-    _evictIfNeeded();
-    // 一次性消費：paint 撲空而空白的 render object 靠這裡收到重繪信號；
-    // 除此之外沒有任何管道能讓「補建完成的段落」回到畫面上。
-    for (final cacheKey in touchedWaiterKeys) {
-      final waiters = _putWaiters.remove(cacheKey);
-      if (waiters == null) continue;
-      for (final callback in waiters) {
-        callback();
-      }
-    }
-  }
-
-  /// paint 撲空時註冊：該 key 的 Paragraph 進快取後回呼一次（一次性，
-  /// put 時整組消費移除）。
-  void addPutWaiter(BlockKey key, LayoutEpoch epoch, ui.VoidCallback callback) {
-    _putWaiters
-        .putIfAbsent(_ParagraphCacheKey(key, epoch), () => <ui.VoidCallback>[])
-        .add(callback);
-  }
-
-  void removePutWaiter(
-    BlockKey key,
-    LayoutEpoch epoch,
-    ui.VoidCallback callback,
-  ) {
-    final cacheKey = _ParagraphCacheKey(key, epoch);
-    final waiters = _putWaiters[cacheKey];
-    if (waiters == null) return;
-    waiters.remove(callback);
-    if (waiters.isEmpty) _putWaiters.remove(cacheKey);
   }
 
   @override
-  void pinRange(BlockRange range) {
-    for (final key in _entries.keys) {
-      if (range.contains(key.blockKey)) _pinned.add(key);
-    }
-  }
+  void pinRange(BlockRange range) {}
 
-  void pinKeys(Iterable<BlockKey> keys, LayoutEpoch epoch) {
-    for (final key in keys) {
-      _pinned.add(_ParagraphCacheKey(key, epoch));
-    }
-  }
+  void pinKeys(Iterable<BlockKey> keys, LayoutEpoch epoch) {}
 
   @override
-  void unpinAll() {
-    _pinned.clear();
-  }
+  void unpinAll() {}
 
-  /// Removes unpinned entries beyond [capacity]. Callers that replace a pin
-  /// set should invoke this after the new pins are in place; trimming between
-  /// unpinning the old set and pinning the new visible set can evict the first
-  /// viewport during restore.
-  void trimToCapacity() {
-    _evictIfNeeded();
-  }
+  void trimToCapacity() {}
 
   @override
   void dispose() {
@@ -163,8 +114,6 @@ final class ParagraphCache implements HybridParagraphCache {
       entry._shared.release();
     }
     _entries.clear();
-    _pinned.clear();
-    _putWaiters.clear();
   }
 
   bool contains(BlockKey key, LayoutEpoch epoch) {
@@ -183,20 +132,7 @@ final class ParagraphCache implements HybridParagraphCache {
         .where((key) => key.blockKey.chapterIndex == chapterIndex)
         .toList(growable: false);
     for (final key in keys) {
-      _pinned.remove(key);
       _entries.remove(key)?._shared.release();
-    }
-  }
-
-  void _evictIfNeeded() {
-    while (_entries.length > capacity) {
-      final evictKey = _entries.keys.firstWhere(
-        (key) => !_pinned.contains(key),
-        orElse: () => _entries.keys.first,
-      );
-      if (_pinned.contains(evictKey)) break;
-      final entry = _entries.remove(evictKey);
-      entry?._shared.release();
     }
   }
 }

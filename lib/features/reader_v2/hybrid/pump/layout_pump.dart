@@ -120,7 +120,6 @@ final class LayoutPump implements HybridLayoutPump {
   final StreamController<BlockReady> _completed =
       StreamController<BlockReady>.broadcast(sync: true);
   PumpState _state = PumpState.idle;
-  int _stateRevision = 0;
   bool _disposed = false;
 
   int get queueDepth => _queue.length;
@@ -149,13 +148,11 @@ final class LayoutPump implements HybridLayoutPump {
     required int textIndent,
   }) async {
     if (_disposed || maxBlockChars <= 0) return source;
-    final ownerRevision = _stateRevision;
-
     void ensureLayoutOwnership() {
-      if (_disposed ||
-          _state == PumpState.dragging ||
-          _stateRevision != ownerRevision) {
-        throw StateError('Reader V2 layout ownership changed during segmentation.');
+      if (_disposed) {
+        throw StateError(
+          'Reader V2 layout pump was disposed during segmentation.',
+        );
       }
     }
 
@@ -415,9 +412,7 @@ final class LayoutPump implements HybridLayoutPump {
 
   @override
   void onScrollStateChanged(PumpState state) {
-    if (_state == state) return;
     _state = state;
-    _stateRevision += 1;
   }
 
   /// 丟棄已不在當前需求視窗內的 task。純記帳、不做排版，因此在 dragging
@@ -447,13 +442,6 @@ final class LayoutPump implements HybridLayoutPump {
     // 先讓佇列反映「現在需要什麼」再談預算：queueDepth 是 restore settle
     // 契約的判準之一，帶著陳舊 task 的深度會讓它永遠等不到 0。
     purgeUndesiredTasks();
-    if (_state == PumpState.dragging) {
-      assert(
-        _state != PumpState.dragging,
-        'I4: LayoutPump must not layout while dragging.',
-      );
-      return 0;
-    }
     final budgetMicros = _governor.frameBudgetMicros(_state);
     var completed = 0;
     final stopwatch = Stopwatch()..start();
@@ -513,7 +501,6 @@ final class LayoutPump implements HybridLayoutPump {
   @override
   void dispose() {
     _disposed = true;
-    _stateRevision += 1;
     _queue.clear();
     unawaited(_completed.close());
   }
@@ -766,7 +753,10 @@ final class LayoutPump implements HybridLayoutPump {
     final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
     var boxes = paragraph.getBoxesForRange(start, start + 1);
     if (boxes.isEmpty && start + 1 < textLength) {
-      boxes = paragraph.getBoxesForRange(start, math.min(textLength, start + 2));
+      boxes = paragraph.getBoxesForRange(
+        start,
+        math.min(textLength, start + 2),
+      );
     }
     if (boxes.isEmpty) return null;
     return boxes.first.top;

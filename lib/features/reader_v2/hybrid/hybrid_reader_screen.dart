@@ -84,8 +84,6 @@ bool isHybridPageMoveComplete({
 
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
-  static const int _restoreGroupsPerSide = 8;
-  static const int _progressiveGroupsPerSide = 8;
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
 
@@ -121,18 +119,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Size _viewportSize = Size.zero;
   double? _pendingScrollOffset;
   int _windowCenter = 0;
-  int _prefetchGeneration = 0;
   int _lastLayoutGeneration = 0;
   int _runtimeLocationRevision = 0;
   int _restoreTicket = 0;
   ReaderV2Location? _lastReportedLocation;
   String? _lastLoggedErrorMessage;
   bool _initialRestoreCompleted = false;
-  bool _restorePrefetchBarrierActive = false;
-  bool _restoreUserScrollObserved = false;
-  bool _restorePinning = false;
-  bool _dragging = false;
-  bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _pumpFramePending = false;
   bool _captureFramePending = false;
@@ -148,7 +140,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex);
-    _physics = HybridScrollPhysics(admission: _admission);
+    _physics = const HybridScrollPhysics();
     _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     _refreshEpochBinding();
 
@@ -205,10 +197,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _attachController();
     }
     if (oldWidget.textColor != widget.textColor) {
-      _ensureWindowTasks(
-        anchorKey: _documentIndex.centerKey,
-        restoreOnly: true,
-      );
+      _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
       _schedulePump();
     }
   }
@@ -343,11 +332,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           : null,
       'scrollDirection': scrollDirection,
       'isScrolling': position?.isScrollingNotifier.value ?? false,
-      'dragging': _dragging,
-      'restoreLocked': _restorePinning,
       'initialRestoreCompleted': _initialRestoreCompleted,
-      'restorePrefetchBarrierActive': _restorePrefetchBarrierActive,
-      'restoreUserScrollObserved': _restoreUserScrollObserved,
       'runtimeLocationRevision': _runtimeLocationRevision,
       'pendingLocation': widget.runtime.pendingLocation?.toJson(),
       'runtimeVisibleLocation': runtimeState.visibleLocation.toJson(),
@@ -451,10 +436,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _handleEpochRebuild(String? previousBookUrl) {
-    _prefetchGeneration += 1;
     _runtimeLocationRevision += 1;
     _restoreTicket += 1;
-    _restorePinning = false;
     _initialRestoreCompleted = false;
 
     final oldNamespace = _namespace;
@@ -614,8 +597,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (controller != null && controller.hasClients) {
       controller.position.jumpTo(controller.position.pixels);
     }
-    _dragging = false;
-    _sawUserScroll = false;
     final ok = await _restoreCore(location, isCurrent: current);
     if (!ok || !current()) return false;
     _lastReportedLocation = location;
@@ -631,10 +612,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (runtime.chapterCount <= 0) return false;
     final ticket = ++_restoreTicket;
     final binding = _pump;
-    _restorePinning = true;
-    _prefetchGeneration += 1;
-    _restorePrefetchBarrierActive = true;
-    _restoreUserScrollObserved = false;
     bool still() =>
         mounted &&
         identical(_pump, binding) &&
@@ -667,16 +644,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       for (final loadedBlocks in _blocks.values) {
         _admission.registerChapter(loadedBlocks);
       }
-      _paragraphCache
-        ..unpinAll()
-        ..pinKeys(<BlockKey>[anchor.blockKey], _epoch);
       _windowCenter = chapterIndex;
       final initialRadius = _chapterRepo.windowRadius;
       _chapterRepo.setResidentRange(
         math.max(0, chapterIndex - initialRadius),
         math.min(runtime.chapterCount - 1, chapterIndex + initialRadius),
       );
-      _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+      _ensureWindowTasks(anchorKey: anchor.blockKey);
       final ready = await _pumpUntilAnchorReady(anchor, stillCurrent: still);
       if (!ready || !still()) return false;
       final target = _offsetForAnchor(anchor, blocks);
@@ -698,10 +672,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       return true;
     } finally {
       if (mounted && identical(_pump, binding) && ticket == _restoreTicket) {
-        _restorePinning = false;
-        _pump.onScrollStateChanged(
-          _dragging ? PumpState.dragging : PumpState.idle,
-        );
+        _pump.onScrollStateChanged(PumpState.idle);
       }
     }
   }
@@ -729,7 +700,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     while (stillCurrent()) {
       _pump.onScrollStateChanged(PumpState.rebuilding);
-      if (initialWindowReady() && _pump.queueDepth == 0) return true;
+      if (initialWindowReady()) return true;
 
       final completed = await _pump.pumpPending();
       if (!stillCurrent()) return false;
@@ -740,12 +711,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (pendingLoads.isNotEmpty) {
         await Future.wait(pendingLoads);
         if (!stillCurrent()) return false;
-        _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+        _ensureWindowTasks(anchorKey: anchor.blockKey);
         continue;
       }
 
       final admittedBefore = _documentIndex.admittedCount;
-      _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+      _ensureWindowTasks(anchorKey: anchor.blockKey);
       if (_pump.queueDepth > 0 ||
           _documentIndex.admittedCount != admittedBefore) {
         continue;
@@ -753,7 +724,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (initialWindowReady()) return true;
 
       if (_expandRestoreResidency(anchor)) {
-        _ensureWindowTasks(anchorKey: anchor.blockKey, restoreOnly: true);
+        _ensureWindowTasks(anchorKey: anchor.blockKey);
         continue;
       }
       return false;
@@ -922,30 +893,25 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!mounted) return;
     switch (event.kind) {
       case ChapterEventKind.loaded:
-        if (_restorePinning) return;
         if (_chapterRepo.isResident(event.chapterId)) {
-          final restoreOnly = _restorePrefetchBarrierActive;
-          final prefetchGeneration = _prefetchGeneration;
-          final restoreTicket = _restoreTicket;
-          final requestCenter = _windowCenter;
           unawaited(
             _ensureChapterBlocks(event.chapterId).then((blocks) {
               if (blocks == null ||
-                  !_canApplyPrefetchResult(
-                    chapterIndex: event.chapterId,
-                    requestCenter: requestCenter,
-                    prefetchGeneration: prefetchGeneration,
-                    restoreTicket: restoreTicket,
-                    restoreOnly: restoreOnly,
-                  )) {
+                  !mounted ||
+                  !_chapterRepo.isResident(event.chapterId)) {
                 return;
               }
-              _enqueueChapterTasks(blocks, restoreOnly: restoreOnly);
+              _enqueueChapterTasks(blocks);
               _schedulePump();
             }),
           );
         }
+        return;
       case ChapterEventKind.evicted:
+        // Raw chapter residency is only a memory-cache policy. Existing block
+        // geometry/Paragraphs remain valid for this epoch and must not vanish
+        // from the scroll world merely because raw text was evicted.
+        return;
       case ChapterEventKind.invalidated:
         _blocks.remove(event.chapterId);
         _blocksInFlight.remove(event.chapterId);
@@ -959,13 +925,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (_documentIndex.invalidateChapter(event.chapterId)) {
           _scheduleRebuild();
         }
+        return;
     }
   }
 
   void _shiftWindow(int chapterIndex) {
     if (chapterIndex == _windowCenter) return;
     _windowCenter = chapterIndex;
-    _prefetchGeneration += 1;
     _syncResidentRangeToViewport(fallbackCenter: chapterIndex);
     _ensureWindowTasks();
     _schedulePump();
@@ -1059,28 +1025,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return chapters;
   }
 
-  void _ensureWindowTasks({BlockKey? anchorKey, bool restoreOnly = false}) {
-    if (restoreOnly) {
-      if (!mounted || !_restorePrefetchBarrierActive) return;
-    } else if (!_canStartOrdinaryPrefetch()) {
-      return;
-    }
-    final prefetchGeneration = _prefetchGeneration;
-    final restoreTicket = _restoreTicket;
-    final requestCenter = _windowCenter;
+  void _ensureWindowTasks({BlockKey? anchorKey}) {
+    if (!mounted) return;
     for (final chapter in _residentChaptersNearestCenter()) {
       final blocks = _blocks[chapter];
       if (blocks == null) {
         unawaited(
           _ensureChapterBlocks(chapter).then((loaded) {
             if (loaded == null ||
-                !_canApplyPrefetchResult(
-                  chapterIndex: loaded.chapterIndex,
-                  requestCenter: requestCenter,
-                  prefetchGeneration: prefetchGeneration,
-                  restoreTicket: restoreTicket,
-                  restoreOnly: restoreOnly,
-                )) {
+                !mounted ||
+                !_chapterRepo.isResident(loaded.chapterIndex)) {
               return;
             }
             _enqueueChapterTasks(
@@ -1088,7 +1042,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               anchorKey: loaded.chapterIndex == _windowCenter
                   ? anchorKey
                   : null,
-              restoreOnly: restoreOnly,
             );
             _schedulePump();
           }),
@@ -1098,43 +1051,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _enqueueChapterTasks(
         blocks,
         anchorKey: chapter == _windowCenter ? anchorKey : null,
-        restoreOnly: restoreOnly,
       );
     }
   }
 
-  bool _canStartOrdinaryPrefetch() {
-    return mounted &&
-        _initialRestoreCompleted &&
-        !_dragging &&
-        !_restorePinning &&
-        !_restorePrefetchBarrierActive;
-  }
-
-  bool _canApplyPrefetchResult({
-    required int chapterIndex,
-    required int requestCenter,
-    required int prefetchGeneration,
-    required int restoreTicket,
-    required bool restoreOnly,
-  }) {
-    if (!mounted ||
-        _dragging ||
-        prefetchGeneration != _prefetchGeneration ||
-        restoreTicket != _restoreTicket ||
-        requestCenter != _windowCenter ||
-        !_chapterRepo.isResident(chapterIndex)) {
-      return false;
-    }
-    if (restoreOnly) return _restorePrefetchBarrierActive;
-    return _canStartOrdinaryPrefetch();
-  }
-
-  void _enqueueChapterTasks(
-    ChapterBlocks blocks, {
-    BlockKey? anchorKey,
-    bool restoreOnly = false,
-  }) {
+  void _enqueueChapterTasks(ChapterBlocks blocks, {BlockKey? anchorKey}) {
     final groups = blocks.paragraphGroups();
     if (groups.isEmpty) return;
     final centerKey = _documentIndex.centerKey;
@@ -1157,11 +1078,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       forward = const <List<ChapterBlock>>[];
       backward = groups.reversed.toList(growable: false);
     }
-    final batchSize = restoreOnly
-        ? _restoreGroupsPerSide
-        : _progressiveGroupsPerSide;
-    forward = _boundedTaskBatch(forward, batchSize);
-    backward = _boundedTaskBatch(backward, batchSize);
     var forwardBlocked = false;
     var backwardBlocked = false;
     final rounds = math.max(forward.length, backward.length);
@@ -1185,30 +1101,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  List<List<ChapterBlock>> _boundedTaskBatch(
-    List<List<ChapterBlock>> groups,
-    int limit,
-  ) {
-    final firstPending = groups.indexWhere(
-      (group) => group.any(
-        (block) =>
-            _documentIndex.metricsFor(block.key) == null ||
-            !_paragraphCache.containsFresh(block.key, _epoch, widget.textColor),
-      ),
-    );
-    if (firstPending < 0) return const <List<ChapterBlock>>[];
-    return groups.skip(firstPending).take(limit).toList(growable: false);
-  }
-
   bool _admitOrSubmitGroup(
     ChapterBlocks blocks,
     List<ChapterBlock> group, {
     required bool blocked,
     BlockKey? anchorKey,
   }) {
-    if (_restorePinning) {
-      _paragraphCache.pinKeys(<BlockKey>[for (final b in group) b.key], _epoch);
-    }
     final anchor = anchorKey != null && group.any((b) => b.key == anchorKey);
     final notYetAdmitted = group
         .where((b) => _documentIndex.metricsFor(b.key) == null)
@@ -1247,8 +1145,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// epoch／fingerprint 改變時 [_handleEpochRebuild] 會整個換掉 pump，理論上
   /// 走不到這裡；仍然檢查，讓失效鍵在單一處完整表達。
   bool _isLayoutTaskStillDesired(LayoutTask task) {
-    if (task.epoch != _epoch || task.fingerprint != _fingerprint) return false;
-    return _chapterRepo.isResident(task.block.key.chapterIndex);
+    return task.epoch == _epoch && task.fingerprint == _fingerprint;
   }
 
   /// layout 熱路徑：只遞增，不配置、不組字串、不 log。
@@ -1354,29 +1251,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Future<void> _pumpOnce() async {
-    if (_dragging) return;
-    final prefetchGeneration = _prefetchGeneration;
     await _pump.pumpPending();
-    if (!mounted || _dragging || prefetchGeneration != _prefetchGeneration) {
-      return;
-    }
+    if (!mounted) return;
     if (_pump.queueDepth > 0) {
       _schedulePump();
     } else {
-      if (!_canStartOrdinaryPrefetch()) return;
       _updateLeadTelemetry();
     }
   }
 
   void _updateLeadTelemetry() {
-    if (!_initialRestoreCompleted || _restorePinning) return;
+    if (!_initialRestoreCompleted) return;
     final offset = _effectiveScrollOffset();
     if (offset == null || _viewportSize.height <= 0) return;
     _admission.updateLead(
       viewportTop: offset,
       viewportBottom: offset + _viewportSize.height,
     );
-    _governor.updateLeadDeficit(_admission.hasLeadDeficit);
     _telemetry.updateRuntimeStats(
       pumpQueueDepth: _pump.queueDepth,
       forwardLeadPx: _admission.latestForwardLead,
@@ -1386,35 +1277,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
-    if (notification is ScrollStartNotification) {
-      if (notification.dragDetails != null) {
-        if (_initialRestoreCompleted && !_restorePinning) {
-          _prefetchGeneration += 1;
-        }
-        _dragging = true;
-        _sawUserScroll = true;
-        if (_restorePrefetchBarrierActive) {
-          _restoreUserScrollObserved = true;
-        }
-        _runtimeLocationRevision += 1;
-        _setPumpState(PumpState.dragging);
-      }
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _runtimeLocationRevision += 1;
+      _setPumpState(PumpState.dragging);
+      _schedulePump();
     } else if (notification is ScrollUpdateNotification) {
-      if (_dragging && notification.dragDetails == null) {
-        _dragging = false;
-        _setPumpState(PumpState.ballistic);
-        _schedulePump();
-      }
+      _setPumpState(
+        notification.dragDetails == null
+            ? PumpState.ballistic
+            : PumpState.dragging,
+      );
+      _schedulePump();
       _scheduleMotionCapture();
     } else if (notification is ScrollEndNotification) {
-      final wasUser = _sawUserScroll;
-      _dragging = false;
-      _sawUserScroll = false;
       _setPumpState(PumpState.idle);
       _schedulePump();
-      if (wasUser) {
-        unawaited(_handleScrollSettled());
-      }
+      unawaited(_handleScrollSettled());
     }
     return false;
   }
@@ -1422,7 +1301,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _scheduleMotionCapture() {
     if (_captureFramePending ||
         !mounted ||
-        _restorePinning ||
         widget.runtime.pendingLocation != null) {
       return;
     }
@@ -1431,7 +1309,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureFramePending = false;
       if (!mounted) return;
-      if (!_initialRestoreCompleted || _restorePinning) return;
+      if (!_initialRestoreCompleted) return;
       if (scheduledRevision != _runtimeLocationRevision) return;
       if (widget.runtime.pendingLocation != null) return;
       final location = _captureAndReport(notify: false);
@@ -1443,11 +1321,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           cacheExtent: _viewportSize.height,
         );
       }
-      _updateParagraphPins();
       _publishProgress();
       _updateLeadTelemetry();
       if (location != null && location.chapterIndex != _windowCenter) {
         _shiftWindow(location.chapterIndex);
+      } else {
+        _syncResidentRangeToViewport();
+        _ensureWindowTasks();
+        _schedulePump();
       }
     });
   }
@@ -1461,18 +1342,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Future<void> _handleScrollSettled({bool allowFullPrefetch = false}) async {
-    if (!mounted || _dragging || !_initialRestoreCompleted || _restorePinning) {
-      return;
-    }
-    final restoreOwnedSettle =
-        widget.runtime.pendingLocation != null ||
-        (_restorePrefetchBarrierActive &&
-            !allowFullPrefetch &&
-            !_restoreUserScrollObserved);
-    final settlePrefetchGeneration = _prefetchGeneration;
+    if (!mounted || !_initialRestoreCompleted) return;
     final settleRestoreTicket = _restoreTicket;
-    final settleWindowCenter = _windowCenter;
-    final settleBarrier = _restorePrefetchBarrierActive;
     final location = _captureAndReport(notify: true);
     if (location != null) {
       final saved = await widget.runtime.saveProgress(
@@ -1480,33 +1351,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         immediate: true,
       );
       if (saved != null) _lastReportedLocation = saved;
-      if (!mounted ||
-          _dragging ||
-          _restorePinning ||
-          settlePrefetchGeneration != _prefetchGeneration ||
-          settleRestoreTicket != _restoreTicket ||
-          settleWindowCenter != _windowCenter ||
-          settleBarrier != _restorePrefetchBarrierActive) {
-        return;
-      }
+      if (!mounted || settleRestoreTicket != _restoreTicket) return;
       if (location.chapterIndex != _windowCenter) {
-        _shiftWindow(location.chapterIndex);
+        _windowCenter = location.chapterIndex;
       }
     }
-    if (!mounted) return;
     _publishProgress();
     _updateLeadTelemetry();
-    if (restoreOwnedSettle) {
-      _syncResidentRangeToViewport(includeLead: false);
-      _ensureWindowTasks(
-        anchorKey: _documentIndex.centerKey,
-        restoreOnly: true,
-      );
-      _schedulePump();
-      return;
-    }
-    _restorePrefetchBarrierActive = false;
-    _restoreUserScrollObserved = false;
     _syncResidentRangeToViewport();
     _ensureWindowTasks();
     _schedulePump();
@@ -1520,8 +1371,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     // progress. DocumentIndex intentionally contains only the admitted window.
     final runtimeLocationIsPublished =
         _initialRestoreCompleted &&
-        widget.runtime.state.phase == ReaderV2Phase.ready &&
-        !_restorePinning;
+        widget.runtime.state.phase == ReaderV2Phase.ready;
     final location = runtimeLocationIsPublished
         ? widget.runtime.state.visibleLocation
         : _captureVisibleLocation();
@@ -1571,18 +1421,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final operation = runtime.stateMachine.currentOperation;
     final binding = _pump;
     final revision = _runtimeLocationRevision;
-    final admitted =
-        _initialRestoreCompleted && !_restorePinning && !_sawUserScroll;
     return () =>
-        admitted &&
+        _initialRestoreCompleted &&
         mounted &&
         identical(widget.runtime, runtime) &&
         !runtime.disposed &&
         runtime.state.phase == ReaderV2Phase.ready &&
         identical(_pump, binding) &&
         revision == _runtimeLocationRevision &&
-        identical(runtime.stateMachine.currentOperation, operation) &&
-        !_sawUserScroll;
+        identical(runtime.stateMachine.currentOperation, operation);
   }
 
   Future<bool> _enqueueCommand(Future<bool> Function(bool Function()) command) {
@@ -1713,20 +1560,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
 
       final restoreOnly = _restorePrefetchBarrierActive;
-      _ensureWindowTasks(
-        anchorKey: _documentIndex.centerKey,
-        restoreOnly: restoreOnly,
-      );
+      _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
 
       while (isCurrent()) {
         final pendingLoads = _blocksInFlight.values.toList(growable: false);
         if (pendingLoads.isNotEmpty) {
           await Future.wait(pendingLoads);
           if (!isCurrent()) return false;
-          _ensureWindowTasks(
-            anchorKey: _documentIndex.centerKey,
-            restoreOnly: restoreOnly,
-          );
+          _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
           continue;
         }
         if (_pump.queueDepth == 0) break;
@@ -2086,7 +1927,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
     final scrolling = controller.position.isScrollingNotifier.value;
-    if (scrolling && !_dragging) {
+    if (scrolling) {
       _runtimeLocationRevision += 1;
       final pixels = controller.position.pixels;
       controller.position.jumpTo(pixels);
@@ -2130,17 +1971,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       paddingLeft: specStyle.paddingLeft,
       paddingRight: specStyle.paddingRight,
     );
-  }
-
-  void _updateParagraphPins() {
-    final offset = _effectiveScrollOffset();
-    if (offset == null || _viewportSize.height <= 0) return;
-    final top = offset - _admission.backwardGuaranteedWindow;
-    final bottom = offset + _viewportSize.height + _admission.guaranteedWindow;
-    _paragraphCache
-      ..unpinAll()
-      ..pinKeys(_documentIndex.keysInRange(top, bottom), _epoch);
-    _paragraphCache.trimToCapacity();
   }
 
   Widget _buildLoading(ReaderV2State state) {
@@ -2295,7 +2125,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         final controller = _scrollController ??= ScrollController(
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
         );
-        _updateParagraphPins();
         final highlight = widget.ttsHighlight;
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,

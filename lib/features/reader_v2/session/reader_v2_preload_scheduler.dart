@@ -24,10 +24,12 @@ class ReaderV2PreloadScheduler {
     required this.resolver,
     int maxConcurrentContentTasks = 1,
     int maxConcurrentLayoutTasks = 1,
-  }) : _maxConcurrentContentTasks =
-           maxConcurrentContentTasks < 1 ? 1 : maxConcurrentContentTasks,
-       _maxConcurrentLayoutTasks =
-           maxConcurrentLayoutTasks < 1 ? 1 : maxConcurrentLayoutTasks;
+  }) : _maxConcurrentContentTasks = maxConcurrentContentTasks < 1
+           ? 1
+           : maxConcurrentContentTasks,
+       _maxConcurrentLayoutTasks = maxConcurrentLayoutTasks < 1
+           ? 1
+           : maxConcurrentLayoutTasks;
 
   final ReaderV2Resolver resolver;
   final int _maxConcurrentContentTasks;
@@ -46,28 +48,16 @@ class ReaderV2PreloadScheduler {
 
   int _generation = 0;
   bool _disposed = false;
-  int _interactiveDepth = 0;
 
   static const int boundaryPreloadPageDistance = 4;
 
-  bool get isInteractive => _interactiveDepth > 0;
+  bool get isInteractive => false;
 
-  int get debugInteractiveDepth => _interactiveDepth;
+  int get debugInteractiveDepth => 0;
 
-  void beginInteractive() {
-    if (_disposed) return;
-    _interactiveDepth += 1;
-  }
+  void beginInteractive() {}
 
-  void endInteractive() {
-    if (_disposed) return;
-    if (_interactiveDepth > 0) {
-      _interactiveDepth -= 1;
-    }
-    if (_interactiveDepth == 0) {
-      _pumpLayout();
-    }
-  }
+  void endInteractive() {}
 
   int bumpGeneration() {
     _generation += 1;
@@ -144,8 +134,9 @@ class ReaderV2PreloadScheduler {
       _clearQueued(content: true, layout: true);
     }
     final center = centerChapterIndex.clamp(0, chapterCount - 1).toInt();
-    final maxRadius =
-        contentRadius > layoutRadius ? contentRadius : layoutRadius;
+    final maxRadius = contentRadius > layoutRadius
+        ? contentRadius
+        : layoutRadius;
     final order = buildCenteredOrder(
       chapterCount: chapterCount,
       centerChapterIndex: center,
@@ -226,9 +217,6 @@ class ReaderV2PreloadScheduler {
     if (resolver.cachedLayout(safeIndex)?.isComplete == true) {
       return Future<void>.value();
     }
-    if (isInteractive) {
-      unawaited(scheduleContent(safeIndex, priority: priority));
-    }
     final key = _taskKey(_ReaderV2PreloadKind.layout, safeIndex, _generation);
     final future = _registerWaiter(key);
     if (_queuedLayoutKeys.contains(key)) {
@@ -274,14 +262,12 @@ class ReaderV2PreloadScheduler {
   }
 
   void _enqueue(_ReaderV2PreloadTask task, {required bool priority}) {
-    final queue =
-        task.kind == _ReaderV2PreloadKind.content
-            ? _contentQueue
-            : _layoutQueue;
-    final queuedKeys =
-        task.kind == _ReaderV2PreloadKind.content
-            ? _queuedContentKeys
-            : _queuedLayoutKeys;
+    final queue = task.kind == _ReaderV2PreloadKind.content
+        ? _contentQueue
+        : _layoutQueue;
+    final queuedKeys = task.kind == _ReaderV2PreloadKind.content
+        ? _queuedContentKeys
+        : _queuedLayoutKeys;
     final key = _taskKey(task.kind, task.chapterIndex, task.generation);
     queuedKeys.add(key);
     if (priority) {
@@ -328,7 +314,7 @@ class ReaderV2PreloadScheduler {
   }
 
   void _pumpLayout() {
-    if (_disposed || isInteractive) return;
+    if (_disposed) return;
     while (_activeLayoutKeys.length < _maxConcurrentLayoutTasks &&
         _layoutQueue.isNotEmpty) {
       final task = _layoutQueue.removeFirst();
@@ -410,19 +396,17 @@ class ReaderV2PreloadScheduler {
     // active 中的任務不在此列——它們會在自己結束時完成 waiter。
     if (content) {
       _contentQueue.clear();
-      final dropped =
-          _queuedContentKeys
-              .where((key) => !_activeContentKeys.contains(key))
-              .toList(growable: false);
+      final dropped = _queuedContentKeys
+          .where((key) => !_activeContentKeys.contains(key))
+          .toList(growable: false);
       _queuedContentKeys.clear();
       dropped.forEach(_completeWaiters);
     }
     if (layout) {
       _layoutQueue.clear();
-      final dropped =
-          _queuedLayoutKeys
-              .where((key) => !_activeLayoutKeys.contains(key))
-              .toList(growable: false);
+      final dropped = _queuedLayoutKeys
+          .where((key) => !_activeLayoutKeys.contains(key))
+          .toList(growable: false);
       _queuedLayoutKeys.clear();
       dropped.forEach(_completeWaiters);
     }
