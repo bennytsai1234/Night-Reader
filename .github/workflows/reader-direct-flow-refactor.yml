@@ -1,13 +1,12 @@
-name: Reader direct-flow validation
+name: Reader direct-flow final repair
 
 on:
   push:
     branches:
       - reader-direct-flow
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: reader-direct-flow-validation
@@ -15,6 +14,7 @@ concurrency:
 
 jobs:
   validate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -27,6 +27,39 @@ jobs:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
+
+      - name: Remove final capacity remnants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          screen = Path('lib/features/reader_v2/hybrid/hybrid_reader_screen.dart')
+          text = screen.read_text(encoding='utf-8')
+          old = '    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);'
+          if old not in text:
+              raise SystemExit('screen capacity remnant not found')
+          screen.write_text(text.replace(old, '    _paragraphCache = ParagraphCache();', 1), encoding='utf-8')
+
+          test = Path('test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart')
+          text = test.read_text(encoding='utf-8')
+          old_param = '    int paragraphCacheCapacity = 512,\n'
+          old_arg = '              paragraphCacheCapacity: paragraphCacheCapacity,\n'
+          if old_param not in text or old_arg not in text:
+              raise SystemExit('screen test capacity remnants not found')
+          text = text.replace(old_param, '', 1).replace(old_arg, '', 1)
+          test.write_text(text, encoding='utf-8')
+          PY
+          dart format \
+            lib/features/reader_v2/hybrid/hybrid_reader_screen.dart \
+            test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
+
+      - name: Commit repair
+        run: |
+          git config user.name "reader-refactor-bot"
+          git config user.email "reader-refactor-bot@users.noreply.github.com"
+          git add lib/features/reader_v2/hybrid/hybrid_reader_screen.dart test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
+          git commit -m "refactor(reader): remove paragraph cache capacity remnants"
+          git push origin HEAD:reader-direct-flow
 
       - run: flutter pub get
 
