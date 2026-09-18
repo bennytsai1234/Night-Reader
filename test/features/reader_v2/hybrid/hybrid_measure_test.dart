@@ -379,7 +379,7 @@ void main() {
     });
 
     test(
-      'keeps a late edge pending until it is outside the visible viewport',
+      'admits a ready edge immediately even when it intersects the viewport',
       () {
         final index = DocumentIndex(
           centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
@@ -396,7 +396,7 @@ void main() {
         addTearDown(admission.dispose);
 
         admission.offer(_ready(0, 1));
-        expect(index.admittedCount, 1);
+        expect(index.admittedCount, 2);
 
         admission.updateViewport(
           visibleTop: 0,
