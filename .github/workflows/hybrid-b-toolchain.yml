@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/offline-toolchain"
+          mkdir -p "$RUNNER_TEMP/offline-toolchain" "$RUNNER_TEMP/toolchain-parts"
           flutter --version > "$RUNNER_TEMP/offline-toolchain/version.txt"
           sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
           tar -czf "$RUNNER_TEMP/offline-toolchain/flutter.tar.gz" --exclude='bin/cache/artifacts/engine/android-*' --exclude='bin/cache/artifacts/engine/linux-x64-profile' --exclude='bin/cache/artifacts/engine/linux-x64-release' --exclude='bin/cache/artifacts/engine/linux-x64/flutter_linux' --exclude='bin/cache/flutter_web_sdk' --exclude='examples' --exclude='dev' -C "$sdk" .
@@ -32,9 +32,43 @@ jobs:
           git diff --exit-code
           cd "$RUNNER_TEMP/offline-toolchain"
           sha256sum *.tar.gz > SHA256SUMS
+          du -h *.tar.gz
+          tar -cf - . | split -b 240M -d - "$RUNNER_TEMP/toolchain-parts/part-"
+          cd "$RUNNER_TEMP/toolchain-parts"
+          sha256sum part-* > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: hybrid-b-offline-toolchain
-          path: ${{ runner.temp }}/offline-toolchain
+          name: hybrid-b-toolchain-00
+          path: |
+            ${{ runner.temp }}/toolchain-parts/part-00
+            ${{ runner.temp }}/toolchain-parts/SHA256SUMS
           retention-days: 1
           compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-b-toolchain-01
+          path: ${{ runner.temp }}/toolchain-parts/part-01
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-b-toolchain-02
+          path: ${{ runner.temp }}/toolchain-parts/part-02
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-b-toolchain-03
+          path: ${{ runner.temp }}/toolchain-parts/part-03
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-b-toolchain-04
+          path: ${{ runner.temp }}/toolchain-parts/part-04
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
