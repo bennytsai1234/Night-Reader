@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
@@ -47,8 +49,10 @@ void main() {
       epoch: LayoutEpoch.initial,
       fingerprint: fingerprint(),
     );
+    const firstKey = BlockKey(chapterIndex: 0, blockIndex: 0);
+    _putParagraph(cache, firstKey, '第一塊');
     index.admit(
-      const BlockKey(chapterIndex: 0, blockIndex: 0),
+      firstKey,
       const BlockMetrics(height: 100, lineCount: 1),
     );
     final centerKey = GlobalKey(debugLabel: 'center');
@@ -71,15 +75,19 @@ void main() {
 
     // 不重建 widget 樹（無 pumpWidget/setState），直接放行後續 block：
     // 前向與後向各一，驗證雙 sliver 都被 revision 直驅。
+    const secondKey = BlockKey(chapterIndex: 0, blockIndex: 1);
+    _putParagraph(cache, secondKey, '第二塊');
     index.admit(
-      const BlockKey(chapterIndex: 0, blockIndex: 1),
+      secondKey,
       const BlockMetrics(height: 120, lineCount: 2),
     );
     await tester.pump();
     expect(find.byType(CachedBlockWidget), findsNWidgets(2));
 
+    const thirdKey = BlockKey(chapterIndex: 1, blockIndex: 0);
+    _putParagraph(cache, thirdKey, '第三塊');
     index.admit(
-      const BlockKey(chapterIndex: 1, blockIndex: 0),
+      thirdKey,
       const BlockMetrics(height: 80, lineCount: 1),
     );
     await tester.pump();
@@ -115,8 +123,10 @@ void main() {
     }
 
     for (var i = 0; i < 3; i += 1) {
+      final key = BlockKey(chapterIndex: 0, blockIndex: i);
+      _putParagraph(cache, key, '舊章第$i塊');
       index.admit(
-        BlockKey(chapterIndex: 0, blockIndex: i),
+        key,
         const BlockMetrics(height: 100, lineCount: 1),
       );
     }
@@ -132,6 +142,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(CachedBlockWidget), findsNothing);
 
+    _putParagraph(cache, resetCenter, '新章');
     index.admit(resetCenter, const BlockMetrics(height: 90, lineCount: 1));
     // 結構性 reset 會由 screen 的 scheduleRebuild 觸發父層 rebuild；
     // generation 變更必須讓既有 sliver child 改用新 key。
@@ -145,4 +156,14 @@ void main() {
 
     cache.dispose();
   });
+}
+
+
+void _putParagraph(ParagraphCache cache, BlockKey key, String text) {
+  final builder = ui.ParagraphBuilder(
+    ui.ParagraphStyle(textDirection: ui.TextDirection.ltr),
+  )..addText(text);
+  final paragraph = builder.build()
+    ..layout(const ui.ParagraphConstraints(width: 760));
+  cache.put(key, LayoutEpoch.initial, paragraph);
 }
