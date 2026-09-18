@@ -1,4 +1,4 @@
-name: Hybrid B pinned toolchain
+name: Hybrid B reference checks
 on:
   push:
     branches: [reader-hybrid-b-rebuild]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  prepare:
+  reference:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -20,55 +20,26 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Export SDK and dependency cache for offline checks
+      - name: Reference Reader tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/reference-checks"
+          flutter test test/features/reader_v2 --reporter expanded 2>&1 | tee "$RUNNER_TEMP/reference-checks/tests.txt"
+      - name: Export native dependency and exact reference identity
+        if: always()
         shell: bash
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/offline-toolchain" "$RUNNER_TEMP/toolchain-parts"
-          flutter --version > "$RUNNER_TEMP/offline-toolchain/version.txt"
-          sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
-          tar -czf "$RUNNER_TEMP/offline-toolchain/flutter.tar.gz" --exclude='bin/cache/artifacts/engine/android-*' --exclude='bin/cache/artifacts/engine/linux-x64-profile' --exclude='bin/cache/artifacts/engine/linux-x64-release' --exclude='bin/cache/artifacts/engine/linux-x64/flutter_linux' --exclude='bin/cache/flutter_web_sdk' --exclude='examples' --exclude='dev' -C "$sdk" .
-          tar -czf "$RUNNER_TEMP/offline-toolchain/pub-cache.tar.gz" -C "${PUB_CACHE:-$HOME/.pub-cache}" .
+          mkdir -p "$RUNNER_TEMP/reference-checks"
+          find .dart_tool -name libsqlite3.so -exec cp {} "$RUNNER_TEMP/reference-checks/libsqlite3.so" \;
+          git rev-parse HEAD > "$RUNNER_TEMP/reference-checks/SOURCE.txt"
           git diff --exit-code
-          cd "$RUNNER_TEMP/offline-toolchain"
-          sha256sum *.tar.gz > SHA256SUMS
-          du -h *.tar.gz
-          tar -cf - . | split -b 240M -d - "$RUNNER_TEMP/toolchain-parts/part-"
-          cd "$RUNNER_TEMP/toolchain-parts"
-          sha256sum part-* > SHA256SUMS
+          cd "$RUNNER_TEMP/reference-checks"
+          sha256sum libsqlite3.so > SHA256SUMS
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: hybrid-b-toolchain-00
-          path: |
-            ${{ runner.temp }}/toolchain-parts/part-00
-            ${{ runner.temp }}/toolchain-parts/SHA256SUMS
+          name: hybrid-b-reference-checks
+          path: ${{ runner.temp }}/reference-checks
           retention-days: 1
-          compression-level: 0
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hybrid-b-toolchain-01
-          path: ${{ runner.temp }}/toolchain-parts/part-01
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hybrid-b-toolchain-02
-          path: ${{ runner.temp }}/toolchain-parts/part-02
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hybrid-b-toolchain-03
-          path: ${{ runner.temp }}/toolchain-parts/part-03
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hybrid-b-toolchain-04
-          path: ${{ runner.temp }}/toolchain-parts/part-04
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
