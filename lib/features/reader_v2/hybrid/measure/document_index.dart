@@ -36,6 +36,8 @@ final class DocumentIndex implements HybridDocumentIndex {
   final Map<BlockKey, BlockMetrics> _metrics = <BlockKey, BlockMetrics>{};
   final _DocumentRevision _revision = _DocumentRevision();
   int _resetGeneration = 0;
+  double _provisionalBeforeExtent = 0.0;
+  double _provisionalAfterExtent = 0.0;
 
   /// 放行/重建的變更訊號。render 層（sliver）訂閱後以 markNeedsLayout
   /// 直驅重排——新放行 block 的可見化不需要 widget 層 setState 重建。
@@ -62,6 +64,10 @@ final class DocumentIndex implements HybridDocumentIndex {
   int get admittedCount => _metrics.length;
   double get beforeExtent => _beforeTree.total;
   double get afterExtent => _afterTree.total;
+  double get provisionalBeforeExtent => _provisionalBeforeExtent;
+  double get provisionalAfterExtent => _provisionalAfterExtent;
+  double get scrollableBeforeExtent => beforeExtent + _provisionalBeforeExtent;
+  double get scrollableAfterExtent => afterExtent + _provisionalAfterExtent;
   int get beforeCount => _beforeCenter.length;
   int get centerAndAfterCount => _centerAndAfter.length;
 
@@ -84,8 +90,25 @@ final class DocumentIndex implements HybridDocumentIndex {
   void reset({required BlockKey centerKey}) {
     _centerKey = centerKey;
     _metrics.clear();
+    _provisionalBeforeExtent = 0.0;
+    _provisionalAfterExtent = 0.0;
     _rebuildAll();
     _resetGeneration += 1;
+    _revision.bump();
+  }
+
+  void setProvisionalExtents({
+    required double before,
+    required double after,
+  }) {
+    final safeBefore = before.isFinite && before > 0 ? before : 0.0;
+    final safeAfter = after.isFinite && after > 0 ? after : 0.0;
+    if ((_provisionalBeforeExtent - safeBefore).abs() < 0.01 &&
+        (_provisionalAfterExtent - safeAfter).abs() < 0.01) {
+      return;
+    }
+    _provisionalBeforeExtent = safeBefore;
+    _provisionalAfterExtent = safeAfter;
     _revision.bump();
   }
 
