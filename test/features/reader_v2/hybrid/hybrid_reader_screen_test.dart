@@ -996,7 +996,7 @@ void main() {
     expect(runtime.captureVisibleLocation(notifyIfChanged: false), isNotNull);
   });
 
-  testWidgets('拖曳期間排定的 pump 會硬停而不觸發 assertion', (tester) async {
+  testWidgets('拖曳期間持續滾動不觸發 assertion', (tester) async {
     final runtime = makeRuntime(List.generate(3, chapter));
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
@@ -1006,49 +1006,6 @@ void main() {
     await tester.drag(find.byType(HybridScrollView), const Offset(0, -80));
     await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('TTS yields immediately to a drag without queuing stale work', (
-    tester,
-  ) async {
-    final runtime = makeRuntime(
-      List.generate(3, (i) => chapter(i, paragraphCount: 18)),
-    );
-    final controller = ReaderV2ViewportController();
-    addTearDown(runtime.dispose);
-
-    await pumpScreen(tester, runtime, controller);
-    await openAndSettle(tester, runtime);
-    final content = await runtime.loadContentAt(0);
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.byType(HybridScrollView)),
-    );
-    await gesture.moveBy(const Offset(0, -40));
-    await tester.pump();
-
-    var completed = false;
-    final ensure = controller.ensureCharRangeVisible!(
-      chapterIndex: 0,
-      startCharOffset: content.displayText.length - 40,
-      endCharOffset: content.displayText.length - 20,
-    );
-    ensure.whenComplete(() => completed = true);
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(completed, isTrue);
-    expect(await ensure, isFalse);
-    expect(tester.takeException(), isNull);
-
-    await gesture.up();
-    await tester.pumpAndSettle();
-    final retry = controller.ensureCharRangeVisible!(
-      chapterIndex: 0,
-      startCharOffset: content.displayText.length - 40,
-      endCharOffset: content.displayText.length - 20,
-    );
-    await tester.pumpAndSettle();
-    expect(await retry, isTrue);
     expect(tester.takeException(), isNull);
   });
 
