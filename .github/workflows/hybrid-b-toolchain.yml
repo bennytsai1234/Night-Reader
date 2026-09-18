@@ -1,0 +1,40 @@
+name: Hybrid B pinned toolchain
+on:
+  push:
+    branches: [reader-hybrid-b-rebuild]
+    paths: [.github/workflows/hybrid-b-toolchain.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 6a4de1ab27e26ca56df1fc133c08d8bb988b54bc
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Export SDK and dependency cache for offline checks
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/offline-toolchain"
+          flutter --version > "$RUNNER_TEMP/offline-toolchain/version.txt"
+          sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          tar -czf "$RUNNER_TEMP/offline-toolchain/flutter.tar.gz" --exclude='bin/cache/artifacts/engine/android-*' --exclude='bin/cache/artifacts/engine/linux-x64-profile' --exclude='bin/cache/artifacts/engine/linux-x64-release' --exclude='bin/cache/artifacts/engine/linux-x64/flutter_linux' --exclude='bin/cache/flutter_web_sdk' --exclude='examples' --exclude='dev' -C "$sdk" .
+          tar -czf "$RUNNER_TEMP/offline-toolchain/pub-cache.tar.gz" -C "${PUB_CACHE:-$HOME/.pub-cache}" .
+          git diff --exit-code
+          cd "$RUNNER_TEMP/offline-toolchain"
+          sha256sum *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-b-offline-toolchain
+          path: ${{ runner.temp }}/offline-toolchain
+          retention-days: 1
+          compression-level: 0
