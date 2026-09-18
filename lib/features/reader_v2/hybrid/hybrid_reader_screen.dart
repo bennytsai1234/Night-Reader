@@ -1617,10 +1617,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (controller == null || !controller.hasClients) return false;
 
     while (isCurrent()) {
+      _refreshProvisionalGeometry();
       final pixels = controller.position.pixels;
       final available = forward
-          ? _documentIndex.afterExtent - pixels
-          : pixels + _documentIndex.beforeExtent;
+          ? _documentIndex.scrollableAfterExtent - pixels
+          : pixels + _documentIndex.scrollableBeforeExtent;
       final atBookBoundary = forward
           ? _admission.atForwardBookBoundary
           : _admission.atBackwardBookBoundary;
@@ -1630,21 +1631,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         return false;
       }
 
+      // Loading semantic blocks may extend the scroll world immediately via
+      // provisional geometry. Exact Paragraph layout stays on the normal pump
+      // and is never a precondition for page movement.
       _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
-
-      while (isCurrent()) {
-        final pendingLoads = _blocksInFlight.values.toList(growable: false);
-        if (pendingLoads.isNotEmpty) {
-          await Future.wait(pendingLoads);
-          if (!isCurrent()) return false;
-          _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
-          continue;
-        }
-        if (_pump.queueDepth == 0) break;
-        final completed = await _pump.pumpPending();
+      final pendingLoads = _blocksInFlight.values.toList(growable: false);
+      if (pendingLoads.isNotEmpty) {
+        await Future.wait(pendingLoads);
         if (!isCurrent()) return false;
-        if (completed == 0 && _pump.queueDepth > 0) return false;
       }
+      _refreshProvisionalGeometry();
+      _ensureWindowTasks(anchorKey: _documentIndex.centerKey);
+      _schedulePump();
 
       WidgetsBinding.instance.ensureVisualUpdate();
       await WidgetsBinding.instance.endOfFrame;
