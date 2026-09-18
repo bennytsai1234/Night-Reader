@@ -1,0 +1,34 @@
+name: Reader direct-flow verification
+
+on:
+  push:
+    branches:
+      - reader-direct-flow
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reader-direct-flow-verification
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Reader tests
+        run: flutter test test/features/reader_v2 --reporter expanded
+      - name: Verify clean tree
+        run: git diff --exit-code
