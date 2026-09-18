@@ -1,12 +1,13 @@
-name: Reader direct-flow final validation
+name: Reader direct-flow validation
 
 on:
   push:
     branches:
       - reader-direct-flow
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: reader-direct-flow-validation
@@ -14,7 +15,6 @@ concurrency:
 
 jobs:
   validate:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -27,19 +27,6 @@ jobs:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
-
-      - name: Remove capacity-era test call
-        run: |
-          sed -i "s/await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 4);/await pumpScreen(tester, runtime, controller);/" test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
-          dart format test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
-
-      - name: Commit repair
-        run: |
-          git config user.name "reader-refactor-bot"
-          git config user.email "reader-refactor-bot@users.noreply.github.com"
-          git add test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
-          git commit -m "test(reader): remove paragraph cache capacity call"
-          git push origin HEAD:reader-direct-flow
 
       - run: flutter pub get
 
