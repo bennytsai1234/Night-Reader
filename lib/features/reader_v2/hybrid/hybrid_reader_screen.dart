@@ -1110,7 +1110,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             }
             _enqueueChapterTasks(
               loaded,
-              anchorKey: loaded.chapterIndex == _windowCenter
+              anchorKey:
+                  anchorKey != null && loaded.chapterIndex == anchorKey.chapterIndex
                   ? anchorKey
                   : null,
             );
@@ -1121,7 +1122,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       _enqueueChapterTasks(
         blocks,
-        anchorKey: chapter == _windowCenter ? anchorKey : null,
+        anchorKey:
+            anchorKey != null && chapter == anchorKey.chapterIndex
+            ? anchorKey
+            : null,
       );
     }
   }
@@ -1201,11 +1205,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _submitGroupTask(blocks, group, anchor: anchor);
   }
 
-  /// 排版需求的唯一判準：`(epoch, fingerprint, residentRange)`。
-  ///
-  /// 投放端（[_ensureWindowTasks]／[_onChapterEvent]）與 drain 端都查同一個
-  /// geometry-owned resident range，避免 viewport 擴張後投放、卻被固定半徑
-  /// 立即丟棄的震盪。
+  /// 排版需求只受 layout identity 約束；互動狀態與 resident cache policy
+  /// 不得讓仍屬於當前 epoch / fingerprint 的工作失效。
   ///
   /// epoch／fingerprint 改變時 [_handleEpochRebuild] 會整個換掉 pump，理論上
   /// 走不到這裡；仍然檢查，讓失效鍵在單一處完整表達。
@@ -1325,6 +1326,63 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
+  BlockKey? _nearestUnadmittedKey({required bool forward}) {
+    BlockKey? candidate;
+    for (final blocks in _blocks.values) {
+      for (final block in blocks.blocks) {
+        final key = block.key;
+        if (_documentIndex.metricsFor(key) != null) continue;
+        if (forward) {
+          if (key < _documentIndex.centerKey) continue;
+          if (candidate == null || key < candidate) candidate = key;
+        } else {
+          if (key >= _documentIndex.centerKey) continue;
+          if (candidate == null || key > candidate) candidate = key;
+        }
+      }
+    }
+    return candidate;
+  }
+
+  void _materializeVisibleDemand() {
+    if (!mounted || !_initialRestoreCompleted || _viewportSize.height <= 0) {
+      return;
+    }
+    final offset = _effectiveScrollOffset();
+    if (offset == null) return;
+
+    final forwardDeficit = math.max(
+      0.0,
+      offset + _viewportSize.height - _documentIndex.afterExtent,
+    );
+    final backwardDeficit = math.max(
+      0.0,
+      -_documentIndex.beforeExtent - offset,
+    );
+    final needsForward =
+        forwardDeficit > 0.5 && _documentIndex.provisionalAfterExtent > 0;
+    final needsBackward =
+        backwardDeficit > 0.5 && _documentIndex.provisionalBeforeExtent > 0;
+    if (!needsForward && !needsBackward) return;
+
+    _syncResidentRangeToViewport();
+    final forward = needsForward && (!needsBackward || forwardDeficit >= backwardDeficit);
+    final anchor = _nearestUnadmittedKey(forward: forward);
+    _ensureWindowTasks(anchorKey: anchor);
+
+    // pumpPending performs Paragraph layout synchronously before returning its
+    // Future. Demand work therefore starts in the current scroll notification
+    // rather than waiting for a post-frame prefetch pass.
+    unawaited(
+      _pump.pumpPending().then((completed) {
+        if (!mounted) return;
+        _refreshProvisionalGeometry();
+        if (completed > 0) _updateLeadTelemetry();
+        if (_pump.queueDepth > 0) _schedulePump();
+      }),
+    );
+  }
+
   void _updateLeadTelemetry() {
     if (!_initialRestoreCompleted) return;
     final offset = _effectiveScrollOffset();
@@ -1346,6 +1404,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         notification.dragDetails != null) {
       _runtimeLocationRevision += 1;
       _setPumpState(PumpState.dragging);
+      _materializeVisibleDemand();
       _schedulePump();
     } else if (notification is ScrollUpdateNotification) {
       _setPumpState(
@@ -1353,6 +1412,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             ? PumpState.ballistic
             : PumpState.dragging,
       );
+      _materializeVisibleDemand();
       _schedulePump();
       _scheduleMotionCapture();
     } else if (notification is ScrollEndNotification) {
