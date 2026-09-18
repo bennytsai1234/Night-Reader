@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -62,10 +63,19 @@ class SourceSwitchService {
           enabledSources.map((source) {
             return searchPool.withResource(() async {
               try {
-                return await _service.preciseSearch(
+                final author = book.author.trim();
+                if (checkAuthor && author.isNotEmpty) {
+                  return await _service.preciseSearch(
+                    source,
+                    book.name,
+                    author,
+                  );
+                }
+                return await _service.searchBooks(
                   source,
                   book.name,
-                  checkAuthor ? book.author : '',
+                  filter: (name, _) => name == book.name,
+                  shouldBreak: (size) => size >= 1,
                 );
               } catch (_) {
                 return const <SearchBook>[];
@@ -172,11 +182,10 @@ class SourceSwitchService {
     );
   }
 
-  /// 持久化換源結果：把書遷移到新來源。
+  /// 持久化換源結果：新來源資料寫入與舊來源資料清理必須一起成功。
   ///
-  /// 若新書的 bookUrl 與舊書不同（遷移到不同來源 URL），先刪除舊書 row 與舊
-  /// 章節，避免書架出現重複項；接著以新章節列表覆蓋新書並 upsert。
-  /// 書架「每源獨立」儲存模型不變：一本書始終只有一個當前來源。
+  /// 換到不同 bookUrl 時會刪除舊來源的 Book、Chapters 與全部正文快取。
+  /// 所有資料庫操作都在同一個 transaction 內，任一步驟失敗會完整回滾。
   Future<void> persistSwitch(
     Book oldBook,
     SourceSwitchResolution resolution, {
@@ -184,16 +193,22 @@ class SourceSwitchService {
     ChapterDao? chapterDao,
   }) async {
     final books = bookDao ?? getIt<BookDao>();
-    final chaptersDao = chapterDao ?? getIt<ChapterDao>();
+    final db = books.appDatabase;
+    final chaptersDao = chapterDao ?? ChapterDao(db);
+    final contentDao = ReaderChapterContentDao(db);
     final migratedBook = resolution.migratedBook;
 
-    if (migratedBook.bookUrl != oldBook.bookUrl) {
-      await chaptersDao.deleteByBook(oldBook.bookUrl);
-      await books.deleteByUrl(oldBook.bookUrl);
-    }
-    await chaptersDao.deleteByBook(migratedBook.bookUrl);
-    await books.upsert(migratedBook);
-    await chaptersDao.insertChapters(resolution.chapters);
+    await db.transaction(() async {
+      await chaptersDao.deleteByBook(migratedBook.bookUrl);
+      await books.upsert(migratedBook);
+      await chaptersDao.insertChapters(resolution.chapters);
+
+      if (migratedBook.bookUrl != oldBook.bookUrl) {
+        await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);
+        await chaptersDao.deleteByBook(oldBook.bookUrl);
+        await books.deleteByUrl(oldBook.bookUrl);
+      }
+    });
   }
 
   String? _nextReadableChapterUrl(

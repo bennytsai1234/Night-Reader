@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:encrypt/encrypt.dart';
+
 import 'package:convert/convert.dart';
 import 'package:pointycastle/block/desede_engine.dart';
 import 'package:pointycastle/export.dart' as pc;
+
 import 'encode_utils_base.dart';
 import 'encode_utils_base64.dart';
 
@@ -24,34 +25,14 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
     final ivBytes = iv != null ? EncodeUtilsBase.toBytes(iv) : null;
 
     if (algorithmName == 'AES') {
-      final k = Key(Uint8List.fromList(keyBytes));
-      final v = ivBytes != null ? IV(Uint8List.fromList(ivBytes)) : null;
-      final encrypter = Encrypter(AES(k, mode: _getAESMode(modeName)));
-      if (action == 'encrypt') {
-        final encrypted = encrypter.encryptBytes(
-          EncodeUtilsBase.toBytes(data),
-          iv: v,
-        );
-        return outputFormat == 'hex'
-            ? hex.encode(encrypted.bytes)
-            : (outputFormat == 'bytes' ? encrypted.bytes : encrypted.base64);
-      } else {
-        final decrypted = Uint8List.fromList(
-          encrypter.decryptBytes(
-            data is String
-                ? Encrypted.fromBase64(data)
-                : Encrypted(Uint8List.fromList(EncodeUtilsBase.toBytes(data))),
-            iv: v,
-          ),
-        );
-        return outputFormat == 'string'
-            ? utf8.decode(decrypted)
-            : (outputFormat == 'bytes'
-                ? decrypted
-                : (outputFormat == 'hex'
-                    ? hex.encode(decrypted)
-                    : base64.encode(decrypted)));
-      }
+      return _aesSymmetricCrypto(
+        action,
+        modeName,
+        keyBytes,
+        ivBytes,
+        data,
+        outputFormat,
+      );
     } else {
       return _pointycastleSymmetricCrypto(
         action,
@@ -65,22 +46,98 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
     }
   }
 
-  static AESMode _getAESMode(String mode) {
-    switch (mode) {
+  static dynamic _aesSymmetricCrypto(
+    String action,
+    String modeName,
+    List<int> keyBytes,
+    List<int>? ivBytes,
+    dynamic data,
+    String outputFormat,
+  ) {
+    final forEncryption = action == 'encrypt';
+    final inputBytes =
+        forEncryption
+            ? Uint8List.fromList(EncodeUtilsBase.toBytes(data))
+            : data is String
+            ? base64.decode(data)
+            : Uint8List.fromList(EncodeUtilsBase.toBytes(data));
+
+    if (modeName != 'ECB' && ivBytes == null) {
+      throw StateError('IV is required.');
+    }
+
+    final keyParameter = pc.KeyParameter(Uint8List.fromList(keyBytes));
+    late final Uint8List resultBytes;
+
+    if (modeName == 'GCM') {
+      final cipher =
+          pc.GCMBlockCipher(pc.AESEngine())
+            ..reset()
+            ..init(
+              forEncryption,
+              pc.AEADParameters(
+                keyParameter,
+                128,
+                Uint8List.fromList(ivBytes!),
+                Uint8List(0),
+              ),
+            );
+      resultBytes = cipher.process(inputBytes);
+    } else {
+      final cipher =
+          pc.PaddedBlockCipherImpl(
+              pc.PKCS7Padding(),
+              _createAesBlockCipher(modeName),
+            )
+            ..reset()
+            ..init(
+              forEncryption,
+              pc.PaddedBlockCipherParameters(
+                modeName == 'ECB'
+                    ? keyParameter
+                    : pc.ParametersWithIV(
+                      keyParameter,
+                      Uint8List.fromList(ivBytes!),
+                    ),
+                null,
+              ),
+            );
+      resultBytes = cipher.process(inputBytes);
+    }
+
+    if (forEncryption) {
+      return outputFormat == 'hex'
+          ? hex.encode(resultBytes)
+          : (outputFormat == 'bytes'
+              ? resultBytes
+              : base64.encode(resultBytes));
+    }
+
+    final decryptedBytes = Uint8List.fromList(resultBytes);
+    return outputFormat == 'string'
+        ? utf8.decode(decryptedBytes)
+        : (outputFormat == 'bytes'
+            ? decryptedBytes
+            : (outputFormat == 'hex'
+                ? hex.encode(decryptedBytes)
+                : base64.encode(decryptedBytes)));
+  }
+
+  static pc.BlockCipher _createAesBlockCipher(String modeName) {
+    final engine = pc.AESEngine();
+    switch (modeName) {
       case 'CBC':
-        return AESMode.cbc;
+        return pc.CBCBlockCipher(engine);
       case 'CFB':
-        return AESMode.cfb64;
+        return pc.CFBBlockCipher(engine, 8);
       case 'CTR':
-        return AESMode.ctr;
+        return pc.CTRBlockCipher(engine.blockSize, pc.CTRStreamCipher(engine));
       case 'ECB':
-        return AESMode.ecb;
+        return pc.ECBBlockCipher(engine);
       case 'OFB':
-        return AESMode.ofb64;
-      case 'GCM':
-        return AESMode.gcm;
+        return pc.OFBBlockCipher(engine, 8);
       default:
-        return AESMode.sic;
+        return pc.SICBlockCipher(engine.blockSize, pc.SICStreamCipher(engine));
     }
   }
 

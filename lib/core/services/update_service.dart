@@ -37,10 +37,24 @@ class AppUpdateService {
       final htmlUrl = (data['html_url'] as String?) ?? '';
       if (tagName == null || tagName.isEmpty) return null;
 
-      final apkAsset = assets.cast<Map<String, dynamic>?>().firstWhere(
-        (a) => a != null && (a['name'] as String?)?.endsWith('.apk') == true,
-        orElse: () => null,
-      );
+      Map<String, dynamic>? apkAsset;
+      String? apkDownloadUrl;
+      for (final rawAsset in assets) {
+        if (rawAsset is! Map<String, dynamic>) continue;
+        final name = rawAsset['name'];
+        final downloadUrl = rawAsset['browser_download_url'];
+        final normalizedDownloadUrl =
+            downloadUrl is String ? downloadUrl.trim() : null;
+        if (name is! String ||
+            !name.toLowerCase().endsWith('.apk') ||
+            normalizedDownloadUrl == null ||
+            !_isHttpUrl(normalizedDownloadUrl)) {
+          continue;
+        }
+        apkAsset = rawAsset;
+        apkDownloadUrl = normalizedDownloadUrl;
+        break;
+      }
       if (apkAsset == null) return null;
 
       final current = await _currentVersionLoader();
@@ -50,7 +64,7 @@ class AppUpdateService {
         versionName: _stripV(tagName),
         tagName: tagName,
         updateLog: body,
-        downloadUrl: apkAsset['browser_download_url'] as String? ?? '',
+        downloadUrl: apkDownloadUrl!,
         assetSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
         releasePageUrl: htmlUrl,
       );
@@ -88,6 +102,13 @@ class AppUpdateService {
       ints.add(n);
     }
     return ints;
+  }
+
+  static bool _isHttpUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
   }
 }
 

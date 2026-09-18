@@ -46,6 +46,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/key.properties
+# Gradle 產生的 Android build 產物
+android/build/
 *.jks
 *.keystore
 
@@ -54,6 +56,12 @@ actionlint
 .codex
 android/.kotlin/
 
+# Local Android reader workload reports and failure artifacts
+artifacts/
+
 # Reasonix
 .reasonix/
 reasonix.toml
+
+# codebase-memory-mcp 的本機索引（衍生產物，可用 index_repository 重建）
+.codebase-memory/

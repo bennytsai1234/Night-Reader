@@ -52,6 +52,25 @@ void main() {
     }
     ''';
 
+    test('sync JS results stay scoped to the current rule context', () {
+      final first = AnalyzeRule().setContent(
+        '',
+        baseUrl: 'https://first.example/book',
+      );
+      final second = AnalyzeRule().setContent(
+        '',
+        baseUrl: 'https://second.example/book',
+      );
+
+      try {
+        expect(first.evalJS('baseUrl', null), 'https://first.example/book');
+        expect(second.evalJS('baseUrl', null), 'https://second.example/book');
+      } finally {
+        first.dispose();
+        second.dispose();
+      }
+    });
+
     test('Routing to CSS parser', () {
       final analyzer = AnalyzeRule().setContent(htmlStr);
       expect(analyzer.getString('.title@text'), 'Test Title');

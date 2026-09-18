@@ -12,10 +12,620 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 
 import 'reader_v2_processed_chapter.dart';
 
+/// 在內容轉換階段執行文字排版正規化。
+///
+/// 無開關、恆開（2026-07-18 內化決策）：所有規則都以 CJK 脈絡判定自我防護，
+/// 中文語境下把半形/歧義寬度標點統一為佔滿全形格的碼位，讓格線對齊；
+/// 純西文脈絡（英文句、數字、URL）一律原樣保留。
+///
+/// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
+/// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
+///
+/// [preserveCjkSpaces] 供標題使用：章節標題的空格是刻意的結構分隔
+/// （「第一章 起點」），不是來源雜訊；內文才需要為格線刪空格。
+String normalizeTypography(String input, {bool preserveCjkSpaces = false}) {
+  if (input.isEmpty) return input;
+
+  final lineNormalized = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  return lineNormalized
+      .split('\n')
+      .map(
+        (line) => _normalizeTypographyLine(
+          line,
+          preserveCjkSpaces: preserveCjkSpaces,
+        ),
+      )
+      .join('\n');
+}
+
+String _normalizeTypographyLine(
+  String line, {
+  required bool preserveCjkSpaces,
+}) {
+  final sourceRunes = line.runes.toList(growable: false);
+  // The public contract is intentionally asymmetric: CJK text is normalized
+  // for the em-grid, while a Western/other-script line remains source text.
+  // Ambiguous punctuation such as a single ellipsis/em-dash is not enough to
+  // classify the whole line as CJK; otherwise Western spacing/control/emoji
+  // shaping can be changed before the local punctuation rules even run.
+  if (!_hasCjkLineContext(sourceRunes)) return line;
+
+  final cleaned = StringBuffer();
+  for (final rune in sourceRunes) {
+    if (rune == 0x09 || rune == 0x00A0 || rune == 0x3000) {
+      cleaned.write(' ');
+      continue;
+    }
+    if (_isControlRune(rune)) continue;
+    // Keep the historical cleanup of zero-width spacing/BOM noise in CJK
+    // material, but never delete ZWNJ/ZWJ: those code points participate in
+    // shaping and emoji clusters and are therefore source semantics.
+    if (rune == 0x200B || rune == 0xFEFF) continue;
+    cleaned.write(String.fromCharCode(rune));
+  }
+
+  var result = cleaned.toString().replaceAll(RegExp(r' +'), ' ');
+  result = _normalizeEllipsis(result);
+  result = _normalizeDashes(result);
+  result = _normalizeCjkPunctuation(result);
+  result = _normalizeAmbiguousWidthPunctuation(result);
+  result = _normalizePairedQuotes(result);
+  result = _normalizePairedSingleQuotes(result);
+  result = _normalizeBrackets(result);
+  result = _mapCjkOnlyPunctuation(result);
+  if (!preserveCjkSpaces) {
+    result = _removeCjkSpaces(result);
+  }
+  return result;
+}
+
+bool _hasCjkLineContext(List<int> runes) {
+  if (runes.any(_isStrongCjkLineRune)) return true;
+
+  // `…` and `—` are shared Western/CJK punctuation and cannot by themselves
+  // claim ownership of an entire line. Keep the existing punctuation-only
+  // Chinese-dialogue contract for the conventional “……” / “——” forms, but
+  // only when the line has no Latin letter/digit that would make the context
+  // genuinely ambiguous.
+  if (runes.any(_isLatinLetterOrDigit)) return false;
+  final hasCurlyQuote = runes.any((rune) => rune == 0x201C || rune == 0x201D);
+  if (!hasCurlyQuote) return false;
+  for (var index = 0; index + 1 < runes.length; index += 1) {
+    final rune = runes[index];
+    final next = runes[index + 1];
+    final doubleEllipsis =
+        (rune == 0x2026 || rune == 0x22EF) &&
+        (next == 0x2026 || next == 0x22EF);
+    final doubleEmDash = rune == 0x2014 && next == 0x2014;
+    if (doubleEllipsis || doubleEmDash) return true;
+  }
+  return false;
+}
+
+bool _isStrongCjkLineRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x1100 && rune <= 0x11FF) || // Hangul Jamo
+      (rune >= 0x3000 && rune <= 0x303F) || // CJK punctuation
+      (rune >= 0x3040 && rune <= 0x30FF) || // Hiragana/Katakana
+      (rune >= 0x3100 && rune <= 0x312F) || // Bopomofo
+      (rune >= 0x3130 && rune <= 0x318F) || // Hangul compatibility Jamo
+      (rune >= 0x31A0 && rune <= 0x31BF) || // Bopomofo extended
+      (rune >= 0x31F0 && rune <= 0x31FF) || // Katakana extensions
+      (rune >= 0xAC00 && rune <= 0xD7AF) || // Hangul syllables
+      (rune >= 0xFF00 && rune <= 0xFF60); // Full-width/CJK forms
+}
+
+bool _isControlRune(int rune) {
+  if (rune == 0x09 || rune == 0x0A) return false;
+  return (rune >= 0x00 && rune <= 0x1F) || (rune >= 0x7F && rune <= 0x9F);
+}
+
+String _normalizeEllipsis(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (!_isEllipsisRune(rune)) {
+      output.write(String.fromCharCode(rune));
+      continue;
+    }
+
+    var end = index + 1;
+    while (end < runes.length && _isEllipsisRune(runes[end])) {
+      end += 1;
+    }
+    final runLength = end - index;
+    final containsGlyph = runes
+        .sublist(index, end)
+        .any((value) => value == 0x2026 || value == 0x22EF);
+    final containsCjkSpecificDot = runes
+        .sublist(index, end)
+        .any((value) => value == 0xFF0E || value == 0x3002);
+    final candidate = containsGlyph || runLength >= 3;
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, end - 1, 1);
+    final hasCjkContext =
+        containsCjkSpecificDot ||
+        _isCjkContextRune(previous) ||
+        _isCjkContextRune(next);
+    if (candidate && hasCjkContext) {
+      output.write('……');
+    } else {
+      for (var cursor = index; cursor < end; cursor += 1) {
+        output.write(String.fromCharCode(runes[cursor]));
+      }
+    }
+    index = end - 1;
+  }
+  return output.toString();
+}
+
+bool _isEllipsisRune(int rune) {
+  return _isEllipsisDot(rune) || rune == 0x2026 || rune == 0x22EF;
+}
+
+bool _isEllipsisDot(int rune) {
+  return rune == 0x2E || rune == 0xFF0E || rune == 0x3002;
+}
+
+/// 破折號統一為 U+2014。
+///
+/// - `―`（U+2015）、`─`（U+2500 製表線，網文常拿來當破折號）→ `—`
+/// - CJK 脈絡下的 `--` 連跑（2+ 個 ASCII hyphen）→ `——`
+/// - CJK 脈絡下的 `–`（U+2013）→ `—`；數字區間（1–5）不動
+/// - 既有 `—` 連跑保持原樣（寬度由字型解決，不強改字數）
+String _normalizeDashes(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune == 0x2015 || rune == 0x2500) {
+      output.write('—');
+      continue;
+    }
+    if (rune == 0x2D) {
+      var end = index + 1;
+      while (end < runes.length && runes[end] == 0x2D) {
+        end += 1;
+      }
+      final runLength = end - index;
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = end < runes.length ? runes[end] : null;
+      if (runLength >= 2 &&
+          (_isCjkContextRune(previous) || _isCjkContextRune(next))) {
+        output.write('——');
+        index = end - 1;
+        continue;
+      }
+      output.write('-' * runLength);
+      index = end - 1;
+      continue;
+    }
+    if (rune == 0x2013) {
+      final previous = index > 0 ? runes[index - 1] : null;
+      final next = index + 1 < runes.length ? runes[index + 1] : null;
+      if (_isCjkContextRune(previous) || _isCjkContextRune(next)) {
+        output.write('—');
+        continue;
+      }
+    }
+    output.write(String.fromCharCode(rune));
+  }
+  return output.toString();
+}
+
+String _normalizeCjkPunctuation(String input) {
+  const replacements = <int, String>{
+    0x2C: '，', // comma
+    0x2E: '。', // full stop
+    0x21: '！', // exclamation
+    0x3F: '？', // question
+    0x3B: '；', // semicolon
+    0x3A: '：', // colon
+    0x7E: '～', // tilde（「喂~」→「喂～」）
+  };
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    final replacement = replacements[runes[index]];
+    if (replacement == null) {
+      output.write(String.fromCharCode(runes[index]));
+      continue;
+    }
+    final previous = _neighborRune(runes, index, -1);
+    final next = _neighborRune(runes, index, 1);
+    final hasCjkSide = _isCjkRune(previous) || _isCjkRune(next);
+    final hasNumericSide =
+        _isAsciiOrFullWidthDigit(previous) || _isAsciiOrFullWidthDigit(next);
+    output.write(
+      hasCjkSide && !hasNumericSide
+          ? replacement
+          : String.fromCharCode(runes[index]),
+    );
+  }
+  return output.toString();
+}
+
+int? _neighborRune(List<int> runes, int index, int direction) {
+  var cursor = index + direction;
+  while (cursor >= 0 && cursor < runes.length) {
+    final rune = runes[cursor];
+    if (rune == 0x0A) return null;
+    if (rune != 0x20) return rune;
+    cursor += direction;
+  }
+  return null;
+}
+
+/// 歧義寬度標點轉 CJK 專屬碼位。
+///
+/// 彎引號（U+201C/201D/2018/2019）與間隔號（U+00B7/U+2027）屬東亞歧義
+/// 寬度字元：Android 字型回退鏈逐字取第一個有字形的字型，這些碼位會
+/// 命中 Roboto 的西文窄字形而非 CJK 字型，因此不佔一格、與漢字不同寬
+/// （`fwid` 只作用於有 OpenType 半形→全形對映的字形，Roboto 不支援）。
+/// 轉成 Roboto 沒有字形的 CJK 專屬碼位（「」『』・）後，回退鏈必然落到
+/// CJK 字型、佔滿一格。
+String _normalizeAmbiguousWidthPunctuation(String input) {
+  final converted = input.split('\n').map(_convertCurlyQuotesLine).join('\n');
+  final runes = converted.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  for (var index = 0; index < runes.length; index += 1) {
+    final rune = runes[index];
+    if (rune != 0xB7 && rune != 0x2027) continue;
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = index + 1 < runes.length ? runes[index + 1] : null;
+    if (_isCjkRune(previous) && _isCjkRune(next)) {
+      output[index] = '・';
+    }
+  }
+  return output.join();
+}
+
+/// 彎引號逐字元轉換，以**行**為 CJK 脈絡判定單位。
+///
+/// 為什麼不成對掃描（2026-07-28 修正）：`“`/`”` 碼位本身即帶開/收方向，
+/// 不需要配對就能安全映射。舊版要求開引號找得到收引號才轉，而中文小說
+/// 連續對白的標準寫法是「每段開頭有開引號、只有最末段有收引號」——前面
+/// 每一段的 `“` 永遠配不到對而原樣留下，同一段對白裡因此並存 Roboto 的
+/// 細窄 `“` 與 CJK 的全形 `「」`，兩種字形一眼可辨。落單引號、
+/// `“他說“不要”…”` 這類內外層結構也同樣漏轉。
+///
+/// 純西文行（整行無 CJK 脈絡字元）仍原樣保留，`He said “hello”` 不受影響。
+///
+/// 單引號 `‘’` 另有撇號歧義（don’t、boys’），以「行內是否有尚未關閉的
+/// `‘`」判定：有 → `’` 是收引號；沒有且前字為拉丁字母/數字 → 撇號保留。
+String _convertCurlyQuotesLine(String line) {
+  final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
+
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var singleQuoteOpen = false;
+  for (var index = 0; index < runes.length; index += 1) {
+    switch (runes[index]) {
+      case 0x201C:
+        output[index] = '「';
+      case 0x201D:
+        output[index] = '」';
+      case 0x2018:
+        output[index] = '『';
+        singleQuoteOpen = true;
+      case 0x2019:
+        if (singleQuoteOpen) {
+          output[index] = '』';
+          singleQuoteOpen = false;
+        } else if (!_isLatinLetterOrDigit(
+          index > 0 ? runes[index - 1] : null,
+        )) {
+          output[index] = '』';
+        }
+    }
+  }
+  return output.join();
+}
+
+bool _isLatinLetterOrDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) ||
+      (rune >= 0x41 && rune <= 0x5A) ||
+      (rune >= 0x61 && rune <= 0x7A);
+}
+
+bool _quotePairHasCjkContext(List<int> runes, int openIndex, int closeIndex) {
+  for (var cursor = openIndex + 1; cursor < closeIndex; cursor += 1) {
+    if (_isCjkContextRune(runes[cursor])) return true;
+  }
+  return _isCjkContextRune(_neighborRune(runes, openIndex, -1)) ||
+      _isCjkContextRune(_neighborRune(runes, closeIndex, 1));
+}
+
+/// CJK 脈絡字元：漢字之外也涵蓋 CJK 標點/全形區段與常見中文標點
+/// （`“……”`、`“——”他說` 這類引號內只有標點的段落也要能判定為中文脈絡）。
+bool _isCjkContextRune(int? rune) {
+  if (rune == null) return false;
+  if (_isCjkRune(rune)) return true;
+  return (rune >= 0x3000 && rune <= 0x303F) ||
+      (rune >= 0xFF00 && rune <= 0xFF60) ||
+      rune == 0x2014 ||
+      rune == 0x2026 ||
+      rune == 0x30FB;
+}
+
+/// 直引號 `"` 無方向資訊，只能靠交替配對。配對以**行**為單位：
+/// 對白引號幾乎不跨行，逐行配對能把單一雜訊引號的錯位影響隔離在
+/// 該行（整章全域交替時，一個落單引號會讓其後所有開/收全部顛倒；
+/// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留；
+/// 逐對再做 CJK 脈絡判定，純英文行（`"Hello," he said.`）不動。
+String _normalizePairedQuotes(String input) {
+  return input
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x22,
+          openReplacement: '「',
+          closeReplacement: '」',
+          skipAt: (runes, index) => false,
+        ),
+      )
+      .join('\n');
+}
+
+/// 直單引號 `'` 同理交替轉 `『』`（中文巢狀引號慣例的內層）。
+///
+/// 撇號保護：**前一個字元**是拉丁字母/數字即視為撇號，不參與配對。
+/// 舊版要求前後皆拉丁，`believin'` 這種字尾撇號（後接空格）漏網，
+/// 在改為交替狀態機後會被當成引號轉掉。代價是中文行內的英文引語
+/// （`他讀了 'test' 這個字`）收尾側會被當撇號而破對——字尾撇號遠比
+/// 中文行內夾英文引語常見，取誤傷較小的一側。
+String _normalizePairedSingleQuotes(String input) {
+  return input
+      .split('\n')
+      .map(
+        (line) => _convertAlternatingQuotesLine(
+          line,
+          quote: 0x27,
+          openReplacement: '『',
+          closeReplacement: '』',
+          skipAt:
+              (runes, index) =>
+                  _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
+        ),
+      )
+      .join('\n');
+}
+
+/// 直引號交替轉換：不再要求整行偶數個。
+///
+/// 舊版奇數個就整行放棄，多段落對白（每段開頭一個 `"`）因此整段留著
+/// 半形直引號，與已轉的 `「」` 混排。改為交替狀態機：起手是開或收由
+/// 第一個引號的前文決定（行首／句讀標點之後 → 開，否則 → 收），之後
+/// 開收交替；落單的引號也拿得到一個方向，字形因此統一。
+///
+/// CJK 脈絡判定改以**行**為單位（與彎引號一致）：純西文行原樣保留。
+String _convertAlternatingQuotesLine(
+  String line, {
+  required int quote,
+  required String openReplacement,
+  required String closeReplacement,
+  required bool Function(List<int> runes, int index) skipAt,
+}) {
+  final runes = line.runes.toList(growable: false);
+  if (!runes.any(_isCjkContextRune)) return line;
+
+  final positions = <int>[];
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == quote &&
+        !_isEscaped(runes, index) &&
+        !skipAt(runes, index)) {
+      positions.add(index);
+    }
+  }
+  if (positions.isEmpty) return line;
+
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  var expectingOpen = _looksLikeQuoteOpening(runes, positions.first);
+  for (final position in positions) {
+    output[position] = expectingOpen ? openReplacement : closeReplacement;
+    expectingOpen = !expectingOpen;
+  }
+  return output.join();
+}
+
+/// 直引號的開/收起手判定，看的是**後文**而非前文。
+///
+/// 前文不管用：開引號與收引號的前一個字元都可能是漢字
+/// （`他說"…"` 的開、`…好"` 的收）。後文則有明確訊號——收引號後面
+/// 接的是句讀或行尾，開引號後面接的是內容字。
+bool _looksLikeQuoteOpening(List<int> runes, int index) {
+  final next = _neighborRune(runes, index, 1);
+  if (next == null) return false; // 行尾 → 收引號
+  return !_isQuoteClosingFollower(next);
+}
+
+/// 句讀與收括號類標點：其前出現的引號是收引號。
+bool _isQuoteClosingFollower(int rune) {
+  const followers = <int>{
+    0x3001, // 、
+    0x3002, // 。
+    0xFF0C, // ，
+    0xFF01, // ！
+    0xFF1F, // ？
+    0xFF1B, // ；
+    0xFF1A, // ：
+    0x300D, // 」
+    0x300F, // 』
+    0xFF09, // ）
+    0x3011, // 】
+    0x2C, // ,
+    0x2E, // .
+    0x21, // !
+    0x3F, // ?
+    0x3B, // ;
+    0x3A, // :
+    0x29, // )
+    0x5D, // ]
+  };
+  return followers.contains(rune);
+}
+
+/// 半形括號在 CJK 脈絡下成對轉全形：`()`→`（）`、`[]`→`【】`
+/// （`【】` 隨後由 [_mapCjkOnlyPunctuation] 統一轉 `「」`）。
+/// 同行成對＋逐對 CJK 脈絡判定；純西文（`f(x)`、`[1]`）不動。
+String _normalizeBrackets(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = List<String>.generate(
+    runes.length,
+    (index) => String.fromCharCode(runes[index]),
+    growable: false,
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x28,
+    close: 0x29,
+    openReplacement: '（',
+    closeReplacement: '）',
+  );
+  _convertBracketPairs(
+    runes,
+    output,
+    open: 0x5B,
+    close: 0x5D,
+    openReplacement: '【',
+    closeReplacement: '】',
+  );
+  return output.join();
+}
+
+void _convertBracketPairs(
+  List<int> runes,
+  List<String> output, {
+  required int open,
+  required int close,
+  required String openReplacement,
+  required String closeReplacement,
+}) {
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != open) {
+      index += 1;
+      continue;
+    }
+    var closeIndex = -1;
+    var cursor = index + 1;
+    for (; cursor < runes.length; cursor += 1) {
+      final rune = runes[cursor];
+      if (rune == 0x0A || rune == open) break;
+      if (rune == close) {
+        closeIndex = cursor;
+        break;
+      }
+    }
+    if (closeIndex < 0) {
+      index = cursor > index ? cursor : index + 1;
+      continue;
+    }
+    if (_quotePairHasCjkContext(runes, index, closeIndex)) {
+      output[index] = openReplacement;
+      output[closeIndex] = closeReplacement;
+    }
+    index = closeIndex + 1;
+  }
+}
+
+/// CJK 專屬碼位的一對一風格映射（恆為中文脈絡，無需判定）：
+/// `【】〖〗`→`「」『』`（2026-07-18 使用者定案：統一成上下引號）、
+/// 半形直角引號 `｢｣`（U+FF62/FF63）→ `「」`。
+///
+/// 直排專用直角引號 `﹁﹂﹃﹄`（U+FE41–FE44，CJK Compatibility Forms）
+/// 也一併收：字形是為**垂直**排版設計的，在橫排版面上渲染成細長的
+/// 直立角線，與正常「」明顯不同粗細；直排書籍轉檔、OCR 與部分繁體
+/// 書源會帶進這組碼位（2026-07-28 補）。`〝〞`（U+301D/U+301E）同理。
+String _mapCjkOnlyPunctuation(String input) {
+  const mappings = <int, String>{
+    0x3010: '「', // 【
+    0x3011: '」', // 】
+    0x3016: '『', // 〖
+    0x3017: '』', // 〗
+    0xFF62: '「', // ｢
+    0xFF63: '」', // ｣
+    0xFE41: '「', // ﹁ 直排左直角
+    0xFE42: '」', // ﹂ 直排右直角
+    0xFE43: '『', // ﹃ 直排左雙直角
+    0xFE44: '』', // ﹄ 直排右雙直角
+    0x301D: '「', // 〝
+    0x301E: '」', // 〞
+  };
+  final output = StringBuffer();
+  for (final rune in input.runes) {
+    final replacement = mappings[rune];
+    if (replacement != null) {
+      output.write(replacement);
+    } else {
+      output.write(String.fromCharCode(rune));
+    }
+  }
+  return output.toString();
+}
+
+bool _isEscaped(List<int> runes, int index) {
+  var slashCount = 0;
+  for (var cursor = index - 1; cursor >= 0 && runes[cursor] == 0x5C; cursor--) {
+    slashCount += 1;
+  }
+  return slashCount.isOdd;
+}
+
+/// 兩側皆 CJK 脈絡字元（漢字或全形標點）的半形空格是來源雜訊，直接刪。
+/// 半形空格不佔全形格，是格線錯位的主要來源之一；「他說 「你好」」這類
+/// 標點鄰接空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。
+String _removeCjkSpaces(String input) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  for (var index = 0; index < runes.length; index += 1) {
+    if (runes[index] == 0x20 &&
+        index > 0 &&
+        index + 1 < runes.length &&
+        _isCjkContextRune(runes[index - 1]) &&
+        _isCjkContextRune(runes[index + 1])) {
+      continue;
+    }
+    output.write(String.fromCharCode(runes[index]));
+  }
+  return output.toString();
+}
+
+bool _isAsciiOrFullWidthDigit(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x30 && rune <= 0x39) || (rune >= 0xFF10 && rune <= 0xFF19);
+}
+
+bool _isCjkRune(int? rune) {
+  if (rune == null) return false;
+  return (rune >= 0x3400 && rune <= 0x4DBF) ||
+      (rune >= 0x4E00 && rune <= 0x9FFF) ||
+      (rune >= 0xF900 && rune <= 0xFAFF) ||
+      (rune >= 0x20000 && rune <= 0x323AF);
+}
+
 class ReaderV2ContentTransformer {
   const ReaderV2ContentTransformer();
 
   static final Map<String, RegExp> _regexCache = {};
+  static const String _duplicateTitleBoundary = r'(?=\s|\p{P}|$)';
 
   static RegExp _getOrCreateRegex(String pattern, {bool unicode = false}) {
     final key = '$pattern|$unicode';
@@ -46,9 +656,6 @@ class ReaderV2ContentTransformer {
       'chineseConvertType': chineseConvertType,
     };
 
-    // 首選：常駐 worker isolate。免去每章 compute spawn，且簡繁轉換也在
-    // worker 內完成（字典由主 isolate 送入初始化一次），主執行緒只剩訊息
-    // 收發——fling 減速期間的內容預載不再佔用幀預算。
     final workerResult = await ReaderV2ContentTransformWorker.instance.process(
       args,
     );
@@ -56,8 +663,6 @@ class ReaderV2ContentTransformer {
       return _decodeProcessed(workerResult);
     }
 
-    // 退回路徑（worker 不可用）：行為與舊版完全相同——compute 一次性
-    // isolate 做替換/重分段，簡繁轉換因字典只在主 isolate 而留在主執行緒。
     final result = await compute(_processInBackground, args);
     final processed = _decodeProcessed(result);
     if (chineseConvertType == 0) return processed;
@@ -81,7 +686,8 @@ class ReaderV2ContentTransformer {
   ) {
     final effectiveRules = (result['effectiveRules'] as List<dynamic>)
         .map(
-          (rule) => ReplaceRule.fromJson(Map<String, dynamic>.from(rule as Map)),
+          (rule) =>
+              ReplaceRule.fromJson(Map<String, dynamic>.from(rule as Map)),
         )
         .toList(growable: false);
     return ReaderV2ProcessedChapter(
@@ -164,7 +770,8 @@ class ReaderV2ContentTransformer {
       chapterTitle,
     ).replaceAll(AppPattern.spaceRegex, r'\s*');
     final duplicateTitlePattern = _getOrCreateRegex(
-      '^(\\s|\\p{P}|$nameRegex)*$titleRegex(\\s)*',
+      '^(\\s|\\p{P}|$nameRegex)*$titleRegex'
+      '$_duplicateTitleBoundary(\\s)*',
       unicode: true,
     );
     final duplicateTitleMatch = duplicateTitlePattern.firstMatch(content);
@@ -182,7 +789,8 @@ class ReaderV2ContentTransformer {
           displayTitle,
         ).replaceAll(AppPattern.spaceRegex, r'\s*');
         final displayDuplicateTitlePattern = _getOrCreateRegex(
-          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex(\\s)*',
+          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex'
+          '$_duplicateTitleBoundary(\\s)*',
           unicode: true,
         );
         final displayDuplicateTitleMatch = displayDuplicateTitlePattern
@@ -223,6 +831,8 @@ class ReaderV2ContentTransformer {
         } catch (_) {}
       }
     }
+
+    content = normalizeTypography(content);
 
     final paragraphs = <String>[];
     const indent = '　　';
@@ -294,7 +904,7 @@ class ReaderV2ContentTransformer {
         } catch (_) {}
       }
     }
-    return displayTitle;
+    return normalizeTypography(displayTitle, preserveCjkSpaces: true);
   }
 }
 
@@ -337,13 +947,10 @@ class ReaderV2ContentTransformWorker {
         ChineseUtils.dictionaryAssetPaths.map(rootBundle.loadString),
       );
     } catch (_) {
-      // 測試環境或 asset 缺失：worker 內簡繁轉換退化為直通（與主 isolate
-      // 字典未初始化時的行為一致）。
       return null;
     }
   }
 
-  /// 轉換一章；回傳 null 代表 worker 不可用，呼叫端應退回 compute 路徑。
   Future<Map<String, Object?>?> process(Map<String, Object?> args) async {
     if (debugDisableWorker || _broken) return null;
     SendPort? commands;
@@ -393,8 +1000,6 @@ class ReaderV2ContentTransformWorker {
         );
         return;
       }
-      // onError（List）或 onExit（null）：worker 已不可信，讓所有等待者
-      // 退回 compute 路徑。
       if (!handshake.isCompleted) handshake.complete(null);
       _markBroken();
     });
@@ -414,8 +1019,6 @@ class ReaderV2ContentTransformWorker {
     }
     final commands = await handshake.future;
     if (commands == null) return null;
-    // 字典訊息先於任何 process 訊息送出（同一 port 依序送達），worker 收到
-    // 第一章之前必已完成初始化。
     final dictionaryData = await dictionaryDataLoader();
     if (dictionaryData != null && dictionaryData.length == 4) {
       commands.send(<String, Object?>{'type': 'dict', 'data': dictionaryData});
@@ -436,7 +1039,6 @@ class ReaderV2ContentTransformWorker {
     _isolate = null;
   }
 
-  /// 測試鉤子：關掉現有 worker 並重設狀態，讓下一次 process 重新 spawn。
   @visibleForTesting
   void debugReset() {
     _markBroken();

@@ -10,6 +10,146 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ReaderV2ContentTransformer', () {
+    test('normalizeTypography 清理空白、隱形字元與 CJK 標點', () {
+      expect(
+        normalizeTypography('你\u200B\t　好\u0001,世界... 3.14 https://a.com'),
+        '你好，世界…… 3.14 https://a.com',
+      );
+      expect(normalizeTypography('英文句子, hello!'), '英文句子， hello!');
+    });
+
+    test('normalizeTypography 恆開：引號配對＋CJK 空格移除＋連續標點保留', () {
+      // 直引號成對轉「」、漢字間空格移除；連續驚嘆號保留作者語氣。
+      expect(normalizeTypography('"你 好 嗎"！！！'), '「你好嗎」！！！');
+      expect(normalizeTypography('等等...'), '等等……');
+      expect(normalizeTypography('你 好 嗎'), '你好嗎');
+      // 全形標點鄰接的空格也是雜訊（不只漢字之間）。
+      expect(normalizeTypography('他說 「你好」 了'), '他說「你好」了');
+    });
+
+    test('normalizeTypography 歧義寬度標點：彎引號逐字元轉 CJK 專屬碼位', () {
+      // 中文脈絡的彎雙引號 → 「」；巢狀彎單引號 → 『』
+      expect(normalizeTypography('\u201C你好\u201D'), '「你好」');
+      expect(normalizeTypography('\u201C他說\u2018好\u2019了\u201D'), '「他說『好』了」');
+      // 引號內只有標點也算中文脈絡（省略號/破折號開頭的對白）
+      expect(normalizeTypography('\u201C……\u201D'), '「……」');
+      // 引號內全西文但外側鄰字是中文 → 成對一起轉，不破對
+      expect(
+        normalizeTypography('他說\u201CHello, world\u201D。'),
+        '他說「Hello, world」。',
+      );
+      // 純西文脈絡的引號對原樣保留
+      expect(
+        normalizeTypography('He said \u201Chello\u201D loudly'),
+        'He said \u201Chello\u201D loudly',
+      );
+      // 落單（不成對）的引號也要轉：`\u201C`/`\u201D` 碼位自帶方向，配對不是
+      // 必要條件。中文小說連續對白的標準寫法是「每段開頭有開引號、只有
+      // 最末段有收引號」，舊版要求成對而讓前面每段的開引號原樣殘留，
+      // 同一段對白裡並存細窄的西文引號與全形「」（2026-07-28 修正）。
+      expect(normalizeTypography('他說\u201D了'), '他說」了');
+      expect(normalizeTypography('\u201C他說了'), '「他說了');
+      // 多段落連續對白：每段開頭的開引號全部統一
+      expect(
+        normalizeTypography('\u201C第一句。\n\u201C第二句。\n\u201C第三句。\u201D'),
+        '「第一句。\n「第二句。\n「第三句。」',
+      );
+      // 收尾前又開新引號：內外層都轉，不留殘餘
+      expect(normalizeTypography('\u201C早안\u201C你好\u201D'), '「早안「你好」');
+      // 撇號不視為引號收尾
+      expect(
+        normalizeTypography('他說\u201Cdon\u2019t worry\u201D。'),
+        '他說「don\u2019t worry」。',
+      );
+      expect(normalizeTypography("It\u2019s fine"), 'It\u2019s fine');
+    });
+
+    test('直引號逐行交替：落單引號取得方向，純西文行不動', () {
+      // 第二行奇數個引號：不再整行放棄，落單引號依後文判定開/收
+      //（後接內容字 → 開引號），三行的引號字形因此一致。
+      expect(
+        normalizeTypography('"第一句"\n殘缺"引號行\n"第三句"'),
+        '「第一句」\n殘缺「引號行\n「第三句」',
+      );
+      // 同行多對引號仍交替配對。
+      expect(normalizeTypography('"甲"與"乙"'), '「甲」與「乙」');
+      // 反斜線跳脫的引號不參與配對。
+      expect(normalizeTypography('"甲\\"乙"'), '「甲\\"乙」');
+      // 純西文行的直引號原樣保留（行級 CJK 脈絡判定）。
+      expect(normalizeTypography('"Hello," he said.'), '"Hello," he said.');
+      // 彎引號與直引號混用的行，兩種都收斂到「」。
+      expect(normalizeTypography('他說\u201C好\u201D，她回答"不好"。'), '他說「好」，她回答「不好」。');
+    });
+
+    test('直單引號配對轉『』，撇號不受波及', () {
+      expect(normalizeTypography("他說'好'了"), '他說『好』了');
+      expect(normalizeTypography("他說don't好"), "他說don't好");
+      expect(normalizeTypography("it's a 'test' here"), "it's a 'test' here");
+    });
+
+    test('破折號統一為全形 em dash，西文連字號不動', () {
+      expect(normalizeTypography('他說--我不去'), '他說——我不去');
+      expect(normalizeTypography('他說——我不去'), '他說——我不去');
+      expect(normalizeTypography('他說\u2015我走'), '他說—我走');
+      expect(normalizeTypography('\u2500\u2500他說'), '——他說');
+      expect(normalizeTypography('他\u2013說'), '他—說');
+      expect(normalizeTypography('1-5 和 2020--2021'), '1-5 和 2020--2021');
+      expect(normalizeTypography('co-op 與 1\u20135'), 'co-op 與 1\u20135');
+    });
+
+    test('刪節號各種來源統一為 ……', () {
+      expect(normalizeTypography('等等。。。'), '等等……');
+      expect(normalizeTypography('等等…'), '等等……');
+      expect(normalizeTypography('等等\u22EF\u22EF'), '等等……');
+      expect(normalizeTypography('等等……好！！！'), '等等……好！！！');
+    });
+
+    test('半形括號在 CJK 脈絡成對轉全形，西文/數學不動', () {
+      expect(normalizeTypography('他笑了(苦笑)一下'), '他笑了（苦笑）一下');
+      // [] 先轉【】、再統一映射為「」。
+      expect(normalizeTypography('[系統]任務完成'), '「系統」任務完成');
+      expect(normalizeTypography('f(x)=1 and a[0]'), 'f(x)=1 and a[0]');
+      expect(normalizeTypography('(他說'), '(他說');
+    });
+
+    test('CJK 專屬括號統一映射為上下引號', () {
+      expect(normalizeTypography('【系統】升級完成'), '「系統」升級完成');
+      expect(normalizeTypography('〖注〗這是註解'), '『注』這是註解');
+      expect(normalizeTypography('\uFF62你好\uFF63'), '「你好」');
+      // 直排專用直角引號（U+FE41–FE44）：字形為垂直排版設計，橫排時
+      // 是細長的直立角線，與全形「」粗細明顯不同；直排轉檔/OCR 來的
+      // 文本會帶進這組碼位。
+      expect(normalizeTypography('\uFE41你好\uFE42'), '「你好」');
+      expect(normalizeTypography('\uFE43註解\uFE44'), '『註解』');
+      // CJK 雙彎引號同樣收斂。
+      expect(normalizeTypography('\u301D你好\u301E'), '「你好」');
+    });
+
+    test('波浪號在 CJK 脈絡轉全形', () {
+      expect(normalizeTypography('喂~你好'), '喂～你好');
+      expect(normalizeTypography('a~b 和 3~5'), 'a~b 和 3~5');
+    });
+
+    test('CJK 空格移除不波及西文詞間空格', () {
+      expect(normalizeTypography('你 好 hello world 嗎'), '你好 hello world 嗎');
+    });
+
+    test('normalizeTypography 歧義寬度標點：間隔號轉全形中點', () {
+      expect(normalizeTypography('哈利·波特'), '哈利・波特');
+      expect(normalizeTypography('哈利‧波特'), '哈利・波特');
+      // 非漢字兩側不轉（數字/西文脈絡）
+      expect(normalizeTypography('3·14'), '3·14');
+      expect(normalizeTypography('a·b'), 'a·b');
+    });
+
+    test('normalizeTypography 不破壞詩歌換行與數字脈絡', () {
+      expect(
+        normalizeTypography('你\n 好\n3.14\nVersion 1.2'),
+        '你\n 好\n3.14\nVersion 1.2',
+      );
+      expect(normalizeTypography('第3.章'), '第3.章');
+    });
+
     test(
       'applies scoped content rules through the shared replace engine',
       () async {
@@ -91,6 +231,22 @@ void main() {
         expect(result.content, isNot(contains('正文\n')));
         expect(result.content, contains('真正內容'));
         expect(result.sameTitleRemoved, isTrue);
+      },
+    );
+
+    test(
+      'does not remove a legal body prefix that only starts with title',
+      () async {
+        final result = await const ReaderV2ContentTransformer().process(
+          book: Book(bookUrl: 'book://1', origin: 'local', name: '測試書'),
+          chapter: BookChapter(title: '序'),
+          rawContent: '序章內容從這裡開始。',
+          enabledRules: const [],
+          chineseConvertType: 0,
+        );
+
+        expect(result.content, contains('序章內容從這裡開始。'));
+        expect(result.sameTitleRemoved, isFalse);
       },
     );
 

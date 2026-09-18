@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_theme.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
@@ -13,10 +14,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     _initFromCache(ReaderV2PrefsRepository.cachedSnapshot);
   }
 
-  static const double minReadableLineHeight =
-      ReaderV2Style.minReadableLineHeight;
-  static const double minAutoPageSpeed = 0.04;
-  static const double maxAutoPageSpeed = 0.45;
+  static const double minReadableLineHeight = ReaderV2Style.minReadableLineHeight;
+  static const double minAutoPageSpeed = ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
 
   final ReaderV2PrefsRepository _prefsRepository;
 
@@ -25,6 +25,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double paragraphSpacing = 1.0;
   double letterSpacing = 0.0;
   int textIndent = 2;
+  bool lastLineSpacingCompensation = false;
   double textPadding = 16.0;
   int themeIndex = 0;
   int lastDayThemeIndex = 0;
@@ -52,6 +53,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     paragraphSpacing = snapshot.paragraphSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
+    lastLineSpacingCompensation = snapshot.lastLineSpacingCompensation;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
@@ -68,9 +70,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     bool bottomInfoReservedExternally = false,
   }) {
     final top =
-        (topInfoReservedExternally
-            ? 0.0
-            : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
+        (topInfoReservedExternally ? 0.0 : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
     return ReaderV2Style(
@@ -84,15 +84,40 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingRight: textPadding,
       bold: false,
       textIndent: textIndent,
+      lastLineSpacingCompensation: lastLineSpacingCompensation,
     );
   }
 
+  bool get isReaderDarkMode => ThemeSettingsProvider.resolveAreaDarkMode(
+        ThemeArea.reader,
+        fallback: _isThemeDark(themeIndex),
+      );
+
+  bool get isMenuDarkMode => ThemeSettingsProvider.resolveAreaDarkMode(
+        ThemeArea.menu,
+        fallback: isReaderDarkMode,
+      );
+
   ReadingTheme get currentTheme {
-    return _themeAt(themeIndex);
+    final dark = isReaderDarkMode;
+    final index = dark ? lastNightThemeIndex : lastDayThemeIndex;
+    return ThemeSettingsProvider.resolveReaderTheme(
+      dark: dark,
+      menu: false,
+      fallback: _themeAt(index),
+    );
   }
 
   ReadingTheme get currentMenuTheme {
-    return _themeAt(menuThemeIndex);
+    final dark = isMenuDarkMode;
+    final index = _normalizeThemeIndex(
+      ThemeSettingsProvider.menuBuiltInIndex(dark, menuThemeIndex),
+    );
+    return ThemeSettingsProvider.resolveReaderTheme(
+      dark: dark,
+      menu: true,
+      fallback: _themeAt(index),
+    );
   }
 
   ReadingTheme _themeAt(int index) {
@@ -106,28 +131,48 @@ class ReaderV2SettingsController extends ChangeNotifier {
     return AppTheme.readingThemes[_normalizeThemeIndex(index)];
   }
 
-  void setFontSize(double value) {
-    fontSize = value;
-    unawaited(_prefsRepository.saveFontSize(value));
-    notifyListeners();
-  }
+  void setFontSize(double value) => setTypography(fontSize: value);
+  void setLineHeight(double value) => setTypography(lineHeight: value);
+  void setParagraphSpacing(double value) => setTypography(paragraphSpacing: value);
+  void setLetterSpacing(double value) => setTypography(letterSpacing: value);
 
-  void setLineHeight(double value) {
-    lineHeight = ReaderV2Style.normalizeLineHeight(value);
-    unawaited(_prefsRepository.saveLineHeight(lineHeight));
-    notifyListeners();
-  }
-
-  void setParagraphSpacing(double value) {
-    paragraphSpacing = value;
-    unawaited(_prefsRepository.saveParagraphSpacing(value));
-    notifyListeners();
-  }
-
-  void setLetterSpacing(double value) {
-    letterSpacing = value;
-    unawaited(_prefsRepository.saveLetterSpacing(value));
-    notifyListeners();
+  void setTypography({
+    double? fontSize,
+    double? lineHeight,
+    double? paragraphSpacing,
+    double? letterSpacing,
+  }) {
+    var changed = false;
+    if (fontSize != null) {
+      if (this.fontSize != fontSize) {
+        this.fontSize = fontSize;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveFontSize(fontSize));
+    }
+    if (lineHeight != null) {
+      final normalized = ReaderV2Style.normalizeLineHeight(lineHeight);
+      if (this.lineHeight != normalized) {
+        this.lineHeight = normalized;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveLineHeight(normalized));
+    }
+    if (paragraphSpacing != null) {
+      if (this.paragraphSpacing != paragraphSpacing) {
+        this.paragraphSpacing = paragraphSpacing;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveParagraphSpacing(paragraphSpacing));
+    }
+    if (letterSpacing != null) {
+      if (this.letterSpacing != letterSpacing) {
+        this.letterSpacing = letterSpacing;
+        changed = true;
+      }
+      unawaited(_prefsRepository.saveLetterSpacing(letterSpacing));
+    }
+    if (changed) notifyListeners();
   }
 
   void setTextIndent(int value) {
@@ -136,7 +181,12 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-
+  void setLastLineSpacingCompensation(bool value) {
+    if (lastLineSpacingCompensation == value) return;
+    lastLineSpacingCompensation = value;
+    unawaited(_prefsRepository.saveLastLineSpacingCompensation(value));
+    notifyListeners();
+  }
 
   void setAutoPageSpeed(double value) {
     final normalized = _normalizeAutoPageSpeed(value);
@@ -149,13 +199,20 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setTheme(int value) {
     themeIndex = _normalizeThemeIndex(value);
     unawaited(_prefsRepository.saveThemeIndex(themeIndex));
-    _rememberDayNightThemeIndex(themeIndex);
+    if (isReaderDarkMode) {
+      lastNightThemeIndex = themeIndex;
+      unawaited(_prefsRepository.saveNightThemeIndex(themeIndex));
+    } else {
+      lastDayThemeIndex = themeIndex;
+      unawaited(_prefsRepository.saveDayThemeIndex(themeIndex));
+    }
     notifyListeners();
   }
 
   void setMenuTheme(int value) {
     menuThemeIndex = _normalizeThemeIndex(value);
     unawaited(_prefsRepository.saveMenuThemeIndex(menuThemeIndex));
+    ThemeSettingsProvider.saveMenuBuiltInIndex(isMenuDarkMode, menuThemeIndex);
     notifyListeners();
   }
 
@@ -174,48 +231,28 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool get isCurrentThemeDark => _isThemeDark(themeIndex);
+  bool get isCurrentThemeDark => isReaderDarkMode;
 
-  int get dayNightToggleTargetThemeIndex =>
-      isCurrentThemeDark ? lastDayThemeIndex : lastNightThemeIndex;
-
-  bool get willToggleToDarkTheme =>
-      _isThemeDark(dayNightToggleTargetThemeIndex);
+  bool get willToggleToDarkTheme => !isReaderDarkMode;
 
   String get dayNightToggleTooltip =>
-      willToggleToDarkTheme ? '切換到夜間主題' : '切換到白天主題';
+      willToggleToDarkTheme ? '切換閱讀深色模式' : '切換閱讀淺色模式';
 
   IconData get dayNightToggleIcon =>
-      willToggleToDarkTheme
-          ? Icons.dark_mode_rounded
-          : Icons.light_mode_rounded;
+      willToggleToDarkTheme ? Icons.dark_mode_rounded : Icons.light_mode_rounded;
 
   void toggleDayNightTheme() {
-    final target = dayNightToggleTargetThemeIndex;
-    if (target == themeIndex) {
-      final fallback =
-          isCurrentThemeDark
-              ? _fallbackDayThemeIndex()
-              : _fallbackNightThemeIndex();
-      if (fallback != themeIndex) setTheme(fallback);
-      return;
-    }
-    setTheme(target);
-  }
-
-  void _rememberDayNightThemeIndex(int index) {
-    if (_isThemeDark(index)) {
-      lastNightThemeIndex = index;
-      unawaited(_prefsRepository.saveNightThemeIndex(index));
-    } else {
-      lastDayThemeIndex = index;
-      unawaited(_prefsRepository.saveDayThemeIndex(index));
-    }
+    ThemeSettingsProvider.saveAreaMode(
+      ThemeArea.reader,
+      isReaderDarkMode ? AreaThemeMode.light : AreaThemeMode.dark,
+    );
+    notifyListeners();
   }
 
   bool _isThemeDark(int index) {
     if (AppTheme.readingThemes.isEmpty) return index != 0;
-    return AppTheme.readingThemes[_normalizeThemeIndex(index)].backgroundColor
+    return AppTheme.readingThemes[_normalizeThemeIndex(index)]
+            .backgroundColor
             .computeLuminance() <
         0.5;
   }
@@ -230,22 +267,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
     return value.clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
   }
 
-  int _fallbackDayThemeIndex() {
-    if (AppTheme.readingThemes.isEmpty) return 0;
-    for (var i = 0; i < AppTheme.readingThemes.length; i++) {
-      if (!_isThemeDark(i)) return i;
-    }
-    return 0;
-  }
-
-  int _fallbackNightThemeIndex() {
-    if (AppTheme.readingThemes.isEmpty) return 1;
-    for (var i = AppTheme.readingThemes.length - 1; i >= 0; i--) {
-      if (_isThemeDark(i)) return i;
-    }
-    return (AppTheme.readingThemes.length - 1).clamp(0, 1 << 20).toInt();
-  }
-
   void _normalizeDayNightThemeIndexes() {
     if (AppTheme.readingThemes.isEmpty) {
       lastDayThemeIndex = 0;
@@ -256,12 +277,5 @@ class ReaderV2SettingsController extends ChangeNotifier {
         lastDayThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
     lastNightThemeIndex =
         lastNightThemeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    _rememberDayNightThemeIndex(themeIndex);
-    if (_isThemeDark(lastDayThemeIndex)) {
-      lastDayThemeIndex = _fallbackDayThemeIndex();
-    }
-    if (!_isThemeDark(lastNightThemeIndex)) {
-      lastNightThemeIndex = _fallbackNightThemeIndex();
-    }
   }
 }

@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'search_provider.dart';
 import 'models/search_scope.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
@@ -105,7 +108,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
           ),
           body: Column(
             children: [
-              // 搜尋進度
               if (provider.isSearching) ...[
                 LinearProgressIndicator(
                   value: provider.progress,
@@ -116,15 +118,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                 ),
                 _buildCurrentSourcePanel(provider),
               ],
-              // 失敗書源提示
               if (!provider.isSearching && provider.failedSources > 0)
                 _buildFailedSourcesPanel(context, provider),
-              // 篩選狀態提示
               if (provider.precisionSearch || !provider.searchScope.isAll)
                 _buildFilterStatusPanel(provider),
               if (provider.hasUnfilteredResults && !provider.isSearching)
                 _buildResultToolbar(context, provider),
-              // 主體內容
               Expanded(
                 child:
                     provider.results.isEmpty && !provider.isSearching
@@ -133,9 +132,9 @@ class _SearchPageContentState extends State<_SearchPageContent> {
               ),
             ],
           ),
-          // FAB 開始/停止搜尋 (對標 Legado fb_start_stop)
           floatingActionButton:
-              provider.lastSearchKey.isNotEmpty
+              provider.lastSearchKey.isNotEmpty &&
+                      (provider.isSearching || provider.results.isNotEmpty)
                   ? FloatingActionButton(
                     mini: true,
                     onPressed:
@@ -157,71 +156,89 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     if (provider.hasUnfilteredResults &&
         provider.results.isEmpty &&
         provider.hasActiveResultFilters) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xxl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.filter_alt_off,
-                size: 48,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '沒有符合篩選的結果',
-                style: AppTextStyles.bodyMd.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: provider.clearResultFilters,
-                icon: const Icon(Icons.clear),
-                label: const Text('清除篩選'),
-              ),
-            ],
-          ),
+      return AppStateView(
+        icon: Icons.filter_alt_off,
+        title: '沒有符合篩選的結果',
+        description: '目前的結果都被篩選條件排除了。',
+        primaryAction: AppStateAction(
+          label: '清除篩選',
+          icon: Icons.clear,
+          onPressed: provider.clearResultFilters,
         ),
       );
     }
 
+    if (provider.lastSearchKey.isNotEmpty && provider.totalSources == 0) {
+      final scoped = !provider.searchScope.isAll;
+      return AppStateView(
+        icon: Icons.source_outlined,
+        title: scoped ? '目前範圍沒有可搜尋的書源' : '尚未加入可搜尋的書源',
+        description:
+            scoped ? '切換搜尋範圍，或到書源管理調整書源。' : '先加入書源，再回來搜尋書籍。',
+        primaryAction:
+            scoped
+                ? AppStateAction(
+                  label: '切換至全部書源',
+                  icon: Icons.public,
+                  onPressed:
+                      () => provider.updateSearchScope(
+                        provider.searchScope..updateAll(),
+                      ),
+                )
+                : AppStateAction(
+                  label: '管理書源',
+                  icon: Icons.source_outlined,
+                  onPressed: () => _openSourceManager(),
+                ),
+        secondaryAction:
+            scoped
+                ? AppStateAction(
+                  label: '管理書源',
+                  icon: Icons.settings_outlined,
+                  onPressed: () => _openSourceManager(),
+                )
+                : null,
+      );
+    }
+
     if (provider.lastSearchKey.isNotEmpty && provider.results.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '找不到相關書籍',
-              style: AppTextStyles.bodyMd.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (provider.precisionSearch)
-              ElevatedButton(
-                onPressed: () => provider.togglePrecisionSearch(),
-                child: const Text('關閉精準搜尋並重試'),
-              ),
-            if (!provider.searchScope.isAll) ...[
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed:
-                    () => provider.updateSearchScope(
-                      provider.searchScope..updateAll(),
-                    ),
-                child: Text('「${provider.searchScope.display}」結果為空，切換至全部書源'),
-              ),
-            ],
-          ],
-        ),
+      final broadenScopeAction = AppStateAction(
+        label: '切換至全部書源',
+        icon: Icons.public,
+        onPressed:
+            () => provider.updateSearchScope(provider.searchScope..updateAll()),
+      );
+      return AppStateView(
+        icon: Icons.search_off,
+        title: '找不到相關書籍',
+        description: '放寬搜尋條件或搜尋範圍後再試一次。',
+        primaryAction:
+            provider.precisionSearch
+                ? AppStateAction(
+                  label: '關閉精準搜尋並重試',
+                  icon: Icons.tune,
+                  onPressed: provider.togglePrecisionSearch,
+                )
+                : provider.searchScope.isAll
+                ? null
+                : broadenScopeAction,
+        secondaryAction:
+            provider.precisionSearch && !provider.searchScope.isAll
+                ? broadenScopeAction
+                : null,
       );
     }
     return SearchHistoryView(
       provider: provider,
       controller: _controller,
       onSearch: _onSearch,
+    );
+  }
+
+  void _openSourceManager() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SourceManagerPage()),
     );
   }
 
@@ -387,7 +404,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
 
   void _showFailureSheet(BuildContext context) {
     final searchProvider = context.read<SearchProvider>();
-    showModalBottomSheet<void>(
+    AppBottomSheet.showCustom<void>(
       context: context,
       showDragHandle: true,
       builder:
@@ -476,7 +493,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     final authorController = TextEditingController(text: provider.authorFilter);
     final kindController = TextEditingController(text: provider.kindFilter);
 
-    showModalBottomSheet<void>(
+    AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

@@ -14,15 +14,14 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
-        android?.apply {
-            // 強制將所有子專案（插件）升級至 SDK 36，避免低版本插件在 SDK 36 環境下出現 android.* 包找不到的問題
-            compileSdkVersion(36)
-
-            // 自動修復缺失的 namespace
-            if (namespace == null) {
-                namespace = "io.legado.reader.${project.name.replace("-", ".")}"
+    // AGP 9 移除了舊的 com.android.build.gradle.BaseExtension 型別，改用新版公開 DSL。
+    // 將所有 Android library 外掛的 compileSdk 拉齊到 37（只升不降），避免仍釘在
+    // 35/36 的外掛在 API 37 app 環境下出現 android.* 解析不一致。各外掛自行維持其
+    // Java/Kotlin bytecode target，這裡不再全域覆寫 jvmTarget。
+    plugins.withId("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+            if ((compileSdk ?: 0) < 37) {
+                compileSdk = 37
             }
         }
     }
@@ -30,22 +29,6 @@ subprojects {
 
 subprojects {
     project.evaluationDependsOn(":app")
-}
-
-gradle.projectsEvaluated {
-    allprojects {
-        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-            compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-            }
-        }
-        tasks.withType<JavaCompile>().configureEach {
-            sourceCompatibility = "17"
-            targetCompatibility = "17"
-            // 添加此行以靜音過時方法的警告
-            options.compilerArgs.add("-Xlint:-deprecation")
-        }
-    }
 }
 
 tasks.register<Delete>("clean") {

@@ -3,6 +3,7 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -15,6 +16,7 @@ class ReaderV2ReplaceRulePage extends StatefulWidget {
 class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   final ReplaceRuleDao _replaceDao = getIt<ReplaceRuleDao>();
   bool _loading = true;
+  Object? _loadError;
   List<ReplaceRule> _rules = const <ReplaceRule>[];
 
   @override
@@ -26,13 +28,22 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   Future<void> _loadRules() async {
     setState(() {
       _loading = true;
+      _loadError = null;
     });
-    final rules = await _replaceDao.getAll();
-    if (!mounted) return;
-    setState(() {
-      _rules = rules;
-      _loading = false;
-    });
+    try {
+      final rules = await _replaceDao.getAll();
+      if (!mounted) return;
+      setState(() {
+        _rules = rules;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error;
+      });
+    }
   }
 
   Future<void> _openEditor({ReplaceRule? rule}) async {
@@ -46,17 +57,31 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         await _replaceDao.upsert(next);
       },
     );
-    await _loadRules();
+    if (mounted) await _loadRules();
   }
 
   Future<void> _deleteRule(ReplaceRule rule) async {
-    await _replaceDao.deleteById(rule.id);
-    await _loadRules();
+    try {
+      await _replaceDao.deleteById(rule.id);
+      await _loadRules();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('刪除規則失敗：$error')));
+    }
   }
 
   Future<void> _toggleEnabled(ReplaceRule rule, bool enabled) async {
-    await _replaceDao.updateEnabled(rule.id, enabled);
-    await _loadRules();
+    try {
+      await _replaceDao.updateEnabled(rule.id, enabled);
+      await _loadRules();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新規則狀態失敗：$error')));
+    }
   }
 
   @override
@@ -66,7 +91,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         title: const Text('替換規則'),
         actions: [
           IconButton(
-            onPressed: _loading ? null : () => _openEditor(),
+            onPressed: _loading || _loadError != null ? null : () => _openEditor(),
             icon: const Icon(Icons.add),
             tooltip: '新增規則',
           ),
@@ -75,8 +100,29 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       body:
           _loading
               ? const Center(child: CircularProgressIndicator())
+              : _loadError != null
+              ? AppStateView(
+                icon: Icons.error_outline,
+                title: '替換規則載入失敗',
+                description: '無法讀取現有規則，請稍後再試。',
+                tone: AppStateTone.error,
+                primaryAction: AppStateAction(
+                  label: '重試',
+                  icon: Icons.refresh,
+                  onPressed: _loadRules,
+                ),
+              )
               : _rules.isEmpty
-              ? _buildEmptyState(context)
+              ? AppStateView(
+                icon: Icons.rule_rounded,
+                title: '還沒有替換規則',
+                description: '新增規則後，可在閱讀時自動整理標題或正文。',
+                primaryAction: AppStateAction(
+                  label: '新增規則',
+                  icon: Icons.add,
+                  onPressed: _openEditor,
+                ),
+              )
               : ListView.separated(
                 itemCount: _rules.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -97,7 +143,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
                       children: [
                         const SizedBox(height: 4),
                         Text(
-                          '${rule.pattern} -> ${rule.replacement}',
+                          '${rule.pattern} → ${rule.replacement}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -106,10 +152,10 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            _chip(rule.isEnabled ? '已啟用' : '已停用'),
-                            _chip(rule.isRegex ? '正則' : '純文字'),
-                            if (rule.scopeContent) _chip('正文'),
-                            if (rule.scopeTitle) _chip('標題'),
+                            _chip(context, rule.isEnabled ? '已啟用' : '已停用'),
+                            _chip(context, rule.isRegex ? '正則' : '純文字'),
+                            if (rule.scopeContent) _chip(context, '正文'),
+                            if (rule.scopeTitle) _chip(context, '標題'),
                           ],
                         ),
                       ],
@@ -138,37 +184,11 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.rule_rounded,
-              size: 48,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 12),
-            const Text('還沒有替換規則'),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => _openEditor(),
-              icon: const Icon(Icons.add),
-              label: const Text('新增規則'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _chip(String label) {
+  Widget _chip(BuildContext context, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.12),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label, style: const TextStyle(fontSize: 11)),

@@ -20,6 +20,7 @@ class SourceItemTile extends StatelessWidget {
   final int? index;
   final bool showHostHeader;
   final String hostLabel;
+  final bool mutationEnabled;
 
   const SourceItemTile({
     super.key,
@@ -34,11 +35,12 @@ class SourceItemTile extends StatelessWidget {
     this.index,
     this.showHostHeader = false,
     this.hostLabel = '',
+    this.mutationEnabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final canDrag = provider.sortMode == 0 && !provider.groupByDomain;
+    final canDrag = provider.canReorder && mutationEnabled;
     final hasStatusDot = source.hasExploreUrl;
     final checkProgress = provider.checkService.progressOf(
       source.bookSourceUrl,
@@ -51,21 +53,22 @@ class SourceItemTile extends StatelessWidget {
         if (showHostHeader)
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
               AppSpacing.md,
-              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.md,
               AppSpacing.xs,
             ),
             child: Text(
               hostLabel,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                height: 1.3,
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
         InkWell(
-          onTap: onTap,
+          onTap: mutationEnabled ? onTap : null,
           onLongPress: onLongPress,
           child: Container(
             color:
@@ -75,7 +78,7 @@ class SourceItemTile extends StatelessWidget {
                     ).colorScheme.primary.withValues(alpha: 0.08)
                     : null,
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
+              horizontal: AppSpacing.md,
               vertical: AppSpacing.sm,
             ),
             child: Column(
@@ -99,24 +102,34 @@ class SourceItemTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    GestureDetector(
+                    Semantics(
+                      label:
+                          '${isSelected ? '取消選取' : '選取'} ${source.bookSourceName}',
+                      button: true,
+                      checked: isSelected,
                       onTap: () => provider.toggleSelect(source.bookSourceUrl),
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          top: 10,
-                          right: AppSpacing.sm,
-                        ),
-                        child: Icon(
-                          isSelected
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                          size: 22,
-                          color:
-                              isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          tooltip:
+                              '${isSelected ? '取消選取' : '選取'} ${source.bookSourceName}',
+                          onPressed:
+                              () => provider.toggleSelect(source.bookSourceUrl),
+                          icon: Icon(
+                            isSelected
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            size: 22,
+                            color:
+                                isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -130,7 +143,8 @@ class SourceItemTile extends StatelessWidget {
                                 child: Text(
                                   _displayNameGroup(),
                                   style: AppTextStyles.bodySm.copyWith(
-                                    fontWeight: FontWeight.bold,
+                                    height: 1.35,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -161,10 +175,11 @@ class SourceItemTile extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: AppSpacing.xs),
                           Text(
                             source.bookSourceUrl,
-                            style: AppTextStyles.labelXs.copyWith(
+                            style: AppTextStyles.labelSm.copyWith(
+                              height: 1.3,
                               color:
                                   Theme.of(
                                     context,
@@ -173,17 +188,18 @@ class SourceItemTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: AppSpacing.xs),
                           _buildTags(context),
                           if (checkProgress != null) ...[
-                            const SizedBox(height: 6),
+                            const SizedBox(height: AppSpacing.sm),
                             _buildCheckProgress(context, checkProgress),
                           ],
                           if (errorLine != null) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: AppSpacing.xs),
                             Text(
                               errorLine,
-                              style: AppTextStyles.labelXs.copyWith(
+                              style: AppTextStyles.labelSm.copyWith(
+                                height: 1.3,
                                 color: context.warning,
                               ),
                               maxLines: 2,
@@ -193,23 +209,23 @@ class SourceItemTile extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     SizedBox(
                       width: 50,
                       child: Switch(
                         value: source.enabled,
-                        onChanged: onEnabledChanged,
+                        onChanged: mutationEnabled ? onEnabledChanged : null,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                     IconButton(
                       tooltip: '編輯',
-                      onPressed: onEdit,
+                      onPressed: mutationEnabled ? onEdit : null,
                       icon: const Icon(Icons.edit_outlined, size: 20),
                     ),
                     IconButton(
                       tooltip: '更多',
-                      onPressed: onShowMenu,
+                      onPressed: mutationEnabled ? onShowMenu : null,
                       icon: const Icon(Icons.more_vert, size: 20),
                     ),
                   ],
@@ -240,7 +256,7 @@ class SourceItemTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xs,
-        vertical: 1,
+        vertical: 2,
       ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
@@ -249,10 +265,10 @@ class SourceItemTile extends StatelessWidget {
       ),
       child: Text(
         health.label,
-        style: TextStyle(
-          fontSize: 9,
+        style: AppTextStyles.labelXs.copyWith(
+          height: 1.15,
           color: color,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -267,26 +283,26 @@ class SourceItemTile extends StatelessWidget {
     if (source.hasContentRule) tags.add('正');
 
     return Wrap(
-      spacing: 4,
-      runSpacing: 4,
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs,
       children:
           tags
               .map(
                 (tag) => Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.xs,
-                    vertical: 1,
+                    vertical: 2,
                   ),
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
                     ).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: AppRadius.cardXs,
                   ),
                   child: Text(
                     tag,
-                    style: TextStyle(
-                      fontSize: 9,
+                    style: AppTextStyles.labelXs.copyWith(
+                      height: 1.15,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -308,7 +324,7 @@ class SourceItemTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 2, right: 6),
+          padding: const EdgeInsets.only(top: 2, right: AppSpacing.sm),
           child:
               progress.isFinal
                   ? Icon(
@@ -328,7 +344,8 @@ class SourceItemTile extends StatelessWidget {
         Expanded(
           child: Text(
             progress.message,
-            style: AppTextStyles.labelXs.copyWith(
+            style: AppTextStyles.labelSm.copyWith(
+              height: 1.3,
               color: color,
               fontWeight: progress.isFinal ? FontWeight.w600 : FontWeight.w500,
             ),

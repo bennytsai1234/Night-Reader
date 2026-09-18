@@ -8,6 +8,7 @@ import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_version.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
@@ -81,6 +82,11 @@ class BackupService {
         backupFolder,
         'readerChapterContent.json',
         await getIt<ReaderChapterContentDao>().getAllEntries(),
+      );
+      await _writeJson(
+        backupFolder,
+        'readRecord.json',
+        await getIt<ReadRecordDao>().getAll(),
       );
 
       // 2. 導出偏好設定 (對標 config.xml)

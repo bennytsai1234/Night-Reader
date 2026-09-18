@@ -22,7 +22,7 @@ class ReaderV2TtsSheet {
     BuildContext context, {
     required ReaderV2TtsSheetController tts,
   }) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder: (_) => _ReaderTtsSheet(tts: tts),

@@ -1,0 +1,16 @@
+C4 Android refresh-rate evidence (2026-09-14, NightReader_120Hz)
+
+Device:
+  adb devices -l
+  emulator-5556          device product:sdk_gphone64_x86_64 model:sdk_gphone64_x86_64 device:emu64xa
+
+SurfaceFlinger:
+  adb -s emulator-5556 shell dumpsys SurfaceFlinger | Select-String -Pattern 'activeMode.*vsyncRate'
+  activeMode={id=0, hwcId=0, resolution=1280x2856, vsyncRate=120.00 Hz, dpi=480.00x480.00, group=0, vrrConfig=N/A}
+
+Android display policy:
+  adb -s emulator-5556 shell cmd display get-displays | Select-String -Pattern 'renderFrameRate|refreshRateOverride|appVsyncOff|presDeadline'
+  appVsyncOff=2000000, presDeadline=8333333, renderFrameRate=120.00001, refreshRateOverride=120.00001
+
+All commands were run from PowerShell 7 with `pwsh -NoProfile`. This file records
+the display environment only; it is not a performance conclusion.

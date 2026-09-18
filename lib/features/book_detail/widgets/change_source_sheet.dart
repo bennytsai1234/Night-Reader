@@ -69,6 +69,7 @@ class _ChangeSourceContent extends StatefulWidget {
 
 class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   final TextEditingController _filterController = TextEditingController();
+  bool _isSwitchingSource = false;
 
   @override
   void dispose() {
@@ -98,7 +99,8 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
             provider: provider,
             filterController: _filterController,
           ),
-          if (provider.isSearching) const LinearProgressIndicator(minHeight: 2),
+          if (provider.isSearching || _isSwitchingSource)
+            const LinearProgressIndicator(minHeight: 2),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -110,7 +112,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               children: [
                 Expanded(
                   child: Text(
-                    provider.status,
+                    _isSwitchingSource ? '正在切換來源…' : provider.status,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -127,25 +129,28 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
             ),
           ),
           Expanded(
-            child:
-                sources.isEmpty && !provider.isSearching
-                    ? const Center(child: Text('未找到其他來源'))
-                    : ListView.separated(
-                      itemCount: sources.length,
-                      separatorBuilder: (ctx, i) => const Divider(height: 1),
-                      itemBuilder: (ctx, i) {
-                        final result = sources[i];
-                        return BookDetailChangeSourceItem(
-                          searchBook: result,
-                          isCurrent:
-                              result.origin == widget.originalBook.origin,
-                          onTap:
-                              result.origin == widget.originalBook.origin
-                                  ? null
-                                  : () => _handleSelect(context, result),
-                        );
-                      },
-                    ),
+            child: IgnorePointer(
+              ignoring: _isSwitchingSource,
+              child:
+                  sources.isEmpty && !provider.isSearching
+                      ? const Center(child: Text('未找到其他來源'))
+                      : ListView.separated(
+                        itemCount: sources.length,
+                        separatorBuilder: (ctx, i) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final result = sources[i];
+                          return BookDetailChangeSourceItem(
+                            searchBook: result,
+                            isCurrent:
+                                result.origin == widget.originalBook.origin,
+                            onTap:
+                                result.origin == widget.originalBook.origin
+                                    ? null
+                                    : () => _handleSelect(context, result),
+                          );
+                        },
+                      ),
+            ),
           ),
         ],
       ),
@@ -153,23 +158,33 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   }
 
   Future<void> _handleSelect(BuildContext context, SearchBook result) async {
-    final select = widget.onSelectSource;
-    final ChangeSourceOutcome outcome;
-    if (select != null) {
-      outcome = await select(result);
-    } else {
-      // 詳情頁情境：沿用既有 changeSource，行為完全不變。
-      final detailOutcome = await widget.detailProvider!.changeSource(result);
-      outcome = (
-        success: detailOutcome.success,
-        message: detailOutcome.message,
-      );
+    if (_isSwitchingSource) return;
+    setState(() => _isSwitchingSource = true);
+    try {
+      final select = widget.onSelectSource;
+      final ChangeSourceOutcome outcome;
+      if (select != null) {
+        outcome = await select(result);
+      } else {
+        final detailOutcome = await widget.detailProvider!.changeSource(result);
+        outcome = (
+          success: detailOutcome.success,
+          message: detailOutcome.message,
+        );
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(outcome.message)));
+      if (outcome.success) Navigator.pop(context);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('換源失敗：$error')));
+    } finally {
+      if (mounted) setState(() => _isSwitchingSource = false);
     }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(outcome.message)));
-    if (outcome.success) Navigator.pop(context);
   }
 
   Widget _buildHeader(BookDetailChangeSourceProvider provider) {
@@ -182,7 +197,7 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
         children: [
           Expanded(
             child: Text(
-              '更換來源 (${provider.filteredResults.length})',
+              '更換來源',
               style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
@@ -191,7 +206,8 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               provider.checkAuthor ? Icons.person : Icons.person_off,
               size: 20,
             ),
-            onPressed: provider.toggleCheckAuthor,
+            onPressed:
+                _isSwitchingSource ? null : provider.toggleCheckAuthor,
             tooltip: '校驗作者',
           ),
           if (provider.isSearching)
@@ -203,7 +219,8 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
           else
             IconButton(
               icon: const Icon(Icons.refresh, size: 20),
-              onPressed: provider.startSearch,
+              onPressed:
+                  _isSwitchingSource ? null : provider.startSearch,
               tooltip: '重新搜尋',
             ),
         ],

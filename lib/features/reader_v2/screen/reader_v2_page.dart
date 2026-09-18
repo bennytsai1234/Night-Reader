@@ -17,6 +17,7 @@ import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
@@ -33,11 +34,17 @@ class ReaderV2Page extends StatefulWidget {
     required this.book,
     this.openTarget,
     this.initialChapters = const <BookChapter>[],
+    @visibleForTesting this.sourceSwitchService,
   });
 
   final Book book;
   final ReaderV2OpenTarget? openTarget;
   final List<BookChapter> initialChapters;
+
+  /// Test-only service injection. Normal app routes leave this null and keep
+  /// constructing the same concrete service in the page state.
+  @visibleForTesting
+  final SourceSwitchService? sourceSwitchService;
 
   @override
   State<ReaderV2Page> createState() => _ReaderV2PageState();
@@ -47,7 +54,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
-  final SourceSwitchService _sourceSwitchService = SourceSwitchService();
+  late final SourceSwitchService _sourceSwitchService;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ReaderV2PageExitCoordinator _exitCoordinator =
@@ -56,15 +63,54 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   late final ReaderV2ControllerHost _host;
   late final ReaderV2PageCoordinator _coordinator;
 
-  /// D6：hybrid 引擎回報的「章序 + 章內百分比」，取代舊分頁模型頁碼。
   final ValueNotifier<HybridProgressSnapshot?> _progress =
       ValueNotifier<HybridProgressSnapshot?>(null);
   Size? _lastViewportSize;
+  String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
+
+  /// Integration workload 的語意 probe 入口；正式頁面不透過它驅動畫面。
+  @visibleForTesting
+  ReaderV2Runtime? get debugRuntime => _host.runtime;
+
+  @visibleForTesting
+  ReaderV2SettingsController get debugSettings => _host.settings;
+
+  @visibleForTesting
+  SourceSwitchService get debugSourceSwitchService => _sourceSwitchService;
+
+  @visibleForTesting
+  Future<ChangeSourceOutcome> debugSelectSourceForTesting(
+    SearchBook candidate,
+  ) {
+    return _handleChangeSourceSelected(candidate);
+  }
+
+  /// Test-only equivalent of the successful reader source-switch route.
+  ///
+  /// The normal UI calls the same replacement helper after the source sheet
+  /// closes; keeping this seam in the page lets widget tests exercise the
+  /// actual replacement/dispose ordering without opening a network-backed
+  /// source sheet.
+  @visibleForTesting
+  Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
+    SearchBook candidate,
+  ) async {
+    SourceSwitchResolution? resolution;
+    final outcome = await _handleChangeSourceSelected(
+      candidate,
+      onSuccess: (value) => resolution = value,
+    );
+    if (mounted && outcome.success && resolution != null) {
+      _pushReplacementForResolution(resolution!);
+    }
+    return outcome;
+  }
 
   @override
   void initState() {
     super.initState();
+    _sourceSwitchService = widget.sourceSwitchService ?? SourceSwitchService();
     _host = ReaderV2ControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
@@ -76,13 +122,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       host: _host,
       showNotice: _showNotice,
     );
-    _progress.addListener(_scheduleRebuild);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
     super.dispose();
@@ -90,6 +136,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _handleControllerChanged() {
     _drainRuntimeNotice();
+    _drainAutoPageNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
   }
@@ -101,8 +148,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _rebuildQueued = false;
       if (mounted) setState(() {});
     });
-    // A pure tap may be the only event; do not wait for a drag animation to
-    // provide the next frame that drains the post-frame rebuild.
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
@@ -119,21 +164,23 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       currentIndex: chapterIndex,
       isScrubbing: menu.isScrubbing,
-      scrubIndex: menu.scrubIndex,
-      pendingIndex: menu.pendingChapterNavigationIndex,
+      scrubPercent: menu.scrubPercent,
       titleFor: _chapterTitleAt,
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDarkBackground ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDarkBackground ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: isDarkBackground
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: isDarkBackground
+            ? Brightness.dark
+            : Brightness.light,
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            isDarkBackground ? Brightness.light : Brightness.dark,
+        systemNavigationBarIconBrightness: isDarkBackground
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: ReaderV2PageShell(
         book: widget.book,
@@ -144,7 +191,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           currentChapterIndex: chapterIndex,
           titleFor: _chapterTitleAt,
           listenable: runtime,
-          onChapterTap: _coordinator.jumpToChapter,
+          onChapterTap: _jumpToChapterFromDrawer,
         ),
         backgroundColor: theme.backgroundColor,
         textColor: theme.textColor,
@@ -161,40 +208,41 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         originName: widget.book.originName,
         displayPageLabel: _displayChapterLabel(runtime),
         displayChapterPercentLabel: _displayChapterPercentLabel(runtime),
+        progressListenable: _progress,
         navigation: navigation,
         isAutoPaging: _host.autoPage?.isRunning ?? false,
-        autoPageSpeed: settings.autoPageSpeed,
         dayNightIcon: settings.dayNightToggleIcon,
         dayNightTooltip: settings.dayNightToggleTooltip,
         onExitIntent: _handleExitIntent,
         onMore: _showMore,
         onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
         onTts: _showTts,
-        onInterface:
-            () =>
-                ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
-        onSettings:
-            () =>
-                ReaderV2SettingsSheets.showAdvancedSettings(context, settings),
+        onInterface: () =>
+            ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
+        onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
+          context,
+          settings,
+          onChangeSource: widget.book.isLocal ? null : _showChangeSource,
+        ),
         onAutoPage: _coordinator.toggleAutoPage,
-        onAutoPageSpeedChanged: settings.setAutoPageSpeed,
         onToggleDayNight: settings.toggleDayNightTheme,
         onReplaceRule: () => _coordinator.openReplaceRule(context),
         onShowControls: menu.showControls,
         onDismissControls: menu.dismissControls,
         onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
         onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
-        onScrubStart: () => menu.onScrubStart(chapterIndex),
-        onScrubbing: menu.onScrubbing,
-        onScrubEnd: (index) {
-          menu.onScrubEnd(index);
-          unawaited(_coordinator.jumpToChapter(index));
+        onScrubStart: menu.onScrubStart,
+        onScrubbing: (percent) {
+          menu.onScrubbing(percent);
+          _coordinator.previewChapterPercent(percent);
         },
-        onChangeSource: _showChangeSource,
+        onScrubEnd: (percent) {
+          menu.onScrubEnd(percent);
+          unawaited(_coordinator.commitChapterPercent(percent));
+        },
         showTts: true,
         showAutoPage: true,
         showReplaceRule: true,
-        showChangeSource: !widget.book.isLocal,
       ),
     );
   }
@@ -215,19 +263,66 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         _host.syncRuntimeConfiguration(runtime, size, style);
 
         final theme = _host.settings.currentTheme;
-        return HybridReaderScreen(
-          runtime: runtime,
-          backgroundColor: theme.backgroundColor,
-          textColor: theme.textColor,
-          style: style,
-          viewportController: _host.viewportController,
-          ttsHighlight: _host.tts?.currentHighlight,
-          onContentTapUp: _handleContentTap,
-          progressListenable: _progress,
-          bookUrl: widget.book.bookUrl,
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            HybridReaderScreen(
+              runtime: runtime,
+              backgroundColor: theme.backgroundColor,
+              textColor: theme.textColor,
+              style: style,
+              viewportController: _host.viewportController,
+              ttsHighlight: _host.tts?.currentHighlight,
+              onContentTapUp: _handleContentTap,
+              progressListenable: _progress,
+              bookUrl: widget.book.bookUrl,
+            ),
+            if (runtime.state.phase == ReaderV2Phase.error)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SafeArea(
+                  minimum: const EdgeInsets.all(24),
+                  child: _buildReaderErrorActions(runtime),
+                ),
+              ),
+          ],
         );
       },
     );
+  }
+
+  Widget _buildReaderErrorActions(ReaderV2Runtime runtime) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.icon(
+          onPressed: () => unawaited(_retryReader(runtime)),
+          icon: const Icon(Icons.refresh),
+          label: const Text('重試'),
+        ),
+        if (!widget.book.isLocal)
+          OutlinedButton.icon(
+            onPressed: _showChangeSource,
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('換源'),
+          ),
+        TextButton.icon(
+          onPressed: _handleExitIntent,
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('返回'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _retryReader(ReaderV2Runtime runtime) async {
+    if (runtime.chapterCount <= 0) {
+      await runtime.openBook();
+      return;
+    }
+    await runtime.reloadContentPreservingLocation();
   }
 
   void _handleContentTap(TapUpDetails details) {
@@ -238,8 +333,26 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _coordinator.handleTap(details, _lastViewportSize);
   }
 
+  Future<bool> _jumpToChapterFromDrawer(int index) async {
+    final runtime = _host.runtime;
+    if (runtime == null) return false;
+    await _coordinator.jumpToChapter(index);
+    final succeeded =
+        mounted &&
+        identical(_host.runtime, runtime) &&
+        runtime.state.phase == ReaderV2Phase.ready &&
+        runtime.state.visibleLocation.chapterIndex == index;
+    return succeeded;
+  }
+
   void _drainRuntimeNotice() {
     final notice = _host.runtime?.takeUserNotice();
+    if (!mounted || notice == null || notice.isEmpty) return;
+    _showNotice(notice);
+  }
+
+  void _drainAutoPageNotice() {
+    final notice = _host.autoPage?.takeUserNotice();
     if (!mounted || notice == null || notice.isEmpty) return;
     _showNotice(notice);
   }
@@ -247,9 +360,17 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _showNotice(String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (!mounted || messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    if (_visibleNoticeMessage == message) return;
+    _visibleNoticeMessage = message;
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(SnackBar(content: Text(message)));
+    unawaited(
+      controller.closed.then<void>((_) {
+        if (_visibleNoticeMessage == message) {
+          _visibleNoticeMessage = null;
+        }
+      }),
+    );
   }
 
   void _handleExitIntent() {
@@ -258,7 +379,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         context: context,
         provider: this,
         isDrawerOpen: () => _scaffoldKey.currentState?.isDrawerOpen ?? false,
-        popNavigator: () => Navigator.of(context).pop(),
+        // The reader is always opened as an app-level route from the
+        // bookshelf.  A Scaffold drawer can leave a LocalHistoryEntry on the
+        // reader route while its closing animation settles; popUntil applies
+        // the predicate to the same route again until that local history is
+        // consumed, then removes only the reader route itself.
+        popNavigator: () {
+          final navigator = Navigator.of(context, rootNavigator: true);
+          final readerRoute = ModalRoute.of(context);
+          if (readerRoute == null) {
+            navigator.pop();
+            return;
+          }
+          navigator.popUntil((route) => !identical(route, readerRoute));
+        },
       ),
     );
   }
@@ -291,33 +425,53 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2TtsSheet.show(context, tts: tts);
   }
 
-  void _showChangeSource() {
+  Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
-    showModalBottomSheet<void>(
+    SourceSwitchResolution? switchedResolution;
+    await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder:
-          (sheetContext) => ChangeSourceSheet(
-            book: widget.book,
-            onSelectSource: _handleChangeSourceSelected,
-          ),
+      builder: (sheetContext) => ChangeSourceSheet(
+        book: widget.book,
+        onSelectSource: (candidate) => _handleChangeSourceSelected(
+          candidate,
+          onSuccess: (resolution) => switchedResolution = resolution,
+        ),
+      ),
     );
+
+    final resolution = switchedResolution;
+    if (!mounted || resolution == null) return;
+    _pushReplacementForResolution(resolution);
   }
 
-  /// 閱讀器情境的換源回呼。
-  ///
-  /// 成功:對齊目前章節 → 持久化 → flush 進度 → pushReplacement 以新書重開整頁。
-  /// 失敗:回傳失敗訊息,**不 pop、不動 runtime**,完整停留在原源。
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
-    SearchBook candidate,
-  ) async {
-    final runtime = _host.runtime;
-    final currentIndex = _currentChapterIndex(runtime);
-    final currentTitle = _chapterTitleAt(currentIndex);
+    SearchBook candidate, {
+    void Function(SourceSwitchResolution resolution)? onSuccess,
+  }) async {
     try {
+      // The flush returns the exact snapshot that was captured and persisted.
+      // Use that snapshot for source alignment; reading runtime state after
+      // the await would allow a scroll/TTS update during the DAO write to
+      // disagree with the progress that is authoritative for this switch.
+      final flushedLocation = await _host.flushProgress();
+      final runtime = _host.runtime;
+      final currentLocation = flushedLocation ?? runtime?.state.visibleLocation;
+      final currentIndex =
+          currentLocation?.chapterIndex ?? _currentChapterIndex(runtime);
+      final currentTitle = _chapterTitleAt(currentIndex);
+      final switchingBook = widget.book.copyWith(
+        chapterIndex: currentIndex,
+        durChapterTitle: currentTitle.isEmpty
+            ? widget.book.durChapterTitle
+            : currentTitle,
+        charOffset: currentLocation?.charOffset ?? widget.book.charOffset,
+        visualOffsetPx:
+            currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
+      );
       final resolution = await _sourceSwitchService.resolveSwitch(
-        widget.book,
+        switchingBook,
         candidate,
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
@@ -329,19 +483,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         bookDao: _host.dependencies.bookDao,
         chapterDao: _host.dependencies.chapterDao,
       );
-      // 持久化成功後再 flush 舊源進度,避免換源失敗時污染原書狀態。
-      await _host.flushProgress();
       AppEventBus().fire(AppEventBus.upBookshelf);
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          BookOpenRoute(
-            book: resolution.migratedBook,
-            openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
-            initialChapters: resolution.chapters,
-          ),
-        );
-      }
+      onSuccess?.call(resolution);
       return (
         success: true,
         message: '已切換到 ${resolution.source.bookSourceName}',
@@ -349,6 +492,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     } catch (e) {
       return (success: false, message: '換源失敗: $e');
     }
+  }
+
+  void _pushReplacementForResolution(SourceSwitchResolution resolution) {
+    Navigator.of(context).pushReplacement(
+      BookOpenRoute(
+        book: resolution.migratedBook,
+        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
+        initialChapters: resolution.chapters,
+      ),
+    );
   }
 
   @override
@@ -413,16 +566,16 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return widget.initialChapters[index].url;
   }
 
-  /// D6：廢除頁碼，狀態列顯示「章序」。
   String _displayChapterLabel(ReaderV2Runtime? runtime) {
     final snapshot = _progress.value;
     if (snapshot != null) return snapshot.chapterLabel;
-    if (runtime == null || runtime.chapterCount <= 0) return '...';
-    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章';
+    if (runtime == null || runtime.chapterCount <= 0) {
+      return '第 ... 章 · 本章 ...';
+    }
+    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章 · 本章 ...';
   }
 
-  /// D6：章內百分比（未達書尾封頂 99.9%，由 HybridProgress 保證）。
   String _displayChapterPercentLabel(ReaderV2Runtime? runtime) {
-    return _progress.value?.percentLabel ?? '...%';
+    return _progress.value?.percentLabel ?? '全書 ...%';
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -13,33 +14,47 @@ import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
-import 'shared/theme/app_theme.dart';
+import 'shared/theme/custom_app_theme.dart';
+import 'shared/navigation/app_route_observer.dart';
+import 'features/association/association_handler_service.dart';
 import 'features/settings/settings_provider.dart';
+import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
+import 'core/startup/startup_retry_gate.dart';
+
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+
+Future<bool> runBackgroundTask<T>({
+  required Future<void> Function() initialize,
+  required Future<List<T>> Function() loadBookshelf,
+  required void Function(String message) logInfo,
+}) async {
+  try {
+    await initialize();
+    final books = await loadBookshelf();
+    logInfo('Background Task: Checking updates for ${books.length} books');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
+  // This entry point is kept for Workmanager background execution. The
+  // foreground app deliberately does not call Workmanager.initialize on
+  // every first frame: there are currently no registered background tasks,
+  // and Android/vivo can spend several seconds creating WorkManager's native
+  // database on the UI path.
   Workmanager().executeTask((task, inputData) async {
-    try {
-      // 這裡需要重新初始化必要的 DI 服務 (因為後台 Isolate 不共享主執行緒狀態)
-      await configureDependencies();
-
-      final bookDao = getIt<BookDao>();
-      final books = await bookDao.getInBookshelf();
-
-      getIt<Logger>().i(
-        'Background Task: Checking updates for ${books.length} books',
-      );
-      // 這裡可以進一步調用 CheckSourceService 執行真實更新
-
-      return Future.value(true);
-    } catch (e) {
-      return Future.value(false);
-    }
+    return runBackgroundTask(
+      initialize: configureDependencies,
+      loadBookshelf: () => getIt<BookDao>().getInBookshelf(),
+      logInfo: (message) => getIt<Logger>().i(message),
+    );
   });
 }
 
@@ -47,6 +62,7 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 const String kAppDisplayName = '夜讀';
+final StartupRetryGate _startupRetryGate = StartupRetryGate();
 
 void main() {
   runZonedGuarded(_startApp, (error, stack) {
@@ -57,13 +73,10 @@ void main() {
 
 Future<void> _startApp() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  // 高刷新率裝置上輸入事件率與顯示刷新率常不同步，重採樣把觸控位移
-  // 對齊 vsync，讓拖曳滾動逐幀位移均勻（官方建議做法，約 5.5ms 取樣位移）。
   GestureBinding.instance.resamplingEnabled = true;
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
 
-  // 自定義錯誤畫面，避免黑屏
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
       'Rendering Error: ${details.exception}',
@@ -71,37 +84,7 @@ Future<void> _startApp() async {
       stackTrace: details.stack,
     );
     CrashHandler.recordFlutterError(details);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Detected an Error:',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                details.exceptionAsString(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                details.stack.toString(),
-                style: const TextStyle(color: Colors.grey, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return buildFlutterErrorWidget(details);
   };
 
   try {
@@ -110,6 +93,9 @@ Future<void> _startApp() async {
     AppLog.i('Dependencies Configured Successfully');
 
     FlutterError.onError = (details) {
+      // Ensure a Flutter build/provider failure cannot leave the native splash
+      // covering the ErrorWidget returned above.
+      FlutterNativeSplash.remove();
       FlutterError.presentError(details);
       AppLog.e(
         'Flutter Error: ${details.exception}',
@@ -133,17 +119,64 @@ Future<void> _startApp() async {
   } catch (e, stack) {
     AppLog.e('Startup Critical Error: $e', error: e, stackTrace: stack);
     CrashHandler.recordError(e, stack);
+    // configureDependencies 失敗時 MainPage 不會建立，不能依賴它釋放原生
+    // Splash；否則錯誤頁會被永久蓋住，看起來像 App 卡在開啟畫面。
+    FlutterNativeSplash.remove();
     runApp(_StartupFailureApp(error: e, stackTrace: stack));
   }
 }
 
-Future<void> _retryCriticalStartup() async {
-  try {
-    await getIt.reset();
-  } catch (e, stack) {
-    AppLog.e('Dependency reset failed: $e', error: e, stackTrace: stack);
-  }
-  await _startApp();
+Widget buildFlutterErrorWidget(
+  FlutterErrorDetails details, {
+  VoidCallback? releaseNativeSplash,
+}) {
+  // A provider/widget build failure can happen after runApp(), so the
+  // dependency try/catch cannot release the native splash for this path.
+  (releaseNativeSplash ?? FlutterNativeSplash.remove)();
+  return Scaffold(
+    backgroundColor: Colors.black,
+    body: Container(
+      padding: const EdgeInsets.all(16),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Detected an Error:',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              details.exceptionAsString(),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              details.stack.toString(),
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _retryCriticalStartup() {
+  return _startupRetryGate.run(
+    reset: () async {
+      try {
+        await getIt.reset();
+      } catch (e, stack) {
+        AppLog.e('Dependency reset failed: $e', error: e, stackTrace: stack);
+      }
+    },
+    start: _startApp,
+  );
 }
 
 class _StartupFailureApp extends StatelessWidget {
@@ -186,13 +219,6 @@ Future<void> _runPostFirstFrameStartupTasks() async {
   }
 
   unawaited(_cleanupLegacyCustomFontArtifacts());
-
-  try {
-    AppLog.i('Initializing Workmanager...');
-    await Workmanager().initialize(callbackDispatcher);
-  } catch (e, stack) {
-    AppLog.e('Workmanager init failed: $e', error: e, stackTrace: stack);
-  }
 }
 
 Future<void> _cleanupLegacyCustomFontArtifacts() async {
@@ -223,31 +249,68 @@ Future<void> _cleanupLegacyCustomFontArtifacts() async {
   }
 }
 
-class ReaderApp extends StatefulWidget {
+class ReaderApp extends StatelessWidget {
   const ReaderApp({super.key});
 
   @override
-  State<ReaderApp> createState() => _ReaderAppState();
-}
-
-class _ReaderAppState extends State<ReaderApp> {
-  @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
+    return Consumer2<SettingsProvider, ThemeSettingsProvider>(
+      builder: (context, settings, themeSettings, child) {
         return MaterialApp(
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
+          navigatorObservers: [appRouteObserver],
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: buildAppTheme(
+            themeSettings.effectiveAppLight,
+            Brightness.light,
+          ),
+          darkTheme: buildAppTheme(
+            themeSettings.effectiveAppDark,
+            Brightness.dark,
+          ),
           themeMode: settings.themeMode,
           locale: settings.locale,
           builder: (context, child) => child ?? const SizedBox.shrink(),
-          home: const MainPage(),
+          home: const _AssociationLifecycleHost(child: MainPage()),
         );
       },
     );
   }
+}
+
+class _AssociationLifecycleHost extends StatefulWidget {
+  const _AssociationLifecycleHost({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AssociationLifecycleHost> createState() =>
+      _AssociationLifecycleHostState();
+}
+
+class _AssociationLifecycleHostState extends State<_AssociationLifecycleHost> {
+  final AssociationHandlerService _associationHandler =
+      AssociationHandlerService();
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _associationHandler.init(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _associationHandler.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

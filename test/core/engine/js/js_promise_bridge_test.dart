@@ -20,6 +20,7 @@ import '../../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('Promise bridge integration', () {
     JavascriptRuntime? runtime;
@@ -285,6 +286,21 @@ void main() {
       );
     });
 
+    test('disposing extensions rejects every pending rule call', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final (_, first) = ext!.registerRuleCall();
+      final (_, second) = ext!.registerRuleCall();
+      final firstExpectation = expectLater(first, throwsA(isA<StateError>()));
+      final secondExpectation = expectLater(second, throwsA(isA<StateError>()));
+
+      ext!.dispose();
+
+      await Future.wait<void>([firstExpectation, secondExpectation]);
+    });
+
     test(
       'concurrent rules on same runtime each complete independently',
       () async {
@@ -399,5 +415,5 @@ void main() {
         expect(result, 'chapter body');
       },
     );
-  });
+  }, skip: quickJsSkip);
 }

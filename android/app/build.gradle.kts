@@ -2,7 +2,6 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -36,7 +35,7 @@ val hasReleaseSigning =
 
 android {
     namespace = "com.inkpage.reader"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     compileOptions {
@@ -44,14 +43,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     defaultConfig {
         applicationId = "com.inkpage.reader"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -68,6 +63,20 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The phone may already contain the signed release package. Keep
+            // local debug builds installable without replacing its data or
+            // requiring the release keystore.
+            applicationIdSuffix = ".debug"
+        }
+        maybeCreate("profile").apply {
+            // Keep profile validation in the same isolated package as debug.
+            // Flutter's default profile variant otherwise uses the release
+            // applicationId, which can make `flutter drive --profile` remove
+            // or replace a user's release app before the test starts.
+            applicationIdSuffix = ".debug"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             signingConfig =
                 if (hasReleaseSigning) {
@@ -81,6 +90,12 @@ android {
                     signingConfigs.getByName("debug")
                 }
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 

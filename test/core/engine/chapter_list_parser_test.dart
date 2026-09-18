@@ -100,6 +100,38 @@ void main() {
   });
 
   test(
+    'ChapterListParser returns no chapters when maxChapters is zero',
+    () async {
+      final source = BookSource.fromJson({
+        'bookSourceUrl': 'https://example.com',
+        'bookSourceName': '零上限測試書源',
+        'ruleToc': {
+          'chapterList': r'$.rows',
+          'chapterName': r'$.serialName',
+          'chapterUrl': r'$.serialID',
+        },
+      });
+      final book = Book(
+        bookUrl: 'https://example.com/book/1',
+        tocUrl: 'https://example.com/toc',
+        origin: 'https://example.com',
+        originName: '零上限測試書源',
+      );
+
+      final result = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: '{"rows":[{"serialID":"1","serialName":"第一章"}]}',
+        baseUrl: book.tocUrl,
+        maxChapters: 0,
+      );
+
+      expect(result.chapters, isEmpty);
+      expect(result.nextUrls, isEmpty);
+    },
+  );
+
+  test(
     'ChapterListParser exposes chapter context during chapterUrl js evaluation',
     () async {
       final source = BookSource.fromJson({

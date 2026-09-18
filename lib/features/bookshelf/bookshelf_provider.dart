@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
 
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
@@ -15,9 +17,8 @@ export 'provider/bookshelf_update_mixin.dart'
 
 class BookshelfProvider extends BookshelfProviderBase
     with BookshelfLogicMixin, BookshelfUpdateMixin, BookshelfImportMixin {
-  StreamSubscription<AppEvent>? _bookshelfSub;
-
-  BookshelfProvider() {
+  BookshelfProvider({BookStorageService? bookStorageService})
+    : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
     loadBooks();
     _bookshelfSub = AppEventBus()
@@ -25,13 +26,24 @@ class BookshelfProvider extends BookshelfProviderBase
         .listen((_) => unawaited(loadBooks()));
   }
 
+  final BookStorageService _bookStorageService;
+  StreamSubscription<AppEvent>? _bookshelfSub;
+
   @override
   Future<void> loadBooks() async {
     isLoading = true;
+    loadErrorMessage = null;
     notifyListeners();
     try {
       books = await bookDao.getInBookshelf();
       _sortBooks();
+    } catch (error, stackTrace) {
+      AppLog.e(
+        '載入書架失敗: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      loadErrorMessage = '書架載入失敗，請重試';
     } finally {
       isLoading = false;
       notifyListeners();
@@ -75,8 +87,10 @@ class BookshelfProvider extends BookshelfProviderBase
     return book.lastCheckTime;
   }
 
-  Future<void> removeFromBookshelf(String url) async {
-    await bookDao.deleteByUrl(url);
+  Future<void> deleteBook(String url) async {
+    final book = await bookDao.getByUrl(url);
+    if (book == null) return;
+    await _bookStorageService.discardBook(book);
     await loadBooks();
   }
 

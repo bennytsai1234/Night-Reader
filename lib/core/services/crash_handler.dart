@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,8 +10,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 /// CrashHandler - 全域異常捕獲與日誌記錄
 /// (原 Android help/CrashHandler.kt)
 class CrashHandler {
+  static const _errorDeduplicationWindow = Duration(seconds: 2);
+  static const _maxRecentErrorFingerprints = 64;
+
   static String? _userAgent;
   static PackageInfo? _packageInfo;
+  static final Map<String, DateTime> _recentErrorFingerprints =
+      <String, DateTime>{};
 
   static Future<void> init() async {
     // 預先加載應用資訊
@@ -41,7 +47,51 @@ class CrashHandler {
 
   static void recordError(Object error, StackTrace? stack) {
     if (_shouldAbsorb(error)) return;
+    if (!_shouldRecordError(error, stack)) return;
     unawaited(_saveLog(error.toString(), stack));
+  }
+
+  static bool _shouldRecordError(
+    Object error,
+    StackTrace? stack, {
+    DateTime? now,
+  }) {
+    final timestamp = now ?? DateTime.now();
+    final fingerprint = _errorFingerprint(error, stack);
+    final previous = _recentErrorFingerprints[fingerprint];
+    if (previous != null &&
+        timestamp.difference(previous) < _errorDeduplicationWindow) {
+      return false;
+    }
+
+    _recentErrorFingerprints[fingerprint] = timestamp;
+    if (_recentErrorFingerprints.length > _maxRecentErrorFingerprints) {
+      final oldest = _recentErrorFingerprints.entries.reduce(
+        (left, right) => left.value.isBefore(right.value) ? left : right,
+      );
+      _recentErrorFingerprints.remove(oldest.key);
+    }
+    return true;
+  }
+
+  static String _errorFingerprint(Object error, StackTrace? stack) {
+    return '${error.toString()}\n${stack?.toString() ?? '<no stack trace>'}';
+  }
+
+  /// Resets the short-window duplicate guard for deterministic unit tests.
+  @visibleForTesting
+  static void resetErrorDeduplicationForTesting() {
+    _recentErrorFingerprints.clear();
+  }
+
+  /// Exposes the decision without touching the filesystem in unit tests.
+  @visibleForTesting
+  static bool shouldRecordErrorForTesting(
+    Object error,
+    StackTrace? stack, {
+    required DateTime now,
+  }) {
+    return _shouldRecordError(error, stack, now: now);
   }
 
   /// 異常吸收邏輯 (原 Android shouldAbsorb)

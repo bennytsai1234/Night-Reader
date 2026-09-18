@@ -15,6 +15,15 @@ void main() {
       expect(fromJson.groupName, 'Fantasy');
     });
 
+    test('missing enabled flags retain book and group defaults', () {
+      final book = Book.fromJson(const <String, dynamic>{});
+      final group = BookGroup.fromJson(const <String, dynamic>{});
+
+      expect(book.canUpdate, isTrue);
+      expect(group.enableRefresh, isTrue);
+      expect(group.show, isTrue);
+    });
+
     test('Bookmark serialization', () {
       final bookmark = Bookmark(
         time: 123456,
@@ -25,6 +34,12 @@ void main() {
       final fromJson = Bookmark.fromJson(json);
       expect(fromJson.time, 123456);
       expect(fromJson.bookName, 'Book A');
+    });
+
+    test('Bookmark without a persisted id uses the model default', () {
+      final bookmark = Bookmark.fromJson(const <String, dynamic>{'time': 1});
+
+      expect(bookmark.id, 0);
     });
 
     test('BookProgress serialization', () {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 
+import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -45,7 +46,7 @@ void main() {
   });
 
   testWidgets(
-    'BookInfoHeader renders consistent primary and secondary actions',
+    'BookInfoHeader shows a single primary action when not in bookshelf',
     (tester) async {
       final provider = BookDetailProvider(
         AggregatedSearchBook(
@@ -66,7 +67,7 @@ void main() {
             body: BookInfoHeader(
               book: provider.book,
               provider: provider,
-              showPhotoView: (_, __) {},
+              showPhotoView: (_, __, ___) {},
               onEdit: () {},
               showSourceOptions: (_, __) {},
               navigateToReader: (_, __, ___, ____) {},
@@ -78,51 +79,98 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, '放入書架'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '加入書架'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.widgetWithText(TextButton, '換源'), findsOneWidget);
       expect(find.widgetWithText(TextButton, '背景下載'), findsNothing);
-      expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.menu_book_rounded), findsNothing);
       expect(find.byIcon(Icons.library_add), findsOneWidget);
     },
   );
 
   testWidgets(
-    'BookInfoHeader hides background download action for local books',
+    'BookInfoHeader shows only the reading action when already in bookshelf',
     (tester) async {
       final provider = BookDetailProvider(
         AggregatedSearchBook(
           book: SearchBook(
-            bookUrl: 'file:///books/demo.txt',
-            name: '本地書',
-            author: '作者乙',
-            origin: 'local',
-            originName: '本地',
+            bookUrl: 'https://example.com/book/1',
+            name: '測試書',
+            author: '作者甲',
+            origin: 'https://example.com',
+            originName: '測試書源',
           ),
-          sources: const <String>['本地'],
+          sources: const <String>['測試書源'],
         ),
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: BookInfoHeader(
-              book: provider.book,
-              provider: provider,
-              showPhotoView: (_, __) {},
-              onEdit: () {},
-              showSourceOptions: (_, __) {},
-              navigateToReader: (_, __, ___, ____) {},
-              showChangeSource: (_, __) {},
-              toggleBookshelf: (_, __) async {},
-            ),
+      Widget buildHeader() => MaterialApp(
+        home: Scaffold(
+          body: BookInfoHeader(
+            book: provider.book,
+            provider: provider,
+            showPhotoView: (_, __, ___) {},
+            onEdit: () {},
+            showSourceOptions: (_, __) {},
+            navigateToReader: (_, __, ___, ____) {},
+            showChangeSource: (_, __) {},
+            toggleBookshelf: (_, __) async {},
           ),
         ),
       );
-      await tester.pump();
 
-      expect(find.text('背景下載'), findsNothing);
+      await tester.pumpWidget(buildHeader());
+      await tester.pumpAndSettle();
+      await provider.setInBookshelf(true);
+      await tester.pumpWidget(buildHeader());
+
+      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '加入書架'), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.widgetWithText(TextButton, '換源'), findsOneWidget);
+      expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.library_add), findsNothing);
     },
   );
+
+  testWidgets('BookInfoHeader hides source switching for local books', (
+    tester,
+  ) async {
+    final provider = BookDetailProvider(
+      AggregatedSearchBook(
+        book: SearchBook(
+          bookUrl: 'file:///books/demo.txt',
+          name: '本地書',
+          author: '作者乙',
+          origin: BookType.localTag,
+          originName: '本地',
+        ),
+        sources: const <String>['本地'],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BookInfoHeader(
+            book: provider.book,
+            provider: provider,
+            showPhotoView: (_, __, ___) {},
+            onEdit: () {},
+            showSourceOptions: (_, __) {},
+            navigateToReader: (_, __, ___, ____) {},
+            showChangeSource: (_, __) {},
+            toggleBookshelf: (_, __) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('換源'), findsNothing);
+    expect(find.text('背景下載'), findsNothing);
+  });
 
   testWidgets('BookInfoHeader continue reading 會帶入 charOffset', (tester) async {
     final provider = BookDetailProvider(
@@ -141,24 +189,28 @@ void main() {
     provider.book.charOffset = 1200;
     ReaderV2OpenTarget? receivedTarget;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: BookInfoHeader(
-            book: provider.book,
-            provider: provider,
-            showPhotoView: (_, __) {},
-            onEdit: () {},
-            showSourceOptions: (_, __) {},
-            navigateToReader: (_, __, target, ____) {
-              receivedTarget = target;
-            },
-            showChangeSource: (_, __) {},
-            toggleBookshelf: (_, __) async {},
-          ),
+    Widget buildHeader() => MaterialApp(
+      home: Scaffold(
+        body: BookInfoHeader(
+          book: provider.book,
+          provider: provider,
+          showPhotoView: (_, __, ___) {},
+          onEdit: () {},
+          showSourceOptions: (_, __) {},
+          navigateToReader: (_, __, target, ____) {
+            receivedTarget = target;
+          },
+          showChangeSource: (_, __) {},
+          toggleBookshelf: (_, __) async {},
         ),
       ),
     );
+
+    await tester.pumpWidget(buildHeader());
+    await tester.pumpAndSettle();
+    await provider.setInBookshelf(true);
+    await tester.pumpWidget(buildHeader());
+
     await tester.tap(find.widgetWithText(FilledButton, '繼續閱讀'));
 
     expect(receivedTarget?.intent, ReaderV2OpenIntent.resume);

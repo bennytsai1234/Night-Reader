@@ -162,6 +162,200 @@ void main() {
     expect(loaderCalls, 2);
   });
 
+  test('交錯分類請求只讓目前書源更新可見狀態', () async {
+    fakeSourceDao.sources = [
+      BookSource(
+        bookSourceUrl: 'source://a',
+        bookSourceName: '書源 A',
+        enabledExplore: true,
+        exploreUrl: 'A::https://example.com/a',
+      ),
+      BookSource(
+        bookSourceUrl: 'source://b',
+        bookSourceName: '書源 B',
+        enabledExplore: true,
+        exploreUrl: 'B::https://example.com/b',
+      ),
+    ];
+    final aCompleter = Completer<List<ExploreKind>>();
+    final bCompleter = Completer<List<ExploreKind>>();
+    final provider = ExploreProvider(
+      sourceDao: fakeSourceDao,
+      kindsLoader: (exploreUrl, {source}) {
+        return source!.bookSourceUrl == 'source://a'
+            ? aCompleter.future
+            : bCompleter.future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    final firstRequest = provider.toggleExpand(0);
+    final secondRequest = provider.toggleExpand(1);
+
+    aCompleter.completeError(StateError('A 載入失敗'));
+    await firstRequest;
+    expect(provider.expandedIndex, 1);
+    expect(provider.isLoadingKinds, isTrue);
+    expect(provider.expandedKinds, isEmpty);
+
+    bCompleter.complete([
+      const ExploreKind(title: 'B 分類', url: 'https://example.com/b/1'),
+    ]);
+    await secondRequest;
+    expect(provider.isLoadingKinds, isFalse);
+    expect(provider.expandedKinds.single.title, 'B 分類');
+  });
+
+  test('舊請求成功結果可進快取，但不覆寫目前書源', () async {
+    fakeSourceDao.sources = [
+      BookSource(
+        bookSourceUrl: 'source://a',
+        bookSourceName: '書源 A',
+        enabledExplore: true,
+        exploreUrl: 'A::https://example.com/a',
+      ),
+      BookSource(
+        bookSourceUrl: 'source://b',
+        bookSourceName: '書源 B',
+        enabledExplore: true,
+        exploreUrl: 'B::https://example.com/b',
+      ),
+    ];
+    final aCompleter = Completer<List<ExploreKind>>();
+    final bCompleter = Completer<List<ExploreKind>>();
+    var aCalls = 0;
+    final provider = ExploreProvider(
+      sourceDao: fakeSourceDao,
+      kindsLoader: (exploreUrl, {source}) {
+        if (source!.bookSourceUrl == 'source://a') {
+          aCalls++;
+          return aCompleter.future;
+        }
+        return bCompleter.future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    final firstRequest = provider.toggleExpand(0);
+    final secondRequest = provider.toggleExpand(1);
+
+    aCompleter.complete([
+      const ExploreKind(title: 'A 分類', url: 'https://example.com/a/1'),
+    ]);
+    await firstRequest;
+    expect(provider.expandedKinds, isEmpty);
+    expect(provider.isLoadingKinds, isTrue);
+
+    bCompleter.complete([
+      const ExploreKind(title: 'B 分類', url: 'https://example.com/b/1'),
+    ]);
+    await secondRequest;
+    await provider.toggleExpand(1);
+    await provider.toggleExpand(0);
+
+    expect(provider.expandedKinds.single.title, 'A 分類');
+    expect(aCalls, 1);
+  });
+
+  test('同一書源較新的請求完成後，舊請求不得覆寫新快取', () async {
+    fakeSourceDao.sources = [
+      BookSource(
+        bookSourceUrl: 'source://same',
+        bookSourceName: '同一書源',
+        enabledExplore: true,
+        exploreUrl: '分類::https://example.com/same',
+      ),
+    ];
+    final oldCompleter = Completer<List<ExploreKind>>();
+    final newCompleter = Completer<List<ExploreKind>>();
+    var loaderCalls = 0;
+    final provider = ExploreProvider(
+      sourceDao: fakeSourceDao,
+      kindsLoader: (exploreUrl, {source}) {
+        loaderCalls++;
+        return loaderCalls == 1 ? oldCompleter.future : newCompleter.future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    final oldRequest = provider.toggleExpand(0);
+    await provider.toggleExpand(0);
+    final newRequest = provider.toggleExpand(0);
+
+    newCompleter.complete([
+      const ExploreKind(title: '新分類', url: 'https://example.com/new'),
+    ]);
+    await newRequest;
+    expect(provider.expandedKinds.single.title, '新分類');
+
+    oldCompleter.complete([
+      const ExploreKind(title: '舊分類', url: 'https://example.com/old'),
+    ]);
+    await oldRequest;
+    expect(provider.expandedKinds.single.title, '新分類');
+
+    await provider.toggleExpand(0);
+    await provider.toggleExpand(0);
+    expect(provider.expandedKinds.single.title, '新分類');
+    expect(loaderCalls, 2);
+  });
+
+  test('展開中的書源規則更新會失效舊請求並自動載入新分類', () async {
+    fakeSourceDao.sources = [
+      BookSource(
+        bookSourceUrl: 'source://same',
+        bookSourceName: '同一書源',
+        enabledExplore: true,
+        exploreUrl: '舊分類::https://example.com/old',
+      ),
+    ];
+    final oldCompleter = Completer<List<ExploreKind>>();
+    final newCompleter = Completer<List<ExploreKind>>();
+    final loaderInputs = <String?>[];
+    final provider = ExploreProvider(
+      sourceDao: fakeSourceDao,
+      kindsLoader: (exploreUrl, {source}) {
+        loaderInputs.add(exploreUrl);
+        return exploreUrl?.contains('新分類') == true
+            ? newCompleter.future
+            : oldCompleter.future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    final oldRequest = provider.toggleExpand(0);
+    fakeSourceDao.pushSources([
+      BookSource(
+        bookSourceUrl: 'source://same',
+        bookSourceName: '同一書源',
+        enabledExplore: true,
+        exploreUrl: '新分類::https://example.com/new',
+      ),
+    ]);
+    await _settleAsync();
+
+    expect(provider.isLoadingKinds, isTrue);
+    newCompleter.complete([
+      const ExploreKind(title: '新分類', url: 'https://example.com/new'),
+    ]);
+    await _settleAsync();
+    expect(provider.expandedKinds.single.title, '新分類');
+
+    oldCompleter.complete([
+      const ExploreKind(title: '舊分類', url: 'https://example.com/old'),
+    ]);
+    await oldRequest;
+    expect(provider.expandedKinds.single.title, '新分類');
+    expect(loaderInputs, <String?>[
+      '舊分類::https://example.com/old',
+      '新分類::https://example.com/new',
+    ]);
+  });
+
   test('changing exploreUrl invalidates in-memory kinds cache', () async {
     fakeSourceDao.sources = [
       BookSource(

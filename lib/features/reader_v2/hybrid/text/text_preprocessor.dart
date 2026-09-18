@@ -109,12 +109,26 @@ List<String> _splitParagraph(String paragraph, int maxBlockChars) {
     var end =
         (start + maxBlockChars).clamp(start + 1, paragraph.length).toInt();
     if (end < paragraph.length) {
-      end = _findSentenceBoundary(paragraph, start, end) ?? end;
+      end =
+          _findSentenceBoundary(paragraph, start, end) ??
+          _safeUtf16Boundary(paragraph, end);
     }
     chunks.add(paragraph.substring(start, end));
     start = end;
   }
   return chunks;
+}
+
+int _safeUtf16Boundary(String text, int boundary) {
+  if (boundary <= 0 || boundary >= text.length) return boundary;
+  final previous = text.codeUnitAt(boundary - 1);
+  final next = text.codeUnitAt(boundary);
+  final splitsSurrogatePair =
+      previous >= 0xD800 &&
+      previous <= 0xDBFF &&
+      next >= 0xDC00 &&
+      next <= 0xDFFF;
+  return splitsSurrogatePair ? boundary + 1 : boundary;
 }
 
 int? _findSentenceBoundary(String text, int start, int preferredEnd) {

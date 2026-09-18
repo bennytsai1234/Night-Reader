@@ -1,6 +1,7 @@
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
 
@@ -121,4 +122,23 @@ class ReaderChapterContentStore {
     bookUrl: book.bookUrl,
     chapterUrl: chapter.url,
   );
+
+  static String inFlightKeyFor({
+    required Book book,
+    required BookChapter chapter,
+    required int chapterIndex,
+    required BookSource? sourceOverride,
+    required bool forceRefresh,
+    required bool saveChapterMetadata,
+    required int maxAttempts,
+  }) {
+    final sourceKey = sourceOverride?.bookSourceUrl.trim() ?? '';
+    final attempts = maxAttempts < 1 ? 1 : maxAttempts;
+    return '${contentKeyFor(book: book, chapter: chapter)}\n'
+        'source=$sourceKey\n'
+        'index=$chapterIndex\n'
+        'refresh=$forceRefresh\n'
+        'metadata=$saveChapterMetadata\n'
+        'attempts=$attempts';
+  }
 }

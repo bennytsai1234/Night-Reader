@@ -50,6 +50,7 @@ class AppStoragePaths {
     String bookKey, {
     bool ensureExists = false,
   }) async {
+    _validatePathComponent(bookKey, argumentName: 'bookKey');
     return _subdirectory(
       await bookAssetsDir(ensureExists: ensureExists),
       bookKey,
@@ -66,6 +67,7 @@ class AppStoragePaths {
   }
 
   static Future<File> shareExportFile(String fileName) async {
+    _validatePathComponent(fileName, argumentName: 'fileName');
     final dir = await shareExportDir(ensureExists: true);
     return File(p.join(dir.path, fileName));
   }
@@ -100,5 +102,22 @@ class AppStoragePaths {
 
   static Directory _fallbackRoot() {
     return Directory(p.join(Directory.systemTemp.path, 'night_reader'));
+  }
+
+  static void _validatePathComponent(
+    String value, {
+    required String argumentName,
+  }) {
+    if (value.isEmpty ||
+        value == '.' ||
+        value == '..' ||
+        value.contains('/') ||
+        value.contains(r'\')) {
+      throw ArgumentError.value(
+        value,
+        argumentName,
+        'must be a single non-empty path component',
+      );
+    }
   }
 }

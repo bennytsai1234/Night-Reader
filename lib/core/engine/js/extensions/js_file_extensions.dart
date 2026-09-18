@@ -2,8 +2,6 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:archive/archive.dart';
-import 'package:fast_gbk/fast_gbk.dart';
-import 'dart:convert';
 import 'package:night_reader/core/services/app_log_service.dart';
 import '../js_extensions_base.dart';
 import '../js_encode_utils.dart';
@@ -81,11 +79,7 @@ extension JsFileExtensions on JsExtensionsBase {
             return;
           }
           final bytes = await file.readAsBytes();
-          final cs = charset.toUpperCase();
-          final content =
-              (cs.contains('GBK') || cs.contains('GB2312'))
-                  ? gbk.decode(bytes)
-                  : utf8.decode(bytes, allowMalformed: true);
+          final content = EncodingDetect.decodeWithCharset(bytes, charset);
           resolveJsPending(parsed.callId, content);
         } catch (e) {
           AppLog.e('java.readTxtFile failed: $e');
@@ -114,12 +108,26 @@ extension JsFileExtensions on JsExtensionsBase {
             'ArchiveTemp',
             JsEncodeUtils.md5Encode16(file.path),
           );
+          final outputDirectory = Directory(outPath);
+          if (await outputDirectory.exists()) {
+            await outputDirectory.delete(recursive: true);
+          }
+          await outputDirectory.create(recursive: true);
           for (final entry in archive) {
             if (entry.isFile) {
+              final entryPath = p.normalize(
+                p.absolute(p.join(outPath, entry.name)),
+              );
+              if (!p.isWithin(p.normalize(p.absolute(outPath)), entryPath)) {
+                AppLog.w(
+                  'java.unArchiveFile skipped unsafe entry: ${entry.name}',
+                );
+                continue;
+              }
               final data = entry.content as List<int>;
-              File(p.join(outPath, entry.name))
-                ..createSync(recursive: true)
-                ..writeAsBytesSync(data);
+              final outputFile = File(entryPath);
+              await outputFile.parent.create(recursive: true);
+              await outputFile.writeAsBytes(data);
             }
           }
           resolveJsPending(
@@ -150,10 +158,7 @@ extension JsFileExtensions on JsExtensionsBase {
           final files = folder.listSync().whereType<File>().toList();
           for (final f in files) {
             final bytes = await f.readAsBytes();
-            final content =
-                EncodingDetect.getEncode(bytes) == 'GBK'
-                    ? gbk.decode(bytes)
-                    : utf8.decode(bytes, allowMalformed: true);
+            final content = EncodingDetect.decode(bytes);
             buffer.writeln(content);
           }
           resolveJsPending(parsed.callId, buffer.toString());

@@ -35,6 +35,9 @@ class ChapterListParser {
     required String baseUrl,
     int? maxChapters,
   }) async {
+    if (maxChapters != null && maxChapters <= 0) {
+      return const ChapterListResult(chapters: []);
+    }
     final tocRule = source.ruleToc;
     if (tocRule == null) return const ChapterListResult(chapters: []);
 

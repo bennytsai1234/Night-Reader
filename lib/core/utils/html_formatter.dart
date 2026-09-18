@@ -1,7 +1,5 @@
-import 'network_utils.dart';
-
 /// HtmlFormatter - HTML 內容清理工具 (原 Android utils/HtmlFormatter.kt)
-/// 用於將 HTML 轉為閱讀器友好的純文字或保留圖片的文字
+/// 用於將 HTML 轉為閱讀器友好的純文字。
 class HtmlFormatter {
   HtmlFormatter._();
 
@@ -15,26 +13,8 @@ class HtmlFormatter {
     caseSensitive: false,
   );
   static final RegExp commentRegex = RegExp(r'<!--[^>]*-->');
-  static final RegExp notImgHtmlRegex = RegExp(
-    r'</?(?!img)[a-zA-Z]+(?=[ >])[^<>]*>',
-    caseSensitive: false,
-  );
   static final RegExp otherHtmlRegex = RegExp(
     r'</?[a-zA-Z]+(?=[ >])[^<>]*>',
-    caseSensitive: false,
-  );
-
-  static final RegExp formatImagePattern = RegExp(
-    r"<img[^>]*\ssrc\s*=\s*['"
-    r'"]([^'
-    r'"{>]*\{([^{}]|\{[^}>]+\})+\})['
-    r'"][^>]*>|<img[^>]*\s(?:data-src|src)\s*=\s*['
-    r'"]([^'
-    r'"]+)['
-    r'"][^>]*>|<img[^>]*\sdata-[^=>]*=\s*['
-    r'"]([^'
-    r'"]*)['
-    r'"][^>]*>',
     caseSensitive: false,
   );
 
@@ -50,6 +30,7 @@ class HtmlFormatter {
     return html
         .replaceAll(nbspRegex, ' ')
         .replaceAll(espRegex, ' ')
+        .replaceAll('\u00A0', ' ')
         .replaceAll(noPrintRegex, '')
         .replaceAll(wrapHtmlRegex, '\n')
         .replaceAll(commentRegex, '')
@@ -57,18 +38,5 @@ class HtmlFormatter {
         .replaceAll(indent1Regex, '\n　　')
         .replaceAll(indent2Regex, '　　')
         .replaceAll(lastRegex, '');
-  }
-
-  /// 格式化 HTML 並保留圖片標籤
-  static String formatKeepImg(String? html, {String? baseUrl}) {
-    if (html == null) return '';
-    final keepImgHtml = format(html, otherRegex: notImgHtmlRegex);
-
-    // 目前簡易處理圖片連結補全
-    return keepImgHtml.replaceAllMapped(formatImagePattern, (match) {
-      final src = match.group(1) ?? match.group(3) ?? match.group(4) ?? '';
-      final absoluteSrc = NetworkUtils.getAbsoluteURL(baseUrl, src);
-      return '<img src="$absoluteSrc">';
-    });
   }
 }

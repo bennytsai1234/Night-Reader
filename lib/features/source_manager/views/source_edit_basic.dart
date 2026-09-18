@@ -15,13 +15,14 @@ class SourceEditBasic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         _buildField(controllers['name']!, '書源名稱', '例如: 筆趣閣'),
         _buildField(controllers['url']!, '書源網址', '例如: https://example.com'),
         _buildField(controllers['icon']!, '書源圖示', 'URL 或 Base64'),
         _buildField(controllers['group']!, '書源分組', '多個分組用逗號分隔'),
         _buildField(controllers['comment']!, '備註', '自定義備註資訊', maxLines: 3),
+        _buildField(controllers['loginUrl']!, '登入網址', 'URL 或 @js: 登入腳本'),
         _buildField(
           controllers['header']!,
           '自定義 Header',
@@ -39,14 +40,14 @@ class SourceEditBasic extends StatelessWidget {
     int maxLines = 1,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          border: const OutlineInputBorder(),
+          border: const OutlineInputBorder(borderRadius: AppRadius.cardMd),
         ),
       ),
     );

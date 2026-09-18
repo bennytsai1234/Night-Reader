@@ -20,10 +20,6 @@ final class AdmissionController extends ChangeNotifier {
   final Map<int, int> _chapterBlockCounts = <int, int>{};
   LayoutEpoch _epoch = LayoutEpoch.initial;
   int _chapterCount = 0;
-  bool _initializing = true;
-  double? _visibleTop;
-  double? _visibleBottom;
-  double _cacheExtent = 0;
   double _latestForwardLead = double.infinity;
   double _latestBackwardLead = double.infinity;
   bool _notifyScheduled = false;
@@ -50,28 +46,25 @@ final class AdmissionController extends ChangeNotifier {
         null;
   }
 
-  bool get needsForwardFriction =>
-      !atForwardBookBoundary && _latestForwardLead < guaranteedWindow;
-
-  bool get needsBackwardFriction =>
-      !atBackwardBookBoundary && _latestBackwardLead < backwardGuaranteedWindow;
-
-  bool get hasLeadDeficit => needsForwardFriction || needsBackwardFriction;
-
   void reset({required LayoutEpoch epoch, required int chapterCount}) {
     _epoch = epoch;
     _chapterCount = chapterCount;
     _pending.clear();
     _chapterBlockCounts.clear();
-    _initializing = true;
-    _visibleTop = null;
-    _visibleBottom = null;
-    _cacheExtent = 0;
+    _latestForwardLead = double.infinity;
+    _latestBackwardLead = double.infinity;
   }
 
   void registerChapter(ChapterBlocks blocks) {
     _chapterBlockCounts[blocks.chapterIndex] = blocks.blocks.length;
     _flushPending();
+  }
+
+  /// Revoke a chapter's shape only for semantic invalidation or explicit
+  /// document replacement. Raw cache eviction does not revoke active geometry.
+  void invalidateChapter(int chapterIndex) {
+    _chapterBlockCounts.remove(chapterIndex);
+    _pending.removeWhere((key, _) => key.chapterIndex == chapterIndex);
   }
 
   void attach(Stream<BlockReady> completed) {
@@ -81,63 +74,24 @@ final class AdmissionController extends ChangeNotifier {
 
   void offer(BlockReady ready) {
     if (ready.epoch != _epoch) return;
-    if (documentIndex.metricsFor(ready.key) != null) return;
+    final existing = documentIndex.metricsFor(ready.key);
+    if (existing != null) {
+      // Paragraph 可能因 LRU、換色或重建而再次量測。若幾何真的改變，不能
+      // 只替換 Paragraph 卻保留舊 extent，否則下一個 block 仍會從舊座標
+      // 開始而造成重疊／裁字。DocumentIndex 會重建 Fenwick 座標並通知
+      // sliver relayout；相同 metrics 則零成本返回。
+      if (existing != ready.metrics) {
+        documentIndex.admit(ready.key, ready.metrics);
+        _scheduleNotify();
+      }
+      return;
+    }
     _pending[ready.key] = ready.metrics;
     _flushPending();
   }
 
-  void activateViewport({
-    required double visibleTop,
-    required double visibleBottom,
-    required double cacheExtent,
-  }) {
-    _initializing = false;
-    updateViewport(
-      visibleTop: visibleTop,
-      visibleBottom: visibleBottom,
-      cacheExtent: cacheExtent,
-    );
-  }
-
-  void updateViewport({
-    required double visibleTop,
-    required double visibleBottom,
-    required double cacheExtent,
-  }) {
-    _visibleTop = visibleTop;
-    _visibleBottom = visibleBottom;
-    _cacheExtent = cacheExtent;
-    _flushPending();
-  }
-
-  bool canAdmitOutsideVisible({
-    required BlockKey key,
-    required double visibleTop,
-    required double visibleBottom,
-    required double cacheExtent,
-  }) {
-    final beforeCenter = key < documentIndex.centerKey;
-    final height = _pending[key]?.height ?? 0;
-    final double top;
-    final double bottom;
-    if (beforeCenter) {
-      bottom = -documentIndex.beforeExtent;
-      top = bottom - height;
-    } else {
-      top = documentIndex.afterExtent;
-      bottom = top + height;
-    }
-    final safeTop = visibleTop - cacheExtent;
-    final safeBottom = visibleBottom + cacheExtent;
-    final outside = bottom <= safeTop || top >= safeBottom;
-    assert(
-      outside,
-      'I2: admitted block must enter outside visible+cacheExtent.',
-    );
-    return outside;
-  }
-
   void _flushPending() {
+    if (_pending.isEmpty) return;
     var changed = false;
     while (true) {
       var admittedThisRound = false;
@@ -172,30 +126,32 @@ final class AdmissionController extends ChangeNotifier {
   bool _admitIfReady(BlockKey key) {
     final metrics = _pending[key];
     if (metrics == null) return false;
-    if (!_initializing) {
-      final visibleTop = _visibleTop;
-      final visibleBottom = _visibleBottom;
-      if (visibleTop == null || visibleBottom == null) return false;
-      if (!canAdmitOutsideVisible(
-        key: key,
-        visibleTop: visibleTop,
-        visibleBottom: visibleBottom,
-        cacheExtent: _cacheExtent,
-      )) {
-        return false;
-      }
-    }
+    Map<BlockKey, double>? previousTops;
+    assert(() {
+      previousTops = <BlockKey, double>{
+        for (final existingKey in documentIndex.keys)
+          existingKey: documentIndex.topOf(existingKey)!,
+      };
+      return true;
+    }());
     _pending.remove(key);
     documentIndex.admit(key, metrics);
+    assert(() {
+      final tops = previousTops;
+      if (tops == null) return true;
+      for (final entry in tops.entries) {
+        final currentTop = documentIndex.topOf(entry.key);
+        if (currentTop == null || (currentTop - entry.value).abs() > 0.000001) {
+          return false;
+        }
+      }
+      return true;
+    }(), 'I3: admitting an exact edge block moved existing coordinates.');
     return true;
   }
 
   BlockKey? _nextForwardKey() {
-    final center = documentIndex.centerKey;
-    BlockKey edge = center;
-    for (final key in documentIndex.keys) {
-      if (key >= center && key > edge) edge = key;
-    }
+    final edge = documentIndex.forwardEdgeKey ?? documentIndex.centerKey;
     final count = _chapterBlockCounts[edge.chapterIndex];
     if (count == null) return null;
     if (edge.blockIndex + 1 < count) {
@@ -213,11 +169,7 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   BlockKey? _nextBackwardKey() {
-    final center = documentIndex.centerKey;
-    BlockKey edge = center;
-    for (final key in documentIndex.keys) {
-      if (key < edge) edge = key;
-    }
+    final edge = documentIndex.backwardEdgeKey ?? documentIndex.centerKey;
     if (edge.blockIndex > 0) {
       return BlockKey(
         chapterIndex: edge.chapterIndex,
@@ -236,11 +188,6 @@ final class AdmissionController extends ChangeNotifier {
   }) {
     _latestForwardLead = documentIndex.afterExtent - viewportBottom;
     _latestBackwardLead = documentIndex.beforeExtent + viewportTop;
-    assert(
-      (atForwardBookBoundary || _latestForwardLead >= 0) &&
-          (atBackwardBookBoundary || _latestBackwardLead >= 0),
-      'I5: an admitted boundary became physically reachable.',
-    );
   }
 
   @override

@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+
 import 'app_permission_service.dart';
 import 'audio_handler.dart';
+import 'tts_speech_coordinator.dart';
 
 /// TTSService - 系統 TTS 朗讀服務（單例）
 /// 對應 Android TTSReadAloudService.kt
@@ -21,12 +24,14 @@ class TTSService extends ChangeNotifier {
   factory TTSService() => _instance;
 
   bool _isInitialized = false;
+  Future<void>? _initializationFuture;
   bool _notificationPermissionChecked = false;
 
   /// nullable：init() 失敗時不崩潰，只是缺少系統通知欄控制
   ReaderAudioHandler? _audioHandler;
   final FlutterTts _flutterTts = FlutterTts();
   final AppPermissionService _permissionService = AppPermissionService();
+  final TtsSpeechCoordinator _speechCoordinator = TtsSpeechCoordinator();
 
   bool _isPlaying = false;
   double _pitch = 1.0;
@@ -63,13 +68,33 @@ class TTSService extends ChangeNotifier {
 
   TTSService._internal();
 
-  /// 必須在 main.dart 的 runApp 之前呼叫
-  Future<void> init() async {
-    if (_isInitialized) return;
+  /// 啟動後初始化 TTS；不得讓可選的 TTS 能力阻塞 App 首畫面。
+  Future<void> init() {
+    if (_isInitialized) return Future<void>.value();
+    final pending = _initializationFuture;
+    if (pending != null) return pending;
 
-    await _ensureAudioHandler();
-    await _initTts();
-    _isInitialized = true;
+    final future = _initialize();
+    _initializationFuture = future;
+    return future;
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _ensureAudioHandler();
+      await _initTts();
+      _isInitialized = true;
+    } catch (e, stackTrace) {
+      // Android 沒有可用 TTS engine 或 platform channel 異常時，
+      // 朗讀功能降級，但書架與閱讀器仍可正常啟動。
+      AppLog.e(
+        'TTSService initialization failed; TTS is unavailable: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _initializationFuture = null;
+    }
   }
 
   Future<void> _ensureAudioHandler() async {
@@ -150,12 +175,11 @@ class TTSService extends ChangeNotifier {
 
     _languages = await _flutterTts.getLanguages;
     // 優先繁中 → 簡中 → 第一個可用語言
-    _language =
-        _languages.contains('zh-TW')
-            ? 'zh-TW'
-            : _languages.contains('zh-CN')
-            ? 'zh-CN'
-            : (_languages.isNotEmpty ? _languages.first.toString() : 'zh-CN');
+    _language = _languages.contains('zh-TW')
+        ? 'zh-TW'
+        : _languages.contains('zh-CN')
+        ? 'zh-CN'
+        : (_languages.isNotEmpty ? _languages.first.toString() : 'zh-CN');
 
     await _flutterTts.setLanguage(_language!);
     await _flutterTts.setSpeechRate(_rate);
@@ -179,27 +203,46 @@ class TTSService extends ChangeNotifier {
 
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
-    if (!_notificationPermissionChecked) {
-      _notificationPermissionChecked = true;
-      await _permissionService.requestNotificationForTts();
-      await _ensureAudioHandler();
-    }
-    _resumeOffset = 0;
-    currentSpokenText = text;
-    // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
-    currentWordStart = -1;
-    currentWordEnd = -1;
-    _isPlaying = true;
-    _audioHandler?.setPlaying(true);
-    notifyListeners();
-    await _flutterTts.speak(text);
+    await _speechCoordinator.speak(
+      prepare: () async {
+        await init();
+        if (!_isInitialized) return false;
+        if (!_notificationPermissionChecked) {
+          _notificationPermissionChecked = true;
+          await _permissionService.requestNotificationForTts();
+          await _ensureAudioHandler();
+        }
+        return _isInitialized;
+      },
+      speak: () async {
+        _resumeOffset = 0;
+        currentSpokenText = text;
+        // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
+        currentWordStart = -1;
+        currentWordEnd = -1;
+        _isPlaying = true;
+        _audioHandler?.setPlaying(true);
+        notifyListeners();
+        await _flutterTts.speak(text);
+      },
+    );
   }
 
   Future<void> stop() async {
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _remainingMinutes = 0;
-    await _flutterTts.stop();
+    await _speechCoordinator.stop(
+      stop: () async {
+        try {
+          // 保留 stop() 的 platform call 契約；沒有可用 TTS engine 時，
+          // 只記錄降級，不讓清理動作冒出未處理例外。
+          await _flutterTts.stop();
+        } catch (e) {
+          AppLog.e('TTSService: stop failed while TTS is unavailable: $e');
+        }
+      },
+    );
     currentSpokenText = '';
     currentWordStart = -1;
     currentWordEnd = -1;
@@ -210,6 +253,8 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> pause() async {
+    await init();
+    if (!_isInitialized) return;
     await _flutterTts.pause();
     _isPlaying = false;
     _audioHandler?.setPlaying(false);
@@ -217,6 +262,8 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> resume() async {
+    await init();
+    if (!_isInitialized) return;
     if (currentSpokenText.isNotEmpty) {
       // 從暫停位置繼續，而非從段落開頭重播
       // 注意：currentWordStart 已包含 _resumeOffset，需還原為原始文本位置
@@ -238,69 +285,130 @@ class TTSService extends ChangeNotifier {
 
   void setSleepTimer(int minutes) {
     _sleepTimer?.cancel();
-    _remainingMinutes = minutes;
-    if (minutes > 0) {
+    _sleepTimer = null;
+    _remainingMinutes = minutes > 0 ? minutes : 0;
+    if (_remainingMinutes > 0) {
       _sleepTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-        if (_remainingMinutes > 0) {
-          _remainingMinutes--;
-          notifyListeners();
-        } else {
-          stop();
+        _remainingMinutes--;
+        if (_remainingMinutes <= 0) {
+          _remainingMinutes = 0;
           timer.cancel();
+          notifyListeners();
+          unawaited(stop());
+          return;
         }
+        notifyListeners();
       });
     }
     notifyListeners();
   }
 
   Future<void> setLanguage(String lang) async {
-    _language = lang;
-    await _flutterTts.setLanguage(lang);
+    final normalized = lang.trim();
+    if (normalized.isEmpty) return;
+
+    await init();
+    if (!_isInitialized) return;
+    await _flutterTts.setLanguage(normalized);
+    _language = normalized;
+    _voices = await _fetchVoices();
+
+    final selectedVoice = _selectedVoice;
+    if (selectedVoice != null) {
+      final matched = _findVoiceByKey(voiceKeyOf(selectedVoice));
+      if (matched == null) {
+        _selectedVoice = null;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(PreferKey.ttsVoice);
+      } else {
+        try {
+          await _applyVoice(matched);
+          _selectedVoice = matched;
+        } catch (e) {
+          _selectedVoice = null;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(PreferKey.ttsVoice);
+          AppLog.e(
+            'TTSService: reapply voice after language change failed: $e',
+          );
+        }
+      }
+    }
     notifyListeners();
   }
 
   Future<void> setPitch(double pitch) async {
     _pitch = pitch;
+    await init();
+    if (!_isInitialized) return;
     await _flutterTts.setPitch(pitch);
     notifyListeners();
   }
 
   Future<void> setRate(double rate) async {
     _rate = rate;
+    await init();
+    if (!_isInitialized) return;
     await _flutterTts.setSpeechRate(rate);
     notifyListeners();
   }
 
   Future<void> setVolume(double volume) async {
     _volume = volume;
+    await init();
+    if (!_isInitialized) return;
     await _flutterTts.setVolume(volume);
     notifyListeners();
   }
 
   Future<void> setEngine(String? engine) async {
+    await init();
+    if (!_isInitialized) return;
     final prefs = await SharedPreferences.getInstance();
     final normalized = engine?.trim() ?? '';
-    if (normalized.isEmpty) {
-      _selectedEngine = null;
-      await prefs.remove(PreferKey.ttsEngine);
-    } else {
-      await _flutterTts.setEngine(normalized);
-      _selectedEngine = normalized;
-      await prefs.setString(PreferKey.ttsEngine, normalized);
+    try {
+      final targetEngine = normalized.isEmpty
+          ? await _fetchDefaultEngine()
+          : normalized;
+      if (targetEngine != null && targetEngine.isNotEmpty) {
+        await _flutterTts.setEngine(targetEngine);
+        await _applyCurrentTtsSettings();
+      }
+
+      if (normalized.isEmpty) {
+        _selectedEngine = null;
+        await prefs.remove(PreferKey.ttsEngine);
+      } else {
+        _selectedEngine = normalized;
+        await prefs.setString(PreferKey.ttsEngine, normalized);
+      }
+      _selectedVoice = null;
+      await prefs.remove(PreferKey.ttsVoice);
+      _voices = await _fetchVoices();
+      notifyListeners();
+    } catch (e) {
+      notifyListeners();
+      AppLog.e('TTSService: set engine failed: $e', error: e);
+      rethrow;
     }
-    _selectedVoice = null;
-    await prefs.remove(PreferKey.ttsVoice);
-    _voices = await _fetchVoices();
-    notifyListeners();
   }
 
   Future<void> setVoiceByKey(String? voiceKey) async {
+    await init();
+    if (!_isInitialized) return;
     final prefs = await SharedPreferences.getInstance();
     if (voiceKey == null || voiceKey.isEmpty) {
-      _selectedVoice = null;
       try {
-        await _flutterTts.clearVoice();
-      } catch (_) {}
+        final result = await _flutterTts.clearVoice();
+        if (!_isSuccessfulTtsResult(result)) {
+          throw StateError('系統未接受系統預設音色');
+        }
+      } catch (e) {
+        notifyListeners();
+        AppLog.e('TTSService: clear voice failed: $e', error: e);
+        rethrow;
+      }
+      _selectedVoice = null;
       await prefs.remove(PreferKey.ttsVoice);
       notifyListeners();
       return;
@@ -312,10 +420,34 @@ class TTSService extends ChangeNotifier {
     );
     if (matched == null) return;
 
-    await _flutterTts.setVoice(matched);
+    try {
+      await _applyVoice(matched);
+    } catch (e) {
+      notifyListeners();
+      AppLog.e('TTSService: set voice failed: $e', error: e);
+      rethrow;
+    }
     _selectedVoice = matched;
     await prefs.setString(PreferKey.ttsVoice, jsonEncode(matched));
     notifyListeners();
+  }
+
+  Map<String, String>? _findVoiceByKey(String voiceKey) {
+    return _voices.cast<Map<String, String>?>().firstWhere(
+      (voice) => voice != null && voiceKeyOf(voice) == voiceKey,
+      orElse: () => null,
+    );
+  }
+
+  Future<void> _applyVoice(Map<String, String> voice) async {
+    final result = await _flutterTts.setVoice(voice);
+    if (!_isSuccessfulTtsResult(result)) {
+      throw StateError('系統未接受音色：${voiceLabelOf(voice)}');
+    }
+  }
+
+  static bool _isSuccessfulTtsResult(dynamic result) {
+    return !((result is num && result <= 0) || (result is bool && !result));
   }
 
   String voiceKeyOf(Map<String, String> voice) {
@@ -348,6 +480,7 @@ class TTSService extends ChangeNotifier {
     if (savedEngine.isNotEmpty && _engines.contains(savedEngine)) {
       try {
         await _flutterTts.setEngine(savedEngine);
+        await _applyCurrentTtsSettings();
         _selectedEngine = savedEngine;
       } catch (e) {
         AppLog.e('TTSService: set saved engine failed: $e', error: e);
@@ -370,8 +503,12 @@ class TTSService extends ChangeNotifier {
             orElse: () => null,
           );
           if (matched != null) {
-            await _flutterTts.setVoice(matched);
-            _selectedVoice = matched;
+            try {
+              await _applyVoice(matched);
+              _selectedVoice = matched;
+            } catch (e) {
+              AppLog.e('TTSService: restore saved voice failed: $e', error: e);
+            }
           }
         }
       } catch (e) {
@@ -394,11 +531,31 @@ class TTSService extends ChangeNotifier {
     return const <String>[];
   }
 
+  Future<String?> _fetchDefaultEngine() async {
+    try {
+      final raw = await _flutterTts.getDefaultEngine;
+      final engine = raw?.toString().trim() ?? '';
+      return engine.isEmpty ? null : engine;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _applyCurrentTtsSettings() async {
+    final language = _language?.trim();
+    if (language != null && language.isNotEmpty) {
+      await _flutterTts.setLanguage(language);
+    }
+    await _flutterTts.setSpeechRate(_rate);
+    await _flutterTts.setPitch(_pitch);
+    await _flutterTts.setVolume(_volume);
+  }
+
   Future<List<Map<String, String>>> _fetchVoices() async {
     try {
       final raw = await _flutterTts.getVoices;
       if (raw is List) {
-        return raw
+        final voices = raw
             .whereType<Map>()
             .map(
               (voice) => voice.map(
@@ -406,8 +563,49 @@ class TTSService extends ChangeNotifier {
               ),
             )
             .toList(growable: false);
+        final usableVoices = voices
+            .where(TTSService.isUsableVoice)
+            .toList(growable: false);
+        final language = _language;
+        if (language == null || language.trim().isEmpty) {
+          return usableVoices;
+        }
+        final languageVoices = usableVoices
+            .where((voice) => TTSService.voiceMatchesLanguage(voice, language))
+            .toList(growable: false);
+        return languageVoices.isNotEmpty ? languageVoices : usableVoices;
       }
     } catch (_) {}
     return const <Map<String, String>>[];
+  }
+
+  @visibleForTesting
+  static bool isUsableVoice(Map<String, String> voice) {
+    final networkRequired = voice['network_required']?.trim().toLowerCase();
+    if (networkRequired == '1' || networkRequired == 'true') return false;
+
+    final features =
+        voice['features']
+            ?.split(RegExp(r'[\t, ]+'))
+            .map((feature) => feature.trim().toLowerCase())
+            .where((feature) => feature.isNotEmpty) ??
+        const <String>[];
+    return !features.contains('notinstalled');
+  }
+
+  @visibleForTesting
+  static bool voiceMatchesLanguage(Map<String, String> voice, String language) {
+    final target = _normalizeLocale(language);
+    final locale = _normalizeLocale(voice['locale'] ?? '');
+    if (target.isEmpty || locale.isEmpty) return true;
+
+    final targetLanguage = target.split('-').first;
+    return locale == target ||
+        locale == targetLanguage ||
+        locale.startsWith('$targetLanguage-');
+  }
+
+  static String _normalizeLocale(String value) {
+    return value.trim().replaceAll('_', '-').toLowerCase();
   }
 }

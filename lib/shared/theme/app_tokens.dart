@@ -7,10 +7,16 @@ class AppPalette {
   // Pigments
   static const Color cinnabar = Color(0xFF7E2E2A); // primary light
   static const Color cinnabarDark = Color(0xFFD67B6E); // primary dark
-  static const Color tea = Color(0xFF8A6F3A); // warning
-  static const Color azurite = Color(0xFF4B6E8C); // info / success
-  static const Color rust = Color(0xFFB0463A); // danger
+  static const Color tea = Color(0xFF8A6F3A); // warning light
+  static const Color teaDark = Color(0xFFC7A867); // warning dark
+  static const Color azurite = Color(0xFF4B6E8C); // info light
+  static const Color azuriteDark = Color(0xFF8FB0C9); // info dark
+  static const Color rust = Color(0xFFB0463A); // danger light
+  static const Color rustDark = Color(0xFFD98B7E); // danger dark
+  static const Color moss = Color(0xFF5F7355); // success light
+  static const Color mossDark = Color(0xFF9DB38F); // success dark
   static const Color gold = Color(0xFFB6914A); // highlight
+  static const Color aubergine = Color(0xFF6B5570); // cover pigment
 
   // Paper (Light mode surfaces)
   static const Color paper50  = Color(0xFFFFFBF2);
@@ -29,14 +35,6 @@ class AppPalette {
   static const Color ink600 = Color(0xFF1A1612);
   static const Color ink700 = Color(0xFF100D0A);
   static const Color ink900 = Color(0xFF060403);
-
-  // Legacy mappings for incremental migration
-  static const Color dangerLight  = Color(0xFFEF4444);
-  static const Color warningLight = Color(0xFFF59E0B);
-  static const Color successLight = Color(0xFF10B981);
-  static const Color dangerDark  = Color(0xFFF87171);
-  static const Color warningDark = Color(0xFFFBBF24);
-  static const Color successDark = Color(0xFF34D399);
 }
 
 /// Spacing scale (logical pixels).

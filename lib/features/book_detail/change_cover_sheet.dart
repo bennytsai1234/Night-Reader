@@ -52,15 +52,24 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
         return;
       }
       final image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image != null && mounted) {
-        context.read<BookDetailProvider>().updateCover('file://${image.path}');
+      if (image == null || !mounted) return;
+      final outcome = await context
+          .read<BookDetailProvider>()
+          .updateCover('file://${image.path}');
+      if (!mounted) return;
+      if (outcome.success) {
         Navigator.pop(context);
+        return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(outcome.message)));
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('選取圖片失敗: $e')));
+      }
     }
   }
 
@@ -69,8 +78,8 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: AppRadius.topSheetXl,
       ),
       child: Column(
@@ -102,8 +111,12 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
   Widget _buildCoverGrid() {
     return Consumer<ChangeCoverProvider>(
       builder: (context, provider, child) {
-        if (provider.covers.isEmpty && !provider.isSearching)
+        if (!provider.isInitialized) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (provider.covers.isEmpty && !provider.isSearching) {
           return const Center(child: Text('未找到相關封面'));
+        }
         return GridView.builder(
           padding: const EdgeInsets.only(top: AppSpacing.lg),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

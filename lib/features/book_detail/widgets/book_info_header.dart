@@ -6,12 +6,13 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.da
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
+
 import '../book_detail_provider.dart';
 
 class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
-  final Function(BuildContext, String) showPhotoView;
+  final Function(BuildContext, String, String) showPhotoView;
   final VoidCallback onEdit;
   final Function(BuildContext, Book) showSourceOptions;
   final void Function(BuildContext, Book, ReaderV2OpenTarget, List<BookChapter>)
@@ -40,48 +41,65 @@ class BookInfoHeader extends StatelessWidget {
         EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
       ),
       textStyle: WidgetStatePropertyAll(
-        Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+        Theme.of(context).textTheme.labelLarge
+            ?.copyWith(fontWeight: FontWeight.w600),
       ),
       shape: WidgetStatePropertyAll(
         RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
       ),
     );
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
             onLongPress: () {
               if (coverUrl != null && coverUrl.isNotEmpty) {
-                showPhotoView(context, coverUrl);
+                showPhotoView(
+                  context,
+                  coverUrl,
+                  BookCoverWidget.heroTag(book.bookUrl),
+                );
               }
             },
             child: Hero(
-              tag: 'book_cover',
+              tag: BookCoverWidget.heroTag(book.bookUrl),
               child: BookCoverWidget(
                 coverUrl: coverUrl,
                 bookName: book.name,
                 author: book.author,
                 width: 100,
                 height: 140,
-                borderRadius: AppRadius.cardXs,
+                borderRadius: AppRadius.cardMd,
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.lg),
+          const SizedBox(width: 12),
           Expanded(
-            child: GestureDetector(
-              onTap: onEdit,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(book.name, style: AppTextStyles.titleMd),
-                  const SizedBox(height: 8),
-                  Text('作者：${book.author}', style: AppTextStyles.bodyMd),
-                  const SizedBox(height: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(book.name, style: AppTextStyles.titleMd),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: '編輯書籍資訊',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text('作者：${book.author}', style: AppTextStyles.bodyMd),
+                const SizedBox(height: AppSpacing.xs),
+                if (book.isLocal)
+                  Text('來源：${book.originName}', style: AppTextStyles.bodySm)
+                else
                   GestureDetector(
                     onTap: () => showSourceOptions(context, book),
                     child: Text(
@@ -92,23 +110,22 @@ class BookInfoHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _SourceStatusChip(provider: provider),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed:
-                              () => navigateToReader(
-                                context,
-                                book,
-                                ReaderV2OpenTarget.resume(book),
-                                provider.allChapters,
-                              ),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _SourceStatusChip(provider: provider),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: provider.isInBookshelf
+                      ? FilledButton.icon(
+                          onPressed: () => navigateToReader(
+                            context,
+                            book,
+                            ReaderV2OpenTarget.resume(book),
+                            provider.allChapters,
+                          ),
                           style: actionButtonStyle,
                           icon: const Icon(Icons.menu_book_rounded, size: 18),
                           label: Text(
@@ -116,38 +133,23 @@ class BookInfoHeader extends StatelessWidget {
                                 ? '開始閱讀'
                                 : '繼續閱讀',
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                        )
+                      : FilledButton.icon(
                           onPressed: () => toggleBookshelf(context, provider),
                           style: actionButtonStyle,
-                          icon: Icon(
-                            provider.isInBookshelf
-                                ? Icons.library_add_check
-                                : Icons.library_add,
-                            size: 18,
-                          ),
-                          label: Text(provider.isInBookshelf ? '移出書架' : '放入書架'),
+                          icon: const Icon(Icons.library_add, size: 18),
+                          label: const Text('加入書架'),
                         ),
-                      ),
-                    ],
-                  ),
+                ),
+                if (!book.isLocal)
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 4,
-                      children: [
-                        TextButton(
-                          onPressed: () => showChangeSource(context, provider),
-                          child: const Text('換源', style: AppTextStyles.labelSm),
-                        ),
-                      ],
+                    child: TextButton(
+                      onPressed: () => showChangeSource(context, provider),
+                      child: const Text('換源', style: AppTextStyles.labelSm),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           ),
         ],

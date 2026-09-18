@@ -22,6 +22,7 @@ class SelectActionBar extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onCheckSource;
   final VoidCallback onDelete;
+  final bool externallyBusy;
 
   const SelectActionBar({
     super.key,
@@ -39,6 +40,7 @@ class SelectActionBar extends StatelessWidget {
     required this.onShare,
     required this.onCheckSource,
     required this.onDelete,
+    this.externallyBusy = false,
   });
 
   @override
@@ -46,12 +48,23 @@ class SelectActionBar extends StatelessWidget {
     final theme = Theme.of(context);
     final selectCount = provider.selectedUrls.length;
     final allCount = provider.sources.length;
+    final visibleSelectedCount =
+        provider.sources
+            .where(
+              (source) => provider.selectedUrls.contains(source.bookSourceUrl),
+            )
+            .length;
+    final hiddenSelectedCount = selectCount - visibleSelectedCount;
     final hasSelection = selectCount > 0;
-    final allSelected = selectCount >= allCount && allCount > 0;
+    final isBusy = provider.isMutationBusy || externallyBusy;
+    final actionsEnabled = hasSelection && !isBusy;
+    final allSelected = visibleSelectedCount == allCount && allCount > 0;
     final selectionLabel =
-        allSelected
-            ? '取消全選 ($selectCount/$allCount)'
-            : '全選 ($selectCount/$allCount)';
+        allCount == 0 && hasSelection
+            ? '已選 $selectCount 個（目前篩選無項目）'
+            : '${allSelected ? '取消全選' : '全選'} '
+                '($visibleSelectedCount/$allCount)'
+                '${hiddenSelectedCount > 0 ? '，另選 $hiddenSelectedCount 個' : ''}';
 
     return Container(
       decoration: BoxDecoration(
@@ -72,7 +85,7 @@ class SelectActionBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: () => provider.selectAll(),
+                    onTap: allCount > 0 && !isBusy ? provider.selectAll : null,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.md,
@@ -108,7 +121,9 @@ class SelectActionBar extends StatelessWidget {
                 // 反選
                 TextButton(
                   onPressed:
-                      allCount > 0 ? () => provider.revertSelection() : null,
+                      allCount > 0 && !isBusy
+                          ? () => provider.revertSelection()
+                          : null,
                   child: const Text('反選', style: AppTextStyles.bodyXs),
                 ),
               ],
@@ -117,12 +132,12 @@ class SelectActionBar extends StatelessWidget {
 
           // 刪除 (主操作)
           TextButton(
-            onPressed: hasSelection ? onDelete : null,
+            onPressed: actionsEnabled ? onDelete : null,
             child: Text(
               '刪除',
               style: AppTextStyles.bodyXs.copyWith(
                 color:
-                    hasSelection
+                    actionsEnabled
                         ? theme.colorScheme.error
                         : theme.colorScheme.onSurfaceVariant,
               ),
@@ -133,9 +148,10 @@ class SelectActionBar extends StatelessWidget {
           PopupMenuButton<String>(
             icon: Icon(
               Icons.more_vert,
-              color: hasSelection ? null : theme.colorScheme.onSurfaceVariant,
+              color: actionsEnabled ? null : theme.colorScheme.onSurfaceVariant,
             ),
-            enabled: hasSelection,
+            tooltip: isBusy ? '操作進行中' : '更多批次操作',
+            enabled: actionsEnabled,
             onSelected: _onMenuSelected,
             itemBuilder:
                 (context) => [

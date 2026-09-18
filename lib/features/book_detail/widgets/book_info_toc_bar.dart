@@ -19,7 +19,7 @@ class BookInfoTocBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = provider.filteredChapters.length;
     final total = provider.totalChapterCount;
-    final isSearching = count != total;
+    final isSearching = provider.hasActiveTocSearch;
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(
@@ -30,9 +30,15 @@ class BookInfoTocBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              isSearching ? '搜尋結果 ($count/$total 章)' : '目錄 (共 $total 章)',
-              style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold),
+            Expanded(
+              child: Text(
+                isSearching ? '搜尋結果 ($count/$total 章)' : '目錄 (共 $total 章)',
+                style: AppTextStyles.bodyMd.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             Row(
               children: [
@@ -41,6 +47,12 @@ class BookInfoTocBar extends StatelessWidget {
                   onPressed: onSearch,
                   tooltip: '搜尋目錄',
                 ),
+                if (isSearching)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 22),
+                    onPressed: provider.clearTocSearch,
+                    tooltip: '清除目錄搜尋',
+                  ),
                 IconButton(
                   icon: const Icon(Icons.my_location, size: 22),
                   onPressed: onLocateCurrent,

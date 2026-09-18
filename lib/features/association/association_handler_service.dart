@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:app_links/app_links.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+
 import 'handlers/association_base.dart';
 import 'handlers/uri_association_handler.dart';
 import 'handlers/file_association_handler.dart';
@@ -41,29 +42,54 @@ class AssociationHandlerService extends AssociationBase
     sharedMediaSubscription = ReceiveSharingIntent.instance
         .getMediaStream()
         .listen((value) {
-          if (context.mounted)
+          if (context.mounted) {
             handleSharedMedia(
               context,
               value,
               showImportDialog,
-              (ctx, path) => showForceImportDialog(ctx, path, handleSharedBook),
+              showForceImportDialog,
             );
+          }
         }, onError: (err) => AppLog.e('SharingIntent error: $err', error: err));
 
     // Check initial intents
-    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-      if (value.isNotEmpty && context.mounted)
-        handleSharedMedia(
-          context,
-          value,
-          showImportDialog,
-          (ctx, path) => showForceImportDialog(ctx, path, handleSharedBook),
+    // Initial-intent futures are intentionally fire-and-forget because this
+    // lifecycle hook cannot delay the first frame.  They still need explicit
+    // error handlers: a plugin failure here otherwise becomes an uncaught
+    // asynchronous error during startup.
+    ReceiveSharingIntent.instance.getInitialMedia().then(
+      (value) {
+        if (value.isNotEmpty && context.mounted) {
+          handleSharedMedia(
+            context,
+            value,
+            showImportDialog,
+            showForceImportDialog,
+          );
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppLog.e(
+          'Initial sharing intent failed: $error',
+          error: error,
+          stackTrace: stackTrace,
         );
-    });
+      },
+    );
 
-    appLinks.getInitialLink().then((uri) {
-      if (uri != null && context.mounted)
-        handleUri(context, uri, showImportDialog);
-    });
+    appLinks.getInitialLink().then(
+      (uri) {
+        if (uri != null && context.mounted) {
+          handleUri(context, uri, showImportDialog);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        AppLog.e(
+          'Initial deep link failed: $error',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      },
+    );
   }
 }

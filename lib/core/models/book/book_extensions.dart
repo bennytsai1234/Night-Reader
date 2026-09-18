@@ -25,7 +25,6 @@ extension BookExtensions on BookBase {
   bool get isAudio => type == 2; // type 2 = 有聲書 (legacy, audio module removed)
   bool get isImage => (type & BookType.image) != 0;
   bool get isText => (type & BookType.text) != 0;
-  bool get isEpub => bookUrl.toLowerCase().endsWith('.epub');
   bool get isLocal => origin == BookType.localTag || origin.startsWith('loc_');
   bool get isUpdate => lastCheckCount > 0;
 
@@ -71,8 +70,8 @@ extension BookExtensions on BookBase {
   bool getUseReplaceRule() {
     final explicitValue = readConfig?.useReplaceRule;
     if (explicitValue != null) return explicitValue;
-    // 圖片類、音訊類、Epub 本地 預設關閉淨化
-    if (isImage || isAudio || isEpub) return false;
+    // 圖片類、音訊類預設關閉淨化
+    if (isImage || isAudio) return false;
     return AppConfig.replaceEnableDefault;
   }
 

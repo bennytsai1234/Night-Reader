@@ -281,6 +281,18 @@ void main() {
   // ContentParser Tests
   // ───────────────────────────────────────────────────
   group('ContentParser', () {
+    test('returns empty content when the source has no content rule', () async {
+      final source = BookSource(bookSourceUrl: 'https://example.com');
+
+      final result = await ContentParser.parse(
+        source: source,
+        body: '<html><body><p>不應輸出的整頁內容</p></body></html>',
+        baseUrl: 'https://example.com/chapter/1',
+      );
+
+      expect(result.content, isEmpty);
+    });
+
     test('Extracts content from HTML', () async {
       final source = BookSource(
         bookSourceUrl: 'https://example.com',
@@ -304,6 +316,52 @@ void main() {
 
       expect(result.content, contains('This is the chapter content.'));
       expect(result.nextUrls, isEmpty);
+    });
+
+    test('removes image tags from text content', () async {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        ruleContent: ContentRule(content: '#content@html'),
+      );
+
+      const html = '''
+      <html><body>
+        <div id="content">
+          <p>圖片前文字</p>
+          <img src="/images/chapter.jpg">
+          <p>圖片後文字</p>
+        </div>
+      </body></html>
+      ''';
+
+      final result = await ContentParser.parse(
+        source: source,
+        body: html,
+        baseUrl: 'https://example.com/chapter/1',
+      );
+
+      expect(result.content, contains('圖片前文字'));
+      expect(result.content, contains('圖片後文字'));
+      expect(result.content, isNot(contains('<img')));
+      expect(result.content, isNot(contains('chapter.jpg')));
+    });
+
+    test('empty extracted content stays empty after finalization', () async {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        ruleContent: ContentRule(
+          content: '#missing@text',
+          replaceRegex: r'##廣告##',
+        ),
+      );
+
+      final result = await ContentParser.finalizeContent(
+        source: source,
+        contentStr: '',
+        baseUrl: 'https://example.com/chapter/1',
+      );
+
+      expect(result, isEmpty);
     });
 
     test('replaceRegex cleans content', () async {

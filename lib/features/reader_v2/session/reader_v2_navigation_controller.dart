@@ -7,7 +7,6 @@ import 'reader_v2_operation_token.dart';
 import 'reader_v2_page_window.dart';
 import 'reader_v2_resolver.dart';
 import 'reader_v2_runtime.dart';
-import 'reader_v2_state.dart';
 
 class ReaderV2NavigationController {
   final ReaderV2Runtime _runtime;
@@ -29,19 +28,13 @@ class ReaderV2NavigationController {
     _pendingNeighborAdvanceDirection = 0;
   }
 
-  ReaderV2Location? get pendingChapterJumpTarget =>
-      _runtime.pendingChapterJumpTarget;
-
-  void set pendingChapterJumpTarget(ReaderV2Location? value) {
-    _runtime.pendingChapterJumpTarget = value;
-  }
-
   bool moveToNextPage({bool saveSettledProgress = true}) {
     final window = _runtime.state.pageWindow;
     final next = window?.next;
     if (window == null) return false;
     if (next == null) {
       clearPendingNeighborAdvance();
+      emitUserNotice('已到書尾');
       return false;
     }
     if (next.isPlaceholder) {
@@ -49,7 +42,7 @@ class ReaderV2NavigationController {
         _rememberPendingNeighborAdvance(current: window.current, forward: true);
       } else {
         clearPendingNeighborAdvance();
-        _emitUserNotice('下一章載入失敗，請再試一次或返回目錄');
+        emitUserNotice('下一章載入失敗，請再試一次或返回目錄');
       }
       _scheduleMissingNeighborPreload(forward: true);
       return false;
@@ -82,6 +75,7 @@ class ReaderV2NavigationController {
     if (window == null) return false;
     if (prev == null) {
       clearPendingNeighborAdvance();
+      emitUserNotice('已到書首');
       return false;
     }
     if (prev.isPlaceholder) {
@@ -92,7 +86,7 @@ class ReaderV2NavigationController {
         );
       } else {
         clearPendingNeighborAdvance();
-        _emitUserNotice('上一章載入失敗，請再試一次或返回目錄');
+        emitUserNotice('上一章載入失敗，請再試一次或返回目錄');
       }
       _scheduleMissingNeighborPreload(forward: false);
       return false;
@@ -156,14 +150,13 @@ class ReaderV2NavigationController {
     const fastPreloadVelocityMedium = 2600;
     const fastPreloadVelocityHigh = 3600;
     final speed = velocity.abs();
-    final span =
-        speed >= fastPreloadVelocityHigh
-            ? 3
-            : speed >= fastPreloadVelocityMedium
-            ? 2
-            : speed >= fastPreloadVelocityLow
-            ? 1
-            : 0;
+    final span = speed >= fastPreloadVelocityHigh
+        ? 3
+        : speed >= fastPreloadVelocityMedium
+        ? 2
+        : speed >= fastPreloadVelocityLow
+        ? 1
+        : 0;
     if (span <= 0) return Future<void>.value();
     return _runtime.preloadScheduler.scheduleDirectional(
       fromChapterIndex: chapterIndex,
@@ -172,27 +165,8 @@ class ReaderV2NavigationController {
     );
   }
 
-  Future<void> jumpToChapter(int chapterIndex) async {
-    final location = _topAlignedChapterLocation(chapterIndex);
-    _runtime.pendingChapterJumpTarget = location;
-    try {
-      await jumpToLocation(location, immediateSave: false);
-      final normalized = location.normalized(
-        chapterCount: _runtime.repository.chapterCount,
-      );
-      if (_runtime.disposed ||
-          _runtime.state.phase != ReaderV2Phase.ready ||
-          _runtime.state.visibleLocation != normalized) {
-        return;
-      }
-      await _runtime.viewportBridge.saveProgressLocation(normalized);
-    } finally {
-      // 只清掉自己設定的目標——兩個 jumpToChapter 交錯時，先結束的不可
-      // 把後到者剛設定的 pending target 蓋成 null。
-      if (identical(_runtime.pendingChapterJumpTarget, location)) {
-        _runtime.pendingChapterJumpTarget = null;
-      }
-    }
+  Future<void> jumpToChapter(int chapterIndex) {
+    return jumpToLocation(_topAlignedChapterLocation(chapterIndex));
   }
 
   Future<void> jumpToLocation(
@@ -201,7 +175,8 @@ class ReaderV2NavigationController {
     ReaderV2OperationToken? operationToken,
   }) async {
     clearPendingNeighborAdvance();
-    final token = operationToken ?? _runtime.beginJumpOperation();
+    final token =
+        operationToken ?? _runtime.beginJumpOperation(location: location);
     try {
       final normalized = location.normalized(
         chapterCount: _runtime.repository.chapterCount,
@@ -210,45 +185,63 @@ class ReaderV2NavigationController {
       if (!_isCurrentOperation(token)) return;
       final window = await _windowAroundPage(page);
       if (!_isCurrentOperation(token)) return;
-      final resolvedLocation =
-          _isTopAlignedChapterStart(normalized)
-              ? normalized.copyWith(chapterIndex: page.chapterIndex)
-              : ReaderV2Location(
-                chapterIndex: page.chapterIndex,
-                charOffset:
-                    normalized.charOffset
-                        .clamp(page.startCharOffset, page.endCharOffset)
-                        .toInt(),
-                visualOffsetPx: normalized.visualOffsetPx,
-              );
+      final resolvedLocation = _isTopAlignedChapterStart(normalized)
+          ? normalized.copyWith(chapterIndex: page.chapterIndex)
+          : ReaderV2Location(
+              chapterIndex: page.chapterIndex,
+              charOffset: normalized.charOffset
+                  .clamp(page.startCharOffset, page.endCharOffset)
+                  .toInt(),
+              visualOffsetPx: normalized.visualOffsetPx,
+            );
       _retainLayoutsForWindow(window);
-      _runtime.completeReadyOperation(
+      var visibleLocation = resolvedLocation;
+      final restore = _runtime.viewportBridge.viewportRestore;
+      if (restore != null) {
+        // Navigation owns positioning. Persistence never starts a second
+        // restore after this operation has already announced ready.
+        _runtime.updatePageWindow(window);
+        final positioned = await restore(resolvedLocation);
+        if (!_isCurrentOperation(token)) return;
+        if (!positioned) {
+          _runtime.failOperation(token, StateError('Viewport restore failed.'));
+          return;
+        }
+        if (!_isTopAlignedChapterStart(resolvedLocation)) {
+          visibleLocation =
+              _runtime.viewportBridge.captureVisibleLocation(
+                allowDuringRestore: true,
+              ) ??
+              resolvedLocation;
+        }
+      }
+      if (!_runtime.completeReadyOperation(
         token,
-        visibleLocation: resolvedLocation,
+        visibleLocation: visibleLocation,
         pageWindow: window,
-      );
+      ))
+        return;
       unawaited(
-        _runtime.preloadScheduler.scheduleJump(resolvedLocation.chapterIndex),
+        _runtime.preloadScheduler.scheduleJump(visibleLocation.chapterIndex),
       );
       if (immediateSave) {
-        unawaited(
-          _runtime.viewportBridge.saveJumpAfterSettled(
-            resolvedLocation,
-            token: token,
-          ),
-        );
+        await _runtime.viewportBridge.saveProgressLocation(visibleLocation);
       }
     } catch (e) {
       _runtime.failOperation(token, e);
     }
   }
 
-  Future<bool> restoreFromLocation(ReaderV2Location location) async {
+  Future<bool> restoreFromLocation(
+    ReaderV2Location location, {
+    ReaderV2OperationToken? operationToken,
+  }) async {
     if (_runtime.disposed || _runtime.viewportBridge.viewportRestore == null) {
       return false;
     }
     clearPendingNeighborAdvance();
-    final token = _runtime.beginRestoreOperation();
+    final token =
+        operationToken ?? _runtime.beginRestoreOperation(location: location);
     try {
       await _runtime.repository.ensureChapters();
       final normalized = await _normalizeRestoreLocation(location);
@@ -258,26 +251,28 @@ class ReaderV2NavigationController {
       if (!_isCurrentOperation(token)) return false;
       final restoreTarget = _locationForRestorePage(normalized, page);
       _retainLayoutsForWindow(window);
-      _runtime.completeReadyOperation(token, pageWindow: window);
+      _runtime.updatePageWindow(window);
       final restore = _runtime.viewportBridge.viewportRestore;
       if (restore == null) return false;
       final positioned = await restore(restoreTarget);
-      if (!positioned || !_isCurrentOperation(token)) {
+      if (!_isCurrentOperation(token)) return false;
+      if (!positioned) {
+        _runtime.failOperation(token, StateError('Viewport restore failed.'));
         return false;
       }
-      if (_isTopAlignedChapterStart(restoreTarget)) {
-        _runtime.updateVisibleLocation(restoreTarget);
-        return true;
-      }
-      final captured = _runtime.viewportBridge.captureVisibleLocation(
-        allowDuringRestore: true,
+      final captured = _isTopAlignedChapterStart(restoreTarget)
+          ? restoreTarget
+          : _runtime.viewportBridge.captureVisibleLocation(
+              allowDuringRestore: true,
+            );
+      return _runtime.completeReadyOperation(
+        token,
+        visibleLocation: captured ?? restoreTarget,
+        pageWindow: window,
       );
-      return captured != null;
     } catch (e) {
       _runtime.failOperation(token, e);
       return false;
-    } finally {
-      _runtime.endRestoreOperation(token);
     }
   }
 
@@ -342,7 +337,7 @@ class ReaderV2NavigationController {
     if (neighbor.isLoading) return;
     if (neighbor.errorMessage != null) {
       clearPendingNeighborAdvance();
-      _emitUserNotice(forward ? '下一章載入失敗，請再試一次或返回目錄' : '上一章載入失敗，請再試一次或返回目錄');
+      emitUserNotice(forward ? '下一章載入失敗，請再試一次或返回目錄' : '上一章載入失敗，請再試一次或返回目錄');
       return;
     }
     if (forward) {
@@ -384,10 +379,9 @@ class ReaderV2NavigationController {
   ) async {
     await _runtime.repository.ensureChapters();
     final chapterCount = _runtime.repository.chapterCount;
-    final chapterIndex =
-        chapterCount <= 0
-            ? 0
-            : location.chapterIndex.clamp(0, chapterCount - 1).toInt();
+    final chapterIndex = chapterCount <= 0
+        ? 0
+        : location.chapterIndex.clamp(0, chapterCount - 1).toInt();
     final content = await _runtime.repository.loadContent(chapterIndex);
     return ReaderV2Location(
       chapterIndex: chapterIndex,
@@ -405,10 +399,9 @@ class ReaderV2NavigationController {
   ) {
     return ReaderV2Location(
       chapterIndex: page.chapterIndex,
-      charOffset:
-          location.charOffset
-              .clamp(page.startCharOffset, page.endCharOffset)
-              .toInt(),
+      charOffset: location.charOffset
+          .clamp(page.startCharOffset, page.endCharOffset)
+          .toInt(),
       visualOffsetPx: location.visualOffsetPx,
     );
   }
@@ -466,7 +459,7 @@ class ReaderV2NavigationController {
     });
   }
 
-  void _emitUserNotice(String message) {
+  void emitUserNotice(String message) {
     if (_runtime.disposed || message.isEmpty) return;
     _pendingUserNotice = message;
     _runtime.notifySessionChanged();

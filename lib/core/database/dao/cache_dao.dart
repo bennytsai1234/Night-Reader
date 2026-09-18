@@ -28,7 +28,8 @@ class CacheDao extends DatabaseAccessor<AppDatabase> with _$CacheDaoMixin {
   Future<void> clearDeadline(int now) {
     return (delete(cacheTable)..where(
       (t) =>
-          t.deadline.isSmallerThanValue(now) & t.deadline.isBiggerThanValue(0),
+          t.deadline.isSmallerOrEqualValue(now) &
+          t.deadline.isBiggerThanValue(0),
     )).go();
   }
 }

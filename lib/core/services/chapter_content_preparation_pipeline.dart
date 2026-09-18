@@ -84,7 +84,15 @@ class ChapterContentPreparationPipeline {
       }
     }
 
-    final key = _inFlightKey(chapter);
+    final key = ReaderChapterContentStore.inFlightKeyFor(
+      book: book,
+      chapter: chapter,
+      chapterIndex: chapterIndex,
+      sourceOverride: sourceOverride,
+      forceRefresh: forceRefresh,
+      saveChapterMetadata: saveChapterMetadata,
+      maxAttempts: maxAttempts,
+    );
     final existing = _inFlight[key];
     if (existing != null) return existing;
 
@@ -96,22 +104,15 @@ class ChapterContentPreparationPipeline {
       maxAttempts: maxAttempts,
     );
     _inFlight[key] = fetch;
-    return fetch.whenComplete(() => _inFlight.remove(key));
+    return fetch.whenComplete(() {
+      if (identical(_inFlight[key], fetch)) {
+        _inFlight.remove(key);
+      }
+    });
   }
 
   void reset() {
     _inFlight.clear();
-  }
-
-  String _inFlightKey(BookChapter chapter) {
-    final store = contentStore;
-    if (store == null) {
-      return '${book.origin}\n${book.bookUrl}\n${chapter.url}';
-    }
-    return ReaderChapterContentStore.contentKeyFor(
-      book: book,
-      chapter: chapter,
-    );
   }
 
   Future<ChapterContentPreparationResult> _fetchAndStore({
@@ -156,7 +157,7 @@ class ChapterContentPreparationPipeline {
     try {
       if (book.origin == 'local') {
         final raw = await LocalBookService().getContent(book, chapter);
-        if (raw.isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
+        if (raw.trim().isNotEmpty && !_looksLikeLocalFailureMessage(raw)) {
           return ChapterContentPreparationResult.ready(raw);
         }
         return ChapterContentPreparationResult.failed(
@@ -181,7 +182,7 @@ class ChapterContentPreparationPipeline {
         chapter,
         nextChapterUrl: nextChapterUrl,
       );
-      if (raw.isNotEmpty) {
+      if (raw.trim().isNotEmpty) {
         return ChapterContentPreparationResult.ready(raw);
       }
       return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
@@ -197,8 +198,7 @@ class ChapterContentPreparationPipeline {
       return switch (e.type) {
         DioExceptionType.connectionTimeout ||
         DioExceptionType.receiveTimeout ||
-        DioExceptionType.sendTimeout =>
-          '加載章節失敗: 連線逾時',
+        DioExceptionType.sendTimeout => '加載章節失敗: 連線逾時',
         DioExceptionType.connectionError => '加載章節失敗: 網路連線失敗',
         _ => '加載章節失敗: 網路錯誤',
       };
@@ -212,7 +212,7 @@ class ChapterContentPreparationPipeline {
     required bool saveChapterMetadata,
   }) async {
     final store = contentStore;
-    if (store == null || result.content.isEmpty) return;
+    if (store == null || result.content.trim().isEmpty) return;
     if (result.isReady) {
       await store.saveRawContent(
         book: book,
@@ -237,6 +237,7 @@ class ChapterContentPreparationPipeline {
         trimmed.startsWith('無法讀取本地書籍內容') ||
         trimmed.startsWith('檔案不存在:') ||
         trimmed.startsWith('本地 TXT 索引缺失') ||
+        trimmed.startsWith('本地 TXT 索引無效') ||
         trimmed.startsWith('不支援的本地格式:');
   }
 }

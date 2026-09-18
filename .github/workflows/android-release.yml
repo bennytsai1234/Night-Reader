@@ -27,7 +27,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.0"
+          flutter-version: "3.47.0"
           channel: stable
           cache: true
 
@@ -36,11 +36,14 @@ jobs:
 
       - name: Run critical regression checks
         run: |
-          flutter analyze lib/features/reader_v2 lib/features/source_manager test/features/reader_v2 test/features/source_manager
+          flutter analyze lib/features/reader_v2 lib/features/source_manager lib/features/settings/theme_settings_provider.dart lib/core/engine/web_book/complete_content_fetcher.dart lib/core/services/book_source_service.dart test/features/reader_v2 test/features/source_manager test/features/settings/theme_settings_provider_test.dart test/shared/theme/theme_customization_test.dart test/core/services/chapter_content_concurrency_test.dart
           flutter test test/features/reader_v2 \
             test/features/source_manager/source_manager_provider_test.dart \
             test/features/source_manager/source_manager_page_smoke_test.dart \
-            test/features/source_manager/source_login_test.dart
+            test/features/source_manager/source_login_test.dart \
+            test/features/settings/theme_settings_provider_test.dart \
+            test/shared/theme/theme_customization_test.dart \
+            test/core/services/chapter_content_concurrency_test.dart
 
       - name: Decode Android release keystore
         env:
@@ -55,7 +58,21 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64
+        run: >-
+          flutter build apk
+          --release
+          --split-per-abi
+          --target-platform android-arm64
+          --analyze-size
+          --code-size-directory build/size-analysis
+
+      - name: Upload code size analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: night-reader-code-size-${{ github.ref_name }}
+          path: build/size-analysis/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Verify release APK manifest
         run: |
@@ -66,7 +83,10 @@ jobs:
           test -n "$manifest_path"
           grep -q 'android.permission.INTERNET' "$manifest_path"
 
+      # 只有 v* tag 觸發才發布 release；手動 workflow_dispatch 只建置、
+      # 不發布（避免從 main 觸發時建立名為 "main" 的假 release）。
       - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
@@ -81,3 +101,12 @@ jobs:
               --title "$TAG_NAME" \
               --generate-notes
           fi
+
+      # 手動觸發時把 APK 掛成 workflow artifact，供測試安裝下載。
+      - name: Upload test APK artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: night-reader-test-arm64-v8a
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 7

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 一段式啟動畫面的靜態圖示（亮色主題變體；暗色見 drawable-night/）。
+     品牌意象：翻開的書 + 書上方升起的彎月 + 點點星光。無動畫，於 Android 12+
+     系統啟動畫面置中顯示（由 values-v31 styles 的 windowSplashScreenAnimatedIcon
+     引用）。內容收在中央 2/3 圓形安全區內（Android 12+ 圖示遮罩規範）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+
+    <!-- 彎月 -->
+    <group
+        android:name="moon"
+        android:translateX="110"
+        android:translateY="55"
+        android:scaleX="3.4"
+        android:scaleY="3.4">
+        <path
+            android:fillColor="#B6914A"
+            android:pathData="M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9c0.83,0 1.64,-0.11 2.4,-0.33 -2.61,-1.45 -4.4,-4.27 -4.4,-7.67s1.79,-6.22 4.4,-7.67C13.64,3.11 12.83,3 12,3z"/>
+    </group>
+
+    <!-- 星光 -->
+    <path
+        android:fillColor="#B6914A"
+        android:pathData="M92,84 L94.7,90.3 L101,93 L94.7,95.7 L92,102 L89.3,95.7 L83,93 L89.3,90.3 Z"/>
+    <path
+        android:fillColor="#B6914A"
+        android:pathData="M201,91.5 L203.25,96.75 L208.5,99 L203.25,101.25 L201,106.5 L198.75,101.25 L193.5,99 L198.75,96.75 Z"/>
+    <path
+        android:fillColor="#B6914A"
+        android:pathData="M180,123 L181.5,126.5 L185,128 L181.5,129.5 L180,133 L178.5,129.5 L175,128 L178.5,126.5 Z"/>
+
+    <!-- 翻開的書（左右兩頁 + 中縫） -->
+    <path
+        android:fillColor="#B6914A"
+        android:fillAlpha="0.10"
+        android:strokeColor="#1A1612"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M144,152 C123,140 96,138 72,146 L72,198 C96,192 123,194 144,206 Z"/>
+    <path
+        android:fillColor="#B6914A"
+        android:fillAlpha="0.10"
+        android:strokeColor="#1A1612"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M144,152 C165,140 192,138 216,146 L216,198 C192,192 165,194 144,206 Z"/>
+</vector>

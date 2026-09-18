@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.library'
+}
+
+def args = ["-Xlint:deprecation"]
+
+group = 'com.eyedeadevelopment.fluttertts'
+version = '1.0-SNAPSHOT'
+
+project.getTasks().withType(JavaCompile).configureEach {
+    options.compilerArgs.addAll(args)
+}
+
+android {
+    namespace = 'com.eyedeadevelopment.fluttertts'
+    compileSdk = 37
+
+    defaultConfig {
+        minSdk = 24
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    lint {
+        disable 'InvalidPackage'
+        disable 'GradleDependency'
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}

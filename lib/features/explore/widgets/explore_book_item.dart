@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import '../../book_detail/book_detail_page.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
@@ -29,13 +28,12 @@ class ExploreBookItem extends StatelessWidget {
       onTap: () => _navigateToDetail(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
+          horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 封面 (對標 Android ivCover)
             BookCoverWidget(
               coverUrl: book.coverUrl,
               bookName: book.name,
@@ -44,101 +42,91 @@ class ExploreBookItem extends StatelessWidget {
               height: 75,
               borderRadius: AppRadius.cardXs,
             ),
-            const SizedBox(width: 12),
-            // 書籍信息
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 書名 (對標 Android tvName)
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           book.name,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
+                            height: 1.3,
+                            fontWeight: FontWeight.w600,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isInBookshelf) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppSpacing.sm),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
+                            horizontal: AppSpacing.sm,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primaryContainer,
                             borderRadius: AppRadius.pillShape,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.library_add_check,
-                                size: 12,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '書架',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            '書架',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              height: 1.2,
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  // 作者 (對標 Android tvAuthor)
+                  const SizedBox(height: AppSpacing.xs),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
-                      '作者: ${book.author}',
+                      '作者：${book.author}',
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 2),
-                  // 最新章節 (對標 Android tvLasted)
                   if (book.latestChapterTitle != null &&
-                      book.latestChapterTitle!.isNotEmpty)
+                      book.latestChapterTitle!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '最新: ${book.latestChapterTitle}',
+                      '最新：${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: context.warning,
+                        height: 1.4,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 2),
-                  // 簡介 (對標 Android tvIntroduce)
-                  if (book.intro != null && book.intro!.isNotEmpty)
+                  ],
+                  if (book.intro != null && book.intro!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
                       style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.45,
                         color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 12,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: 4),
-                  // 分類標籤 (對標 Android llKind)
-                  if (book.kind != null && book.kind!.isNotEmpty)
+                  ],
+                  if (book.kind != null && book.kind!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
                     Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: _buildKindTags(theme),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -148,29 +136,31 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
-  /// 構建分類標籤 (對標 Android llKind.setLabels)
   List<Widget> _buildKindTags(ThemeData theme) {
     final kinds =
         book.kind!
             .split(RegExp(r'[,，]'))
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
-            .take(4)
+            .take(3)
             .toList();
 
     return kinds.map((kind) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 2,
+        ),
         decoration: BoxDecoration(
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            color: theme.colorScheme.outline.withValues(alpha: 0.28),
           ),
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: AppRadius.cardXs,
         ),
         child: Text(
           kind,
-          style: TextStyle(
-            fontSize: 10,
+          style: theme.textTheme.labelSmall?.copyWith(
+            height: 1.2,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),

@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.library'
+}
+
+group 'com.mr.flutter.plugin.filepicker'
+version '1.0-SNAPSHOT'
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+android {
+    compileSdk 37
+    namespace 'com.mr.flutter.plugin.filepicker'
+
+    defaultConfig {
+        minSdk 21
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'proguard-rules.pro'
+    }
+    lint {
+        disable 'InvalidPackage'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.annotation:annotation:1.9.1'
+    implementation "androidx.lifecycle:lifecycle-runtime:2.8.7"
+}

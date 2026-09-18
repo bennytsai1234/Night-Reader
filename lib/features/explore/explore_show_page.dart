@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 
@@ -51,59 +52,52 @@ class _ExploreShowContent extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
-    // 初始載入中
     if (provider.isLoading && provider.books.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 錯誤且無數據
     if (provider.errorMessage != null && provider.books.isEmpty) {
-      return _buildStatePanel(
-        context,
+      return AppStateView(
         icon: Icons.error_outline,
-        message: '分類載入失敗',
-        detail: provider.errorMessage,
-        actions: [
-          TextButton.icon(
-            onPressed:
-                () => _showErrorDialog(context, provider.errorMessage ?? ''),
-            icon: const Icon(Icons.info_outline),
-            label: const Text('查看錯誤'),
-          ),
-          FilledButton.icon(
-            onPressed: () => provider.refresh(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('重試'),
-          ),
-        ],
+        title: '分類載入失敗',
+        description: provider.errorMessage,
+        tone: AppStateTone.error,
+        primaryAction: AppStateAction(
+          label: '重試',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
+        secondaryAction: AppStateAction(
+          label: '查看錯誤',
+          icon: Icons.info_outline,
+          onPressed:
+              () => _showErrorDialog(context, provider.errorMessage ?? ''),
+        ),
       );
     }
 
-    // 空數據
     if (provider.isEmpty) {
-      return _buildStatePanel(
-        context,
+      return AppStateView(
         icon: Icons.inbox_outlined,
-        message: '暫無內容',
-        actions: [
-          FilledButton.icon(
-            onPressed: () => provider.refresh(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('重新整理'),
-          ),
-        ],
+        title: '這個分類目前沒有內容',
+        description: '書源可能尚未提供資料，也可以稍後再試。',
+        primaryAction: AppStateAction(
+          label: '重新整理',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
-    // 書籍列表 (對標 Android ExploreShowActivity RecyclerView)
     return RefreshIndicator(
       onRefresh: () => provider.refresh(),
       child: ListView.builder(
         itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
-            // LoadMore 指示器 (對標 Android LoadMoreView)
-            provider.loadMore();
+            if (provider.errorMessage == null) {
+              provider.loadMore();
+            }
             return _buildLoadMoreIndicator(context, provider);
           }
           return ExploreBookItem(
@@ -116,7 +110,6 @@ class _ExploreShowContent extends StatelessWidget {
     );
   }
 
-  /// 載入更多指示器 (對標 Android LoadMoreView)
   Widget _buildLoadMoreIndicator(
     BuildContext context,
     ExploreShowProvider provider,
@@ -143,59 +136,14 @@ class _ExploreShowContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStatePanel(
-    BuildContext context, {
-    required IconData icon,
-    required String message,
-    String? detail,
-    required List<Widget> actions,
-  }) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 52, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: theme.colorScheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (detail != null && detail.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                detail,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: actions,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showErrorDialog(BuildContext context, String message) {
     showDialog<void>(
       context: context,
       builder:
           (ctx) => AlertDialog(
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.cardXl,
+            ),
             title: const Text('錯誤原因'),
             content: SelectableText(message),
             actions: [

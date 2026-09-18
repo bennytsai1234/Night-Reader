@@ -11,6 +11,8 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
@@ -36,10 +38,7 @@ const List<MainDestination> _defaultDestinations = [
 class MainPage extends StatefulWidget {
   const MainPage({super.key, this.destinations, this.onDestinationDoubleTap});
 
-  /// 自訂分頁清單;測試時用以避免拉入真實 page 的 deps。預設為 [_defaultDestinations]。
   final List<MainDestination>? destinations;
-
-  /// 同一個 destination 被快速連點兩次時觸發。預設邏輯:書架 → loadBooks()。
   final MainDestinationDoubleTapCallback? onDestinationDoubleTap;
 
   @override
@@ -51,23 +50,15 @@ class _MainPageState extends State<MainPage> {
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
-  // 啟動轉場狀態:原生 splash 是純深紫夜空色(無圖標,取自藝術圖天空平均色),
-  // 轉場圖預載完成後即撤,藝術圖在同色底上淡入浮現(全程漸變、無硬切),
-  // 撐到書架首批書本載完(且至少顯示一小段時間)再淡出。
-  late bool _splashArtVisible = widget.destinations == null;
-  bool _splashArtShown = false;
-  bool _splashArtFading = false;
-  bool _splashArtDismissScheduled = false;
-  DateTime? _splashArtShownAt;
+  bool _nativeSplashReleaseScheduled = false;
+  bool _showStartupLoadingOverlay = false;
+  DateTime? _splashHeldAt;
   BookshelfProvider? _splashShelfProvider;
   VoidCallback? _splashShelfListener;
+  Timer? _splashTimeoutTimer;
 
-  static const _splashArtAsset = 'assets/splash_landscape.png';
-  static const _splashArtBackground = Color(0xFF261940);
-  static const _splashArtRevealDuration = Duration(milliseconds: 700);
-  static const _splashArtRevealScaleDuration = Duration(milliseconds: 1100);
-  static const _splashArtMinDisplay = Duration(milliseconds: 1600);
-  static const _splashArtFadeDuration = Duration(milliseconds: 500);
+  static const _splashMinDisplay = Duration(milliseconds: 900);
+  static const _splashShelfTimeout = Duration(seconds: 2);
 
   late final PageController _pageController = PageController(
     initialPage: _currentIndex,
@@ -82,6 +73,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    _splashTimeoutTimer?.cancel();
     _detachSplashShelfListener();
     _pageController.dispose();
     super.dispose();
@@ -91,10 +83,13 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       unawaited(_initDeferredStartupData());
+      final hasShelfProvider = context.read<BookshelfProvider?>() != null;
+      if (widget.destinations == null || hasShelfProvider) {
+        _releaseSplashWhenShelfReady();
+      }
       if (widget.destinations == null) {
-        // 僅真實 app 路徑;測試注入 destinations 時不觸碰 platform channel。
-        unawaited(_handOffNativeSplashToArt());
         unawaited(_runAutomaticUpdateCheck());
       }
     });
@@ -102,16 +97,24 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final shelf = context.watch<BookshelfProvider?>();
+    final isRealShelfTab = widget.destinations == null && _currentIndex == 0;
+    final showShelfLoadError =
+        isRealShelfTab &&
+        shelf != null &&
+        !shelf.isLoading &&
+        shelf.loadErrorMessage != null;
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         _handleBackIntent();
       },
-      child: Stack(
-        children: [
-          Scaffold(
-            body: PageView(
+      child: Scaffold(
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView(
               controller: _pageController,
               onPageChanged: (idx) {
                 setState(() => _currentIndex = idx);
@@ -121,71 +124,87 @@ class _MainPageState extends State<MainPage> {
                 (index) => _KeepAliveWrapper(child: _destinations[index].page),
               ),
             ),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _currentIndex,
-              onDestinationSelected: (index) {
-                if (_currentIndex == index) {
-                  if (DateTime.now().difference(_lastTapTime).inMilliseconds <
-                      300) {
-                    _handleDoubleTap(index);
-                  }
-                  _lastTapTime = DateTime.now();
-                  return;
-                }
-                _pageController.animateToPage(
-                  index,
-                  duration: _tabAnimationDuration,
-                  curve: _tabAnimationCurve,
-                );
-              },
-              destinations:
-                  _destinations
-                      .map(
-                        (destination) => NavigationDestination(
-                          icon: Icon(destination.icon),
-                          selectedIcon: Icon(destination.selectedIcon),
-                          label: destination.label,
-                        ),
-                      )
-                      .toList(),
-            ),
-          ),
-          if (_splashArtVisible)
             Positioned.fill(
               child: IgnorePointer(
-                ignoring: _splashArtFading,
-                child: AnimatedOpacity(
-                  opacity: _splashArtFading ? 0.0 : 1.0,
-                  duration: _splashArtFadeDuration,
-                  curve: Curves.easeOut,
-                  onEnd: () {
-                    if (_splashArtFading) {
-                      setState(() => _splashArtVisible = false);
-                    }
-                  },
-                  child: Container(
-                    color: _splashArtBackground,
-                    child: AnimatedOpacity(
-                      opacity: _splashArtShown ? 1.0 : 0.0,
-                      duration: _splashArtRevealDuration,
-                      curve: Curves.easeOut,
-                      child: AnimatedScale(
-                        scale: _splashArtShown ? 1.0 : 1.06,
-                        duration: _splashArtRevealScaleDuration,
-                        curve: Curves.easeOutCubic,
-                        child: Image.asset(
-                          _splashArtAsset,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (_, _, _) => const SizedBox.shrink(),
-                        ),
-                      ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child:
+                      _showStartupLoadingOverlay
+                          ? ColoredBox(
+                            key: const ValueKey('startup-loading-overlay'),
+                            color: Theme.of(
+                              context,
+                            ).scaffoldBackgroundColor.withValues(alpha: 0.96),
+                            child: Center(
+                              child: Semantics(
+                                liveRegion: true,
+                                label: '正在載入書架',
+                                child: ExcludeSemantics(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(),
+                                      SizedBox(height: AppSpacing.lg),
+                                      Text('正在載入書架…'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          : const SizedBox.shrink(
+                            key: ValueKey('startup-loading-overlay-hidden'),
+                          ),
+                ),
+              ),
+            ),
+            if (showShelfLoadError)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: AppStateView(
+                    icon: Icons.error_outline,
+                    title: '書架載入失敗',
+                    description: shelf.loadErrorMessage,
+                    tone: AppStateTone.error,
+                    primaryAction: AppStateAction(
+                      label: '重試',
+                      icon: Icons.refresh,
+                      onPressed: shelf.loadBooks,
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) {
+            if (_currentIndex == index) {
+              if (DateTime.now().difference(_lastTapTime).inMilliseconds <
+                  300) {
+                _handleDoubleTap(index);
+              }
+              _lastTapTime = DateTime.now();
+              return;
+            }
+            _pageController.animateToPage(
+              index,
+              duration: _tabAnimationDuration,
+              curve: _tabAnimationCurve,
+            );
+          },
+          destinations:
+              _destinations
+                  .map(
+                    (destination) => NavigationDestination(
+                      icon: Icon(destination.icon),
+                      selectedIcon: Icon(destination.selectedIcon),
+                      label: destination.label,
+                    ),
+                  )
+                  .toList(),
+        ),
       ),
     );
   }
@@ -196,66 +215,73 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _defaultDoubleTap(BuildContext context, int index) {
-    // 預設 double-tap 行為僅針對預設 destinations(書架在 index 0)
     if (widget.destinations != null) return;
     if (index == 0) {
       context.read<BookshelfProvider>().loadBooks();
     }
   }
 
-  // 原生 splash(純深紫色、無圖標)撐到全螢幕轉場圖預載完成才撤,轉場層同底色、
-  // 無縫交棒後藝術圖才淡入浮現;再撐到書架首批書本查完才淡出,讓使用者一看到
-  // 書架就是填好的清單、不閃轉圈。加 2 秒逾時,避免查詢異常卡住開機。
-  Future<void> _handOffNativeSplashToArt() async {
-    try {
-      await precacheImage(const AssetImage(_splashArtAsset), context);
-    } catch (e, stack) {
-      AppLog.e('Splash art precache failed: $e', error: e, stackTrace: stack);
-    }
-    _splashArtShownAt = DateTime.now();
-    FlutterNativeSplash.remove();
-    if (!mounted) return;
-    setState(() => _splashArtShown = true);
-    _dismissSplashArtWhenShelfReady();
-  }
-
-  void _dismissSplashArtWhenShelfReady() {
-    final shelf = context.read<BookshelfProvider>();
+  void _releaseSplashWhenShelfReady() {
+    _splashHeldAt = DateTime.now();
+    final shelf = context.read<BookshelfProvider?>();
+    if (shelf == null) return;
     if (!shelf.isLoading) {
-      _dismissSplashArtOnce();
+      _completeSplashShelfWait();
       return;
     }
     void listener() {
-      if (!shelf.isLoading) _dismissSplashArtOnce();
+      if (!shelf.isLoading) _completeSplashShelfWait();
     }
 
     _splashShelfProvider = shelf;
     _splashShelfListener = listener;
     shelf.addListener(listener);
-    Future<void>.delayed(const Duration(seconds: 2), _dismissSplashArtOnce);
+    _splashTimeoutTimer?.cancel();
+    _splashTimeoutTimer = Timer(_splashShelfTimeout, _handleSplashShelfTimeout);
   }
 
-  // 書架就緒後啟動淡出;若轉場圖顯示未滿 _splashArtMinDisplay 則補足,
-  // 避免小書架瞬間載完時藝術圖一閃而過。
-  void _dismissSplashArtOnce() {
-    if (_splashArtDismissScheduled) return;
-    _splashArtDismissScheduled = true;
-    _detachSplashShelfListener();
-    final shownAt = _splashArtShownAt;
-    final remaining =
-        shownAt == null
-            ? Duration.zero
-            : _splashArtMinDisplay - DateTime.now().difference(shownAt);
-    if (remaining > Duration.zero) {
-      Future<void>.delayed(remaining, _startSplashArtFade);
-    } else {
-      _startSplashArtFade();
+  void _handleSplashShelfTimeout() {
+    _splashTimeoutTimer = null;
+    final shelf = _splashShelfProvider;
+    if (shelf == null || !shelf.isLoading) {
+      _completeSplashShelfWait();
+      return;
     }
+
+    if (!mounted) {
+      _releaseNativeSplashOnce();
+      return;
+    }
+    setState(() => _showStartupLoadingOverlay = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _releaseNativeSplashOnce();
+    });
   }
 
-  void _startSplashArtFade() {
-    if (!mounted || _splashArtFading) return;
-    setState(() => _splashArtFading = true);
+  void _completeSplashShelfWait() {
+    _splashTimeoutTimer?.cancel();
+    _splashTimeoutTimer = null;
+    _detachSplashShelfListener();
+    if (mounted && _showStartupLoadingOverlay) {
+      setState(() => _showStartupLoadingOverlay = false);
+    }
+    _releaseNativeSplashOnce();
+  }
+
+  void _releaseNativeSplashOnce() {
+    if (_nativeSplashReleaseScheduled) return;
+    _nativeSplashReleaseScheduled = true;
+    if (widget.destinations != null) return;
+    final heldAt = _splashHeldAt;
+    final remaining =
+        heldAt == null
+            ? Duration.zero
+            : _splashMinDisplay - DateTime.now().difference(heldAt);
+    if (remaining > Duration.zero) {
+      Future<void>.delayed(remaining, FlutterNativeSplash.remove);
+    } else {
+      FlutterNativeSplash.remove();
+    }
   }
 
   void _detachSplashShelfListener() {

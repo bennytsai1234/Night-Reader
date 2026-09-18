@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import '../models/search_scope.dart';
 
 /// SearchScopeSheet - 搜尋範圍選擇底部彈窗
@@ -26,18 +27,16 @@ class SearchScopeSheet extends StatefulWidget {
     required this.onScopeChanged,
   });
 
-  /// 顯示底部彈窗
   static void show(
     BuildContext context, {
     required SearchScope currentScope,
     required List<String> groups,
     required ValueChanged<SearchScope> onScopeChanged,
   }) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
       builder:
           (_) => SearchScopeSheet(
             currentScope: currentScope,
@@ -54,15 +53,13 @@ class SearchScopeSheet extends StatefulWidget {
 class _SearchScopeSheetState extends State<SearchScopeSheet>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  // 分組模式
   final Set<String> _selectedGroups = {};
-
-  // 書源模式
   BookSource? _selectedSource;
   List<BookSource> _allSources = [];
   List<BookSource> _filteredSources = [];
   final TextEditingController _searchController = TextEditingController();
+  bool _sourcesLoading = true;
+  Object? _sourcesLoadError;
 
   @override
   void initState() {
@@ -72,33 +69,44 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
       vsync: this,
       initialIndex: widget.currentScope.isSource ? 1 : 0,
     );
-
-    // 初始化選中狀態
     if (!widget.currentScope.isAll && !widget.currentScope.isSource) {
       _selectedGroups.addAll(widget.currentScope.displayNames);
     }
-
     _loadSources();
   }
 
   Future<void> _loadSources() async {
-    final dao = getIt<BookSourceDao>();
-    _allSources =
-        (await dao.getAll())
-            .where((source) => source.isSearchEnabledByRuntime)
-            .toList()
-          ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    _filteredSources = List.from(_allSources);
-
-    // 如果當前是單一書源模式，嘗試找到對應書源
-    if (widget.currentScope.isSource) {
-      final scopeStr = widget.currentScope.toString();
-      final url = scopeStr.substring(scopeStr.indexOf('::') + 2);
-      _selectedSource =
-          _allSources.where((s) => s.bookSourceUrl == url).firstOrNull;
+    if (mounted) {
+      setState(() {
+        _sourcesLoading = true;
+        _sourcesLoadError = null;
+      });
     }
+    try {
+      final dao = getIt<BookSourceDao>();
+      final sources =
+          (await dao.getAll())
+              .where((source) => source.isSearchEnabledByRuntime)
+              .toList()
+            ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
+      if (!mounted) return;
+      _allSources = sources;
+      _filteredSources = List.from(_allSources);
 
-    if (mounted) setState(() {});
+      if (widget.currentScope.isSource) {
+        final scopeStr = widget.currentScope.toString();
+        final url = scopeStr.substring(scopeStr.indexOf('::') + 2);
+        _selectedSource =
+            _allSources.where((s) => s.bookSourceUrl == url).firstOrNull;
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _sourcesLoadError = error;
+      _allSources = [];
+      _filteredSources = [];
+    } finally {
+      if (mounted) setState(() => _sourcesLoading = false);
+    }
   }
 
   void _filterSources(String query) {
@@ -136,16 +144,15 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
       builder: (context, scrollController) {
         return Column(
           children: [
-            // 標題列
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
                 AppSpacing.md,
                 AppSpacing.lg,
-                0,
+                AppSpacing.sm,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     '搜尋範圍',
@@ -153,31 +160,35 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          widget.onScopeChanged(SearchScope());
-                          Navigator.pop(context);
-                        },
-                        child: const Text('全部書源'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: _onConfirm,
-                        child: const Text('確定'),
-                      ),
-                    ],
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: AppSpacing.md,
+                      runSpacing: AppSpacing.sm,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            widget.onScopeChanged(SearchScope());
+                            Navigator.pop(context);
+                          },
+                          child: const Text('全部書源'),
+                        ),
+                        FilledButton(
+                          onPressed: _onConfirm,
+                          child: const Text('確定'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            // Tab 切換
             TabBar(
               controller: _tabController,
               tabs: const [Tab(text: '分組'), Tab(text: '書源')],
             ),
-            // Tab 內容
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -193,7 +204,6 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
     );
   }
 
-  /// 分組模式：Checkbox 多選
   Widget _buildGroupTab(ScrollController scrollController) {
     if (widget.groups.isEmpty) {
       return Center(
@@ -229,15 +239,33 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
     );
   }
 
-  /// 書源模式：Radio 單選 + 搜尋
   Widget _buildSourceTab(ScrollController scrollController) {
+    if (_sourcesLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_sourcesLoadError != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('書源載入失敗'),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: _loadSources,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: [
-        // 搜尋框
         Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
-            vertical: AppSpacing.sm,
+            vertical: AppSpacing.md,
           ),
           child: TextField(
             controller: _searchController,
@@ -245,10 +273,12 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
               hintText: '搜尋書源',
               prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
-              border: OutlineInputBorder(borderRadius: AppRadius.cardSm),
+              border: const OutlineInputBorder(
+                borderRadius: AppRadius.cardMd,
+              ),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.md,
               ),
             ),
             onChanged: _filterSources,
@@ -259,7 +289,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
               _filteredSources.isEmpty
                   ? Center(
                     child: Text(
-                      '無匹配書源',
+                      _allSources.isEmpty
+                          ? '目前沒有可搜尋的書源'
+                          : '找不到符合條件的書源',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -316,19 +348,15 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
   void _onConfirm() {
     final SearchScope newScope;
     if (_tabController.index == 0) {
-      // 分組模式
-      if (_selectedGroups.isEmpty) {
-        newScope = SearchScope(); // 無選擇 = 全部
-      } else {
-        newScope = SearchScope.fromGroups(_selectedGroups.toList());
-      }
+      newScope =
+          _selectedGroups.isEmpty
+              ? SearchScope()
+              : SearchScope.fromGroups(_selectedGroups.toList());
     } else {
-      // 書源模式
-      if (_selectedSource != null) {
-        newScope = SearchScope.fromSource(_selectedSource!);
-      } else {
-        newScope = SearchScope(); // 無選擇 = 全部
-      }
+      newScope =
+          _selectedSource != null
+              ? SearchScope.fromSource(_selectedSource!)
+              : SearchScope();
     }
     widget.onScopeChanged(newScope);
     Navigator.pop(context);

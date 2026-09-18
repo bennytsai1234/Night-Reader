@@ -54,7 +54,9 @@ class SearchBook implements RuleDataInterface {
   /// 群組內 [originOrder] 最前者；**優先有封面**者；若皆無封面，退回
   /// [originOrder] 最前者。決定卡片封面 / 最新章與 [origin]。
   static SearchBook aggregate(List<SearchBook> group) {
-    assert(group.isNotEmpty, 'aggregate 需要非空群組');
+    if (group.isEmpty) {
+      throw ArgumentError.value(group, 'group', 'aggregate 需要非空群組');
+    }
     final representative = _pickRepresentative(group);
     final card = representative._cloneForCard();
     for (final book in group) {

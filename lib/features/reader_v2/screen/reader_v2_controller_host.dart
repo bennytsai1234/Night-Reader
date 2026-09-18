@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -10,6 +11,7 @@ import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_book
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
+import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -20,6 +22,9 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
 class ReaderV2ControllerHost {
+  @visibleForTesting
+  static FutureOr<void> Function()? debugBeforeFlushProgress;
+
   ReaderV2ControllerHost({
     required this.book,
     required this.initialChapters,
@@ -67,6 +72,10 @@ class ReaderV2ControllerHost {
   Size? _lastViewportSize;
   int? _lastLayoutSignature;
   int _lastContentSettingsGeneration = 0;
+  ReaderV2LayoutSpec? _pendingPresentationSpec;
+  bool _presentationCallbackQueued = false;
+  bool _presentationInFlight = false;
+  int _presentationRevision = 0;
   bool _opening = false;
 
   void _onControllerChanged() {
@@ -104,10 +113,9 @@ class ReaderV2ControllerHost {
     final nextAutoPage = ReaderV2AutoPageController(
       runtime: nextRuntime,
       viewportController: viewportController,
-      viewportExtent:
-          () =>
-              _lastViewportSize?.height ??
-              nextRuntime.state.layoutSpec.viewportSize.height,
+      viewportExtent: () =>
+          _lastViewportSize?.height ??
+          nextRuntime.state.layoutSpec.viewportSize.height,
       autoPageSpeed: () => settings.autoPageSpeed,
     )..addListener(_onControllerChanged);
 
@@ -138,10 +146,9 @@ class ReaderV2ControllerHost {
     final needsLayout = _lastLayoutSignature != spec.layoutSignature;
     if (needsLayout) {
       _lastLayoutSignature = spec.layoutSignature;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_isMounted()) return;
-        unawaited(runtime.applyPresentation(spec: spec));
-      });
+      _pendingPresentationSpec = spec;
+      _presentationRevision += 1;
+      _queuePresentationDispatch(runtime);
     }
     if (_lastContentSettingsGeneration != settings.contentSettingsGeneration) {
       _lastContentSettingsGeneration = settings.contentSettingsGeneration;
@@ -150,6 +157,64 @@ class ReaderV2ControllerHost {
         unawaited(runtime.reloadContentPreservingLocation());
       });
     }
+  }
+
+  /// Wait for one quiet frame before dispatching the latest presentation.
+  ///
+  /// Rotation and inset animations can produce a new layout signature every
+  /// frame. Keeping the request pending until a frame arrives without a new
+  /// signature coalesces that stream while still guaranteeing that the final
+  /// size is dispatched. The extra frame is scheduler-based rather than a
+  /// fixed wall-clock debounce, so it does not depend on device speed.
+  void _queuePresentationDispatch(ReaderV2Runtime runtime) {
+    if (_presentationCallbackQueued || _presentationInFlight) return;
+    _presentationCallbackQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isMounted()) {
+        _presentationCallbackQueued = false;
+        _pendingPresentationSpec = null;
+        return;
+      }
+      _waitForQuietPresentationFrame(runtime, _presentationRevision);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _waitForQuietPresentationFrame(
+    ReaderV2Runtime runtime,
+    int observedRevision,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isMounted()) {
+        _presentationCallbackQueued = false;
+        _pendingPresentationSpec = null;
+        return;
+      }
+      if (_presentationRevision != observedRevision) {
+        _waitForQuietPresentationFrame(runtime, _presentationRevision);
+        return;
+      }
+
+      _presentationCallbackQueued = false;
+      final pendingSpec = _pendingPresentationSpec;
+      _pendingPresentationSpec = null;
+      if (pendingSpec == null) return;
+
+      _presentationInFlight = true;
+      unawaited(
+        runtime.applyPresentation(spec: pendingSpec).whenComplete(() {
+          _presentationInFlight = false;
+          if (!_isMounted()) {
+            _pendingPresentationSpec = null;
+            return;
+          }
+          if (_pendingPresentationSpec != null) {
+            _queuePresentationDispatch(runtime);
+          }
+        }),
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   ReaderV2Location _initialLocationFor(ReaderV2LayoutSpec spec) {
@@ -170,8 +235,16 @@ class ReaderV2ControllerHost {
   }
 
   ReaderV2LayoutSpec specFromStyle(Size size, ReaderV2Style style) {
+    // em-grid 鎖寬：cell 為實測值（有樣式級快取，重複呼叫零成本），
+    // 量測失敗（回 null）時 fromViewport 維持未鎖寬的原始 contentWidth。
+    final cellWidth = LayoutPump.measureCellWidth(
+      fontSize: style.fontSize,
+      letterSpacing: style.letterSpacing,
+      bold: style.bold,
+    );
     return ReaderV2LayoutSpec.fromViewport(
       viewportSize: size,
+      cellWidth: cellWidth,
       style: ReaderV2LayoutStyle(
         fontSize: style.fontSize,
         lineHeight: style.lineHeight,
@@ -183,12 +256,17 @@ class ReaderV2ControllerHost {
         paddingRight: style.paddingRight,
         bold: style.bold,
         textIndent: style.textIndent,
+        lastLineSpacingCompensation: style.lastLineSpacingCompensation,
       ),
     );
   }
 
-  Future<void> flushProgress() async {
-    await runtime?.flushProgress();
+  Future<ReaderV2Location?> flushProgress() async {
+    final hook = debugBeforeFlushProgress;
+    if (kDebugMode && hook != null) {
+      await hook();
+    }
+    return runtime?.flushProgress();
   }
 
   void _openRuntimeAfterFirstFrame(ReaderV2Runtime runtime) {

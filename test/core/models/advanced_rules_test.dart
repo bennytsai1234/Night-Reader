@@ -33,6 +33,14 @@ void main() {
       expect(fromJson.rule, contains('第'));
     });
 
+    test('missing enabled flags retain rule defaults', () {
+      final dictRule = DictRule.fromJson(const <String, dynamic>{});
+      final tocRule = TxtTocRule.fromJson(const <String, dynamic>{});
+
+      expect(dictRule.enabled, isTrue);
+      expect(tocRule.enable, isTrue);
+    });
+
     test('BookChapterReview serialization', () {
       final review = BookChapterReview(
         bookId: 1,

@@ -42,12 +42,18 @@ class ConcurrentRateLimiter {
 
     final key = source!.getKey();
     final rateIndex = concurrentRate.indexOf('/');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final isConcurrent = rateIndex > 0;
+    final initialDelay = isConcurrent ? 0 : int.tryParse(concurrentRate) ?? 0;
 
-    _concurrentRecordMap[key] ??= ConcurrentRecord(
-      rateIndex > 0,
-      DateTime.now().millisecondsSinceEpoch,
-      0,
-    );
+    final existingRecord = _concurrentRecordMap[key];
+    if (existingRecord == null || existingRecord.isConcurrent != isConcurrent) {
+      _concurrentRecordMap[key] = ConcurrentRecord(
+        isConcurrent,
+        now - initialDelay,
+        0,
+      );
+    }
 
     final fetchRecord = _concurrentRecordMap[key]!;
 
@@ -59,7 +65,6 @@ class ConcurrentRateLimiter {
       }
 
       final nextTime = fetchRecord.time + (int.tryParse(concurrentRate) ?? 0);
-      final now = DateTime.now().millisecondsSinceEpoch;
       if (now >= nextTime) {
         fetchRecord.time = now;
         fetchRecord.frequency = 1;
@@ -71,7 +76,6 @@ class ConcurrentRateLimiter {
       final sj = int.tryParse(concurrentRate.substring(rateIndex + 1)) ?? 1000;
       final cs = int.tryParse(concurrentRate.substring(0, rateIndex)) ?? 1;
 
-      final now = DateTime.now().millisecondsSinceEpoch;
       final nextTime = fetchRecord.time + sj;
 
       if (now >= nextTime) {

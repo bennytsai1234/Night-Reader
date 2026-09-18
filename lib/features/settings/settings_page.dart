@@ -4,7 +4,9 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
+import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/features/settings/reading_stats_page.dart';
 import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
 import 'package:night_reader/features/about/about_page.dart';
@@ -15,125 +17,120 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          '我的',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontFamilySerif,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        elevation: 0,
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('我的')),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: [
           _buildProfileCard(context),
-
-          _buildSectionTitle(context, '主題與外觀'),
+          _buildSectionTitle(context, '閱讀'),
           _buildPanel(context, [
             _buildListTile(
               context,
-              icon: Icons.palette_outlined,
-              title: '閱讀排版與主題',
-              summary: '切換閱讀背景、字體、字號',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ReadingSettingsPage(),
-                    ),
-                  ),
+              icon: Icons.timer_outlined,
+              title: '閱讀統計',
+              summary: '累積閱讀時間',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReadingStatsPage()),
+              ),
+            ),
+            _buildListTile(
+              context,
+              icon: Icons.tune_outlined,
+              title: '閱讀偏好',
+              summary: '操作、自動翻頁與內容轉換',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReadingSettingsPage()),
+              ),
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '書源'),
           _buildPanel(context, [
             _buildListTile(
               context,
               icon: Icons.source_outlined,
               title: '書源管理',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SourceManagerPage(),
-                    ),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+              ),
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '個人化'),
           _buildPanel(context, [
             _buildListTile(
               context,
+              icon: Icons.palette_outlined,
+              title: '外觀與主題',
+              summary: '介面與閱讀配色',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AppearanceSettingsPage()),
+              ),
+            ),
+            _buildListTile(
+              context,
               icon: Icons.volume_up_outlined,
               title: '朗讀與語音',
-              summary: '語速、音調、系統語音',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
-                  ),
+              summary: '語速、音調與系統語音',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
+              ),
             ),
             _buildListTile(
               context,
               icon: Icons.backup_outlined,
               title: '備份與還原',
-              summary: '本地備份、數據遷移',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BackupSettingsPage(),
-                    ),
-                  ),
+              summary: '本地備份與資料遷移',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BackupSettingsPage()),
+              ),
               isLast: true,
             ),
           ]),
-
           _buildSectionTitle(context, '工具與其他'),
           _buildPanel(context, [
             _buildListTile(
               context,
               icon: Icons.download_for_offline_outlined,
               title: '背景下載佇列',
-              summary: '查看、暫停、重試與刪除下載任務',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DownloadManagerPage(),
-                    ),
-                  ),
+              summary: '下載任務',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DownloadManagerPage()),
+              ),
             ),
             _buildListTile(
               context,
               icon: Icons.info_outline,
               title: '關於夜讀',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AboutPage()),
-                  ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutPage()),
+              ),
               isLast: true,
             ),
           ]),
-
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xl),
           Center(
-            child: Text(
-              '夜讀 · GPL-3.0',
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                letterSpacing: 2.0,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text(
+                '夜讀 · GPL-3.0',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.labelSm.copyWith(
+                  height: 1.2,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.7),
+                  letterSpacing: 1.2,
+                ),
               ),
             ),
           ),
@@ -144,48 +141,45 @@ class SettingsPage extends StatelessWidget {
 
   Widget _buildProfileCard(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        border: Border.all(
-          color: isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10),
-        ),
+        color: theme.cardTheme.color ?? scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: AppRadius.cardLg,
-        boxShadow:
-            theme.cardTheme.shadowColor != null
-                ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : [],
+        boxShadow: theme.cardTheme.shadowColor != null
+            ? [
+                BoxShadow(
+                  color: theme.cardTheme.shadowColor!,
+                  blurRadius: AppSpacing.sm,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : [],
       ),
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
+              borderRadius: AppRadius.cardMd,
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x0F14110D),
-                  blurRadius: 0,
+                  color: scheme.shadow.withValues(alpha: 0.06),
                   spreadRadius: 1,
                 ),
               ],
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.asset('assets/app-icon.png', fit: BoxFit.cover),
+            child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,37 +187,40 @@ class SettingsPage extends StatelessWidget {
                 Text(
                   '夜讀',
                   style: TextStyle(
-                    fontFamily: AppTextStyles.fontFamilySerif,
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
-                    letterSpacing: 2.0,
-                    color: isDark ? AppPalette.ink50 : AppPalette.ink700,
+                    height: 1.3,
+                    letterSpacing: 1.6,
+                    color: scheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   '閱讀，從這裡開始',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppPalette.ink200 : AppPalette.ink300,
+                  style: AppTextStyles.bodySm.copyWith(
+                    height: 1.4,
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: AppRadius.pillShape,
             ),
             child: Text(
               '本地',
-              style: TextStyle(
-                fontSize: 10,
+              style: AppTextStyles.labelXs.copyWith(
+                height: 1.2,
                 fontWeight: FontWeight.w600,
-                color: accent,
-                letterSpacing: 0.5,
+                color: scheme.primary,
+                letterSpacing: 0.2,
               ),
             ),
           ),
@@ -233,19 +230,21 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(BuildContext context, String title) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 22, right: 22, top: 20, bottom: 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.sm,
+      ),
       child: Text(
         title,
-        style: TextStyle(
-          fontSize: 10,
-          letterSpacing: 2.4,
-          color: accent,
-          fontWeight: FontWeight.w600,
+        style: AppTextStyles.labelXs.copyWith(
+          height: 1.2,
+          letterSpacing: 1.8,
+          color: scheme.primary,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -253,28 +252,20 @@ class SettingsPage extends StatelessWidget {
 
   Widget _buildPanel(BuildContext context, List<Widget> children) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
+    final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        border: Border.all(
-          color: isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Material(
+        color: theme.cardTheme.color ?? scheme.surface,
+        elevation: theme.cardTheme.elevation ?? 0,
+        shadowColor: theme.cardTheme.shadowColor,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardLg,
+          side: BorderSide(color: scheme.outlineVariant),
         ),
-        borderRadius: AppRadius.cardLg,
-        boxShadow:
-            theme.cardTheme.shadowColor != null
-                ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : [],
+        child: Column(children: children),
       ),
-      child: Column(children: children),
     );
   }
 
@@ -286,26 +277,18 @@ class SettingsPage extends StatelessWidget {
     required VoidCallback onTap,
     bool isLast = false,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final accent = isDark ? AppPalette.cinnabarDark : AppPalette.cinnabar;
-
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         decoration: BoxDecoration(
-          border:
-              isLast
-                  ? null
-                  : Border(
-                    bottom: BorderSide(
-                      color:
-                          isDark
-                              ? const Color(0x1EF4EDD7)
-                              : const Color(0x16241C10),
-                    ),
-                  ),
+          border: isLast
+              ? null
+              : Border(bottom: BorderSide(color: scheme.outlineVariant)),
         ),
         child: Row(
           children: [
@@ -313,39 +296,43 @@ class SettingsPage extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
+                color: scheme.primary.withValues(alpha: 0.12),
                 borderRadius: AppRadius.cardSm,
               ),
-              child: Icon(icon, color: accent, size: 18),
+              child: Icon(icon, color: scheme.primary, size: 18),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? AppPalette.ink50 : AppPalette.ink700,
+                    style: AppTextStyles.bodyBase.copyWith(
+                      height: 1.35,
+                      color: scheme.onSurface,
                     ),
                   ),
                   if (summary != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       summary,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppPalette.ink200 : AppPalette.ink300,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyXs.copyWith(
+                        height: 1.4,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ],
               ),
             ),
+            const SizedBox(width: AppSpacing.sm),
             Icon(
               Icons.chevron_right,
-              color: isDark ? AppPalette.ink200 : AppPalette.ink300,
+              size: 20,
+              color: scheme.onSurfaceVariant,
             ),
           ],
         ),

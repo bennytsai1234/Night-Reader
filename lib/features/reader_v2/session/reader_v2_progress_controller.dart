@@ -66,19 +66,30 @@ class ReaderV2ProgressController {
     final normalized = location.normalized(
       chapterCount: repository.chapterCount,
     );
+    final content = repository.cachedContent(normalized.chapterIndex);
+    // A progress write describes content that is already on screen. Do not
+    // turn persistence into a network/content load; enrich it only from the
+    // exact materialized chapter already present in the repository cache.
+    final persisted = normalized.hasContentIdentity || content == null
+        ? normalized
+        : normalized.withContentIdentity(
+            contentHash: content.contentHash,
+            displayText: content.displayText,
+          );
     final title = repository.titleFor(normalized.chapterIndex);
+    final anchorJson = jsonEncode(persisted.toJson());
     book.chapterIndex = normalized.chapterIndex;
     book.charOffset = normalized.charOffset;
     book.visualOffsetPx = normalized.visualOffsetPx;
     book.durChapterTitle = title;
-    book.readerAnchorJson = jsonEncode(normalized.toJson());
+    book.readerAnchorJson = anchorJson;
     await bookDao.updateProgress(
       book.bookUrl,
       normalized.chapterIndex,
       title,
       normalized.charOffset,
       visualOffsetPx: normalized.visualOffsetPx,
-      readerAnchorJson: jsonEncode(normalized.toJson()),
+      readerAnchorJson: anchorJson,
     );
   }
 

@@ -11,6 +11,7 @@ import '../../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('AnalyzeRule JS result bridge', () {
     JavascriptRuntime? runtime;
@@ -465,5 +466,5 @@ java.getString('.next@text') + "|" + count + "|" + names.get(1);
         rule.dispose();
       },
     );
-  });
+  }, skip: quickJsSkip);
 }

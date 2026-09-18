@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -15,6 +16,11 @@ import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'reader_v2_content.dart';
 import 'reader_v2_content_transformer.dart';
 import 'reader_v2_processed_chapter.dart';
+
+typedef ReaderV2TestContentLoader = Future<String?> Function(
+  int chapterIndex,
+  BookChapter chapter,
+);
 
 class ReaderV2ChapterRepositoryException implements Exception {
   const ReaderV2ChapterRepositoryException(this.message);
@@ -36,6 +42,7 @@ class ReaderV2ChapterRepository {
     ReaderChapterContentDao? contentDao,
     BookSourceService? service,
     int Function()? currentChineseConvert,
+    this.contentLoader,
   }) : bookDao = bookDao ?? getIt<BookDao>(),
        chapterDao = chapterDao ?? getIt<ChapterDao>(),
        replaceDao =
@@ -61,6 +68,11 @@ class ReaderV2ChapterRepository {
   final ReaderChapterContentDao? contentDao;
   final BookSourceService service;
   final int Function() currentChineseConvert;
+
+  /// Test-only seam. When absent, the production content pipeline is
+  /// unchanged. A supplied loader may hold a chapter future to reproduce a
+  /// deterministic in-flight state without changing rendering behaviour.
+  final ReaderV2TestContentLoader? contentLoader;
   final ReaderV2ContentTransformer _contentTransformer =
       const ReaderV2ContentTransformer();
 
@@ -141,6 +153,11 @@ class ReaderV2ChapterRepository {
   ReaderV2Content? cachedContent(int chapterIndex) =>
       _contentCache[chapterIndex];
 
+  /// Monotonic identity for the currently materialized semantic content.
+  /// Consumers that retain UTF-16 coordinates across async work must bind
+  /// those coordinates to this generation.
+  int get contentGeneration => _contentCacheGeneration;
+
   void clearContentCache() {
     _contentCacheGeneration += 1;
     _source = null;
@@ -157,6 +174,19 @@ class ReaderV2ChapterRepository {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
       throw const ReaderV2ChapterRepositoryException('章節內容載入失敗: 找不到章節');
+    }
+    final testLoader = contentLoader;
+    if (testLoader != null) {
+      final rawContent = await testLoader(chapterIndex, chapter);
+      final content = ReaderV2Content.fromRaw(
+        chapterIndex: chapterIndex,
+        title: chapter.title,
+        rawText: rawContent ?? chapter.content ?? '',
+      );
+      if (cacheGeneration == _contentCacheGeneration) {
+        _writeToContentCache(chapterIndex, content);
+      }
+      return content;
     }
     final loaded = await _loadViaV2ContentPipeline(
       chapterIndex,
@@ -238,6 +268,13 @@ class ReaderV2ChapterRepository {
     BookChapter chapter,
     int cacheGeneration,
   ) async {
+    final localExtension = localBookExtensionFromPath(book.bookUrl);
+    if (book.origin == 'local' &&
+        book.bookUrl.startsWith('local://') &&
+        localExtension.isNotEmpty &&
+        !isSupportedLocalBookPath(book.bookUrl)) {
+      throw const ReaderV2ChapterRepositoryException('本地書格式不受支援，請使用 TXT 檔案');
+    }
     final contentDao = this.contentDao;
     if (contentDao == null) return null;
     final storage = ReaderChapterContentStorage.withMaterializer(
@@ -248,8 +285,8 @@ class ReaderV2ChapterRepository {
       ),
       sourceDao: sourceDao,
       service: service,
-      getSource:
-          () => cacheGeneration == _contentCacheGeneration ? _source : null,
+      getSource: () =>
+          cacheGeneration == _contentCacheGeneration ? _source : null,
       setSource: (source) {
         if (cacheGeneration == _contentCacheGeneration) {
           _source = source;

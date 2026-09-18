@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
@@ -21,8 +22,10 @@ class ReaderV2AutoPageController extends ChangeNotifier {
        _scrollInterval = scrollInterval,
        _timerFactory = timerFactory ?? Timer.periodic;
 
-  static const double _minAutoPageSpeed = 0.04;
-  static const double _maxAutoPageSpeed = 0.45;
+  static const double _minAutoPageSpeed =
+      ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double _maxAutoPageSpeed =
+      ReaderV2PrefsRepository.maxAutoPageSpeed;
   static const double _defaultAutoPageSpeed = 0.16;
 
   final ReaderV2Runtime runtime;
@@ -34,8 +37,15 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   Timer? _timer;
   bool _stepping = false;
   DateTime? _lastScrollTick;
+  String? _pendingUserNotice;
 
   bool get isRunning => _timer != null;
+
+  String? takeUserNotice() {
+    final notice = _pendingUserNotice;
+    _pendingUserNotice = null;
+    return notice;
+  }
 
   void toggle() {
     if (isRunning) {
@@ -59,9 +69,11 @@ class ReaderV2AutoPageController extends ChangeNotifier {
       final moved = await _step();
       if (!moved) stop();
       return moved;
-    } catch (_) {
+    } catch (error, stackTrace) {
       // viewport command 失敗時停止自動翻頁——不停的話 16ms 週期 timer 會
       // 反覆丟出未處理的非同步例外。
+      debugPrint('ReaderV2 auto page command failed: $error\n$stackTrace');
+      _pendingUserNotice = '自動翻頁發生錯誤，已停止';
       stop();
       return false;
     } finally {

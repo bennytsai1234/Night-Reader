@@ -636,7 +636,7 @@ class AnalyzeUrl {
   /// 從 Content-Type 標頭提取 charset
   String? _extractCharsetFromContentType(String contentType) {
     final match = RegExp(
-      r'charset=([a-zA-Z0-9_-]+)',
+      r'''charset\s*=\s*["']?([^;\s"']+)''',
       caseSensitive: false,
     ).firstMatch(contentType);
     return match?.group(1);
@@ -644,15 +644,7 @@ class AnalyzeUrl {
 
   /// 根據 charset 名稱解碼位元組
   String _decodeWithCharset(Uint8List bytes, String charsetName) {
-    final upper = charsetName.toUpperCase();
-    if (upper == 'GBK' || upper == 'GB2312' || upper == 'GB18030') {
-      try {
-        return gbk.decode(bytes);
-      } catch (_) {
-        return utf8.decode(bytes, allowMalformed: true);
-      }
-    }
-    return utf8.decode(bytes, allowMalformed: true);
+    return EncodingDetect.decodeWithCharset(bytes, charsetName);
   }
 
   /// 獲取回應內容的 body (兼容舊代碼)

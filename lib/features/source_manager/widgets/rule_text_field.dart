@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class RuleTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -21,7 +22,7 @@ class RuleTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -38,7 +39,7 @@ class RuleTextField extends StatelessWidget {
               _buildHelperButton(context),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.md),
           TextFormField(
             controller: controller,
             maxLines: maxLines,
@@ -47,10 +48,12 @@ class RuleTextField extends StatelessWidget {
               hintText: hint,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
+                horizontal: AppSpacing.lg,
                 vertical: AppSpacing.md,
               ),
-              border: OutlineInputBorder(borderRadius: AppRadius.cardSm),
+              border: const OutlineInputBorder(
+                borderRadius: AppRadius.cardMd,
+              ),
             ),
           ),
         ],
@@ -59,15 +62,23 @@ class RuleTextField extends StatelessWidget {
   }
 
   Widget _buildHelperButton(BuildContext context) {
-    return IconButton(
-      icon: Icon(
-        Icons.help_outline,
-        size: 20,
-        color: Theme.of(context).colorScheme.primary,
+    final semanticsLabel = '開啟$label小幫手';
+    return Semantics(
+      label: semanticsLabel,
+      button: true,
+      onTap: () => _showHelperMenu(context),
+      child: ExcludeSemantics(
+        child: IconButton(
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          tooltip: semanticsLabel,
+          icon: Icon(
+            Icons.help_outline,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          onPressed: () => _showHelperMenu(context),
+        ),
       ),
-      onPressed: () => _showHelperMenu(context),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
     );
   }
 
@@ -94,42 +105,55 @@ class RuleTextField extends StatelessWidget {
               {'label': '取連結屬性 @href', 'value': '@href'},
             ];
 
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
+      isScrollControlled: true,
       builder: (ctx) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Text(
-                  '$label - 規則小幫手',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Text(
+                    '$label - 規則小幫手',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              ...helpers.map(
-                (h) => ListTile(
-                  title: Text(h['label']!),
-                  subtitle: Text(h['value']!),
-                  onTap: () {
-                    final text = controller.text;
-                    final selection = controller.selection;
-                    final newText = text.replaceRange(
-                      selection.start,
-                      selection.end,
-                      h['value']!,
-                    );
-                    controller.text = newText;
-                    controller.selection = TextSelection.collapsed(
-                      offset: selection.start + h['value']!.length,
-                    );
-                    Navigator.pop(ctx);
-                  },
+                const Divider(height: 1),
+                ...helpers.map(
+                  (h) => ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
+                    title: Text(h['label']!),
+                    subtitle: Text(h['value']!),
+                    onTap: () {
+                      final text = controller.text;
+                      final selection = controller.selection;
+                      final hasValidSelection =
+                          selection.isValid &&
+                          selection.start >= 0 &&
+                          selection.end <= text.length;
+                      final start =
+                          hasValidSelection ? selection.start : text.length;
+                      final end =
+                          hasValidSelection ? selection.end : text.length;
+                      final value = h['value']!;
+                      final newText = text.replaceRange(start, end, value);
+                      controller.value = TextEditingValue(
+                        text: newText,
+                        selection: TextSelection.collapsed(
+                          offset: start + value.length,
+                        ),
+                      );
+                      Navigator.pop(ctx);
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

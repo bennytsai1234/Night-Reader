@@ -229,4 +229,81 @@ void main() {
     expect(provider.books, hasLength(1));
     expect(provider.books.single.name, '新資料');
   });
+
+  test('分頁暫時失敗保留 hasMore，重試同一頁後只追加一次', () async {
+    var callCount = 0;
+    final requestedPages = <int?>[];
+    final provider = ExploreShowProvider(
+      sourceUrl: 'source://main',
+      exploreUrl: 'https://example.com/explore',
+      exploreName: '精選',
+      exploreLoader: (_, __, {page, cancelToken}) async {
+        callCount++;
+        requestedPages.add(page);
+        if (callCount == 1) {
+          return [
+            _makeSearchBook(
+              bookUrl: 'https://example.com/books/first',
+              name: '第一頁',
+              author: '作者甲',
+            ),
+          ];
+        }
+        if (callCount == 2) {
+          throw StateError('暫時失敗');
+        }
+        return [
+          _makeSearchBook(
+            bookUrl: 'https://example.com/books/second',
+            name: '第二頁',
+            author: '作者乙',
+          ),
+        ];
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    expect(provider.books.map((book) => book.name), ['第一頁']);
+
+    await provider.loadMore();
+    expect(provider.errorMessage, contains('暫時失敗'));
+    expect(provider.hasMore, isTrue);
+    expect(provider.books.map((book) => book.name), ['第一頁']);
+
+    await provider.loadMore();
+    expect(provider.errorMessage, isNull);
+    expect(provider.books.map((book) => book.name), ['第一頁', '第二頁']);
+    expect(requestedPages, [1, 2, 2]);
+  });
+
+  test('只有空分頁會結束 hasMore', () async {
+    var callCount = 0;
+    final provider = ExploreShowProvider(
+      sourceUrl: 'source://main',
+      exploreUrl: 'https://example.com/explore',
+      exploreName: '精選',
+      exploreLoader: (_, __, {page, cancelToken}) async {
+        callCount++;
+        if (callCount == 1) {
+          return [
+            _makeSearchBook(
+              bookUrl: 'https://example.com/books/first',
+              name: '唯一資料',
+              author: '作者甲',
+            ),
+          ];
+        }
+        return [];
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    expect(provider.hasMore, isTrue);
+
+    await provider.loadMore();
+    expect(provider.hasMore, isFalse);
+    expect(provider.books, hasLength(1));
+  });
 }

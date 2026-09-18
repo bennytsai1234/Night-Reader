@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/search_book.dart';
 
 void main() {
+  test('aggregate rejects an empty group in every build mode', () {
+    expect(() => SearchBook.aggregate(const []), throwsArgumentError);
+  });
+
   test('sourceLabels 會保留各來源的名稱', () {
     final book = SearchBook(
       bookUrl: 'https://example.com/book/1',

@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
@@ -13,8 +15,6 @@ import 'widgets/legado_explore_kind_flow.dart';
 
 const String _allGroupsMenuValue = '__all_groups__';
 
-/// ExplorePage - 發現主頁面
-/// (對標 Android ExploreFragment + ExploreAdapter)
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
 
@@ -52,13 +52,16 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: '搜尋書籍',
             onPressed:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const SearchPage()),
                 ),
           ),
-          if (provider.groups.isNotEmpty)
+          if (!provider.isLoadingSources &&
+              provider.sourceLoadError == null &&
+              provider.groups.isNotEmpty)
             PopupMenuButton<String>(
               icon: Icon(
                 Icons.tune_rounded,
@@ -113,105 +116,102 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       children: [
         Icon(
           checked ? Icons.check : Icons.circle_outlined,
-          size: 18,
+          size: AppSpacing.xl,
           color: checked ? theme.colorScheme.primary : null,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.md),
         Text(
           text,
-          style: TextStyle(color: checked ? theme.colorScheme.primary : null),
+          style: TextStyle(
+            height: 1.2,
+            color: checked ? theme.colorScheme.primary : null,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildSourceList(ExploreProvider provider, ThemeData theme) {
+    if (provider.isLoadingSources) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (provider.sourceLoadError != null) {
+      return AppStateView(
+        icon: Icons.error_outline,
+        title: '發現書源載入失敗',
+        description: provider.sourceLoadError!,
+        tone: AppStateTone.error,
+        primaryAction: AppStateAction(
+          label: '重試',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
+      );
+    }
+
     if (provider.isEmpty &&
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
-      return _buildEmptyState(
-        theme: theme,
+      return AppStateView(
         icon: Icons.travel_explore_outlined,
-        message: '目前無可用發現規則的書源',
-        actions: [
-          FilledButton.icon(
-            onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重新整理'),
-          ),
-        ],
+        title: '目前沒有可用的發現書源',
+        description: '到書源管理啟用支援發現功能的書源。',
+        primaryAction: AppStateAction(
+          label: '管理書源',
+          icon: Icons.source_outlined,
+          onPressed:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+              ),
+        ),
+        secondaryAction: AppStateAction(
+          label: '重新整理',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
     if (provider.isEmpty) {
-      return _buildEmptyState(
-        theme: theme,
+      return AppStateView(
         icon: Icons.search_off,
-        message: '找不到符合條件的書源',
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              if (provider.selectedGroup != null) {
-                provider.setGroupFilter(null);
-              } else {
-                provider.setSearchQuery('');
-              }
-            },
-            icon: const Icon(Icons.clear),
-            label: const Text('清除條件'),
-          ),
-          FilledButton.icon(
-            onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重新整理'),
-          ),
-        ],
+        title: '找不到符合條件的書源',
+        description: '清除搜尋或分組條件後再試一次。',
+        primaryAction: AppStateAction(
+          label: '清除條件',
+          icon: Icons.clear,
+          onPressed: () {
+            if (provider.selectedGroup != null) {
+              provider.setGroupFilter(null);
+            } else {
+              provider.setSearchQuery('');
+            }
+          },
+        ),
+        secondaryAction: AppStateAction(
+          label: '重新整理',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, AppSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+        0,
+        AppSpacing.xs,
+        0,
+        AppSpacing.md,
+      ),
       itemCount: provider.sources.length,
       itemBuilder: (context, index) {
         final source = provider.sources[index];
         final isExpanded = provider.expandedIndex == index;
         return _buildSourceItem(provider, source, index, isExpanded, theme);
       },
-    );
-  }
-
-  Widget _buildEmptyState({
-    required ThemeData theme,
-    required IconData icon,
-    required String message,
-    required List<Widget> actions,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 52, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: actions,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -222,17 +222,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     bool isExpanded,
     ThemeData theme,
   ) {
-    final titleBackground = theme.colorScheme.primaryContainer.withValues(
-      alpha: 0.55,
-    );
-    final titleForeground = theme.colorScheme.onPrimaryContainer;
+    final titleBackground = theme.colorScheme.primary.withValues(alpha: 0.06);
+    final titleForeground = theme.colorScheme.onSurface;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.lg,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
         0,
-        AppSpacing.lg,
-        index == provider.sources.length - 1 ? AppSpacing.md : 10,
+        AppSpacing.md,
+        AppSpacing.sm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +260,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
-                    vertical: 10,
+                    vertical: AppSpacing.md,
                   ),
                   child: Row(
                     children: [
@@ -272,6 +270,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
+                            height: 1.3,
                             color: titleForeground,
                             fontWeight: FontWeight.w500,
                           ),
@@ -279,20 +278,20 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       ),
                       if (isExpanded && provider.isLoadingKinds)
                         SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: AppSpacing.xl,
+                          height: AppSpacing.xl,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: theme.colorScheme.primary,
                           ),
                         ),
                       if (isExpanded && provider.isLoadingKinds)
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppSpacing.sm),
                       Icon(
                         isExpanded
                             ? Icons.keyboard_arrow_down
                             : Icons.chevron_right,
-                        size: 20,
+                        size: AppSpacing.xl,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ],
@@ -304,14 +303,14 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           if (isExpanded && !provider.isLoadingKinds)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm,
-                AppSpacing.sm,
-                AppSpacing.sm,
+                AppSpacing.xs,
+                AppSpacing.xs,
+                AppSpacing.xs,
                 0,
               ),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerLowest,
+                  color: theme.colorScheme.surface,
                   borderRadius: AppRadius.cardMd,
                   border: Border.all(
                     color: theme.colorScheme.outlineVariant.withValues(
@@ -324,11 +323,12 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                         ? Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.md,
-                            vertical: 10,
+                            vertical: AppSpacing.md,
                           ),
                           child: Text(
                             '暫無分類',
                             style: theme.textTheme.bodySmall?.copyWith(
+                              height: 1.4,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
@@ -349,7 +349,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     final kinds = provider.expandedKinds;
 
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.xs),
       child: LegadoExploreKindFlow(
         styles: kinds.map((kind) => kind.effectiveStyle).toList(),
         children:
@@ -358,13 +358,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
               final hasUrl = kind.url != null && kind.url!.isNotEmpty;
               final background =
                   isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.08)
-                      : theme.colorScheme.primaryContainer.withValues(
-                        alpha: 0.42,
-                      );
+                      ? theme.colorScheme.error.withValues(alpha: 0.06)
+                      : theme.colorScheme.primary.withValues(alpha: 0.05);
               final borderColor =
                   isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.2)
+                      ? theme.colorScheme.error.withValues(alpha: 0.18)
                       : theme.colorScheme.outlineVariant;
               final textColor =
                   isError
@@ -383,11 +381,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           ? () => _navigateToExploreShow(source, kind)
                           : null,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 40),
+                    constraints: const BoxConstraints(minHeight: AppSpacing.xxxl),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: AppSpacing.sm,
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.xs,
                       ),
                       decoration: BoxDecoration(
                         borderRadius: AppRadius.cardMd,
@@ -395,15 +393,14 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        kind.title,
+                        isError ? '分類載入失敗' : kind.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.labelSmall?.copyWith(
-                          fontSize: 11,
-                          height: 1.15,
+                          height: 1.2,
                           color: textColor,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -420,7 +417,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text('ERROR'),
+            title: const Text('分類載入錯誤'),
             content: SelectableText(kind.url ?? kind.title),
             actions: [
               TextButton(
@@ -464,41 +461,48 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       items: [
         const PopupMenuItem<String>(value: 'edit', child: Text('編輯')),
         const PopupMenuItem<String>(value: 'top', child: Text('置頂')),
-        const PopupMenuItem<String>(value: 'search', child: Text('搜索')),
-        const PopupMenuItem<String>(value: 'refresh', child: Text('刷新分類')),
+        const PopupMenuItem<String>(value: 'search', child: Text('搜尋')),
+        const PopupMenuItem<String>(value: 'refresh', child: Text('重新整理分類')),
         const PopupMenuItem<String>(value: 'delete', child: Text('刪除')),
       ],
     );
 
     if (!context.mounted || action == null) return;
 
-    switch (action) {
-      case 'edit':
-        final full = await provider.getFullSource(source.bookSourceUrl);
-        if (full != null && context.mounted) {
-          Navigator.push(
+    try {
+      switch (action) {
+        case 'edit':
+          final full = await provider.getFullSource(source.bookSourceUrl);
+          if (full != null && context.mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+            );
+          }
+          return;
+        case 'top':
+          await provider.topSource(source);
+          return;
+        case 'search':
+          final full = await provider.getFullSource(source.bookSourceUrl);
+          if (full == null || !context.mounted) return;
+          await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+            MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
           );
-        }
-        return;
-      case 'top':
-        await provider.topSource(source);
-        return;
-      case 'search':
-        final full = await provider.getFullSource(source.bookSourceUrl);
-        if (full == null || !context.mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
-        );
-        return;
-      case 'refresh':
-        await provider.refreshKindsCache(source);
-        return;
-      case 'delete':
-        _confirmDelete(context, provider, source);
-        return;
+          return;
+        case 'refresh':
+          await provider.refreshKindsCache(source);
+          return;
+        case 'delete':
+          _confirmDelete(context, provider, source);
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
     }
   }
 
@@ -519,13 +523,23 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 child: const Text('取消'),
               ),
               TextButton(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
-                  provider.deleteSource(source);
+                  try {
+                    await provider.deleteSource(source);
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('刪除書源失敗：$error')),
+                    );
+                  }
                 },
                 child: Text(
                   '刪除',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(
+                    height: 1.2,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
             ],

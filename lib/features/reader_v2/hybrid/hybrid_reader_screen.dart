@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:convert' show jsonEncode;
 import 'dart:io' as io;
 import 'dart:math' as math;
-import 'dart:ui' as ui show FrameTiming, Paragraph;
+import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_pointer_tap_layer.dart';
@@ -17,6 +22,7 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 
 import 'anchor/anchor_manager.dart';
 import 'core/hybrid_contracts.dart';
+import 'core/chapter_layout_plan.dart';
 import 'core/hybrid_types.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
@@ -32,16 +38,6 @@ import 'text/text_preprocessor.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
-/// 方案 B 混合架構的閱讀主面（W3 整合層）。
-///
-/// 取代 `EngineReaderV2Screen`：對上維持 D5 的三個契約面——
-/// 1. `ReaderV2ViewportController` 七閉包 attach/detach（前六個經 FIFO 佇列，
-///    settleScroll 直達）；
-/// 2. runtime 的 capture / restore 註冊（owner 語意照舊）；
-/// 3. settle 點（拖曳結束、fling 停止、跳章完成、epoch 重建完成）一律
-///    capture + saveProgress。
-/// 對下組裝 hybrid 各模組：text→measure→paragraph/pump→view，錨點換算
-/// 全部經 [HybridAnchor]（I6），epoch 對齊 runtime 的 layoutGeneration（D9）。
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
     super.key,
@@ -56,6 +52,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
     this.enableDiskMetrics = true,
+    this.paragraphCacheCapacity = 512,
   });
 
   final ReaderV2Runtime runtime;
@@ -65,37 +62,42 @@ class HybridReaderScreen extends StatefulWidget {
   final GestureTapUpCallback? onContentTapUp;
   final ReaderV2ViewportController? viewportController;
   final ReaderV2TtsHighlight? ttsHighlight;
-
-  /// D6：章序 + 章內百分比的對外通道（頁面組裝層讀取顯示）。
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
-
-  /// D10 磁碟 metrics 的檔名 key；null 時停用磁碟快取。
   final String? bookUrl;
-
-  /// 測試可注入 `TextPreprocessor(useIsolate: false)` 避免真 isolate。
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskMetrics;
+  final int paragraphCacheCapacity;
 
   @override
   State<HybridReaderScreen> createState() => _HybridReaderScreenState();
 }
 
+bool isHybridPageMoveComplete({
+  required double requestedDistance,
+  required double actualDistance,
+  required bool atBookBoundary,
+}) {
+  if (!requestedDistance.isFinite || requestedDistance <= 0) return false;
+  if (!actualDistance.isFinite || actualDistance <= 0) return false;
+  const tolerance = 0.5;
+  if (actualDistance + tolerance >= requestedDistance) return true;
+  return atBookBoundary;
+}
+
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
-  /// 動作中 capture 觸發 runtime notify 的最小間隔（沿用舊引擎節流值）。
-  static const Duration _motionNotifyInterval = Duration(milliseconds: 200);
   static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
-
+  static const double _minimumViewportMovement = 0.01;
+  static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
   final MeasurementStore _measurementStore = MeasurementStore();
   final DocumentIndex _documentIndex = DocumentIndex(
     centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
   );
-  final AnchorManager _anchorManager = AnchorManager();
   final BudgetGovernor _governor = BudgetGovernor();
   final HybridTelemetry _telemetry = HybridTelemetry();
   final _HybridCommandQueue _commands = _HybridCommandQueue();
-
+  final HybridScrollPhysics _physics = const HybridScrollPhysics();
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
   late ParagraphCache _paragraphCache;
@@ -103,35 +105,31 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late LayoutEpoch _epoch;
   late StyleFingerprint _fingerprint;
   late MeasurementNamespace _namespace;
-
-  final Map<int, ChapterBlocks> _blocks = <int, ChapterBlocks>{};
-  final Map<int, Future<ChapterBlocks?>> _blocksInFlight =
-      <int, Future<ChapterBlocks?>>{};
-  final Set<BlockKey> _enqueued = <BlockKey>{};
+  final Map<int, ChapterLayoutPlan> _layoutPlans = <int, ChapterLayoutPlan>{};
+  final Map<int, ChapterBlocks> _blocks = {};
+  final Map<int, Future<ChapterBlocks?>> _blocksInFlight = {};
+  final Map<BlockKey, ParagraphLease> _viewportLeases = {};
   final Set<({MeasurementNamespace namespace, int chapter, String contentHash})>
-  _warmedChapters =
-      <({MeasurementNamespace namespace, int chapter, String contentHash})>{};
-
+  _warmedChapters = {};
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
+  StreamSubscription<BlockReady>? _pumpEventsSub;
   ScrollController? _scrollController;
   MetricsDiskCache? _metricsDiskCache;
-
   Size _viewportSize = Size.zero;
   double? _pendingScrollOffset;
+  ReaderV2OperationToken? _demandOwner;
   int _windowCenter = 0;
   int _lastLayoutGeneration = 0;
   int _runtimeLocationRevision = 0;
-  int _restoreTicket = 0;
   ReaderV2Location? _lastReportedLocation;
-  ReaderV2Location? _lastSyncedLocation;
-  DateTime? _lastMotionNotifyAt;
+  String? _lastLoggedErrorMessage;
   bool _initialRestoreCompleted = false;
-  bool _capturing = false;
   bool _dragging = false;
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
-  bool _pumpFramePending = false;
   bool _captureFramePending = false;
+  double? _lastDebugSnapshotOffset;
+  int _fallbackItemExtentCount = 0;
 
   @override
   void initState() {
@@ -140,78 +138,80 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       repository: widget.runtime.repository,
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
-    _admission = AdmissionController(documentIndex: _documentIndex)
-      ..addListener(_scheduleRebuild);
-    _paragraphCache = ParagraphCache();
+    _admission = AdmissionController(documentIndex: _documentIndex);
+    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     _refreshEpochBinding();
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
     _lastReportedLocation = widget.runtime.state.visibleLocation;
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
-
-    widget.runtime.registerHybridViewport(this);
-    widget.runtime.addListener(_onRuntimeChanged);
-    widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
-    widget.runtime.registerViewportRestore(this, _restoreToLocation);
+    _registerRuntime();
     _attachController();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // 冷開機由 runtime.openBook() 經 restore 鏈進來；熱掛載（runtime 已
-      // ready）沒有人會再叫 restore，這裡自己補一次同步。
-      if (widget.runtime.state.phase == ReaderV2Phase.ready) {
-        unawaited(_syncToRuntimeLocation(force: true));
-      }
+      if (mounted) _restoreAttachedRuntime();
     });
+  }
+
+  void _registerRuntime() {
+    widget.runtime.registerHybridViewport(this);
+    widget.runtime.addListener(_onRuntimeChanged);
+    widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
+    widget.runtime.registerViewportRestore(this, _restoreToLocation);
+  }
+
+  void _unregisterRuntime(ReaderV2Runtime runtime) {
+    runtime.unregisterHybridViewport(this);
+    runtime.removeListener(_onRuntimeChanged);
+    runtime.unregisterVisibleLocationCapture(this);
+    runtime.unregisterViewportRestore(this);
   }
 
   @override
   void didUpdateWidget(covariant HybridReaderScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.runtime != widget.runtime) {
-      oldWidget.runtime.unregisterHybridViewport(this);
-      oldWidget.runtime.removeListener(_onRuntimeChanged);
-      oldWidget.runtime.unregisterVisibleLocationCapture(this);
-      oldWidget.runtime.unregisterViewportRestore(this);
+      _unregisterRuntime(oldWidget.runtime);
       _chapterEventsSub?.cancel();
       unawaited(_chapterRepo.dispose());
       _chapterRepo = HybridChapterRepository(
         repository: widget.runtime.repository,
       );
       _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
-      widget.runtime.registerHybridViewport(this);
-      widget.runtime.addListener(_onRuntimeChanged);
-      widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
-      widget.runtime.registerViewportRestore(this, _restoreToLocation);
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
-      _lastSyncedLocation = null;
+      _lastLoggedErrorMessage = null;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
-      _restoreTicket += 1;
-      _initialRestoreCompleted = false;
-      _handleEpochRebuild();
+      _handleEpochRebuild(oldWidget.bookUrl);
+      _registerRuntime();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_syncToRuntimeLocation(force: true));
+        if (mounted) _restoreAttachedRuntime();
       });
     }
     if (oldWidget.viewportController != widget.viewportController) {
       _detachController(oldWidget.viewportController);
       _attachController();
     }
+    if (oldWidget.textColor != widget.textColor) _reconcileVisibleWindow();
   }
 
   @override
   void dispose() {
-    widget.runtime.unregisterHybridViewport(this);
-    widget.runtime.removeListener(_onRuntimeChanged);
-    widget.runtime.unregisterVisibleLocationCapture(this);
-    widget.runtime.unregisterViewportRestore(this);
+    _logTelemetrySessionSummary();
+    _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
     WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _chapterEventsSub?.cancel();
-    unawaited(_writeDiskMetrics(_measurementStore.snapshot(_namespace)));
+    _pumpEventsSub?.cancel();
+    unawaited(
+      _writeDiskMetrics(
+        _measurementStore.snapshot(_namespace),
+        bookUrl: widget.bookUrl,
+      ),
+    );
     unawaited(_chapterRepo.dispose());
+    _releaseViewportLeases();
     _admission.dispose();
     _pump.dispose();
     _paragraphCache.dispose();
@@ -219,29 +219,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
-      unawaited(widget.runtime.flushProgress());
-      unawaited(_writeDiskMetrics(_measurementStore.snapshot(_namespace)));
-    }
-  }
-
-  void _handleFrameTimings(List<ui.FrameTiming> timings) {
-    if (!mounted || timings.isEmpty) return;
-    widget.runtime.recordFrameTimings(timings);
-    _governor.recordFrameTimings(timings);
-    _telemetry.recordFrameTimings(timings);
-  }
-
-  // ---- epoch / namespace（D9：epoch 對齊 layoutGeneration） ----
-
   void _refreshEpochBinding() {
     _epoch = LayoutEpoch(widget.runtime.state.layoutGeneration);
     _fingerprint = StyleFingerprint.fromLayoutSpec(
       widget.runtime.state.layoutSpec,
+      justify: AppConfig.readerV2ContentJustify,
       platformFontSignature:
           '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
     );
@@ -251,78 +233,826 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       measurementStore: _measurementStore,
       namespace: _namespace,
       governor: _governor,
+      onTaskCompleted: _handleLayoutTaskCompleted,
     );
     _admission.reset(epoch: _epoch, chapterCount: widget.runtime.chapterCount);
     _admission.attach(_pump.completed);
+    _pumpEventsSub = _pump.completed.listen((_) {
+      // Admission has consumed this result before demand is advanced. Newly
+      // measured frontier blocks can therefore supply the same native frame.
+      _reconcileVisibleWindow();
+    });
   }
 
-  void _handleEpochRebuild() {
-    _enqueued.clear();
+  void _handleEpochRebuild(String? previousBookUrl) {
+    _runtimeLocationRevision += 1;
+    _initialRestoreCompleted = false;
+    final oldNamespace = _namespace;
+    unawaited(
+      _writeDiskMetrics(
+        _measurementStore.snapshot(oldNamespace),
+        fingerprint: oldNamespace.fingerprint,
+        bookUrl: previousBookUrl,
+      ),
+    );
+    _releaseViewportLeases();
+    _pumpEventsSub?.cancel();
+    _pump.dispose();
+    _paragraphCache.dispose();
+    _measurementStore.invalidateNamespace(oldNamespace);
     _blocks.clear();
+    _layoutPlans.clear();
     _blocksInFlight.clear();
     _chapterRepo.invalidateLoaded(emitEvents: false);
-    _pump.dispose();
-    final oldCache = _paragraphCache;
-    _paragraphCache = ParagraphCache();
-    WidgetsBinding.instance.addPostFrameCallback((_) => oldCache.dispose());
+    _warmedChapters.clear();
+    _documentIndex.reset(centerKey: _documentIndex.centerKey);
+    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     _refreshEpochBinding();
   }
 
-  // ---- runtime 事件 ----
+  Future<bool> _restoreCore(
+    ReaderV2Location location, {
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
+    _initialRestoreCompleted = false;
+    _scheduleRebuild();
+    final binding = _pump;
+    final chapter = location.chapterIndex
+        .clamp(0, widget.runtime.chapterCount - 1)
+        .toInt();
+    _windowCenter = chapter;
+    _setDemandRange(
+      math.max(0, chapter - _chapterRepo.windowRadius),
+      math.min(
+        widget.runtime.chapterCount - 1,
+        chapter + _chapterRepo.windowRadius,
+      ),
+    );
+    binding.clearPendingLayouts();
+    binding.onScrollStateChanged(PumpState.rebuilding);
+    try {
+      final blocks = await _ensureChapterBlocks(chapter, anchor: true);
+      if (blocks == null || !isCurrent()) return false;
+      final normalized = location.normalized(
+        chapterCount: widget.runtime.chapterCount,
+        chapterLength: blocks.displayText.length,
+      );
+      final anchor = HybridAnchor.fromLocation(normalized, blocks);
+      _initialRestoreCompleted = false;
+      _scheduleRebuild();
+      _releaseViewportLeases();
+      _documentIndex.reset(centerKey: anchor.blockKey);
+      _admission.reset(
+        epoch: _epoch,
+        chapterCount: widget.runtime.chapterCount,
+      );
+      // Only a document reset relinquishes the old world. Raw-cache eviction
+      // never removes coordinates underneath a mounted viewport.
+      for (final oldChapter in _layoutPlans.keys.toList(growable: false)) {
+        if (!_chapterRepo.isResident(oldChapter)) _releaseChapter(oldChapter);
+      }
+      for (final shape in _blocks.values) {
+        _admission.registerChapter(shape);
+      }
+      while (isCurrent()) {
+        final revision = _documentIndex.revisionNumber;
+        final target = _offsetForAnchor(anchor, blocks);
+        _requestWindow(
+          target ?? 0,
+          (target ?? 0) + math.max(1, _viewportSize.height),
+          anchorKey: anchor.blockKey,
+        );
+        final positionedTarget = _offsetForAnchor(anchor, blocks);
+        if (positionedTarget != null &&
+            _windowReady(
+              positionedTarget,
+              positionedTarget + _viewportSize.height,
+            ))
+          break;
+        // Cached exact metrics may advance admission synchronously, without
+        // creating a layout task. Re-evaluate that progress before waiting.
+        if (_documentIndex.revisionNumber != revision) continue;
+        if (!await _waitForMaterialization(isCurrent)) return false;
+      }
+      if (!isCurrent()) return false;
+      final target = _offsetForAnchor(anchor, blocks);
+      if (target == null) return false;
+      _pendingScrollOffset = target;
+      _lastReportedLocation = normalized;
+      _initialRestoreCompleted = true;
+      _scheduleRebuild();
+      // Return only after the native viewport exists and has applied the
+      // position. This is a Flutter frame transaction, not a prefetch barrier.
+      do {
+        await _nextFrame();
+        if (!isCurrent()) return false;
+      } while (_rebuildQueued || !(_scrollController?.hasClients ?? false));
+      final position = _scrollController!.position;
+      position.jumpTo(
+        target
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble(),
+      );
+      _pendingScrollOffset = null;
+      await _nextFrame();
+      if (!isCurrent()) return false;
+      _reconcileVisibleWindow();
+      _publishProgress();
+      return true;
+    } finally {
+      if (mounted && identical(binding, _pump)) {
+        binding.onScrollStateChanged(
+          _dragging ? PumpState.dragging : PumpState.idle,
+        );
+      }
+    }
+  }
+
+  Future<void> _nextFrame() {
+    WidgetsBinding.instance.ensureVisualUpdate();
+    return WidgetsBinding.instance.endOfFrame;
+  }
+
+  Future<bool> _waitForMaterialization(bool Function() isCurrent) async {
+    if (!isCurrent()) return false;
+    if (_pump.queueDepth > 0) {
+      await _nextFrame();
+    } else {
+      final loads = _blocksInFlight.values.toList(growable: false);
+      if (loads.isEmpty) return false;
+      await Future.any(loads);
+    }
+    return isCurrent();
+  }
+
+  bool _windowReady(double top, double bottom) {
+    if (_documentIndex.admittedCount == 0) return false;
+    if (-_documentIndex.beforeExtent > top + 0.001 && !_isBookStartAdmitted())
+      return false;
+    if (_documentIndex.afterExtent < bottom - 0.001 && !_isBookEndAdmitted())
+      return false;
+    return _documentIndex
+        .keysInRange(top, bottom)
+        .every((key) => _paragraphCache.contains(key, _epoch));
+  }
+
+  Future<ChapterBlocks?> _ensureChapterBlocks(
+    int chapter, {
+    bool anchor = false,
+  }) {
+    final cached = _blocks[chapter];
+    if (cached != null) return Future.value(cached);
+    final pending = _blocksInFlight[chapter];
+    if (pending != null) return pending;
+    final binding = _pump;
+    final repository = _chapterRepo;
+    final preprocessor = widget.preprocessor;
+    final maxBlockChars = binding.maxCharsForBudget(
+      _governor.ballisticSliceBudget,
+    );
+    late final Future<ChapterBlocks?> task;
+    bool current() =>
+        mounted &&
+        identical(binding, _pump) &&
+        identical(_blocksInFlight[chapter], task);
+    task = () async {
+      try {
+        final text = await repository.load(chapter);
+        if (!current()) return null;
+        final plan = _layoutPlans[chapter];
+        if (plan != null) {
+          final restored = plan.materialize(text);
+          if (restored == null) {
+            // An actual source edit ends the old document identity. Let the
+            // runtime capture/remap/restore it; never overwrite admitted keys.
+            await widget.runtime.reloadContentPreservingLocation();
+            return null;
+          }
+          _blocks[chapter] = restored;
+          _admission.registerChapter(restored);
+          return restored;
+        }
+        final rough = await preprocessor.process(
+          text,
+          maxBlockChars: maxBlockChars,
+        );
+        if (!current()) return null;
+        final spec = widget.runtime.state.layoutSpec;
+        final blocks = await binding.alignChapterBlocksToVisualLines(
+          rough,
+          maxBlockChars: maxBlockChars,
+          bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
+            spec.style,
+            justify: AppConfig.readerV2ContentJustify,
+          ),
+          contentWidth: spec.contentWidth,
+          cellWidth: spec.cellWidth,
+          textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
+          priority: anchor
+              ? LayoutTaskPriority.anchor
+              : LayoutTaskPriority.prefetch,
+        );
+        if (blocks == null || !current()) return null;
+        _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
+        _blocks[chapter] = blocks;
+        _admission.registerChapter(blocks);
+        // Disk reads may improve later reuse; neither first paint nor command
+        // completion waits for this optional cache.
+        unawaited(_warmDiskMetricsForChapter(blocks));
+        return blocks;
+      } catch (_) {
+        return null;
+      }
+    }();
+    _blocksInFlight[chapter] = task;
+    unawaited(
+      task.then((_) {
+        if (identical(_blocksInFlight[chapter], task))
+          _blocksInFlight.remove(chapter);
+      }),
+    );
+    return task;
+  }
+
+  void _setDemandRange(int first, int last) {
+    _pump.setDemandRange(first, last);
+    if (_chapterRepo.residentFirst == first &&
+        _chapterRepo.residentLast == last)
+      return;
+    _chapterRepo.setResidentRange(first, last);
+  }
+
+  void _requestChapter(int chapter) {
+    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
+    final first = math.min(_chapterRepo.residentFirst ?? chapter, chapter);
+    final last = math.max(_chapterRepo.residentLast ?? chapter, chapter);
+    _setDemandRange(first, last);
+    final binding = _pump;
+    unawaited(
+      _ensureChapterBlocks(chapter).then((blocks) {
+        if (blocks != null && mounted && identical(binding, _pump))
+          _reconcileVisibleWindow();
+      }),
+    );
+  }
+
+  void _onChapterEvent(ChapterEvent event) {
+    if (!mounted) return;
+    switch (event.kind) {
+      case ChapterEventKind.loaded:
+        if (_chapterRepo.isResident(event.chapterId))
+          _requestChapter(event.chapterId);
+      case ChapterEventKind.evicted:
+        // The active document keeps only text-free boundaries and metrics.
+        // Raw text can be released without reinterpreting its geometry.
+        if (!_chapterRepo.isResident(event.chapterId)) {
+          _blocks.remove(event.chapterId);
+          _blocksInFlight.remove(event.chapterId);
+        }
+        break;
+      case ChapterEventKind.invalidated:
+        _releaseChapter(event.chapterId);
+        _documentIndex.invalidateChapter(event.chapterId);
+        _scheduleRebuild();
+    }
+  }
+
+  void _releaseChapter(int chapter) {
+    _blocks.remove(chapter);
+    _layoutPlans.remove(chapter);
+    _blocksInFlight.remove(chapter);
+    _warmedChapters.removeWhere((entry) => entry.chapter == chapter);
+    _pump.invalidateChapter(chapter);
+    _measurementStore.invalidateChapter(chapter);
+    _paragraphCache.invalidateChapter(chapter);
+    _admission.invalidateChapter(chapter);
+  }
+
+  void _releaseViewportLeases() {
+    for (final lease in _viewportLeases.values) {
+      lease.release();
+    }
+    _viewportLeases.clear();
+  }
+
+  void _requestWindow(double top, double bottom, {BlockKey? anchorKey}) {
+    final needed = <BlockKey>{};
+    final groups = <BlockKey>{};
+    void request(BlockKey key, {bool anchor = false}) {
+      final blocks = _blocks[key.chapterIndex];
+      if (blocks == null) {
+        _requestChapter(key.chapterIndex);
+        return;
+      }
+      final group = blocks.groupContaining(key);
+      if (group.isEmpty || !groups.add(group.first.key)) return;
+      for (final block in group) {
+        needed.add(block.key);
+        _viewportLeases.putIfAbsent(
+          block.key,
+          () => _paragraphCache.retain(block.key, _epoch),
+        );
+      }
+      final ready = group.every(
+        (block) =>
+            _measurementStore.get(_namespace, block.key) != null &&
+            _paragraphCache.containsFresh(block.key, _epoch, widget.textColor),
+      );
+      if (!ready) {
+        _submitGroupTask(blocks, group, anchor: anchor);
+      } else {
+        for (final block in group) {
+          if (_documentIndex.metricsFor(block.key) == null) {
+            _admission.offer(
+              BlockReady(
+                key: block.key,
+                epoch: _epoch,
+                metrics: _measurementStore.get(_namespace, block.key)!,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    if (anchorKey != null) request(anchorKey, anchor: true);
+    for (final key
+        in _documentIndex.keysInRange(top, bottom).toList(growable: false)) {
+      request(key);
+    }
+    if (_documentIndex.metricsFor(_documentIndex.centerKey) != null) {
+      if (_documentIndex.afterExtent < bottom && !_isBookEndAdmitted()) {
+        final key = _frontierKey(forward: true);
+        if (key != null) request(key);
+      }
+      if (-_documentIndex.beforeExtent > top && !_isBookStartAdmitted()) {
+        final key = _frontierKey(forward: false);
+        if (key != null) request(key);
+      }
+    }
+    // New consumers are acquired before old ones release their ownership.
+    for (final key in _viewportLeases.keys.toList(growable: false)) {
+      if (!needed.contains(key)) _viewportLeases.remove(key)!.release();
+    }
+  }
+
+  BlockKey? _frontierKey({required bool forward}) {
+    final edge =
+        (forward
+            ? _documentIndex.forwardEdgeKey
+            : _documentIndex.backwardEdgeKey) ??
+        _documentIndex.centerKey;
+    final blocks = _blocks[edge.chapterIndex];
+    if (blocks == null) {
+      _requestChapter(edge.chapterIndex);
+      return null;
+    }
+    final index = edge.blockIndex + (forward ? 1 : -1);
+    if (index >= 0 && index < blocks.blocks.length)
+      return blocks.blocks[index].key;
+    final chapter = edge.chapterIndex + (forward ? 1 : -1);
+    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return null;
+    final neighbor = _blocks[chapter];
+    if (neighbor == null) {
+      _requestChapter(chapter);
+      return null;
+    }
+    return (forward ? neighbor.blocks.first : neighbor.blocks.last).key;
+  }
+
+  void _reconcileVisibleWindow() {
+    if (!mounted || !_initialRestoreCompleted) return;
+    // A runtime operation owns demand until positioning commits. Observations
+    // of the previously displayed world cannot overwrite its requested target.
+    if (widget.runtime.pendingLocation != null) return;
+    final offset = _effectiveScrollOffset();
+    if (offset == null || _viewportSize.height <= 0) return;
+    final top = offset - _admission.backwardGuaranteedWindow;
+    final bottom = offset + _viewportSize.height + _admission.guaranteedWindow;
+    final keys = _documentIndex
+        .keysInRange(top, bottom)
+        .toList(growable: false);
+    var first = math.max(0, _windowCenter - _chapterRepo.windowRadius);
+    var last = math.min(
+      widget.runtime.chapterCount - 1,
+      _windowCenter + _chapterRepo.windowRadius,
+    );
+    if (keys.isNotEmpty) {
+      first = math.min(first, keys.first.chapterIndex);
+      last = math.max(last, keys.last.chapterIndex);
+    }
+    // Keep an in-progress frontier load until it supplies this demand. The
+    // outermost chapter may not yet have any admitted geometry.
+    if (_documentIndex.afterExtent < bottom && !_isBookEndAdmitted()) {
+      last = math.max(
+        last,
+        math.min(
+          widget.runtime.chapterCount - 1,
+          (_documentIndex.forwardEdgeKey?.chapterIndex ?? _windowCenter) + 1,
+        ),
+      );
+    }
+    if (-_documentIndex.beforeExtent > top && !_isBookStartAdmitted()) {
+      first = math.min(
+        first,
+        math.max(
+          0,
+          (_documentIndex.backwardEdgeKey?.chapterIndex ?? _windowCenter) - 1,
+        ),
+      );
+    }
+    _setDemandRange(first, last);
+    _requestWindow(top, bottom);
+    _updateLeadTelemetry();
+  }
+
+  void _updateLeadTelemetry() {
+    final offset = _effectiveScrollOffset();
+    if (offset == null) return;
+    _admission.updateLead(
+      viewportTop: offset,
+      viewportBottom: offset + _viewportSize.height,
+    );
+    _telemetry.updateRuntimeStats(
+      pumpQueueDepth: _pump.queueDepth,
+      forwardLeadPx: _admission.latestForwardLead,
+      backwardLeadPx: _admission.latestBackwardLead,
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _dragging = true;
+      _sawUserScroll = true;
+      _runtimeLocationRevision += 1;
+      _pump.onScrollStateChanged(PumpState.dragging);
+    } else if (notification is ScrollUpdateNotification) {
+      if (_dragging && notification.dragDetails == null) {
+        _dragging = false;
+        _pump.onScrollStateChanged(PumpState.ballistic);
+      }
+      _scheduleMotionCapture();
+    } else if (notification is ScrollEndNotification) {
+      final wasUser = _sawUserScroll;
+      _dragging = false;
+      _sawUserScroll = false;
+      _pump.onScrollStateChanged(PumpState.idle);
+      if (wasUser) unawaited(_handleScrollSettled());
+    }
+    return false;
+  }
+
+  void _scheduleMotionCapture() {
+    if (_captureFramePending || !mounted) return;
+    _captureFramePending = true;
+    final revision = _runtimeLocationRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _captureFramePending = false;
+      if (!mounted ||
+          !_initialRestoreCompleted ||
+          revision != _runtimeLocationRevision)
+        return;
+      if (widget.runtime.pendingLocation != null) return;
+      final location = _captureAndReport(notify: false);
+      if (location != null) _windowCenter = location.chapterIndex;
+      _reconcileVisibleWindow();
+      _publishProgress();
+    });
+  }
+
+  Future<void> _handleScrollSettled() async {
+    if (!mounted ||
+        !_initialRestoreCompleted ||
+        widget.runtime.pendingLocation != null)
+      return;
+    final location = _captureAndReport(notify: true);
+    if (location != null) _windowCenter = location.chapterIndex;
+    _reconcileVisibleWindow();
+    _publishProgress();
+    await widget.runtime.saveProgress(immediate: true);
+  }
+
+  Future<bool> _ensurePageDistanceAvailable({
+    required bool forward,
+    required double distance,
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent() ||
+        distance <= 0 ||
+        !(_scrollController?.hasClients ?? false))
+      return false;
+    final geometryRevision = _documentIndex.revisionNumber;
+    final pixels = _scrollController!.position.pixels;
+    final target = pixels + (forward ? distance : -distance);
+    final top = math.min(pixels, target);
+    final bottom = math.max(pixels, target) + _viewportSize.height;
+    while (isCurrent()) {
+      _requestWindow(top, bottom);
+      if (_windowReady(top, bottom)) {
+        if (_documentIndex.revisionNumber != geometryRevision)
+          await _nextFrame();
+        return isCurrent();
+      }
+      if (!await _waitForMaterialization(isCurrent)) return false;
+    }
+    return false;
+  }
+
+  Future<List<ParagraphLease>> _ensureRangeLaidOut(
+    ChapterBlocks blocks,
+    int start,
+    int end,
+    bool Function() isCurrent,
+  ) async {
+    final range = HybridTextRange(math.max(0, start), math.max(0, end));
+    final targets = blocks.blocks
+        .where(
+          (block) =>
+              block.charRange.intersects(range) ||
+              (range.isEmpty && block.charRange.containsOffset(range.start)),
+        )
+        .toList(growable: false);
+    // This command owns these drawables until its geometry query and native
+    // movement finish. Viewport prefetch may independently release its leases.
+    final leases = <ParagraphLease>[];
+    final groups = <BlockKey>{};
+    try {
+      for (final block in targets) {
+        leases.add(_paragraphCache.retain(block.key, _epoch));
+        if (!_paragraphCache.containsFresh(
+          block.key,
+          _epoch,
+          widget.textColor,
+        )) {
+          final group = blocks.groupContaining(block.key);
+          if (groups.add(group.first.key)) {
+            _submitGroupTask(blocks, group, anchor: true);
+          }
+        }
+      }
+      while (isCurrent() &&
+          !targets.every(
+            (block) => _paragraphCache.containsFresh(
+              block.key,
+              _epoch,
+              widget.textColor,
+            ),
+          )) {
+        if (!await _waitForMaterialization(isCurrent)) break;
+      }
+      return leases;
+    } catch (_) {
+      for (final lease in leases) {
+        lease.release();
+      }
+      rethrow;
+    }
+  }
+
+  void _handleFallbackItemExtent() {
+    _fallbackItemExtentCount += 1;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.inactive) {
+      unawaited(widget.runtime.flushProgress());
+      unawaited(
+        _writeDiskMetrics(
+          _measurementStore.snapshot(_namespace),
+          bookUrl: widget.bookUrl,
+        ),
+      );
+    }
+  }
+
+  void _logTelemetrySessionSummary() {
+    final summary = _telemetry.sessionSummary();
+    if ((summary['frames'] as int? ?? 0) == 0) return;
+    summary['fontSize'] = _fingerprint.fontSize;
+    summary['lastLineSpacingCompensation'] =
+        _fingerprint.lastLineSpacingCompensation;
+    AppLog.i('ReaderV2 telemetry session: ${jsonEncode(summary)}');
+  }
+
+  @visibleForTesting
+  Map<String, Object?> debugSnapshot() {
+    final controller = _scrollController;
+    final position = controller != null && controller.hasClients
+        ? controller.position
+        : null;
+    final offset = _effectiveScrollOffset();
+    final viewportHeight = _viewportSize.height;
+    final hasViewport = offset != null && viewportHeight > 0;
+    final visibleKeys = hasViewport
+        ? _documentIndex
+              .keysInRange(offset, offset + viewportHeight)
+              .toList(growable: false)
+        : const <BlockKey>[];
+    final missingParagraphKeys = <BlockKey>[];
+    for (final key in visibleKeys) {
+      if (!_paragraphCache.containsFresh(key, _epoch, widget.textColor)) {
+        missingParagraphKeys.add(key);
+      }
+    }
+
+    String scrollDirection = 'idle';
+    final previousOffset = _lastDebugSnapshotOffset;
+    if (offset != null && previousOffset != null) {
+      final delta = offset - previousOffset;
+      if (delta > 0.5) {
+        scrollDirection = 'forward';
+      } else if (delta < -0.5) {
+        scrollDirection = 'backward';
+      }
+    }
+    _lastDebugSnapshotOffset = offset;
+
+    final captured = _captureVisibleLocation();
+    final runtimeState = widget.runtime.state;
+    final telemetry = _telemetry.snapshot;
+    _telemetry.recordPumpQueueDepth(_pump.queueDepth);
+
+    Map<String, int> keyJson(BlockKey key) => <String, int>{
+      'chapterIndex': key.chapterIndex,
+      'blockIndex': key.blockIndex,
+    };
+
+    double? finiteOrNull(double value) => value.isFinite ? value : null;
+
+    bool isConsecutive(BlockKey previous, BlockKey next) {
+      if (previous.chapterIndex == next.chapterIndex) {
+        return next.blockIndex == previous.blockIndex + 1;
+      }
+      return next.chapterIndex == previous.chapterIndex + 1 &&
+          next.blockIndex == 0;
+    }
+
+    final visibleKeysContiguous = visibleKeys.length < 2
+        ? true
+        : Iterable<int>.generate(visibleKeys.length - 1).every(
+            (index) =>
+                isConsecutive(visibleKeys[index], visibleKeys[index + 1]),
+          );
+    final visibleChapters = <int>[];
+    for (final key in visibleKeys) {
+      if (visibleChapters.isEmpty || visibleChapters.last != key.chapterIndex) {
+        visibleChapters.add(key.chapterIndex);
+      }
+    }
+
+    return <String, Object?>{
+      'capturedAtMs': DateTime.now().millisecondsSinceEpoch,
+      'displayRefreshRate': ui.PlatformDispatcher.instance.views.isEmpty
+          ? null
+          : finiteOrNull(
+              ui.PlatformDispatcher.instance.views.first.display.refreshRate,
+            ),
+      'phase': runtimeState.phase.name,
+      'scrollOffset': finiteOrNull(offset ?? double.nan),
+      'viewportHeight': finiteOrNull(viewportHeight),
+      'viewportBottom': hasViewport
+          ? finiteOrNull(offset + viewportHeight)
+          : null,
+      'scrollDirection': scrollDirection,
+      'isScrolling': position?.isScrollingNotifier.value ?? false,
+      'dragging': _dragging,
+      'initialRestoreCompleted': _initialRestoreCompleted,
+      'runtimeLocationRevision': _runtimeLocationRevision,
+      'pendingLocation': widget.runtime.pendingLocation?.toJson(),
+      'runtimeVisibleLocation': runtimeState.visibleLocation.toJson(),
+      'runtimeCommittedLocation': runtimeState.committedLocation.toJson(),
+      'capturedLocation': captured?.toJson(),
+      'layoutGeneration': runtimeState.layoutGeneration,
+      'epoch': _epoch.value,
+      'documentIndexRevision': _documentIndex.revisionNumber,
+      'documentIndexResetGeneration': _documentIndex.resetGeneration,
+      'documentIndexCenter': keyJson(_documentIndex.centerKey),
+      'admittedCount': _documentIndex.admittedCount,
+      'beforeCount': _documentIndex.beforeCount,
+      'centerAndAfterCount': _documentIndex.centerAndAfterCount,
+      'beforeExtent': finiteOrNull(_documentIndex.beforeExtent),
+      'afterExtent': finiteOrNull(_documentIndex.afterExtent),
+      'backwardEdge': _documentIndex.backwardEdgeKey == null
+          ? null
+          : keyJson(_documentIndex.backwardEdgeKey!),
+      'forwardEdge': _documentIndex.forwardEdgeKey == null
+          ? null
+          : keyJson(_documentIndex.forwardEdgeKey!),
+      'visibleKeys': [for (final key in visibleKeys) keyJson(key)],
+      'visibleChapters': visibleChapters,
+      'visibleKeysContiguous': visibleKeysContiguous,
+      'missingParagraphKeys': [
+        for (final key in missingParagraphKeys) keyJson(key),
+      ],
+      'paragraphCacheLength': _paragraphCache.length,
+      'loadedChapterCount': _blocks.length,
+      'loadedContentHashes': {
+        for (final entry in _blocks.entries) entry.key: entry.value.contentHash,
+      },
+      'chaptersInFlight': _blocksInFlight.keys.toList(growable: false),
+      'residentFirstChapter': _chapterRepo.residentFirst,
+      'residentLastChapter': _chapterRepo.residentLast,
+      'pumpQueueDepth': _pump.queueDepth,
+      'discardedLayoutTasks': _pump.discardedWorkCount,
+      'fallbackItemExtentHits': _fallbackItemExtentCount,
+      'forwardLeadPx': finiteOrNull(_admission.latestForwardLead),
+      'backwardLeadPx': finiteOrNull(_admission.latestBackwardLead),
+      'rollingFrameP50Micros': telemetry.frameP50Micros,
+      'rollingFrameP95Micros': telemetry.frameP95Micros,
+      'rollingFrameP99Micros': telemetry.frameP99Micros,
+      'rollingJankOver8ms': telemetry.jankOver8ms,
+      'rollingJankOver16ms': telemetry.jankOver16ms,
+      'rollingJankOver33ms': telemetry.jankOver33ms,
+      'worstFrameMicros': telemetry.worstFrameMicros,
+      'consecutiveMissedFrames': telemetry.consecutiveMissedFrames,
+      'maxConsecutiveMissedFrames': telemetry.maxConsecutiveMissedFrames,
+      'layoutTaskCount': telemetry.layoutTaskCount,
+      'layoutTaskP99Micros': telemetry.layoutTaskP99Micros,
+      'worstLayoutTaskMicros': telemetry.worstLayoutTaskMicros,
+      'worstLayoutTaskPredictedMicros':
+          telemetry.worstLayoutTaskPredictedMicros,
+      'worstLayoutTaskCharCount': telemetry.worstLayoutTaskCharCount,
+      'layoutTasksOver8ms': telemetry.layoutTasksOver8ms,
+      'vsyncOverheadP99Micros': telemetry.vsyncOverheadP99Micros,
+      'buildP99Micros': telemetry.buildP99Micros,
+      'rasterP99Micros': telemetry.rasterP99Micros,
+      'worstVsyncOverheadMicros': telemetry.worstVsyncOverheadMicros,
+      'worstBuildMicros': telemetry.worstBuildMicros,
+      'worstRasterMicros': telemetry.worstRasterMicros,
+    };
+  }
+
+  void _handleFrameTimings(List<ui.FrameTiming> timings) {
+    if (!mounted || timings.isEmpty) return;
+    widget.runtime.recordFrameTimings(timings);
+    _governor.recordFrameTimings(timings);
+    _telemetry.recordFrameTimings(timings);
+  }
+
+  void _handleLayoutTaskCompleted(LayoutPumpTaskStats stats) {
+    _telemetry.recordLayoutTask(
+      elapsedMicros: stats.elapsed.inMicroseconds.toDouble(),
+      predictedMicros: stats.predicted.inMicroseconds.toDouble(),
+      charCount: stats.charCount,
+    );
+  }
 
   void _onRuntimeChanged() {
     if (!mounted) return;
     final state = widget.runtime.state;
+    final errorMessage = state.errorMessage;
+    if (state.phase != ReaderV2Phase.error) {
+      _lastLoggedErrorMessage = null;
+    } else if (errorMessage != null &&
+        errorMessage.isNotEmpty &&
+        errorMessage != _lastLoggedErrorMessage) {
+      _lastLoggedErrorMessage = errorMessage;
+      debugPrint('ReaderV2 operation failed: $errorMessage');
+    }
     final layoutChanged = _lastLayoutGeneration != state.layoutGeneration;
     if (layoutChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
-      _handleEpochRebuild();
+      _handleEpochRebuild(widget.bookUrl);
     }
-    if (_capturing) {
-      _scheduleRebuild();
-      return;
+    final requested = widget.runtime.pendingLocation;
+    final operation = widget.runtime.stateMachine.currentOperation;
+    if (requested != null && !identical(operation, _demandOwner)) {
+      _demandOwner = operation;
+      if (widget.runtime.chapterCount > 0) {
+        final chapter = requested.chapterIndex
+            .clamp(0, widget.runtime.chapterCount - 1)
+            .toInt();
+        _windowCenter = chapter;
+        _pump.clearPendingLayouts();
+        _setDemandRange(
+          math.max(0, chapter - _chapterRepo.windowRadius),
+          math.min(
+            widget.runtime.chapterCount - 1,
+            chapter + _chapterRepo.windowRadius,
+          ),
+        );
+      }
     }
-    final locationChanged = state.visibleLocation != _lastReportedLocation;
-    final needsViewportSync =
-        locationChanged ||
-        (layoutChanged && !widget.runtime.hybridViewportActive);
-    if (needsViewportSync) {
-      _runtimeLocationRevision += 1;
-      final revision = _runtimeLocationRevision;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || revision != _runtimeLocationRevision) return;
-        unawaited(_syncToRuntimeLocation(force: true));
-      });
-      WidgetsBinding.instance.ensureVisualUpdate();
+    if (state.phase == ReaderV2Phase.ready && _initialRestoreCompleted) {
+      _demandOwner = null;
+      _reconcileVisibleWindow();
+      _publishProgress();
     }
     _scheduleRebuild();
   }
 
-  Future<void> _syncToRuntimeLocation({bool force = false}) async {
+  void _restoreAttachedRuntime() {
     final runtime = widget.runtime;
-    if (runtime.chapterCount <= 0) return;
-    final location = runtime.state.visibleLocation.normalized(
-      chapterCount: runtime.chapterCount,
-    );
-    if (!force && _initialRestoreCompleted && _lastSyncedLocation == location) {
-      return;
+    if (runtime.state.phase == ReaderV2Phase.ready) {
+      unawaited(runtime.restoreFromLocation(runtime.state.visibleLocation));
     }
-    final generation = runtime.state.layoutGeneration;
-    bool still() =>
-        mounted &&
-        runtime.state.layoutGeneration == generation &&
-        runtime.state.visibleLocation.normalized(
-              chapterCount: runtime.chapterCount,
-            ) ==
-            location;
-    final ok = await _restoreCore(location, isCurrent: still);
-    if (!ok || !still()) return;
-    _lastSyncedLocation = location;
-    _lastReportedLocation = location;
-    _scheduleRebuild();
   }
-
-  // ---- capture / restore（D5 條款 2；I6：一切重建以 HybridAnchor 為基準） ----
 
   ReaderV2Location? _captureForBridge() {
     final location = _captureVisibleLocation();
@@ -337,8 +1067,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _viewportSize.height,
     );
     final worldY = offset + anchorLine;
-    final hit =
-        _documentIndex.hitTest(worldY) ?? _documentIndex.hitTest(offset);
+    final anchorHit = _documentIndex.hitTest(worldY);
+    final scrollTopHit = _documentIndex.hitTest(offset);
+    final preserved = _preserveShortChapterAtBoundary(
+      anchorHit: anchorHit,
+      scrollOffset: offset,
+    );
+    if (preserved != null) return preserved;
+    final hit = anchorHit ?? scrollTopHit;
     if (hit == null) return null;
     final blocks = _blocks[hit.key.chapterIndex];
     if (blocks == null || hit.key.blockIndex >= blocks.blocks.length) {
@@ -347,145 +1083,89 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final block = blocks.blocks[hit.key.blockIndex];
     var lineTop = 0.0;
     var charOffset = block.charRange.start;
-    final paragraph = _paragraphCache.acquire(hit.key, _epoch);
-    if (paragraph != null) {
-      final line = _lineAt(paragraph, hit.offsetInBlock);
+    final entry = _paragraphCache.acquireEntry(hit.key, _epoch);
+    if (entry != null) {
+      final paragraph = entry.paragraph;
+      final line = _lineAt(paragraph, hit.offsetInBlock + entry.localTop);
       if (line != null) {
-        lineTop = line.top;
-        final indent = _indentCharsFor(block);
+        final group = blocks.groupContaining(hit.key);
+        final indent = _indentCharsFor(group.first);
+        final groupTextLength = indent + _groupTextLength(group);
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
         );
-        charOffset =
-            (block.charRange.start + math.max(0, position.offset - indent))
-                .clamp(block.charRange.start, block.charRange.end)
-                .toInt();
+        final boxTop = _textBoxTopForOffset(
+          paragraph,
+          position.offset,
+          groupTextLength,
+        );
+        lineTop = (boxTop ?? line.top) - entry.localTop;
+        final groupStart = group.first.charRange.start;
+        final groupEnd = group.last.charRange.end;
+        charOffset = (groupStart + math.max(0, position.offset - indent))
+            .clamp(groupStart, groupEnd)
+            .toInt();
       }
     }
-    final visual =
-        (worldY - (hit.blockTop + lineTop))
-            .clamp(
-              ReaderV2Location.minVisualOffsetPx,
-              ReaderV2Location.maxVisualOffsetPx,
-            )
-            .toDouble();
+    final visual = (worldY - (hit.blockTop + lineTop))
+        .clamp(
+          ReaderV2Location.minVisualOffsetPx,
+          ReaderV2Location.maxVisualOffsetPx,
+        )
+        .toDouble();
     return ReaderV2Location(
-      chapterIndex: hit.key.chapterIndex,
-      charOffset: charOffset,
-      visualOffsetPx: visual,
-    ).normalized(
-      chapterCount: widget.runtime.chapterCount,
-      chapterLength: blocks.displayText.length,
-    );
+          chapterIndex: hit.key.chapterIndex,
+          charOffset: charOffset,
+          visualOffsetPx: visual,
+        )
+        .normalized(
+          chapterCount: widget.runtime.chapterCount,
+          chapterLength: blocks.displayText.length,
+        )
+        .withContentIdentity(
+          contentHash: blocks.contentHash,
+          displayText: blocks.displayText,
+        );
+  }
+
+  ReaderV2Location? _preserveShortChapterAtBoundary({
+    required DocumentOffsetHit? anchorHit,
+    required double scrollOffset,
+  }) {
+    final previous = _lastReportedLocation;
+    if (previous == null ||
+        anchorHit == null ||
+        anchorHit.key.chapterIndex != previous.chapterIndex + 1) {
+      return null;
+    }
+    final range = _documentIndex.chapterRange(previous.chapterIndex);
+    if (range == null || scrollOffset > range.bottom + 0.5) return null;
+    return previous;
   }
 
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
-    if (!mounted || widget.runtime.chapterCount <= 0) return false;
-    // 拖曳中拒絕 restore——settle-restore 硬拉回目標會跟手勢打架。
-    if (!_anchorManager.beginRestore(isDragging: _dragging)) return false;
-    try {
-      final ok = await _restoreCore(location);
-      if (!ok || !mounted) return false;
-      _scheduleRebuild();
-      final captured = _captureVisibleLocation();
-      if (captured == null) return false;
-      _lastSyncedLocation = location;
-      _lastReportedLocation = location;
-      return true;
-    } finally {
-      _anchorManager.completeRestore();
-    }
-  }
-
-  Future<bool> _restoreCore(
-    ReaderV2Location location, {
-    bool Function()? isCurrent,
-  }) async {
     final runtime = widget.runtime;
-    if (runtime.chapterCount <= 0) return false;
-    final ticket = ++_restoreTicket;
-    bool still() =>
-        mounted && ticket == _restoreTicket && (isCurrent?.call() ?? true);
-    final chapterIndex =
-        location.chapterIndex.clamp(0, runtime.chapterCount - 1).toInt();
-    _pump.onScrollStateChanged(PumpState.rebuilding);
-    try {
-      final blocks = await _ensureChapterBlocks(chapterIndex);
-      if (blocks == null || !still()) return false;
-      final normalized = location.normalized(
-        chapterCount: runtime.chapterCount,
-        chapterLength: blocks.displayText.length,
-      );
-      final anchor = _anchorManager.captureFromLocation(normalized, blocks);
-      // 重定中心：admitted 度量由 store 回填（經 _ensureWindowTasks 的
-      // 連續段 direct-admit），上側走 center 負座標生長（I3）。
-      _documentIndex.reset(centerKey: anchor.blockKey);
-      _admission.reset(epoch: _epoch, chapterCount: runtime.chapterCount);
-      _admission.attach(_pump.completed);
-      for (final loadedBlocks in _blocks.values) {
-        _admission.registerChapter(loadedBlocks);
-      }
-      _enqueued.clear();
-      _windowCenter = chapterIndex;
-      _chapterRepo.setPrefetchCenter(chapterIndex);
-      _ensureWindowTasks(anchorKey: anchor.blockKey);
-      final ready = await _pumpUntilAnchorReady(anchor, stillCurrent: still);
-      if (!ready || !still()) return false;
-      final target = _offsetForAnchor(anchor, blocks);
-      if (target == null) return false;
-      _applyScrollOffset(target);
-      _admission.activateViewport(
-        visibleTop: target,
-        visibleBottom: target + _viewportSize.height,
-        cacheExtent: _viewportSize.height,
-      );
-      _initialRestoreCompleted = true;
-      _scheduleRebuild();
-      _schedulePump();
-      return true;
-    } finally {
-      if (ticket == _restoreTicket) {
-        _pump.onScrollStateChanged(
-          _dragging ? PumpState.dragging : PumpState.idle,
-        );
-      }
+    final operation = runtime.stateMachine.currentOperation;
+    final binding = _pump;
+    final revision = ++_runtimeLocationRevision;
+    bool current() =>
+        mounted &&
+        identical(widget.runtime, runtime) &&
+        identical(_pump, binding) &&
+        revision == _runtimeLocationRevision &&
+        (operation == null || runtime.isCurrentOperationToken(operation));
+    if (!current() || runtime.chapterCount <= 0) return false;
+    final controller = _scrollController;
+    if (controller != null && controller.hasClients) {
+      controller.position.jumpTo(controller.position.pixels);
     }
-  }
-
-  Future<bool> _pumpUntilAnchorReady(
-    HybridAnchor anchor, {
-    required bool Function() stillCurrent,
-  }) async {
-    bool anchorReady() =>
-        _measurementStore.get(_namespace, anchor.blockKey) != null &&
-        _paragraphCache.contains(anchor.blockKey, _epoch);
-    bool initialWindowReady() {
-      if (!anchorReady()) return false;
-      final blocks = _blocks[anchor.chapterIndex];
-      final target = blocks == null ? null : _offsetForAnchor(anchor, blocks);
-      if (target == null) return false;
-      final viewport = math.max(1.0, _viewportSize.height);
-      final requiredTop = target - _admission.backwardGuaranteedWindow;
-      final requiredBottom = target + viewport + _admission.guaranteedWindow;
-      final hasTop = -_documentIndex.beforeExtent <= requiredTop;
-      final hasBottom = _documentIndex.afterExtent >= requiredBottom;
-      return (hasTop || _isBookStartAdmitted()) &&
-          (hasBottom || _isBookEndAdmitted());
-    }
-
-    var guard = 0;
-    while (guard++ < 600) {
-      if (!stillCurrent()) return false;
-      if (initialWindowReady()) return true;
-      final completed = await _pump.pumpPending();
-      if (completed != 0) continue;
-      final pendingLoads = _blocksInFlight.values.toList(growable: false);
-      if (pendingLoads.isEmpty) return anchorReady();
-      await Future.wait(pendingLoads);
-      if (!stillCurrent()) return false;
-      _ensureWindowTasks(anchorKey: anchor.blockKey);
-    }
-    return anchorReady();
+    _dragging = false;
+    _sawUserScroll = false;
+    final ok = await _restoreCore(location, isCurrent: current);
+    if (!ok || !current()) return false;
+    _lastReportedLocation = location;
+    _scheduleRebuild();
+    return true;
   }
 
   bool _isBookStartAdmitted() {
@@ -502,47 +1182,62 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   double? _offsetForAnchor(HybridAnchor anchor, ChapterBlocks blocks) {
-    final top = _documentIndex.topOf(anchor.blockKey);
+    final resolved = _visualPositionForChar(blocks, anchor.charOffsetInChapter);
+    final key = resolved?.key ?? anchor.blockKey;
+    final top = _documentIndex.topOf(key);
     if (top == null) return null;
-    final lineTop =
-        _lineTopForChar(blocks, anchor.blockKey, anchor.charOffsetInChapter) ??
-        0.0;
+    final lineTop = resolved?.localTop ?? 0.0;
     final anchorLine = AnchorManager.anchorOffsetInViewport(
       _viewportSize.height,
     );
     return top + lineTop - anchorLine + anchor.visualOffsetPx;
   }
 
-  double? _lineTopForChar(
+  ({BlockKey key, double localTop})? _visualPositionForChar(
     ChapterBlocks blocks,
-    BlockKey key,
     int charOffsetInChapter,
   ) {
-    if (key.blockIndex >= blocks.blocks.length) return null;
-    final block = blocks.blocks[key.blockIndex];
-    final paragraph = _paragraphCache.acquire(key, _epoch);
-    if (paragraph == null) return 0.0;
-    final indent = _indentCharsFor(block);
-    final local =
-        (charOffsetInChapter - block.charRange.start)
-            .clamp(0, block.text.length)
-            .toInt() +
-        indent;
-    final boxes = paragraph.getBoxesForRange(
-      local,
-      math.min(local + 1, block.text.length + indent),
-    );
-    if (boxes.isEmpty) return 0.0;
-    return boxes.first.top;
+    final rawBlock = blocks.blockForCharOffset(charOffsetInChapter);
+    final group = blocks.groupContaining(rawBlock.key);
+    if (group.isEmpty) return null;
+    final head = group.first;
+    final rawEntry = _paragraphCache.acquireEntry(rawBlock.key, _epoch);
+    if (rawEntry == null) return null;
+    final indent = _indentCharsFor(head);
+    final groupTextLength = indent + _groupTextLength(group);
+    final groupLocalOffset =
+        indent +
+        (charOffsetInChapter - head.charRange.start)
+            .clamp(0, groupTextLength - indent)
+            .toInt();
+    final paragraphY =
+        _textBoxTopForOffset(
+          rawEntry.paragraph,
+          groupLocalOffset,
+          groupTextLength,
+        ) ??
+        0.0;
+    var owningKey = rawBlock.key;
+    var owningLocalTop = rawEntry.localTop;
+    for (final member in group) {
+      final memberEntry = _paragraphCache.acquireEntry(member.key, _epoch);
+      if (memberEntry == null) continue;
+      if (memberEntry.localTop <= paragraphY + 0.001) {
+        owningKey = member.key;
+        owningLocalTop = memberEntry.localTop;
+      } else {
+        break;
+      }
+    }
+    return (key: owningKey, localTop: paragraphY - owningLocalTop);
   }
 
-  void _applyScrollOffset(double target) {
-    final controller = _scrollController;
-    if (controller != null && controller.hasClients) {
-      controller.position.jumpTo(target);
-    } else {
-      _pendingScrollOffset = target;
+  int _groupTextLength(List<ChapterBlock> group) {
+    var total = 0;
+    for (final block in group) {
+      total += block.text.length;
     }
+    return total;
   }
 
   double? _effectiveScrollOffset() {
@@ -553,194 +1248,53 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return _pendingScrollOffset;
   }
 
-  // ---- 章節文字 → block 管線 ----
-
-  Future<ChapterBlocks?> _ensureChapterBlocks(int chapterIndex) {
-    final cached = _blocks[chapterIndex];
-    if (cached != null) return Future<ChapterBlocks?>.value(cached);
-    final inFlight = _blocksInFlight[chapterIndex];
-    if (inFlight != null) return inFlight;
-    final generation = _lastLayoutGeneration;
-    late final Future<ChapterBlocks?> task;
-    task = () async {
-      try {
-        final text = await _chapterRepo.load(chapterIndex);
-        final blocks = await widget.preprocessor.process(
-          text,
-          maxBlockChars: _pump.maxCharsForBudget(
-            _governor.ballisticSliceBudget,
-          ),
-        );
-        if (!mounted || _lastLayoutGeneration != generation) return null;
-        await _warmDiskMetricsForChapter(blocks);
-        if (!mounted || _lastLayoutGeneration != generation) return null;
-        _blocks[chapterIndex] = blocks;
-        _admission.registerChapter(blocks);
-        return blocks;
-      } catch (_) {
-        return null;
-      }
-    }();
-    _blocksInFlight[chapterIndex] = task;
-    task.whenComplete(() {
-      if (identical(_blocksInFlight[chapterIndex], task)) {
-        _blocksInFlight.remove(chapterIndex);
-      }
-    });
-    return task;
-  }
-
-  void _onChapterEvent(ChapterEvent event) {
-    if (!mounted) return;
-    switch (event.kind) {
-      case ChapterEventKind.loaded:
-        if ((event.chapterId - _windowCenter).abs() <=
-            _chapterRepo.windowRadius) {
-          unawaited(
-            _ensureChapterBlocks(event.chapterId).then((blocks) {
-              if (blocks == null || !mounted) return;
-              _enqueueChapterTasks(blocks);
-              _schedulePump();
-              _scheduleRebuild();
-            }),
-          );
-        }
-      case ChapterEventKind.evicted:
-        _blocks.remove(event.chapterId);
-      case ChapterEventKind.invalidated:
-        _blocks.remove(event.chapterId);
-        _measurementStore.invalidateChapter(event.chapterId);
-        _paragraphCache.invalidateChapter(event.chapterId);
-        _enqueued.removeWhere((key) => key.chapterIndex == event.chapterId);
-    }
-  }
-
-  void _shiftWindow(int chapterIndex) {
-    if (chapterIndex == _windowCenter) return;
-    _windowCenter = chapterIndex;
-    _chapterRepo.setPrefetchCenter(chapterIndex);
-    _ensureWindowTasks();
-    _schedulePump();
-  }
-
-  // ---- 排版任務投放（admit 保持每側自 center 起連續，I2/I3 前提） ----
-
-  void _ensureWindowTasks({BlockKey? anchorKey}) {
-    final admittedBefore = _documentIndex.admittedCount;
-    for (final delta in const <int>[0, 1, -1, 2, -2]) {
-      final chapter = _windowCenter + delta;
-      if (chapter < 0 || chapter >= widget.runtime.chapterCount) continue;
-      final blocks = _blocks[chapter];
-      if (blocks == null) {
-        unawaited(
-          _ensureChapterBlocks(chapter).then((loaded) {
-            if (loaded == null || !mounted) return;
-            if ((loaded.chapterIndex - _windowCenter).abs() > 2) return;
-            _enqueueChapterTasks(loaded);
-            _schedulePump();
-            _scheduleRebuild();
-          }),
-        );
-        continue;
-      }
-      _enqueueChapterTasks(blocks, anchorKey: delta == 0 ? anchorKey : null);
-    }
-    if (_documentIndex.admittedCount != admittedBefore) _scheduleRebuild();
-  }
-
-  void _enqueueChapterTasks(ChapterBlocks blocks, {BlockKey? anchorKey}) {
-    final list = blocks.blocks;
-    if (list.isEmpty) return;
-    final centerKey = _documentIndex.centerKey;
-    List<ChapterBlock> forward;
-    List<ChapterBlock> backward;
-    if (blocks.chapterIndex == centerKey.chapterIndex) {
-      final center = centerKey.blockIndex.clamp(0, list.length - 1).toInt();
-      forward = list.sublist(center);
-      backward = list.sublist(0, center).reversed.toList(growable: false);
-    } else if (blocks.chapterIndex > centerKey.chapterIndex) {
-      forward = list;
-      backward = const <ChapterBlock>[];
-    } else {
-      forward = const <ChapterBlock>[];
-      backward = list.reversed.toList(growable: false);
-    }
-    var forwardBlocked = false;
-    var backwardBlocked = false;
-    final rounds = math.max(forward.length, backward.length);
-    for (var i = 0; i < rounds; i += 1) {
-      if (i < forward.length) {
-        forwardBlocked = _admitOrSubmit(
-          blocks,
-          forward[i],
-          blocked: forwardBlocked,
-          anchor: anchorKey != null && forward[i].key == anchorKey,
-        );
-      }
-      if (i < backward.length) {
-        backwardBlocked = _admitOrSubmit(
-          blocks,
-          backward[i],
-          blocked: backwardBlocked,
-          anchor: anchorKey != null && backward[i].key == anchorKey,
-        );
-      }
-    }
-  }
-
-  /// 就緒（有 metrics + paragraph）且同側尚未斷檔 → 直接 admit；
-  /// 否則送 pump。回傳「此側是否已斷檔」（斷檔後不得再 direct-admit，
-  /// 否則 DocumentIndex 會出現中間洞，補齊時可見內容會位移，違反 I3）。
-  bool _admitOrSubmit(
+  void _submitGroupTask(
     ChapterBlocks blocks,
-    ChapterBlock block, {
-    required bool blocked,
+    List<ChapterBlock> group, {
     bool anchor = false,
   }) {
-    final key = block.key;
-    final metrics = _measurementStore.get(_namespace, key);
-    final hasParagraph = _paragraphCache.contains(key, _epoch);
-    final admitted = _documentIndex.metricsFor(key) != null;
-    if (admitted) {
-      if (!hasParagraph) _submitTask(blocks, block, anchor: anchor);
-      return blocked;
-    }
-    if (metrics != null && hasParagraph && !blocked) {
-      _admission.offer(BlockReady(key: key, epoch: _epoch, metrics: metrics));
-      return blocked;
-    }
-    _submitTask(blocks, block, anchor: anchor);
-    return true;
-  }
-
-  void _submitTask(
-    ChapterBlocks blocks,
-    ChapterBlock block, {
-    bool anchor = false,
-  }) {
-    final key = block.key;
-    if (!_enqueued.add(key)) return;
+    final head = group.first;
+    final headKey = head.key;
+    final last = group.last;
     final spec = widget.runtime.state.layoutSpec;
     _pump.submit(
       LayoutTask(
-        block: block,
+        block: head,
+        continuationBlocks: group.length > 1
+            ? group.sublist(1)
+            : const <ChapterBlock>[],
         epoch: _epoch,
         fingerprint: _fingerprint,
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
-          isTitle: block.isTitle,
-          justify: !block.isTitle,
+          isTitle: head.isTitle,
+          justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
         contentWidth: spec.contentWidth,
-        priority: _priorityFor(key, anchor: anchor),
-        direction:
-            key < _documentIndex.centerKey
-                ? HybridScrollDirection.backward
-                : HybridScrollDirection.forward,
-        indentChars: _indentCharsFor(block),
-        trailingSpacing: _trailingSpacingFor(blocks, block),
+        cellWidth: spec.cellWidth,
+        textColor: widget.textColor,
+        priority: _priorityFor(headKey, anchor: anchor),
+        direction: headKey < _documentIndex.centerKey
+            ? HybridScrollDirection.backward
+            : HybridScrollDirection.forward,
+        indentChars: _indentCharsFor(head),
+        trailingSpacing: _trailingSpacingFor(blocks, last),
+        trailingLayoutLookahead: _layoutLookaheadAfter(blocks, last),
       ),
     );
+  }
+
+  String _layoutLookaheadAfter(ChapterBlocks blocks, ChapterBlock block) {
+    final nextIndex = block.blockIndex + 1;
+    if (nextIndex >= blocks.blocks.length) return '';
+    final next = blocks.blocks[nextIndex];
+    if (!next.isContinuation ||
+        !next.layoutBreakBefore ||
+        next.sourceParagraphIndex != block.sourceParagraphIndex ||
+        next.text.isEmpty) {
+      return '';
+    }
+    return String.fromCharCode(next.text.runes.first);
   }
 
   LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {
@@ -758,8 +1312,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return widget.runtime.state.layoutSpec.style.textIndent.clamp(0, 8).toInt();
   }
 
-  /// 沿用舊引擎間距規則：標題後 = paragraphSpacing*8px（硬編碼特例）；
-  /// 段落後 = fontSize×行高×paragraphSpacing；超長段切塊之間零間距（D2）。
   double _trailingSpacingFor(ChapterBlocks blocks, ChapterBlock block) {
     final style = widget.runtime.state.layoutSpec.style;
     if (block.isTitle) return style.paragraphSpacing * 8;
@@ -774,164 +1326,34 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return style.fontSize * style.effectiveLineHeight * style.paragraphSpacing;
   }
 
-  // ---- pump 驅動 ----
-
-  void _setPumpState(PumpState state) {
-    _pump.onScrollStateChanged(state);
-  }
-
-  void _schedulePump() {
-    if (_pumpFramePending || !mounted) return;
-    _pumpFramePending = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _pumpFramePending = false;
-      if (!mounted) return;
-      unawaited(_pumpOnce());
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  Future<void> _pumpOnce() async {
-    // 已排定的 post-frame pump 可能剛好撞上使用者開始拖曳；
-    // I4 在這裡硬停，待 ScrollEnd 再恢復，不能讓 debug assert 擊穿手勢。
-    if (_dragging) return;
-    final completed = await _pump.pumpPending();
-    if (!mounted) return;
-    if (_pump.queueDepth > 0) {
-      _schedulePump();
-    } else {
-      // 佇列見底 → 允許之後的視窗掃描重新投放（處理段落被 LRU 逐出的重排）。
-      _enqueued.clear();
-      _updateLeadTelemetry();
-    }
-    if (completed > 0) _scheduleRebuild();
-  }
-
-  void _updateLeadTelemetry() {
-    final offset = _effectiveScrollOffset();
-    if (offset == null || _viewportSize.height <= 0) return;
-    _admission.updateLead(
-      viewportTop: offset,
-      viewportBottom: offset + _viewportSize.height,
-    );
-    _governor.updateLeadDeficit(_admission.hasLeadDeficit);
-    _telemetry.updateRuntimeStats(
-      pumpQueueDepth: _pump.queueDepth,
-      forwardLeadPx: _admission.latestForwardLead,
-      backwardLeadPx: _admission.latestBackwardLead,
-    );
-  }
-
-  // ---- 滾動事件 / settle（D5 條款 3） ----
-
-  bool _handleScrollNotification(ScrollNotification notification) {
-    if (notification.depth != 0) return false;
-    if (notification is ScrollStartNotification) {
-      if (notification.dragDetails != null) {
-        _dragging = true;
-        _sawUserScroll = true;
-        _setPumpState(PumpState.dragging);
-      }
-    } else if (notification is ScrollUpdateNotification) {
-      if (_dragging && notification.dragDetails == null) {
-        _dragging = false;
-        _setPumpState(PumpState.ballistic);
-        _schedulePump();
-      }
-      _scheduleMotionCapture();
-    } else if (notification is ScrollEndNotification) {
-      final wasUser = _sawUserScroll;
-      _dragging = false;
-      _sawUserScroll = false;
-      _setPumpState(PumpState.idle);
-      _schedulePump();
-      if (wasUser) unawaited(_handleScrollSettled());
-    }
-    return false;
-  }
-
-  void _scheduleMotionCapture() {
-    if (_captureFramePending || !mounted) return;
-    _captureFramePending = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _captureFramePending = false;
-      if (!mounted) return;
-      final location = _captureAndReport(notify: _shouldNotifyForMotion());
-      final offset = _effectiveScrollOffset();
-      if (offset != null) {
-        _admission.updateViewport(
-          visibleTop: offset,
-          visibleBottom: offset + _viewportSize.height,
-          cacheExtent: _viewportSize.height,
-        );
-      }
-      _updateParagraphPins();
-      _publishProgress();
-      _updateLeadTelemetry();
-      if (location != null && location.chapterIndex != _windowCenter) {
-        _shiftWindow(location.chapterIndex);
-      }
-    });
-  }
-
-  bool _shouldNotifyForMotion() {
-    final now = DateTime.now();
-    final last = _lastMotionNotifyAt;
-    if (last == null || now.difference(last) >= _motionNotifyInterval) {
-      _lastMotionNotifyAt = now;
-      return true;
-    }
-    return false;
-  }
-
   ReaderV2Location? _captureAndReport({required bool notify}) {
-    _capturing = true;
-    try {
-      final location = widget.runtime.captureVisibleLocation(
-        notifyIfChanged: notify,
-      );
-      if (location != null) _lastReportedLocation = location;
-      return location;
-    } finally {
-      _capturing = false;
-    }
-  }
-
-  Future<void> _handleScrollSettled() async {
-    if (!mounted || _dragging) return;
-    final location = _captureAndReport(notify: true);
-    if (location != null) {
-      // settle 即刻落盤：背景 flush 靠不住（app 可能被系統回收）。
-      final saved = await widget.runtime.saveProgress(
-        location: location,
-        immediate: true,
-      );
-      if (saved != null) _lastReportedLocation = saved;
-      if (mounted && location.chapterIndex != _windowCenter) {
-        _shiftWindow(location.chapterIndex);
-      }
-    }
-    if (!mounted) return;
-    _publishProgress();
-    _updateLeadTelemetry();
-    _ensureWindowTasks();
-    _schedulePump();
+    final location = widget.runtime.captureVisibleLocation(
+      notifyIfChanged: notify,
+    );
+    if (location != null) _lastReportedLocation = location;
+    return location;
   }
 
   void _publishProgress() {
     final notifier = widget.progressListenable;
     if (notifier == null) return;
-    final offset = _effectiveScrollOffset();
-    if (offset == null || _viewportSize.height <= 0) return;
-    final worldY =
-        offset + AnchorManager.anchorOffsetInViewport(_viewportSize.height);
-    notifier.value = HybridProgress(
-      documentIndex: _documentIndex,
-      chapterCount: widget.runtime.chapterCount,
-    ).progressForOffset(worldY);
-  }
 
-  // ---- D5 條款 1：七閉包 attach/detach（前六個經 FIFO 佇列） ----
+    // Chapter progress is semantic content progress, not materialized layout
+    // progress. DocumentIndex intentionally contains only the admitted window.
+    final runtimeLocationIsPublished =
+        _initialRestoreCompleted &&
+        widget.runtime.state.phase == ReaderV2Phase.ready;
+    final location = runtimeLocationIsPublished
+        ? widget.runtime.state.visibleLocation
+        : _captureVisibleLocation();
+    if (location == null) return;
+    final blocks = _blocks[location.chapterIndex];
+    if (blocks == null) return;
+
+    notifier.value = HybridProgress(
+      chapterCount: widget.runtime.chapterCount,
+    ).progressForLocation(location, chapterLength: blocks.displayText.length);
+  }
 
   void _attachController() {
     widget.viewportController
@@ -965,41 +1387,51 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  Future<bool> _enqueueCommand(Future<bool> Function() command) {
-    return _commands.enqueue(isMounted: () => mounted, command: command);
+  bool Function() _captureCommandOwner() {
+    final runtime = widget.runtime;
+    final operation = runtime.stateMachine.currentOperation;
+    final binding = _pump;
+    final revision = _runtimeLocationRevision;
+    final admitted = _initialRestoreCompleted && !_sawUserScroll;
+    return () =>
+        admitted &&
+        mounted &&
+        identical(widget.runtime, runtime) &&
+        !runtime.disposed &&
+        runtime.state.phase == ReaderV2Phase.ready &&
+        identical(_pump, binding) &&
+        revision == _runtimeLocationRevision &&
+        identical(runtime.stateMachine.currentOperation, operation) &&
+        !_sawUserScroll;
   }
 
-  Future<bool> _scrollBy(double delta) =>
-      _enqueueCommand(() => _scrollByNow(delta));
-
-  Future<bool> _continuousScrollBy(double delta) =>
-      _enqueueCommand(() => _continuousScrollByNow(delta));
-
-  Future<bool> _animateBy(double delta) =>
-      _enqueueCommand(() => _animateByNow(delta));
-
-  Future<bool> _moveToNextPage() =>
-      _enqueueCommand(() => _movePageNow(forward: true));
-
-  Future<bool> _moveToPrevPage() =>
-      _enqueueCommand(() => _movePageNow(forward: false));
-
-  Future<bool> _ensureCharRangeVisible({
-    required int chapterIndex,
-    required int startCharOffset,
-    required int endCharOffset,
-  }) {
-    return _enqueueCommand(
-      () => _ensureCharRangeVisibleNow(
-        chapterIndex: chapterIndex,
-        startCharOffset: startCharOffset,
-        endCharOffset: endCharOffset,
-      ),
+  Future<bool> _enqueueCommand(Future<bool> Function(bool Function()) command) {
+    final current = _captureCommandOwner();
+    return _commands.enqueue(
+      isCurrent: current,
+      command: () => command(current),
     );
   }
 
-  /// settleScroll 不經佇列（D5）：先停住殘餘慣性再走 settle。
+  Future<bool> _scrollBy(double delta) =>
+      _enqueueCommand((current) => _scrollByNow(delta, current));
+
+  Future<bool> _continuousScrollBy(double delta) =>
+      _enqueueCommand((current) => _continuousScrollByNow(delta, current));
+
+  Future<bool> _animateBy(double delta) =>
+      _enqueueCommand((current) => _animateByNow(delta, current));
+
+  Future<bool> _moveToNextPage() => _enqueueCommand(
+    (current) => _movePageNow(forward: true, isCurrent: current),
+  );
+
+  Future<bool> _moveToPrevPage() => _enqueueCommand(
+    (current) => _movePageNow(forward: false, isCurrent: current),
+  );
+
   Future<void> _settleScroll() async {
+    _runtimeLocationRevision += 1;
     final controller = _scrollController;
     if (controller != null && controller.hasClients) {
       final pixels = controller.position.pixels;
@@ -1016,29 +1448,33 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final position = controller.position;
     final before = position.pixels;
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target =
-        (before + delta).clamp(position.minScrollExtent, max).toDouble();
-    if ((target - before).abs() < 0.01) return false;
+    final target = (before + delta)
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
+    if ((target - before).abs() < _minimumViewportMovement) return false;
     position.jumpTo(target);
     return true;
   }
 
-  Future<bool> _scrollByNow(double delta) async {
-    if (!mounted || !_jumpBy(delta)) return false;
+  Future<bool> _scrollByNow(double delta, bool Function() isCurrent) async {
+    if (!isCurrent() || !_jumpBy(delta)) return false;
     await _handleScrollSettled();
-    return mounted;
+    return isCurrent();
   }
 
-  Future<bool> _continuousScrollByNow(double delta) async {
-    if (!mounted || !_jumpBy(delta)) return false;
+  Future<bool> _continuousScrollByNow(
+    double delta,
+    bool Function() isCurrent,
+  ) async {
+    if (!isCurrent() || !_jumpBy(delta)) return false;
     _scheduleMotionCapture();
-    _schedulePump();
-    return mounted;
+    _reconcileVisibleWindow();
+    return isCurrent();
   }
 
-  Future<bool> _animateByNow(double delta) async {
+  Future<bool> _animateByNow(double delta, bool Function() isCurrent) async {
     final controller = _scrollController;
-    if (!mounted ||
+    if (!isCurrent() ||
         controller == null ||
         !controller.hasClients ||
         delta == 0) {
@@ -1047,122 +1483,182 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final position = controller.position;
     final before = position.pixels;
     final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target =
-        (before + delta).clamp(position.minScrollExtent, max).toDouble();
-    if ((target - before).abs() < 0.01) return false;
+    final target = (before + delta)
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
+    if ((target - before).abs() < _minimumViewportMovement) return false;
     await position.animateTo(
       target,
       duration: _ensureAnimateDuration,
       curve: Curves.easeOutCubic,
     );
-    if (!mounted) return false;
+    if (!isCurrent()) return false;
     await _handleScrollSettled();
-    return mounted;
+    return isCurrent();
   }
 
-  Future<bool> _movePageNow({required bool forward}) {
+  Future<bool> _movePageNow({
+    required bool forward,
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent()) return false;
     final height = _viewportSize.height;
-    if (height <= 0) return Future<bool>.value(false);
+    if (height <= 0) return false;
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return false;
     final style = widget.runtime.state.layoutSpec.style;
     final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
     final magnitude = math.max(height * 0.5, height - overlap - 8.0);
-    return _animateByNow(forward ? magnitude : -magnitude);
+
+    final reachable = await _ensurePageDistanceAvailable(
+      forward: forward,
+      distance: magnitude,
+      isCurrent: isCurrent,
+    );
+    if (!reachable || !isCurrent() || !controller.hasClients) return false;
+
+    final before = controller.position.pixels;
+    final moved = await _animateByNow(
+      forward ? magnitude : -magnitude,
+      isCurrent,
+    );
+    if (!isCurrent()) return false;
+    if (!moved) _emitBookBoundaryNotice(forward: forward);
+    if (!moved || !controller.hasClients) return false;
+
+    final after = controller.position.pixels;
+    final atBookBoundary = forward
+        ? _admission.atForwardBookBoundary
+        : _admission.atBackwardBookBoundary;
+    return isHybridPageMoveComplete(
+      requestedDistance: magnitude,
+      actualDistance: (after - before).abs(),
+      atBookBoundary: atBookBoundary,
+    );
   }
 
-  // ---- D5 條款 6：ensureCharRangeVisible ----
+  void _emitBookBoundaryNotice({required bool forward}) {
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    final atExtent = forward
+        ? position.pixels >= position.maxScrollExtent - _minimumViewportMovement
+        : position.pixels <=
+              position.minScrollExtent + _minimumViewportMovement;
+    final atBookBoundary = forward
+        ? _admission.atForwardBookBoundary
+        : _admission.atBackwardBookBoundary;
+    if (!atExtent || !atBookBoundary) return;
+    widget.runtime.emitUserNotice(forward ? '已到書尾' : '已到書首');
+  }
 
   Future<bool> _ensureCharRangeVisibleNow({
     required int chapterIndex,
     required int startCharOffset,
     required int endCharOffset,
+    required bool Function() isCurrent,
   }) async {
     final runtime = widget.runtime;
-    if (!mounted || runtime.chapterCount <= 0) return false;
+    if (!isCurrent() || runtime.chapterCount <= 0) return false;
     final safeChapter = chapterIndex.clamp(0, runtime.chapterCount - 1).toInt();
+    if (!_chapterRepo.isResident(safeChapter)) {
+      final ok = await _restoreCore(
+        ReaderV2Location(
+          chapterIndex: safeChapter,
+          charOffset: math.min(startCharOffset, endCharOffset),
+        ),
+        isCurrent: isCurrent,
+      );
+      if (ok && isCurrent()) await _handleScrollSettled();
+      return ok && isCurrent();
+    }
     final blocks = await _ensureChapterBlocks(safeChapter);
-    if (blocks == null || !mounted) return false;
+    if (blocks == null || !isCurrent()) return false;
     final start = math.min(startCharOffset, endCharOffset);
     final end = math.max(startCharOffset, endCharOffset);
     final anchorKey = blocks.blockForCharOffset(start).key;
     if (_documentIndex.topOf(anchorKey) == null) {
-      // 目標不在目前 world（跨窗跳讀）：以 restore 流程重定中心過去。
       final ok = await _restoreCore(
         ReaderV2Location(chapterIndex: safeChapter, charOffset: start),
+        isCurrent: isCurrent,
       );
-      if (ok && mounted) await _handleScrollSettled();
-      return ok && mounted;
+      if (ok && isCurrent()) await _handleScrollSettled();
+      return ok && isCurrent();
     }
-    await _ensureRangeLaidOut(blocks, start, end);
-    if (!mounted) return false;
-    final rect = _worldRectForRange(blocks, start, end);
-    final offset = _effectiveScrollOffset();
-    if (rect == null || offset == null) return false;
-    final height = _viewportSize.height;
-    final topPadding = math.min(80.0, height * 0.14);
-    final bottomPadding = math.min(120.0, height * 0.20);
-    final preferredTopInset = math.min(180.0, height * 0.32);
-    final comfortBottom = offset + math.min(220.0, height * 0.46);
-    final visibleTop = offset + topPadding;
-    final visibleBottom = offset + height - bottomPadding;
-    final safelyVisible =
-        rect.top >= visibleTop && rect.bottom <= visibleBottom;
-    if (safelyVisible && rect.top <= comfortBottom) return true;
-    final preferredTarget = rect.top - preferredTopInset;
-    final minTarget = rect.bottom - height + bottomPadding;
-    final maxTarget = rect.top - topPadding;
-    final target =
-        minTarget <= maxTarget
-            ? preferredTarget.clamp(minTarget, maxTarget).toDouble()
-            : minTarget;
-    final controller = _scrollController;
-    if (controller == null || !controller.hasClients) return false;
-    final position = controller.position;
-    final bounded =
-        target
-            .clamp(
-              math.min(position.minScrollExtent, position.pixels),
-              math.max(position.maxScrollExtent, position.pixels),
-            )
-            .toDouble();
-    await position.animateTo(
-      bounded,
-      duration: _ensureAnimateDuration,
-      curve: Curves.easeOutCubic,
-    );
-    if (!mounted) return false;
-    await _handleScrollSettled();
-    return mounted;
+    final leases = await _ensureRangeLaidOut(blocks, start, end, isCurrent);
+    try {
+      if (!isCurrent()) return false;
+      final rect = _worldRectForRange(blocks, start, end);
+      final offset = _effectiveScrollOffset();
+      if (rect == null || offset == null) return false;
+      final height = _viewportSize.height;
+      final topPadding = math.min(80.0, height * 0.14);
+      final bottomPadding = math.min(120.0, height * 0.20);
+      final preferredTopInset = math.min(180.0, height * 0.32);
+      final comfortBottom = offset + math.min(220.0, height * 0.46);
+      final visibleTop = offset + topPadding;
+      final visibleBottom = offset + height - bottomPadding;
+      final safelyVisible =
+          rect.top >= visibleTop && rect.bottom <= visibleBottom;
+      if (safelyVisible && rect.top <= comfortBottom) return true;
+      final preferredTarget = rect.top - preferredTopInset;
+      final minTarget = rect.bottom - height + bottomPadding;
+      final maxTarget = rect.top - topPadding;
+      final target = minTarget <= maxTarget
+          ? preferredTarget.clamp(minTarget, maxTarget).toDouble()
+          : minTarget;
+      final controller = _scrollController;
+      if (controller == null || !controller.hasClients) return false;
+      final position = controller.position;
+      final bounded = target
+          .clamp(
+            math.min(position.minScrollExtent, position.pixels),
+            math.max(position.maxScrollExtent, position.pixels),
+          )
+          .toDouble();
+      await position.animateTo(
+        bounded,
+        duration: _ensureAnimateDuration,
+        curve: Curves.easeOutCubic,
+      );
+      if (!isCurrent()) return false;
+      await _handleScrollSettled();
+      return isCurrent();
+    } finally {
+      for (final lease in leases) {
+        lease.release();
+      }
+    }
   }
 
-  Future<void> _ensureRangeLaidOut(
+  List<ui.TextBox>? _blockLocalBoxesForRange(
     ChapterBlocks blocks,
-    int start,
-    int end,
-  ) async {
-    final range = HybridTextRange(math.max(0, start), math.max(0, end));
-    final targets = blocks.blocks
-        .where((block) {
-          return block.charRange.intersects(range) ||
-              (range.isEmpty && block.charRange.containsOffset(range.start));
-        })
-        .toList(growable: false);
-    for (final block in targets) {
-      if (_paragraphCache.contains(block.key, _epoch) &&
-          _measurementStore.get(_namespace, block.key) != null) {
-        continue;
-      }
-      _submitTask(blocks, block, anchor: true);
-    }
-    var guard = 0;
-    bool allReady() => targets.every(
-      (block) =>
-          _paragraphCache.contains(block.key, _epoch) &&
-          _measurementStore.get(_namespace, block.key) != null,
-    );
-    while (guard++ < 100 && !allReady()) {
-      final completed = await _pump.pumpPending();
-      if (completed == 0) break;
-    }
+    ChapterBlock block,
+    HybridTextRange range,
+  ) {
+    final entry = _paragraphCache.acquireEntry(block.key, _epoch);
+    if (entry == null) return null;
+    final group = blocks.groupContaining(block.key);
+    if (group.isEmpty) return null;
+    final indent = _indentCharsFor(group.first);
+    final groupStart = group.first.charRange.start;
+    final localStart =
+        math.max(range.start, block.charRange.start) - groupStart + indent;
+    final localEnd =
+        math.min(range.end, block.charRange.end) - groupStart + indent;
+    if (localEnd <= localStart) return const <ui.TextBox>[];
+    final boxes = entry.paragraph.getBoxesForRange(localStart, localEnd);
+    if (boxes.isEmpty) return boxes;
+    return <ui.TextBox>[
+      for (final box in boxes)
+        ui.TextBox.fromLTRBD(
+          box.left,
+          box.top - entry.localTop,
+          box.right,
+          box.bottom - entry.localTop,
+          box.direction,
+        ),
+    ];
   }
 
   Rect? _worldRectForRange(ChapterBlocks blocks, int start, int end) {
@@ -1176,30 +1672,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       final blockTop = _documentIndex.topOf(block.key);
       if (blockTop == null) continue;
-      final paragraph = _paragraphCache.acquire(block.key, _epoch);
       double localTop = 0;
-      double localBottom =
-          _documentIndex.metricsFor(block.key)?.height ??
-          paragraph?.height ??
-          0;
-      if (paragraph != null) {
-        final indent = _indentCharsFor(block);
-        final localStart =
-            math.max(range.start, block.charRange.start) -
-            block.charRange.start +
-            indent;
-        final localEnd =
-            math.min(range.end, block.charRange.end) -
-            block.charRange.start +
-            indent;
-        if (localEnd > localStart) {
-          final boxes = paragraph.getBoxesForRange(localStart, localEnd);
-          if (boxes.isNotEmpty) {
-            localTop = boxes.first.top;
-            localBottom =
-                boxes.map((box) => box.bottom).reduce(math.max).toDouble();
-          }
-        }
+      double localBottom = _documentIndex.metricsFor(block.key)?.height ?? 0;
+      final boxes = _blockLocalBoxesForRange(blocks, block, range);
+      if (boxes != null && boxes.isNotEmpty) {
+        localTop = boxes.first.top;
+        localBottom = boxes
+            .map((box) => box.bottom)
+            .reduce(math.max)
+            .toDouble();
       }
       final rangeTop = blockTop + localTop;
       final rangeBottom = blockTop + localBottom;
@@ -1209,8 +1690,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (top == null || bottom == null) return null;
     return Rect.fromLTRB(0, top, 0, bottom);
   }
-
-  // ---- D5 條款 5：TTS 高亮 ----
 
   List<HybridLineBox> _ttsLineBoxes(ReaderV2TtsHighlight highlight) {
     final offset = _effectiveScrollOffset();
@@ -1223,27 +1702,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (range.isEmpty) return const <HybridLineBox>[];
     final result = <HybridLineBox>[];
     final seenLines = <({BlockKey key, double top, double bottom})>{};
-    for (final block in blocks.blocks) {
+    final blockList = blocks.blocks;
+    var low = 0;
+    var high = blockList.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (blockList[middle].charRange.end <= range.start) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    for (var index = low; index < blockList.length; index += 1) {
+      final block = blockList[index];
+      if (block.charRange.start >= range.end) break;
       if (!block.charRange.intersects(range)) continue;
       final top = _documentIndex.topOf(block.key);
       if (top == null) continue;
-      final paragraph = _paragraphCache.acquire(block.key, _epoch);
-      if (paragraph == null) continue;
-      final indent = _indentCharsFor(block);
-      final localStart =
-          math.max(range.start, block.charRange.start) -
-          block.charRange.start +
-          indent;
-      final localEnd =
-          math.min(range.end, block.charRange.end) -
-          block.charRange.start +
-          indent;
-      if (localEnd <= localStart) continue;
+      final boxes = _blockLocalBoxesForRange(blocks, block, range);
+      if (boxes == null || boxes.isEmpty) continue;
       final clipped = HybridTextRange(
         math.max(range.start, block.charRange.start),
         math.min(range.end, block.charRange.end),
       );
-      for (final box in paragraph.getBoxesForRange(localStart, localEnd)) {
+      for (final box in boxes) {
         final screenTop = top + box.top - offset;
         final screenBottom = top + box.bottom - offset;
         if (!seenLines.add((
@@ -1266,57 +1748,60 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return result;
   }
 
-  // ---- D10：磁碟 metrics ----
-
   Future<void> _warmDiskMetricsForChapter(ChapterBlocks blocks) async {
-    if (!widget.enableDiskMetrics || widget.bookUrl == null) return;
+    final bookUrl = widget.bookUrl;
+    if (!widget.enableDiskMetrics || bookUrl == null) return;
+    final namespace = _namespace;
+    final binding = _pump;
     final warmKey = (
-      namespace: _namespace,
+      namespace: namespace,
       chapter: blocks.chapterIndex,
-      contentHash: blocks.contentHash,
+      contentHash: blocks.layoutIdentity,
     );
     if (!_warmedChapters.add(warmKey)) return;
     try {
       final cache = await _obtainDiskCache();
-      final namespace = _namespace;
       final count = await cache.warmIntoStore(
-        bookUrl: widget.bookUrl!,
+        bookUrl: bookUrl,
         namespace: namespace,
-        chapterContentHashes: <int, String>{
-          blocks.chapterIndex: blocks.contentHash,
-        },
+        chapterLayoutIdentities: {blocks.chapterIndex: blocks.layoutIdentity},
         put: (key, metrics) {
-          if (namespace == _namespace) {
+          if (mounted &&
+              identical(binding, _pump) &&
+              _warmedChapters.contains(warmKey) &&
+              _measurementStore.get(namespace, key) == null) {
             _measurementStore.put(namespace, key, metrics);
           }
         },
       );
-      _telemetry.recordDiskMetricsHit(count > 0);
-    } catch (_) {
-      // 測試環境無 path_provider、或 IO 失敗：磁碟快取屬最佳努力，靜默略過。
-    }
+      if (mounted && identical(binding, _pump)) {
+        _telemetry.recordDiskMetricsHit(count > 0);
+      }
+    } catch (_) {}
   }
 
-  Future<void> _writeDiskMetrics(Map<BlockKey, BlockMetrics> snapshot) async {
-    if (!widget.enableDiskMetrics ||
-        widget.bookUrl == null ||
-        snapshot.isEmpty) {
+  Future<void> _writeDiskMetrics(
+    Map<BlockKey, BlockMetrics> snapshot, {
+    required String? bookUrl,
+    StyleFingerprint? fingerprint,
+  }) async {
+    if (!widget.enableDiskMetrics || bookUrl == null || snapshot.isEmpty) {
       return;
     }
+    final targetFingerprint = fingerprint ?? _fingerprint;
+    final chapterLayoutIdentities = <int, String>{
+      for (final plan in _layoutPlans.values)
+        plan.chapterIndex: plan.layoutIdentity,
+    };
     try {
       final cache = await _obtainDiskCache();
       await cache.write(
-        bookUrl: widget.bookUrl!,
-        fingerprint: _fingerprint,
+        bookUrl: bookUrl,
+        fingerprint: targetFingerprint,
         metrics: snapshot,
-        chapterContentHashes: <int, String>{
-          for (final blocks in _blocks.values)
-            blocks.chapterIndex: blocks.contentHash,
-        },
+        chapterLayoutIdentities: chapterLayoutIdentities,
       );
-    } catch (_) {
-      // 同上：最佳努力。
-    }
+    } catch (_) {}
   }
 
   Future<MetricsDiskCache> _obtainDiskCache() async {
@@ -1325,8 +1810,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final directory = await getApplicationSupportDirectory();
     return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
   }
-
-  // ---- 建構 ----
 
   void _scheduleRebuild() {
     if (!mounted || _rebuildQueued) return;
@@ -1343,41 +1826,49 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (controller == null || !controller.hasClients) return false;
     final scrolling = controller.position.isScrollingNotifier.value;
     if (scrolling && !_dragging) {
+      _runtimeLocationRevision += 1;
       final pixels = controller.position.pixels;
       controller.position.jumpTo(pixels);
-      return true; // 動畫中的點擊只用來停住，不觸發分區動作。
+      return true;
     }
     return false;
   }
 
   ({double top, double bottom})? _lineAt(ui.Paragraph paragraph, double dy) {
-    ({double top, double bottom})? last;
-    for (final line in paragraph.computeLineMetrics()) {
-      final lineTop = line.baseline - line.ascent;
-      final lineBottom = lineTop + line.height;
-      last = (top: lineTop, bottom: lineBottom);
-      if (dy < lineBottom) return last;
-    }
-    return last;
+    final lineCount = paragraph.numberOfLines;
+    if (lineCount <= 0) return null;
+    final position = paragraph.getPositionForOffset(Offset(0, dy));
+    final lineNumber =
+        (paragraph.getLineNumberAt(math.max(0, position.offset)) ??
+                lineCount - 1)
+            .clamp(0, lineCount - 1)
+            .toInt();
+    final line = paragraph.getLineMetricsAt(lineNumber);
+    if (line == null) return null;
+    final lineTop = line.baseline - line.ascent;
+    return (top: lineTop, bottom: lineTop + line.height);
   }
 
-  ReaderV2Style _overlayStyle() => widget.style.copyWith(paddingTop: 0.0);
+  double? _textBoxTopForOffset(
+    ui.Paragraph paragraph,
+    int textOffset,
+    int textLength,
+  ) {
+    if (textLength <= 0) return 0.0;
+    final safeOffset = textOffset.clamp(0, textLength).toInt();
+    final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
+    final boxes = paragraph.getBoxesForRange(start, start + 1);
+    if (boxes.isEmpty) return null;
+    return boxes.first.top;
+  }
 
-  void _updateParagraphPins() {
-    final offset = _effectiveScrollOffset();
-    if (offset == null || _viewportSize.height <= 0) return;
-    final top = offset - _admission.backwardGuaranteedWindow;
-    final bottom = offset + _viewportSize.height + _admission.guaranteedWindow;
-    final keys = <BlockKey>[];
-    for (final key in _documentIndex.keys) {
-      final blockTop = _documentIndex.topOf(key);
-      final blockBottom = _documentIndex.bottomOf(key);
-      if (blockTop == null || blockBottom == null) continue;
-      if (blockBottom > top && blockTop < bottom) keys.add(key);
-    }
-    _paragraphCache
-      ..unpinAll()
-      ..pinKeys(keys, _epoch);
+  ReaderV2Style _overlayStyle() {
+    final specStyle = widget.runtime.state.layoutSpec.style;
+    return widget.style.copyWith(
+      paddingTop: 0.0,
+      paddingLeft: specStyle.paddingLeft,
+      paddingRight: specStyle.paddingRight,
+    );
   }
 
   Widget _buildLoading(ReaderV2State state) {
@@ -1385,27 +1876,137 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (state.phase == ReaderV2Phase.error) {
       child = Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          state.errorMessage ?? '章節載入失敗',
-          style: TextStyle(color: widget.textColor, fontSize: 14),
-          textAlign: TextAlign.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: widget.textColor.withValues(alpha: 0.72),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _friendlyErrorMessage,
+              style: TextStyle(color: widget.textColor, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     } else {
-      child = SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.5,
-          color: widget.textColor.withValues(alpha: 0.6),
-        ),
+      child = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: widget.textColor.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _phaseMessage(state.phase),
+            style: TextStyle(
+              color: widget.textColor.withValues(alpha: 0.72),
+              fontSize: 13,
+            ),
+          ),
+        ],
       );
     }
     return ColoredBox(
       color: widget.backgroundColor,
       child: ReaderV2PointerTapLayer(
         onTapUp: widget.onContentTapUp,
-        child: Center(child: child),
+        child: Semantics(
+          liveRegion: true,
+          excludeSemantics: true,
+          label: state.phase == ReaderV2Phase.error
+              ? _friendlyErrorMessage
+              : _phaseMessage(state.phase),
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+
+  String _phaseMessage(ReaderV2Phase phase) {
+    return switch (phase) {
+      ReaderV2Phase.cold => '正在準備閱讀內容',
+      ReaderV2Phase.loading => '正在載入章節',
+      ReaderV2Phase.layingOut => '正在整理版面',
+      ReaderV2Phase.restoring => '正在恢復閱讀位置',
+      ReaderV2Phase.switchingMode => '正在套用閱讀設定',
+      ReaderV2Phase.ready => '',
+      ReaderV2Phase.error => _friendlyErrorMessage,
+    };
+  }
+
+  Widget _buildOperationOverlay(ReaderV2State state) {
+    if (state.phase == ReaderV2Phase.ready) return const SizedBox.shrink();
+    final isError = state.phase == ReaderV2Phase.error;
+    final message = isError
+        ? _friendlyErrorMessage
+        : _phaseMessage(state.phase);
+    return IgnorePointer(
+      child: Semantics(
+        liveRegion: true,
+        excludeSemantics: true,
+        label: message,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: SafeArea(
+            minimum: const EdgeInsets.only(top: 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: widget.backgroundColor.withValues(alpha: 0.92),
+                border: Border.all(
+                  color: widget.textColor.withValues(alpha: 0.16),
+                ),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isError)
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 16,
+                        color: widget.textColor.withValues(alpha: 0.72),
+                      )
+                    else
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.textColor.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        message,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.textColor.withValues(alpha: 0.78),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1417,89 +2018,103 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
         if (!_initialRestoreCompleted) return _buildLoading(state);
-        final controller =
-            _scrollController ??= ScrollController(
-              initialScrollOffset: _pendingScrollOffset ?? 0.0,
-            );
-        _updateParagraphPins();
+        final controller = _scrollController ??= ScrollController(
+          initialScrollOffset: _pendingScrollOffset ?? 0.0,
+          keepScrollOffset: false,
+        );
         final highlight = widget.ttsHighlight;
+        final visualContent = NotificationListener<ScrollNotification>(
+          onNotification: _handleScrollNotification,
+          child: HybridScrollView(
+            centerKey: _centerKey,
+            documentIndex: _documentIndex,
+            namespace: _namespace,
+            measurementStore: _measurementStore,
+            paragraphCache: _paragraphCache,
+            epoch: _epoch,
+            controller: controller,
+            cacheExtent: _viewportSize.height,
+            textColor: widget.textColor,
+            horizontalPadding: EdgeInsets.only(
+              left: state.layoutSpec.style.paddingLeft,
+              right: state.layoutSpec.style.paddingRight,
+            ),
+            physics: _physics,
+            onFallbackItemExtent: _handleFallbackItemExtent,
+          ),
+        );
+        final readerStack = Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            visualContent,
+            if (highlight != null && highlight.isValid)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, _) {
+                    return HybridTtsHighlightOverlay(
+                      lines: _ttsLineBoxes(highlight),
+                      style: _overlayStyle(),
+                      textColor: widget.textColor,
+                      highlight: highlight,
+                    );
+                  },
+                ),
+              ),
+            if (state.phase != ReaderV2Phase.ready)
+              Positioned.fill(child: _buildOperationOverlay(state)),
+          ],
+        );
         return ColoredBox(
           color: widget.backgroundColor,
           child: ReaderV2PointerTapLayer(
             onTapUp: widget.onContentTapUp,
             onPointerDownTapPolicy: _holdScrollOnPointerDown,
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                NotificationListener<ScrollNotification>(
-                  onNotification: _handleScrollNotification,
-                  child: HybridScrollView(
-                    centerKey: _centerKey,
-                    documentIndex: _documentIndex,
-                    namespace: _namespace,
-                    measurementStore: _measurementStore,
-                    paragraphCache: _paragraphCache,
-                    epoch: _epoch,
-                    controller: controller,
-                    cacheExtent: _viewportSize.height,
-                    textColor: widget.textColor,
-                    horizontalPadding: EdgeInsets.only(
-                      left: widget.style.paddingLeft,
-                      right: widget.style.paddingRight,
-                    ),
-                    physics: HybridScrollPhysics(
-                      applyForwardFriction: _admission.needsForwardFriction,
-                      applyBackwardFriction: _admission.needsBackwardFriction,
-                    ),
-                  ),
-                ),
-                if (highlight != null && highlight.isValid)
-                  Positioned.fill(
-                    child: AnimatedBuilder(
-                      animation: controller,
-                      builder: (context, _) {
-                        return HybridTtsHighlightOverlay(
-                          lines: _ttsLineBoxes(highlight),
-                          style: _overlayStyle(),
-                          textColor: widget.textColor,
-                          highlight: highlight,
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
+            child: readerStack,
           ),
         );
       },
     );
   }
+
+  Future<bool> _ensureCharRangeVisible({
+    required int chapterIndex,
+    required int startCharOffset,
+    required int endCharOffset,
+  }) => _enqueueCommand(
+    (current) => _ensureCharRangeVisibleNow(
+      chapterIndex: chapterIndex,
+      startCharOffset: startCharOffset,
+      endCharOffset: endCharOffset,
+      isCurrent: current,
+    ),
+  );
 }
 
-/// D5 條款 1 的 FIFO 命令佇列——hybrid 自帶實作，不 import 舊 viewport 內部。
 final class _HybridCommandQueue {
-  Future<void> _tail = Future<void>.value();
+  Future<void>? _tail;
+  bool get isBusy => _tail != null;
 
   Future<bool> enqueue({
-    required bool Function() isMounted,
+    required bool Function() isCurrent,
     required Future<bool> Function() command,
   }) {
-    if (!isMounted()) return Future<bool>.value(false);
-    final completer = Completer<bool>();
-    _tail = _tail
-        .catchError((_) {})
-        .then((_) async {
-          if (!isMounted()) return false;
-          return command();
-        })
-        .then(
-          completer.complete,
-          onError: (Object error, StackTrace stackTrace) {
-            if (!completer.isCompleted) {
-              completer.completeError(error, stackTrace);
-            }
-          },
-        );
-    return completer.future;
+    if (!isCurrent()) return Future<bool>.value(false);
+    final result = (_tail ?? Future<void>.value()).then((_) async {
+      if (!isCurrent()) return false;
+      final completed = await command();
+      return isCurrent() && completed;
+    });
+    final drained = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    _tail = drained;
+    unawaited(
+      drained.then((_) {
+        if (identical(_tail, drained)) _tail = null;
+      }),
+    );
+    return result;
   }
 }

@@ -287,21 +287,27 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // 搜尋操作
   // ═══════════════════════════════════════════
 
+  String? _normalizedSearchKey(String keyword) {
+    final normalized = keyword.trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
   Future<void> search(String keyword) async {
-    if (keyword.isEmpty) return;
-    _lastSearchKey = keyword;
+    final searchKey = _normalizedSearchKey(keyword);
+    if (searchKey == null) return;
+    _lastSearchKey = searchKey;
     _results = [];
     _sourceFailures.clear();
     clearResultFilters();
     notifyListeners();
 
     // 儲存搜尋歷史
-    await _keywordDao.saveKeyword(keyword);
+    await _keywordDao.saveKeyword(searchKey);
     await loadHistory();
 
     // 委派搜尋引擎
     await _searchModel.search(
-      key: keyword,
+      key: searchKey,
       scope: _searchScope,
       precisionSearch: _precisionSearch,
     );
@@ -309,8 +315,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   /// 在指定書源內搜尋
   Future<void> searchInSource(BookSource source, String keyword) async {
-    if (keyword.isEmpty) return;
-    _lastSearchKey = keyword;
+    final searchKey = _normalizedSearchKey(keyword);
+    if (searchKey == null) return;
+    _lastSearchKey = searchKey;
     _results = [];
     _sourceFailures.clear();
     clearResultFilters();
@@ -320,7 +327,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     notifyListeners();
 
     await _searchModel.search(
-      key: keyword,
+      key: searchKey,
       scope: singleScope,
       precisionSearch: _precisionSearch,
     );

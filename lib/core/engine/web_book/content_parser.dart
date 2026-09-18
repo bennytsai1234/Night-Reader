@@ -36,18 +36,17 @@ class ContentParser {
 
     try {
       final contentRule = source.ruleContent;
-      if (contentRule == null) return ContentResult(content: body);
+      if (contentRule == null) return const ContentResult(content: '');
 
       var content = await rule.getStringAsync(
         contentRule.content ?? '',
         unescape: false,
       );
 
-      content = HtmlFormatter.formatKeepImg(content, baseUrl: baseUrl);
-
       if (content.contains('&')) {
         content = AnalyzeRuleBase.htmlUnescape.convert(content);
       }
+      content = HtmlFormatter.format(content);
 
       final nextUrls = <String>[];
       if (contentRule.nextContentUrl != null &&
@@ -85,6 +84,7 @@ class ContentParser {
     required String contentStr,
     String? baseUrl,
   }) async {
+    if (contentStr.trim().isEmpty) return '';
     final replaceRegex = source.ruleContent?.replaceRegex;
     if (replaceRegex == null || replaceRegex.isEmpty) return contentStr;
 
@@ -107,6 +107,8 @@ class ContentParser {
     } catch (_) {
       // 若規則解析失敗則保留 trim 後的原文
     }
+
+    if (str.trim().isEmpty) return '';
 
     // 段落縮排 (對標 Android "　　$it" join)
     str = str.split(RegExp(r'\r?\n')).map((e) => '　　$e').join('\n');

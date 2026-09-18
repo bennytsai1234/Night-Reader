@@ -1,58 +1,99 @@
-# reader
+# 閱讀器 (reader)
 
 ## Responsibility
 
-- Reader V2 閱讀器主流程：以 `hybrid/` 的 Framework 滾動骨架（`CustomScrollView.center` + 雙 `SliverVariedExtentList`）承載自有 block 排版管線，負責章節載入、精確量測、渲染、無界滾動、進度、TTS 逐段高亮、閱讀設定、點擊區、書籤、章內替換、換源。release 重點回歸區。
-- 未來工作從這裡開始：排版/渲染、章節預載與進度、TTS 高亮、閱讀設定、點擊區、書籤、章內替換、換源 sheet。
+擁有夜讀的正文會話、內容轉換、閱讀位置與呈現。`ReaderV2Runtime` 管理命令和狀態，`HybridReaderScreen` 組裝既有 Hybrid B 的 Flutter Sliver／Paragraph 管線。沒有另建 Reader V3；未掛載 Hybrid viewport 時的分頁 resolver／navigation 路徑仍保留。
+
+2026-09-18 的核心責任分工如下；先前考古判定保存在 `docs/changes/planning/2026-09-18-hybrid-b-rebuild/`，不是現行程式規格。
+
+| 責任 | Owner | 核心入口 |
+|---|---|---|
+| 命令目標、操作身分、ready／error | Runtime／StateMachine | `session/reader_v2_runtime.dart`、`reader_v2_state_machine.dart`、`reader_v2_operation_token.dart` |
+| displayText、轉換與 content identity | ChapterRepository／Content | `chapter/reader_v2_chapter_repository.dart`、`reader_v2_content.dart`、`reader_v2_content_transformer.dart` |
+| 位置重映射、保存 | ContentLocationMapper／ViewportBridge／ProgressController | `session/reader_v2_location.dart`、`reader_v2_viewport_bridge.dart`、`reader_v2_progress_controller.dart` |
+| 切行 probe、drawable layout、pending／去重／取消、frame credit | LayoutPump | `hybrid/pump/layout_pump.dart`、`budget_governor.dart`、`layout_cost_model.dart` |
+| Active 文件的精確幾何與切分 | DocumentIndex／ChapterLayoutPlan | `hybrid/measure/document_index.dart`、`hybrid/core/chapter_layout_plan.dart` |
+| drawable 存活 | 實際 consumer 的 ParagraphLease | `hybrid/paragraph/paragraph_cache.dart`、`hybrid/view/cached_block_widget.dart` |
+| 連續邊界追加 | AdmissionController | `hybrid/view/admission_controller.dart` |
+| 捲動、慣性、viewport geometry | Flutter 原生 ScrollPosition／Sliver | `hybrid/view/hybrid_scroll_view.dart`、`hybrid_block_sliver.dart` |
+| 原始文字的常駐範圍 | HybridChapterRepository | `hybrid/text/hybrid_chapter_repository.dart` |
+
+除另註外，表中路徑相對於 `lib/features/reader_v2/`。
 
 ## Scope
 
-- `hybrid/` — 現行閱讀主面與排版核心：`hybrid_reader_screen.dart` 組裝 bridge；`core/` 定義 Block/Epoch/Fingerprint 契約；`text/` 做章節視窗與 isolate 前處理；`measure/` 維護精確 metrics、雙 Fenwick `DocumentIndex` 與 contentHash 驗證的磁碟快取；`paragraph/` 管 `ui.Paragraph` LRU/pin；`pump/` 是唯一排版入口；`view/` 管 center 雙 sliver、admission 與 leaf render object；`anchor/overlay/progress/telemetry/` 為橫切模組。
-- `screen/` — `reader_v2_page.dart`（`ReaderV2Page`，組裝 ControllerHost/Coordinator/HybridReaderScreen/Menus/Drawer）、`reader_v2_page_shell.dart`、`reader_v2_chapters_drawer.dart`、`reader_v2_controller_host.dart`（聚合子控制器）、`dependencies/reader_v2_dependencies.dart`（從 getIt 注入 DAO + `BookSourceService`，建 `ReaderV2ChapterRepository`）。
-- `session/` — `reader_v2_runtime.dart`（`ReaderV2Runtime extends ChangeNotifier`，整合 repository/content/layoutEngine/renderPage/preloadScheduler/progressController，持有 NavigationController + ViewportBridge 並代理公開 API，預載速度門檻 1500/2600/3600）、`reader_v2_state_machine.dart` + `reader_v2_operation_token.dart`（集中 open/jump/restore/presentation/contentReload 的 phase、過期操作檢查、restore-in-progress、visible/committed location 與 page window 更新）、`reader_v2_navigation_controller.dart`（導航跳轉/窗口/neighbor advance）、`reader_v2_viewport_bridge.dart`（viewport capture/restore/進度儲存）、`reader_v2_state.dart`（`ReaderV2Phase{cold,loading,layingOut,restoring,ready,switchingMode,error}`）、`reader_v2_resolver.dart`、`reader_v2_progress_controller.dart`、`reader_v2_preload_scheduler.dart`、`reader_v2_performance_metrics.dart`、`reader_v2_page_window.dart`、`reader_v2_open_target.dart`、`reader_v2_location.dart`、`reader_v2_chapter_view.dart`、`reader_v2_session_facade.dart`。
-- `use_cases/` — `reader_v2_page_coordinator.dart`（點擊分區/TTS 高亮追蹤/換源 sheet）、`coordinators/`（章節導航 resolver、display coordinator、page exit coordinator）。
-- `chapter/` — `reader_v2_chapter_repository.dart`（取章節/正文/書源/replace rule）、`reader_v2_content.dart`、`reader_v2_content_transformer.dart`（套用 replace rule+簡繁轉換）、`reader_v2_processed_chapter.dart`。
-- `layout/` — `reader_v2_layout_engine.dart`（599 行，`ReaderV2LayoutEngine`+`ReaderV2LayoutEngineStats`）、`reader_v2_layout.dart`、`reader_v2_layout_spec.dart`、`reader_v2_typography.dart`、`reader_v2_style.dart`（`ReaderV2Style`，`minReadableLineHeight`）、`reader_v2_layout_constants.dart`。
-- `render/` — `reader_v2_render_page.dart`、`reader_v2_line_box.dart`、`reader_v2_text_adapter.dart`，僅供保留的舊 session/resolver 相容路徑與測試使用；現行 hybrid 畫面不經 tile painter。
-- `viewport/` — 只保留跨 feature 公開 bridge `reader_v2_viewport_controller.dart`（七閉包）與原始指標點擊仲裁 `reader_v2_pointer_tap_layer.dart`；具體捲動實作已由 `hybrid/view/` 擁有。
-- `features/` — `tts/`（`reader_v2_tts_controller.dart` 494 行，`abstract ReaderV2TtsEngine`+實作、`reader_v2_tts_sheet.dart`、`reader_v2_tts_highlight.dart`）、`settings/`（`reader_v2_settings_controller.dart`、`reader_v2_prefs_repository.dart`、`reader_v2_settings_sheets.dart`）、`menu/`（`reader_v2_menu_controller.dart`、`reader_v2_bottom_menu.dart`、`reader_v2_top_menu.dart`、`reader_v2_tap_action.dart`）、`auto_page/`、`bookmark/`、`replace_rule/`（`reader_v2_replace_rule_sheet.dart`、`reader_v2_replace_rule_page.dart`、`reader_v2_replace_rule_editor_sheet.dart`）。
+頁面裝配在 `screen/reader_v2_page.dart`、`reader_v2_page_shell.dart`、`reader_v2_controller_host.dart` 與 `screen/dependencies/reader_v2_dependencies.dart`。`BookOpenRoute` 是開書入口，controller host 以 viewport／style 建立 layout spec；既有 `DESIGN.md`、共享 `AppBottomSheet`／`AppStateView` 仍是 UI 慣例。
 
-## Dependencies & Impact
+會話核心在 `session/`：`ReaderV2State` 表達 cold／loading／layingOut／restoring／ready／switchingMode／error；`ReaderV2OperationToken` 的 targetLocation 是正在執行的語意目標。`ReaderV2Resolver`、`ReaderV2NavigationController`、`ReaderV2PreloadScheduler` 的分頁支線不是 Hybrid Paragraph queue，不應同時驅動兩個 viewport。
 
-- 上游：`database/dao`（book/book_source/chapter/bookmark/replace_rule/reader_chapter_content）、`services/{book_source,book_storage,source_switch,tts,reader_chapter_content_store/storage}`、`engine/{app_event_bus,reader/chinese_text_converter}`、`models/{book,chapter,replace_rule,book_source}`、`config/app_config`、`constant/{page_anim,prefer_key}`、`di`、`shared/{theme,navigation}`。
-- 下游影響：TTS 經 `TTSService`+`ttsProgress` 事件；進度/書籤寫回 DAO；換源經 `source_switch_service`。閱讀設定與 `settings`/`AppConfig` 同步。
-- 被開書轉場（`shared/navigation/book_open_route.dart`）進入。
+內容 repository 封裝本地書、持久快取、書源服務，以及替換規則、CJK typography normalization、繁簡轉換。`contentHash` 綁定最終 displayText，`contentGeneration` 使 TTS 淘汰舊 segment／highlight。`ReaderV2ContentLocationMapper` 使用 canonical-equivalent 轉換或雙側 text context 重映射 UTF-16 位置。
 
-## Key Flows
+閱讀功能仍由 `features/menu/`、`settings/`、`tts/`、`auto_page/`、`bookmark/`、`replace_rule/` 與 `use_cases/reader_v2_page_coordinator.dart` 管理。朗讀跟隨、頁距移動經 `ReaderV2ViewportController` 七閉包；settleScroll 直達，其餘命令由 Hybrid FIFO 執行，綁定當時 runtime／pump／操作身分，失效後不套用到新視口。
 
-- 開書：`ReaderV2Page` → `ReaderV2Runtime` hybrid owner 模式 → `HybridChapterRepository` 包裝既有 repository → `TextPreprocessor` 切成 block → `LayoutPump` 建立同源 `ui.Paragraph`/metrics → `AdmissionController` 連續放行 → `HybridScrollView` 渲染。
-- 預載：`HybridChapterRepository` 以錨點章維持 ±2 章，`LayoutPump` 依 dragging/ballistic/idle gate 與領先量排程；metrics 以 StyleFingerprint + contentHash 驗證磁碟命中。
-- TTS：`ReaderV2TtsController` → `TTSService` → `ReaderV2TtsHighlight` → block 的 `Paragraph.getBoxesForRange` 產生整行高亮；`ensureCharRangeVisible` 經 FIFO bridge 跟讀。
-- 換源：`PageCoordinator` → `change_source_sheet` → `source_switch_service` → 重載章節。
+`layout/reader_v2_layout_spec.dart`、`reader_v2_style.dart`、`reader_v2_typography.dart` 保存樣式、em-grid 與字寬契約。`render/` 與 `layout/reader_v2_layout_engine.dart` 的既有分頁型別與引擎保留。
 
-## Change Entry Points & Routes
+## Data flow
 
-- 排版/渲染：`hybrid/{text,measure,paragraph,pump,view,overlay}`；`LayoutPump` 是唯一可建置與 layout `ui.Paragraph` 的模組，改 `ReaderV2Style` 需同步檢查 StyleFingerprint 與失效矩陣。
-- 滾動/視埠：`hybrid/hybrid_reader_screen.dart` + `hybrid/view/*`；跨 feature 命令契約仍在 `viewport/reader_v2_viewport_controller.dart`，`reader_v2_state.dart` 定義 `ReaderV2Phase` 狀態機。
-- 章節載入/預載/進度：`session/reader_v2_runtime.dart` + `chapter/reader_v2_chapter_repository.dart` + `services/reader_chapter_content_store.dart`。
-- TTS 高亮：`features/tts/*` + `services/tts_service.dart` + `render/reader_v2_tts_highlight_overlay_layer.dart`。
-- 閱讀設定/點擊區/自動翻頁/書籤：`features/{settings,menu,auto_page,bookmark}/*`；同步 `SettingsProvider`/`AppConfig`/`PreferKey`。
-- 章內替換：`features/replace_rule/*` + `chapter/reader_v2_content_transformer.dart`。
-- 換源：`use_cases/reader_v2_page_coordinator.dart` + `features/book_detail/change_source_sheet.dart` + `services/source_switch_service.dart`。
+```mermaid
+flowchart TD
+    Command[Runtime operation target] --> Demand[Screen 綁定目前需求]
+    Content[ChapterText: displayText + contentHash] --> Pre[TextPreprocessor]
+    Pre --> Pump[LayoutPump 統一工作佇列]
+    Demand --> Pump
+    Pump --> Plan[真實視覺行界 / ChapterLayoutPlan]
+    Plan --> Layout[同一 Pump 的 Paragraph layout]
+    Layout --> Metrics[MeasurementStore]
+    Layout --> Leases[ParagraphCache / consumer leases]
+    Metrics --> Admission[依連續邊界 admit]
+    Admission --> Index[DocumentIndex / Fenwick]
+    Index --> Native[CustomScrollView / HybridBlockSliver]
+    Leases --> Native
+    Native --> Position[已完成原生定位]
+    Position --> Ready[Runtime ready]
+    Ready --> Save[ProgressController / BookDao]
+```
 
-## Known Risks
+`_ensureChapterBlocks` 取得及粗切正文後，將 visual-line alignment 排入 Pump；不在 screen 的 async continuation 直接做 native probes。`_ChapterWork` 每次推進一個切行步驟，與 `_LayoutWork` 共用目前 frame credit。`pumpPending()` 不會因反覆 await 而取得新的每幀預算。`setDemandRange` 同時撤銷過期切行與 drawable 工作，取消的 preparation Future 會完成而不懸掛。
 
-- `ReaderV2Runtime` hybrid owner 模式沿用 `ReaderV2StateMachine` 的 operation token 與 `layoutGeneration`；hybrid `LayoutEpoch` 必須維持一對一，不可建立第二個獨立世代來源。
-- I1–I6 是硬底線：extent 只能讀精確 metrics；admission 必須從 center 向兩側連續且在 visible+cache 外；禁止 offset correction；dragging 零排版；領先量不足必須降級；所有重建以 `ReaderV2Location` ↔ `HybridAnchor` 為基準。
-- TTS/錨點仍使用 `ReaderV2Content.displayText` 的 UTF-16 半開區間；縮排前綴不屬於 displayText，幾何換算必須扣除。
-- 磁碟 metrics 的 fingerprint 必須跨程序穩定，且逐章 contentHash 不符時不可 warm；平台字型摘要變化需換命名空間。
-- 本機只能驗證邏輯與 widget 行為；120Hz fling p99、長時間 Paragraph 記憶體平台期與真機字型 fallback 仍需 CI APK/device lab 驗收。
+`_requestWindow` 先為所需內容持有 leases，再提交工作；既有 exact metrics／drawable 可立即重用。`BlockReady` 只沿 center 前後的連續邊界進入 DocumentIndex；不再要求 block 位於 visible／cacheExtent 以外。6000／3000px 只作前後預載距離，不是首屏 restore 成功條件，更不改使用者的手勢或慣性位移。
 
-## Do Not Do
+`_restoreCore` 完成目標與實際首屏材料化後，等待原生視口存在並套用 scroll offset，才回覆成功。Runtime 隨後完成 ready／保存；被阻塞的遠端預載或背景 queue 尚有工作，不會讓已定位的首屏失敗。
 
-- 不要在 reader 內直接抓書（用 `ReaderV2ChapterRepository`+`BookSourceService`）。
-- 不要在 `LayoutPump` 之外建立或 layout `ui.Paragraph`，也不要把 placeholder/估算 extent 放進 sliver。
-- 不要為上側補入做 scroll offset correction；向上生長只用 `CustomScrollView.center` 的負座標空間。
-- 不要把閱讀設定另存為獨立持久層（統一走 `PreferKey`+`AppConfig`）。
-- 不要恢復 slide 翻頁模式（已移除，固定 scroll）。
-- 不要在 feature freeze 下新增新互動模式（除非使用者明確要求）。
+## State-transition contracts
+
+**命令意圖與畫面觀察：**遠距離跳章開始時，既有 `ReaderV2OperationToken` 就接管目標需求範圍，不等正文下載完成。舊畫面 capture 不得在命令 pending 時把需求拉回原章。沒有另造 restore ticket 或 user-scroll-observed barrier。
+
+**樣式／旋轉：**host 以有效 layout spec 呼叫 `applyPresentation`，runtime 更新 layoutGeneration 並保留語意位置；screen 更換 pump／namespace，撤销舊命令與準備結果，清理 active 幾何與切分，重新定位。換色不改幾何指紋，重建 drawable 時仍由 leases 保證原生物件壽命。
+
+**內容轉換：**`reloadContentPreservingLocation` 保留原內容以重映射 offset，清 content cache 並更新世代，再以新 content identity 定位。切分身分包含實際 charRange／continuation／layoutBreakBefore；只有相同 chapter、hash、textLength 的 `ChapterLayoutPlan` 可以重新材料化正文。
+
+**快取逐出：**raw eviction 只釋放 `_blocks` 與無效 in-flight 入口，不刪已 admit 幾何或 text-free plan。載入完成時若章節已不屬目前 residency，結果可回覆原呼叫者但不重新占住 raw cache。回讀已訪問章節復用舊 plan，不能用新成本估計重新解釋舊 BlockKey。若內容身分真的改變，改走內容重載及 anchor 重映射，不混用旧座標。
+
+**Paragraph 存活：**cache、每個 mounted RenderCachedBlock、視口準備與命令都各自擁有引用。LRU 淘汰或同 key replacement 先取得新引用、再釋放舊引用；只有最後一個 owner 釋放時才 dispose。畫面訂閱 replacement 持續到 detach，不依赖一次性 waiter 或 restore pin timing。
+
+**換源／離場：**先 flush 取得權威位置，再 resolve／原子 persist；退出 sheet 後替換 reader route，建立新會話。返回與 App lifecycle 經既有 exit coordinator／ProgressController 落盤。TTS、閱讀時間、規則 I/O 的真實狀態沒有因 Hybrid 瘦身而刪除。
+
+## Boundaries
+
+- `ReaderV2Location` 是跨層位置契約；content metadata 不替代 chapter／offset／visualOffset 的座標語意。全章進度由 charOffset／完整 displayText.length 得到。
+- native Sliver 幾何查詢仍使用140成熟化的增量 Fenwick。itemExtent callback 必須是全函式，保留已證明需要的1px fallback；它不提供 scrollExtent，也不是全書估高。
+- 任意 char cut 不可增加硬換行。獨立 transaction 只在實際行界，lookahead 維持 wrapping，縮排只屬語意段首，段距及 B2 只屬真正段尾。
+- gesture 只影響 Pump 的資源分配；dragging 仍可取得有界切片。不要恢復 dragging 零供給、lead friction、restore-prefetch barrier、screen `_enqueued` 或 discard rollback 帳本。
+- tiny style-keyed `measureCellWidth` 仍是同步字寬探針；不要將「正文切行與 Paragraph 工作共用 queue」誇大為所有任何尺寸的 native 量測都已非同步化。
+- Active 幾何／切分 metadata 隨已訪問範圍累積，直到明確文件重建；raw cache 與 drawable reuse 有自己的界限，不能把後兩者有界說成整個會話常數記憶體。
+
+## Validation entrypoints
+
+`flutter analyze`、`flutter test` 是基本檢查。聚焦測試在 `test/features/reader_v2/hybrid/`：`hybrid_pump_test.dart` 驗證統一 queue／frame credit／取消與 leases；`cached_block_repaint_test.dart` 驗證 mounted consumer 壽命；`chapter_layout_plan_test.dart`、`hybrid_chapter_residency_test.dart` 驗證身分與逐出；`hybrid_measure_test.dart`、`hybrid_scroll_behavior_test.dart` 驗證連續追加及原生 motion；`hybrid_reader_screen_test.dart` 驗證定位、pending target、阻塞預載與跨章往返。
+
+`hybrid_visual_layout_segmentation_test.dart`、`hybrid_visual_layout_compensation_test.dart`、`em_grid_lock_test.dart` 保留行界、末行補償、字寬基線。`reader_v2_style_change_test.dart`、`reader_v2_rotation_viewport_test.dart`、`reader_v2_chinese_convert_loop_test.dart`、`reader_v2_source_switch_loop_test.dart` 及 core source-switch tests 保留跨模組契約。
+
+`.github/workflows/reader-v2.yml` 檢查實際 checkout 的 committed source，不注入補丁；Android lane 執行 `integration_test/reader_journey_test.dart` 並保存 screenshot／logcat。host tests 不是裝置效能證據；120Hz／P99／特定手機的主張需要另有實測。
+
+## Known limits
+
+網路失敗仍可能使尚未取得的正文不可顯示；移除 readiness 人為阻礙不等於能顯示不存在的資料。單一 visual line 若超過目標 transaction 字數，不能為硬切預算而破壞行界。未取得內容身分的相鄰同名、不同 URL 章節不再被通用 title-only 規則刪除；相同 URL 去重仍保留，不宣稱解決所有畸形來源的跨 URL 重複。
+
+## Related modules
+
+App 裝配見 `app_shell.md`，章節／正文來源見 `engine.md`、`source_network.md`，資料與交易見 `data.md`，書籍入口見 `library.md`，發布與平台運作見 `operations.md`。本次實作與證據見 `../changes/completed/2026-09-18/hybrid-b-rebuild.md`。

@@ -5,12 +5,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';
 
 const String _systemTtsSourceKey = 'system';
+
+Future<void> _applyTtsSettingSafely(
+  Future<void> operation,
+  String settingName,
+) async {
+  try {
+    await operation;
+  } catch (error, stackTrace) {
+    // Settings are persisted independently from the optional platform TTS
+    // engine.  A rejected platform call must not become an unhandled Future
+    // during startup or when the user changes a setting.
+    AppLog.e(
+      'TTS setting update failed ($settingName): $error',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+}
 
 /// SettingsProvider - 設置提供者 (重構後)
 /// (原 Android help/config/AppConfig.kt)
@@ -197,9 +217,13 @@ class SettingsProvider extends SettingsProviderBase {
     speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
     ttsSourceKey = _systemTtsSourceKey;
 
-    TTSService().setRate(speechRate);
-    TTSService().setPitch(speechPitch);
-    TTSService().setVolume(speechVolume);
+    unawaited(_applyTtsSettingSafely(TTSService().setRate(speechRate), 'rate'));
+    unawaited(
+      _applyTtsSettingSafely(TTSService().setPitch(speechPitch), 'pitch'),
+    );
+    unawaited(
+      _applyTtsSettingSafely(TTSService().setVolume(speechVolume), 'volume'),
+    );
   }
 
   /// 僅用於清理舊版非 system TTS 書源設定（migration），在建構後非同步執行，不影響 UI 渲染。
@@ -214,21 +238,21 @@ class SettingsProvider extends SettingsProviderBase {
   // --- 朗讀速率 ---
   void setSpeechRate(double v) {
     speechRate = v;
-    TTSService().setRate(v);
+    unawaited(_applyTtsSettingSafely(TTSService().setRate(v), 'rate'));
     save(PreferKey.ttsSpeechRate, v);
     update();
   }
 
   void setSpeechPitch(double v) {
     speechPitch = v;
-    TTSService().setPitch(v);
+    unawaited(_applyTtsSettingSafely(TTSService().setPitch(v), 'pitch'));
     save(PreferKey.speechPitch, v);
     update();
   }
 
   void setSpeechVolume(double v) {
     speechVolume = v;
-    TTSService().setVolume(v);
+    unawaited(_applyTtsSettingSafely(TTSService().setVolume(v), 'volume'));
     save(PreferKey.speechVolume, v);
     update();
   }

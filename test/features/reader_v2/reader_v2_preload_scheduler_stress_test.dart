@@ -187,7 +187,10 @@ void main() {
       }
       await Future.wait(
         futures,
-      ).timeout(const Duration(seconds: 60), onTimeout: () => <void>[]);
+      ).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => fail('generation 交錯後仍有 Future 未完成（waiter 洩漏）'),
+      );
 
       expect(
         resolver.maxActive,

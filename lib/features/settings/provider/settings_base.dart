@@ -19,6 +19,13 @@ abstract class SettingsProviderBase extends ChangeNotifier {
     }
   }
 
+  void setThemeMode(ThemeMode mode) {
+    if (themeMode == mode) return;
+    themeMode = mode;
+    save('themeMode', mode.name);
+    update();
+  }
+
   ThemeMode parseThemeMode(String mode) {
     switch (mode) {
       case 'light':

@@ -10,7 +10,7 @@ final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
 /// Cookie manager variant that tolerates malformed session-cookie markers such
 /// as `expires=session`, which some book-source sites emit in the wild.
 class LenientCookieManager extends Interceptor {
-  LenientCookieManager(this.cookieJar, {this.ignoreInvalidCookies = false});
+  LenientCookieManager(this.cookieJar, {this.ignoreInvalidCookies = true});
 
   final CookieJar cookieJar;
   bool ignoreInvalidCookies;
@@ -120,11 +120,9 @@ class LenientCookieManager extends Interceptor {
 
   Future<String> loadCookies(RequestOptions options) async {
     final savedCookies = await cookieJar.loadForRequest(options.uri);
-    final previousCookies =
-        options.headers[HttpHeaders.cookieHeader] as String?;
     final cookies = getCookies([
-      ...?previousCookies
-          ?.split(';')
+      ..._cookieHeaderValues(options.headers)
+          .expand((value) => value.split(';'))
           .where((e) => e.isNotEmpty)
           .map((c) => _fromSetCookieValue(c))
           .whereType<Cookie>(),
@@ -151,18 +149,19 @@ class LenientCookieManager extends Interceptor {
     final originalUri = response.requestOptions.uri;
     final realUri = originalUri.resolveUri(response.realUri);
     await cookieJar.saveFromResponse(realUri, cookies);
+  }
 
-    final statusCode = response.statusCode ?? 0;
-    final locations = response.headers[HttpHeaders.locationHeader] ?? [];
-    final redirected = statusCode >= 300 && statusCode < 400;
-    if (redirected && locations.isNotEmpty) {
-      final baseUri = response.realUri;
-      await Future.wait(
-        locations.map(
-          (location) =>
-              cookieJar.saveFromResponse(baseUri.resolve(location), cookies),
-        ),
-      );
+  Iterable<String> _cookieHeaderValues(Map<String, dynamic> headers) sync* {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() != HttpHeaders.cookieHeader) continue;
+      final value = entry.value;
+      if (value is String) {
+        yield value;
+      } else if (value is Iterable) {
+        yield* value
+            .where((item) => item != null)
+            .map((item) => item.toString());
+      }
     }
   }
 }
@@ -173,12 +172,17 @@ Cookie? parseSetCookieValueLenient(
 }) {
   try {
     return Cookie.fromSetCookieValue(value);
-  } on HttpException {
+  } catch (error) {
+    if (error is! HttpException && error is! FormatException) rethrow;
     final sanitized = sanitizeSetCookieValue(value);
     if (sanitized != value && sanitized.isNotEmpty) {
       try {
         return Cookie.fromSetCookieValue(sanitized);
-      } on HttpException {
+      } catch (sanitizedError) {
+        if (sanitizedError is! HttpException &&
+            sanitizedError is! FormatException) {
+          rethrow;
+        }
         if (ignoreInvalidCookies) {
           return null;
         }

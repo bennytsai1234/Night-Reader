@@ -34,6 +34,15 @@ void main() {
       expect(result, 'Doe, John');
     });
 
+    test(r'replace resolves $10 before the overlapping $1 token', () {
+      final result = AnalyzeByRegex.replace(
+        'abcdefghij',
+        r'##(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)##$10-$1',
+      );
+
+      expect(result, 'j-a');
+    });
+
     test('getString - automatically routes to replace when ## present', () {
       final result = AnalyzeByRegex.getString('abc 123 def', r'##\d+##XYZ');
       expect(result, 'abc XYZ def');

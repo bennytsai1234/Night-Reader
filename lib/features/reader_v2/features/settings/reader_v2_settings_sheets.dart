@@ -14,7 +14,7 @@ class ReaderV2SettingsSheets {
     BuildContext context,
     ReaderV2SettingsController settings,
   ) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder: (_) => _ReaderInterfaceSheet(settings: settings),
@@ -23,12 +23,17 @@ class ReaderV2SettingsSheets {
 
   static void showAdvancedSettings(
     BuildContext context,
-    ReaderV2SettingsController settings,
-  ) {
-    showModalBottomSheet(
+    ReaderV2SettingsController settings, {
+    VoidCallback? onChangeSource,
+  }) {
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _ReaderAdvancedSheet(settings: settings),
+      builder:
+          (_) => _ReaderAdvancedSheet(
+            settings: settings,
+            onChangeSource: onChangeSource,
+          ),
     );
   }
 }
@@ -43,7 +48,11 @@ class _ReaderInterfaceSheet extends StatefulWidget {
 }
 
 class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
-  final Map<String, Timer> _debouncers = <String, Timer>{};
+  Timer? _typographyCommitTimer;
+  bool _fontSizeDirty = false;
+  bool _lineHeightDirty = false;
+  bool _letterSpacingDirty = false;
+  bool _paragraphSpacingDirty = false;
   late double _fontSize;
   late double _lineHeight;
   late double _letterSpacing;
@@ -57,31 +66,83 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
     _lineHeight = settings.lineHeight;
     _letterSpacing = settings.letterSpacing;
     _paragraphSpacing = settings.paragraphSpacing;
+    settings.addListener(_syncTypographyFromSettings);
   }
 
   @override
   void dispose() {
-    for (final timer in _debouncers.values) {
-      timer.cancel();
-    }
+    widget.settings.removeListener(_syncTypographyFromSettings);
+    _commitTypographyNow();
     super.dispose();
   }
 
-  void _scheduleCommit(String key, VoidCallback action) {
-    _debouncers.remove(key)?.cancel();
-    _debouncers[key] = Timer(const Duration(milliseconds: 120), action);
+  bool get _hasDirtyTypography =>
+      _fontSizeDirty ||
+      _lineHeightDirty ||
+      _letterSpacingDirty ||
+      _paragraphSpacingDirty;
+
+  void _syncTypographyFromSettings() {
+    if (!mounted) return;
+    final settings = widget.settings;
+    final nextFontSize = _fontSizeDirty ? _fontSize : settings.fontSize;
+    final nextLineHeight = _lineHeightDirty ? _lineHeight : settings.lineHeight;
+    final nextLetterSpacing =
+        _letterSpacingDirty ? _letterSpacing : settings.letterSpacing;
+    final nextParagraphSpacing =
+        _paragraphSpacingDirty ? _paragraphSpacing : settings.paragraphSpacing;
+    if (nextFontSize == _fontSize &&
+        nextLineHeight == _lineHeight &&
+        nextLetterSpacing == _letterSpacing &&
+        nextParagraphSpacing == _paragraphSpacing) {
+      return;
+    }
+    setState(() {
+      _fontSize = nextFontSize;
+      _lineHeight = nextLineHeight;
+      _letterSpacing = nextLetterSpacing;
+      _paragraphSpacing = nextParagraphSpacing;
+    });
   }
 
-  void _commitNow(String key, VoidCallback action) {
-    _debouncers.remove(key)?.cancel();
-    action();
+  void _scheduleTypographyCommit() {
+    _typographyCommitTimer?.cancel();
+    _typographyCommitTimer = Timer(
+      const Duration(milliseconds: 120),
+      _commitTypography,
+    );
+  }
+
+  void _commitTypographyNow() {
+    _typographyCommitTimer?.cancel();
+    _typographyCommitTimer = null;
+    _commitTypography();
+  }
+
+  void _commitTypography() {
+    _typographyCommitTimer = null;
+    if (!_hasDirtyTypography) return;
+    final fontSize = _fontSizeDirty ? _fontSize : null;
+    final lineHeight = _lineHeightDirty ? _lineHeight : null;
+    final letterSpacing = _letterSpacingDirty ? _letterSpacing : null;
+    final paragraphSpacing = _paragraphSpacingDirty ? _paragraphSpacing : null;
+    _fontSizeDirty = false;
+    _lineHeightDirty = false;
+    _letterSpacingDirty = false;
+    _paragraphSpacingDirty = false;
+    widget.settings.setTypography(
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      letterSpacing: letterSpacing,
+      paragraphSpacing: paragraphSpacing,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
     return AppBottomSheet(
-      title: '界面設定',
+      title: '外觀與排版',
       icon: Icons.format_paint_outlined,
       children: [
         const SheetSection(
@@ -93,10 +154,11 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => _ReaderThemeSelector(
-            selectedIndex: settings.themeIndex,
-            onSelected: settings.setTheme,
-          ),
+          builder:
+              (context, _) => _ReaderThemeSelector(
+                selectedIndex: settings.themeIndex,
+                onSelected: settings.setTheme,
+              ),
         ),
         const SheetSection(
           title: '選單樣式',
@@ -107,10 +169,11 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => _ReaderThemeSelector(
-            selectedIndex: settings.menuThemeIndex,
-            onSelected: settings.setMenuTheme,
-          ),
+          builder:
+              (context, _) => _ReaderThemeSelector(
+                selectedIndex: settings.menuThemeIndex,
+                onSelected: settings.setMenuTheme,
+              ),
         ),
         const SheetSection(title: '排版精修'),
         ReaderV2SettingComponents.buildSliderRow(
@@ -120,13 +183,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 40,
           onChanged: (value) {
             setState(() => _fontSize = value);
-            _scheduleCommit(
-              'fontSize',
-              () => settings.setFontSize(_fontSize),
-            );
+            _fontSizeDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow('fontSize', () => settings.setFontSize(value));
+            setState(() => _fontSize = value);
+            _fontSizeDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -136,13 +199,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 3.0,
           onChanged: (value) {
             setState(() => _lineHeight = value);
-            _scheduleCommit(
-              'lineHeight',
-              () => settings.setLineHeight(_lineHeight),
-            );
+            _lineHeightDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow('lineHeight', () => settings.setLineHeight(value));
+            setState(() => _lineHeight = value);
+            _lineHeightDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -152,16 +215,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 4.0,
           onChanged: (value) {
             setState(() => _letterSpacing = value);
-            _scheduleCommit(
-              'letterSpacing',
-              () => settings.setLetterSpacing(_letterSpacing),
-            );
+            _letterSpacingDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow(
-              'letterSpacing',
-              () => settings.setLetterSpacing(value),
-            );
+            setState(() => _letterSpacing = value);
+            _letterSpacingDirty = true;
+            _commitTypographyNow();
           },
         ),
         ReaderV2SettingComponents.buildSliderRow(
@@ -171,58 +231,87 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           max: 3.0,
           onChanged: (value) {
             setState(() => _paragraphSpacing = value);
-            _scheduleCommit(
-              'paragraphSpacing',
-              () => settings.setParagraphSpacing(_paragraphSpacing),
-            );
+            _paragraphSpacingDirty = true;
+            _scheduleTypographyCommit();
           },
           onChangeEnd: (value) {
-            _commitNow(
-              'paragraphSpacing',
-              () => settings.setParagraphSpacing(value),
-            );
+            setState(() => _paragraphSpacing = value);
+            _paragraphSpacingDirty = true;
+            _commitTypographyNow();
           },
         ),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => Row(
-            children: [
-              const SizedBox(
-                width: 65,
-                child: Text('首行縮排', style: TextStyle(fontSize: 12)),
+          builder:
+              (context, _) => Row(
+                children: [
+                  const SizedBox(
+                    width: 65,
+                    child: Text('首行縮排', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Spacer(),
+                  DropdownButton<int>(
+                    value: settings.textIndent,
+                    underline: const SizedBox.shrink(),
+                    items:
+                        [0, 1, 2, 4]
+                            .map(
+                              (i) => DropdownMenuItem(
+                                value: i,
+                                child: Text('$i 字'),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (value) {
+                      if (value != null) settings.setTextIndent(value);
+                    },
+                  ),
+                ],
               ),
-              const Spacer(),
-              DropdownButton<int>(
-                value: settings.textIndent,
-                underline: const SizedBox.shrink(),
-                items:
-                    [0, 1, 2, 4]
-                        .map(
-                          (i) =>
-                              DropdownMenuItem(value: i, child: Text('$i 字')),
-                        )
-                        .toList(),
-                onChanged: (value) {
-                  if (value != null) settings.setTextIndent(value);
-                },
-              ),
-            ],
-          ),
         ),
-        const SheetSection(title: '自動翻頁'),
+        const SheetSection(title: '排版進階'),
         ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => ReaderV2SettingComponents.buildSliderRow(
-            label: '速度',
-            value: settings.autoPageSpeed,
-            min: ReaderV2SettingsController.minAutoPageSpeed,
-            max: ReaderV2SettingsController.maxAutoPageSpeed,
-            divisions: 41,
-            onChanged: settings.setAutoPageSpeed,
-            valueFormatter: (value) => '${(value * 100).round()}%',
-          ),
+          builder:
+              (context, _) => _ReaderTypographySwitches(settings: settings),
         ),
       ],
+    );
+  }
+}
+
+class _ReaderTypographySwitches extends StatelessWidget {
+  const _ReaderTypographySwitches({required this.settings});
+
+  final ReaderV2SettingsController settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _buildSwitch(
+          title: '末行字距補償',
+          subtitle: '讓末行貼近上方滿行字距；每段會額外排版一次',
+          value: settings.lastLineSpacingCompensation,
+          onChanged: settings.setLastLineSpacingCompensation,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSwitch({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(title, style: const TextStyle(fontSize: 13)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }
@@ -288,12 +377,14 @@ class _ReaderThemeSelector extends StatelessWidget {
 }
 
 class _ReaderAdvancedSheet extends StatelessWidget {
-  const _ReaderAdvancedSheet({required this.settings});
+  const _ReaderAdvancedSheet({required this.settings, this.onChangeSource});
 
   final ReaderV2SettingsController settings;
+  final VoidCallback? onChangeSource;
 
   @override
   Widget build(BuildContext context) {
+    final changeSource = onChangeSource;
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
@@ -301,6 +392,35 @@ class _ReaderAdvancedSheet extends StatelessWidget {
           title: '進階設定',
           icon: Icons.tune_rounded,
           children: [
+            if (changeSource != null) ...[
+              const SheetSection(title: '書源'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('換源', style: TextStyle(fontSize: 14)),
+                subtitle: const Text(
+                  '搜尋其他書源並切換本書來源',
+                  style: TextStyle(fontSize: 11),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 18),
+                onTap: () {
+                  Navigator.pop(context);
+                  changeSource();
+                },
+              ),
+              const Divider(height: 32),
+            ],
+            const SheetSection(title: '自動翻頁'),
+            ReaderV2SettingComponents.buildSliderRow(
+              label: '速度',
+              value: settings.autoPageSpeed,
+              min: ReaderV2SettingsController.minAutoPageSpeed,
+              max: ReaderV2SettingsController.maxAutoPageSpeed,
+              divisions: 43,
+              onChanged: settings.setAutoPageSpeed,
+              valueFormatter: (value) => '${(value * 100).round()}%',
+            ),
+            const Divider(height: 32),
             const SheetSection(title: '繁簡轉換'),
             Wrap(
               spacing: 12,

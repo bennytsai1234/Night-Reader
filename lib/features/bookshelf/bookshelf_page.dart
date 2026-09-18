@@ -3,18 +3,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
-import 'package:night_reader/core/services/restore_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+
+enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
 
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
@@ -26,6 +28,7 @@ class BookshelfPage extends StatefulWidget {
 class _BookshelfPageState extends State<BookshelfPage> {
   bool _isMultiSelect = false;
   final Set<String> _selectedUrls = {};
+  _BookshelfBatchAction? _batchAction;
 
   @override
   Widget build(BuildContext context) {
@@ -41,58 +44,58 @@ class _BookshelfPageState extends State<BookshelfPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title:
-              _isMultiSelect
-                  ? Text('已選擇 ${_selectedUrls.length} 本')
-                  : const Text('書架'),
-          leading:
-              _isMultiSelect
-                  ? IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed:
-                        () => setState(() {
-                          _isMultiSelect = false;
-                          _selectedUrls.clear();
-                        }),
-                  )
-                  : null,
-          actions:
-              _isMultiSelect
-                  ? [
-                    IconButton(
-                      icon: const Icon(Icons.download_outlined),
-                      tooltip: '批次下載',
-                      onPressed:
-                          _selectedUrls.isEmpty
-                              ? null
-                              : () => _batchDownload(context, provider),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.cloud_download_outlined),
-                      tooltip: '整本書補下載',
-                      onPressed:
-                          _selectedUrls.isEmpty
-                              ? null
-                              : () => _batchEnsureComplete(context, provider),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.update),
-                      tooltip: '批次檢查更新',
-                      onPressed:
-                          _selectedUrls.isEmpty
-                              ? null
-                              : () => _batchCheckUpdate(context, provider),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: '刪除',
-                      onPressed: () => _showDeleteConfirm(context, provider),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.select_all),
-                      tooltip: '全選',
-                      onPressed:
-                          () => setState(() {
+          title: _isMultiSelect
+              ? Text(
+                  _batchAction == null
+                      ? '已選擇 ${_selectedUrls.length} 本'
+                      : _batchProgressTitle(provider),
+                )
+              : const Text('書架'),
+          leading: _isMultiSelect
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() {
+                    _isMultiSelect = false;
+                    _selectedUrls.clear();
+                  }),
+                )
+              : null,
+          actions: _isMultiSelect
+              ? [
+                  IconButton(
+                    icon: const Icon(Icons.download_outlined),
+                    tooltip: '批次下載',
+                    onPressed: _selectedUrls.isEmpty || _batchAction != null
+                        ? null
+                        : () => _batchDownload(context, provider),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    tooltip: '整本書補下載',
+                    onPressed: _selectedUrls.isEmpty || _batchAction != null
+                        ? null
+                        : () => _batchEnsureComplete(context, provider),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.update),
+                    tooltip: '批次檢查更新',
+                    onPressed: _selectedUrls.isEmpty || _batchAction != null
+                        ? null
+                        : () => _batchCheckUpdate(context, provider),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: '刪除',
+                    onPressed: _selectedUrls.isEmpty || _batchAction != null
+                        ? null
+                        : () => _showDeleteConfirm(context, provider),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.select_all),
+                    tooltip: '全選',
+                    onPressed: _batchAction != null
+                        ? null
+                        : () => setState(() {
                             if (_selectedUrls.length == provider.books.length) {
                               _selectedUrls.clear();
                             } else {
@@ -101,161 +104,162 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               );
                             }
                           }),
+                  ),
+                ]
+              : [
+                  IconButton(
+                    icon: const Icon(Icons.search),
+                    tooltip: '搜尋書籍',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SearchPage()),
                     ),
-                  ]
-                  : [
-                    IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed:
-                          () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SearchPage(),
+                  ),
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'grid',
+                        child: Row(
+                          children: [
+                            Icon(
+                              provider.isGridView
+                                  ? Icons.view_list_outlined
+                                  : Icons.grid_view_outlined,
+                              size: 20,
+                              color: Theme.of(context).iconTheme.color,
                             ),
-                          ),
-                    ),
-
-                    PopupMenuButton<String>(
-                      itemBuilder:
-                          (context) => [
-                            PopupMenuItem(
-                              value: 'grid',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.view_quilt_outlined,
-                                    size: 20,
-                                    color: Theme.of(context).iconTheme.color,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(provider.isGridView ? '列表視圖' : '網格視圖'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'add_local',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.file_open_outlined, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('添加本地'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'sort',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.sort, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('排序'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'manage',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.format_list_bulleted, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('書架管理'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'import_url',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.file_download_outlined, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('從網址匯入書架'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'import',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.file_download_outlined, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('從檔案匯入書架'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'export',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.file_upload_outlined, size: 20),
-                                  SizedBox(width: 12),
-                                  Text('匯出書架'),
-                                ],
-                              ),
-                            ),
+                            const SizedBox(width: 12),
+                            Text(provider.isGridView ? '列表視圖' : '網格視圖'),
                           ],
-                      onSelected: (value) async {
-                        switch (value) {
-                          case 'grid':
-                            provider.setGridView(!provider.isGridView);
-                            break;
-                          case 'add_local':
-                            final result = await FilePicker.pickFiles(
-                              type: FileType.custom,
-                              allowedExtensions:
-                                  kSupportedLocalBookExtensions.toList()
-                                    ..sort(),
-                            );
-                            if (result != null &&
-                                result.files.single.path != null) {
-                              if (!context.mounted) break;
-                              await _importLocalBook(
-                                context,
-                                provider,
-                                result.files.single.path!,
-                              );
-                            }
-                            break;
-                          case 'sort':
-                            await _showSortSheet(context, provider);
-                            break;
-                          case 'manage':
-                            setState(() {
-                              _isMultiSelect = true;
-                            });
-                            break;
-                          case 'import':
-                            await _handleBookshelfImport(context);
-                            break;
-                          case 'import_url':
-                            await _showImportBookshelfUrlDialog(
-                              context,
-                              provider,
-                            );
-                            break;
-                          case 'export':
-                            await _handleBookshelfExport(context, provider);
-                            break;
-                        }
-                      },
-                    ),
-                  ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'add_local',
+                        child: Row(
+                          children: [
+                            Icon(Icons.file_open_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('加入本地書籍'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'sort',
+                        child: Row(
+                          children: [
+                            Icon(Icons.sort, size: 20),
+                            SizedBox(width: 12),
+                            Text('排序'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'manage',
+                        child: Row(
+                          children: [
+                            Icon(Icons.format_list_bulleted, size: 20),
+                            SizedBox(width: 12),
+                            Text('書架管理'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'import_url',
+                        child: Row(
+                          children: [
+                            Icon(Icons.file_download_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('從網址匯入書架'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'import',
+                        child: Row(
+                          children: [
+                            Icon(Icons.file_download_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('從檔案匯入書架'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: Row(
+                          children: [
+                            Icon(Icons.file_upload_outlined, size: 20),
+                            SizedBox(width: 12),
+                            Text('匯出書架'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'grid':
+                          provider.setGridView(!provider.isGridView);
+                          break;
+                        case 'add_local':
+                          final path = await AppFileSelectionService.instance
+                              .pickLocalBookPath();
+                          if (path != null) {
+                            if (!context.mounted) break;
+                            await _importLocalBook(context, provider, path);
+                          }
+                          break;
+                        case 'sort':
+                          await _showSortSheet(context, provider);
+                          break;
+                        case 'manage':
+                          setState(() {
+                            _isMultiSelect = true;
+                          });
+                          break;
+                        case 'import':
+                          await _handleBookshelfImport(context);
+                          break;
+                        case 'import_url':
+                          await _showImportBookshelfUrlDialog(
+                            context,
+                            provider,
+                          );
+                          break;
+                        case 'export':
+                          await _handleBookshelfExport(context, provider);
+                          break;
+                      }
+                    },
+                  ),
+                ],
         ),
         body: Column(
           children: [
+            if (_batchAction != null)
+              const LinearProgressIndicator(minHeight: 2),
             Expanded(
-              child:
-                  provider.isLoading && provider.books.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : provider.books.isEmpty
-                      ? const Center(child: Text('書架空空如也，去搜尋看看吧'))
-                      : RefreshIndicator(
-                        onRefresh: () => provider.refreshBookshelf(),
-                        child:
-                            provider.isGridView
-                                ? _buildGridView(provider)
-                                : _buildListView(provider),
+              child: provider.isLoading && provider.books.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.books.isEmpty
+                  ? AppStateView(
+                      icon: Icons.auto_stories_outlined,
+                      title: '書架還是空的',
+                      description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
+                      primaryAction: AppStateAction(
+                        label: '搜尋書籍',
+                        icon: Icons.search,
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SearchPage()),
+                        ),
                       ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () => provider.refreshBookshelf(),
+                      child: provider.isGridView
+                          ? _buildGridView(provider)
+                          : _buildListView(provider),
+                    ),
             ),
           ],
         ),
@@ -271,14 +275,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
     try {
       final ok = await provider.importLocalBookPath(path);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
     }
   }
 
@@ -289,79 +291,70 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final controller = TextEditingController();
     final url = await showDialog<String>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('從網址匯入書架'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-                child: const Text('匯入'),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('從網址匯入書架'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('匯入'),
+          ),
+        ],
+      ),
     );
     if (url == null || url.isEmpty || !context.mounted) return;
     try {
       await provider.importBookshelfFromUrl(url);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('書架網址匯入完成')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('書架網址匯入完成')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('書架網址匯入失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('書架網址匯入失敗: $e')));
     }
   }
 
   Future<void> _handleBookshelfImport(BuildContext context) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json', 'zip'],
-    );
-    if (result == null ||
-        result.files.single.path == null ||
-        !context.mounted) {
-      return;
-    }
-    final path = result.files.single.path!;
+    final path = await AppFileSelectionService.instance
+        .pickBookshelfImportPath();
+    if (path == null || !context.mounted) return;
     try {
-      if (path.toLowerCase().endsWith('.zip')) {
-        final restored = await RestoreService().restoreFromZip(File(path));
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(restored ? '備份還原完成，請重新開啟相關頁面確認資料' : '備份還原失敗')),
-        );
-      } else {
-        final imported = await BookshelfExchangeService().importFromFile(
-          File(path),
-        );
-        if (!context.mounted) return;
-        context.read<BookshelfProvider>().loadBooks();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
-              '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
-            ),
-          ),
-        );
+      final imported = await BookshelfExchangeService().importFromFile(
+        File(path),
+      );
+      if (!context.mounted) return;
+      final importedTotal =
+          imported.books +
+          imported.chapters +
+          imported.sources +
+          imported.contents;
+      if (importedTotal == 0) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('未找到可匯入的書架資料')));
+        return;
       }
+      context.read<BookshelfProvider>().loadBooks();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
+            '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
+          ),
+        ),
+      );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
     }
   }
 
@@ -372,14 +365,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
     try {
       await BookshelfExchangeService().shareBookshelf(books: provider.books);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('書架已匯出')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('書架已匯出')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
     }
   }
 
@@ -387,26 +378,25 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BuildContext context,
     BookshelfProvider provider,
   ) async {
-    final selected = await showModalBottomSheet<BookshelfSortMode>(
+    final selected = await AppBottomSheet.showCustom<BookshelfSortMode>(
       context: context,
-      builder:
-          (ctx) => SafeArea(
-            child: RadioGroup<BookshelfSortMode>(
-              groupValue: provider.sortMode,
-              onChanged: (value) => Navigator.pop(ctx, value),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final mode in BookshelfSortMode.values)
-                    ListTile(
-                      leading: Radio<BookshelfSortMode>(value: mode),
-                      title: Text(mode.label),
-                      onTap: () => Navigator.pop(ctx, mode),
-                    ),
-                ],
-              ),
-            ),
+      builder: (ctx) => SafeArea(
+        child: RadioGroup<BookshelfSortMode>(
+          groupValue: provider.sortMode,
+          onChanged: (value) => Navigator.pop(ctx, value),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final mode in BookshelfSortMode.values)
+                ListTile(
+                  leading: Radio<BookshelfSortMode>(value: mode),
+                  title: Text(mode.label),
+                  onTap: () => Navigator.pop(ctx, mode),
+                ),
+            ],
           ),
+        ),
+      ),
     );
     if (selected != null) {
       await provider.setSortMode(selected);
@@ -418,7 +408,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final result = await provider.batchDownload(_selectedUrls);
+      final result = await _runBatchAction(
+        _BookshelfBatchAction.download,
+        provider.batchDownload,
+      );
+      if (result == null) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -433,9 +427,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
       });
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
     }
   }
 
@@ -444,7 +437,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final result = await provider.batchEnsureComplete(_selectedUrls);
+      final result = await _runBatchAction(
+        _BookshelfBatchAction.ensureComplete,
+        provider.batchEnsureComplete,
+      );
+      if (result == null) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -461,9 +458,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
       });
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('整本書補下載失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('整本書補下載失敗: $e')));
     }
   }
 
@@ -472,7 +468,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BookshelfProvider provider,
   ) async {
     try {
-      final results = await provider.batchCheckUpdate(_selectedUrls);
+      final results = await _runBatchAction(
+        _BookshelfBatchAction.checkUpdate,
+        provider.batchCheckUpdate,
+      );
+      if (results == null) return;
       final updated = results.where((result) => result.hasUpdate).length;
       final chapters = results.fold<int>(
         0,
@@ -491,10 +491,37 @@ class _BookshelfPageState extends State<BookshelfPage> {
       });
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
     }
+  }
+
+  Future<T?> _runBatchAction<T>(
+    _BookshelfBatchAction action,
+    Future<T> Function(Set<String> urls) operation,
+  ) async {
+    if (_batchAction != null || _selectedUrls.isEmpty) return null;
+    final selectedUrls = Set<String>.from(_selectedUrls);
+    setState(() => _batchAction = action);
+    try {
+      return await operation(selectedUrls);
+    } finally {
+      if (mounted) {
+        setState(() => _batchAction = null);
+      }
+    }
+  }
+
+  String _batchProgressTitle(BookshelfProvider provider) {
+    return switch (_batchAction) {
+      _BookshelfBatchAction.download => '正在加入下載佇列…',
+      _BookshelfBatchAction.ensureComplete => '正在檢查缺失章節…',
+      _BookshelfBatchAction.checkUpdate =>
+        provider.updatingCount > 0
+            ? '正在檢查更新（剩 ${provider.updatingCount} 本）'
+            : '正在整理更新結果…',
+      null => '已選擇 ${_selectedUrls.length} 本',
+    };
   }
 
   Widget _buildListView(BookshelfProvider provider) {
@@ -503,20 +530,19 @@ class _BookshelfPageState extends State<BookshelfPage> {
         padding: const EdgeInsets.all(AppSpacing.md),
         itemCount: provider.books.length,
         onReorderItem: provider.reorderBooks,
-        itemBuilder:
-            (context, index) => Padding(
-              key: ValueKey(provider.books[index].bookUrl),
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _buildBookItem(context, provider.books[index]),
-            ),
+        itemBuilder: (context, index) => Padding(
+          key: ValueKey(provider.books[index].bookUrl),
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: _buildBookItem(context, provider.books[index]),
+        ),
       );
     }
     return ListView.separated(
       padding: const EdgeInsets.all(AppSpacing.md),
       itemCount: provider.books.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder:
-          (context, index) => _buildBookItem(context, provider.books[index]),
+      itemBuilder: (context, index) =>
+          _buildBookItem(context, provider.books[index]),
     );
   }
 
@@ -525,26 +551,34 @@ class _BookshelfPageState extends State<BookshelfPage> {
       padding: const EdgeInsets.all(AppSpacing.md),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        childAspectRatio: 0.55,
+        // Leave a little room for the two-line title and the progress bar.
+        // The previous ratio overflowed by 1.5 px on the phone's narrow
+        // logical width after Flutter rounded the grid constraints.
+        childAspectRatio: 0.52,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
       itemCount: provider.books.length,
-      itemBuilder:
-          (context, index) => _buildGridItem(context, provider.books[index]),
+      itemBuilder: (context, index) =>
+          _buildGridItem(context, provider.books[index]),
+    );
+  }
+
+  ({Color border, Color primary, Color secondary, Color tertiary})
+  _bookItemColors(ThemeData theme, bool isSelected) {
+    final scheme = theme.colorScheme;
+    return (
+      border: isSelected ? scheme.primary : scheme.outlineVariant,
+      primary: scheme.onSurface,
+      secondary: scheme.onSurfaceVariant,
+      tertiary: scheme.onSurfaceVariant.withValues(alpha: 0.7),
     );
   }
 
   Widget _buildGridItem(BuildContext context, Book book) {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final borderColor =
-        isSelected
-            ? theme.colorScheme.primary
-            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
-    final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
+    final colors = _bookItemColors(theme, isSelected);
 
     return InkWell(
       onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
@@ -567,24 +601,23 @@ class _BookshelfPageState extends State<BookshelfPage> {
               AspectRatio(
                 aspectRatio: 0.72,
                 child: Hero(
-                  tag: 'book_cover_${book.bookUrl}',
+                  tag: BookCoverWidget.heroTag(book.bookUrl),
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: borderColor,
+                        color: colors.border,
                         width: isSelected ? 2 : 1,
                       ),
                       borderRadius: AppRadius.cardXs,
-                      boxShadow:
-                          theme.cardTheme.shadowColor != null
-                              ? [
-                                BoxShadow(
-                                  color: theme.cardTheme.shadowColor!,
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                              : [],
+                      boxShadow: theme.cardTheme.shadowColor != null
+                          ? [
+                              BoxShadow(
+                                color: theme.cardTheme.shadowColor!,
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : [],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(AppRadius.xs - 1),
@@ -603,11 +636,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
               Text(
                 book.name,
                 style: TextStyle(
-                  fontFamily: AppTextStyles.fontFamilySerif,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   height: 1.25,
-                  color: fgPrimary,
+                  color: colors.primary,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -616,19 +648,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
               Container(
                 height: 2,
                 decoration: BoxDecoration(
-                  color: borderColor,
+                  color: colors.border,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
-                    widthFactor:
-                        book.totalChapterNum > 0
-                            ? (book.chapterIndex / book.totalChapterNum).clamp(
-                              0.0,
-                              1.0,
-                            )
-                            : 0.0,
+                    widthFactor: bookshelfReadProgress(book),
                     child: Container(
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
@@ -646,7 +672,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
               top: 4,
               child: Icon(
                 isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: isSelected ? theme.colorScheme.primary : Colors.white,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface,
+                shadows: [
+                  Shadow(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.9),
+                    blurRadius: AppSpacing.xs,
+                  ),
+                ],
               ),
             ),
         ],
@@ -657,15 +691,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
   Widget _buildBookItem(BuildContext context, Book book) {
     final isSelected = _selectedUrls.contains(book.bookUrl);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final borderColor =
-        isSelected
-            ? theme.colorScheme.primary
-            : (isDark ? const Color(0x1EF4EDD7) : const Color(0x16241C10));
-    final fgPrimary = isDark ? AppPalette.ink50 : AppPalette.ink700;
-    final fgSecondary = isDark ? AppPalette.ink200 : AppPalette.ink300;
-    final fgTertiary = isDark ? const Color(0xFF847B68) : AppPalette.ink200;
+    final colors = _bookItemColors(theme, isSelected);
 
     return InkWell(
       onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
@@ -686,22 +712,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
         decoration: BoxDecoration(
           color: theme.cardTheme.color,
           borderRadius: AppRadius.cardLg,
-          border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
-          boxShadow:
-              theme.cardTheme.shadowColor != null
-                  ? [
-                    BoxShadow(
-                      color: theme.cardTheme.shadowColor!,
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                  : [],
+          border: Border.all(color: colors.border, width: isSelected ? 2 : 1),
+          boxShadow: theme.cardTheme.shadowColor != null
+              ? [
+                  BoxShadow(
+                    color: theme.cardTheme.shadowColor!,
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [],
         ),
         child: Row(
           children: [
             Hero(
-              tag: 'book_cover_${book.bookUrl}',
+              tag: BookCoverWidget.heroTag(book.bookUrl),
               child: BookCoverWidget(
                 bookName: book.name,
                 coverUrl: book.getDisplayCover(),
@@ -718,10 +743,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   Text(
                     book.name,
                     style: TextStyle(
-                      fontFamily: AppTextStyles.fontFamilySerif,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: fgPrimary,
+                      color: colors.primary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -729,20 +753,20 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   const SizedBox(height: 2),
                   Text(
                     book.author,
-                    style: TextStyle(fontSize: 11, color: fgTertiary),
+                    style: TextStyle(fontSize: 11, color: colors.tertiary),
                     maxLines: 1,
                   ),
                   const Spacer(),
                   Text(
-                    '讀至: ${book.durChapterTitle}',
-                    style: TextStyle(fontSize: 11, color: fgSecondary),
+                    '讀至：${book.durChapterTitle}',
+                    style: TextStyle(fontSize: 11, color: colors.secondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '最新: ${book.latestChapterTitle}',
-                    style: TextStyle(fontSize: 10, color: fgTertiary),
+                    '最新：${book.latestChapterTitle}',
+                    style: TextStyle(fontSize: 10, color: colors.tertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -750,17 +774,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   Container(
                     height: 2,
                     decoration: BoxDecoration(
-                      color: borderColor,
+                      color: colors.border,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor:
-                            book.totalChapterNum > 0
-                                ? (book.chapterIndex / book.totalChapterNum)
-                                    .clamp(0.0, 1.0)
-                                : 0.0,
+                        widthFactor: bookshelfReadProgress(book),
                         child: Container(
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
@@ -798,9 +818,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
 
   void _openBook(BuildContext context, Book book) {
     if (book.type == 2) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
       return;
     }
     Navigator.push(
@@ -812,30 +831,42 @@ class _BookshelfPageState extends State<BookshelfPage> {
   void _showDeleteConfirm(BuildContext context, BookshelfProvider p) {
     showDialog(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('確認刪除'),
-            content: Text('是否從書架刪除這 ${_selectedUrls.length} 本書？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  for (var url in _selectedUrls) {
-                    await p.removeFromBookshelf(url);
-                  }
-                  setState(() {
-                    _isMultiSelect = false;
-                    _selectedUrls.clear();
-                  });
-                },
-                child: const Text('刪除'),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('確認刪除'),
+        content: Text(
+          '將永久刪除這 ${_selectedUrls.length} 本書，以及本機章節、正文快取、書籤、下載任務與封面資料。此操作無法復原。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
           ),
+          ElevatedButton(
+            onPressed: () async {
+              final selectedUrls = Set<String>.from(_selectedUrls);
+              Navigator.pop(ctx);
+              try {
+                for (final url in selectedUrls) {
+                  await p.deleteBook(url);
+                }
+                if (!mounted) return;
+                setState(() {
+                  _isMultiSelect = false;
+                  _selectedUrls.clear();
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('已刪除 ${selectedUrls.length} 本書')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('刪除失敗: $e')));
+              }
+            },
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
     );
   }
 }

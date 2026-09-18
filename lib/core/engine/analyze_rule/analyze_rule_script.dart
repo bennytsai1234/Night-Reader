@@ -13,19 +13,14 @@ import 'package:night_reader/core/utils/ttf_parser.dart';
 extension AnalyzeRuleScript on AnalyzeRuleBase {
   dynamic evalJS(String jsStr, dynamic result) {
     jsEngine ??= JsEngine(source: source, ruleContext: this);
-    if (AnalyzeRuleBase.scriptCache.containsKey(jsStr) && result == null) {
-      return AnalyzeRuleBase.scriptCache[jsStr];
-    }
     final context = _buildJsContext(result);
-    final evalResult = jsEngine!.evaluate(jsStr, context: context);
-    if (result == null) AnalyzeRuleBase.scriptCache[jsStr] = evalResult;
-    return evalResult;
+    return jsEngine!.evaluate(jsStr, context: context);
   }
 
   /// Promise bridge 版本的 evalJS — 支援 rule JS 中的 `java.ajax` 等 async 呼叫。
   ///
-  /// 不做 scriptCache：async rule 的結果可能隨 HTTP 回應改變，quiety 快取容易
-  /// 誤命中；同步 rule 仍由 [evalJS] 的 scriptCache 保留既有行為。
+  /// JS 結果取決於 source / book / chapter / page / baseUrl 與外部狀態，
+  /// 因此同步與非同步路徑都不快取執行結果。
   Future<dynamic> evalJSAsync(String jsStr, dynamic result) async {
     jsEngine ??= JsEngine(source: source, ruleContext: this);
     final context = _buildJsContext(result);

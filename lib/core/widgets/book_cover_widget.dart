@@ -25,26 +25,39 @@ class BookCoverWidget extends StatelessWidget {
     this.borderRadius,
   });
 
+  static String heroTag(String bookUrl) => 'book_cover_$bookUrl';
+
   @override
   Widget build(BuildContext context) {
     final effectiveBorderRadius = borderRadius ?? AppRadius.cardXs;
+    final trimmedAuthor = author?.trim();
+    final semanticLabel =
+        trimmedAuthor == null || trimmedAuthor.isEmpty
+            ? '《$bookName》封面'
+            : '《$bookName》封面，作者 $trimmedAuthor';
 
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: effectiveBorderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+    return Semantics(
+      image: true,
+      label: semanticLabel,
+      child: ExcludeSemantics(
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: effectiveBorderRadius,
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A241C10),
+                blurRadius: 2,
+                offset: Offset(0, 1),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: effectiveBorderRadius,
-        child: _buildCover(context),
+          child: ClipRRect(
+            borderRadius: effectiveBorderRadius,
+            child: _buildCover(context),
+          ),
+        ),
       ),
     );
   }
@@ -59,6 +72,10 @@ class BookCoverWidget extends StatelessWidget {
       return _buildTextCover();
     }
 
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = (width * devicePixelRatio).ceil();
+    final cacheHeight = (height * devicePixelRatio).ceil();
+
     if (source.startsWith('memory://')) {
       return FutureBuilder<Uint8List?>(
         future: ResourceService().getMemoryResource(source),
@@ -66,7 +83,7 @@ class BookCoverWidget extends StatelessWidget {
           final bytes = snapshot.data;
           if (bytes == null || bytes.isEmpty) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildPlaceholder();
+              return _buildPlaceholder(context);
             }
             _failedCoverSources.add(source);
             return _buildTextCover();
@@ -76,6 +93,8 @@ class BookCoverWidget extends StatelessWidget {
             fit: BoxFit.cover,
             width: width,
             height: height,
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
             errorBuilder: (context, error, stackTrace) {
               _failedCoverSources.add(source);
               return _buildTextCover();
@@ -90,15 +109,13 @@ class BookCoverWidget extends StatelessWidget {
           source.startsWith('local://')
               ? File(source.replaceFirst('local://', ''))
               : File(Uri.parse(source).toFilePath());
-      if (!file.existsSync()) {
-        _failedCoverSources.add(source);
-        return _buildTextCover();
-      }
       return Image.file(
         file,
         fit: BoxFit.cover,
         width: width,
         height: height,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         errorBuilder: (context, error, stackTrace) {
           _failedCoverSources.add(source);
           return _buildTextCover();
@@ -111,8 +128,10 @@ class BookCoverWidget extends StatelessWidget {
       fit: BoxFit.cover,
       width: width,
       height: height,
+      memCacheWidth: cacheWidth,
+      memCacheHeight: cacheHeight,
       fadeInDuration: const Duration(milliseconds: 200),
-      placeholder: (context, url) => _buildPlaceholder(),
+      placeholder: (context, url) => _buildPlaceholder(context),
       errorWidget: (context, url, error) {
         _failedCoverSources.add(source);
         return _buildTextCover();
@@ -120,9 +139,9 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(BuildContext context) {
     return Container(
-      color: Colors.grey.withValues(alpha: 0.1),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: const Center(
         child: SizedBox(
           width: 16,
@@ -135,9 +154,9 @@ class BookCoverWidget extends StatelessWidget {
 
   /// 實作文字封面 (對標 Android 預設文字封面)
   Widget _buildTextCover() {
-    // 根據書名生成隨機但固定的背景色
     final int colorIndex = bookName.hashCode.abs() % _coverColors.length;
     final Color color = _coverColors[colorIndex];
+    final Color foregroundColor = _readableForeground(color);
     final String displayChar = bookName.isNotEmpty ? bookName[0] : '書';
 
     return Container(
@@ -148,14 +167,14 @@ class BookCoverWidget extends StatelessWidget {
           children: [
             Text(
               displayChar,
-              style: AppTextStyles.titleSm.copyWith(color: Colors.white),
+              style: AppTextStyles.titleSm.copyWith(color: foregroundColor),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              'No Image',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 8,
+              '無封面',
+              style: AppTextStyles.labelXs.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -164,19 +183,36 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
+  Color _readableForeground(Color background) {
+    const lightForeground = AppPalette.paper50;
+    const darkForeground = AppPalette.ink700;
+
+    double contrastRatio(Color foreground) {
+      final lighter =
+          foreground.computeLuminance() > background.computeLuminance()
+              ? foreground.computeLuminance()
+              : background.computeLuminance();
+      final darker =
+          foreground.computeLuminance() > background.computeLuminance()
+              ? background.computeLuminance()
+              : foreground.computeLuminance();
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    return contrastRatio(darkForeground) >= contrastRatio(lightForeground)
+        ? darkForeground
+        : lightForeground;
+  }
+
   static const List<Color> _coverColors = [
-    Color(0xFFE57373),
-    Color(0xFFF06292),
-    Color(0xFFBA68C8),
-    Color(0xFF9575CD),
-    Color(0xFF7986CB),
-    Color(0xFF64B5F6),
-    Color(0xFF4FC3F7),
-    Color(0xFF4DB6AC),
-    Color(0xFF81C784),
-    Color(0xFFAED581),
-    Color(0xFFFFB74D),
-    Color(0xFFD4E157),
+    AppPalette.cinnabar,
+    AppPalette.rust,
+    AppPalette.tea,
+    AppPalette.gold,
+    AppPalette.azurite,
+    AppPalette.moss,
+    AppPalette.ink300,
+    AppPalette.aubergine,
   ];
 
   static final Set<String> _failedCoverSources = <String>{};

@@ -1,78 +1,62 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/services/download/download_executor.dart';
 
-/// Tests for DownloadExecutor retry logic.
-///
-/// DownloadExecutor is a mixin that depends on DownloadBase and DownloadScheduler,
-/// making it difficult to instantiate in isolation. Instead, we verify the retry
-/// constants and the exponential backoff formula used by _downloadChapter.
+class _FakeBookSourceDao extends Fake implements BookSourceDao {}
+
+class _RetryingBookSourceService extends BookSourceService {
+  int calls = 0;
+
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    dynamic cancelToken,
+  }) async {
+    calls += 1;
+    return calls < 3 ? '' : '可讀正文';
+  }
+}
+
 void main() {
-  group('DownloadExecutor retry logic', () {
-    // The retry constant defined in DownloadExecutor
-    const maxRetries = 3;
-
-    test('maxRetries is 3', () {
-      // Mirrors static const int _maxRetries = 3 in DownloadExecutor
-      expect(maxRetries, 3);
-    });
-
-    test('exponential backoff timing: attempt 0 = 500ms', () {
-      // delay = Duration(milliseconds: 500 * (1 << attempt))
-      const delay = Duration(milliseconds: 500 * (1 << 0));
-      expect(delay, const Duration(milliseconds: 500));
-    });
-
-    test('exponential backoff timing: attempt 1 = 1000ms', () {
-      const delay = Duration(milliseconds: 500 * (1 << 1));
-      expect(delay, const Duration(milliseconds: 1000));
-    });
-
-    test('exponential backoff timing: attempt 2 = 2000ms', () {
-      const delay = Duration(milliseconds: 500 * (1 << 2));
-      expect(delay, const Duration(milliseconds: 2000));
-    });
-
-    test('last retry (attempt == maxRetries - 1) does not delay', () {
-      // In the code: if (attempt < _maxRetries - 1) { delay } else { log exhausted }
-      // So on the final attempt (attempt == 2), no delay occurs, only error logging.
-      const lastAttempt = maxRetries - 1;
-      expect(
-        lastAttempt < maxRetries - 1,
-        false,
-        reason: 'Final attempt should not trigger delay',
+  group('chapter content retry behavior', () {
+    test('uses the production pipeline until a later attempt returns readable content', () async {
+      final service = _RetryingBookSourceService();
+      final retryAttempts = <int>[];
+      final pipeline = ChapterContentPreparationPipeline(
+        book: Book(
+          bookUrl: 'https://book.example/1',
+          origin: 'https://source.example',
+        ),
+        contentStore: null,
+        sourceDao: _FakeBookSourceDao(),
+        service: service,
+        retryDelay: (attempt) {
+          retryAttempts.add(attempt);
+          return Duration.zero;
+        },
       );
-    });
 
-    test('retry attempts cover range 0 to maxRetries-1', () {
-      final attempts = List.generate(maxRetries, (i) => i);
-      expect(attempts, [0, 1, 2]);
-      expect(attempts.length, maxRetries);
-    });
+      final result = await pipeline.prepare(
+        chapterIndex: 0,
+        chapter: BookChapter(url: 'chapter/1', index: 0),
+        sourceOverride: BookSource(bookSourceUrl: 'https://source.example'),
+        maxAttempts: 3,
+      );
 
-    test('backoff durations increase exponentially', () {
-      final durations = <Duration>[];
-      for (var attempt = 0; attempt < maxRetries - 1; attempt++) {
-        durations.add(Duration(milliseconds: 500 * (1 << attempt)));
-      }
-      // Each subsequent delay should be double the previous
-      for (var i = 1; i < durations.length; i++) {
-        expect(
-          durations[i].inMilliseconds,
-          durations[i - 1].inMilliseconds * 2,
-          reason: 'Backoff should double with each attempt',
-        );
-      }
-    });
-
-    test('total maximum backoff time is 1500ms (500 + 1000)', () {
-      // Only first two attempts have backoff (attempt 0 and 1)
-      // Attempt 2 is the final attempt and goes straight to error logging
-      var totalBackoff = 0;
-      for (var attempt = 0; attempt < maxRetries - 1; attempt++) {
-        totalBackoff += 500 * (1 << attempt);
-      }
-      expect(totalBackoff, 1500);
+      expect(result.isReady, isTrue);
+      expect(result.content, '可讀正文');
+      expect(service.calls, 3);
+      expect(retryAttempts, [0, 1]);
     });
   });
 

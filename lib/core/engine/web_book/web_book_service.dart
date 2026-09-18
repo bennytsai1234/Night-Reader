@@ -188,6 +188,7 @@ class WebBook {
             source,
             book,
             stage: 'toc',
+            allowPartial: true,
             concurrency: effectivePageConcurrency,
             cancelToken: cancelToken,
           );
@@ -268,6 +269,10 @@ class WebBook {
       for (final c in allChapters) {
         if (seen.add(c.url)) deduped.add(c);
       }
+
+      // A title is a label, not content identity. Different URLs remain
+      // distinct until the source provides evidence that they are duplicates;
+      // guessing from adjacent names can irreversibly delete real chapters.
 
       // formatJs (對標 Android BookChapterList.formatJs)
       final formatJs = source.ruleToc?.formatJs;
@@ -374,6 +379,7 @@ class WebBook {
         source,
         book,
         stage: 'content',
+        allowPartial: false,
         concurrency: effectivePageConcurrency,
         cancelToken: cancelToken,
       );
@@ -507,6 +513,7 @@ class WebBook {
     BookSource source,
     Book book, {
     required String stage,
+    required bool allowPartial,
     int concurrency = _pageConcurrency,
     CancelToken? cancelToken,
   }) async {
@@ -527,7 +534,9 @@ class WebBook {
             _checkLoginRequired(res, stage: stage);
             return res;
           } catch (e) {
+            if (e is DioException && CancelToken.isCancel(e)) rethrow;
             AppLog.e('WebBook: 並發抓取失敗 $url: $e');
+            if (!allowPartial) rethrow;
             return null;
           } finally {
             sem.release();

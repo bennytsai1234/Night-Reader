@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
 
 MainDestination _fake(String label) => MainDestination(
@@ -166,6 +168,80 @@ void main() {
     final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navBar.selectedIndex, 0);
   });
+
+  testWidgets(
+    'slow shelf hands off to a non-blocking semantic overlay after 2 seconds',
+    (tester) async {
+      final shelf = _ControllableShelfProvider();
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          ChangeNotifierProvider<BookshelfProvider>.value(
+            value: shelf,
+            child: MaterialApp(
+              home: MainPage(
+                destinations: [_fake('書架'), _fake('發現'), _fake('我的')],
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('startup-loading-overlay')),
+          findsOneWidget,
+        );
+        final overlaySemantics = tester.widget<Semantics>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('startup-loading-overlay')),
+                matching: find.byType(Semantics),
+              )
+              .first,
+        );
+        expect(overlaySemantics.properties.label, '正在載入書架');
+        expect(overlaySemantics.properties.liveRegion, isTrue);
+
+        await tester.drag(find.byType(PageView), const Offset(-500, 0));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.byKey(const Key('page-發現')), findsOneWidget);
+
+        shelf.completeLoading();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          find.byKey(const ValueKey('startup-loading-overlay')),
+          findsNothing,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+}
+
+class _ControllableShelfProvider extends Fake implements BookshelfProvider {
+  final List<VoidCallback> _listeners = <VoidCallback>[];
+  bool _isLoading = true;
+
+  @override
+  bool get isLoading => _isLoading;
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  void completeLoading() {
+    _isLoading = false;
+    for (final listener in List<VoidCallback>.of(_listeners)) {
+      listener();
+    }
+  }
 }
 
 class _CounterPage extends StatefulWidget {

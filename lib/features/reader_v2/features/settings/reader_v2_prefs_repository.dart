@@ -1,3 +1,4 @@
+import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,7 @@ class ReaderV2PrefsSnapshot {
   final int menuThemeIndex;
   final double autoPageSpeed;
   final int chineseConvert;
+  final bool lastLineSpacingCompensation;
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
@@ -29,6 +31,7 @@ class ReaderV2PrefsSnapshot {
     required this.menuThemeIndex,
     required this.autoPageSpeed,
     required this.chineseConvert,
+    required this.lastLineSpacingCompensation,
     required this.showAddToShelfAlert,
     required this.clickActions,
   });
@@ -46,6 +49,7 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: 0,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
+      lastLineSpacingCompensation: AppConfig.readerLastLineSpacingCompensation,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
     );
@@ -63,6 +67,7 @@ class ReaderV2PrefsSnapshot {
     int? menuThemeIndex,
     double? autoPageSpeed,
     int? chineseConvert,
+    bool? lastLineSpacingCompensation,
     bool? showAddToShelfAlert,
     List<int>? clickActions,
   }) {
@@ -78,6 +83,8 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
       autoPageSpeed: autoPageSpeed ?? this.autoPageSpeed,
       chineseConvert: chineseConvert ?? this.chineseConvert,
+      lastLineSpacingCompensation:
+          lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
     );
@@ -86,6 +93,11 @@ class ReaderV2PrefsSnapshot {
 
 class ReaderV2PrefsRepository {
   const ReaderV2PrefsRepository();
+
+  /// 自動翻頁速度（每秒滾動畫面高的比例）的合法範圍；
+  /// 所有讀寫端（設定 sheet、全域設定頁、AutoPageController）共用此常數。
+  static const double minAutoPageSpeed = 0.02;
+  static const double maxAutoPageSpeed = 0.45;
 
   static ReaderV2PrefsSnapshot? _latestSnapshot;
 
@@ -125,6 +137,9 @@ class ReaderV2PrefsRepository {
       chineseConvert:
           prefs.getInt(PreferKey.readerChineseConvert) ??
           defaults.chineseConvert,
+      lastLineSpacingCompensation:
+          prefs.getBool(PreferKey.readerLastLineSpacingCompensation) ??
+          defaults.lastLineSpacingCompensation,
       showAddToShelfAlert:
           prefs.getBool(PreferKey.showAddToShelfAlert) ??
           defaults.showAddToShelfAlert,
@@ -132,6 +147,7 @@ class ReaderV2PrefsRepository {
         prefs.getString(PreferKey.readerClickActions),
       ),
     );
+    _syncAppConfig(snapshot);
     _latestSnapshot = snapshot;
     return snapshot;
   }
@@ -183,6 +199,11 @@ class ReaderV2PrefsRepository {
     return _setInt(PreferKey.readerChineseConvert, value);
   }
 
+  Future<void> saveLastLineSpacingCompensation(bool value) {
+    AppConfig.readerLastLineSpacingCompensation = value;
+    return _setBool(PreferKey.readerLastLineSpacingCompensation, value);
+  }
+
   Future<void> saveShowAddToShelfAlert(bool value) {
     return _setBool(PreferKey.showAddToShelfAlert, value);
   }
@@ -220,6 +241,11 @@ class ReaderV2PrefsRepository {
     await prefs.setString(key, value);
   }
 
+  void _syncAppConfig(ReaderV2PrefsSnapshot snapshot) {
+    AppConfig.readerLastLineSpacingCompensation =
+        snapshot.lastLineSpacingCompensation;
+  }
+
   List<int> _parseClickActions(String? stored) {
     final normalized =
         stored
@@ -240,7 +266,9 @@ class ReaderV2PrefsRepository {
   double _normalizeAutoPageSpeed(double? value) {
     if (value == null || !value.isFinite)
       return ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
-    if (value > 1) return (value / 100).clamp(0.08, 0.45).toDouble();
-    return value.clamp(0.08, 0.45).toDouble();
+    if (value > 1) {
+      return (value / 100).clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
+    }
+    return value.clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
   }
 }

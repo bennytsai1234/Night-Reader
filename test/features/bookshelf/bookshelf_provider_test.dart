@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -49,11 +50,25 @@ class _FakeChapterDao extends Fake implements ChapterDao {
   Future<void> deleteByBook(String bookUrl) async {}
 }
 
+class _FakeBookStorageService extends Fake implements BookStorageService {
+  _FakeBookStorageService(this.bookDao);
+
+  final _FakeBookDao bookDao;
+  final List<String> discardedBookUrls = [];
+
+  @override
+  Future<void> discardBook(Book book) async {
+    discardedBookUrls.add(book.bookUrl);
+    await bookDao.deleteByUrl(book.bookUrl);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 測試
 // ---------------------------------------------------------------------------
 
-BookshelfProvider _makeProvider() => BookshelfProvider();
+BookshelfProvider _makeProvider({BookStorageService? bookStorageService}) =>
+    BookshelfProvider(bookStorageService: bookStorageService);
 
 void main() {
   late _FakeBookDao fakeBookDao;
@@ -116,7 +131,7 @@ void main() {
       );
     });
 
-    test('removeFromBookshelf 刪除書籍並重新載入', () async {
+    test('deleteBook 透過完整儲存清除流程刪除書籍並重新載入', () async {
       fakeBookDao.shelf = [
         Book(
           bookUrl: 'http://a.com',
@@ -126,9 +141,13 @@ void main() {
           originName: 'on',
         ),
       ];
-      final p = _makeProvider();
+      final storage = _FakeBookStorageService(fakeBookDao);
+      final p = _makeProvider(bookStorageService: storage);
       await Future.delayed(Duration.zero);
-      await p.removeFromBookshelf('http://a.com');
+
+      await p.deleteBook('http://a.com');
+
+      expect(storage.discardedBookUrls, ['http://a.com']);
       expect(p.books, isEmpty);
     });
   });

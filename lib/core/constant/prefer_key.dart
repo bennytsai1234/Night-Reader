@@ -188,6 +188,8 @@ class PreferKey {
   static const String readerPageTurnMode = 'reader_page_turn_mode';
   static const String readerAutoPageSpeed = 'reader_auto_page_speed';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
+  static const String readerLastLineSpacingCompensation =
+      'reader_last_line_spacing_compensation';
   static const String readerTtsRate = 'reader_tts_rate';
   static const String readerTtsPitch = 'reader_tts_pitch';
   static const String readerTtsLanguage = 'reader_tts_language';

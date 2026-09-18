@@ -8,12 +8,14 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/book_group_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
+import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/book_group.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
@@ -34,6 +36,7 @@ class RestoreService {
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
+  final ReadRecordDao _readRecordDao = getIt<ReadRecordDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
 
@@ -74,12 +77,12 @@ class RestoreService {
         try {
           final dynamic decoded = jsonDecode(data);
           if (decoded is List<dynamic>) {
-            await _importListData(fileName, decoded);
-            restoredAny = true;
+            final restored = await _importListData(fileName, decoded);
+            restoredAny = restoredAny || restored;
           } else if (fileName == 'config.json' &&
               decoded is Map<String, dynamic>) {
-            await _restorePreferences(decoded);
-            restoredAny = true;
+            final restored = await _restorePreferences(decoded);
+            restoredAny = restoredAny || restored;
           }
         } catch (e) {
           AppLog.e('Restore failed for $fileName: $e', error: e);
@@ -93,9 +96,31 @@ class RestoreService {
     }
   }
 
-  Future<void> _importListData(String fileName, List<dynamic> list) async {
+  Future<bool> _importListData(String fileName, List<dynamic> list) async {
+    const supportedFiles = <String>{
+      'books.json',
+      'bookshelf.json',
+      'bookSources.json',
+      'bookSource.json',
+      'replaceRules.json',
+      'replaceRule.json',
+      'bookGroups.json',
+      'bookGroup.json',
+      'bookmarks.json',
+      'bookmark.json',
+      'downloadTask.json',
+      'downloadTasks.json',
+      'readerChapterContent.json',
+      'readerChapterContents.json',
+      'readRecord.json',
+      'readRecords.json',
+    };
+    if (!supportedFiles.contains(fileName)) return false;
+
+    var importedAny = false;
     for (var item in list) {
       if (item is Map<String, dynamic>) {
+        importedAny = true;
         switch (fileName) {
           case 'books.json':
           case 'bookshelf.json':
@@ -127,30 +152,39 @@ class RestoreService {
               ReaderChapterContentEntry.fromJson(item),
             );
             break;
+          case 'readRecord.json':
+          case 'readRecords.json':
+            await _readRecordDao.restoreByBookName(ReadRecord.fromJson(item));
+            break;
         }
       }
     }
+    return list.isEmpty || importedAny;
   }
 
-  Future<void> _restorePreferences(Map<String, dynamic> values) async {
+  Future<bool> _restorePreferences(Map<String, dynamic> values) async {
+    if (values.isEmpty) return true;
     final prefs = await SharedPreferences.getInstance();
+    var restoredAny = false;
     for (final entry in values.entries) {
       final val = entry.value;
       if (val is String) {
-        await prefs.setString(entry.key, val);
+        restoredAny = await prefs.setString(entry.key, val) || restoredAny;
       } else if (val is int) {
-        await prefs.setInt(entry.key, val);
+        restoredAny = await prefs.setInt(entry.key, val) || restoredAny;
       } else if (val is bool) {
-        await prefs.setBool(entry.key, val);
+        restoredAny = await prefs.setBool(entry.key, val) || restoredAny;
       } else if (val is double) {
-        await prefs.setDouble(entry.key, val);
+        restoredAny = await prefs.setDouble(entry.key, val) || restoredAny;
       } else if (val is List) {
         final strings = val.whereType<String>().toList();
         if (strings.length == val.length) {
-          await prefs.setStringList(entry.key, strings);
+          restoredAny =
+              await prefs.setStringList(entry.key, strings) || restoredAny;
         }
       }
     }
+    return restoredAny;
   }
 
   String _normalizedFileName(String path) => p.basename(path);

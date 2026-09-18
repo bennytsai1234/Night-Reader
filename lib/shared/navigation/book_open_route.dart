@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_scope.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 
 /// 開書轉場：短促的淡入 + 輕微上滑。
@@ -17,10 +18,13 @@ class BookOpenRoute extends PageRouteBuilder {
     this.initialChapters = const <BookChapter>[],
   }) : super(
          pageBuilder:
-             (context, animation, secondaryAnimation) => ReaderV2Page(
+             (context, animation, secondaryAnimation) => ReaderV2ReadTimeScope(
                book: book,
-               openTarget: openTarget,
-               initialChapters: initialChapters,
+               child: ReaderV2Page(
+                 book: book,
+                 openTarget: openTarget,
+                 initialChapters: initialChapters,
+               ),
              ),
          transitionDuration: const Duration(milliseconds: 280),
          reverseTransitionDuration: const Duration(milliseconds: 220),

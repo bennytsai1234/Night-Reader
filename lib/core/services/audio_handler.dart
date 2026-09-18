@@ -37,13 +37,17 @@ class ReaderAudioHandler extends BaseAudioHandler {
     required String author,
     String? artUri,
   }) {
+    final normalizedArtUri = artUri?.trim();
     mediaItem.add(
       MediaItem(
         id: 'night_reader_tts',
         album: '夜讀朗讀',
         title: title,
         artist: author,
-        artUri: artUri != null ? Uri.parse(artUri) : null,
+        artUri:
+            normalizedArtUri == null || normalizedArtUri.isEmpty
+                ? null
+                : Uri.tryParse(normalizedArtUri),
       ),
     );
   }

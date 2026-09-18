@@ -73,16 +73,26 @@ class AppBottomSheet extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                       ],
-                      Text(
-                        title,
-                        style: AppTextStyles.titleSm.copyWith(
-                          fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.titleSm.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      if (trailing != null) trailing!,
+                      if (trailing != null) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        trailing!,
+                      ],
                       IconButton(
                         onPressed: () => Navigator.pop(context),
+                        tooltip: '關閉',
                         icon: const Icon(Icons.keyboard_arrow_down, size: 28),
                       ),
                     ],
@@ -117,7 +127,7 @@ class AppBottomSheet extends StatelessWidget {
     required List<Widget> children,
     Widget? trailing,
   }) {
-    return showModalBottomSheet<T>(
+    return showCustom<T>(
       context: context,
       isScrollControlled: true,
       builder:
@@ -127,6 +137,31 @@ class AppBottomSheet extends StatelessWidget {
             trailing: trailing,
             children: children,
           ),
+    );
+  }
+
+  /// 顯示需要自訂內容與狀態管理的底部工作表，同時統一外層形狀與裁切。
+  static Future<T?> showCustom<T>({
+    required BuildContext context,
+    required WidgetBuilder builder,
+    bool isScrollControlled = false,
+    bool useSafeArea = false,
+    bool? showDragHandle,
+    Color? backgroundColor,
+    ShapeBorder? shape,
+    Clip? clipBehavior,
+  }) {
+    return showModalBottomSheet<T>(
+      context: context,
+      builder: builder,
+      isScrollControlled: isScrollControlled,
+      useSafeArea: useSafeArea,
+      showDragHandle: showDragHandle,
+      backgroundColor: backgroundColor,
+      shape:
+          shape ??
+          const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
+      clipBehavior: clipBehavior ?? Clip.antiAlias,
     );
   }
 }

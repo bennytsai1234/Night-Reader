@@ -13,18 +13,27 @@ class BookshelfStateTracker {
   final Set<String> _bookshelfKeys = {};
 
   StreamSubscription<AppEvent>? _bookshelfSubscription;
+  int _initializeGeneration = 0;
+  int _refreshGeneration = 0;
+  bool _isDisposed = false;
 
   BookshelfStateTracker({BookDao? bookDao, AppEventBus? eventBus})
     : _bookDao = bookDao ?? getIt<BookDao>(),
       _eventBus = eventBus ?? AppEventBus();
 
   Future<void> initialize({VoidCallback? onChanged}) async {
+    if (_isDisposed) return;
+    final generation = ++_initializeGeneration;
     await refresh();
+    if (_isDisposed || generation != _initializeGeneration) return;
     _subscribeBookshelfUpdates(onChanged: onChanged);
   }
 
   Future<void> refresh({VoidCallback? onChanged}) async {
+    if (_isDisposed) return;
+    final generation = ++_refreshGeneration;
     final books = await _bookDao.getInBookshelf();
+    if (_isDisposed || generation != _refreshGeneration) return;
     _bookshelfKeys
       ..clear()
       ..addAll(books.expand(_bookshelfKeysForBook));
@@ -60,7 +69,12 @@ class BookshelfStateTracker {
   }
 
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _initializeGeneration++;
+    _refreshGeneration++;
     _bookshelfSubscription?.cancel();
+    _bookshelfSubscription = null;
   }
 
   void _subscribeBookshelfUpdates({VoidCallback? onChanged}) {

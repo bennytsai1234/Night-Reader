@@ -95,6 +95,7 @@ final class StyleFingerprint {
     required this.fontFamilySignature,
     required this.platformFontSignature,
     this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
+    this.lastLineSpacingCompensation = false,
   });
 
   factory StyleFingerprint.fromLayoutSpec(
@@ -124,6 +125,7 @@ final class StyleFingerprint {
       textScaleFactor: textScaleFactor,
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
+      lastLineSpacingCompensation: style.lastLineSpacingCompensation,
     );
   }
 
@@ -146,6 +148,7 @@ final class StyleFingerprint {
   final String fontFamilySignature;
   final String platformFontSignature;
   final String typographyFeatureSignature;
+  final bool lastLineSpacingCompensation;
 
   int get stableHash => Object.hash(
     viewportWidth,
@@ -167,10 +170,9 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
+    lastLineSpacingCompensation,
   );
 
-  /// 跨程序穩定的磁碟 key 材料。`Object.hash` 只適合記憶體 hashCode，
-  /// 不保證不同 Dart process 仍產生相同值。
   String get stableKey => jsonEncode(<Object>[
     viewportWidth,
     viewportHeight,
@@ -191,6 +193,7 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
+    lastLineSpacingCompensation,
   ]);
 
   @override
@@ -214,7 +217,8 @@ final class StyleFingerprint {
         other.textScaleFactor == textScaleFactor &&
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
-        other.typographyFeatureSignature == typographyFeatureSignature;
+        other.typographyFeatureSignature == typographyFeatureSignature &&
+        other.lastLineSpacingCompensation == lastLineSpacingCompensation;
   }
 
   @override
@@ -303,6 +307,7 @@ final class ChapterBlock {
     required this.sourceParagraphIndex,
     this.isTitle = false,
     this.isContinuation = false,
+    this.layoutBreakBefore = false,
   });
 
   final BlockKey key;
@@ -310,7 +315,16 @@ final class ChapterBlock {
   final HybridTextRange charRange;
   final int sourceParagraphIndex;
   final bool isTitle;
+
+  /// Semantic paragraph identity. A continuation still belongs to the same
+  /// source paragraph and therefore gets no paragraph spacing/indent.
   final bool isContinuation;
+
+  /// True only when this continuation begins at a visual line boundary that
+  /// was measured with the current layout style. Unlike an arbitrary
+  /// preprocessing chunk, this boundary may safely start a new ui.Paragraph
+  /// transaction without introducing a new visible line break.
+  final bool layoutBreakBefore;
 
   int get chapterIndex => key.chapterIndex;
   int get blockIndex => key.blockIndex;
@@ -340,6 +354,21 @@ final class ChapterBlocks {
   final String contentHash;
   final List<ChapterBlock> blocks;
 
+  late final String layoutIdentity = jsonEncode([
+    contentHash,
+    title,
+    for (final block in blocks)
+      [
+        block.blockIndex,
+        block.charRange.start,
+        block.charRange.end,
+        block.sourceParagraphIndex,
+        block.isTitle,
+        block.isContinuation,
+        block.layoutBreakBefore,
+      ],
+  ]);
+
   ChapterBlock blockForCharOffset(int charOffset) {
     final safeOffset = charOffset.clamp(0, displayText.length).toInt();
     for (final block in blocks) {
@@ -361,6 +390,49 @@ final class ChapterBlocks {
   int blockStartOffset(BlockKey key) {
     final block = blocks.firstWhere((item) => item.key == key);
     return block.charRange.start;
+  }
+
+  /// Returns the blocks that still require one continuous ui.Paragraph. An
+  /// arbitrary preprocessor chunk remains grouped; a measured visual-line
+  /// boundary starts a new layout transaction while keeping semantic
+  /// continuation metadata intact.
+  List<ChapterBlock> groupContaining(BlockKey key) {
+    final index = blocks.indexWhere((block) => block.key == key);
+    if (index < 0) return const <ChapterBlock>[];
+    final sourceParagraphIndex = blocks[index].sourceParagraphIndex;
+    var start = index;
+    while (start > 0 &&
+        blocks[start].isContinuation &&
+        !blocks[start].layoutBreakBefore &&
+        blocks[start - 1].sourceParagraphIndex == sourceParagraphIndex) {
+      start -= 1;
+    }
+    var end = index;
+    while (end + 1 < blocks.length &&
+        blocks[end + 1].isContinuation &&
+        !blocks[end + 1].layoutBreakBefore &&
+        blocks[end + 1].sourceParagraphIndex == sourceParagraphIndex) {
+      end += 1;
+    }
+    return blocks.sublist(start, end + 1);
+  }
+
+  List<List<ChapterBlock>> paragraphGroups() {
+    final groups = <List<ChapterBlock>>[];
+    var i = 0;
+    while (i < blocks.length) {
+      final sourceParagraphIndex = blocks[i].sourceParagraphIndex;
+      var j = i + 1;
+      while (j < blocks.length &&
+          blocks[j].isContinuation &&
+          !blocks[j].layoutBreakBefore &&
+          blocks[j].sourceParagraphIndex == sourceParagraphIndex) {
+        j += 1;
+      }
+      groups.add(blocks.sublist(i, j));
+      i = j;
+    }
+    return groups;
   }
 }
 
@@ -482,35 +554,62 @@ final class HybridBlockTextStyle {
 }
 
 final class LayoutTask {
-  const LayoutTask({
+  LayoutTask({
     required this.block,
+    this.continuationBlocks = const <ChapterBlock>[],
     required this.epoch,
     required this.fingerprint,
     required this.textStyle,
     required this.contentWidth,
+    this.textColor = const ui.Color(0xFF000000),
     this.priority = LayoutTaskPriority.prefetch,
     this.direction = HybridScrollDirection.forward,
     this.indentChars = 0,
     this.trailingSpacing = 0.0,
+    this.trailingLayoutLookahead = '',
+    this.cellWidth,
   }) : assert(indentChars >= 0),
-       assert(trailingSpacing >= 0);
+       assert(trailingSpacing >= 0),
+       assert(cellWidth == null || cellWidth > 0);
 
   final ChapterBlock block;
+  final List<ChapterBlock> continuationBlocks;
+
+  List<ChapterBlock> get groupBlocks => continuationBlocks.isEmpty
+      ? <ChapterBlock>[block]
+      : <ChapterBlock>[block, ...continuationBlocks];
+
+  late final String combinedText = _buildCombinedText();
+
+  String _buildCombinedText() {
+    if (continuationBlocks.isEmpty) return block.text;
+    final buffer = StringBuffer(block.text);
+    for (final continuation in continuationBlocks) {
+      buffer.write(continuation.text);
+    }
+    return buffer.toString();
+  }
+
+  /// A visual-line-aligned non-final transaction lays out one following rune
+  /// only as context. The render object clips that following line; it exists so
+  /// justify/shaping semantics of the visible last line match the unsplit
+  /// paragraph rather than treating every transaction as a paragraph end.
+  final String trailingLayoutLookahead;
+
+  late final String layoutText = trailingLayoutLookahead.isEmpty
+      ? combinedText
+      : '$combinedText$trailingLayoutLookahead';
+
   final LayoutEpoch epoch;
   final StyleFingerprint fingerprint;
   final HybridBlockTextStyle textStyle;
   final double contentWidth;
+  final ui.Color textColor;
   final LayoutTaskPriority priority;
   final HybridScrollDirection direction;
-
-  /// 段首縮排的全形空白字元數（沿用舊引擎「排版時動態前綴」規則；
-  /// 續塊與標題恆為 0）。前綴不屬於章節 displayText，
-  /// charOffset 換算時必須扣除。
   final int indentChars;
-
-  /// 排在本 block 之後的垂直間距（px），計入 BlockMetrics.height。
-  /// 標題塊 = paragraphSpacing*8；段落末塊 = fontSize*行高*paragraphSpacing。
   final double trailingSpacing;
+  final double? cellWidth;
 
   BlockKey get key => block.key;
 }

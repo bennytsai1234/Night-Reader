@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
 
 class ReaderV2PageShell extends StatelessWidget {
   const ReaderV2PageShell({
@@ -25,9 +29,9 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.originName,
     required this.displayPageLabel,
     required this.displayChapterPercentLabel,
+    this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
-    required this.autoPageSpeed,
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onExitIntent,
@@ -37,7 +41,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
-    required this.onAutoPageSpeedChanged,
     required this.onToggleDayNight,
     required this.onReplaceRule,
     required this.onShowControls,
@@ -47,11 +50,9 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
-    this.onChangeSource,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
-    this.showChangeSource = true,
   });
 
   final Book book;
@@ -71,9 +72,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final String originName;
   final String displayPageLabel;
   final String displayChapterPercentLabel;
+  final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
-  final double autoPageSpeed;
   final IconData dayNightIcon;
   final String dayNightTooltip;
   final VoidCallback onExitIntent;
@@ -83,21 +84,18 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
-  final ValueChanged<double> onAutoPageSpeedChanged;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
   final VoidCallback onShowControls;
   final VoidCallback onDismissControls;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
-  final VoidCallback onScrubStart;
-  final ValueChanged<int> onScrubbing;
-  final ValueChanged<int> onScrubEnd;
-  final VoidCallback? onChangeSource;
+  final ValueChanged<double> onScrubStart;
+  final ValueChanged<double> onScrubbing;
+  final ValueChanged<double> onScrubEnd;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
-  final bool showChangeSource;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +167,6 @@ class ReaderV2PageShell extends StatelessWidget {
                 menuTextColor: menuTextColor,
                 navigation: navigation,
                 isAutoPaging: isAutoPaging,
-                autoPageSpeed: autoPageSpeed,
                 dayNightIcon: dayNightIcon,
                 dayNightTooltip: dayNightTooltip,
                 onOpenDrawer: onOpenDrawer,
@@ -177,7 +174,6 @@ class ReaderV2PageShell extends StatelessWidget {
                 onInterface: onInterface,
                 onSettings: onSettings,
                 onAutoPage: onAutoPage,
-                onAutoPageSpeedChanged: onAutoPageSpeedChanged,
                 onToggleDayNight: onToggleDayNight,
                 onReplaceRule: onReplaceRule,
                 onPrevChapter: onPrevChapter,
@@ -185,11 +181,10 @@ class ReaderV2PageShell extends StatelessWidget {
                 onScrubStart: onScrubStart,
                 onScrubbing: onScrubbing,
                 onScrubEnd: onScrubEnd,
-                onChangeSource: onChangeSource,
+                progressListenable: progressListenable,
                 showTts: showTts,
                 showAutoPage: showAutoPage,
                 showReplaceRule: showReplaceRule,
-                showChangeSource: showChangeSource,
               ),
             ],
           ),
@@ -231,6 +226,35 @@ class _PermanentInfoBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progressListenable = shell.progressListenable;
+    if (progressListenable == null) {
+      return _buildBar(context, null);
+    }
+    return ValueListenableBuilder<HybridProgressSnapshot?>(
+      valueListenable: progressListenable,
+      builder: (context, progress, _) => _buildBar(context, progress),
+    );
+  }
+
+  Widget _buildBar(BuildContext context, HybridProgressSnapshot? progress) {
+    final chapterLabel = progress?.chapterLabel ?? shell.displayPageLabel;
+    final percentLabel =
+        progress?.percentLabel ?? shell.displayChapterPercentLabel;
+    final statusLabel = [
+      shell.book.name,
+      chapterLabel,
+      percentLabel,
+      if (shell.isAutoPaging) '自動翻頁中',
+    ].join('，');
+    final dark = shell.backgroundColor.computeLuminance() < 0.5;
+    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
+      dark: dark,
+      menu: false,
+    );
+    final infoColor =
+        custom?.secondaryText ?? shell.textColor.withValues(alpha: 0.68);
+    final accentColor = custom?.accent ?? infoColor;
+    final borderColor = custom?.border;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -241,60 +265,76 @@ class _PermanentInfoBar extends StatelessWidget {
             shell.backgroundColor.withValues(alpha: 0.88),
           ],
         ),
+        border:
+            borderColor == null
+                ? null
+                : Border(
+                  top: BorderSide(
+                    color: borderColor.withValues(alpha: 0.45),
+                  ),
+                ),
       ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          kReaderPermanentInfoTopPadding,
-          16,
-          MediaQuery.of(context).padding.bottom +
-              kReaderPermanentInfoBottomSpacing,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                shell.book.name,
-                style: TextStyle(
-                  color: shell.textColor.withValues(alpha: 0.5),
-                  fontSize: 10,
-                ),
-                overflow: TextOverflow.ellipsis,
+      child: Semantics(
+        container: true,
+        label: statusLabel,
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              kReaderPermanentInfoTopPadding,
+              16,
+              MediaQuery.of(context).padding.bottom +
+                  kReaderPermanentInfoBottomSpacing,
+            ),
+            child: DefaultTextStyle(
+              style: TextStyle(color: infoColor, fontSize: 11),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (shell.isAutoPaging) ...[
+                          Icon(
+                            Icons.auto_stories_outlined,
+                            size: 13,
+                            color: accentColor,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text('自動翻頁中'),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            shell.book.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      chapterLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(percentLabel, maxLines: 1, textAlign: TextAlign.right),
+                ],
               ),
             ),
-            Text(
-              shell.displayPageLabel,
-              style: TextStyle(
-                color: shell.textColor.withValues(alpha: 0.5),
-                fontSize: 10,
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 60,
-              child: Text(
-                shell.displayChapterPercentLabel,
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: shell.textColor.withValues(alpha: 0.5),
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-const double _controlsDismissTapTolerance = 2.0;
-const double _controlsDismissDragTolerance = 18.0;
-const double _controlsDismissTapToleranceSquared =
-    _controlsDismissTapTolerance * _controlsDismissTapTolerance;
-const double _controlsDismissDragToleranceSquared =
-    _controlsDismissDragTolerance * _controlsDismissDragTolerance;
+const double _controlsDismissTapToleranceSquared = kTouchSlop * kTouchSlop;
+const double _controlsDismissDragToleranceSquared = kTouchSlop * kTouchSlop;
 
 class _ReaderV2ControlsDismissLayer extends StatefulWidget {
   const _ReaderV2ControlsDismissLayer({required this.onDismiss});
@@ -313,6 +353,10 @@ class _ReaderV2ControlsDismissLayerState
   bool _dismissed = false;
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (event.buttons != kPrimaryButton) {
+      _resetTracking();
+      return;
+    }
     if (_pointer != null) {
       _resetTracking();
       return;

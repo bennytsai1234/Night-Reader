@@ -36,6 +36,7 @@ class TxtTocRule {
       example: json['example'],
       serialNumber: json['serialNumber'] ?? -1,
       enable:
+          json['enable'] == null ||
           json['enable'] == 1 ||
           json['enable'] == true, // Handle both int and bool cases
     );

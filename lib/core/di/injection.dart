@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../services/network_service.dart';
 import '../database/app_database.dart';
 import '../database/dao/book_dao.dart';
@@ -22,6 +25,7 @@ import '../database/dao/server_dao.dart';
 import '../database/dao/reader_chapter_content_dao.dart';
 import '../services/tts_service.dart';
 import '../services/crash_handler.dart';
+import '../services/app_log_service.dart';
 
 final getIt = GetIt.instance;
 
@@ -100,10 +104,23 @@ Future<void> configureDependencies() async {
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
 
-  // 5. 初始化所有服務
-  await Future.wait([
-    CrashHandler.init(),
-    getIt<NetworkService>().init(),
-    getIt<TTSService>().init(),
-  ]);
+  // 5. 初始化啟動所需服務。
+  // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
+  // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
+  await Future.wait([CrashHandler.init(), getIt<NetworkService>().init()]);
+
+  unawaited(_initializeTtsInBackground(getIt<TTSService>()));
+}
+
+Future<void> _initializeTtsInBackground(TTSService service) async {
+  try {
+    await service.init();
+  } catch (error, stackTrace) {
+    // TTS 不可用時仍應保留書架與閱讀功能。
+    AppLog.e(
+      'TTS background initialization failed; continuing without TTS: $error',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 }
