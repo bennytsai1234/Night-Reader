@@ -1149,33 +1149,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       forward = const <List<ChapterBlock>>[];
       backward = groups.reversed.toList(growable: false);
     }
-    var forwardBlocked = false;
-    var backwardBlocked = false;
     final rounds = math.max(forward.length, backward.length);
     for (var i = 0; i < rounds; i += 1) {
       if (i < forward.length) {
-        forwardBlocked = _admitOrSubmitGroup(
+        _admitOrSubmitGroup(
           blocks,
           forward[i],
-          blocked: forwardBlocked,
           anchorKey: anchorKey,
         );
       }
       if (i < backward.length) {
-        backwardBlocked = _admitOrSubmitGroup(
+        _admitOrSubmitGroup(
           blocks,
           backward[i],
-          blocked: backwardBlocked,
           anchorKey: anchorKey,
         );
       }
     }
   }
 
-  bool _admitOrSubmitGroup(
+  void _admitOrSubmitGroup(
     ChapterBlocks blocks,
     List<ChapterBlock> group, {
-    required bool blocked,
     BlockKey? anchorKey,
   }) {
     final anchor = anchorKey != null && group.any((b) => b.key == anchorKey);
@@ -1187,24 +1182,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         (b) => !_paragraphCache.containsFresh(b.key, _epoch, widget.textColor),
       );
       if (missingParagraph) _submitGroupTask(blocks, group, anchor: anchor);
-      return blocked;
+      return;
     }
     final allReady = notYetAdmitted.every(
       (b) =>
           _measurementStore.get(_namespace, b.key) != null &&
           _paragraphCache.containsFresh(b.key, _epoch, widget.textColor),
     );
-    if (allReady && !blocked) {
+    if (allReady) {
       for (final b in notYetAdmitted) {
         final metrics = _measurementStore.get(_namespace, b.key)!;
         _admission.offer(
           BlockReady(key: b.key, epoch: _epoch, metrics: metrics),
         );
       }
-      return blocked;
+      return;
     }
     _submitGroupTask(blocks, group, anchor: anchor);
-    return true;
   }
 
   /// 排版需求的唯一判準：`(epoch, fingerprint, residentRange)`。
