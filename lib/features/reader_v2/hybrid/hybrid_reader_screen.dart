@@ -138,6 +138,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex);
+    _admission.addListener(_refreshProvisionalGeometry);
     _physics = const HybridScrollPhysics();
     _paragraphCache = ParagraphCache();
     _refreshEpochBinding();
@@ -218,6 +219,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       ),
     );
     unawaited(_chapterRepo.dispose());
+    _admission.removeListener(_refreshProvisionalGeometry);
     _admission.dispose();
     _pump.dispose();
     _paragraphCache.dispose();
@@ -346,6 +348,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       'centerAndAfterCount': _documentIndex.centerAndAfterCount,
       'beforeExtent': finiteOrNull(_documentIndex.beforeExtent),
       'afterExtent': finiteOrNull(_documentIndex.afterExtent),
+      'provisionalBeforeExtent': finiteOrNull(
+        _documentIndex.provisionalBeforeExtent,
+      ),
+      'provisionalAfterExtent': finiteOrNull(
+        _documentIndex.provisionalAfterExtent,
+      ),
+      'scrollableBeforeExtent': finiteOrNull(
+        _documentIndex.scrollableBeforeExtent,
+      ),
+      'scrollableAfterExtent': finiteOrNull(
+        _documentIndex.scrollableAfterExtent,
+      ),
       'backwardEdge': _documentIndex.backwardEdgeKey == null
           ? null
           : keyJson(_documentIndex.backwardEdgeKey!),
@@ -648,6 +662,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         math.max(0, chapterIndex - initialRadius),
         math.min(runtime.chapterCount - 1, chapterIndex + initialRadius),
       );
+      _refreshProvisionalGeometry();
       _ensureWindowTasks(anchorKey: anchor.blockKey);
       final ready = await _pumpUntilAnchorReady(anchor, stillCurrent: still);
       if (!ready || !still()) return false;
@@ -873,6 +888,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (!current()) return null;
         _blocks[chapterIndex] = blocks;
         _admission.registerChapter(blocks);
+        _refreshProvisionalGeometry();
         return blocks;
       } catch (_) {
         return null;
@@ -923,6 +939,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (_documentIndex.invalidateChapter(event.chapterId)) {
           _scheduleRebuild();
         }
+        _refreshProvisionalGeometry();
         return;
     }
   }
@@ -1021,6 +1038,62 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       return b.compareTo(a);
     });
     return chapters;
+  }
+
+  void _refreshProvisionalGeometry() {
+    final center = _documentIndex.centerKey;
+    final first = _chapterRepo.residentFirst;
+    final last = _chapterRepo.residentLast;
+    if (first == null || last == null || _blocks.isEmpty) {
+      _documentIndex.setProvisionalExtents(before: 0, after: 0);
+      return;
+    }
+
+    var before = 0.0;
+    var after = 0.0;
+
+    for (var chapter = center.chapterIndex; chapter >= first; chapter -= 1) {
+      final blocks = _blocks[chapter];
+      if (blocks == null) break;
+      for (final block in blocks.blocks) {
+        if (block.key >= center) continue;
+        if (_documentIndex.metricsFor(block.key) != null) continue;
+        before += _provisionalHeightFor(blocks, block);
+      }
+    }
+
+    for (var chapter = center.chapterIndex; chapter <= last; chapter += 1) {
+      final blocks = _blocks[chapter];
+      if (blocks == null) break;
+      for (final block in blocks.blocks) {
+        if (block.key < center) continue;
+        if (_documentIndex.metricsFor(block.key) != null) continue;
+        after += _provisionalHeightFor(blocks, block);
+      }
+    }
+
+    _documentIndex.setProvisionalExtents(before: before, after: after);
+  }
+
+  double _provisionalHeightFor(ChapterBlocks blocks, ChapterBlock block) {
+    final exact = _measurementStore.get(_namespace, block.key);
+    if (exact != null) return exact.height;
+
+    final spec = widget.runtime.state.layoutSpec;
+    final style = spec.style;
+    final cell = spec.cellWidth;
+    final fallbackCell = style.fontSize > 0 ? style.fontSize : 1.0;
+    final advance = cell != null && cell.isFinite && cell > 0
+        ? cell
+        : fallbackCell;
+    final columns = math.max(1, (spec.contentWidth / advance).floor());
+    final textUnits = math.max(1, block.text.length + _indentCharsFor(block));
+    final lines = math.max(1, (textUnits / columns).ceil());
+    final lineHeight = math.max(
+      1.0,
+      style.fontSize * style.effectiveLineHeight,
+    );
+    return lines * lineHeight + _trailingSpacingFor(blocks, block);
   }
 
   void _ensureWindowTasks({BlockKey? anchorKey}) {
