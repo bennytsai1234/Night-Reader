@@ -50,6 +50,55 @@ void main() {
       expect(index.chapterExtent(0), 150);
     });
 
+    test('provisional semantic extent extends scroll world without altering exact coordinates', () {
+      final index = DocumentIndex(
+        centerKey: const BlockKey(chapterIndex: 1, blockIndex: 0),
+      )..admit(
+          const BlockKey(chapterIndex: 1, blockIndex: 0),
+          const BlockMetrics(height: 80, lineCount: 2),
+        );
+
+      final revisionBefore = index.revisionNumber;
+      index.setProvisionalExtents(before: 240, after: 360);
+
+      expect(index.beforeExtent, 0);
+      expect(index.afterExtent, 80);
+      expect(index.provisionalBeforeExtent, 240);
+      expect(index.provisionalAfterExtent, 360);
+      expect(index.scrollableBeforeExtent, 240);
+      expect(index.scrollableAfterExtent, 440);
+      expect(
+        index.topOf(const BlockKey(chapterIndex: 1, blockIndex: 0)),
+        0,
+      );
+      expect(index.revisionNumber, revisionBefore + 1);
+
+      index.setProvisionalExtents(before: 0, after: 0);
+      expect(index.scrollableBeforeExtent, 0);
+      expect(index.scrollableAfterExtent, 80);
+    });
+
+    test('reset clears provisional semantic extent with exact geometry', () {
+      final index = DocumentIndex(
+        centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
+      )
+        ..setProvisionalExtents(before: 100, after: 200)
+        ..admit(
+          const BlockKey(chapterIndex: 0, blockIndex: 0),
+          const BlockMetrics(height: 50, lineCount: 1),
+        );
+
+      index.reset(
+        centerKey: const BlockKey(chapterIndex: 2, blockIndex: 0),
+      );
+
+      expect(index.admittedCount, 0);
+      expect(index.provisionalBeforeExtent, 0);
+      expect(index.provisionalAfterExtent, 0);
+      expect(index.scrollableBeforeExtent, 0);
+      expect(index.scrollableAfterExtent, 0);
+    });
+
     test('incremental edge admits match a bulk rebuild exactly', () {
       const center = BlockKey(chapterIndex: 2, blockIndex: 3);
       final metrics = <BlockKey, BlockMetrics>{};
