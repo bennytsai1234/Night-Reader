@@ -77,8 +77,16 @@ final class HybridScrollView extends StatelessWidget {
             ? null
             : ScrollCacheExtent.pixels(cacheExtent!),
         slivers: <Widget>[
+          HybridContinuationSliver(
+            documentIndex: documentIndex,
+            beforeCenter: true,
+          ),
           _buildSliver(beforeCenter: true),
           _buildSliver(key: centerKey, beforeCenter: false),
+          HybridContinuationSliver(
+            documentIndex: documentIndex,
+            beforeCenter: false,
+          ),
         ],
       ),
     );
@@ -195,6 +203,108 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
         epoch != oldDelegate.epoch ||
         textColor != oldDelegate.textColor ||
         horizontalPadding != oldDelegate.horizontalPadding;
+  }
+}
+
+/// Semantic continuation geometry for blocks that exist in the loaded document
+/// but do not have exact Paragraph metrics yet. This sliver owns scroll extent
+/// only; it never paints content. As exact blocks materialize, the provisional
+/// extent is replaced by exact DocumentIndex geometry without changing the
+/// already-materialized block coordinates.
+final class HybridContinuationSliver extends LeafRenderObjectWidget {
+  const HybridContinuationSliver({
+    super.key,
+    required this.documentIndex,
+    required this.beforeCenter,
+  });
+
+  final DocumentIndex documentIndex;
+  final bool beforeCenter;
+
+  @override
+  RenderHybridContinuationSliver createRenderObject(BuildContext context) {
+    return RenderHybridContinuationSliver(
+      documentIndex: documentIndex,
+      beforeCenter: beforeCenter,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderHybridContinuationSliver renderObject,
+  ) {
+    renderObject
+      ..documentIndex = documentIndex
+      ..beforeCenter = beforeCenter;
+  }
+}
+
+final class RenderHybridContinuationSliver extends RenderSliver {
+  RenderHybridContinuationSliver({
+    required DocumentIndex documentIndex,
+    required bool beforeCenter,
+  }) : _documentIndex = documentIndex,
+       _beforeCenter = beforeCenter;
+
+  DocumentIndex _documentIndex;
+  bool _beforeCenter;
+
+  set documentIndex(DocumentIndex value) {
+    if (identical(_documentIndex, value)) return;
+    if (attached) _documentIndex.revision.removeListener(_handleRevision);
+    _documentIndex = value;
+    if (attached) _documentIndex.revision.addListener(_handleRevision);
+    markNeedsLayout();
+  }
+
+  set beforeCenter(bool value) {
+    if (_beforeCenter == value) return;
+    _beforeCenter = value;
+    markNeedsLayout();
+  }
+
+  void _handleRevision() => markNeedsLayout();
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _documentIndex.revision.addListener(_handleRevision);
+  }
+
+  @override
+  void detach() {
+    _documentIndex.revision.removeListener(_handleRevision);
+    super.detach();
+  }
+
+  @override
+  void performLayout() {
+    final extent = _beforeCenter
+        ? _documentIndex.provisionalBeforeExtent
+        : _documentIndex.provisionalAfterExtent;
+    if (extent <= 0) {
+      geometry = SliverGeometry.zero;
+      return;
+    }
+    final paintExtent = calculatePaintOffset(
+      constraints,
+      from: 0,
+      to: extent,
+    );
+    final cacheExtent = calculateCacheOffset(
+      constraints,
+      from: 0,
+      to: extent,
+    );
+    geometry = SliverGeometry(
+      scrollExtent: extent,
+      paintExtent: paintExtent,
+      layoutExtent: paintExtent,
+      maxPaintExtent: extent,
+      cacheExtent: cacheExtent,
+      hasVisualOverflow: extent > constraints.remainingPaintExtent,
+    );
   }
 }
 
