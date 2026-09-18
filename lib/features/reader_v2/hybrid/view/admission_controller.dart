@@ -206,8 +206,10 @@ final class AdmissionController extends ChangeNotifier {
     required double viewportTop,
     required double viewportBottom,
   }) {
-    _latestForwardLead = documentIndex.afterExtent - viewportBottom;
-    _latestBackwardLead = documentIndex.beforeExtent + viewportTop;
+    _latestForwardLead =
+        documentIndex.scrollableAfterExtent - viewportBottom;
+    _latestBackwardLead =
+        documentIndex.scrollableBeforeExtent + viewportTop;
   }
 
   @override
