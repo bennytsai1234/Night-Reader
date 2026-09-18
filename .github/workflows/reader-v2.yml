@@ -1,7 +1,5 @@
 name: Reader V2
 on:
-  push:
-    branches: [reader-hybrid-b-rebuild]
   workflow_dispatch:
 permissions:
   contents: read
