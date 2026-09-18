@@ -22,7 +22,6 @@ final class AdmissionController extends ChangeNotifier {
   int _chapterCount = 0;
   double _latestForwardLead = double.infinity;
   double _latestBackwardLead = double.infinity;
-  bool _notifyScheduled = false;
   bool _disposed = false;
 
   double get latestForwardLead => _latestForwardLead;
@@ -86,7 +85,7 @@ final class AdmissionController extends ChangeNotifier {
       // sliver relayout；相同 metrics 則零成本返回。
       if (existing != ready.metrics) {
         documentIndex.admit(ready.key, ready.metrics);
-        _scheduleNotify();
+        _notifyGeometryChanged();
       }
       return;
     }
@@ -131,16 +130,12 @@ final class AdmissionController extends ChangeNotifier {
       if (!admittedThisRound) break;
       changed = true;
     }
-    if (changed) _scheduleNotify();
+    if (changed) _notifyGeometryChanged();
   }
 
-  void _scheduleNotify() {
-    if (_notifyScheduled || _disposed) return;
-    _notifyScheduled = true;
-    scheduleMicrotask(() {
-      _notifyScheduled = false;
-      if (!_disposed) notifyListeners();
-    });
+  void _notifyGeometryChanged() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   bool _admitIfReady(BlockKey key) {
