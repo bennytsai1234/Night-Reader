@@ -42,7 +42,48 @@ Git 分支沿用128與考古紀錄的祖先。為避免把產品回退到7月，
 
 本地完整測試對應本次 production／test tree。離線環境的 Git 物件以內容雜湊核對後提交；只有正式 source 已成為 commit，獨立的 Reader V2 workflow 才 checkout 執行 analyze、tests及Android。驗證步驟不注入程式、不套補丁，並檢查 `git diff --exit-code`。臨時工具鏈／傳輸 workflow 不保留在交付 tree。
 
-**此紀錄初始寫入時，Android 新版本執行尚未完成；不能把固定上界的 reference checks 當成新版本驗證。** Android 驗證結果須以之後同分支的實際 run、head SHA、job結論及artifacts為準，後續證據將附於本紀錄。
+下節補上中斷後讀回確認的獨立 CI 結果。上方1025／84是實作階段的本地完整測試紀錄；下方298是另一輪 CI 聚焦測試，兩者不可混算，也不表示接續檢查時重新執行了本地完整測試。
+
+## 獨立 CI 與 Android 驗證結果
+
+**已確認：**production commit 為 `1cf0d5d1ce993c7d868c77204eb153e26936cc76`，tree 為 `03d6b38291a4b19db9c1842b14017a6f95f4b5d8`。[Reader V2 run 35306106586](https://github.com/bennytsai1234/Night-Reader/actions/runs/35306106586) 的 head SHA 與 `reader-checks`、`reader-android` 兩份產物內的 `SOURCE.txt` 完全一致。
+
+執行時間：2026-09-18 04:12:53–04:23:25 UTC，即台灣12:12:53–12:23:25。run、check job `105478500983`、android job `105478923838` 均為 `completed / success`。兩個 job 的 `Verify validation did not modify tracked source` 步驟也成功。
+
+| 檢查 | 讀回的實際結果 |
+|---|---|
+| 全專案 `flutter analyze` | `No issues found! (ran in 22.0s)` |
+| Reader／換源／字元轉換聚焦測試 | `00:53 +298: All tests passed!` |
+| Android debug APK | `Built build/app/outputs/flutter-apk/app-debug.apk` |
+| Pixel 6 profile、API35、x86_64模擬器旅程 | 一個完整journey通過；框架輸出 `00:43 +2: All tests passed!` 含tearDownAll，不計成兩個獨立旅程 |
+| 受測來源未被改寫 | 兩個job均通過 `git diff --exit-code` |
+
+聚焦測試的命令與範圍：
+
+```bash
+flutter test test/features/reader_v2 \
+  test/core/services/source_switch_service_test.dart \
+  test/core/services/source_switch_progress_test.dart \
+  test/core/engine/reader/chinese_text_converter_length_test.dart \
+  --reporter expanded
+```
+
+Android旅程使用正常TXT匯入管線建立前言與三章，經實際目錄widget跳到索引2→0→1，拖曳220 logical px並保存，核對DB的章節／字元位置，返回書架再重開。重開核對章節與字元位置相同、`visualOffsetPx` 誤差不超過0.1 logical px；各settled檢查可見block非空、連續且無缺失Paragraph。
+
+生命週期部分是測試binding注入 `paused/resumed`，**不是**作業系統Home鍵切背景或process kill驗證。Android本輪也沒有操作旋轉、TTS或高速長時間滾動；不能拿host測試代替這些裝置情境。
+
+已檢視 `reader-after-reopen.png`（415358 bytes）：最後截圖有連續正文與進度列，沒有首屏整片空白或錯誤畫面。這是一張重開後的截圖，不是對整段動畫每一幀的視覺驗證。
+
+**真實警告：**測試通過且截圖保存之後，清理階段 `adb uninstall` 回報 `Failure [DELETE_FAILED_INTERNAL_ERROR]`／`Failed to uninstall app`。Android job仍成功；紀錄保留此清理失敗，不宣稱整份log零錯誤。沒有為這個測後卸載失敗修改Reader production或重跑已通過情境。
+
+產物已下载並以SHA-256與GitHub API digest核對相同：
+
+| Artifact | ID | SHA-256 |
+|---|---|---|
+| reader-checks | 10530534197 | `eaad4097f5d641fbe149a935aba3d447d01415bf2009a8a0d5a56b28f6fa969f` |
+| reader-android | 10530874404 | `1b19d029a4231599f52904222c35aac89ff3e67352e26a4a0eea7512ac19707a` |
+
+本次接續提交只補驗證紀錄，沒有再改production／tests／workflow；受測程式仍是上述1cf0d5d。`main` 讀回仍為 `6a4de1ab27e26ca56df1fc133c08d8bb988b54bc`。
 
 ## 尚未驗證及保留限制
 
