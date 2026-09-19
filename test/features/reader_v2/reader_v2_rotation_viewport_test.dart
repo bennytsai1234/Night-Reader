@@ -83,9 +83,10 @@ void main() {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final deadline = DateTime.now().add(timeout);
-    while (!runtime.state.hasStableWorld) {
+    while (!runtime.state.hasStableWorld ||
+        runtime.stateMachine.currentOperation != null) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.lifecycle}');
+        fail('Reader runtime did not settle: lifecycle=${runtime.state.lifecycle}, operation=${runtime.stateMachine.currentOperation?.kind}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -219,9 +220,10 @@ void main() {
 
     // Allow the final transition to settle before recording the ending state.
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (!runtime.state.hasStableWorld) {
+    while (!runtime.state.hasStableWorld ||
+        runtime.stateMachine.currentOperation != null) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.lifecycle}');
+        fail('Reader runtime did not settle: lifecycle=${runtime.state.lifecycle}, operation=${runtime.stateMachine.currentOperation?.kind}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
