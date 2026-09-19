@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -85,7 +85,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
 
 
-  ReaderV2State get state =>  ReaderV2State get state => stateMachine.state;
+  ReaderV2State get state => stateMachine.state;
 
   bool get restoreInProgress => stateMachine.restoreInProgress;
 
@@ -98,9 +98,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Viewport bridge delegation --
 
-  // -- Viewport bridge delegation --
-
-  void registerVisibleLocationCapture(  void registerVisibleLocationCapture(
+  void registerVisibleLocationCapture(
     Object owner,
     ReaderV2VisibleLocationCapture capture,
   ) {
@@ -158,8 +156,6 @@ class ReaderV2Runtime extends ChangeNotifier {
       return false;
     }
   }
-
-  // -- Runtime-owned methods --
 
   // -- Runtime-owned methods --
 
@@ -310,7 +306,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  void notifySessionChanged() {  void notifySessionChanged() {
+  void notifySessionChanged() {
     if (disposed) return;
     notifyListeners();
   }
@@ -358,7 +354,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }) async {
     final token = beginJumpOperation(location: location);
     AppLog.d(
-      'Reader hybrid jump operation id=${token.id} '
+      'Reader jump operation id=${token.id} '
       'target=${location.chapterIndex}',
     );
     try {
@@ -367,13 +363,13 @@ class ReaderV2Runtime extends ChangeNotifier {
         token: token,
       );
       AppLog.d(
-        'Reader hybrid jump operation id=${token.id} positioned=$positioned '
+        'Reader jump operation id=${token.id} positioned=$positioned '
         'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
         'visible=${state.visibleLocation.chapterIndex}',
       );
       if (!positioned) {
         if (isCurrentOperationToken(token)) {
-          failOperation(token, StateError('Hybrid jump restore failed.'));
+          failOperation(token, StateError('Reader jump restore failed.'));
         }
         return;
       }
@@ -415,12 +411,12 @@ class ReaderV2Runtime extends ChangeNotifier {
     final restore = viewportBridge.viewportRestore;
     if (restore == null) return false;
     AppLog.d(
-      'Reader hybrid viewport restore start op=${token.id} '
+      'Reader viewport restore start op=${token.id} '
       'target=${resolved.chapterIndex}',
     );
     final restored = await restore(resolved);
     AppLog.d(
-      'Reader hybrid viewport restore done op=${token.id} restored=$restored '
+      'Reader viewport restore done op=${token.id} restored=$restored '
       'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
       'visible=${state.visibleLocation.chapterIndex}',
     );
@@ -431,14 +427,13 @@ class ReaderV2Runtime extends ChangeNotifier {
       visibleLocation: resolved,
     );
     AppLog.d(
-      'Reader hybrid viewport complete op=${token.id} completed=$completed '
+      'Reader viewport complete op=${token.id} completed=$completed '
       'phase=${state.phase} visible=${state.visibleLocation.chapterIndex}',
     );
     return completed;
   }
 
   @override
-  void dispose() {  @override
   void dispose() {
     disposed = true;
     progressController.dispose();

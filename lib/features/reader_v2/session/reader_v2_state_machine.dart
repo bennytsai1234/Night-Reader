@@ -85,7 +85,7 @@ class ReaderV2StateMachine {
     state = state.copyWith(committedLocation: location);
   }
 
-  bool isCurrent(  bool isCurrent(ReaderV2OperationToken token) {
+  bool isCurrent(ReaderV2OperationToken token) {
     final current = _currentOperation;
     return current != null &&
         current.id == token.id &&

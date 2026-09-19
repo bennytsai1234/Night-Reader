@@ -204,6 +204,5 @@ class ReaderV2PageCoordinator {
         : _host.viewportController.moveToPrevPage;
     if (command == null) return;
     await command();
-
   }
 }
