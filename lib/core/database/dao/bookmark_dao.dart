@@ -12,6 +12,10 @@ class BookmarkDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<Bookmark>> getAll() => select(bookmarks).get();
 
+  Future<List<Bookmark>> getByBook(String bookUrl) {
+    return (select(bookmarks)..where((t) => t.bookUrl.equals(bookUrl))).get();
+  }
+
   Stream<List<Bookmark>> watchByBook(String bookUrl) {
     return (select(bookmarks)..where((t) => t.bookUrl.equals(bookUrl))).watch();
   }
