@@ -96,7 +96,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
     SearchBook candidate,
   ) async {
-    SourceSwitchResolution? resolution;
+    PreparedSourceSwitch? resolution;
     final outcome = await _handleChangeSourceSelected(
       candidate,
       onSuccess: (value) => resolution = value,
@@ -427,7 +427,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
-    SourceSwitchResolution? switchedResolution;
+    PreparedSourceSwitch? switchedResolution;
     await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
@@ -448,7 +448,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate, {
-    void Function(SourceSwitchResolution resolution)? onSuccess,
+    void Function(PreparedSourceSwitch resolution)? onSuccess,
   }) async {
     try {
       // The flush returns the exact snapshot that was captured and persisted.
@@ -470,12 +470,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         visualOffsetPx:
             currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
       );
-      final resolution = await _sourceSwitchService.resolveSwitch(
+      final resolution = await _sourceSwitchService.prepareSwitch(
         switchingBook,
         candidate,
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
-        validateTargetContent: true,
       );
       await _sourceSwitchService.persistSwitch(
         widget.book,
@@ -494,7 +493,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     }
   }
 
-  void _pushReplacementForResolution(SourceSwitchResolution resolution) {
+  void _pushReplacementForResolution(PreparedSourceSwitch resolution) {
     Navigator.of(context).pushReplacement(
       BookOpenRoute(
         book: resolution.migratedBook,
