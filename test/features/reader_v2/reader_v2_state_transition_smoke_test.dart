@@ -81,6 +81,9 @@ void main() {
       chapterIndex: 0,
       charOffset: 0,
     );
+    final migratedChapters = chapters
+        .map((chapter) => chapter.copyWith(bookUrl: candidate.bookUrl))
+        .toList(growable: false);
     return PreparedSourceSwitch(
       searchBook: candidate,
       source: BookSource(
@@ -88,9 +91,9 @@ void main() {
         bookSourceName: candidate.originName ?? '新源',
       ),
       migratedBook: migratedBook,
-      chapters: chapters,
+      chapters: migratedChapters,
       targetChapterIndex: 0,
-      validatedContent: chapters.first.content,
+      validatedContent: migratedChapters.first.content!,
     );
   }
 
