@@ -43,7 +43,6 @@ class ReaderV2ViewportBridge {
   }) => _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
 
   Future<ReaderV2Location?> saveProgress({
-  Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
     bool immediate = true,
   }) async {
