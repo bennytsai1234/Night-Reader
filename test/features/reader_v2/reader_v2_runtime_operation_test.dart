@@ -138,6 +138,35 @@ void main() {
     expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
   });
 
+  test('failed content reload rolls back to the committed content identity', () async {
+    var failRefresh = false;
+    final runtime = makeRuntime(
+      [chapter(0)],
+      contentLoader: (_, chapter) async {
+        if (failRefresh) {
+          throw ReaderV2ChapterRepositoryException('重新載入正文失敗');
+        }
+        return chapter.content;
+      },
+    );
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    await runtime.openBook();
+
+    final before = runtime.repository.cachedContent(0);
+    final generationBefore = runtime.repository.contentGeneration;
+    expect(before, isNotNull);
+    failRefresh = true;
+
+    await runtime.reloadContentPreservingLocation();
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
+    expect(runtime.repository.cachedContent(0), same(before));
+    expect(runtime.repository.contentGeneration, greaterThan(generationBefore));
+    expect(runtime.takeUserNotice(), '重新載入正文失敗');
+  });
+
   test('first readable world unavailable marks the Reader unavailable', () async {
     final runtime = makeRuntime(
       [chapter(0)],
