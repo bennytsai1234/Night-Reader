@@ -2,7 +2,6 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dar
 
 import 'reader_v2_location.dart';
 import 'reader_v2_operation_token.dart';
-import 'reader_v2_page_window.dart';
 import 'reader_v2_state.dart';
 
 class ReaderV2StateMachine {
@@ -38,7 +37,6 @@ class ReaderV2StateMachine {
       targetLocation: location,
       phase: ReaderV2Phase.layingOut,
       clearError: true,
-      clearPageWindow: true,
     );
   }
 
@@ -48,7 +46,6 @@ class ReaderV2StateMachine {
       targetLocation: location,
       phase: ReaderV2Phase.restoring,
       clearError: true,
-      clearPageWindow: true,
     );
   }
 
@@ -64,7 +61,6 @@ class ReaderV2StateMachine {
       layoutSpec: spec,
       layoutGeneration: layoutGeneration,
       clearError: true,
-      clearPageWindow: true,
     );
   }
 
@@ -78,7 +74,6 @@ class ReaderV2StateMachine {
       phase: ReaderV2Phase.layingOut,
       layoutGeneration: layoutGeneration,
       clearError: true,
-      clearPageWindow: true,
     );
   }
 
@@ -90,22 +85,7 @@ class ReaderV2StateMachine {
     state = state.copyWith(committedLocation: location);
   }
 
-  void updateReadyPosition({
-    required ReaderV2Location visibleLocation,
-    required ReaderV2PageWindow pageWindow,
-  }) {
-    state = state.copyWith(
-      phase: ReaderV2Phase.ready,
-      visibleLocation: visibleLocation,
-      pageWindow: pageWindow,
-    );
-  }
-
-  void updatePageWindow(ReaderV2PageWindow pageWindow) {
-    state = state.copyWith(pageWindow: pageWindow);
-  }
-
-  bool isCurrent(ReaderV2OperationToken token) {
+  bool isCurrent(  bool isCurrent(ReaderV2OperationToken token) {
     final current = _currentOperation;
     return current != null &&
         current.id == token.id &&
@@ -116,14 +96,12 @@ class ReaderV2StateMachine {
   bool completeReady(
     ReaderV2OperationToken token, {
     ReaderV2Location? visibleLocation,
-    ReaderV2PageWindow? pageWindow,
     bool clearError = true,
   }) {
     if (!isCurrent(token)) return false;
     state = state.copyWith(
       phase: ReaderV2Phase.ready,
       visibleLocation: visibleLocation,
-      pageWindow: pageWindow,
       clearError: clearError,
     );
     return true;
@@ -145,7 +123,6 @@ class ReaderV2StateMachine {
     ReaderV2LayoutSpec? layoutSpec,
     int? layoutGeneration,
     bool clearError = false,
-    bool clearPageWindow = false,
   }) {
     final generation = layoutGeneration ?? state.layoutGeneration;
     final token = ReaderV2OperationToken(
@@ -161,7 +138,6 @@ class ReaderV2StateMachine {
       layoutSpec: layoutSpec,
       layoutGeneration: generation,
       clearError: clearError,
-      clearPageWindow: clearPageWindow,
     );
     return token;
   }

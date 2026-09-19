@@ -95,8 +95,7 @@ class ReaderV2AutoPageController extends ChangeNotifier {
     }
     final moveToNextPage = _viewportController?.moveToNextPage;
     if (moveToNextPage != null && await moveToNextPage()) return true;
-    final moved = runtime.moveToNextPage();
-    return Future<bool>.value(moved);
+    return false;
   }
 
   Duration _intervalForCurrentMode() {

@@ -12,7 +12,6 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_con
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
 import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -103,7 +102,6 @@ class ReaderV2ControllerHost {
     final nextRuntime = ReaderV2Runtime(
       book: book,
       repository: repository,
-      layoutEngine: ReaderV2LayoutEngine(),
       progressController: progressController,
       initialLayoutSpec: spec,
       initialLocation: initialLocation,

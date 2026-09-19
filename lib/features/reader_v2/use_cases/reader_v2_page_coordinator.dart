@@ -199,29 +199,11 @@ class ReaderV2PageCoordinator {
   }
 
   Future<void> _movePage({required bool forward}) async {
-    final runtime = _host.runtime;
-    final viewportSize = _host.runtime?.state.layoutSpec.viewportSize;
-    if (runtime == null || viewportSize == null) return;
     final command = forward
         ? _host.viewportController.moveToNextPage
         : _host.viewportController.moveToPrevPage;
-    if (command != null) {
-      final moved = await command();
-      if (!moved) return;
-      return;
-    }
-    final animateBy = _host.viewportController.animateBy;
-    if (animateBy != null) {
-      final moved = await animateBy(
-        viewportSize.height * (forward ? 0.9 : -0.9),
-      );
-      if (!moved) return;
-      return;
-    }
-    if (forward) {
-      runtime.moveToNextPage();
-    } else {
-      runtime.moveToPrevPage();
-    }
+    if (command == null) return;
+    await command();
+
   }
 }
