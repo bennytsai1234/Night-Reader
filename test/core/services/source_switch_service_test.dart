@@ -515,6 +515,63 @@ void main() {
       expect(entries.single.content, resolution.validatedContent);
     });
 
+    test('目標正文 handoff 寫入失敗時整個 commit 回滾', () async {
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await _seedOldContent(db, oldBook);
+
+      final candidate = _candidate('new-origin');
+      final chapters = _chapters(candidate.bookUrl, 4);
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(chapters: chapters),
+        sourceDao: db.bookSourceDao,
+      );
+      final resolution = await service.resolveSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 1,
+        targetChapterTitle: '第2章',
+        validateTargetContent: true,
+      );
+
+      await db.customStatement('''
+        CREATE TRIGGER fail_source_switch_handoff_content
+        BEFORE INSERT ON reader_chapter_contents
+        WHEN NEW.origin = 'new-origin'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced handoff content failure');
+        END;
+      ''');
+
+      expect(
+        () => service.persistSwitch(
+          oldBook,
+          resolution,
+          bookDao: db.bookDao,
+          chapterDao: db.chapterDao,
+        ),
+        throwsA(anything),
+      );
+
+      expect(await db.bookDao.getByUrl(oldBook.bookUrl), isNotNull);
+      expect(await db.chapterDao.getByBook(oldBook.bookUrl), hasLength(3));
+      expect(
+        await db.readerChapterContentDao.getEntriesByBookUrls(<String>[
+          oldBook.bookUrl,
+        ]),
+        hasLength(1),
+      );
+      expect(await db.bookDao.getByUrl(candidate.bookUrl), isNull);
+      expect(await db.chapterDao.getByBook(candidate.bookUrl), isEmpty);
+      expect(
+        await db.readerChapterContentDao.getEntriesByBookUrls(<String>[
+          candidate.bookUrl,
+        ]),
+        isEmpty,
+      );
+    });
+
     test('新來源資料寫入失敗時 transaction 回滾並完整保留舊資料', () async {
       final oldBook = _currentBook();
       await db.bookDao.upsert(oldBook);
