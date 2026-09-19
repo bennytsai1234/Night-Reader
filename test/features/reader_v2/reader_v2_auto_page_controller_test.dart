@@ -13,7 +13,7 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 class _FakeRuntime extends Fake implements ReaderV2Runtime {
   @override
   final ReaderV2State state = ReaderV2State(
-    phase: ReaderV2Phase.ready,
+    lifecycle: ReaderV2Lifecycle.ready,
     committedLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     visibleLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     layoutSpec: ReaderV2LayoutSpec.fromViewport(
