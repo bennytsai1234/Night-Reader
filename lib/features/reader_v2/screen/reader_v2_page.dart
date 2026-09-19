@@ -96,13 +96,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
     SearchBook candidate,
   ) async {
-    PreparedSourceSwitch? resolution;
+    PreparedSourceSwitch? preparedSwitch;
     final outcome = await _handleChangeSourceSelected(
       candidate,
-      onSuccess: (value) => resolution = value,
+      onSuccess: (value) => preparedSwitch = value,
     );
-    if (mounted && outcome.success && resolution != null) {
-      _pushReplacementForResolution(resolution!);
+    if (mounted && outcome.success && preparedSwitch != null) {
+      _pushReplacementForPreparedSwitch(preparedSwitch!);
     }
     return outcome;
   }
@@ -427,7 +427,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
-    PreparedSourceSwitch? switchedResolution;
+    PreparedSourceSwitch? preparedSwitch;
     await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
@@ -436,19 +436,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         book: widget.book,
         onSelectSource: (candidate) => _handleChangeSourceSelected(
           candidate,
-          onSuccess: (resolution) => switchedResolution = resolution,
+          onSuccess: (prepared) => preparedSwitch = prepared,
         ),
       ),
     );
 
-    final resolution = switchedResolution;
-    if (!mounted || resolution == null) return;
-    _pushReplacementForResolution(resolution);
+    final prepared = preparedSwitch;
+    if (!mounted || prepared == null) return;
+    _pushReplacementForPreparedSwitch(prepared);
   }
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate, {
-    void Function(PreparedSourceSwitch resolution)? onSuccess,
+    void Function(PreparedSourceSwitch prepared)? onSuccess,
   }) async {
     try {
       // The flush returns the exact snapshot that was captured and persisted.
@@ -470,7 +470,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         visualOffsetPx:
             currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
       );
-      final resolution = await _sourceSwitchService.prepareSwitch(
+      final prepared = await _sourceSwitchService.prepareSwitch(
         switchingBook,
         candidate,
         targetChapterIndex: currentIndex,
@@ -478,27 +478,27 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       );
       await _sourceSwitchService.persistSwitch(
         widget.book,
-        resolution,
+        prepared,
         bookDao: _host.dependencies.bookDao,
         chapterDao: _host.dependencies.chapterDao,
       );
       AppEventBus().fire(AppEventBus.upBookshelf);
-      onSuccess?.call(resolution);
+      onSuccess?.call(prepared);
       return (
         success: true,
-        message: '已切換到 ${resolution.source.bookSourceName}',
+        message: '已切換到 ${prepared.source.bookSourceName}',
       );
     } catch (e) {
       return (success: false, message: '換源失敗: $e');
     }
   }
 
-  void _pushReplacementForResolution(PreparedSourceSwitch resolution) {
+  void _pushReplacementForPreparedSwitch(PreparedSourceSwitch prepared) {
     Navigator.of(context).pushReplacement(
       BookOpenRoute(
-        book: resolution.migratedBook,
-        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
-        initialChapters: resolution.chapters,
+        book: prepared.migratedBook,
+        openTarget: ReaderV2OpenTarget.resume(prepared.migratedBook),
+        initialChapters: prepared.chapters,
       ),
     );
   }
