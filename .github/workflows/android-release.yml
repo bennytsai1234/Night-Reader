@@ -57,6 +57,7 @@ jobs:
             test/core/services/chapter_content_concurrency_test.dart \
             test/core/services/source_switch_service_test.dart \
             test/core/services/source_switch_progress_test.dart \
+            test/core/services/book_cover_storage_service_test.dart \
             test/core/services/download_scheduler_test.dart
           flutter test test/features/reader_v2 \
             test/features/source_manager/source_manager_provider_test.dart \
@@ -67,6 +68,7 @@ jobs:
             test/core/services/chapter_content_concurrency_test.dart \
             test/core/services/source_switch_service_test.dart \
             test/core/services/source_switch_progress_test.dart \
+            test/core/services/book_cover_storage_service_test.dart \
             test/core/services/download_scheduler_test.dart \
             test/core/engine/reader/chinese_text_converter_length_test.dart
 
