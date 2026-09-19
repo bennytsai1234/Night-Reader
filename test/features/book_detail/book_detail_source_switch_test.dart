@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -140,6 +141,10 @@ void main() {
       chapterDao: db.chapterDao,
       sourceDao: db.bookSourceDao,
       service: service,
+      sourceSwitchService: SourceSwitchService(
+        service: service,
+        sourceDao: db.bookSourceDao,
+      ),
       coverStorage: _FakeCoverStorageService(),
     );
     addTearDown(provider.dispose);
@@ -194,6 +199,10 @@ void main() {
       chapterDao: db.chapterDao,
       sourceDao: db.bookSourceDao,
       service: service,
+      sourceSwitchService: SourceSwitchService(
+        service: service,
+        sourceDao: db.bookSourceDao,
+      ),
       coverStorage: _FakeCoverStorageService(),
     );
     addTearDown(provider.dispose);
