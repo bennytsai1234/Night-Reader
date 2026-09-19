@@ -87,8 +87,6 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   ReaderV2State get state => stateMachine.state;
 
-  bool get operationInProgress => stateMachine.operationInProgress;
-
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
 
