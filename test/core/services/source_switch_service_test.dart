@@ -9,6 +9,8 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 
 class _FakeBookSourceService extends BookSourceService {
@@ -21,6 +23,7 @@ class _FakeBookSourceService extends BookSourceService {
   final List<BookChapter> chapters;
   final String content;
   final bool throwOnChapterList;
+  int contentCalls = 0;
 
   @override
   Future<Book> getBookInfo(
@@ -52,6 +55,7 @@ class _FakeBookSourceService extends BookSourceService {
     int? pageConcurrency,
     CancelToken? cancelToken,
   }) async {
+    contentCalls++;
     return content;
   }
 }
@@ -334,7 +338,7 @@ void main() {
       await db.close();
     });
 
-    test('遷移到不同 bookUrl 時刪除舊書、章節與全部正文', () async {
+    test('遷移到不同 bookUrl 時原子寫入目標正文並刪除舊來源資料', () async {
       final oldBook = _currentBook();
       await db.bookDao.upsert(oldBook);
       await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
@@ -342,8 +346,9 @@ void main() {
 
       final candidate = _candidate('new-origin');
       final chapters = _chapters(candidate.bookUrl, 100);
+      final sourceService = _FakeBookSourceService(chapters: chapters);
       final service = SourceSwitchService(
-        service: _FakeBookSourceService(chapters: chapters),
+        service: sourceService,
         sourceDao: db.bookSourceDao,
       );
 
@@ -381,6 +386,133 @@ void main() {
         resolution.migratedBook.bookUrl,
       );
       expect(newChapters.length, 100);
+
+      final targetChapter = newChapters[resolution.targetChapterIndex];
+      final targetEntry = await db.readerChapterContentDao.getEntry(
+        contentKey: ReaderChapterContentDao.contentKey(
+          origin: migrated.origin,
+          bookUrl: migrated.bookUrl,
+          chapterUrl: targetChapter.url,
+        ),
+      );
+      expect(targetEntry, isNotNull);
+      expect(targetEntry!.isReady, isTrue);
+      expect(targetEntry.content, resolution.validatedContent);
+
+      final storage = ReaderChapterContentStorage.withMaterializer(
+        book: migrated,
+        contentStore: ReaderChapterContentStore(
+          chapterDao: db.chapterDao,
+          contentDao: db.readerChapterContentDao,
+        ),
+        sourceDao: db.bookSourceDao,
+        service: sourceService,
+      );
+      final prepared = await storage.read(
+        chapterIndex: resolution.targetChapterIndex,
+        chapter: targetChapter,
+      );
+      expect(prepared.isReady, isTrue);
+      expect(prepared.content, resolution.validatedContent);
+      expect(
+        sourceService.contentCalls,
+        1,
+        reason: 'handoff 後 Reader 必須直接命中已驗證正文，不得第二次抓網路',
+      );
+    });
+
+    test('未驗證目標正文時不得 commit，舊 world 保持不變', () async {
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await _seedOldContent(db, oldBook);
+
+      final candidate = _candidate('new-origin');
+      final chapters = _chapters(candidate.bookUrl, 4);
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(chapters: chapters),
+        sourceDao: db.bookSourceDao,
+      );
+      final resolution = await service.resolveSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 1,
+        targetChapterTitle: '第2章',
+      );
+      expect(resolution.validatedContent, isNull);
+
+      expect(
+        () => service.persistSwitch(
+          oldBook,
+          resolution,
+          bookDao: db.bookDao,
+          chapterDao: db.chapterDao,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            '換源尚未完成目標正文驗證',
+          ),
+        ),
+      );
+
+      expect(await db.bookDao.getByUrl(oldBook.bookUrl), isNotNull);
+      expect(await db.chapterDao.getByBook(oldBook.bookUrl), hasLength(3));
+      expect(
+        await db.readerChapterContentDao.getEntriesByBookUrls(<String>[
+          oldBook.bookUrl,
+        ]),
+        hasLength(1),
+      );
+      expect(await db.bookDao.getByUrl(candidate.bookUrl), isNull);
+      expect(await db.chapterDao.getByBook(candidate.bookUrl), isEmpty);
+    });
+
+    test('bookUrl 相同但 origin 改變時清除舊 source identity 正文', () async {
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await _seedOldContent(db, oldBook);
+
+      final candidate = SearchBook(
+        bookUrl: oldBook.bookUrl,
+        name: oldBook.name,
+        author: oldBook.author,
+        origin: 'new-origin',
+        originName: '新源',
+        tocUrl: 'new-origin/toc/1',
+      );
+      final chapters = _chapters(oldBook.bookUrl, 3);
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(chapters: chapters),
+        sourceDao: db.bookSourceDao,
+      );
+      final resolution = await service.resolveSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 1,
+        targetChapterTitle: '第2章',
+        validateTargetContent: true,
+      );
+
+      await service.persistSwitch(
+        oldBook,
+        resolution,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      final migrated = await db.bookDao.getByUrl(oldBook.bookUrl);
+      expect(migrated, isNotNull);
+      expect(migrated!.origin, 'new-origin');
+      final entries = await db.readerChapterContentDao.getEntriesByBookUrls(
+        <String>[oldBook.bookUrl],
+      );
+      expect(entries, hasLength(1));
+      expect(entries.single.origin, 'new-origin');
+      expect(entries.single.chapterUrl, chapters[1].url);
+      expect(entries.single.content, resolution.validatedContent);
     });
 
     test('新來源資料寫入失敗時 transaction 回滾並完整保留舊資料', () async {
@@ -432,6 +564,12 @@ void main() {
       );
       expect(await db.bookDao.getByUrl(candidate.bookUrl), isNull);
       expect(await db.chapterDao.getByBook(candidate.bookUrl), isEmpty);
+      expect(
+        await db.readerChapterContentDao.getEntriesByBookUrls(<String>[
+          candidate.bookUrl,
+        ]),
+        isEmpty,
+      );
     });
   });
 }
