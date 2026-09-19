@@ -107,6 +107,7 @@ class ReaderTestHarness {
         reason: runtime.state.unavailableMessage,
       );
       return runtime.state.hasStableWorld &&
+          runtime.stateMachine.currentOperation == null &&
           find.byType(HybridScrollView).evaluate().isNotEmpty;
     });
     await tester.pumpAndSettle();
