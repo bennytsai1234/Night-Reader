@@ -73,7 +73,7 @@ void main() {
     await database.close();
   });
 
-  SourceSwitchResolution resolutionFor(SearchBook candidate) {
+  PreparedSourceSwitch resolutionFor(SearchBook candidate) {
     final migratedBook = book.copyWith(
       bookUrl: candidate.bookUrl,
       origin: candidate.origin,
@@ -81,7 +81,7 @@ void main() {
       chapterIndex: 0,
       charOffset: 0,
     );
-    return SourceSwitchResolution(
+    return PreparedSourceSwitch(
       searchBook: candidate,
       source: BookSource(
         bookSourceUrl: candidate.origin,
@@ -350,7 +350,7 @@ void main() {
     ) as ChangeSourceOutcome;
 
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
   });
 }
