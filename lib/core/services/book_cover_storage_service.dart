@@ -107,7 +107,17 @@ class BookCoverStorageService {
     }
 
     if (!keepOldAssets && await oldDir.exists()) {
-      await oldDir.delete(recursive: true);
+      try {
+        await oldDir.delete(recursive: true);
+      } catch (error, stack) {
+        // Old source cover cache is derived data. Cleanup failure must not
+        // prevent the migrated custom-cover path from becoming authoritative.
+        AppLog.e(
+          '清理舊來源封面快取失敗: $error',
+          error: error,
+          stackTrace: stack,
+        );
+      }
     }
   }
 
