@@ -112,7 +112,11 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   void unregisterViewportRestore(Object owner) {
-    viewportBridge.unregisterViewportRestore(owner);
+    final detachedActiveOwner = viewportBridge.unregisterViewportRestore(owner);
+    if (!detachedActiveOwner || disposed) return;
+    final operation = stateMachine.currentOperation;
+    if (operation == null || !stateMachine.abandonOperation(operation)) return;
+    notifyListeners();
   }
 
   ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
