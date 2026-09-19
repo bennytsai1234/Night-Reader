@@ -97,7 +97,7 @@ class BookCoverStorageService {
           // fails, keep the old cached file referenced rather than deleting it.
           migratedBook.customCoverLocalPath = oldCustomPath;
           keepOldAssets = true;
-          AppLog.w(
+          AppLog.e(
             '遷移自訂封面快取失敗，保留舊檔: $error',
             error: error,
             stackTrace: stack,
