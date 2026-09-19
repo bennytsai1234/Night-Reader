@@ -204,8 +204,15 @@ class BookDetailProvider extends ChangeNotifier {
        _service = service ?? BookSourceService(),
        _coverStorage = coverStorage ?? BookCoverStorageService(),
        _downloadService = downloadService {
-    _sourceSwitchService = sourceSwitchService ??
-        SourceSwitchService(service: _service, sourceDao: _sourceDao);
+    _sourceSwitchService =
+        sourceSwitchService ??
+        SourceSwitchService(
+          service: _service,
+          sourceDao: _sourceDao,
+          operationQuiescer: (oldBook) =>
+              _resolvedDownloadService.quiesceForSourceSwitch(oldBook),
+          assetRetirer: _coverStorage.handoffSourceSwitchAssets,
+        );
     _book =
         searchBook.book is Book
             ? searchBook.book as Book
