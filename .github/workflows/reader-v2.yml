@@ -1,5 +1,16 @@
-name: Reader V2
+name: Reader
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/features/reader_v2/**'
+      - 'test/features/reader_v2/**'
+      - 'integration_test/reader_*.dart'
+      - 'test/core/services/source_switch_*.dart'
+      - 'test/core/engine/reader/chinese_text_converter_length_test.dart'
+      - '.github/workflows/reader-v2.yml'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
   workflow_dispatch:
 permissions:
   contents: read
