@@ -437,7 +437,7 @@ void main() {
     expect(after['missingParagraphKeys'], isEmpty);
   });
 
-  testWidgets('開書後掛載 hybrid 滾動骨架並落實 D5 七閉包 attach', (tester) async {
+  testWidgets('開書後掛載 hybrid 滾動骨架並註冊現行 viewport commands', (tester) async {
     final runtime = makeRuntime(List.generate(3, chapter));
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
@@ -445,7 +445,6 @@ void main() {
     await pumpScreen(tester, runtime, controller);
     expect(controller.scrollBy, isNotNull);
     expect(controller.continuousScrollBy, isNotNull);
-    expect(controller.animateBy, isNotNull);
     expect(controller.moveToNextPage, isNotNull);
     expect(controller.moveToPrevPage, isNotNull);
     expect(controller.settleScroll, isNotNull);
@@ -1021,7 +1020,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     expect(controller.scrollBy, isNull);
     expect(controller.continuousScrollBy, isNull);
-    expect(controller.animateBy, isNull);
     expect(controller.moveToNextPage, isNull);
     expect(controller.moveToPrevPage, isNull);
     expect(controller.settleScroll, isNull);

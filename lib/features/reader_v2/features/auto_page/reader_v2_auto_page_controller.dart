@@ -90,8 +90,6 @@ class ReaderV2AutoPageController extends ChangeNotifier {
       }
       final scrollBy = _viewportController?.scrollBy;
       if (scrollBy != null && await scrollBy(delta)) return true;
-      final animateBy = _viewportController?.animateBy;
-      if (animateBy != null && await animateBy(delta)) return true;
     }
     final moveToNextPage = _viewportController?.moveToNextPage;
     if (moveToNextPage != null && await moveToNextPage()) return true;

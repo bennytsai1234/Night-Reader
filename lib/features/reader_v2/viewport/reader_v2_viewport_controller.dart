@@ -12,7 +12,6 @@ typedef ReaderV2ViewportEnsureRangeCommand =
 class ReaderV2ViewportController {
   ReaderV2ViewportDeltaCommand? scrollBy;
   ReaderV2ViewportDeltaCommand? continuousScrollBy;
-  ReaderV2ViewportDeltaCommand? animateBy;
   ReaderV2ViewportPageCommand? moveToNextPage;
   ReaderV2ViewportPageCommand? moveToPrevPage;
   ReaderV2ViewportSettleCommand? settleScroll;

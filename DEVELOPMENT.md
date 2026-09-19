@@ -60,7 +60,7 @@ flutter devices
 adb devices -l
 ```
 
-repo 的通用 Android integration runner 是 `tool/run_android_integration_test.ps1`；Reader 的 committed-source 驗證由 `.github/workflows/reader-v2.yml` 執行 `integration_test/reader_journey_test.dart` 並保存 journey output、logcat 與 screenshot artifact。
+repo 的通用 Android integration runner 是 `tool/run_android_integration_test.ps1`。Reader 的 PR CI `.github/workflows/reader-v2.yml` 只負責 `flutter analyze` 與 Reader/source-switch 一般測試；不啟動 Android emulator，也不把 integration journey 當成自動 correctness gate。需要裝置／體感驗證時，由人類依改動範圍在實體裝置或 AVD 手動重現。
 
 本機 debug 可用 `flutter run -d <device-id>` 重現 UI 行為；release APK 仍由 GitHub Actions 建置。不要在文件中綁定某一個 emulator serial、已移除的 workload script 或歷史 performance gate。
 
