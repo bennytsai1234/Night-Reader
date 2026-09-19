@@ -25,27 +25,26 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
     this.persistToDatabase = false,
   }) : super(sourceDao: _UnusedBookSourceDao());
 
-  final SourceSwitchResolution? resolution;
+  final PreparedSourceSwitch? resolution;
   final Object? resolveError;
   final Object? persistError;
   final Duration resolveDelay;
   final Duration persistDelay;
   final bool persistToDatabase;
-  int resolveCalls = 0;
+  int prepareCalls = 0;
   int persistCalls = 0;
   Book? lastCurrentBook;
   Book? lastOldBook;
-  SourceSwitchResolution? lastResolution;
+  PreparedSourceSwitch? lastPrepared;
 
   @override
-  Future<SourceSwitchResolution> resolveSwitch(
+  Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
-    bool validateTargetContent = false,
   }) async {
-    resolveCalls += 1;
+    prepareCalls += 1;
     lastCurrentBook = currentBook.copyWith();
     if (resolveDelay != Duration.zero) await Future<void>.delayed(resolveDelay);
     final error = resolveError;
@@ -54,20 +53,20 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
     if (result == null) {
       throw StateError('FakeReaderV2SourceSwitchService has no resolution');
     }
-    lastResolution = result;
+    lastPrepared = result;
     return result;
   }
 
   @override
   Future<void> persistSwitch(
     Book oldBook,
-    SourceSwitchResolution resolution, {
+    PreparedSourceSwitch resolution, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
   }) async {
     persistCalls += 1;
     lastOldBook = oldBook.copyWith();
-    lastResolution = resolution;
+    lastPrepared = resolution;
     if (persistDelay != Duration.zero) await Future<void>.delayed(persistDelay);
     final error = persistError;
     if (error != null) throw error;
