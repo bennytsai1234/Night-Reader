@@ -6,6 +6,8 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
@@ -110,7 +112,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   void initState() {
     super.initState();
-    _sourceSwitchService = widget.sourceSwitchService ?? SourceSwitchService();
+    _sourceSwitchService =
+        widget.sourceSwitchService ??
+        SourceSwitchService(
+          operationQuiescer: (oldBook) =>
+              DownloadService().quiesceForSourceSwitch(oldBook),
+          assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+        );
     _host = ReaderV2ControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
