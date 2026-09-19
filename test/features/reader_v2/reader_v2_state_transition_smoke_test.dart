@@ -122,13 +122,14 @@ void main() {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final deadline = DateTime.now().add(timeout);
-    while (!runtime.state.hasStableWorld) {
+    while (!runtime.state.hasStableWorld ||
+        runtime.stateMachine.currentOperation != null) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not reach ready: ${runtime.state.lifecycle}');
+        fail('Reader runtime did not settle: lifecycle=${runtime.state.lifecycle}, operation=${runtime.stateMachine.currentOperation?.kind}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
-    // Flush any post-frame callbacks scheduled by the final ready notification.
+    // Flush post-frame callbacks scheduled by the final operation completion.
     await tester.pump();
   }
 
