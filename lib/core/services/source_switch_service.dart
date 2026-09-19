@@ -13,6 +13,14 @@ import 'package:pool/pool.dart';
 
 import 'book_source_service.dart';
 
+bool _looksReadableSourceSwitchContent(String content) {
+  final trimmed = content.trim();
+  if (trimmed.isEmpty) return false;
+  if (trimmed.startsWith('加載章節失敗')) return false;
+  if (trimmed.startsWith('章節內容為空')) return false;
+  return trimmed.runes.length >= 20;
+}
+
 class PreparedSourceSwitch {
   final SearchBook searchBook;
   final BookSource source;
@@ -30,11 +38,11 @@ class PreparedSourceSwitch {
     required this.targetChapterIndex,
     required this.validatedContent,
   }) : targetChapter = chapters[targetChapterIndex] {
-    if (validatedContent.trim().isEmpty) {
+    if (!_looksReadableSourceSwitchContent(validatedContent)) {
       throw ArgumentError.value(
         validatedContent,
         'validatedContent',
-        'Prepared source switch requires validated target content',
+        'Prepared source switch requires readable validated target content',
       );
     }
     if (targetChapter.bookUrl != migratedBook.bookUrl) {
@@ -177,7 +185,7 @@ class SourceSwitchService {
       targetChapter,
       nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
     );
-    if (!_looksReadable(validatedContent)) {
+    if (!_looksReadableSourceSwitchContent(validatedContent)) {
       throw StateError('目標章節內容不可讀');
     }
 
@@ -258,11 +266,4 @@ class SourceSwitchService {
     return null;
   }
 
-  bool _looksReadable(String content) {
-    final trimmed = content.trim();
-    if (trimmed.isEmpty) return false;
-    if (trimmed.startsWith('加載章節失敗')) return false;
-    if (trimmed.startsWith('章節內容為空')) return false;
-    return trimmed.runes.length >= 20;
-  }
 }
