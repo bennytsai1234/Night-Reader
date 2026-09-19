@@ -57,20 +57,98 @@ jobs:
             lib/features/reader_v2/hybrid/hybrid_reader_screen.dart
             lib/features/reader_v2/chapter/reader_v2_chapter_repository.dart
             lib/features/book_detail/book_detail_provider.dart
-            lib/core/models/book/book_logic.dart
-            lib/core/models/book/chapter_alignment.dart
-            lib/core/database/dao/bookmark_dao.dart
             lib/core/services/source_switch_service.dart
-            lib/core/services/source_switch_handoff.dart
-            lib/core/services/book_cover_storage_service.dart
-            lib/core/services/download_service.dart
-            lib/core/services/download/download_base.dart
-            lib/core/services/download/download_scheduler.dart
-            lib/core/services/download/download_executor.dart
           )
           mapfile -t changed < <(
-            git diff --name-only "$BASE_SHA"...HEAD -- '*.dart' |
-              grep -E '^(lib|test|integration_test)/' || true
+            git diff --name-only "$BASE_SHA"...HEAD -- 'lib/**/*.dart' |
+              grep -E '^lib/.*\.dart
+          targets=("${roots[@]}" "${changed[@]}")
+          printf '%s\n' "${targets[@]}" |
+            awk 'NF && !seen[$0]++' > "$RUNNER_TEMP/reader-checks/analyze-targets.txt"
+          mapfile -t unique_targets < "$RUNNER_TEMP/reader-checks/analyze-targets.txt"
+
+          flutter analyze --no-pub "${unique_targets[@]}" \
+            2>&1 | tee "$RUNNER_TEMP/reader-checks/analyze.txt"
+      - name: Reader contract tests
+        run: |
+          set -o pipefail
+          flutter test \
+            test/features/reader_v2/hybrid/hybrid_core_test.dart \
+            test/features/reader_v2/hybrid/hybrid_chapter_residency_test.dart \
+            test/features/reader_v2/reader_v2_state_machine_test.dart \
+            test/features/reader_v2/reader_v2_runtime_operation_test.dart \
+            test/features/reader_v2/reader_v2_content_identity_test.dart \
+            test/features/reader_v2/reader_v2_source_switch_loop_test.dart \
+            test/core/services/source_switch_service_test.dart \
+            test/core/services/source_switch_progress_test.dart \
+            test/core/services/download_scheduler_test.dart \
+            --reporter compact \
+            2>&1 | tee "$RUNNER_TEMP/reader-checks/tests.txt"
+      - name: Verify validation did not modify tracked source
+        if: always()
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-pr-checks
+          path: ${{ runner.temp }}/reader-checks
+          retention-days: 7
+
+  full:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze full Reader surface
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/reader-checks"
+          git rev-parse HEAD > "$RUNNER_TEMP/reader-checks/SOURCE.txt"
+          flutter analyze \
+            lib/features/reader_v2 \
+            lib/features/book_detail/book_detail_provider.dart \
+            lib/core/models/book \
+            lib/core/database/dao/bookmark_dao.dart \
+            lib/core/services/source_switch_service.dart \
+            lib/core/services/source_switch_handoff.dart \
+            lib/core/services/book_cover_storage_service.dart \
+            lib/core/services/download_service.dart \
+            lib/core/services/download \
+            test/features/reader_v2 \
+            test/core/services/source_switch_service_test.dart \
+            test/core/services/source_switch_progress_test.dart \
+            test/core/services/download_scheduler_test.dart \
+            2>&1 | tee "$RUNNER_TEMP/reader-checks/analyze.txt"
+      - name: Full Reader regression
+        run: |
+          set -o pipefail
+          flutter test \
+            test/features/reader_v2 \
+            test/core/services/source_switch_service_test.dart \
+            test/core/services/source_switch_progress_test.dart \
+            test/core/services/download_scheduler_test.dart \
+            test/core/engine/reader/chinese_text_converter_length_test.dart \
+            --reporter compact \
+            2>&1 | tee "$RUNNER_TEMP/reader-checks/tests.txt"
+      - name: Verify validation did not modify tracked source
+        if: always()
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-full-checks
+          path: ${{ runner.temp }}/reader-checks
+          retention-days: 7
+ || true
           )
           targets=("${roots[@]}" "${changed[@]}")
           printf '%s\n' "${targets[@]}" |
