@@ -107,7 +107,6 @@ class ReaderV2ViewportBridge {
     return captured;
   }
 
-  ReaderV2Location? _normalizeCapturedLocation(
   ReaderV2Location? _normalizeCapturedLocation(ReaderV2Location? location) {
     if (location == null) return null;
     final visualOffset = location.visualOffsetPx;
