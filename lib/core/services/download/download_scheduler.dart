@@ -66,6 +66,7 @@ mixin DownloadScheduler on DownloadBase {
         !_addingTaskUrls.add(book.bookUrl)) {
       return;
     }
+    beginTaskActivity(book.bookUrl);
     try {
       final task = DownloadTask(
         bookUrl: book.bookUrl,
@@ -93,11 +94,12 @@ mixin DownloadScheduler on DownloadBase {
         tasks.add(task);
       }
       update();
-      if (!isDownloading) {
+      if (!isTaskRetiring(book.bookUrl) && !isDownloading) {
         startDownloads();
       }
     } finally {
       _addingTaskUrls.remove(book.bookUrl);
+      completeTaskActivity(book.bookUrl);
     }
   }
 
