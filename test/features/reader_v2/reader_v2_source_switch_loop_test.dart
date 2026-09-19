@@ -360,7 +360,7 @@ void main() {
     );
   });
 
-  testWidgets('S2 resolve 失敗：舊 session、DB 進度與書架事件保持自洽', (tester) async {
+  testWidgets('S2 prepare 失敗：舊 session、DB 進度與書架事件保持自洽', (tester) async {
     const location = ReaderV2Location(
       chapterIndex: 0,
       charOffset: 13,
@@ -410,7 +410,7 @@ void main() {
       isEmpty,
     );
     print(
-      'T5 S2 resolve failure DB=${locationOf(stored)} location=$after '
+      'T5 S2 prepare failure DB=${locationOf(stored)} location=$after '
       'events=${eventNames.where((name) => name == AppEventBus.upBookshelf).length} '
       'error="${outcome.message}"',
     );
