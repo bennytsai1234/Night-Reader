@@ -210,7 +210,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
     notifyListeners();
     try {
-      repository.clearContentCache();
       final remappedLocation = await _remapReloadLocation(
         location: location,
         previousContent: previousContent,
@@ -228,7 +227,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2Content? previousContent,
     required ReaderV2OperationToken token,
   }) async {
-    final after = await repository.loadContent(location.chapterIndex);
+    final after = await repository.reloadContent(location.chapterIndex);
     if (!isCurrentOperationToken(token)) return location;
     final before = previousContent;
     if (before == null) return location;
