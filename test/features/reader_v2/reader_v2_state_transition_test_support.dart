@@ -60,20 +60,20 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
   @override
   Future<void> persistSwitch(
     Book oldBook,
-    PreparedSourceSwitch resolution, {
+    PreparedSourceSwitch preparedSwitch, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
   }) async {
     persistCalls += 1;
     lastOldBook = oldBook.copyWith();
-    lastPrepared = resolution;
+    lastPrepared = preparedSwitch;
     if (persistDelay != Duration.zero) await Future<void>.delayed(persistDelay);
     final error = persistError;
     if (error != null) throw error;
     if (persistToDatabase) {
       await super.persistSwitch(
         oldBook,
-        resolution,
+        preparedSwitch,
         bookDao: bookDao,
         chapterDao: chapterDao,
       );
