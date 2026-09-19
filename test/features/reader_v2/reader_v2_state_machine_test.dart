@@ -98,8 +98,6 @@ void main() {
 
   });
 }
-  });
-}
 
 ReaderV2State _initialState() {
   return ReaderV2State(

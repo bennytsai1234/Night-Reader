@@ -910,7 +910,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _governor.recordFrameTimings(timings);
   }
 
-  void _onRuntimeChanged() {  void _onRuntimeChanged() {
+  void _onRuntimeChanged() {
     if (!mounted) return;
     final state = widget.runtime.state;
     final errorMessage = state.errorMessage;
