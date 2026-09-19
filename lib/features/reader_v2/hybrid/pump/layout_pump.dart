@@ -13,7 +13,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
-final class LayoutPump implements HybridLayoutPump {final class LayoutPump implements HybridLayoutPump {
+final class LayoutPump implements HybridLayoutPump {
   @visibleForTesting
   static void Function()? debugOnIntermediateParagraphDisposed;
 
@@ -277,7 +277,7 @@ final class LayoutPump implements HybridLayoutPump {final class LayoutPump imple
       elapsed: elapsed,
       layoutPasses: layoutPasses,
     );
-    for (var i = 0; i < keys.length; i += 1) {    for (var i = 0; i < keys.length; i += 1) {
+    for (var i = 0; i < keys.length; i += 1) {
       _completed.add(
         BlockReady(key: keys[i], epoch: task.epoch, metrics: metricsList[i]),
       );

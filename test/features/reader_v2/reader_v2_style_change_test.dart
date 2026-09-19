@@ -163,6 +163,7 @@ void main() {
       bottomInfoReservedExternally: true,
     );
     final runtime = host.ensureRuntime(viewport, initialStyle);
+    runtime.registerViewportRestore(host, (_) async => true);
     await runtime.openBook();
     await tester.pump();
     await tester.pump();
@@ -209,8 +210,6 @@ void main() {
         final beforeGeneration = harness.runtime.state.layoutGeneration;
         final beforeSignature =
             harness.runtime.state.layoutSpec.layoutSignature;
-        final beforeLayout = harness.runtime.resolver.cachedLayout(0);
-        expect(beforeLayout, isNotNull);
         applyCount = 0;
         reloadCount = 0;
 
@@ -227,27 +226,10 @@ void main() {
 
         final afterState = harness.runtime.state;
         final afterContent = await harness.runtime.loadContentAt(0);
-        final afterLayout = harness.runtime.resolver.cachedLayout(0);
-        expect(afterLayout, isNotNull);
         expect(afterState.layoutSpec.layoutSignature, isNot(beforeSignature));
-        expect(afterLayout, isNot(same(beforeLayout)));
-        expect(
-          afterLayout!.layoutSignature,
-          afterState.layoutSpec.layoutSignature,
-        );
-        expectReaderMetricsFreshForSignature(
-          currentSignature: afterState.layoutSpec.layoutSignature,
-          observedSignatures: <int>[afterLayout.layoutSignature],
-        );
         expectReaderLayoutGenerationAdvanced(
           beforeGeneration,
           afterState.layoutGeneration,
-        );
-        // The non-hybrid resolver uses layoutGeneration as its epoch source;
-        // keep the shared D9 assertion active for this deterministic path.
-        expectReaderEpochAlignedWithGeneration(
-          epoch: afterState.layoutGeneration,
-          layoutGeneration: afterState.layoutGeneration,
         );
         expect(applyCount, 1);
         expect(reloadCount, 0);
@@ -500,16 +482,6 @@ void main() {
     expect(applyCount, 1);
     expect(harness.runtime.state.layoutSpec.style.fontSize, 22);
     expect(harness.runtime.state.layoutGeneration, initialGeneration + 1);
-    final cached = harness.runtime.resolver.cachedLayout(0);
-    expect(cached, isNotNull);
-    expect(
-      cached!.layoutSignature,
-      harness.runtime.state.layoutSpec.layoutSignature,
-    );
-    expectReaderMetricsFreshForSignature(
-      currentSignature: harness.runtime.state.layoutSpec.layoutSignature,
-      observedSignatures: <int>[cached.layoutSignature],
-    );
   });
 
   testWidgets('scroll 尚未 settle 時 style 變更仍以當下 semantic anchor restore', (

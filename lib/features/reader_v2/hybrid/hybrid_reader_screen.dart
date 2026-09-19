@@ -656,7 +656,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _requestWindow(top, bottom);
   }
 
-  bool _handleScrollNotification(  bool _handleScrollNotification(ScrollNotification notification) {
+  bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
     if (notification is ScrollStartNotification &&
         notification.dragDetails != null) {
@@ -788,7 +788,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   @override
-  void didChangeAppLifecycleState  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
@@ -804,7 +803,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   @visibleForTesting
-  Map<String, Object?> debugSnapshot()  @visibleForTesting
   Map<String, Object?> debugSnapshot() {
     final controller = _scrollController;
     final position = controller != null && controller.hasClients
@@ -825,7 +823,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
     }
 
-    final captured = _captureVisibleLocation();    final captured = _captureVisibleLocation();
+    final captured = _captureVisibleLocation();
     final runtimeState = widget.runtime.state;
     Map<String, int> keyJson(BlockKey key) => <String, int>{
       'chapterIndex': key.chapterIndex,

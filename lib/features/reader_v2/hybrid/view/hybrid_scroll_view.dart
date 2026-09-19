@@ -56,7 +56,6 @@ final class HybridScrollView extends StatelessWidget {
   final Color textColor;
 
   @override
-  Widget build  @override
   Widget build(BuildContext context) {
     // D4：原生 Scrollbar 停用；無回彈由 HybridScrollPhysics（Clamping 基底）保證。
     return ScrollConfiguration(

@@ -177,7 +177,6 @@ final class AdmissionController extends ChangeNotifier {
   }
 
   @override
-  void dispose() {  @override
   void dispose() {
     _disposed = true;
     _subscription?.cancel();
