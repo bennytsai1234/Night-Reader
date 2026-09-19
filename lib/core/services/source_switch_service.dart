@@ -304,7 +304,7 @@ class SourceSwitchService {
         await retireAssets(oldBook, migratedBook);
         await books.upsert(migratedBook);
       } catch (error, stackTrace) {
-        AppLog.w(
+        AppLog.e(
           'Source switch committed but old source assets could not be retired: '
           '$error',
           error: error,
