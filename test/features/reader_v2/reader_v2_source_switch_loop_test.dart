@@ -130,7 +130,7 @@ void main() {
     );
   }
 
-  SourceSwitchResolution resolutionFor(
+  PreparedSourceSwitch resolutionFor(
     SearchBook sourceCandidate,
     ReaderV2Location location,
   ) {
@@ -152,7 +152,7 @@ void main() {
       location: location,
       content: oldContent,
     );
-    return SourceSwitchResolution(
+    return PreparedSourceSwitch(
       searchBook: sourceCandidate,
       source: BookSource(
         bookSourceUrl: sourceCandidate.origin,
@@ -388,7 +388,7 @@ void main() {
     final after = harness.runtime.state.visibleLocation;
     expect(outcome.success, isFalse);
     expect(outcome.message, contains('resolve failure sentinel'));
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 0);
     expect(find.byType(ReaderV2Page), findsOneWidget);
     expect(harness.runtime.disposed, isFalse);
@@ -445,7 +445,7 @@ void main() {
     final stored = await readBook(book.bookUrl);
     expect(outcome.success, isFalse);
     expect(outcome.message, contains('persist failure sentinel'));
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(find.byType(ReaderV2Page), findsOneWidget);
     expect(harness.runtime.disposed, isFalse);
@@ -498,7 +498,7 @@ void main() {
     );
     await pumpUntil(
       tester,
-      () => fake.resolveCalls == 1,
+      () => fake.prepareCalls == 1,
       description: 'resolve delay',
     );
     blockingDao.blockNextProgressWrite = true;
@@ -516,7 +516,7 @@ void main() {
       book.bookUrl,
     );
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(oldStoredBeforeRelease, isNull);
     expect(locationOf(newStoredBeforeRelease), flushedLocation);
@@ -579,7 +579,7 @@ void main() {
     final newRuntime = newState.debugRuntime as ReaderV2Runtime;
     await tester.pump();
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(locationOf(stored), location);
     expect(newRuntime.state.visibleLocation, location);
@@ -625,7 +625,7 @@ void main() {
     );
     await pumpUntil(
       tester,
-      () => fake.resolveCalls == 1,
+      () => fake.prepareCalls == 1,
       description: 'return race resolve',
     );
     Navigator.of(tester.element(find.byType(ReaderV2Page))).pop();
@@ -635,7 +635,7 @@ void main() {
     final stored = await readBook(sourceCandidate.bookUrl);
     await tester.pump();
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(find.byType(ReaderV2Page), findsNothing);
     expect(find.byKey(const ValueKey<String>('sentinel')), findsOneWidget);
