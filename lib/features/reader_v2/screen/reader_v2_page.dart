@@ -200,9 +200,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         controlsVisible: menu.controlsVisible,
         showReadTitleAddition: settings.showReadTitleAddition,
         hasVisibleContent:
-            runtime != null && runtime.state.phase == ReaderV2Phase.ready,
+            runtime != null && runtime.state.hasStableWorld,
         isLoading:
-            runtime == null || runtime.state.phase != ReaderV2Phase.ready,
+            runtime == null || !runtime.state.hasStableWorld,
         chapterTitle: _chapterTitleAt(chapterIndex),
         chapterUrl: _chapterUrlAt(chapterIndex),
         originName: widget.book.originName,
@@ -277,7 +277,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
             ),
-            if (runtime.state.phase == ReaderV2Phase.error)
+            if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable)
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SafeArea(
@@ -340,7 +340,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final succeeded =
         mounted &&
         identical(_host.runtime, runtime) &&
-        runtime.state.phase == ReaderV2Phase.ready &&
+        runtime.state.hasStableWorld &&
         runtime.state.visibleLocation.chapterIndex == index;
     return succeeded;
   }

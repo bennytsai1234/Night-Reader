@@ -1,6 +1,5 @@
 import 'reader_v2_location.dart';
 import 'reader_v2_runtime.dart';
-import 'reader_v2_state.dart';
 
 class ReaderV2ViewportBridge {
   final ReaderV2Runtime _runtime;
@@ -33,25 +32,21 @@ class ReaderV2ViewportBridge {
     _viewportRestore = restore;
   }
 
-  void unregisterViewportRestore(Object owner) {
-    if (!identical(_viewportRestoreOwner, owner)) return;
+  bool unregisterViewportRestore(Object owner) {
+    if (!identical(_viewportRestoreOwner, owner)) return false;
     _viewportRestoreOwner = null;
     _viewportRestore = null;
+    return true;
   }
 
   ReaderV2Location? captureVisibleLocation({
     bool notifyIfChanged = true,
-    bool allowDuringRestore = false,
-  }) => _captureVisibleLocation(
-    notifyIfChanged: notifyIfChanged,
-    allowDuringRestore: allowDuringRestore,
-  );
+  }) => _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
 
   Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
     bool immediate = true,
   }) async {
-    if (_runtime.restoreInProgress) return null;
     final targetLocation =
         location ?? captureVisibleLocation(notifyIfChanged: false);
     if (targetLocation == null) return null;
@@ -59,7 +54,6 @@ class ReaderV2ViewportBridge {
   }
 
   Future<ReaderV2Location?> flushProgress() {
-    if (_runtime.restoreInProgress) return Future<ReaderV2Location?>.value();
     final location =
         captureVisibleLocation(notifyIfChanged: false) ??
         _runtime.state.visibleLocation;
@@ -75,7 +69,7 @@ class ReaderV2ViewportBridge {
     ReaderV2Location location, {
     bool immediate = true,
   }) async {
-    if (_runtime.disposed || _runtime.restoreInProgress) return null;
+    if (_runtime.disposed) return null;
     final normalized = location.normalized(
       chapterCount: _runtime.repository.chapterCount,
     );
@@ -102,14 +96,9 @@ class ReaderV2ViewportBridge {
   }
 
   ReaderV2Location? _captureVisibleLocation({
-    bool allowDuringRestore = false,
     bool notifyIfChanged = true,
   }) {
-    if (_runtime.disposed ||
-        (_runtime.state.phase != ReaderV2Phase.ready && !allowDuringRestore)) {
-      return null;
-    }
-    if (_runtime.restoreInProgress && !allowDuringRestore) return null;
+    if (_runtime.disposed || !_runtime.state.hasStableWorld) return null;
     final capture = _visibleLocationCapture;
     if (capture == null) return null;
     final captured = _normalizeCapturedLocation(capture());

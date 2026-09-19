@@ -12,22 +12,18 @@ class ReaderV2StateMachine {
   ReaderV2OperationToken? _currentOperation;
 
   ReaderV2OperationToken? get currentOperation => _currentOperation;
-  bool get restoreInProgress => state.phase == ReaderV2Phase.restoring;
-
-  ReaderV2Location? get pendingLocation => switch (state.phase) {
-    ReaderV2Phase.loading ||
-    ReaderV2Phase.layingOut ||
-    ReaderV2Phase.restoring ||
-    ReaderV2Phase.switchingMode => _currentOperation?.targetLocation,
-    _ => null,
-  };
+  ReaderV2Location? get pendingLocation => _currentOperation?.targetLocation;
 
   ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
+    if (state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      state = state.copyWith(
+        lifecycle: ReaderV2Lifecycle.cold,
+        clearUnavailableMessage: true,
+      );
+    }
     return _beginOperation(
       ReaderV2OperationKind.open,
       targetLocation: location,
-      phase: ReaderV2Phase.loading,
-      clearError: true,
     );
   }
 
@@ -35,8 +31,6 @@ class ReaderV2StateMachine {
     return _beginOperation(
       ReaderV2OperationKind.jump,
       targetLocation: location,
-      phase: ReaderV2Phase.layingOut,
-      clearError: true,
     );
   }
 
@@ -44,8 +38,6 @@ class ReaderV2StateMachine {
     return _beginOperation(
       ReaderV2OperationKind.restore,
       targetLocation: location,
-      phase: ReaderV2Phase.restoring,
-      clearError: true,
     );
   }
 
@@ -57,10 +49,8 @@ class ReaderV2StateMachine {
     return _beginOperation(
       ReaderV2OperationKind.presentation,
       targetLocation: location,
-      phase: ReaderV2Phase.switchingMode,
-      layoutSpec: spec,
       layoutGeneration: layoutGeneration,
-      clearError: true,
+      layoutSpec: spec,
     );
   }
 
@@ -71,9 +61,7 @@ class ReaderV2StateMachine {
     return _beginOperation(
       ReaderV2OperationKind.contentReload,
       targetLocation: location,
-      phase: ReaderV2Phase.layingOut,
       layoutGeneration: layoutGeneration,
-      clearError: true,
     );
   }
 
@@ -89,56 +77,93 @@ class ReaderV2StateMachine {
     final current = _currentOperation;
     return current != null &&
         current.id == token.id &&
-        current.kind == token.kind &&
-        state.layoutGeneration == token.layoutGeneration;
+        current.kind == token.kind;
   }
 
-  bool completeReady(
-    ReaderV2OperationToken token, {
-    ReaderV2Location? visibleLocation,
-    bool clearError = true,
-  }) {
+  bool commitLayoutForOperation(ReaderV2OperationToken token) {
     if (!isCurrent(token)) return false;
+    if (token.layoutGeneration == state.layoutGeneration) return true;
+    if (token.layoutGeneration != state.layoutGeneration + 1) {
+      throw StateError(
+        'Layout generation must advance exactly once for the current operation.',
+      );
+    }
     state = state.copyWith(
-      phase: ReaderV2Phase.ready,
-      visibleLocation: visibleLocation,
-      clearError: clearError,
+      layoutSpec: token.layoutSpec,
+      layoutGeneration: token.layoutGeneration,
     );
     return true;
   }
 
-  bool fail(ReaderV2OperationToken token, Object error) {
+  bool completeOperation(
+    ReaderV2OperationToken token, {
+    ReaderV2Location? visibleLocation,
+  }) {
     if (!isCurrent(token)) return false;
+    _currentOperation = null;
     state = state.copyWith(
-      phase: ReaderV2Phase.error,
-      errorMessage: error.toString(),
+      lifecycle: ReaderV2Lifecycle.ready,
+      visibleLocation: visibleLocation,
+      clearUnavailableMessage: true,
+    );
+    return true;
+  }
+
+  bool abandonOperation(ReaderV2OperationToken token) {
+    if (!isCurrent(token)) return false;
+    _currentOperation = null;
+    return true;
+  }
+
+  bool markUnavailable(ReaderV2OperationToken token, Object error) {
+    if (!isCurrent(token)) return false;
+    if (state.hasStableWorld) {
+      throw StateError(
+        'A stable Reader world cannot become unavailable from an operation failure.',
+      );
+    }
+    _currentOperation = null;
+    state = state.copyWith(
+      lifecycle: ReaderV2Lifecycle.unavailable,
+      unavailableMessage: error.toString(),
     );
     return true;
   }
 
   ReaderV2OperationToken _beginOperation(
     ReaderV2OperationKind kind, {
-    required ReaderV2Phase phase,
     ReaderV2Location? targetLocation,
-    ReaderV2LayoutSpec? layoutSpec,
     int? layoutGeneration,
-    bool clearError = false,
+    ReaderV2LayoutSpec? layoutSpec,
   }) {
-    final generation = layoutGeneration ?? state.layoutGeneration;
+    final previous = _currentOperation;
+    final inheritedGeneration =
+        previous != null && previous.layoutGeneration > state.layoutGeneration
+        ? previous.layoutGeneration
+        : state.layoutGeneration;
+    final generation = layoutGeneration ?? inheritedGeneration;
+    if (generation < state.layoutGeneration ||
+        generation > state.layoutGeneration + 1) {
+      throw StateError(
+        'Operation layout generation is outside the active transaction.',
+      );
+    }
+    ReaderV2LayoutSpec? stagedSpec = layoutSpec;
+    if (stagedSpec == null &&
+        previous != null &&
+        previous.layoutGeneration > state.layoutGeneration &&
+        generation == previous.layoutGeneration) {
+      stagedSpec = previous.layoutSpec;
+    }
     final token = ReaderV2OperationToken(
       targetLocation:
-          targetLocation ?? pendingLocation ?? state.visibleLocation,
+          targetLocation ?? previous?.targetLocation ?? state.visibleLocation,
       id: ++_nextOperationId,
       kind: kind,
       layoutGeneration: generation,
+      layoutSpec: stagedSpec,
     );
     _currentOperation = token;
-    state = state.copyWith(
-      phase: phase,
-      layoutSpec: layoutSpec,
-      layoutGeneration: generation,
-      clearError: clearError,
-    );
     return token;
   }
 }

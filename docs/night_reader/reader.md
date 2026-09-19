@@ -6,7 +6,8 @@ Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime
 
 | 責任 | Owner | 核心入口 |
 |---|---|---|
-| 命令目標、operation identity、ready/error | Runtime / StateMachine | `session/reader_v2_runtime.dart`、`reader_v2_state_machine.dart`、`reader_v2_operation_token.dart` |
+| Reader lifecycle（cold / ready / unavailable） | Runtime / StateMachine | `session/reader_v2_state.dart`、`reader_v2_state_machine.dart` |
+| 命令目標、operation identity、normal cancellation、pending layout intent | StateMachine / OperationToken | `session/reader_v2_state_machine.dart`、`reader_v2_operation_token.dart` |
 | displayText、內容轉換、content identity | ChapterRepository / Content | `chapter/reader_v2_chapter_repository.dart`、`reader_v2_content.dart`、`reader_v2_content_transformer.dart` |
 | 語意位置重映射與落盤 | ContentLocationMapper / ViewportBridge / ProgressController | `session/reader_v2_location.dart`、`reader_v2_viewport_bridge.dart`、`reader_v2_progress_controller.dart` |
 | 切行、Paragraph layout、pending 去重/取消、frame credit | LayoutPump | `hybrid/pump/layout_pump.dart`、`budget_governor.dart`、`layout_cost_model.dart` |
@@ -32,12 +33,14 @@ flowchart TD
     Index --> Sliver[CustomScrollView / HybridBlockSliver]
     Paragraphs --> Sliver
     Sliver --> Capture[Viewport location]
-    Capture --> Runtime[Runtime ready / progress]
+    Capture --> Runtime[Runtime stable world / progress]
 ```
 
 ## Current invariants
 
-- Runtime operation token 表示真正要完成的語意目標；新 operation 使舊 operation 失效，舊 async completion 不得覆寫新狀態。
+- Reader lifecycle 只回答「是否已有可閱讀的 stable world」：首次 world 尚未建立是 `cold`，已建立是 `ready`，只有首次連可閱讀 world 都無法建立時才是 `unavailable`。
+- Runtime operation token 表示真正要完成的語意目標；jump / restore / presentation / content reload 都是 operation。新 operation 取代舊 operation 是正常 cancellation，舊 async completion 不得覆寫新 operation 或 stable world。
+- 外部目標正文 unavailable 由 ChapterRepository 的明確失敗型別表示；已有 stable world 時只結束該 operation 並保留舊 world，不能升格成 Reader unavailable。內部 viewport/layout invariant violation 則直接暴露為 bug，不轉成產品 failure state。
 - `ReaderV2Location` 是跨層位置契約。內容 identity 改變時由 `ReaderV2ContentLocationMapper` 重映射，不以舊 scalar offset 猜位置。
 - 正文 visual-line probe 與 drawable Paragraph 都由同一 `LayoutPump` 排程；`BudgetGovernor` 只負責目前 frame 可消耗的工作量。
 - `DocumentIndex` 只接收連續、已精確量測的 block；active geometry 不由 raw cache eviction 反向刪除。

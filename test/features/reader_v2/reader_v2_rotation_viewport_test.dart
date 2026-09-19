@@ -11,7 +11,6 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'reader_v2_state_transition_test_support.dart';
@@ -84,9 +83,10 @@ void main() {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final deadline = DateTime.now().add(timeout);
-    while (runtime.state.phase != ReaderV2Phase.ready) {
+    while (!runtime.state.hasStableWorld ||
+        runtime.stateMachine.currentOperation != null) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.phase}');
+        fail('Reader runtime did not settle: lifecycle=${runtime.state.lifecycle}, operation=${runtime.stateMachine.currentOperation?.kind}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -123,7 +123,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await pumpUntilReady(tester, runtime);
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     return (host: host, runtime: runtime);
   }
 
@@ -197,7 +197,7 @@ void main() {
     await runtime.openBook();
     await tester.pump();
     await tester.pump();
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     applyCount = 0;
 
     const frameCount = 12;
@@ -220,9 +220,10 @@ void main() {
 
     // Allow the final transition to settle before recording the ending state.
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (runtime.state.phase != ReaderV2Phase.ready) {
+    while (!runtime.state.hasStableWorld ||
+        runtime.stateMachine.currentOperation != null) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.phase}');
+        fail('Reader runtime did not settle: lifecycle=${runtime.state.lifecycle}, operation=${runtime.stateMachine.currentOperation?.kind}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }

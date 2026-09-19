@@ -15,7 +15,6 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dar
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 
 import 'reader_v2_state_transition_test_support.dart';
 
@@ -417,7 +416,7 @@ void main() {
         runtime.state.visibleLocation.charOffset,
         lessThanOrEqualTo(afterContent.displayText.length),
       );
-      expect(runtime.state.phase, ReaderV2Phase.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
     },
   );
 }

@@ -63,7 +63,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   }) : _initialLocation = initialLocation,
        stateMachine = ReaderV2StateMachine(
          ReaderV2State(
-           phase: ReaderV2Phase.cold,
+           lifecycle: ReaderV2Lifecycle.cold,
            committedLocation: initialLocation,
            visibleLocation: initialLocation,
            layoutSpec: initialLayoutSpec,
@@ -86,8 +86,6 @@ class ReaderV2Runtime extends ChangeNotifier {
 
 
   ReaderV2State get state => stateMachine.state;
-
-  bool get restoreInProgress => stateMachine.restoreInProgress;
 
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
@@ -114,7 +112,11 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   void unregisterViewportRestore(Object owner) {
-    viewportBridge.unregisterViewportRestore(owner);
+    final detachedActiveOwner = viewportBridge.unregisterViewportRestore(owner);
+    if (!detachedActiveOwner || disposed) return;
+    final operation = stateMachine.currentOperation;
+    if (operation == null || !stateMachine.abandonOperation(operation)) return;
+    notifyListeners();
   }
 
   ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
@@ -146,13 +148,9 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<bool> restoreFromLocation(ReaderV2Location location) async {
     final token = beginRestoreOperation(location: location);
     try {
-      final restored = await _positionViewport(location: location, token: token);
-      if (!restored && stateMachine.isCurrent(token)) {
-        failOperation(token, StateError('Reader viewport restore failed.'));
-      }
-      return restored;
-    } catch (error) {
-      failOperation(token, error);
+      return await _positionViewport(location: location, token: token);
+    } on ReaderV2ChapterRepositoryException catch (error) {
+      _finishContentUnavailable(token, error);
       return false;
     }
   }
@@ -173,21 +171,15 @@ class ReaderV2Runtime extends ChangeNotifier {
     final token = stateMachine.beginOpen(location: _initialLocation);
     notifyListeners();
     try {
-      final positioned = await _positionViewport(
-        location: _initialLocation,
-        token: token,
-      );
-      if (!positioned && stateMachine.isCurrent(token)) {
-        failOperation(token, StateError('Reader viewport restore failed.'));
-      }
-    } catch (error) {
-      failOperation(token, error);
+      await _positionViewport(location: _initialLocation, token: token);
+    } on ReaderV2ChapterRepositoryException catch (error) {
+      _finishContentUnavailable(token, error);
     }
   }
 
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
-    final needLayout = state.layoutSpec.layoutSignature != spec.layoutSignature;
-    if (!needLayout) return;
+    final stagedSpec = stateMachine.currentOperation?.layoutSpec ?? state.layoutSpec;
+    if (stagedSpec.layoutSignature == spec.layoutSignature) return;
     if (kDebugMode) debugOnApplyPresentationTriggered?.call();
 
     final location =
@@ -201,12 +193,9 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
     notifyListeners();
     try {
-      final positioned = await _positionViewport(location: location, token: token);
-      if (!positioned && stateMachine.isCurrent(token)) {
-        failOperation(token, StateError('Reader presentation restore failed.'));
-      }
-    } catch (error) {
-      failOperation(token, error);
+      await _positionViewport(location: location, token: token);
+    } on ReaderV2ChapterRepositoryException catch (error) {
+      _finishContentUnavailable(token, error);
     }
   }
 
@@ -217,7 +206,6 @@ class ReaderV2Runtime extends ChangeNotifier {
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
     final previousContent = repository.cachedContent(location.chapterIndex);
-    repository.clearContentCache();
     final token = stateMachine.beginContentReload(
       location: location,
       layoutGeneration: state.layoutGeneration + 1,
@@ -230,15 +218,9 @@ class ReaderV2Runtime extends ChangeNotifier {
         token: token,
       );
       if (!isCurrentOperationToken(token)) return;
-      final positioned = await _positionViewport(
-        location: remappedLocation,
-        token: token,
-      );
-      if (!positioned && stateMachine.isCurrent(token)) {
-        failOperation(token, StateError('Reader content restore failed.'));
-      }
-    } catch (error) {
-      failOperation(token, error);
+      await _positionViewport(location: remappedLocation, token: token);
+    } on ReaderV2ChapterRepositoryException catch (error) {
+      _finishContentUnavailable(token, error);
     }
   }
 
@@ -247,10 +229,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2Content? previousContent,
     required ReaderV2OperationToken token,
   }) async {
+    final after = await repository.reloadContent(location.chapterIndex);
+    if (!isCurrentOperationToken(token)) return location;
     final before = previousContent;
     if (before == null) return location;
-    final after = await repository.loadContent(location.chapterIndex);
-    if (!isCurrentOperationToken(token)) return location;
     return ReaderV2ContentLocationMapper.remap(
       location: location,
       before: before,
@@ -274,12 +256,12 @@ class ReaderV2Runtime extends ChangeNotifier {
     return token;
   }
 
-  bool completeReadyOperation(
+  bool completeOperation(
     ReaderV2OperationToken token, {
     ReaderV2Location? visibleLocation,
   }) {
     if (!isCurrentOperationToken(token)) return false;
-    final completed = stateMachine.completeReady(
+    final completed = stateMachine.completeOperation(
       token,
       visibleLocation: visibleLocation,
     );
@@ -287,11 +269,29 @@ class ReaderV2Runtime extends ChangeNotifier {
     return completed;
   }
 
-  bool failOperation(ReaderV2OperationToken token, Object error) {
-    if (!isCurrentOperationToken(token)) return false;
-    final failed = stateMachine.fail(token, error);
-    if (failed) notifyListeners();
-    return failed;
+  void _finishContentUnavailable(
+    ReaderV2OperationToken token,
+    ReaderV2ChapterRepositoryException error,
+  ) {
+    if (!isCurrentOperationToken(token)) return;
+    if (state.hasStableWorld) {
+      if (!stateMachine.abandonOperation(token)) return;
+      _pendingUserNotice = error.message;
+    } else {
+      if (!stateMachine.markUnavailable(token, error)) return;
+    }
+    notifyListeners();
+  }
+
+  Never _failOperationInvariant(
+    ReaderV2OperationToken token,
+    String message,
+  ) {
+    if (isCurrentOperationToken(token)) {
+      stateMachine.abandonOperation(token);
+      notifyListeners();
+    }
+    throw StateError(message);
   }
 
   void updateVisibleLocation(ReaderV2Location location, {bool notify = true}) {
@@ -364,20 +364,15 @@ class ReaderV2Runtime extends ChangeNotifier {
       );
       AppLog.d(
         'Reader jump operation id=${token.id} positioned=$positioned '
-        'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
+        'current=${stateMachine.isCurrent(token)} lifecycle=${state.lifecycle.name} '
         'visible=${state.visibleLocation.chapterIndex}',
       );
-      if (!positioned) {
-        if (isCurrentOperationToken(token)) {
-          failOperation(token, StateError('Reader jump restore failed.'));
-        }
-        return;
-      }
+      if (!positioned) return;
       if (immediateSave) {
         await viewportBridge.saveProgressLocation(state.visibleLocation);
       }
-    } catch (error) {
-      failOperation(token, error);
+    } on ReaderV2ChapterRepositoryException catch (error) {
+      _finishContentUnavailable(token, error);
     }
   }
 
@@ -388,12 +383,21 @@ class ReaderV2Runtime extends ChangeNotifier {
     await repository.ensureChapters();
     if (!isCurrentOperationToken(token)) return false;
     final chapterCount = repository.chapterCount;
-    if (chapterCount <= 0) return false;
+    if (chapterCount <= 0) {
+      _failOperationInvariant(
+        token,
+        'Reader chapter repository has no chapters after ensureChapters().',
+      );
+    }
     final chapterIndex = location.chapterIndex
         .clamp(0, chapterCount - 1)
         .toInt();
     final content = await repository.loadContent(chapterIndex);
     if (!isCurrentOperationToken(token)) return false;
+
+    final previousGeneration = state.layoutGeneration;
+    if (!stateMachine.commitLayoutForOperation(token)) return false;
+    if (state.layoutGeneration != previousGeneration) notifyListeners();
 
     // `charOffset` is meaningful only in the display-text identity that owned
     // it when captured. Resume/source-switch locations carry that identity and
@@ -409,7 +413,9 @@ class ReaderV2Runtime extends ChangeNotifier {
     );
 
     final restore = viewportBridge.viewportRestore;
-    if (restore == null) return false;
+    if (restore == null) {
+      _failOperationInvariant(token, 'Reader viewport owner is not registered.');
+    }
     AppLog.d(
       'Reader viewport restore start op=${token.id} '
       'target=${resolved.chapterIndex}',
@@ -417,18 +423,24 @@ class ReaderV2Runtime extends ChangeNotifier {
     final restored = await restore(resolved);
     AppLog.d(
       'Reader viewport restore done op=${token.id} restored=$restored '
-      'current=${stateMachine.isCurrent(token)} phase=${state.phase} '
+      'current=${stateMachine.isCurrent(token)} lifecycle=${state.lifecycle.name} '
       'visible=${state.visibleLocation.chapterIndex}',
     );
-    if (!restored) return false;
+    if (!restored) {
+      if (!isCurrentOperationToken(token)) return false;
+      _failOperationInvariant(
+        token,
+        'Reader viewport could not materialize the current operation target.',
+      );
+    }
     if (!isCurrentOperationToken(token)) return false;
-    final completed = completeReadyOperation(
+    final completed = completeOperation(
       token,
       visibleLocation: resolved,
     );
     AppLog.d(
       'Reader viewport complete op=${token.id} completed=$completed '
-      'phase=${state.phase} visible=${state.visibleLocation.chapterIndex}',
+      'lifecycle=${state.lifecycle.name} visible=${state.visibleLocation.chapterIndex}',
     );
     return completed;
   }
