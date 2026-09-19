@@ -13,22 +13,22 @@ class _UnusedBookSourceDao extends Fake implements BookSourceDao {}
 /// Reusable page-layer fake for T5 and related state-transition tests.
 ///
 /// The fake owns no network or database behavior. Each call can be delayed or
-/// failed independently, while [resolution] supplies the deterministic
+/// failed independently, while [prepared] supplies the deterministic
 /// successful result used by the page orchestration.
 class FakeReaderV2SourceSwitchService extends SourceSwitchService {
   FakeReaderV2SourceSwitchService({
-    this.resolution,
-    this.resolveError,
+    this.prepared,
+    this.prepareError,
     this.persistError,
-    this.resolveDelay = Duration.zero,
+    this.prepareDelay = Duration.zero,
     this.persistDelay = Duration.zero,
     this.persistToDatabase = false,
   }) : super(sourceDao: _UnusedBookSourceDao());
 
-  final PreparedSourceSwitch? resolution;
-  final Object? resolveError;
+  final PreparedSourceSwitch? prepared;
+  final Object? prepareError;
   final Object? persistError;
-  final Duration resolveDelay;
+  final Duration prepareDelay;
   final Duration persistDelay;
   final bool persistToDatabase;
   int prepareCalls = 0;
@@ -46,12 +46,12 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
   }) async {
     prepareCalls += 1;
     lastCurrentBook = currentBook.copyWith();
-    if (resolveDelay != Duration.zero) await Future<void>.delayed(resolveDelay);
-    final error = resolveError;
+    if (prepareDelay != Duration.zero) await Future<void>.delayed(prepareDelay);
+    final error = prepareError;
     if (error != null) throw error;
-    final result = resolution;
+    final result = prepared;
     if (result == null) {
-      throw StateError('FakeReaderV2SourceSwitchService has no resolution');
+      throw StateError('FakeReaderV2SourceSwitchService has no prepared handoff');
     }
     lastPrepared = result;
     return result;
