@@ -6,14 +6,20 @@ on:
       - 'lib/features/reader_v2/**'
       - 'lib/features/book_detail/book_detail_provider.dart'
       - 'lib/core/models/book/**'
+      - 'lib/core/engine/reader/**'
       - 'lib/core/database/dao/bookmark_dao.dart'
+      - 'lib/core/database/dao/reader_chapter_content_dao.dart'
       - 'lib/core/services/source_switch_*.dart'
       - 'lib/core/services/book_cover_storage_service.dart'
+      - 'lib/core/services/book_source_service.dart'
+      - 'lib/core/services/chapter_content_preparation_pipeline.dart'
+      - 'lib/core/services/reader_chapter_content_*.dart'
       - 'lib/core/services/download_service.dart'
       - 'lib/core/services/download/**'
       - 'test/features/reader_v2/**'
       - 'test/core/services/source_switch_*.dart'
       - 'test/core/services/download_scheduler_test.dart'
+      - 'test/core/engine/reader/**'
       - 'integration_test/reader_*.dart'
       - '.github/workflows/reader-v2.yml'
       - 'pubspec.yaml'
@@ -32,7 +38,7 @@ defaults:
     shell: bash
 
 jobs:
-  pr-fast:
+  pr-analyze:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -71,31 +77,84 @@ jobs:
           printf '%s\n' "${targets[@]}" |
             awk 'NF && !seen[$0]++' > "$RUNNER_TEMP/reader-checks/analyze-targets.txt"
           mapfile -t unique_targets < "$RUNNER_TEMP/reader-checks/analyze-targets.txt"
-
           flutter analyze --no-pub "${unique_targets[@]}" \
             2>&1 | tee "$RUNNER_TEMP/reader-checks/analyze.txt"
-      - name: Reader contract tests
-        run: |
-          set -o pipefail
-          flutter test \
-            test/features/reader_v2/hybrid/hybrid_core_test.dart \
-            test/features/reader_v2/hybrid/hybrid_chapter_residency_test.dart \
-            test/features/reader_v2/reader_v2_state_machine_test.dart \
-            test/features/reader_v2/reader_v2_runtime_operation_test.dart \
-            test/features/reader_v2/reader_v2_content_identity_test.dart \
-            test/features/reader_v2/reader_v2_source_switch_loop_test.dart \
-            test/core/services/source_switch_service_test.dart \
-            test/core/services/source_switch_progress_test.dart \
-            test/core/services/download_scheduler_test.dart \
-            --reporter compact \
-            2>&1 | tee "$RUNNER_TEMP/reader-checks/tests.txt"
-      - name: Verify validation did not modify tracked source
+      - name: Verify analysis did not modify tracked source
         if: always()
         run: git diff --exit-code
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reader-pr-checks
+          name: reader-pr-analyze
+          path: ${{ runner.temp }}/reader-checks
+          retention-days: 7
+
+  pr-fast:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Reader responsibility contract tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/reader-checks"
+          git rev-parse HEAD > "$RUNNER_TEMP/reader-checks/SOURCE.txt"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          changed="$(git diff --name-only "$BASE_SHA" HEAD)"
+
+          tests=(
+            test/features/reader_v2/hybrid/hybrid_core_test.dart
+            test/features/reader_v2/reader_v2_state_machine_test.dart
+            test/features/reader_v2/reader_v2_runtime_operation_test.dart
+            test/features/reader_v2/reader_v2_content_identity_test.dart
+            test/core/engine/reader/chinese_text_converter_length_test.dart
+          )
+
+          if grep -Eq '(^lib/features/reader_v2/hybrid/|^test/features/reader_v2/hybrid/)' <<< "$changed"; then
+            tests+=(
+              test/features/reader_v2/hybrid/hybrid_chapter_residency_test.dart
+              test/features/reader_v2/hybrid/hybrid_pump_test.dart
+              test/features/reader_v2/hybrid/hybrid_sliver_live_admission_test.dart
+            )
+          fi
+
+          if grep -Eq '(source_switch|book_detail_provider|reader_v2_page|bookmark|download|book_logic|chapter_alignment|book_cover_storage)' <<< "$changed"; then
+            tests+=(
+              test/features/reader_v2/reader_v2_source_switch_loop_test.dart
+              test/core/services/source_switch_service_test.dart
+              test/core/services/source_switch_progress_test.dart
+              test/core/services/download_scheduler_test.dart
+            )
+          fi
+
+          if grep -Eq '(chapter_repository|chapter_content_preparation|reader_chapter_content)' <<< "$changed"; then
+            tests+=(
+              test/features/reader_v2/reader_v2_chapter_repository_test.dart
+            )
+          fi
+
+          printf '%s\n' "${tests[@]}" | awk 'NF && !seen[$0]++' > "$RUNNER_TEMP/reader-checks/test-targets.txt"
+          mapfile -t unique_tests < "$RUNNER_TEMP/reader-checks/test-targets.txt"
+          flutter test "${unique_tests[@]}" --reporter compact \
+            2>&1 | tee "$RUNNER_TEMP/reader-checks/tests.txt"
+      - name: Verify tests did not modify tracked source
+        if: always()
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-pr-tests
           path: ${{ runner.temp }}/reader-checks
           retention-days: 7
 
@@ -122,10 +181,16 @@ jobs:
             lib/features/reader_v2 \
             lib/features/book_detail/book_detail_provider.dart \
             lib/core/models/book \
+            lib/core/engine/reader \
             lib/core/database/dao/bookmark_dao.dart \
+            lib/core/database/dao/reader_chapter_content_dao.dart \
             lib/core/services/source_switch_service.dart \
             lib/core/services/source_switch_handoff.dart \
             lib/core/services/book_cover_storage_service.dart \
+            lib/core/services/book_source_service.dart \
+            lib/core/services/chapter_content_preparation_pipeline.dart \
+            lib/core/services/reader_chapter_content_storage.dart \
+            lib/core/services/reader_chapter_content_store.dart \
             lib/core/services/download_service.dart \
             lib/core/services/download \
             test/features/reader_v2 \
