@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui' show Size;
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -35,16 +34,12 @@ class _FakeRuntime extends Fake implements ReaderV2Runtime {
 
 void main() {
   test(
-    'viewport command error stops auto page and exposes one notice',
+    'viewport command error stops auto page and preserves the root cause',
     () async {
-      final logMessages = <String?>[];
-      final previousDebugPrint = debugPrint;
-      debugPrint = (message, {wrapWidth}) => logMessages.add(message);
-      addTearDown(() => debugPrint = previousDebugPrint);
+      final error = StateError('boom');
       final viewport =
           ReaderV2ViewportController()
-            ..continuousScrollBy =
-                (_) => Future<bool>.error(StateError('boom'));
+            ..continuousScrollBy = (_) => Future<bool>.error(error);
       final controller = ReaderV2AutoPageController(
         runtime: _FakeRuntime(),
         viewportController: viewport,
@@ -57,12 +52,9 @@ void main() {
 
       controller.start();
       expect(controller.isRunning, isTrue);
-      expect(await controller.stepAsync(), isFalse);
+      await expectLater(controller.stepAsync(), throwsA(same(error)));
 
       expect(controller.isRunning, isFalse);
-      expect(controller.takeUserNotice(), '自動翻頁發生錯誤，已停止');
-      expect(controller.takeUserNotice(), isNull);
-      expect(logMessages.whereType<String>(), anyElement(contains('boom')));
     },
   );
 }

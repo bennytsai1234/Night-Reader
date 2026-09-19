@@ -126,7 +126,7 @@ void main() {
       [chapter(0), chapter(1)],
       contentLoader: (index, chapter) async {
         if (index == 1) {
-          throw ReaderV2ChapterRepositoryException('目標章節暫時無法取得');
+          throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
         }
         return chapter.content;
       },
@@ -154,7 +154,7 @@ void main() {
       [chapter(0)],
       contentLoader: (_, chapter) async {
         if (failRefresh) {
-          throw ReaderV2ChapterRepositoryException('重新載入正文失敗');
+          throw ReaderV2ContentUnavailableException('重新載入正文失敗');
         }
         return chapter.content;
       },
@@ -177,11 +177,42 @@ void main() {
     expect(runtime.takeUserNotice(), '重新載入正文失敗');
   });
 
+  test('unknown content failure is exposed without replacing the stable world', () async {
+    final runtime = makeRuntime(
+      [chapter(0), chapter(1)],
+      contentLoader: (index, chapter) async {
+        if (index == 1) throw StateError('layout/content invariant broke');
+        return chapter.content;
+      },
+    );
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    await runtime.openBook();
+    final before = runtime.state.visibleLocation;
+
+    await expectLater(
+      runtime.jumpToChapter(1),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'layout/content invariant broke',
+        ),
+      ),
+    );
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
+    expect(runtime.state.visibleLocation, before);
+    expect(runtime.pendingLocation, isNull);
+    expect(runtime.takeUserNotice(), isNull);
+  });
+
   test('first readable world unavailable marks the Reader unavailable', () async {
     final runtime = makeRuntime(
       [chapter(0)],
       contentLoader: (_, __) async {
-        throw ReaderV2ChapterRepositoryException('正文暫時無法取得');
+        throw ReaderV2ContentUnavailableException('正文暫時無法取得');
       },
     );
     addTearDown(runtime.dispose);

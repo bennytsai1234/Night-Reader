@@ -2,6 +2,8 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
@@ -104,8 +106,14 @@ class ContentParser {
       } finally {
         rule.dispose();
       }
-    } catch (_) {
-      // 若規則解析失敗則保留 trim 後的原文
+    } on ParsingException catch (error, stackTrace) {
+      // replaceRegex 是外部書源規則；規則本身失敗可退回未替換正文，
+      // 但保留完整診斷。其他未知錯誤不得在 acquisition boundary 被吞掉。
+      AppLog.e(
+        '正文 replaceRegex 規則解析失敗，保留未替換正文',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
 
     if (str.trim().isEmpty) return '';

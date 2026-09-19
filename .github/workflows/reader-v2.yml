@@ -6,7 +6,10 @@ on:
       - 'lib/features/reader_v2/**'
       - 'lib/features/book_detail/book_detail_provider.dart'
       - 'lib/core/models/book/**'
+      - 'lib/core/models/replace_rule.dart'
       - 'lib/core/engine/reader/**'
+      - 'lib/core/engine/web_book/content_parser.dart'
+      - 'lib/core/engine/web_book/web_book_service.dart'
       - 'lib/core/database/dao/bookmark_dao.dart'
       - 'lib/core/database/dao/reader_chapter_content_dao.dart'
       - 'lib/core/services/source_switch_*.dart'
@@ -18,6 +21,8 @@ on:
       - 'lib/core/services/download/**'
       - 'test/features/reader_v2/**'
       - 'test/core/services/source_switch_*.dart'
+      - 'test/core/services/chapter_content_preparation_pipeline_test.dart'
+      - 'test/core/models/replace_rule_test.dart'
       - 'test/core/services/book_cover_storage_service_test.dart'
       - 'test/core/services/download_scheduler_test.dart'
       - 'test/core/engine/reader/**'
@@ -90,6 +95,8 @@ jobs:
             test/features/reader_v2/reader_v2_state_machine_test.dart
             test/features/reader_v2/reader_v2_runtime_operation_test.dart
             test/features/reader_v2/reader_v2_content_identity_test.dart
+            test/features/reader_v2/reader_v2_auto_page_controller_test.dart
+            test/features/reader_v2/reader_v2_tts_highlight_follower_test.dart
             test/core/engine/reader/chinese_text_converter_length_test.dart
           )
           if grep -Eq '(^lib/features/reader_v2/hybrid/|^test/features/reader_v2/hybrid/)' <<< "$changed"; then
@@ -97,6 +104,7 @@ jobs:
               test/features/reader_v2/hybrid/hybrid_chapter_residency_test.dart
               test/features/reader_v2/hybrid/hybrid_pump_test.dart
               test/features/reader_v2/hybrid/hybrid_sliver_live_admission_test.dart
+              test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
             )
           fi
           if grep -Eq '(source_switch|book_detail_provider|reader_v2_page|bookmark|download|book_logic|chapter_alignment|book_cover_storage)' <<< "$changed"; then
@@ -108,9 +116,13 @@ jobs:
               test/core/services/download_scheduler_test.dart
             )
           fi
-          if grep -Eq '(chapter_repository|chapter_content_preparation|reader_chapter_content)' <<< "$changed"; then
+          if grep -Eq '(chapter_repository|chapter_content_preparation|reader_chapter_content|content_transformer|replace_rule|content_parser|web_book_service)' <<< "$changed"; then
             tests+=(
               test/features/reader_v2/reader_v2_chapter_repository_test.dart
+              test/core/services/chapter_content_preparation_pipeline_test.dart
+              test/core/models/replace_rule_test.dart
+              test/core/engine/engine_integration_test.dart
+              test/core/engine/source_compatibility_test.dart
             )
           fi
           printf '%s\n' "${tests[@]}" | awk 'NF && !seen[$0]++' > "$RUNNER_TEMP/reader-checks/test-targets.txt"
@@ -150,7 +162,10 @@ jobs:
             lib/features/reader_v2 \
             lib/features/book_detail/book_detail_provider.dart \
             lib/core/models/book \
+            lib/core/models/replace_rule.dart \
             lib/core/engine/reader \
+            lib/core/engine/web_book/content_parser.dart \
+            lib/core/engine/web_book/web_book_service.dart \
             lib/core/database/dao/bookmark_dao.dart \
             lib/core/database/dao/reader_chapter_content_dao.dart \
             lib/core/services/source_switch_service.dart \
@@ -163,6 +178,10 @@ jobs:
             lib/core/services/download_service.dart \
             lib/core/services/download \
             test/features/reader_v2 \
+            test/core/models/replace_rule_test.dart \
+            test/core/engine/engine_integration_test.dart \
+            test/core/engine/source_compatibility_test.dart \
+            test/core/services/chapter_content_preparation_pipeline_test.dart \
             test/core/services/source_switch_service_test.dart \
             test/core/services/source_switch_progress_test.dart \
             test/core/services/book_cover_storage_service_test.dart \
@@ -173,6 +192,7 @@ jobs:
           set -o pipefail
           flutter test \
             test/features/reader_v2 \
+            test/core/services/chapter_content_preparation_pipeline_test.dart \
             test/core/services/source_switch_service_test.dart \
             test/core/services/source_switch_progress_test.dart \
             test/core/services/book_cover_storage_service_test.dart \

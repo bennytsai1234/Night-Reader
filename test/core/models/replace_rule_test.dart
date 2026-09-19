@@ -15,6 +15,13 @@ void main() {
       expect(rule.apply('price99'), r'$99');
     });
 
+    test('invalid external regex remains a no-op', () {
+      final rule = ReplaceRule(pattern: '[', replacement: 'x');
+
+      expect(rule.isValid(), isFalse);
+      expect(rule.apply('keep me'), 'keep me');
+    });
+
     test('imports legado legacy replace rule json keys', () {
       final rule = ReplaceRule.fromJson({
         'id': '42',

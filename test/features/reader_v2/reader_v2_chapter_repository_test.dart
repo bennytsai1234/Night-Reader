@@ -1,16 +1,50 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 
 class _FakeBookDao extends Fake implements BookDao {}
 
-class _FakeChapterDao extends Fake implements ChapterDao {}
+class _FakeChapterDao extends Fake implements ChapterDao {
+  @override
+  Future<List<BookChapter>> getByBook(String bookUrl) async => <BookChapter>[];
 
-class _FakeSourceDao extends Fake implements BookSourceDao {}
+  @override
+  Future<void> insertChapters(List<BookChapter> chapterList) async {}
+}
+
+class _FakeSourceDao extends Fake implements BookSourceDao {
+  _FakeSourceDao([this.source]);
+
+  final BookSource? source;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async => source;
+}
+
+class _ThrowingChapterListService extends BookSourceService {
+  _ThrowingChapterListService(this.error);
+
+  final Object error;
+
+  @override
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) async {
+    throw error;
+  }
+}
 
 void main() {
   test('既有不支援本地書不會從章節內容或快取繞過格式檢查', () async {
@@ -37,12 +71,85 @@ void main() {
     await expectLater(
       repository.loadContent(0),
       throwsA(
-        isA<ReaderV2ChapterRepositoryException>().having(
+        isA<ReaderV2ContentUnavailableException>().having(
           (error) => error.message,
           'message',
           contains('本地書格式不受支援'),
         ),
       ),
     );
+  });
+  test('known source failure becomes explicit TOC content-unavailable', () async {
+    final source = BookSource(bookSourceUrl: 'https://source.example');
+    final repository = ReaderV2ChapterRepository(
+      book: Book(
+        bookUrl: 'https://book.example/1',
+        origin: source.bookSourceUrl,
+      ),
+      bookDao: _FakeBookDao(),
+      chapterDao: _FakeChapterDao(),
+      sourceDao: _FakeSourceDao(source),
+      service: _ThrowingChapterListService(
+        SourceException('目錄規則不可用', sourceUrl: source.bookSourceUrl),
+      ),
+    );
+
+    await expectLater(
+      repository.ensureChapters(),
+      throwsA(
+        isA<ReaderV2ContentUnavailableException>().having(
+          (error) => error.message,
+          'message',
+          contains('目錄規則不可用'),
+        ),
+      ),
+    );
+  });
+
+  test('network TOC cancellation is not converted to unavailable', () async {
+    final source = BookSource(bookSourceUrl: 'https://source.example');
+    final cancellation = DioException(
+      requestOptions: RequestOptions(path: source.bookSourceUrl),
+      type: DioExceptionType.cancel,
+      message: 'superseded',
+    );
+    final repository = ReaderV2ChapterRepository(
+      book: Book(
+        bookUrl: 'https://book.example/1',
+        origin: source.bookSourceUrl,
+      ),
+      bookDao: _FakeBookDao(),
+      chapterDao: _FakeChapterDao(),
+      sourceDao: _FakeSourceDao(source),
+      service: _ThrowingChapterListService(cancellation),
+    );
+
+    await expectLater(
+      repository.ensureChapters(),
+      throwsA(
+        isA<DioException>().having(
+          (error) => error.type,
+          'type',
+          DioExceptionType.cancel,
+        ),
+      ),
+    );
+  });
+
+  test('unknown TOC failure keeps its original root cause', () async {
+    final source = BookSource(bookSourceUrl: 'https://source.example');
+    final error = StateError('TOC invariant broke');
+    final repository = ReaderV2ChapterRepository(
+      book: Book(
+        bookUrl: 'https://book.example/1',
+        origin: source.bookSourceUrl,
+      ),
+      bookDao: _FakeBookDao(),
+      chapterDao: _FakeChapterDao(),
+      sourceDao: _FakeSourceDao(source),
+      service: _ThrowingChapterListService(error),
+    );
+
+    await expectLater(repository.ensureChapters(), throwsA(same(error)));
   });
 }

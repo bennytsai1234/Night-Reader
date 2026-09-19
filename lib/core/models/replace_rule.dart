@@ -37,7 +37,7 @@ class ReplaceRule {
     if (isRegex) {
       try {
         RegExp(pattern);
-      } catch (_) {
+      } on FormatException {
         return false;
       }
       // 檢查結尾是否有多餘的 | (原版特有的健壯性檢查)
@@ -115,7 +115,7 @@ class ReplaceRule {
       } else {
         return content.replaceAll(pattern, replacement);
       }
-    } catch (_) {
+    } on FormatException {
       return content;
     }
   }

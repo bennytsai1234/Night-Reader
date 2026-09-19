@@ -46,11 +46,11 @@ final class ReaderV2TtsHighlightFollower {
     _pendingHighlight = null;
     _following = true;
 
-    var succeeded = false;
+    late final bool succeeded;
     try {
       succeeded = await ensureHighlightVisible(target);
-    } catch (_) {
-      succeeded = false;
+    } finally {
+      _following = false;
     }
 
     final targetIsCurrent = _currentHighlight == target;
@@ -59,8 +59,6 @@ final class ReaderV2TtsHighlightFollower {
     } else if (!succeeded && targetIsCurrent && _pendingHighlight == null) {
       _pendingHighlight = target;
     }
-    _following = false;
-
     final next = _pendingHighlight;
     if (next != null && (succeeded || next != target)) {
       unawaited(_followNext());
