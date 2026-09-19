@@ -11,7 +11,6 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'reader_v2_state_transition_test_support.dart';
@@ -86,7 +85,7 @@ void main() {
     final deadline = DateTime.now().add(timeout);
     while (!runtime.state.hasStableWorld) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.phase}');
+        fail('Reader runtime did not settle: ${runtime.state.lifecycle}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -222,7 +221,7 @@ void main() {
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (!runtime.state.hasStableWorld) {
       if (DateTime.now().isAfter(deadline)) {
-        fail('Reader runtime did not settle: ${runtime.state.phase}');
+        fail('Reader runtime did not settle: ${runtime.state.lifecycle}');
       }
       await tester.pump(const Duration(milliseconds: 16));
     }
