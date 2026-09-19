@@ -73,7 +73,7 @@ void main() {
     await database.close();
   });
 
-  PreparedSourceSwitch resolutionFor(SearchBook candidate) {
+  PreparedSourceSwitch preparedFor(SearchBook candidate) {
     final migratedBook = book.copyWith(
       bookUrl: candidate.bookUrl,
       origin: candidate.origin,
@@ -339,7 +339,7 @@ void main() {
   testWidgets('換源 seam 注入 fake SourceSwitchService 並可驅動頁面層入口', (tester) async {
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate),
+      prepared: preparedFor(sourceCandidate),
     );
     final harness = await pumpPage(
       tester,
