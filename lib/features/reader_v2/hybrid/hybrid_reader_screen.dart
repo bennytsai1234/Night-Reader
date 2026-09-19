@@ -1666,7 +1666,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!_warmedChapters.add(warmKey)) return;
     try {
       final cache = await _obtainDiskCache();
-      final count = await cache.warmIntoStore(
+      await cache.warmIntoStore(
         bookUrl: bookUrl,
         namespace: namespace,
         chapterLayoutIdentities: {blocks.chapterIndex: blocks.layoutIdentity},
