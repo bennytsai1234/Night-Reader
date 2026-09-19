@@ -209,7 +209,7 @@ void main() {
     });
   });
 
-  group('SourceSwitchService.resolveSwitch', () {
+  group('SourceSwitchService.prepareSwitch', () {
     late AppDatabase db;
 
     setUp(() async {
