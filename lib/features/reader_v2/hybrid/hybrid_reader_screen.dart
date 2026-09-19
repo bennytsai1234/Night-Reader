@@ -1840,73 +1840,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     };
   }
 
-  Widget _buildOperationOverlay(ReaderV2State state) {
-    if (state.phase == ReaderV2Phase.ready) return const SizedBox.shrink();
-    final isError = state.phase == ReaderV2Phase.error;
-    final message = isError
-        ? _friendlyErrorMessage
-        : _phaseMessage(state.phase);
-    return IgnorePointer(
-      child: Semantics(
-        liveRegion: true,
-        excludeSemantics: true,
-        label: message,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: SafeArea(
-            minimum: const EdgeInsets.only(top: 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: widget.backgroundColor.withValues(alpha: 0.92),
-                border: Border.all(
-                  color: widget.textColor.withValues(alpha: 0.16),
-                ),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isError)
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 16,
-                        color: widget.textColor.withValues(alpha: 0.72),
-                      )
-                    else
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: widget.textColor.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        message,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: widget.textColor.withValues(alpha: 0.78),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1957,8 +1890,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                   },
                 ),
               ),
-            if (state.phase != ReaderV2Phase.ready)
-              Positioned.fill(child: _buildOperationOverlay(state)),
           ],
         );
         return ColoredBox(
