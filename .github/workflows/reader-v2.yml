@@ -128,7 +128,8 @@ jobs:
           retention-days: 7
 
   full:
-    if: github.event_name == 'workflow_dispatch'
+    # One-time branch validation; restore to workflow_dispatch after this run.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
