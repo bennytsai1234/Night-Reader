@@ -78,6 +78,4 @@ extension BookLogic on Book {
       return null;
     }
   }
-
-
 }
