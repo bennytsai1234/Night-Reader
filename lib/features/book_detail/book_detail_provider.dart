@@ -484,12 +484,11 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
     final oldBook = _book.copyWith();
     try {
-      final resolution = await _sourceSwitchService.resolveSwitch(
+      final resolution = await _sourceSwitchService.prepareSwitch(
         oldBook,
         newSource,
         targetChapterIndex: oldBook.chapterIndex,
         targetChapterTitle: oldBook.durChapterTitle,
-        validateTargetContent: true,
       );
       await _sourceSwitchService.persistSwitch(
         oldBook,
