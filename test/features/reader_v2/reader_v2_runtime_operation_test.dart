@@ -100,12 +100,75 @@ void main() {
     final presentation = runtime.applyPresentation(spec: specWithFontSize(22));
 
     expect(runtime.pendingLocation, target);
+    expect(runtime.state.hasStableWorld, isTrue);
     content.complete(chapters[3].content);
     await Future.wait([jump, presentation]);
 
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.visibleLocation, target);
+    expect(runtime.state.layoutSpec.layoutSignature, specWithFontSize(22).layoutSignature);
     expect(restores.last, target);
+    expect(runtime.pendingLocation, isNull);
+  });
+
+  test('target content unavailable leaves the existing Reader world intact', () async {
+    final runtime = makeRuntime(
+      [chapter(0), chapter(1)],
+      contentLoader: (index, chapter) async {
+        if (index == 1) {
+          throw ReaderV2ChapterRepositoryException('目標章節暫時無法取得');
+        }
+        return chapter.content;
+      },
+    );
+    addTearDown(runtime.dispose);
+    final owner = Object();
+    runtime.registerViewportRestore(owner, (_) async => true);
+    await runtime.openBook();
+    final before = runtime.state.visibleLocation;
+    final generation = runtime.state.layoutGeneration;
+
+    await runtime.jumpToChapter(1);
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
+    expect(runtime.state.visibleLocation, before);
+    expect(runtime.state.layoutGeneration, generation);
+    expect(runtime.pendingLocation, isNull);
+    expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+  });
+
+  test('first readable world unavailable marks the Reader unavailable', () async {
+    final runtime = makeRuntime(
+      [chapter(0)],
+      contentLoader: (_, __) async {
+        throw ReaderV2ChapterRepositoryException('正文暫時無法取得');
+      },
+    );
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+
+    await runtime.openBook();
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
+    expect(runtime.state.hasStableWorld, isFalse);
+    expect(runtime.pendingLocation, isNull);
+    expect(runtime.state.unavailableMessage, contains('正文暫時無法取得'));
+    expect(runtime.takeUserNotice(), isNull);
+  });
+
+  test('internal viewport ownership violation is exposed as a bug', () async {
+    final runtime = makeRuntime([chapter(0), chapter(1)]);
+    addTearDown(runtime.dispose);
+    final owner = Object();
+    runtime.registerViewportRestore(owner, (_) async => true);
+    await runtime.openBook();
+    runtime.unregisterViewportRestore(owner);
+
+    await expectLater(runtime.jumpToChapter(1), throwsStateError);
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.pendingLocation, isNull);
   });
 
@@ -124,7 +187,7 @@ void main() {
     restore.complete(true);
     await opening;
 
-    expect(runtime.state.phase, isNot(ReaderV2Phase.ready));
+    expect(runtime.state.hasStableWorld, isFalse);
   });
 
   test('presentation and reload converge through the same viewport owner', () async {
@@ -141,7 +204,7 @@ void main() {
     await runtime.applyPresentation(spec: specWithFontSize(22));
     await runtime.reloadContentPreservingLocation();
 
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.visibleLocation.chapterIndex, 1);
     expect(runtime.pendingLocation, isNull);
     expect(restores, isNotEmpty);
