@@ -13,68 +13,67 @@ class _UnusedBookSourceDao extends Fake implements BookSourceDao {}
 /// Reusable page-layer fake for T5 and related state-transition tests.
 ///
 /// The fake owns no network or database behavior. Each call can be delayed or
-/// failed independently, while [resolution] supplies the deterministic
+/// failed independently, while [prepared] supplies the deterministic
 /// successful result used by the page orchestration.
 class FakeReaderV2SourceSwitchService extends SourceSwitchService {
   FakeReaderV2SourceSwitchService({
-    this.resolution,
-    this.resolveError,
+    this.prepared,
+    this.prepareError,
     this.persistError,
-    this.resolveDelay = Duration.zero,
+    this.prepareDelay = Duration.zero,
     this.persistDelay = Duration.zero,
     this.persistToDatabase = false,
   }) : super(sourceDao: _UnusedBookSourceDao());
 
-  final SourceSwitchResolution? resolution;
-  final Object? resolveError;
+  final PreparedSourceSwitch? prepared;
+  final Object? prepareError;
   final Object? persistError;
-  final Duration resolveDelay;
+  final Duration prepareDelay;
   final Duration persistDelay;
   final bool persistToDatabase;
-  int resolveCalls = 0;
+  int prepareCalls = 0;
   int persistCalls = 0;
   Book? lastCurrentBook;
   Book? lastOldBook;
-  SourceSwitchResolution? lastResolution;
+  PreparedSourceSwitch? lastPrepared;
 
   @override
-  Future<SourceSwitchResolution> resolveSwitch(
+  Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
-    bool validateTargetContent = false,
   }) async {
-    resolveCalls += 1;
+    prepareCalls += 1;
     lastCurrentBook = currentBook.copyWith();
-    if (resolveDelay != Duration.zero) await Future<void>.delayed(resolveDelay);
-    final error = resolveError;
+    if (prepareDelay != Duration.zero) await Future<void>.delayed(prepareDelay);
+    final error = prepareError;
     if (error != null) throw error;
-    final result = resolution;
+    final result = prepared;
     if (result == null) {
-      throw StateError('FakeReaderV2SourceSwitchService has no resolution');
+      throw StateError('FakeReaderV2SourceSwitchService has no prepared handoff');
     }
-    lastResolution = result;
+    lastPrepared = result;
     return result;
   }
 
   @override
-  Future<void> persistSwitch(
+  Future<void> commitSwitch(
     Book oldBook,
-    SourceSwitchResolution resolution, {
+    PreparedSourceSwitch preparedSwitch, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
   }) async {
     persistCalls += 1;
     lastOldBook = oldBook.copyWith();
-    lastResolution = resolution;
+    lastPrepared = preparedSwitch;
     if (persistDelay != Duration.zero) await Future<void>.delayed(persistDelay);
     final error = persistError;
     if (error != null) throw error;
     if (persistToDatabase) {
-      await super.persistSwitch(
+      await super.commitSwitch(
         oldBook,
-        resolution,
+        preparedSwitch,
         bookDao: bookDao,
         chapterDao: chapterDao,
       );

@@ -204,8 +204,15 @@ class BookDetailProvider extends ChangeNotifier {
        _service = service ?? BookSourceService(),
        _coverStorage = coverStorage ?? BookCoverStorageService(),
        _downloadService = downloadService {
-    _sourceSwitchService = sourceSwitchService ??
-        SourceSwitchService(service: _service, sourceDao: _sourceDao);
+    _sourceSwitchService =
+        sourceSwitchService ??
+        SourceSwitchService(
+          service: _service,
+          sourceDao: _sourceDao,
+          operationQuiescer: (oldBook) =>
+              _resolvedDownloadService.quiesceForSourceSwitch(oldBook),
+          assetRetirer: _coverStorage.handoffSourceSwitchAssets,
+        );
     _book =
         searchBook.book is Book
             ? searchBook.book as Book
@@ -484,23 +491,22 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
     final oldBook = _book.copyWith();
     try {
-      final resolution = await _sourceSwitchService.resolveSwitch(
+      final prepared = await _sourceSwitchService.prepareSwitch(
         oldBook,
         newSource,
         targetChapterIndex: oldBook.chapterIndex,
         targetChapterTitle: oldBook.durChapterTitle,
-        validateTargetContent: true,
       );
-      await _sourceSwitchService.persistSwitch(
+      await _sourceSwitchService.commitSwitch(
         oldBook,
-        resolution,
+        prepared,
         bookDao: _bookDao,
         chapterDao: _chapterDao,
       );
 
-      _book = resolution.migratedBook;
-      _currentSource = resolution.source;
-      _allChapters = resolution.chapters;
+      _book = prepared.migratedBook;
+      _currentSource = prepared.source;
+      _allChapters = prepared.chapters;
       _isInBookshelf = _book.isInBookshelf;
       _sourceIssueMessage = null;
       try {

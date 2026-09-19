@@ -130,7 +130,7 @@ void main() {
     );
   }
 
-  SourceSwitchResolution resolutionFor(
+  PreparedSourceSwitch preparedFor(
     SearchBook sourceCandidate,
     ReaderV2Location location,
   ) {
@@ -152,7 +152,7 @@ void main() {
       location: location,
       content: oldContent,
     );
-    return SourceSwitchResolution(
+    return PreparedSourceSwitch(
       searchBook: sourceCandidate,
       source: BookSource(
         bookSourceUrl: sourceCandidate.origin,
@@ -170,7 +170,7 @@ void main() {
       ),
       chapters: newChapters,
       targetChapterIndex: location.chapterIndex,
-      validatedContent: newChapters[location.chapterIndex].content,
+      validatedContent: newChapters[location.chapterIndex].content!,
     );
   }
 
@@ -291,7 +291,7 @@ void main() {
     await database.bookDao.upsert(book);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
+      prepared: preparedFor(sourceCandidate, location),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     final outcome = await harness.state.debugSelectSourceForTesting(
@@ -335,7 +335,7 @@ void main() {
     await database.bookDao.upsert(book);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, flushedLocation),
+      prepared: preparedFor(sourceCandidate, flushedLocation),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(initialLocation);
@@ -360,7 +360,7 @@ void main() {
     );
   });
 
-  testWidgets('S2 resolve 失敗：舊 session、DB 進度與書架事件保持自洽', (tester) async {
+  testWidgets('S2 prepare 失敗：舊 session、DB 進度與書架事件保持自洽', (tester) async {
     const location = ReaderV2Location(
       chapterIndex: 0,
       charOffset: 13,
@@ -376,7 +376,7 @@ void main() {
     );
     addTearDown(subscription.cancel);
     final fake = FakeReaderV2SourceSwitchService(
-      resolveError: StateError('resolve failure sentinel'),
+      prepareError: StateError('prepare failure sentinel'),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(location);
@@ -387,8 +387,8 @@ void main() {
     final stored = await readBook(book.bookUrl);
     final after = harness.runtime.state.visibleLocation;
     expect(outcome.success, isFalse);
-    expect(outcome.message, contains('resolve failure sentinel'));
-    expect(fake.resolveCalls, 1);
+    expect(outcome.message, contains('prepare failure sentinel'));
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 0);
     expect(find.byType(ReaderV2Page), findsOneWidget);
     expect(harness.runtime.disposed, isFalse);
@@ -410,7 +410,7 @@ void main() {
       isEmpty,
     );
     print(
-      'T5 S2 resolve failure DB=${locationOf(stored)} location=$after '
+      'T5 S2 prepare failure DB=${locationOf(stored)} location=$after '
       'events=${eventNames.where((name) => name == AppEventBus.upBookshelf).length} '
       'error="${outcome.message}"',
     );
@@ -433,7 +433,7 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
+      prepared: preparedFor(sourceCandidate, location),
       persistError: StateError('persist failure sentinel'),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
@@ -445,7 +445,7 @@ void main() {
     final stored = await readBook(book.bookUrl);
     expect(outcome.success, isFalse);
     expect(outcome.message, contains('persist failure sentinel'));
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(find.byType(ReaderV2Page), findsOneWidget);
     expect(harness.runtime.disposed, isFalse);
@@ -486,8 +486,8 @@ void main() {
     GetIt.instance.registerSingleton<BookDao>(blockingDao);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, flushedLocation),
-      resolveDelay: const Duration(milliseconds: 100),
+      prepared: preparedFor(sourceCandidate, flushedLocation),
+      prepareDelay: const Duration(milliseconds: 100),
       persistToDatabase: true,
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
@@ -498,8 +498,8 @@ void main() {
     );
     await pumpUntil(
       tester,
-      () => fake.resolveCalls == 1,
-      description: 'resolve delay',
+      () => fake.prepareCalls == 1,
+      description: 'prepare delay',
     );
     blockingDao.blockNextProgressWrite = true;
     harness.runtime.progressController.schedule(lateLocation);
@@ -516,7 +516,7 @@ void main() {
       book.bookUrl,
     );
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(oldStoredBeforeRelease, isNull);
     expect(locationOf(newStoredBeforeRelease), flushedLocation);
@@ -561,8 +561,8 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
-      resolveDelay: const Duration(milliseconds: 1),
+      prepared: preparedFor(sourceCandidate, location),
+      prepareDelay: const Duration(milliseconds: 1),
       persistDelay: const Duration(milliseconds: 1),
       persistToDatabase: true,
     );
@@ -579,7 +579,7 @@ void main() {
     final newRuntime = newState.debugRuntime as ReaderV2Runtime;
     await tester.pump();
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(locationOf(stored), location);
     expect(newRuntime.state.visibleLocation, location);
@@ -611,8 +611,8 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
-      resolveDelay: const Duration(milliseconds: 100),
+      prepared: preparedFor(sourceCandidate, location),
+      prepareDelay: const Duration(milliseconds: 100),
       persistToDatabase: true,
     );
     final harness = await pumpPageOverSentinel(
@@ -625,8 +625,8 @@ void main() {
     );
     await pumpUntil(
       tester,
-      () => fake.resolveCalls == 1,
-      description: 'return race resolve',
+      () => fake.prepareCalls == 1,
+      description: 'return race prepare',
     );
     Navigator.of(tester.element(find.byType(ReaderV2Page))).pop();
     await tester.pump();
@@ -635,7 +635,7 @@ void main() {
     final stored = await readBook(sourceCandidate.bookUrl);
     await tester.pump();
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(find.byType(ReaderV2Page), findsNothing);
     expect(find.byKey(const ValueKey<String>('sentinel')), findsOneWidget);

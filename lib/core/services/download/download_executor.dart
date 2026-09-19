@@ -77,6 +77,8 @@ String classifyDownloadFailureReason(String message) {
 mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   @override
   Future<void> processTask(DownloadTask task) async {
+    if (isTaskRetiring(task.bookUrl)) return;
+    beginTaskActivity(task.bookUrl);
     activeTaskUrls.add(task.bookUrl);
     task.status = DownloadTask.statusDownloading;
     task.successCount = 0;
@@ -146,11 +148,16 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       );
       var poolCount = 0;
       for (var chapter in toDownload) {
-        if (!isDownloading || task.status == DownloadTask.statusPaused) {
+        if (!isDownloading ||
+            task.status == DownloadTask.statusPaused ||
+            isTaskRetiring(task.bookUrl)) {
           stoppedEarly = true;
           break;
         }
-        await checkPause();
+        if (!await waitUntilTaskRunnable(task.bookUrl)) {
+          stoppedEarly = true;
+          break;
+        }
 
         if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
           if (countsPreStoredChapters) {
@@ -167,8 +174,13 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           continue;
         }
 
-        while (poolCount >= maxChapterConcurrent) {
+        while (poolCount >= maxChapterConcurrent &&
+            !isTaskRetiring(task.bookUrl)) {
           await Future.delayed(const Duration(milliseconds: 500));
+        }
+        if (isTaskRetiring(task.bookUrl)) {
+          stoppedEarly = true;
+          break;
         }
 
         poolCount++;
@@ -252,6 +264,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
     } finally {
       activeTaskUrls.remove(task.bookUrl);
+      completeTaskActivity(task.bookUrl);
     }
     update();
   }

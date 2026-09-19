@@ -6,6 +6,8 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
@@ -96,13 +98,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
     SearchBook candidate,
   ) async {
-    SourceSwitchResolution? resolution;
+    PreparedSourceSwitch? preparedSwitch;
     final outcome = await _handleChangeSourceSelected(
       candidate,
-      onSuccess: (value) => resolution = value,
+      onSuccess: (value) => preparedSwitch = value,
     );
-    if (mounted && outcome.success && resolution != null) {
-      _pushReplacementForResolution(resolution!);
+    if (mounted && outcome.success && preparedSwitch != null) {
+      _pushReplacementForPreparedSwitch(preparedSwitch!);
     }
     return outcome;
   }
@@ -110,7 +112,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   void initState() {
     super.initState();
-    _sourceSwitchService = widget.sourceSwitchService ?? SourceSwitchService();
+    _sourceSwitchService =
+        widget.sourceSwitchService ??
+        SourceSwitchService(
+          operationQuiescer: (oldBook) =>
+              DownloadService().quiesceForSourceSwitch(oldBook),
+          assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+        );
     _host = ReaderV2ControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,
@@ -427,7 +435,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
-    SourceSwitchResolution? switchedResolution;
+    PreparedSourceSwitch? preparedSwitch;
     await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
@@ -436,19 +444,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         book: widget.book,
         onSelectSource: (candidate) => _handleChangeSourceSelected(
           candidate,
-          onSuccess: (resolution) => switchedResolution = resolution,
+          onSuccess: (prepared) => preparedSwitch = prepared,
         ),
       ),
     );
 
-    final resolution = switchedResolution;
-    if (!mounted || resolution == null) return;
-    _pushReplacementForResolution(resolution);
+    final prepared = preparedSwitch;
+    if (!mounted || prepared == null) return;
+    _pushReplacementForPreparedSwitch(prepared);
   }
 
   Future<ChangeSourceOutcome> _handleChangeSourceSelected(
     SearchBook candidate, {
-    void Function(SourceSwitchResolution resolution)? onSuccess,
+    void Function(PreparedSourceSwitch prepared)? onSuccess,
   }) async {
     try {
       // The flush returns the exact snapshot that was captured and persisted.
@@ -470,36 +478,35 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         visualOffsetPx:
             currentLocation?.visualOffsetPx ?? widget.book.visualOffsetPx,
       );
-      final resolution = await _sourceSwitchService.resolveSwitch(
+      final prepared = await _sourceSwitchService.prepareSwitch(
         switchingBook,
         candidate,
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
-        validateTargetContent: true,
       );
-      await _sourceSwitchService.persistSwitch(
+      await _sourceSwitchService.commitSwitch(
         widget.book,
-        resolution,
+        prepared,
         bookDao: _host.dependencies.bookDao,
         chapterDao: _host.dependencies.chapterDao,
       );
       AppEventBus().fire(AppEventBus.upBookshelf);
-      onSuccess?.call(resolution);
+      onSuccess?.call(prepared);
       return (
         success: true,
-        message: '已切換到 ${resolution.source.bookSourceName}',
+        message: '已切換到 ${prepared.source.bookSourceName}',
       );
     } catch (e) {
       return (success: false, message: '換源失敗: $e');
     }
   }
 
-  void _pushReplacementForResolution(SourceSwitchResolution resolution) {
+  void _pushReplacementForPreparedSwitch(PreparedSourceSwitch prepared) {
     Navigator.of(context).pushReplacement(
       BookOpenRoute(
-        book: resolution.migratedBook,
-        openTarget: ReaderV2OpenTarget.resume(resolution.migratedBook),
-        initialChapters: resolution.chapters,
+        book: prepared.migratedBook,
+        openTarget: ReaderV2OpenTarget.resume(prepared.migratedBook),
+        initialChapters: prepared.chapters,
       ),
     );
   }

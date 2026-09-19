@@ -72,7 +72,7 @@ void main() {
     await database.close();
   });
 
-  SourceSwitchResolution resolutionFor(SearchBook candidate) {
+  PreparedSourceSwitch preparedFor(SearchBook candidate) {
     final migratedBook = book.copyWith(
       bookUrl: candidate.bookUrl,
       origin: candidate.origin,
@@ -80,16 +80,19 @@ void main() {
       chapterIndex: 0,
       charOffset: 0,
     );
-    return SourceSwitchResolution(
+    final migratedChapters = chapters
+        .map((chapter) => chapter.copyWith(bookUrl: candidate.bookUrl))
+        .toList(growable: false);
+    return PreparedSourceSwitch(
       searchBook: candidate,
       source: BookSource(
         bookSourceUrl: candidate.origin,
         bookSourceName: candidate.originName ?? '新源',
       ),
       migratedBook: migratedBook,
-      chapters: chapters,
+      chapters: migratedChapters,
       targetChapterIndex: 0,
-      validatedContent: chapters.first.content,
+      validatedContent: migratedChapters.first.content!,
     );
   }
 
@@ -336,7 +339,7 @@ void main() {
   testWidgets('換源 seam 注入 fake SourceSwitchService 並可驅動頁面層入口', (tester) async {
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate),
+      prepared: preparedFor(sourceCandidate),
     );
     final harness = await pumpPage(
       tester,
@@ -350,7 +353,7 @@ void main() {
     ) as ChangeSourceOutcome;
 
     expect(outcome.success, isTrue);
-    expect(fake.resolveCalls, 1);
+    expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
   });
 }

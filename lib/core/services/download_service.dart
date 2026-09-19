@@ -1,4 +1,8 @@
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/source_switch_handoff.dart';
 import 'download/download_base.dart';
 import 'download/download_scheduler.dart';
 import 'download/download_executor.dart';
@@ -13,11 +17,63 @@ class DownloadService extends DownloadBase
   static final DownloadService _instance = DownloadService._internal();
   factory DownloadService() => _instance;
 
+  late final Future<void> _initialization;
+
   double get progress => totalProgress;
 
   DownloadService._internal() {
-    _loadTasks();
     listenEvents();
+    _initialization = _loadTasks();
+  }
+
+  Future<SourceSwitchOperationLease> quiesceForSourceSwitch(Book oldBook) async {
+    await _initialization;
+    final bookUrl = oldBook.bookUrl;
+    markTaskRetiring(bookUrl);
+
+    final task = tasks.cast<DownloadTask?>().firstWhere(
+      (candidate) => candidate?.bookUrl == bookUrl,
+      orElse: () => null,
+    );
+    final previousStatus = task?.status;
+    if (task != null) {
+      task.status = DownloadTask.statusPaused;
+      update();
+    }
+
+    await waitForTaskIdle(bookUrl);
+    return _DownloadSourceSwitchLease(
+      owner: this,
+      bookUrl: bookUrl,
+      task: task,
+      previousStatus: previousStatus,
+    );
+  }
+
+  void _commitSourceSwitchRetirement(String bookUrl) {
+    tasks.removeWhere((task) => task.bookUrl == bookUrl);
+    clearTaskRetiring(bookUrl);
+    update();
+  }
+
+  void _rollbackSourceSwitchRetirement(
+    String bookUrl,
+    DownloadTask? task,
+    int? previousStatus,
+  ) {
+    if (task != null && previousStatus != null) {
+      task.status = previousStatus == DownloadTask.statusDownloading
+          ? DownloadTask.statusWaiting
+          : previousStatus;
+      if (!tasks.contains(task)) {
+        tasks.add(task);
+      }
+    }
+    clearTaskRetiring(bookUrl);
+    update();
+    if (task != null && task.isWaiting && !isDownloading) {
+      startDownloads();
+    }
   }
 
   /// 從資料庫恢復任務
@@ -113,5 +169,39 @@ class DownloadService extends DownloadBase
     final task = tasks.removeAt(current);
     tasks.insert(next, task);
     update();
+  }
+}
+
+class _DownloadSourceSwitchLease implements SourceSwitchOperationLease {
+  _DownloadSourceSwitchLease({
+    required this.owner,
+    required this.bookUrl,
+    required this.task,
+    required this.previousStatus,
+  });
+
+  final DownloadService owner;
+  final String bookUrl;
+  final DownloadTask? task;
+  final int? previousStatus;
+  bool _finalized = false;
+
+  @override
+  Future<void> retireInTransaction(AppDatabase db) {
+    return DownloadDao(db).deleteByUrl(bookUrl);
+  }
+
+  @override
+  void committed() {
+    if (_finalized) return;
+    _finalized = true;
+    owner._commitSourceSwitchRetirement(bookUrl);
+  }
+
+  @override
+  void rolledBack() {
+    if (_finalized) return;
+    _finalized = true;
+    owner._rollbackSourceSwitchRetirement(bookUrl, task, previousStatus);
   }
 }

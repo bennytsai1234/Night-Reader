@@ -28,18 +28,25 @@ mixin DownloadScheduler on DownloadBase {
         });
   }
 
-  Future<void> checkPriority() async {
+  Future<bool> waitUntilTaskRunnable(String bookUrl) async {
+    final retireSignal = retirementSignal(bookUrl);
     while (isBookshelfRefreshing) {
-      await Future.delayed(const Duration(seconds: 1));
+      if (isTaskRetiring(bookUrl)) return false;
+      await Future.any<void>(<Future<void>>[
+        Future<void>.delayed(const Duration(milliseconds: 250)),
+        retireSignal,
+      ]);
     }
-  }
+    if (isTaskRetiring(bookUrl)) return false;
 
-  Future<void> checkPause() async {
-    await checkPriority();
     if (isPaused) {
       pauseCompleter ??= Completer<void>();
-      await pauseCompleter!.future;
+      await Future.any<void>(<Future<void>>[
+        pauseCompleter!.future,
+        retireSignal,
+      ]);
     }
+    return !isTaskRetiring(bookUrl);
   }
 
   void togglePause() {
@@ -54,7 +61,12 @@ mixin DownloadScheduler on DownloadBase {
   }
 
   Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
-    if (chapters.isEmpty || !_addingTaskUrls.add(book.bookUrl)) return;
+    if (chapters.isEmpty ||
+        isTaskRetiring(book.bookUrl) ||
+        !_addingTaskUrls.add(book.bookUrl)) {
+      return;
+    }
+    beginTaskActivity(book.bookUrl);
     try {
       final task = DownloadTask(
         bookUrl: book.bookUrl,
@@ -82,11 +94,12 @@ mixin DownloadScheduler on DownloadBase {
         tasks.add(task);
       }
       update();
-      if (!isDownloading) {
+      if (!isTaskRetiring(book.bookUrl) && !isDownloading) {
         startDownloads();
       }
     } finally {
       _addingTaskUrls.remove(book.bookUrl);
+      completeTaskActivity(book.bookUrl);
     }
   }
 
@@ -108,7 +121,8 @@ mixin DownloadScheduler on DownloadBase {
         if (activeTasks.length < maxConcurrent) {
           final nextTask = tasks.cast<DownloadTask?>().firstWhere((t) {
             if (t == null || !t.isWaiting) return false;
-            return !activeTaskUrls.contains(t.bookUrl);
+            return !activeTaskUrls.contains(t.bookUrl) &&
+                !isTaskRetiring(t.bookUrl);
           }, orElse: () => null);
           if (nextTask != null) {
             processTask(nextTask);

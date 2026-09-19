@@ -56,6 +56,78 @@ void main() {
     await getIt.reset();
   });
 
+  test('retiring task 不會再被加入下載佇列', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    scheduler.markTaskRetiring('book/retiring');
+
+    await scheduler.addDownloadTask(
+      Book(bookUrl: 'book/retiring', name: '換源中的書'),
+      <BookChapter>[BookChapter(url: 'chapter/0', index: 0)],
+    );
+
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    expect(dao.upserts, isEmpty);
+    expect(scheduler.tasks, isEmpty);
+    scheduler.dispose();
+  });
+
+  test('retirement signal 會喚醒全域 pause 中的 task', () async {
+    final scheduler = _TestDownloadScheduler()
+      ..isPaused = true
+      ..pauseCompleter = Completer<void>();
+
+    final wait = scheduler.waitUntilTaskRunnable('book/paused');
+    await Future<void>.delayed(Duration.zero);
+    scheduler.markTaskRetiring('book/paused');
+
+    expect(await wait, isFalse);
+    scheduler.dispose();
+  });
+
+  test('quiescence 只在 active operation 真正完成後成立', () async {
+    final scheduler = _TestDownloadScheduler();
+    scheduler.beginTaskActivity('book/active');
+    var quiesced = false;
+    final wait = scheduler.waitForTaskIdle('book/active').then((_) {
+      quiesced = true;
+    });
+
+    scheduler.markTaskRetiring('book/active');
+    await Future<void>.delayed(Duration.zero);
+    expect(quiesced, isFalse);
+
+    scheduler.completeTaskActivity('book/active');
+    await wait;
+    expect(quiesced, isTrue);
+    scheduler.dispose();
+  });
+
+  test('quiescence 會等待 in-flight task creation 的 DAO write 完成', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    dao.upsertCompleter = Completer<void>();
+    final book = Book(bookUrl: 'book/adding', name: '建立中的任務');
+    final chapters = <BookChapter>[BookChapter(url: 'chapter/0', index: 0)];
+
+    final adding = scheduler.addDownloadTask(book, chapters);
+    await Future<void>.delayed(Duration.zero);
+    expect(dao.upserts, hasLength(1));
+
+    scheduler.markTaskRetiring(book.bookUrl);
+    var quiesced = false;
+    final wait = scheduler.waitForTaskIdle(book.bookUrl).then((_) {
+      quiesced = true;
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(quiesced, isFalse);
+
+    dao.upsertCompleter!.complete();
+    await adding;
+    await wait;
+    expect(quiesced, isTrue);
+    scheduler.dispose();
+  });
+
   test('重複加入進行中的任務不會以新等待狀態覆寫資料庫', () async {
     final scheduler = _TestDownloadScheduler()..isDownloading = true;
     final existing = DownloadTask(

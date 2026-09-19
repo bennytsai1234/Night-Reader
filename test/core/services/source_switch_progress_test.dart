@@ -43,12 +43,24 @@ class _FakeBookSourceService extends BookSourceService {
   }) async {
     return chapters;
   }
+
+  @override
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+    CancelToken? cancelToken,
+  }) async {
+    return '這是一段足夠長的已驗證正文內容，用來建立可提交的換源 handoff。';
+  }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('resolveSwitch 不會把沒有內容 identity 的章內座標帶到新來源', () async {
+  test('prepareSwitch 不會把沒有內容 identity 的章內座標帶到新來源', () async {
     final source = BookSource(
       bookSourceUrl: 'https://new-source.example',
       bookSourceName: '新源',
@@ -87,7 +99,7 @@ void main() {
       originName: source.bookSourceName,
     );
 
-    final resolution = await service.resolveSwitch(
+    final resolution = await service.prepareSwitch(
       currentBook,
       candidate,
       targetChapterIndex: 1,
