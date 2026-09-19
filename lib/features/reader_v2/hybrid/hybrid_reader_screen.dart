@@ -1821,8 +1821,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   Widget build(BuildContext context) {
-  @override
-  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
