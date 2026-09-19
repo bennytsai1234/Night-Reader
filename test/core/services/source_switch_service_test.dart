@@ -3,15 +3,44 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/core/services/source_switch_handoff.dart';
+
+class _RecordingSourceSwitchLease implements SourceSwitchOperationLease {
+  _RecordingSourceSwitchLease(this.bookUrl);
+
+  final String bookUrl;
+  bool retiredInTransaction = false;
+  bool committedCalled = false;
+  bool rolledBackCalled = false;
+
+  @override
+  Future<void> retireInTransaction(AppDatabase db) async {
+    retiredInTransaction = true;
+    await DownloadDao(db).deleteByUrl(bookUrl);
+  }
+
+  @override
+  void committed() {
+    committedCalled = true;
+  }
+
+  @override
+  void rolledBack() {
+    rolledBackCalled = true;
+  }
+}
 
 class _FakeBookSourceService extends BookSourceService {
   _FakeBookSourceService({
@@ -278,7 +307,7 @@ void main() {
           candidate,
           targetChapterIndex: 5,
           targetChapterTitle: '第6章',
-          ),
+        ),
         throwsA(
           isA<StateError>().having((e) => e.message, 'message', '目標章節內容不可讀'),
         ),
@@ -417,6 +446,105 @@ void main() {
       );
     });
 
+    test('書籤跟 logical book 原子移交，舊正文 scalar offset 不跨來源沿用', () async {
+      final oldBook = _currentBook(
+        chapterIndex: 1,
+        durChapterTitle: '第2章',
+        totalChapterNum: 3,
+      );
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await db.bookmarkDao.upsert(
+        Bookmark(
+          id: 41,
+          time: 1,
+          bookName: oldBook.name,
+          bookAuthor: oldBook.author,
+          chapterIndex: 1,
+          chapterPos: 77,
+          chapterName: '第2章',
+          bookUrl: oldBook.bookUrl,
+          bookText: '使用者當時看到的原文',
+          content: '使用者筆記',
+        ),
+      );
+
+      final candidate = _candidate('new-origin');
+      final chapters = _chapters(candidate.bookUrl, 5);
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(chapters: chapters),
+        sourceDao: db.bookSourceDao,
+      );
+      final prepared = await service.prepareSwitch(
+        oldBook,
+        candidate,
+        targetChapterIndex: 1,
+        targetChapterTitle: '第2章',
+      );
+
+      await service.commitSwitch(
+        oldBook,
+        prepared,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      expect(await db.bookmarkDao.getByBook(oldBook.bookUrl), isEmpty);
+      final migratedBookmarks = await db.bookmarkDao.getByBook(
+        prepared.migratedBook.bookUrl,
+      );
+      expect(migratedBookmarks, hasLength(1));
+      final bookmark = migratedBookmarks.single;
+      expect(bookmark.id, 41);
+      expect(bookmark.chapterIndex, 1);
+      expect(bookmark.chapterName, '第2章');
+      expect(bookmark.chapterPos, 0);
+      expect(bookmark.bookText, '使用者當時看到的原文');
+      expect(bookmark.content, '使用者筆記');
+    });
+
+    test('operation owner 在 commit transaction 內退休，成功後才 finalize', () async {
+      final oldBook = _currentBook();
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await db.downloadDao.upsert(
+        DownloadTask(
+          bookUrl: oldBook.bookUrl,
+          bookName: oldBook.name,
+          startChapterIndex: 0,
+          endChapterIndex: 2,
+          status: DownloadTask.statusWaiting,
+        ),
+      );
+
+      final lease = _RecordingSourceSwitchLease(oldBook.bookUrl);
+      final candidate = _candidate('new-origin');
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 4),
+        ),
+        sourceDao: db.bookSourceDao,
+        operationQuiescer: (_) async => lease,
+      );
+      final prepared = await service.prepareSwitch(oldBook, candidate);
+
+      await service.commitSwitch(
+        oldBook,
+        prepared,
+        bookDao: db.bookDao,
+        chapterDao: db.chapterDao,
+      );
+
+      expect(lease.retiredInTransaction, isTrue);
+      expect(lease.committedCalled, isTrue);
+      expect(lease.rolledBackCalled, isFalse);
+      expect(
+        (await db.downloadDao.getAll())
+            .where((task) => task.bookUrl == oldBook.bookUrl),
+        isEmpty,
+      );
+    });
+
     test('PreparedSourceSwitch 不接受不可讀正文', () {
       final migratedBook = _currentBook().copyWith(
         bookUrl: 'new-origin/book/1',
@@ -481,6 +609,78 @@ void main() {
       expect(entries.single.origin, 'new-origin');
       expect(entries.single.chapterUrl, chapters[1].url);
       expect(entries.single.content, resolution.validatedContent);
+    });
+
+    test('commit 失敗時 operation retirement 與書籤 migration 一起回滾', () async {
+      final oldBook = _currentBook(
+        chapterIndex: 1,
+        durChapterTitle: '第2章',
+        totalChapterNum: 3,
+      );
+      await db.bookDao.upsert(oldBook);
+      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
+      await db.bookmarkDao.upsert(
+        Bookmark(
+          id: 42,
+          time: 1,
+          chapterIndex: 1,
+          chapterPos: 33,
+          chapterName: '第2章',
+          bookUrl: oldBook.bookUrl,
+          content: '保留的筆記',
+        ),
+      );
+      await db.downloadDao.upsert(
+        DownloadTask(
+          bookUrl: oldBook.bookUrl,
+          bookName: oldBook.name,
+          startChapterIndex: 0,
+          endChapterIndex: 2,
+          status: DownloadTask.statusWaiting,
+        ),
+      );
+
+      final lease = _RecordingSourceSwitchLease(oldBook.bookUrl);
+      final candidate = _candidate('new-origin');
+      final service = SourceSwitchService(
+        service: _FakeBookSourceService(
+          chapters: _chapters(candidate.bookUrl, 4),
+        ),
+        sourceDao: db.bookSourceDao,
+        operationQuiescer: (_) async => lease,
+      );
+      final prepared = await service.prepareSwitch(oldBook, candidate);
+
+      await db.customStatement('''
+        CREATE TRIGGER fail_source_switch_bookmark_handoff
+        BEFORE INSERT ON reader_chapter_contents
+        WHEN NEW.origin = 'new-origin'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced rollback after handoff staging');
+        END;
+      ''');
+
+      expect(
+        () => service.commitSwitch(
+          oldBook,
+          prepared,
+          bookDao: db.bookDao,
+          chapterDao: db.chapterDao,
+        ),
+        throwsA(anything),
+      );
+
+      expect(lease.retiredInTransaction, isTrue);
+      expect(lease.committedCalled, isFalse);
+      expect(lease.rolledBackCalled, isTrue);
+      final oldBookmarks = await db.bookmarkDao.getByBook(oldBook.bookUrl);
+      expect(oldBookmarks, hasLength(1));
+      expect(oldBookmarks.single.chapterPos, 33);
+      expect(
+        (await db.downloadDao.getAll())
+            .where((task) => task.bookUrl == oldBook.bookUrl),
+        hasLength(1),
+      );
     });
 
     test('目標正文 handoff 寫入失敗時整個 commit 回滾', () async {
