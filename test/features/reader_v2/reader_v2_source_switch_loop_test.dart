@@ -170,7 +170,7 @@ void main() {
       ),
       chapters: newChapters,
       targetChapterIndex: location.chapterIndex,
-      validatedContent: newChapters[location.chapterIndex].content,
+      validatedContent: newChapters[location.chapterIndex].content!,
     );
   }
 
