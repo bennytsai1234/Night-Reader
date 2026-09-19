@@ -476,7 +476,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         targetChapterIndex: currentIndex,
         targetChapterTitle: currentTitle.isEmpty ? null : currentTitle,
       );
-      await _sourceSwitchService.persistSwitch(
+      await _sourceSwitchService.commitSwitch(
         widget.book,
         prepared,
         bookDao: _host.dependencies.bookDao,
