@@ -323,7 +323,7 @@ void main() {
     });
   });
 
-  group('SourceSwitchService.persistSwitch', () {
+  group('SourceSwitchService.commitSwitch', () {
     late AppDatabase db;
 
     setUp(() async {
