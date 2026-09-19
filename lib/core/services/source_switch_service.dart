@@ -45,9 +45,9 @@ class PreparedSourceSwitch {
         'Prepared source switch requires readable validated target content',
       );
     }
-    if (targetChapter.bookUrl != migratedBook.bookUrl) {
+    if (chapters.any((chapter) => chapter.bookUrl != migratedBook.bookUrl)) {
       throw ArgumentError(
-        'Prepared source switch target chapter does not belong to migrated book',
+        'Prepared source switch chapters do not belong to migrated book',
       );
     }
   }
@@ -207,7 +207,7 @@ class SourceSwitchService {
   /// chapters and that exact target body as one authoritative world. Obsolete
   /// data owned by the old source identity is retired in the same transaction;
   /// any failure rolls the whole handoff back to the old world.
-  Future<void> persistSwitch(
+  Future<void> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch prepared, {
     BookDao? bookDao,
