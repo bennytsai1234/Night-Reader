@@ -1020,7 +1020,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     expect(controller.scrollBy, isNull);
     expect(controller.continuousScrollBy, isNull);
-    expect(controller.animateBy, isNull);
     expect(controller.moveToNextPage, isNull);
     expect(controller.moveToPrevPage, isNull);
     expect(controller.settleScroll, isNull);

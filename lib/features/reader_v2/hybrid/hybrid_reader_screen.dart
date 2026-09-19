@@ -83,7 +83,7 @@ bool isHybridPageMoveComplete({
 
 class _HybridReaderScreenState extends State<HybridReaderScreen>
     with WidgetsBindingObserver {
-  static const Duration _ensureAnimateDuration = Duration(milliseconds: 260);
+  static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
   final GlobalKey _centerKey = GlobalKey(debugLabel: 'hybrid-center-sliver');
@@ -1372,7 +1372,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return isCurrent();
   }
 
-  Future<bool> _animateByNow(double delta, bool Function() isCurrent) async {
+  Future<bool> _animatePageByNow(double delta, bool Function() isCurrent) async {
     final controller = _scrollController;
     if (!isCurrent() ||
         controller == null ||
@@ -1389,7 +1389,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if ((target - before).abs() < _minimumViewportMovement) return false;
     await position.animateTo(
       target,
-      duration: _ensureAnimateDuration,
+      duration: _viewportMotionDuration,
       curve: Curves.easeOutCubic,
     );
     if (!isCurrent()) return false;
@@ -1418,7 +1418,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!reachable || !isCurrent() || !controller.hasClients) return false;
 
     final before = controller.position.pixels;
-    final moved = await _animateByNow(
+    final moved = await _animatePageByNow(
       forward ? magnitude : -magnitude,
       isCurrent,
     );
@@ -1518,7 +1518,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           .toDouble();
       await position.animateTo(
         bounded,
-        duration: _ensureAnimateDuration,
+        duration: _viewportMotionDuration,
         curve: Curves.easeOutCubic,
       );
       if (!isCurrent()) return false;
@@ -1945,8 +1945,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             visualContent,
             if (highlight != null && highlight.isValid)
               Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: controller,
+                child: ListenableBuilder(
+                  listenable: controller,
                   builder: (context, _) {
                     return HybridTtsHighlightOverlay(
                       lines: _ttsLineBoxes(highlight),
