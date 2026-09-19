@@ -417,7 +417,7 @@ void main() {
         runtime.state.visibleLocation.charOffset,
         lessThanOrEqualTo(afterContent.displayText.length),
       );
-      expect(runtime.state.phase, ReaderV2Phase.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
     },
   );
 }
