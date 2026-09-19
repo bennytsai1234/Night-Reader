@@ -13,7 +13,9 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:pool/pool.dart';
 
+import 'app_log_service.dart';
 import 'book_source_service.dart';
+import 'source_switch_handoff.dart';
 
 bool _looksReadableSourceSwitchContent(String content) {
   final trimmed = content.trim();
@@ -56,14 +58,22 @@ class PreparedSourceSwitch {
 }
 
 class SourceSwitchService {
-  SourceSwitchService({BookSourceService? service, BookSourceDao? sourceDao})
-    : _service = service ?? BookSourceService(),
-      _sourceDao = sourceDao ?? getIt<BookSourceDao>();
+  SourceSwitchService({
+    BookSourceService? service,
+    BookSourceDao? sourceDao,
+    SourceSwitchOperationQuiescer? operationQuiescer,
+    SourceSwitchAssetRetirer? assetRetirer,
+  }) : _service = service ?? BookSourceService(),
+       _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
+       _operationQuiescer = operationQuiescer,
+       _assetRetirer = assetRetirer;
 
   static const int _maxConcurrentSearches = 6;
 
   final BookSourceService _service;
   final BookSourceDao _sourceDao;
+  final SourceSwitchOperationQuiescer? _operationQuiescer;
+  final SourceSwitchAssetRetirer? _assetRetirer;
 
   Future<List<SearchBook>> searchAlternatives(
     Book book, {
@@ -222,8 +232,16 @@ class SourceSwitchService {
     final contentDao = ReaderChapterContentDao(db);
     final bookmarkDao = BookmarkDao(db);
     final migratedBook = prepared.migratedBook;
+    final sourceIdentityChanged =
+        oldBook.origin != migratedBook.origin ||
+        oldBook.bookUrl != migratedBook.bookUrl;
+    final operationLease = sourceIdentityChanged
+        ? await _operationQuiescer?.call(oldBook)
+        : null;
 
-    await db.transaction(() async {
+    try {
+      await db.transaction(() async {
+        await operationLease?.retireInTransaction(db);
       await chaptersDao.deleteByBook(migratedBook.bookUrl);
       await books.upsert(migratedBook);
       await chaptersDao.insertChapters(prepared.chapters);
@@ -264,18 +282,36 @@ class SourceSwitchService {
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
 
-      final sourceIdentityChanged =
-          oldBook.origin != migratedBook.origin ||
-          oldBook.bookUrl != migratedBook.bookUrl;
       if (sourceIdentityChanged) {
         await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);
       }
 
-      if (migratedBook.bookUrl != oldBook.bookUrl) {
-        await chaptersDao.deleteByBook(oldBook.bookUrl);
-        await books.deleteByUrl(oldBook.bookUrl);
+        if (migratedBook.bookUrl != oldBook.bookUrl) {
+          await chaptersDao.deleteByBook(oldBook.bookUrl);
+          await books.deleteByUrl(oldBook.bookUrl);
+        }
+      });
+    } catch (_) {
+      operationLease?.rolledBack();
+      rethrow;
+    }
+
+    operationLease?.committed();
+
+    final retireAssets = _assetRetirer;
+    if (sourceIdentityChanged && retireAssets != null) {
+      try {
+        await retireAssets(oldBook, migratedBook);
+        await books.upsert(migratedBook);
+      } catch (error, stackTrace) {
+        AppLog.w(
+          'Source switch committed but old source assets could not be retired: '
+          '$error',
+          error: error,
+          stackTrace: stackTrace,
+        );
       }
-    });
+    }
   }
 
   String? _nextReadableChapterUrl(
