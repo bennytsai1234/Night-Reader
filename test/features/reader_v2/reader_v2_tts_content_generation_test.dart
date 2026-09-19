@@ -7,7 +7,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
@@ -52,7 +51,6 @@ void main() {
     final runtime = ReaderV2Runtime(
       book: book,
       repository: repository,
-      layoutEngine: ReaderV2LayoutEngine(),
       progressController: ReaderV2ProgressController(
         book: book,
         repository: repository,
@@ -75,6 +73,7 @@ void main() {
       initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     );
     addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
     await runtime.openBook();
 
     final engine = _FakeTtsEngine();

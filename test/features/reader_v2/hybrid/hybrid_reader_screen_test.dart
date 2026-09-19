@@ -16,7 +16,6 @@ import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_ove
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/hybrid/view/cached_block_widget.dart';
 import 'package:night_reader/features/reader_v2/hybrid/view/hybrid_scroll_view.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -208,7 +207,6 @@ void main() {
     return ReaderV2Runtime(
       book: book,
       repository: repository,
-      layoutEngine: ReaderV2LayoutEngine(),
       progressController: ReaderV2ProgressController(
         book: book,
         repository: repository,
@@ -1215,46 +1213,4 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('hybrid 開書與跳章不會再觸發舊分頁排版引擎', (tester) async {
-    final previousObserver = ReaderV2LayoutEngine.debugOnStats;
-    var oldLayoutRuns = 0;
-    ReaderV2LayoutEngine.debugOnStats = (_) => oldLayoutRuns += 1;
-    final runtime = makeRuntime(List.generate(3, chapter));
-    final controller = ReaderV2ViewportController();
-    addTearDown(() {
-      runtime.dispose();
-      ReaderV2LayoutEngine.debugOnStats = previousObserver;
-    });
-
-    await pumpScreen(tester, runtime, controller);
-    await openAndSettle(tester, runtime);
-    await completeWithFrames(tester, runtime.jumpToChapter(1));
-    await tester.pumpAndSettle();
-    await completeWithFrames(
-      tester,
-      runtime.applyPresentation(
-        spec: ReaderV2LayoutSpec.fromViewport(
-          viewportSize: const Size(220, 180),
-          style: const ReaderV2LayoutStyle(
-            fontSize: 20,
-            lineHeight: 1.6,
-            letterSpacing: 0,
-            paragraphSpacing: 0.8,
-            paddingTop: 12,
-            paddingBottom: 0,
-            paddingLeft: 12,
-            paddingRight: 12,
-            textIndent: 2,
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await completeWithFrames(tester, runtime.reloadContentPreservingLocation());
-    await tester.pumpAndSettle();
-
-    expect(oldLayoutRuns, 0);
-    expect(runtime.state.pageWindow, isNull);
-    expect(runtime.state.phase, ReaderV2Phase.ready);
-  });
 }

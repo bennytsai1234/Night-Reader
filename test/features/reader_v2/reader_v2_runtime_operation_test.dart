@@ -1,0 +1,149 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
+
+class _FakeBookDao extends Fake implements BookDao {}
+class _FakeChapterDao extends Fake implements ChapterDao {}
+class _FakeSourceDao extends Fake implements BookSourceDao {}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  ReaderV2LayoutSpec specWithFontSize(double fontSize) {
+    return ReaderV2LayoutSpec.fromViewport(
+      viewportSize: const Size(220, 180),
+      style: ReaderV2LayoutStyle(
+        fontSize: fontSize,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 0.8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+        textIndent: 2,
+      ),
+    );
+  }
+
+  BookChapter chapter(int index) => BookChapter(
+    url: 'chapter_$index',
+    title: '第 $index 章',
+    bookUrl: 'http://book.test',
+    index: index,
+    content: '第 $index 章內容。',
+  );
+
+  ReaderV2Runtime makeRuntime(
+    List<BookChapter> chapters, {
+    ReaderV2TestContentLoader? contentLoader,
+  }) {
+    final book = Book(
+      bookUrl: 'http://book.test',
+      name: '測試書',
+      author: '作者',
+      origin: 'local',
+      originName: '本地',
+    );
+    final bookDao = _FakeBookDao();
+    final repository = ReaderV2ChapterRepository(
+      book: book,
+      initialChapters: chapters,
+      contentLoader: contentLoader,
+      bookDao: bookDao,
+      chapterDao: _FakeChapterDao(),
+      sourceDao: _FakeSourceDao(),
+    );
+    return ReaderV2Runtime(
+      book: book,
+      repository: repository,
+      progressController: ReaderV2ProgressController(
+        book: book,
+        repository: repository,
+        bookDao: bookDao,
+      ),
+      initialLayoutSpec: specWithFontSize(18),
+      initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+    );
+  }
+
+  test('latest operation owns the semantic target', () async {
+    final content = Completer<String?>();
+    final chapters = List.generate(4, chapter);
+    final runtime = makeRuntime(
+      chapters,
+      contentLoader: (index, chapter) =>
+          index == 3 ? content.future : Future.value(chapter.content),
+    );
+    addTearDown(runtime.dispose);
+    final restores = <ReaderV2Location>[];
+    runtime.registerViewportRestore(Object(), (location) async {
+      restores.add(location);
+      return true;
+    });
+    await runtime.openBook();
+
+    const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+    final jump = runtime.jumpToLocation(target);
+    final presentation = runtime.applyPresentation(spec: specWithFontSize(22));
+
+    expect(runtime.pendingLocation, target);
+    content.complete(chapters[3].content);
+    await Future.wait([jump, presentation]);
+
+    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.visibleLocation, target);
+    expect(restores.last, target);
+    expect(runtime.pendingLocation, isNull);
+  });
+
+  test('disposing runtime expires an awaiting viewport operation', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    final entered = Completer<void>();
+    final restore = Completer<bool>();
+    runtime.registerViewportRestore(Object(), (_) {
+      entered.complete();
+      return restore.future;
+    });
+
+    final opening = runtime.openBook();
+    await entered.future;
+    runtime.dispose();
+    restore.complete(true);
+    await opening;
+
+    expect(runtime.state.phase, isNot(ReaderV2Phase.ready));
+  });
+
+  test('presentation and reload converge through the same viewport owner', () async {
+    final runtime = makeRuntime(List.generate(3, chapter));
+    addTearDown(runtime.dispose);
+    final restores = <ReaderV2Location>[];
+    runtime.registerViewportRestore(Object(), (location) async {
+      restores.add(location);
+      return true;
+    });
+
+    await runtime.openBook();
+    await runtime.jumpToChapter(1);
+    await runtime.applyPresentation(spec: specWithFontSize(22));
+    await runtime.reloadContentPreservingLocation();
+
+    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+    expect(runtime.pendingLocation, isNull);
+    expect(restores, isNotEmpty);
+  });
+}
