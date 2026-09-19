@@ -432,7 +432,7 @@ void main() {
         (tester.state(find.byType(HybridReaderScreen)) as dynamic)
                 .debugSnapshot()
             as Map<String, Object?>;
-    expect(after['phase'], 'ready');
+    expect(after['lifecycle'], 'ready');
     expect(after['initialRestoreCompleted'], true);
     expect(after['missingParagraphKeys'], isEmpty);
   });
@@ -514,7 +514,7 @@ void main() {
         (tester.state(find.byType(HybridReaderScreen)) as dynamic)
                 .debugSnapshot()
             as Map<String, Object?>;
-    expect(snapshot['phase'], 'ready');
+    expect(snapshot['lifecycle'], 'ready');
     expect(snapshot['initialRestoreCompleted'], true);
     expect(snapshot['pumpQueueDepth'], 0);
     expect(snapshot['visibleKeys'], isNotEmpty);
