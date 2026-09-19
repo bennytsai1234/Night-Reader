@@ -172,7 +172,6 @@ class DownloadService extends DownloadBase
   }
 }
 
-
 class _DownloadSourceSwitchLease implements SourceSwitchOperationLease {
   _DownloadSourceSwitchLease({
     required this.owner,
