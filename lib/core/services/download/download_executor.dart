@@ -78,7 +78,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   @override
   Future<void> processTask(DownloadTask task) async {
     if (isTaskRetiring(task.bookUrl)) return;
-    final operation = beginTaskOperation(task.bookUrl);
+    beginTaskActivity(task.bookUrl);
     activeTaskUrls.add(task.bookUrl);
     task.status = DownloadTask.statusDownloading;
     task.successCount = 0;
@@ -264,7 +264,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
     } finally {
       activeTaskUrls.remove(task.bookUrl);
-      completeTaskOperation(task.bookUrl, operation);
+      completeTaskActivity(task.bookUrl);
     }
     update();
   }
