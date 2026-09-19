@@ -41,7 +41,7 @@ class DownloadService extends DownloadBase
       update();
     }
 
-    await waitForTaskOperation(bookUrl);
+    await waitForTaskIdle(bookUrl);
     return _DownloadSourceSwitchLease(
       owner: this,
       bookUrl: bookUrl,
