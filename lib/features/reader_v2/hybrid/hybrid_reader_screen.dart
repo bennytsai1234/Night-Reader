@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -118,7 +119,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   int _lastLayoutGeneration = 0;
   int _runtimeLocationRevision = 0;
   ReaderV2Location? _lastReportedLocation;
-  String? _lastLoggedErrorMessage;
   bool _initialRestoreCompleted = false;
   bool _dragging = false;
   bool _sawUserScroll = false;
@@ -172,7 +172,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
-      _lastLoggedErrorMessage = null;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
       _handleEpochRebuild(oldWidget.bookUrl);
       _registerRuntime();
@@ -265,8 +264,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     required bool Function() isCurrent,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
-    _initialRestoreCompleted = false;
-    _scheduleRebuild();
     final binding = _pump;
     final chapter = location.chapterIndex
         .clamp(0, widget.runtime.chapterCount - 1)
@@ -451,7 +448,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         // completion waits for this optional cache.
         unawaited(_warmDiskMetricsForChapter(blocks));
         return blocks;
-      } catch (_) {
+      } on ReaderV2ChapterRepositoryException {
+        if (anchor) rethrow;
         return null;
       }
     }();
@@ -854,7 +852,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
 
     return <String, Object?>{
-      'phase': runtimeState.phase.name,
+      'lifecycle': runtimeState.lifecycle.name,
       'scrollOffset': finiteOrNull(offset ?? double.nan),
       'viewportHeight': finiteOrNull(viewportHeight),
       'viewportBottom': hasViewport
@@ -911,15 +909,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _onRuntimeChanged() {
     if (!mounted) return;
     final state = widget.runtime.state;
-    final errorMessage = state.errorMessage;
-    if (state.phase != ReaderV2Phase.error) {
-      _lastLoggedErrorMessage = null;
-    } else if (errorMessage != null &&
-        errorMessage.isNotEmpty &&
-        errorMessage != _lastLoggedErrorMessage) {
-      _lastLoggedErrorMessage = errorMessage;
-      debugPrint('ReaderV2 operation failed: $errorMessage');
-    }
     final layoutChanged = _lastLayoutGeneration != state.layoutGeneration;
     if (layoutChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
@@ -944,7 +933,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         );
       }
     }
-    if (state.phase == ReaderV2Phase.ready && _initialRestoreCompleted) {
+    if (state.hasStableWorld && _initialRestoreCompleted) {
       _demandOwner = null;
       _reconcileVisibleWindow();
       _publishProgress();
@@ -953,8 +942,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _restoreAttachedRuntime() {
+  void _restoreAttachedRuntime() {
     final runtime = widget.runtime;
-    if (runtime.state.phase == ReaderV2Phase.ready) {
+    if (runtime.state.hasStableWorld) {
       unawaited(runtime.restoreFromLocation(runtime.state.visibleLocation));
     }
   }
@@ -1247,7 +1237,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     // progress. DocumentIndex intentionally contains only the admitted window.
     final runtimeLocationIsPublished =
         _initialRestoreCompleted &&
-        widget.runtime.state.phase == ReaderV2Phase.ready;
+        widget.runtime.state.hasStableWorld;
     final location = runtimeLocationIsPublished
         ? widget.runtime.state.visibleLocation
         : _captureVisibleLocation();
@@ -1301,7 +1291,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         mounted &&
         identical(widget.runtime, runtime) &&
         !runtime.disposed &&
-        runtime.state.phase == ReaderV2Phase.ready &&
+        runtime.state.hasStableWorld &&
         identical(_pump, binding) &&
         revision == _runtimeLocationRevision &&
         identical(runtime.stateMachine.currentOperation, operation) &&
@@ -1769,8 +1759,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   Widget _buildLoading(ReaderV2State state) {
+    final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;
+    final message = unavailable
+        ? _friendlyErrorMessage
+        : '正在準備閱讀內容';
     final Widget child;
-    if (state.phase == ReaderV2Phase.error) {
+    if (unavailable) {
       child = Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -1782,7 +1776,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              _friendlyErrorMessage,
+              message,
               style: TextStyle(color: widget.textColor, fontSize: 14),
               textAlign: TextAlign.center,
             ),
@@ -1803,7 +1797,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            _phaseMessage(state.phase),
+            message,
             style: TextStyle(
               color: widget.textColor.withValues(alpha: 0.72),
               fontSize: 13,
@@ -1819,28 +1813,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         child: Semantics(
           liveRegion: true,
           excludeSemantics: true,
-          label: state.phase == ReaderV2Phase.error
-              ? _friendlyErrorMessage
-              : _phaseMessage(state.phase),
+          label: message,
           child: Center(child: child),
         ),
       ),
     );
   }
 
-  String _phaseMessage(ReaderV2Phase phase) {
-    return switch (phase) {
-      ReaderV2Phase.cold => '正在準備閱讀內容',
-      ReaderV2Phase.loading => '正在載入章節',
-      ReaderV2Phase.layingOut => '正在整理版面',
-      ReaderV2Phase.restoring => '正在恢復閱讀位置',
-      ReaderV2Phase.switchingMode => '正在套用閱讀設定',
-      ReaderV2Phase.ready => '',
-      ReaderV2Phase.error => _friendlyErrorMessage,
-    };
-  }
-
-
+  @override
+  Widget build(BuildContext context) {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
