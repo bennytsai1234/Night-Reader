@@ -490,7 +490,7 @@ class BookDetailProvider extends ChangeNotifier {
         targetChapterIndex: oldBook.chapterIndex,
         targetChapterTitle: oldBook.durChapterTitle,
       );
-      await _sourceSwitchService.persistSwitch(
+      await _sourceSwitchService.commitSwitch(
         oldBook,
         prepared,
         bookDao: _bookDao,
