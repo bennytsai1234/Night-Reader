@@ -12,7 +12,6 @@ class ReaderV2StateMachine {
   ReaderV2OperationToken? _currentOperation;
 
   ReaderV2OperationToken? get currentOperation => _currentOperation;
-  bool get operationInProgress => _currentOperation != null;
   ReaderV2Location? get pendingLocation => _currentOperation?.targetLocation;
 
   ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
