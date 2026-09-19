@@ -13,25 +13,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
-final class LayoutPumpTaskStats {
-  const LayoutPumpTaskStats({
-    required this.elapsed,
-    required this.predicted,
-    required this.charCount,
-    required this.groupBlockCount,
-    required this.layoutPasses,
-    required this.state,
-  });
-
-  final Duration elapsed;
-  final Duration predicted;
-  final int charCount;
-  final int groupBlockCount;
-  final double layoutPasses;
-  final PumpState state;
-}
-
-final class LayoutPump implements HybridLayoutPump {
+final class LayoutPump implements HybridLayoutPump {final class LayoutPump implements HybridLayoutPump {
   @visibleForTesting
   static void Function()? debugOnIntermediateParagraphDisposed;
 
@@ -87,20 +69,17 @@ final class LayoutPump implements HybridLayoutPump {
     required MeasurementNamespace namespace,
     BudgetGovernor? governor,
     LayoutCostModel? costModel,
-    void Function(LayoutPumpTaskStats stats)? onTaskCompleted,
   }) : _paragraphCache = paragraphCache,
        _measurementStore = measurementStore,
        _namespace = namespace,
        _governor = governor ?? BudgetGovernor(),
-       _costModel = costModel ?? LayoutCostModel(),
-       _onTaskCompleted = onTaskCompleted;
+       _costModel = costModel ?? LayoutCostModel();
 
   final ParagraphCache _paragraphCache;
   final HybridMeasurementStore _measurementStore;
   final MeasurementNamespace _namespace;
   final BudgetGovernor _governor;
   final LayoutCostModel _costModel;
-  final void Function(LayoutPumpTaskStats stats)? _onTaskCompleted;
   final Queue<_PumpWork> _queue = Queue<_PumpWork>();
   final StreamController<BlockReady> _completed =
       StreamController<BlockReady>.broadcast(sync: true);
@@ -275,7 +254,6 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   void _layoutTask(LayoutTask task) {
-    final predicted = _costModel.predict(task);
     final started = Stopwatch()..start();
     final layoutPasses = _costModel.layoutPassesFor(task);
     final paragraph = _buildParagraph(task);
@@ -299,17 +277,7 @@ final class LayoutPump implements HybridLayoutPump {
       elapsed: elapsed,
       layoutPasses: layoutPasses,
     );
-    _onTaskCompleted?.call(
-      LayoutPumpTaskStats(
-        elapsed: elapsed,
-        predicted: predicted,
-        charCount: task.layoutText.length,
-        groupBlockCount: groupBlocks.length,
-        layoutPasses: layoutPasses,
-        state: _state,
-      ),
-    );
-    for (var i = 0; i < keys.length; i += 1) {
+    for (var i = 0; i < keys.length; i += 1) {    for (var i = 0; i < keys.length; i += 1) {
       _completed.add(
         BlockReady(key: keys[i], epoch: task.epoch, metrics: metricsList[i]),
       );
