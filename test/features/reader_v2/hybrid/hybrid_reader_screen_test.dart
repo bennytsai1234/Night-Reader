@@ -293,7 +293,7 @@ void main() {
       expect(pending['residentLastChapter'], 11);
       target.complete(chapters[9].content);
       await completeWithFrames(tester, jump);
-      expect(runtime.state.phase, ReaderV2Phase.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.state.visibleLocation.chapterIndex, 9);
       expect(snapshot(tester)['missingParagraphKeys'], isEmpty);
     },
@@ -316,7 +316,7 @@ void main() {
     await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 1);
     await completeWithFrames(tester, runtime.openBook());
     expect(background.isCompleted, false);
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     final visible = snapshot(tester);
     expect(visible['initialRestoreCompleted'], true);
     expect(visible['missingParagraphKeys'], isEmpty);
@@ -451,7 +451,7 @@ void main() {
     expect(controller.ensureCharRangeVisible, isNotNull);
 
     await openAndSettle(tester, runtime);
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     expect(find.byType(HybridScrollView), findsOneWidget);
 
     // capture 契約：可從畫面反推出合法的 ReaderV2Location。
@@ -479,7 +479,7 @@ void main() {
 
     await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 4);
     await openAndSettle(tester, runtime);
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
 
     final elements = find.byType(CachedBlockWidget).evaluate().toList();
     expect(elements, isNotEmpty);
@@ -551,14 +551,19 @@ void main() {
     expect(snapshot.chapterSegment, inInclusiveRange(0, 9));
   });
 
-  testWidgets('首次 restore 後 operation 狀態不再覆蓋閱讀內容', (tester) async {
-    final runtime = makeRuntime(List.generate(2, chapter));
+  testWidgets('目標正文 unavailable 不會摧毀既有 Hybrid world', (tester) async {
+    final chapters = List.generate(2, chapter);
+    final runtime = makeRuntime(
+      chapters,
+      contentLoader: (index, chapter) async {
+        if (index == 1) {
+          throw ReaderV2ChapterRepositoryException('目標章節暫時無法取得');
+        }
+        return chapter.content;
+      },
+    );
     final controller = ReaderV2ViewportController();
     var contentTaps = 0;
-    final logMessages = <String?>[];
-    final previousDebugPrint = debugPrint;
-    debugPrint = (message, {wrapWidth}) => logMessages.add(message);
-    addTearDown(() => debugPrint = previousDebugPrint);
     addTearDown(runtime.dispose);
 
     await pumpScreen(
@@ -569,44 +574,30 @@ void main() {
     );
     await openAndSettle(tester, runtime);
     final viewportSize = tester.getSize(find.byType(HybridScrollView));
+    final before =
+        (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                .debugSnapshot()
+            as Map;
 
-    final token = runtime.beginJumpOperation();
-    await tester.pump();
+    await runtime.jumpToChapter(1);
     await tester.pump();
 
-    expect(find.text('正在整理版面'), findsNothing);
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.visibleLocation.chapterIndex, 0);
+    expect(runtime.pendingLocation, isNull);
     expect(find.byType(HybridScrollView), findsOneWidget);
     expect(tester.getSize(find.byType(HybridScrollView)), viewportSize);
+    final after =
+        (tester.state(find.byType(HybridReaderScreen)) as dynamic)
+                .debugSnapshot()
+            as Map;
+    expect(after['documentIndexResetGeneration'], before['documentIndexResetGeneration']);
+    expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsNothing);
+    expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+
     await tester.tapAt(tester.getCenter(find.byType(HybridScrollView)));
     await tester.pump();
     expect(contentTaps, 1);
-
-    runtime.failOperation(token, StateError('internal restore details'));
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsNothing);
-    expect(find.textContaining('internal restore details'), findsNothing);
-    expect(find.byType(HybridScrollView), findsOneWidget);
-    int matchingErrorLogs() => logMessages
-        .whereType<String>()
-        .where((message) => message.contains('internal restore details'))
-        .length;
-    expect(matchingErrorLogs(), 1);
-
-    runtime.failOperation(token, StateError('internal restore details'));
-    await tester.pump();
-    await tester.pump();
-    expect(matchingErrorLogs(), 1);
-
-    final nextToken = runtime.beginJumpOperation();
-    await tester.pump();
-    await tester.pump();
-    runtime.failOperation(nextToken, StateError('internal restore details'));
-    await tester.pump();
-    await tester.pump();
-    expect(matchingErrorLogs(), 2, reason: '新的 operation 進入 error 時仍須留下技術診斷');
-    debugPrint = previousDebugPrint;
   });
 
   testWidgets('hybrid 只在已確認書首書尾時發出邊界通知', (tester) async {
@@ -705,7 +696,7 @@ void main() {
     await completeWithFrames(tester, jump);
     await tester.pumpAndSettle();
 
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.state.visibleLocation.chapterIndex, 1);
   });
 
@@ -787,7 +778,7 @@ void main() {
     await completeWithFrames(tester, runtime.jumpToChapter(0));
     await tester.pumpAndSettle();
 
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.state.visibleLocation.chapterIndex, 0);
     final captured = runtime.captureVisibleLocation(notifyIfChanged: false);
     expect(captured, isNotNull);
@@ -818,7 +809,7 @@ void main() {
     await completeWithFrames(tester, runtime.jumpToChapter(0));
     await tester.pumpAndSettle();
 
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     expect(
       runtime.state.visibleLocation.chapterIndex,
       0,
@@ -1046,7 +1037,7 @@ void main() {
               as Map;
       expect((snapshot['loadedContentHashes'] as Map)[0], hash);
       expect(snapshot['missingParagraphKeys'], isEmpty);
-      expect(newRuntime.state.phase, ReaderV2Phase.ready);
+      expect(newRuntime.state.hasStableWorld, isTrue);
       expect(tester.takeException(), isNull);
     },
   );
