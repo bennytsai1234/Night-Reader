@@ -381,7 +381,7 @@ void main() {
   });
 
   test(
-    'hybrid reload branch passes the remapped location to viewport restore',
+    'reload passes the remapped semantic location to the viewport owner',
     () async {
       var convertType = 1;
       final runtime = await makeRuntime(convertType: () => convertType);
