@@ -86,9 +86,9 @@ void main() {
 
   test('quiescence 只在 active operation 真正完成後成立', () async {
     final scheduler = _TestDownloadScheduler();
-    final operation = scheduler.beginTaskOperation('book/active');
+    scheduler.beginTaskActivity('book/active');
     var quiesced = false;
-    final wait = scheduler.waitForTaskOperation('book/active').then((_) {
+    final wait = scheduler.waitForTaskIdle('book/active').then((_) {
       quiesced = true;
     });
 
@@ -96,7 +96,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(quiesced, isFalse);
 
-    scheduler.completeTaskOperation('book/active', operation);
+    scheduler.completeTaskActivity('book/active');
     await wait;
     expect(quiesced, isTrue);
     scheduler.dispose();
