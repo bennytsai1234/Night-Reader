@@ -484,7 +484,7 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
     final oldBook = _book.copyWith();
     try {
-      final resolution = await _sourceSwitchService.prepareSwitch(
+      final prepared = await _sourceSwitchService.prepareSwitch(
         oldBook,
         newSource,
         targetChapterIndex: oldBook.chapterIndex,
@@ -492,14 +492,14 @@ class BookDetailProvider extends ChangeNotifier {
       );
       await _sourceSwitchService.persistSwitch(
         oldBook,
-        resolution,
+        prepared,
         bookDao: _bookDao,
         chapterDao: _chapterDao,
       );
 
-      _book = resolution.migratedBook;
-      _currentSource = resolution.source;
-      _allChapters = resolution.chapters;
+      _book = prepared.migratedBook;
+      _currentSource = prepared.source;
+      _allChapters = prepared.chapters;
       _isInBookshelf = _book.isInBookshelf;
       _sourceIssueMessage = null;
       try {
