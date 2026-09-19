@@ -32,10 +32,11 @@ class ReaderV2ViewportBridge {
     _viewportRestore = restore;
   }
 
-  void unregisterViewportRestore(Object owner) {
-    if (!identical(_viewportRestoreOwner, owner)) return;
+  bool unregisterViewportRestore(Object owner) {
+    if (!identical(_viewportRestoreOwner, owner)) return false;
     _viewportRestoreOwner = null;
     _viewportRestore = null;
+    return true;
   }
 
   ReaderV2Location? captureVisibleLocation({
