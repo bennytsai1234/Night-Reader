@@ -138,22 +138,24 @@ class ReaderV2StateMachine {
     ReaderV2LayoutSpec? layoutSpec,
   }) {
     final previous = _currentOperation;
-    final carriesPendingLayout =
-        previous != null && previous.layoutGeneration > state.layoutGeneration;
-    final generation =
-        layoutGeneration ??
-        (carriesPendingLayout ? previous.layoutGeneration : state.layoutGeneration);
+    final inheritedGeneration =
+        previous != null && previous.layoutGeneration > state.layoutGeneration
+        ? previous.layoutGeneration
+        : state.layoutGeneration;
+    final generation = layoutGeneration ?? inheritedGeneration;
     if (generation < state.layoutGeneration ||
         generation > state.layoutGeneration + 1) {
       throw StateError(
         'Operation layout generation is outside the active transaction.',
       );
     }
-    final stagedSpec =
-        layoutSpec ??
-        (carriesPendingLayout && generation == previous.layoutGeneration
-            ? previous.layoutSpec
-            : null);
+    ReaderV2LayoutSpec? stagedSpec = layoutSpec;
+    if (stagedSpec == null &&
+        previous != null &&
+        previous.layoutGeneration > state.layoutGeneration &&
+        generation == previous.layoutGeneration) {
+      stagedSpec = previous.layoutSpec;
+    }
     final token = ReaderV2OperationToken(
       targetLocation:
           targetLocation ?? previous?.targetLocation ?? state.visibleLocation,
