@@ -158,13 +158,45 @@ class ReaderV2ChapterRepository {
   /// those coordinates to this generation.
   int get contentGeneration => _contentCacheGeneration;
 
-  void clearContentCache() {
+  /// Starts a new semantic-content generation without destroying the last
+  /// committed cache if the replacement cannot be materialized.
+  ///
+  /// The generation remains monotonic on rollback so work from the abandoned
+  /// refresh can never become current later.
+  Future<ReaderV2Content> reloadContent(int chapterIndex) async {
+    await ensureChapters();
+    final safeIndex = _normalizeChapterIndex(chapterIndex);
+    final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
+    final previousSource = _source;
+    final previousRules = _enabledRules;
+
     _contentCacheGeneration += 1;
+    final refreshGeneration = _contentCacheGeneration;
     _source = null;
     _contentCache.clear();
     _contentInFlight.clear();
     _enabledRules = null;
     _enabledRulesInFlight = null;
+
+    var materialized = false;
+    try {
+      final content = await loadContent(safeIndex);
+      materialized = true;
+      return content;
+    } finally {
+      if (!materialized && _contentCacheGeneration == refreshGeneration) {
+        // Invalidate every async task started by the failed refresh before
+        // restoring the last committed semantic world.
+        _contentCacheGeneration += 1;
+        _source = previousSource;
+        _contentCache
+          ..clear()
+          ..addAll(previousCache);
+        _contentInFlight.clear();
+        _enabledRules = previousRules;
+        _enabledRulesInFlight = null;
+      }
+    }
   }
 
   Future<ReaderV2Content> _loadContentUncached(
