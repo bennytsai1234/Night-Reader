@@ -155,8 +155,6 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Runtime-owned methods --
 
-  // -- Runtime-owned methods --
-
   String? takeUserNotice() {
     final notice = _pendingUserNotice;
     _pendingUserNotice = null;
@@ -242,7 +240,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   bool isCurrentOperationToken(ReaderV2OperationToken token) {
-  bool isCurrentOperationToken(ReaderV2OperationToken token) {
     return !disposed && stateMachine.isCurrent(token);
   }
 
@@ -296,7 +293,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     throw StateError(message);
   }
 
-  void updateVisibleLocation(ReaderV2Location location, {bool notify = true}) {
   void updateVisibleLocation(ReaderV2Location location, {bool notify = true}) {
     if (disposed) return;
     stateMachine.updateVisibleLocation(location);
@@ -448,8 +444,6 @@ class ReaderV2Runtime extends ChangeNotifier {
     return completed;
   }
 
-  @override
-  void dispose() {
   @override
   void dispose() {
     disposed = true;
