@@ -356,7 +356,7 @@ void main() {
         targetChapterTitle: '第6章',
       );
 
-      await service.persistSwitch(
+      await service.commitSwitch(
         oldBook,
         resolution,
         bookDao: db.bookDao,
@@ -464,7 +464,7 @@ void main() {
         targetChapterTitle: '第2章',
       );
 
-      await service.persistSwitch(
+      await service.commitSwitch(
         oldBook,
         resolution,
         bookDao: db.bookDao,
@@ -512,7 +512,7 @@ void main() {
       ''');
 
       expect(
-        () => service.persistSwitch(
+        () => service.commitSwitch(
           oldBook,
           resolution,
           bookDao: db.bookDao,
@@ -568,7 +568,7 @@ void main() {
       ''');
 
       expect(
-        () => service.persistSwitch(
+        () => service.commitSwitch(
           oldBook,
           resolution,
           bookDao: db.bookDao,
