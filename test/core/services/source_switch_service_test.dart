@@ -301,8 +301,8 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      expect(
-        () => service.prepareSwitch(
+      await expectLater(
+        service.prepareSwitch(
           _currentBook(),
           candidate,
           targetChapterIndex: 5,
@@ -324,8 +324,8 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      expect(
-        () => service.prepareSwitch(
+      await expectLater(
+        service.prepareSwitch(
           _currentBook(),
           candidate,
           targetChapterIndex: 5,
@@ -343,8 +343,8 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      expect(
-        () => service.prepareSwitch(_currentBook(), candidate),
+      await expectLater(
+        service.prepareSwitch(_currentBook(), candidate),
         throwsA(
           isA<StateError>().having((e) => e.message, 'message', '找不到對應書源'),
         ),
@@ -660,8 +660,8 @@ void main() {
         END;
       ''');
 
-      expect(
-        () => service.commitSwitch(
+      await expectLater(
+        service.commitSwitch(
           oldBook,
           prepared,
           bookDao: db.bookDao,
@@ -711,8 +711,8 @@ void main() {
         END;
       ''');
 
-      expect(
-        () => service.commitSwitch(
+      await expectLater(
+        service.commitSwitch(
           oldBook,
           resolution,
           bookDao: db.bookDao,
@@ -767,8 +767,8 @@ void main() {
         END;
       ''');
 
-      expect(
-        () => service.commitSwitch(
+      await expectLater(
+        service.commitSwitch(
           oldBook,
           resolution,
           bookDao: db.bookDao,
