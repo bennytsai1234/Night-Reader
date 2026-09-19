@@ -36,7 +36,6 @@ final class HybridScrollView extends StatelessWidget {
     this.horizontalPadding = EdgeInsets.zero,
     this.physics = const HybridScrollPhysics(),
     this.textColor = const Color(0xFF000000),
-    this.onFallbackItemExtent,
   });
 
   /// center sliver 的 key。必須由呼叫端持有並跨 rebuild 穩定——
@@ -55,10 +54,6 @@ final class HybridScrollView extends StatelessWidget {
   /// changes the ballistic trajectory based on paragraph readiness.
   final ScrollPhysics physics;
   final Color textColor;
-
-  /// Passive counter for the framework's total itemExtent callback. Keep this
-  /// layout-path callback allocation-free; it is not a correctness gate.
-  final void Function()? onFallbackItemExtent;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +98,6 @@ final class HybridScrollView extends StatelessWidget {
           index: index,
         );
         if (key == null) {
-          onFallbackItemExtent?.call();
           return _fallbackItemExtent;
         }
         // extent 讀 DocumentIndex 的 admitted metrics，與 Fenwick 座標同源
@@ -116,7 +110,6 @@ final class HybridScrollView extends StatelessWidget {
         // 一致，且 BlockMetrics 保證 height > 0（兩個生產者都有 guard）。
         // 保留是因為 itemExtentBuilder 被框架強制解包，必須是全函式。
         if (extent == null || !extent.isFinite || extent <= 0) {
-          onFallbackItemExtent?.call();
           return _fallbackItemExtent;
         }
         return extent;

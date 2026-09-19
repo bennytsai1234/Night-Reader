@@ -31,9 +31,6 @@ class _FakeRuntime extends Fake implements ReaderV2Runtime {
     ),
     layoutGeneration: 0,
   );
-
-  @override
-  bool moveToNextPage({bool saveSettledProgress = true}) => false;
 }
 
 void main() {

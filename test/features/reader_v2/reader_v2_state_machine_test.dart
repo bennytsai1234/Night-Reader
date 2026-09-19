@@ -2,9 +2,7 @@ import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
-import 'package:night_reader/features/reader_v2/render/reader_v2_render_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_page_window.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state_machine.dart';
 
@@ -98,24 +96,6 @@ void main() {
       expect(machine.state.visibleLocation, visible);
     });
 
-    test('ready position update does not start a new operation', () {
-      final machine = ReaderV2StateMachine(_initialState());
-      final operationBefore = machine.currentOperation;
-
-      machine.updateReadyPosition(
-        visibleLocation: const ReaderV2Location(
-          chapterIndex: 3,
-          charOffset: 12,
-        ),
-        pageWindow: _emptyPageWindow(),
-      );
-
-      expect(machine.currentOperation, same(operationBefore));
-      expect(machine.state.phase, ReaderV2Phase.ready);
-      expect(machine.state.visibleLocation.chapterIndex, 3);
-      expect(machine.state.visibleLocation.charOffset, 12);
-      expect(machine.state.pageWindow, isNotNull);
-    });
   });
 }
 
@@ -147,10 +127,3 @@ ReaderV2LayoutSpec _layoutSpec({double fontSize = 18}) {
   );
 }
 
-ReaderV2PageWindow _emptyPageWindow() {
-  return ReaderV2PageWindow(
-    prev: null,
-    current: ReaderV2RenderPage(lines: const [], chapterIndex: 0),
-    next: null,
-  );
-}

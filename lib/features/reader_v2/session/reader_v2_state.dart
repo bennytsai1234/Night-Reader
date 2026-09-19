@@ -1,8 +1,6 @@
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 import 'reader_v2_location.dart';
-import 'reader_v2_page_window.dart';
-
 enum ReaderV2Phase {
   cold,
   loading,
@@ -20,7 +18,6 @@ class ReaderV2State {
     required this.visibleLocation,
     required this.layoutSpec,
     required this.layoutGeneration,
-    this.pageWindow,
     this.errorMessage,
   });
 
@@ -29,7 +26,6 @@ class ReaderV2State {
   final ReaderV2Location visibleLocation;
   final ReaderV2LayoutSpec layoutSpec;
   final int layoutGeneration;
-  final ReaderV2PageWindow? pageWindow;
   final String? errorMessage;
 
   ReaderV2State copyWith({
@@ -38,8 +34,6 @@ class ReaderV2State {
     ReaderV2Location? visibleLocation,
     ReaderV2LayoutSpec? layoutSpec,
     int? layoutGeneration,
-    ReaderV2PageWindow? pageWindow,
-    bool clearPageWindow = false,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -49,7 +43,6 @@ class ReaderV2State {
       visibleLocation: visibleLocation ?? this.visibleLocation,
       layoutSpec: layoutSpec ?? this.layoutSpec,
       layoutGeneration: layoutGeneration ?? this.layoutGeneration,
-      pageWindow: clearPageWindow ? null : (pageWindow ?? this.pageWindow),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }

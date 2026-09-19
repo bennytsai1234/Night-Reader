@@ -20,13 +20,9 @@ final class AdmissionController extends ChangeNotifier {
   final Map<int, int> _chapterBlockCounts = <int, int>{};
   LayoutEpoch _epoch = LayoutEpoch.initial;
   int _chapterCount = 0;
-  double _latestForwardLead = double.infinity;
-  double _latestBackwardLead = double.infinity;
   bool _notifyScheduled = false;
   bool _disposed = false;
 
-  double get latestForwardLead => _latestForwardLead;
-  double get latestBackwardLead => _latestBackwardLead;
 
   bool get atForwardBookBoundary {
     final chapter = _chapterCount - 1;
@@ -51,8 +47,6 @@ final class AdmissionController extends ChangeNotifier {
     _chapterCount = chapterCount;
     _pending.clear();
     _chapterBlockCounts.clear();
-    _latestForwardLead = double.infinity;
-    _latestBackwardLead = double.infinity;
   }
 
   void registerChapter(ChapterBlocks blocks) {
@@ -180,14 +174,6 @@ final class AdmissionController extends ChangeNotifier {
     final count = _chapterBlockCounts[previousChapter];
     if (previousChapter < 0 || count == null || count <= 0) return null;
     return BlockKey(chapterIndex: previousChapter, blockIndex: count - 1);
-  }
-
-  void updateLead({
-    required double viewportTop,
-    required double viewportBottom,
-  }) {
-    _latestForwardLead = documentIndex.afterExtent - viewportBottom;
-    _latestBackwardLead = documentIndex.beforeExtent + viewportTop;
   }
 
   @override

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert' show jsonEncode;
 import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -10,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/core/config/app_config.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -32,7 +30,6 @@ import 'paragraph/paragraph_cache.dart';
 import 'progress/hybrid_progress.dart';
 import 'pump/budget_governor.dart';
 import 'pump/layout_pump.dart';
-import 'telemetry/hybrid_telemetry.dart';
 import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'view/admission_controller.dart';
@@ -95,7 +92,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     centerKey: const BlockKey(chapterIndex: 0, blockIndex: 0),
   );
   final BudgetGovernor _governor = BudgetGovernor();
-  final HybridTelemetry _telemetry = HybridTelemetry();
   final _HybridCommandQueue _commands = _HybridCommandQueue();
   final HybridScrollPhysics _physics = const HybridScrollPhysics();
   late HybridChapterRepository _chapterRepo;
@@ -128,8 +124,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
-  double? _lastDebugSnapshotOffset;
-  int _fallbackItemExtentCount = 0;
 
   @override
   void initState() {
@@ -154,14 +148,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _registerRuntime() {
-    widget.runtime.registerHybridViewport(this);
     widget.runtime.addListener(_onRuntimeChanged);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
 
   void _unregisterRuntime(ReaderV2Runtime runtime) {
-    runtime.unregisterHybridViewport(this);
     runtime.removeListener(_onRuntimeChanged);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
@@ -197,7 +189,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   void dispose() {
-    _logTelemetrySessionSummary();
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
     WidgetsBinding.instance.removeObserver(this);
@@ -233,7 +224,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       measurementStore: _measurementStore,
       namespace: _namespace,
       governor: _governor,
-      onTaskCompleted: _handleLayoutTaskCompleted,
     );
     _admission.reset(epoch: _epoch, chapterCount: widget.runtime.chapterCount);
     _admission.attach(_pump.completed);
@@ -664,21 +654,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     _setDemandRange(first, last);
     _requestWindow(top, bottom);
-    _updateLeadTelemetry();
-  }
-
-  void _updateLeadTelemetry() {
-    final offset = _effectiveScrollOffset();
-    if (offset == null) return;
-    _admission.updateLead(
-      viewportTop: offset,
-      viewportBottom: offset + _viewportSize.height,
-    );
-    _telemetry.updateRuntimeStats(
-      pumpQueueDepth: _pump.queueDepth,
-      forwardLeadPx: _admission.latestForwardLead,
-      backwardLeadPx: _admission.latestBackwardLead,
-    );
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
@@ -812,10 +787,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  void _handleFallbackItemExtent() {
-    _fallbackItemExtentCount += 1;
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
@@ -829,15 +800,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         ),
       );
     }
-  }
-
-  void _logTelemetrySessionSummary() {
-    final summary = _telemetry.sessionSummary();
-    if ((summary['frames'] as int? ?? 0) == 0) return;
-    summary['fontSize'] = _fingerprint.fontSize;
-    summary['lastLineSpacingCompensation'] =
-        _fingerprint.lastLineSpacingCompensation;
-    AppLog.i('ReaderV2 telemetry session: ${jsonEncode(summary)}');
   }
 
   @visibleForTesting
@@ -861,23 +823,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
     }
 
-    String scrollDirection = 'idle';
-    final previousOffset = _lastDebugSnapshotOffset;
-    if (offset != null && previousOffset != null) {
-      final delta = offset - previousOffset;
-      if (delta > 0.5) {
-        scrollDirection = 'forward';
-      } else if (delta < -0.5) {
-        scrollDirection = 'backward';
-      }
-    }
-    _lastDebugSnapshotOffset = offset;
-
     final captured = _captureVisibleLocation();
     final runtimeState = widget.runtime.state;
-    final telemetry = _telemetry.snapshot;
-    _telemetry.recordPumpQueueDepth(_pump.queueDepth);
-
     Map<String, int> keyJson(BlockKey key) => <String, int>{
       'chapterIndex': key.chapterIndex,
       'blockIndex': key.blockIndex,
@@ -907,19 +854,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
 
     return <String, Object?>{
-      'capturedAtMs': DateTime.now().millisecondsSinceEpoch,
-      'displayRefreshRate': ui.PlatformDispatcher.instance.views.isEmpty
-          ? null
-          : finiteOrNull(
-              ui.PlatformDispatcher.instance.views.first.display.refreshRate,
-            ),
       'phase': runtimeState.phase.name,
       'scrollOffset': finiteOrNull(offset ?? double.nan),
       'viewportHeight': finiteOrNull(viewportHeight),
       'viewportBottom': hasViewport
           ? finiteOrNull(offset + viewportHeight)
           : null,
-      'scrollDirection': scrollDirection,
       'isScrolling': position?.isScrollingNotifier.value ?? false,
       'dragging': _dragging,
       'initialRestoreCompleted': _initialRestoreCompleted,
@@ -960,47 +900,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       'residentLastChapter': _chapterRepo.residentLast,
       'pumpQueueDepth': _pump.queueDepth,
       'discardedLayoutTasks': _pump.discardedWorkCount,
-      'fallbackItemExtentHits': _fallbackItemExtentCount,
-      'forwardLeadPx': finiteOrNull(_admission.latestForwardLead),
-      'backwardLeadPx': finiteOrNull(_admission.latestBackwardLead),
-      'rollingFrameP50Micros': telemetry.frameP50Micros,
-      'rollingFrameP95Micros': telemetry.frameP95Micros,
-      'rollingFrameP99Micros': telemetry.frameP99Micros,
-      'rollingJankOver8ms': telemetry.jankOver8ms,
-      'rollingJankOver16ms': telemetry.jankOver16ms,
-      'rollingJankOver33ms': telemetry.jankOver33ms,
-      'worstFrameMicros': telemetry.worstFrameMicros,
-      'consecutiveMissedFrames': telemetry.consecutiveMissedFrames,
-      'maxConsecutiveMissedFrames': telemetry.maxConsecutiveMissedFrames,
-      'layoutTaskCount': telemetry.layoutTaskCount,
-      'layoutTaskP99Micros': telemetry.layoutTaskP99Micros,
-      'worstLayoutTaskMicros': telemetry.worstLayoutTaskMicros,
-      'worstLayoutTaskPredictedMicros':
-          telemetry.worstLayoutTaskPredictedMicros,
-      'worstLayoutTaskCharCount': telemetry.worstLayoutTaskCharCount,
-      'layoutTasksOver8ms': telemetry.layoutTasksOver8ms,
-      'vsyncOverheadP99Micros': telemetry.vsyncOverheadP99Micros,
-      'buildP99Micros': telemetry.buildP99Micros,
-      'rasterP99Micros': telemetry.rasterP99Micros,
-      'worstVsyncOverheadMicros': telemetry.worstVsyncOverheadMicros,
-      'worstBuildMicros': telemetry.worstBuildMicros,
-      'worstRasterMicros': telemetry.worstRasterMicros,
     };
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
     if (!mounted || timings.isEmpty) return;
-    widget.runtime.recordFrameTimings(timings);
     _governor.recordFrameTimings(timings);
-    _telemetry.recordFrameTimings(timings);
-  }
-
-  void _handleLayoutTaskCompleted(LayoutPumpTaskStats stats) {
-    _telemetry.recordLayoutTask(
-      elapsedMicros: stats.elapsed.inMicroseconds.toDouble(),
-      predictedMicros: stats.predicted.inMicroseconds.toDouble(),
-      charCount: stats.charCount,
-    );
   }
 
   void _onRuntimeChanged() {
@@ -1761,7 +1666,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!_warmedChapters.add(warmKey)) return;
     try {
       final cache = await _obtainDiskCache();
-      final count = await cache.warmIntoStore(
+      await cache.warmIntoStore(
         bookUrl: bookUrl,
         namespace: namespace,
         chapterLayoutIdentities: {blocks.chapterIndex: blocks.layoutIdentity},
@@ -1774,9 +1679,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           }
         },
       );
-      if (mounted && identical(binding, _pump)) {
-        _telemetry.recordDiskMetricsHit(count > 0);
-      }
     } catch (_) {}
   }
 
@@ -2040,7 +1942,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               right: state.layoutSpec.style.paddingRight,
             ),
             physics: _physics,
-            onFallbackItemExtent: _handleFallbackItemExtent,
           ),
         );
         final readerStack = Stack(

@@ -11,7 +11,6 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
@@ -77,10 +76,9 @@ void main() {
       contentDao: contentDao,
       currentChineseConvert: convertType,
     );
-    return ReaderV2Runtime(
+    final runtime = ReaderV2Runtime(
       book: book,
       repository: repository,
-      layoutEngine: ReaderV2LayoutEngine(),
       progressController: ReaderV2ProgressController(
         book: book,
         repository: repository,
@@ -102,6 +100,8 @@ void main() {
       ),
       initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     );
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    return runtime;
   }
 
   test('semantic mapper maps an expanded code point after the mapped rune', () {
@@ -381,7 +381,7 @@ void main() {
   });
 
   test(
-    'hybrid reload branch passes the remapped location to viewport restore',
+    'reload passes the remapped semantic location to the viewport owner',
     () async {
       var convertType = 1;
       final runtime = await makeRuntime(convertType: () => convertType);
@@ -398,14 +398,12 @@ void main() {
 
       final owner = Object();
       ReaderV2Location? restored;
-      runtime.registerHybridViewport(owner);
       runtime.registerViewportRestore(owner, (location) async {
         restored = location;
         return true;
       });
       addTearDown(() {
         runtime.unregisterViewportRestore(owner);
-        runtime.unregisterHybridViewport(owner);
       });
 
       convertType = 2;
