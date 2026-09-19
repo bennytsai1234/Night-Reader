@@ -130,7 +130,7 @@ void main() {
     );
   }
 
-  PreparedSourceSwitch resolutionFor(
+  PreparedSourceSwitch preparedFor(
     SearchBook sourceCandidate,
     ReaderV2Location location,
   ) {
@@ -291,7 +291,7 @@ void main() {
     await database.bookDao.upsert(book);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
+      prepared: preparedFor(sourceCandidate, location),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     final outcome = await harness.state.debugSelectSourceForTesting(
@@ -335,7 +335,7 @@ void main() {
     await database.bookDao.upsert(book);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, flushedLocation),
+      prepared: preparedFor(sourceCandidate, flushedLocation),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(initialLocation);
@@ -376,7 +376,7 @@ void main() {
     );
     addTearDown(subscription.cancel);
     final fake = FakeReaderV2SourceSwitchService(
-      resolveError: StateError('resolve failure sentinel'),
+      prepareError: StateError('prepare failure sentinel'),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(location);
@@ -387,7 +387,7 @@ void main() {
     final stored = await readBook(book.bookUrl);
     final after = harness.runtime.state.visibleLocation;
     expect(outcome.success, isFalse);
-    expect(outcome.message, contains('resolve failure sentinel'));
+    expect(outcome.message, contains('prepare failure sentinel'));
     expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 0);
     expect(find.byType(ReaderV2Page), findsOneWidget);
@@ -433,7 +433,7 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
+      prepared: preparedFor(sourceCandidate, location),
       persistError: StateError('persist failure sentinel'),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
@@ -486,8 +486,8 @@ void main() {
     GetIt.instance.registerSingleton<BookDao>(blockingDao);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, flushedLocation),
-      resolveDelay: const Duration(milliseconds: 100),
+      prepared: preparedFor(sourceCandidate, flushedLocation),
+      prepareDelay: const Duration(milliseconds: 100),
       persistToDatabase: true,
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
@@ -499,7 +499,7 @@ void main() {
     await pumpUntil(
       tester,
       () => fake.prepareCalls == 1,
-      description: 'resolve delay',
+      description: 'prepare delay',
     );
     blockingDao.blockNextProgressWrite = true;
     harness.runtime.progressController.schedule(lateLocation);
@@ -561,8 +561,8 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
-      resolveDelay: const Duration(milliseconds: 1),
+      prepared: preparedFor(sourceCandidate, location),
+      prepareDelay: const Duration(milliseconds: 1),
       persistDelay: const Duration(milliseconds: 1),
       persistToDatabase: true,
     );
@@ -611,8 +611,8 @@ void main() {
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
     final fake = FakeReaderV2SourceSwitchService(
-      resolution: resolutionFor(sourceCandidate, location),
-      resolveDelay: const Duration(milliseconds: 100),
+      prepared: preparedFor(sourceCandidate, location),
+      prepareDelay: const Duration(milliseconds: 100),
       persistToDatabase: true,
     );
     final harness = await pumpPageOverSentinel(
@@ -626,7 +626,7 @@ void main() {
     await pumpUntil(
       tester,
       () => fake.prepareCalls == 1,
-      description: 'return race resolve',
+      description: 'return race prepare',
     );
     Navigator.of(tester.element(find.byType(ReaderV2Page))).pop();
     await tester.pump();
