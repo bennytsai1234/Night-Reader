@@ -27,7 +27,8 @@ abstract class DownloadBase extends ChangeNotifier {
   bool isBookshelfRefreshing = false;
   final Set<String> activeTaskUrls = <String>{};
   final Set<String> retiringTaskUrls = <String>{};
-  final Map<String, Completer<void>> _activeTaskOperations =
+  final Map<String, int> _taskActivityCounts = <String, int>{};
+  final Map<String, Completer<void>> _taskIdleSignals =
       <String, Completer<void>>{};
   final Map<String, Completer<void>> _retirementSignals =
       <String, Completer<void>>{};
@@ -72,28 +73,31 @@ abstract class DownloadBase extends ChangeNotifier {
     _retirementSignals.remove(bookUrl);
   }
 
-  Completer<void> beginTaskOperation(String bookUrl) {
-    final existing = _activeTaskOperations[bookUrl];
-    if (existing != null && !existing.isCompleted) {
-      throw StateError('download task already active: $bookUrl');
+  void beginTaskActivity(String bookUrl) {
+    final count = _taskActivityCounts[bookUrl] ?? 0;
+    if (count == 0) {
+      _taskIdleSignals[bookUrl] = Completer<void>();
     }
-    final operation = Completer<void>();
-    _activeTaskOperations[bookUrl] = operation;
-    return operation;
+    _taskActivityCounts[bookUrl] = count + 1;
   }
 
-  void completeTaskOperation(String bookUrl, Completer<void> operation) {
-    if (!identical(_activeTaskOperations[bookUrl], operation)) return;
-    _activeTaskOperations.remove(bookUrl);
-    if (!operation.isCompleted) {
-      operation.complete();
+  void completeTaskActivity(String bookUrl) {
+    final count = _taskActivityCounts[bookUrl] ?? 0;
+    if (count <= 1) {
+      _taskActivityCounts.remove(bookUrl);
+      final signal = _taskIdleSignals.remove(bookUrl);
+      if (signal != null && !signal.isCompleted) {
+        signal.complete();
+      }
+      return;
     }
+    _taskActivityCounts[bookUrl] = count - 1;
   }
 
-  Future<void> waitForTaskOperation(String bookUrl) async {
-    final operation = _activeTaskOperations[bookUrl];
-    if (operation != null) {
-      await operation.future;
+  Future<void> waitForTaskIdle(String bookUrl) async {
+    final signal = _taskIdleSignals[bookUrl];
+    if (signal != null) {
+      await signal.future;
     }
   }
 
