@@ -242,49 +242,50 @@ class SourceSwitchService {
     try {
       await db.transaction(() async {
         await operationLease?.retireInTransaction(db);
-      await chaptersDao.deleteByBook(migratedBook.bookUrl);
-      await books.upsert(migratedBook);
-      await chaptersDao.insertChapters(prepared.chapters);
 
-      final bookmarks = await bookmarkDao.getByBook(oldBook.bookUrl);
-      for (final bookmark in bookmarks) {
-        final alignedIndex = alignChapterIndex(
-          oldIndex: bookmark.chapterIndex,
-          oldTitle: bookmark.chapterName,
-          oldTotalCount: oldBook.totalChapterNum,
-          newChapters: prepared.chapters,
-        );
-        final alignedChapter = prepared.chapters[alignedIndex];
-        await bookmarkDao.upsert(
-          bookmark.copyWith(
+        await chaptersDao.deleteByBook(migratedBook.bookUrl);
+        await books.upsert(migratedBook);
+        await chaptersDao.insertChapters(prepared.chapters);
+
+        final bookmarks = await bookmarkDao.getByBook(oldBook.bookUrl);
+        for (final bookmark in bookmarks) {
+          final alignedIndex = alignChapterIndex(
+            oldIndex: bookmark.chapterIndex,
+            oldTitle: bookmark.chapterName,
+            oldTotalCount: oldBook.totalChapterNum,
+            newChapters: prepared.chapters,
+          );
+          final alignedChapter = prepared.chapters[alignedIndex];
+          await bookmarkDao.upsert(
+            bookmark.copyWith(
+              bookUrl: migratedBook.bookUrl,
+              chapterIndex: alignedIndex,
+              chapterName: alignedChapter.title,
+              // Bookmark.chapterPos is a UTF-16 scalar in the old source body.
+              // It has no authority in another source without a content anchor.
+              chapterPos: 0,
+            ),
+          );
+        }
+
+        final targetChapter = prepared.targetChapter;
+        await contentDao.saveContent(
+          contentKey: ReaderChapterContentDao.contentKey(
+            origin: migratedBook.origin,
             bookUrl: migratedBook.bookUrl,
-            chapterIndex: alignedIndex,
-            chapterName: alignedChapter.title,
-            // Bookmark.chapterPos is a UTF-16 scalar in the old source body.
-            // It has no authority in another source without a content anchor.
-            chapterPos: 0,
+            chapterUrl: targetChapter.url,
           ),
-        );
-      }
-
-      final targetChapter = prepared.targetChapter;
-      await contentDao.saveContent(
-        contentKey: ReaderChapterContentDao.contentKey(
           origin: migratedBook.origin,
           bookUrl: migratedBook.bookUrl,
           chapterUrl: targetChapter.url,
-        ),
-        origin: migratedBook.origin,
-        bookUrl: migratedBook.bookUrl,
-        chapterUrl: targetChapter.url,
-        chapterIndex: targetChapter.index,
-        content: prepared.validatedContent,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
+          chapterIndex: targetChapter.index,
+          content: prepared.validatedContent,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
 
-      if (sourceIdentityChanged) {
-        await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);
-      }
+        if (sourceIdentityChanged) {
+          await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);
+        }
 
         if (migratedBook.bookUrl != oldBook.bookUrl) {
           await chaptersDao.deleteByBook(oldBook.bookUrl);
@@ -298,6 +299,8 @@ class SourceSwitchService {
 
     operationLease?.committed();
 
+    // Cover files are derived storage, not part of database-world validity.
+    // Retire them only after the authoritative handoff has committed.
     final retireAssets = _assetRetirer;
     if (sourceIdentityChanged && retireAssets != null) {
       try {
@@ -326,5 +329,4 @@ class SourceSwitchService {
     }
     return null;
   }
-
 }
