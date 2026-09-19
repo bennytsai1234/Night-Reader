@@ -76,4 +76,4 @@ flutter test test/core/services/source_switch_service_test.dart test/core/servic
 - `reader_v2_runtime_operation_test.dart`、`reader_v2_state_machine_test.dart`：operation ownership。
 - style、rotation、簡繁轉換、source-switch tests：跨模組位置與 identity 契約。
 
-`.github/workflows/reader-v2.yml` 在 GitHub Actions 跑 analyze、Reader/source-switch tests 與 Android emulator journey；binary build/Android 行為以 Actions 結果為準。
+`.github/workflows/reader-v2.yml` 在 GitHub Actions 只跑 analyze 與 Reader/source-switch tests。Android emulator journey 不再是 PR gate；觸控、動畫、流暢度與實際閱讀體感由人類在實體裝置或需要時的 AVD 驗收，不能用自動 journey 代替真人 UX 判斷。
