@@ -102,6 +102,32 @@ void main() {
     scheduler.dispose();
   });
 
+  test('quiescence 會等待 in-flight task creation 的 DAO write 完成', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    dao.upsertCompleter = Completer<void>();
+    final book = Book(bookUrl: 'book/adding', name: '建立中的任務');
+    final chapters = <BookChapter>[BookChapter(url: 'chapter/0', index: 0)];
+
+    final adding = scheduler.addDownloadTask(book, chapters);
+    await Future<void>.delayed(Duration.zero);
+    expect(dao.upserts, hasLength(1));
+
+    scheduler.markTaskRetiring(book.bookUrl);
+    var quiesced = false;
+    final wait = scheduler.waitForTaskIdle(book.bookUrl).then((_) {
+      quiesced = true;
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(quiesced, isFalse);
+
+    dao.upsertCompleter!.complete();
+    await adding;
+    await wait;
+    expect(quiesced, isTrue);
+    scheduler.dispose();
+  });
+
   test('重複加入進行中的任務不會以新等待狀態覆寫資料庫', () async {
     final scheduler = _TestDownloadScheduler()..isDownloading = true;
     final existing = DownloadTask(
