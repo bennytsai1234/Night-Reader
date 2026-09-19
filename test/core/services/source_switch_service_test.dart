@@ -229,18 +229,17 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         _currentBook(chapterIndex: 5, durChapterTitle: '第6章'),
         candidate,
         targetChapterIndex: 5,
         targetChapterTitle: '第6章',
-        validateTargetContent: true,
       );
 
       expect(resolution.targetChapterIndex, 5);
       expect(resolution.chapters.length, 100);
       expect(resolution.migratedBook.origin, 'new-origin');
-      expect(resolution.validatedContent, isNotNull);
+      expect(resolution.validatedContent, isNotEmpty);
     });
 
     test('新源章節數較少時 clamp 不越界', () async {
@@ -251,7 +250,7 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         _currentBook(
           chapterIndex: 50,
           durChapterTitle: '不存在的章節',
@@ -260,7 +259,6 @@ void main() {
         candidate,
         targetChapterIndex: 50,
         targetChapterTitle: '不存在的章節',
-        validateTargetContent: true,
       );
 
       expect(resolution.targetChapterIndex, inInclusiveRange(0, 9));
@@ -275,13 +273,12 @@ void main() {
       );
 
       expect(
-        () => service.resolveSwitch(
+        () => service.prepareSwitch(
           _currentBook(),
           candidate,
           targetChapterIndex: 5,
           targetChapterTitle: '第6章',
-          validateTargetContent: true,
-        ),
+          ),
         throwsA(
           isA<StateError>().having((e) => e.message, 'message', '目標章節內容不可讀'),
         ),
@@ -299,7 +296,7 @@ void main() {
       );
 
       expect(
-        () => service.resolveSwitch(
+        () => service.prepareSwitch(
           _currentBook(),
           candidate,
           targetChapterIndex: 5,
@@ -318,7 +315,7 @@ void main() {
       );
 
       expect(
-        () => service.resolveSwitch(_currentBook(), candidate),
+        () => service.prepareSwitch(_currentBook(), candidate),
         throwsA(
           isA<StateError>().having((e) => e.message, 'message', '找不到對應書源'),
         ),
@@ -352,12 +349,11 @@ void main() {
         sourceDao: db.bookSourceDao,
       );
 
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         oldBook,
         candidate,
         targetChapterIndex: 5,
         targetChapterTitle: '第6章',
-        validateTargetContent: true,
       );
 
       await service.persistSwitch(
@@ -421,52 +417,25 @@ void main() {
       );
     });
 
-    test('未驗證目標正文時不得 commit，舊 world 保持不變', () async {
-      final oldBook = _currentBook();
-      await db.bookDao.upsert(oldBook);
-      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
-      await _seedOldContent(db, oldBook);
-
-      final candidate = _candidate('new-origin');
-      final chapters = _chapters(candidate.bookUrl, 4);
-      final service = SourceSwitchService(
-        service: _FakeBookSourceService(chapters: chapters),
-        sourceDao: db.bookSourceDao,
+    test('PreparedSourceSwitch 不接受不可讀正文', () {
+      final migratedBook = _currentBook().copyWith(
+        bookUrl: 'new-origin/book/1',
+        origin: 'new-origin',
+        originName: '新源',
       );
-      final resolution = await service.resolveSwitch(
-        oldBook,
-        candidate,
-        targetChapterIndex: 1,
-        targetChapterTitle: '第2章',
-      );
-      expect(resolution.validatedContent, isNull);
+      final chapters = _chapters(migratedBook.bookUrl, 3);
 
       expect(
-        () => service.persistSwitch(
-          oldBook,
-          resolution,
-          bookDao: db.bookDao,
-          chapterDao: db.chapterDao,
+        () => PreparedSourceSwitch(
+          searchBook: _candidate('new-origin'),
+          source: _source('new-origin', '新源'),
+          migratedBook: migratedBook,
+          chapters: chapters,
+          targetChapterIndex: 1,
+          validatedContent: '加載章節失敗',
         ),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            '換源尚未完成目標正文驗證',
-          ),
-        ),
+        throwsArgumentError,
       );
-
-      expect(await db.bookDao.getByUrl(oldBook.bookUrl), isNotNull);
-      expect(await db.chapterDao.getByBook(oldBook.bookUrl), hasLength(3));
-      expect(
-        await db.readerChapterContentDao.getEntriesByBookUrls(<String>[
-          oldBook.bookUrl,
-        ]),
-        hasLength(1),
-      );
-      expect(await db.bookDao.getByUrl(candidate.bookUrl), isNull);
-      expect(await db.chapterDao.getByBook(candidate.bookUrl), isEmpty);
     });
 
     test('bookUrl 相同但 origin 改變時清除舊 source identity 正文', () async {
@@ -488,12 +457,11 @@ void main() {
         service: _FakeBookSourceService(chapters: chapters),
         sourceDao: db.bookSourceDao,
       );
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         oldBook,
         candidate,
         targetChapterIndex: 1,
         targetChapterTitle: '第2章',
-        validateTargetContent: true,
       );
 
       await service.persistSwitch(
@@ -527,12 +495,11 @@ void main() {
         service: _FakeBookSourceService(chapters: chapters),
         sourceDao: db.bookSourceDao,
       );
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         oldBook,
         candidate,
         targetChapterIndex: 1,
         targetChapterTitle: '第2章',
-        validateTargetContent: true,
       );
 
       await db.customStatement('''
@@ -584,12 +551,11 @@ void main() {
         service: _FakeBookSourceService(chapters: chapters),
         sourceDao: db.bookSourceDao,
       );
-      final resolution = await service.resolveSwitch(
+      final resolution = await service.prepareSwitch(
         oldBook,
         candidate,
         targetChapterIndex: 1,
         targetChapterTitle: '第2章',
-        validateTargetContent: true,
       );
 
       await db.customStatement('''
