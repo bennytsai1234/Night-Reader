@@ -156,6 +156,7 @@ void main() {
       bottomInfoReservedExternally: true,
     );
     final runtime = host.ensureRuntime(size, style);
+    runtime.registerViewportRestore(host, (_) async => true);
     await runtime.openBook();
     // ensureRuntime also schedules the normal first-frame open. Consume that
     // callback while the host is alive so it cannot run after tearDown.

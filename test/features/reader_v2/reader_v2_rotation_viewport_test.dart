@@ -114,6 +114,10 @@ void main() {
       bottomInfoReservedExternally: true,
     );
     final runtime = host.ensureRuntime(const Size(360, 640), initialStyle);
+    runtime.registerViewportRestore(host, (_) async => true);
+    // This harness exercises Runtime's viewport seam without mounting the
+    // production Hybrid viewport. The fake owner acknowledges semantic
+    // positioning; Runtime remains the sole operation/state owner.
     // ensureRuntime owns the first-frame open. Start a frame explicitly, then
     // wait on the real runtime phase so a later open cannot race a jump.
     await tester.pumpWidget(const SizedBox.shrink());
@@ -189,6 +193,7 @@ void main() {
       bottomInfoReservedExternally: true,
     );
     final runtime = host.ensureRuntime(initialSize, initialStyle);
+    runtime.registerViewportRestore(host, (_) async => true);
     await runtime.openBook();
     await tester.pump();
     await tester.pump();
