@@ -551,7 +551,7 @@ void main() {
     expect(snapshot.chapterSegment, inInclusiveRange(0, 9));
   });
 
-  testWidgets('首次 restore 後非 ready 狀態以不攔截 overlay 回饋', (tester) async {
+  testWidgets('首次 restore 後 operation 狀態不再覆蓋閱讀內容', (tester) async {
     final runtime = makeRuntime(List.generate(2, chapter));
     final controller = ReaderV2ViewportController();
     var contentTaps = 0;
@@ -574,18 +574,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('正在整理版面'), findsOneWidget);
+    expect(find.text('正在整理版面'), findsNothing);
     expect(find.byType(HybridScrollView), findsOneWidget);
     expect(tester.getSize(find.byType(HybridScrollView)), viewportSize);
-    final ignorePointer = tester.widget<IgnorePointer>(
-      find
-          .ancestor(
-            of: find.text('正在整理版面'),
-            matching: find.byType(IgnorePointer),
-          )
-          .first,
-    );
-    expect(ignorePointer.ignoring, isTrue);
     await tester.tapAt(tester.getCenter(find.byType(HybridScrollView)));
     await tester.pump();
     expect(contentTaps, 1);
@@ -594,7 +585,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsOneWidget);
+    expect(find.text('閱讀內容暫時無法顯示，請稍後再試'), findsNothing);
     expect(find.textContaining('internal restore details'), findsNothing);
     expect(find.byType(HybridScrollView), findsOneWidget);
     int matchingErrorLogs() => logMessages
