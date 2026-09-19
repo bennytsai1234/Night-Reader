@@ -13,22 +13,36 @@ import 'package:pool/pool.dart';
 
 import 'book_source_service.dart';
 
-class SourceSwitchResolution {
+class PreparedSourceSwitch {
   final SearchBook searchBook;
   final BookSource source;
   final Book migratedBook;
   final List<BookChapter> chapters;
   final int targetChapterIndex;
-  final String? validatedContent;
+  final BookChapter targetChapter;
+  final String validatedContent;
 
-  const SourceSwitchResolution({
+  PreparedSourceSwitch({
     required this.searchBook,
     required this.source,
     required this.migratedBook,
     required this.chapters,
     required this.targetChapterIndex,
-    this.validatedContent,
-  });
+    required this.validatedContent,
+  }) : targetChapter = chapters[targetChapterIndex] {
+    if (validatedContent.trim().isEmpty) {
+      throw ArgumentError.value(
+        validatedContent,
+        'validatedContent',
+        'Prepared source switch requires validated target content',
+      );
+    }
+    if (targetChapter.bookUrl != migratedBook.bookUrl) {
+      throw ArgumentError(
+        'Prepared source switch target chapter does not belong to migrated book',
+      );
+    }
+  }
 }
 
 class SourceSwitchService {
@@ -104,7 +118,7 @@ class SourceSwitchService {
     }
   }
 
-  Future<SourceSwitchResolution?> autoResolveSwitch(
+  Future<PreparedSourceSwitch?> autoPrepareSwitch(
     Book currentBook, {
     bool checkAuthor = true,
     int? targetChapterIndex,
@@ -116,12 +130,11 @@ class SourceSwitchService {
     );
     for (final candidate in candidates) {
       try {
-        return await resolveSwitch(
+        return await prepareSwitch(
           currentBook,
           candidate,
           targetChapterIndex: targetChapterIndex,
           targetChapterTitle: targetChapterTitle,
-          validateTargetContent: true,
         );
       } catch (_) {
         continue;
@@ -130,12 +143,11 @@ class SourceSwitchService {
     return null;
   }
 
-  Future<SourceSwitchResolution> resolveSwitch(
+  Future<PreparedSourceSwitch> prepareSwitch(
     Book currentBook,
     SearchBook candidate, {
     int? targetChapterIndex,
     String? targetChapterTitle,
-    bool validateTargetContent = false,
   }) async {
     final source = await _sourceDao.getByUrl(candidate.origin);
     if (source == null) {
@@ -158,21 +170,18 @@ class SourceSwitchService {
       chapters.length - 1,
     );
 
-    String? validatedContent;
-    if (validateTargetContent) {
-      final chapter = chapters[resolvedTargetIndex];
-      validatedContent = await _service.getContent(
-        source,
-        migratedBook,
-        chapter,
-        nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
-      );
-      if (!_looksReadable(validatedContent)) {
-        throw StateError('目標章節內容不可讀');
-      }
+    final targetChapter = chapters[resolvedTargetIndex];
+    final validatedContent = await _service.getContent(
+      source,
+      migratedBook,
+      targetChapter,
+      nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
+    );
+    if (!_looksReadable(validatedContent)) {
+      throw StateError('目標章節內容不可讀');
     }
 
-    return SourceSwitchResolution(
+    return PreparedSourceSwitch(
       searchBook: candidate,
       source: source,
       migratedBook: migratedBook,
@@ -185,30 +194,29 @@ class SourceSwitchService {
   /// Commit a fully prepared source switch and hand the validated target
   /// content to the new reader world in the same database transaction.
   ///
-  /// A resolution without readable target content is not commit-ready. New
-  /// book metadata, chapters and the exact validated target body become
-  /// authoritative together; obsolete data owned by the old source identity
-  /// is removed in that same transaction. Any failure rolls the whole handoff
-  /// back to the old world.
+  /// Only a [PreparedSourceSwitch] can cross this boundary: target content
+  /// validation has already succeeded, so commit publishes book metadata,
+  /// chapters and that exact target body as one authoritative world. Obsolete
+  /// data owned by the old source identity is retired in the same transaction;
+  /// any failure rolls the whole handoff back to the old world.
   Future<void> persistSwitch(
     Book oldBook,
-    SourceSwitchResolution resolution, {
+    PreparedSourceSwitch prepared, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
   }) async {
-    final validatedTarget = _requireValidatedHandoff(resolution);
     final books = bookDao ?? getIt<BookDao>();
     final db = books.appDatabase;
     final chaptersDao = chapterDao ?? ChapterDao(db);
     final contentDao = ReaderChapterContentDao(db);
-    final migratedBook = resolution.migratedBook;
+    final migratedBook = prepared.migratedBook;
 
     await db.transaction(() async {
       await chaptersDao.deleteByBook(migratedBook.bookUrl);
       await books.upsert(migratedBook);
-      await chaptersDao.insertChapters(resolution.chapters);
+      await chaptersDao.insertChapters(prepared.chapters);
 
-      final targetChapter = validatedTarget.chapter;
+      final targetChapter = prepared.targetChapter;
       await contentDao.saveContent(
         contentKey: ReaderChapterContentDao.contentKey(
           origin: migratedBook.origin,
@@ -219,7 +227,7 @@ class SourceSwitchService {
         bookUrl: migratedBook.bookUrl,
         chapterUrl: targetChapter.url,
         chapterIndex: targetChapter.index,
-        content: validatedTarget.content,
+        content: prepared.validatedContent,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
 
@@ -235,27 +243,6 @@ class SourceSwitchService {
         await books.deleteByUrl(oldBook.bookUrl);
       }
     });
-  }
-
-  ({BookChapter chapter, String content}) _requireValidatedHandoff(
-    SourceSwitchResolution resolution,
-  ) {
-    final targetIndex = resolution.targetChapterIndex;
-    if (targetIndex < 0 || targetIndex >= resolution.chapters.length) {
-      throw StateError('換源目標章節索引無效');
-    }
-
-    final content = resolution.validatedContent;
-    if (content == null || !_looksReadable(content)) {
-      throw StateError('換源尚未完成目標正文驗證');
-    }
-
-    final chapter = resolution.chapters[targetIndex];
-    if (chapter.bookUrl != resolution.migratedBook.bookUrl) {
-      throw StateError('換源目標正文 identity 與新書不一致');
-    }
-
-    return (chapter: chapter, content: content);
   }
 
   String? _nextReadableChapterUrl(
