@@ -942,7 +942,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _restoreAttachedRuntime() {
-  void _restoreAttachedRuntime() {
     final runtime = widget.runtime;
     if (runtime.state.hasStableWorld) {
       unawaited(runtime.restoreFromLocation(runtime.state.visibleLocation));
