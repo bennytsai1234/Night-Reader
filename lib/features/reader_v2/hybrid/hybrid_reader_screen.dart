@@ -1264,7 +1264,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     widget.viewportController
       ?..scrollBy = _scrollBy
       ..continuousScrollBy = _continuousScrollBy
-      ..animateBy = _animateBy
       ..moveToNextPage = _moveToNextPage
       ..moveToPrevPage = _moveToPrevPage
       ..settleScroll = _settleScroll
@@ -1277,7 +1276,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (controller.continuousScrollBy == _continuousScrollBy) {
       controller.continuousScrollBy = null;
     }
-    if (controller.animateBy == _animateBy) controller.animateBy = null;
     if (controller.moveToNextPage == _moveToNextPage) {
       controller.moveToNextPage = null;
     }
@@ -1323,9 +1321,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   Future<bool> _continuousScrollBy(double delta) =>
       _enqueueCommand((current) => _continuousScrollByNow(delta, current));
-
-  Future<bool> _animateBy(double delta) =>
-      _enqueueCommand((current) => _animateByNow(delta, current));
 
   Future<bool> _moveToNextPage() => _enqueueCommand(
     (current) => _movePageNow(forward: true, isCurrent: current),
