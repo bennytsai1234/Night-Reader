@@ -123,7 +123,7 @@ void main() {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final deadline = DateTime.now().add(timeout);
-    while (runtime.state.phase != ReaderV2Phase.ready) {
+    while (!runtime.state.hasStableWorld) {
       if (DateTime.now().isAfter(deadline)) {
         fail('Reader runtime did not reach ready: ${runtime.state.phase}');
       }
@@ -162,7 +162,7 @@ void main() {
     // callback while the host is alive so it cannot run after tearDown.
     await tester.pump();
     await tester.pump();
-    expect(runtime.state.phase, ReaderV2Phase.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
     return (host: host, runtime: runtime);
   }
 
