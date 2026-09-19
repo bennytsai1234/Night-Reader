@@ -58,7 +58,7 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
   }
 
   @override
-  Future<void> persistSwitch(
+  Future<void> commitSwitch(
     Book oldBook,
     PreparedSourceSwitch preparedSwitch, {
     BookDao? bookDao,
@@ -71,7 +71,7 @@ class FakeReaderV2SourceSwitchService extends SourceSwitchService {
     final error = persistError;
     if (error != null) throw error;
     if (persistToDatabase) {
-      await super.persistSwitch(
+      await super.commitSwitch(
         oldBook,
         preparedSwitch,
         bookDao: bookDao,
