@@ -102,11 +102,11 @@ class ReaderTestHarness {
   Future<void> settled() async {
     await pumpUntil(tester, () {
       expect(
-        runtime.state.phase,
-        isNot(ReaderV2Phase.error),
-        reason: runtime.state.errorMessage,
+        runtime.state.lifecycle,
+        isNot(ReaderV2Lifecycle.unavailable),
+        reason: runtime.state.unavailableMessage,
       );
-      return runtime.state.phase == ReaderV2Phase.ready &&
+      return runtime.state.hasStableWorld &&
           find.byType(HybridScrollView).evaluate().isNotEmpty;
     });
     await tester.pumpAndSettle();
