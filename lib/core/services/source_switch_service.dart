@@ -182,16 +182,21 @@ class SourceSwitchService {
     );
   }
 
-  /// 持久化換源結果：新來源資料寫入與舊來源資料清理必須一起成功。
+  /// Commit a fully prepared source switch and hand the validated target
+  /// content to the new reader world in the same database transaction.
   ///
-  /// 換到不同 bookUrl 時會刪除舊來源的 Book、Chapters 與全部正文快取。
-  /// 所有資料庫操作都在同一個 transaction 內，任一步驟失敗會完整回滾。
+  /// A resolution without readable target content is not commit-ready. New
+  /// book metadata, chapters and the exact validated target body become
+  /// authoritative together; obsolete data owned by the old source identity
+  /// is removed in that same transaction. Any failure rolls the whole handoff
+  /// back to the old world.
   Future<void> persistSwitch(
     Book oldBook,
     SourceSwitchResolution resolution, {
     BookDao? bookDao,
     ChapterDao? chapterDao,
   }) async {
+    final validatedTarget = _requireValidatedHandoff(resolution);
     final books = bookDao ?? getIt<BookDao>();
     final db = books.appDatabase;
     final chaptersDao = chapterDao ?? ChapterDao(db);
@@ -203,12 +208,54 @@ class SourceSwitchService {
       await books.upsert(migratedBook);
       await chaptersDao.insertChapters(resolution.chapters);
 
-      if (migratedBook.bookUrl != oldBook.bookUrl) {
+      final targetChapter = validatedTarget.chapter;
+      await contentDao.saveContent(
+        contentKey: ReaderChapterContentDao.contentKey(
+          origin: migratedBook.origin,
+          bookUrl: migratedBook.bookUrl,
+          chapterUrl: targetChapter.url,
+        ),
+        origin: migratedBook.origin,
+        bookUrl: migratedBook.bookUrl,
+        chapterUrl: targetChapter.url,
+        chapterIndex: targetChapter.index,
+        content: validatedTarget.content,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      final sourceIdentityChanged =
+          oldBook.origin != migratedBook.origin ||
+          oldBook.bookUrl != migratedBook.bookUrl;
+      if (sourceIdentityChanged) {
         await contentDao.deleteByBook(oldBook.origin, oldBook.bookUrl);
+      }
+
+      if (migratedBook.bookUrl != oldBook.bookUrl) {
         await chaptersDao.deleteByBook(oldBook.bookUrl);
         await books.deleteByUrl(oldBook.bookUrl);
       }
     });
+  }
+
+  ({BookChapter chapter, String content}) _requireValidatedHandoff(
+    SourceSwitchResolution resolution,
+  ) {
+    final targetIndex = resolution.targetChapterIndex;
+    if (targetIndex < 0 || targetIndex >= resolution.chapters.length) {
+      throw StateError('換源目標章節索引無效');
+    }
+
+    final content = resolution.validatedContent;
+    if (content == null || !_looksReadable(content)) {
+      throw StateError('換源尚未完成目標正文驗證');
+    }
+
+    final chapter = resolution.chapters[targetIndex];
+    if (chapter.bookUrl != resolution.migratedBook.bookUrl) {
+      throw StateError('換源目標正文 identity 與新書不一致');
+    }
+
+    return (chapter: chapter, content: content);
   }
 
   String? _nextReadableChapterUrl(
