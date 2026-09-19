@@ -14,7 +14,17 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_contr
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 
-class _FakeBookDao extends Fake implements BookDao {}
+class _FakeBookDao extends Fake implements BookDao {
+  @override
+  Future<void> updateProgress(
+    String bookUrl,
+    int chapterIndex,
+    String chapterTitle,
+    int pos, {
+    double visualOffsetPx = 0.0,
+    String? readerAnchorJson,
+  }) async {}
+}
 class _FakeChapterDao extends Fake implements ChapterDao {}
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
@@ -199,6 +209,44 @@ void main() {
     expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.pendingLocation, isNull);
+  });
+
+  test('detaching the active viewport owner cancels its current operation', () async {
+    final runtime = makeRuntime([chapter(0), chapter(1)]);
+    addTearDown(runtime.dispose);
+    final owner = Object();
+    runtime.registerViewportRestore(owner, (_) async => true);
+    await runtime.openBook();
+
+    final operation = runtime.beginJumpOperation(
+      location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+    );
+    expect(runtime.stateMachine.currentOperation, same(operation));
+    expect(runtime.state.hasStableWorld, isTrue);
+
+    runtime.unregisterViewportRestore(owner);
+
+    expect(runtime.stateMachine.currentOperation, isNull);
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.hasStableWorld, isTrue);
+  });
+
+  test('detaching a stale viewport owner does not cancel the active operation', () async {
+    final runtime = makeRuntime([chapter(0), chapter(1)]);
+    addTearDown(runtime.dispose);
+    final staleOwner = Object();
+    final activeOwner = Object();
+    runtime.registerViewportRestore(staleOwner, (_) async => true);
+    runtime.registerViewportRestore(activeOwner, (_) async => true);
+    await runtime.openBook();
+
+    final operation = runtime.beginJumpOperation(
+      location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+    );
+    runtime.unregisterViewportRestore(staleOwner);
+
+    expect(runtime.stateMachine.currentOperation, same(operation));
+    expect(runtime.state.hasStableWorld, isTrue);
   });
 
   test('disposing runtime expires an awaiting viewport operation', () async {
