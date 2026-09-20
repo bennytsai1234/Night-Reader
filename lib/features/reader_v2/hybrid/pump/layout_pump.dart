@@ -202,19 +202,10 @@ final class LayoutPump implements HybridLayoutPump {
       final budget = _governor.frameBudgetMicros(_state);
       while (!_disposed && _queue.isNotEmpty && _spentThisFrame < budget) {
         final work = _queue.reduce((a, b) => a.priority <= b.priority ? a : b);
-        // Drawable layout has a trained cost model, so it can be guarded
-        // before execution. Chapter planning has no predictive model: its
-        // iterator step is already the bounded scheduling unit. Charging an
-        // entire frame slice for every chapter step artificially turns
-        // "paragraph count" into "minimum frame count", even when a step only
-        // costs a few microseconds. Let chapter work consume the frame by
-        // measured elapsed time instead of a fabricated full-slice estimate.
-        if (work is _LayoutWork) {
-          final predicted = _costModel.predict(work.task).inMicroseconds;
-          if (_spentThisFrame > 0 && _spentThisFrame + predicted > budget) {
-            break;
-          }
-        }
+        final predicted = work is _LayoutWork
+            ? _costModel.predict(work.task).inMicroseconds
+            : _governor.ballisticSliceBudget.inMicroseconds;
+        if (_spentThisFrame > 0 && _spentThisFrame + predicted > budget) break;
         _queue.remove(work);
         final watch = Stopwatch()..start();
         bool done;
