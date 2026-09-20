@@ -768,11 +768,12 @@ void main() {
         expect(identical(promoted, samePromoted), isTrue);
         expect(pump.queueDepth, 2);
 
-        // A 1us dragging budget admits one ChapterWork step per manual slice.
-        // The promoted chapter must receive both slices and complete before
-        // the older prefetch task gets a turn.
+        // A 1us dragging budget admits one ChapterWork step per frame.
+        // Manual pumping consumes this frame's credit; the next real frame
+        // must continue the promoted work instead of returning to the older
+        // prefetch task.
         expect(await pump.pumpPending(), 0);
-        expect(await pump.pumpPending(), 1);
+        await tester.pump(const Duration(milliseconds: 16));
         final promotedBlocks = await promoted;
         expect(promotedBlocks, isNotNull);
         expect(promotedBlocks!.chapterIndex, 1);
