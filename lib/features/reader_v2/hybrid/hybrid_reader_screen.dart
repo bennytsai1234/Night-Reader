@@ -334,12 +334,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         final target = _offsetForAnchor(anchor, blocks);
         final readyTop = _jumpReadinessTop(
           target: target ?? 0,
-          chapter: chapter,
-          location: normalized,
           jumpOwnsNeighborhood: jumpOwnsNeighborhood,
         );
-        final readyBottom =
-            (target ?? 0) + math.max(1, _viewportSize.height);
+        final readyBottom = _jumpReadinessBottom(
+          target: target ?? 0,
+          jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+        );
         _requestWindow(
           readyTop,
           readyBottom,
@@ -350,11 +350,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             _windowReady(
               _jumpReadinessTop(
                 target: positionedTarget,
-                chapter: chapter,
-                location: normalized,
                 jumpOwnsNeighborhood: jumpOwnsNeighborhood,
               ),
-              positionedTarget + _viewportSize.height,
+              _jumpReadinessBottom(
+                target: positionedTarget,
+                jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+              ),
             ))
           break;
         // Cached exact metrics may advance admission synchronously, without
@@ -437,20 +438,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   double _jumpReadinessTop({
     required double target,
-    required int chapter,
-    required ReaderV2Location location,
     required bool jumpOwnsNeighborhood,
   }) {
-    if (!jumpOwnsNeighborhood ||
-        chapter <= 0 ||
-        location.charOffset > 0 ||
-        !_blocks.containsKey(chapter - 1)) {
-      return target;
-    }
-    // A chapter jump lands at the chapter start. Require at least one real
-    // backward block before committing the new world so the viewport cannot
-    // open exactly on an unmaterialized minScrollExtent.
-    return target - 1.0;
+    if (!jumpOwnsNeighborhood) return target;
+    // Jump commits into the same backward lead invariant used by steady-state
+    // scrolling. The first frame therefore starts warm instead of asking the
+    // user gesture to build the lead after the target is already visible.
+    return target - _admission.backwardGuaranteedWindow;
+  }
+
+  double _jumpReadinessBottom({
+    required double target,
+    required bool jumpOwnsNeighborhood,
+  }) {
+    final viewportBottom = target + math.max(1, _viewportSize.height);
+    if (!jumpOwnsNeighborhood) return viewportBottom;
+    return viewportBottom + _admission.guaranteedWindow;
   }
 
   Future<void> _nextFrame() {
