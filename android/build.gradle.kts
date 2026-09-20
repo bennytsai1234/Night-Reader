@@ -1,17 +1,3 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-    dependencies {
-        // AGP 9 built-in Kotlin defaults to KGP 2.2.10, while Flutter 3.47
-        // requires >= 2.2.20. Keep Kotlin built into AGP and raise only its
-        // runtime KGP dependency; do not re-apply kotlin-android.
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20")
-    }
-}
-
 allprojects {
     repositories {
         google()
