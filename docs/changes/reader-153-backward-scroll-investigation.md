@@ -1,6 +1,6 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / reproduced backward-frontier scheduler defect repaired / partial-publication hypothesis conditional / not merged**
+Status: **OPEN / backward-frontier readiness defect reproduced / conservative scheduler restored / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
@@ -138,7 +138,7 @@ These are code-review findings, not proof of the observed runtime symptom:
 4. In v0.2.153 main, existing chapter work can be born as prefetch work and retain that priority even after it becomes imminent viewport/frontier demand. This branch fixes that ownership defect by promoting the same in-flight work.
 5. A pump budget cannot necessarily preempt a large synchronous planning operation in the middle of that operation.
 
-These facts make backward-frontier starvation plausible, but **not proven as the user's observed bug**. The confirmed priority defect is repaired here; the whole-chapter readiness / planner-cost hypothesis remains open.
+These facts make backward-frontier starvation plausible, but **not proven as the user's observed bug**. The confirmed priority defect is repaired here; the whole-chapter jump/readiness contract remains open.
 
 ---
 
@@ -247,18 +247,13 @@ After the first chapter step consumed any measurable time, the scheduler treated
 
 That means a chapter with roughly 60–120 paragraph steps can naturally require around 1–2 seconds at 60 Hz before the whole chapter becomes publishable. Therefore the observed delay is **not proven to be a v0.2.153-only regression**. v0.2.153 can make each step heavier because it performs Reader-owned visual-line planning, but the paragraph-count-to-frame-count floor predates that change.
 
-### Repair on this branch
+### Scheduler safety decision
 
-The pump no longer fabricates a full-slice predicted cost for chapter work that has no predictive model.
+An experimental change briefly removed the conservative full-slice admission estimate for ChapterWork so multiple cheap steps could share a frame. Review found that this can start a synchronous `planBlock()` when little frame budget remains and therefore can introduce frame overruns. That experiment has been reverted.
 
-- drawable layout keeps its existing trained pre-execution cost estimate;
-- chapter planning is charged by actual measured elapsed time;
-- multiple cheap chapter steps may share the same frame budget;
-- an expensive chapter step naturally consumes the remaining budget and stops further work that frame.
+The branch keeps the safer demand-priority promotion, but the reproduced backward-frontier problem is now treated as a **jump/readiness contract problem**, not something to solve by letting chapter planning run more aggressively inside a frame.
 
-This removes the false invariant `minimum preparation frames ~= paragraph count` without increasing the frame budget.
-
-A scheduler contract was added to prove that multiple cheap chapter steps can complete inside one sufficiently large frame budget. Partial chapter publication / reverse frontier materialization remains a conditional next step only if real-device testing still shows meaningful backward-frontier delay after this repair.
+The next architecture step should make jump completion wait for the required neighboring reader-ready world instead of trading hidden post-jump stalls for scheduler risk.
 
 ---
 
