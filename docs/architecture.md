@@ -53,7 +53,7 @@ flowchart TD
 
 粗切位置不是排版邊界。`LayoutPump` 在真實視覺行首建立可獨立排版的 transaction，保留自然段的縮排、段距與末行補償。切行 probe 與 Paragraph 建置共用同一佇列、需求取消與 frame credit；拖曳只改預算，不撤銷有效內容。
 
-`ChapterLayoutPlan` 保存不含正文的切分資訊，保證原始文字被逐出後，重新載入仍使用已進入文件的相同 BlockKey／文字範圍。原始文字或 Paragraph 的 LRU eviction 不會自行刪除 active `DocumentIndex` 幾何；明確跳章、排版世代或內容身分變更才重建文件。已訪問文件的量測與切分資訊會隨範圍累積，並非全書常數記憶體。
+`ChapterLayoutPlan` 保存不含正文的切分資訊，保證原始文字被逐出後，重新載入仍使用已進入文件的相同 BlockKey／文字範圍。原始文字或 Paragraph 的 LRU eviction 不會自行刪除 active `DocumentIndex` 幾何；明確跳章、排版世代或 Runtime 發布的 content generation 變更才重建文件。持久正文若在 session 外被下載/更新，ChapterRepository 在重新取得該章時比較已 materialize identity 並推進 committed generation；Hybrid 不從 plan mismatch 反向命令 Runtime reload，同一 generation 內若 identity 不一致就是 invariant failure。已訪問文件的量測與切分資訊會隨範圍累積，並非全書常數記憶體。
 
 可見 render object、視口準備與命令各自持有 `ParagraphLease`。快取替換／逐出只釋放快取的引用，不能提前 dispose 仍被消費者使用的 native Paragraph。`ReaderV2Location` 是跨層位置契約，包含章節、UTF-16 字元位移、視覺位移及內容重映射資訊；章內進度以完整正文長度為分母，不依賴目前排完多少高度。
 
@@ -68,7 +68,7 @@ Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新�
 | 書籍、書源、章節、書籤、下載、Cookie | Drift / SQLite | `lib/core/database/` 與各 DAO |
 | 正文、封面、度量與其他檔案快取 | App 私有檔案系統 | `lib/core/storage/`、Reader content storage |
 | 使用者偏好與主題模式 | `SharedPreferences` | `PreferKey`、`SettingsProvider`、`ThemeSettingsProvider` |
-| Reader 命令、可見位置、持久化 | 各自的 runtime operation／viewport／progress owner | `ReaderV2Runtime`、`ReaderV2Location` |
+| Reader 命令、可見位置、semantic content generation、持久化 | 各自的 runtime operation／content session／viewport／progress owner | `ReaderV2Runtime`、`ReaderV2State`、`ReaderV2Location` |
 | Active 文件幾何與切分 | DocumentIndex／ChapterLayoutPlan | Hybrid screen 的明確文件重建 |
 | 可繪段落存活期 | 每個 consumer 的 ParagraphLease | RenderCachedBlock／視口／命令 |
 | 書源規則與解析結果 | 書源資料 + 記憶體／持久快取 | `core/engine`、`WebBook`、書源服務 |

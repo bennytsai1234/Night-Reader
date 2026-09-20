@@ -11,6 +11,7 @@ class ReaderV2State {
     required this.visibleLocation,
     required this.layoutSpec,
     required this.layoutGeneration,
+    this.contentGeneration = 0,
     this.unavailableMessage,
   });
 
@@ -19,6 +20,12 @@ class ReaderV2State {
   final ReaderV2Location visibleLocation;
   final ReaderV2LayoutSpec layoutSpec;
   final int layoutGeneration;
+
+  /// Runtime-published semantic document generation.
+  ///
+  /// This is independent from [layoutGeneration]: content identity may change
+  /// without changing the presentation specification.
+  final int contentGeneration;
   final String? unavailableMessage;
 
   bool get hasStableWorld => lifecycle == ReaderV2Lifecycle.ready;
@@ -29,6 +36,7 @@ class ReaderV2State {
     ReaderV2Location? visibleLocation,
     ReaderV2LayoutSpec? layoutSpec,
     int? layoutGeneration,
+    int? contentGeneration,
     String? unavailableMessage,
     bool clearUnavailableMessage = false,
   }) {
@@ -38,6 +46,7 @@ class ReaderV2State {
       visibleLocation: visibleLocation ?? this.visibleLocation,
       layoutSpec: layoutSpec ?? this.layoutSpec,
       layoutGeneration: layoutGeneration ?? this.layoutGeneration,
+      contentGeneration: contentGeneration ?? this.contentGeneration,
       unavailableMessage: clearUnavailableMessage
           ? null
           : (unavailableMessage ?? this.unavailableMessage),

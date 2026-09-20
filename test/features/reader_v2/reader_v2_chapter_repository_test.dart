@@ -79,6 +79,100 @@ void main() {
       ),
     );
   });
+  test(
+    'reloaded materialized chapter identity advances semantic generation',
+    () async {
+      final book = Book(
+        bookUrl: 'local://identity-drift.txt',
+        origin: 'local',
+        name: 'identity-drift',
+      );
+      final chapters = List<BookChapter>.generate(
+        21,
+        (index) => BookChapter(
+          url: 'chapter_$index',
+          bookUrl: book.bookUrl,
+          title: '第 $index 章',
+          index: index,
+          content: '正文 $index',
+        ),
+      );
+      final raw = <int, String>{
+        for (var index = 0; index < chapters.length; index++)
+          index: '正文 $index',
+      };
+      final repository = ReaderV2ChapterRepository(
+        book: book,
+        initialChapters: chapters,
+        contentLoader: (index, __) async => raw[index],
+        bookDao: _FakeBookDao(),
+        chapterDao: _FakeChapterDao(),
+        sourceDao: _FakeSourceDao(),
+      );
+
+      await repository.loadContent(0);
+      for (var index = 1; index < chapters.length; index += 1) {
+        await repository.loadContent(index);
+      }
+      expect(repository.cachedContent(0), isNull);
+      expect(repository.contentGeneration, 0);
+
+      raw[0] = '正文 0 已由外部持久層更新';
+      final changed = await repository.loadContent(0);
+
+      expect(changed.displayText, contains('外部持久層更新'));
+      expect(repository.contentGeneration, 1);
+    },
+  );
+
+  test('semantic content generation advances only after a committed reload', () async {
+    var raw = '第一版正文';
+    var fail = false;
+    final book = Book(
+      bookUrl: 'local://generation.txt',
+      origin: 'local',
+      name: 'generation',
+    );
+    final repository = ReaderV2ChapterRepository(
+      book: book,
+      initialChapters: <BookChapter>[
+        BookChapter(
+          url: 'chapter_0',
+          bookUrl: book.bookUrl,
+          title: '第一章',
+          content: raw,
+        ),
+      ],
+      contentLoader: (_, __) async {
+        if (fail) {
+          throw const ReaderV2ContentUnavailableException('refresh unavailable');
+        }
+        return raw;
+      },
+      bookDao: _FakeBookDao(),
+      chapterDao: _FakeChapterDao(),
+      sourceDao: _FakeSourceDao(),
+    );
+
+    await repository.loadContent(0);
+    expect(repository.contentGeneration, 0);
+
+    raw = '第二版正文';
+    final committed = await repository.reloadContent(0);
+    expect(committed.displayText, contains('第二版正文'));
+    expect(repository.contentGeneration, 1);
+
+    final cached = repository.cachedContent(0);
+    fail = true;
+    await expectLater(
+      repository.reloadContent(0),
+      throwsA(isA<ReaderV2ContentUnavailableException>()),
+    );
+
+    expect(repository.contentGeneration, 1);
+    expect(repository.cachedContent(0), same(cached));
+  });
+
   test('known source failure becomes explicit TOC content-unavailable', () async {
     final source = BookSource(bookSourceUrl: 'https://source.example');
     final repository = ReaderV2ChapterRepository(

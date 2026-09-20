@@ -83,13 +83,14 @@ void main() {
     await controller.startFromVisibleLocation();
     expect(engine.isPlaying, isTrue);
     expect(controller.currentHighlight, isNotNull);
-    final generationBefore = repository.contentGeneration;
+    final generationBefore = runtime.state.contentGeneration;
 
     rawText = '新的內容已經改變。第二句也不同。';
     await runtime.reloadContentPreservingLocation();
     await Future<void>.delayed(Duration.zero);
 
-    expect(repository.contentGeneration, generationBefore + 1);
+    expect(runtime.state.contentGeneration, generationBefore + 1);
+    expect(repository.contentGeneration, runtime.state.contentGeneration);
     expect(engine.stopCalls, greaterThanOrEqualTo(1));
     expect(engine.isPlaying, isFalse);
     expect(controller.currentHighlight, isNull);

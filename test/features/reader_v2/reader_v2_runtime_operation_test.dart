@@ -121,6 +121,53 @@ void main() {
     expect(runtime.pendingLocation, isNull);
   });
 
+  test(
+    'content generation change re-resolves the same active operation token',
+    () async {
+      final chapters = List<BookChapter>.generate(21, chapter);
+      final raw = <int, String>{
+        for (var index = 0; index < chapters.length; index++)
+          index: chapters[index].content ?? '',
+      };
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, __) async => raw[index],
+      );
+      addTearDown(runtime.dispose);
+
+      var simulateGenerationChange = false;
+      var restoreAttempts = 0;
+      final operationIds = <int>[];
+      runtime.registerViewportRestore(Object(), (_) async {
+        if (!simulateGenerationChange) return true;
+        restoreAttempts += 1;
+        operationIds.add(runtime.stateMachine.currentOperation!.id);
+        if (restoreAttempts == 1) {
+          await runtime.loadContentAt(0);
+          return false;
+        }
+        return true;
+      });
+
+      await runtime.openBook();
+      for (var index = 1; index < chapters.length; index += 1) {
+        await runtime.loadContentAt(index);
+      }
+      expect(runtime.repository.cachedContent(0), isNull);
+      final contentBefore = runtime.state.contentGeneration;
+
+      raw[0] = '第一章由外部持久層更新';
+      simulateGenerationChange = true;
+      await runtime.jumpToChapter(1);
+
+      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(restoreAttempts, 2);
+      expect(operationIds.toSet(), hasLength(1));
+      expect(runtime.pendingLocation, isNull);
+    },
+  );
+
   test('target content unavailable leaves the existing Reader world intact', () async {
     final runtime = makeRuntime(
       [chapter(0), chapter(1)],
@@ -148,6 +195,34 @@ void main() {
     expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
   });
 
+  test(
+    'content reload publishes semantic generation without changing layout generation',
+    () async {
+      var raw = '第一版正文。';
+      final runtime = makeRuntime(
+        [chapter(0)],
+        contentLoader: (_, __) async => raw,
+      );
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
+
+      final layoutBefore = runtime.state.layoutGeneration;
+      final contentBefore = runtime.state.contentGeneration;
+      raw = '第二版正文，內容已改變。';
+
+      await runtime.reloadContentPreservingLocation();
+
+      expect(runtime.state.layoutGeneration, layoutBefore);
+      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(
+        runtime.state.contentGeneration,
+        runtime.repository.contentGeneration,
+      );
+      expect(runtime.state.hasStableWorld, isTrue);
+    },
+  );
+
   test('failed content reload rolls back to the committed content identity', () async {
     var failRefresh = false;
     final runtime = makeRuntime(
@@ -165,6 +240,8 @@ void main() {
 
     final before = runtime.repository.cachedContent(0);
     final generationBefore = runtime.repository.contentGeneration;
+    final publishedBefore = runtime.state.contentGeneration;
+    final layoutBefore = runtime.state.layoutGeneration;
     expect(before, isNotNull);
     failRefresh = true;
 
@@ -173,7 +250,10 @@ void main() {
     expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.hasStableWorld, isTrue);
     expect(runtime.repository.cachedContent(0), same(before));
-    expect(runtime.repository.contentGeneration, greaterThan(generationBefore));
+    expect(runtime.repository.contentGeneration, generationBefore);
+    expect(runtime.state.contentGeneration, publishedBefore);
+    expect(runtime.state.contentGeneration, runtime.repository.contentGeneration);
+    expect(runtime.state.layoutGeneration, layoutBefore);
     expect(runtime.takeUserNotice(), '重新載入正文失敗');
   });
 

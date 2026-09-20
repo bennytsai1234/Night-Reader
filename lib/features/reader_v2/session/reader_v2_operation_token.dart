@@ -19,7 +19,7 @@ class ReaderV2OperationToken {
   /// Layout generation this operation intends to materialize.
   ///
   /// A superseding operation inherits an uncommitted generation so normal
-  /// cancellation cannot silently drop a pending presentation/content change.
+  /// cancellation cannot silently drop a pending presentation change.
   final int layoutGeneration;
   final ReaderV2LayoutSpec? layoutSpec;
 

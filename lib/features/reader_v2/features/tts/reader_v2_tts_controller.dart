@@ -94,7 +94,7 @@ class ReaderV2TtsController extends ChangeNotifier
   ReaderV2TtsController({required this.runtime, ReaderV2TtsEngine? tts})
     : _tts = tts ?? ReaderV2SystemTtsEngine(),
       _ownsTtsEngine = tts == null {
-    _observedContentGeneration = runtime.repository.contentGeneration;
+    _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
     _eventSubscription = _tts.events.listen(_handleTtsEvent);
@@ -254,7 +254,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   void _handleRuntimeChanged() {
-    final contentGeneration = runtime.repository.contentGeneration;
+    final contentGeneration = runtime.state.contentGeneration;
     if (contentGeneration == _observedContentGeneration) return;
     _observedContentGeneration = contentGeneration;
 

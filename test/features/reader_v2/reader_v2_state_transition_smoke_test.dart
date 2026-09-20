@@ -295,7 +295,8 @@ void main() {
       ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
       final harness = await makeHostRuntime(tester);
       final before = harness.runtime.state.visibleLocation;
-      final beforeGeneration = harness.runtime.state.layoutGeneration;
+      final beforeLayoutGeneration = harness.runtime.state.layoutGeneration;
+      final beforeContentGeneration = harness.runtime.state.contentGeneration;
       final beforeContent = await harness.runtime.loadContentAt(0);
       reloadCount = 0;
 
@@ -315,9 +316,10 @@ void main() {
       await pumpUntilReady(tester, harness.runtime);
 
       expect(reloadCount, 1);
-      expectReaderLayoutGenerationAdvanced(
-        beforeGeneration,
-        harness.runtime.state.layoutGeneration,
+      expect(harness.runtime.state.layoutGeneration, beforeLayoutGeneration);
+      expectReaderContentGenerationAdvanced(
+        beforeContentGeneration,
+        harness.runtime.state.contentGeneration,
       );
       final after = harness.runtime.state.visibleLocation;
       final afterContent = await harness.runtime.loadContentAt(0);

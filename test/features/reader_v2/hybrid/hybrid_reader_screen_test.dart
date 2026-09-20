@@ -332,6 +332,117 @@ void main() {
     },
   );
 
+  testWidgets(
+    'runtime content generation rebuilds Hybrid without re-entrant reload',
+    (tester) async {
+      final chapters = <BookChapter>[chapter(0, paragraphCount: 12)];
+      var raw = chapters.single.content ?? '';
+      var reloadCount = 0;
+      ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
+      addTearDown(() => ReaderV2Runtime.debugOnReloadContentTriggered = null);
+
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (_, __) async => raw,
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await openAndSettle(tester, runtime);
+      final before = snapshot(tester);
+      final layoutBefore = runtime.state.layoutGeneration;
+      final contentBefore = runtime.state.contentGeneration;
+      reloadCount = 0;
+
+      raw = List<String>.generate(
+        14,
+        (index) =>
+            '新版第 $index 段：正文 identity 已更新，新的 semantic document 由 Runtime 發布。',
+      ).join('\n\n');
+
+      await completeWithFrames(
+        tester,
+        runtime.reloadContentPreservingLocation(),
+      );
+      await tester.pumpAndSettle();
+
+      final content = await runtime.loadContentAt(0);
+      final after = snapshot(tester);
+      expect(reloadCount, 1);
+      expect(runtime.state.layoutGeneration, layoutBefore);
+      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(after['contentGeneration'], runtime.state.contentGeneration);
+      expect(
+        after['epochContentGeneration'],
+        runtime.state.contentGeneration,
+      );
+      expect(
+        after['documentIndexResetGeneration'] as int,
+        greaterThan(before['documentIndexResetGeneration'] as int),
+      );
+      expect((after['loadedContentHashes'] as Map)[0], content.contentHash);
+      expect(after['missingParagraphKeys'], isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'externally changed chapter flows owner generation into local Hybrid rebuild',
+    (tester) async {
+      final chapters = List<BookChapter>.generate(
+        21,
+        (index) => chapter(index, paragraphCount: 4),
+      );
+      final raw = <int, String>{
+        for (var index = 0; index < chapters.length; index++)
+          index: chapters[index].content ?? '',
+      };
+      var reloadCount = 0;
+      ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
+      addTearDown(() => ReaderV2Runtime.debugOnReloadContentTriggered = null);
+
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, __) async => raw[index],
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await openAndSettle(tester, runtime);
+      for (var index = 1; index < chapters.length; index += 1) {
+        await runtime.loadContentAt(index);
+      }
+      expect(runtime.repository.cachedContent(0), isNull);
+
+      final layoutBefore = runtime.state.layoutGeneration;
+      final contentBefore = runtime.state.contentGeneration;
+      reloadCount = 0;
+      raw[0] =
+          '外部更新後的第一章。這次 identity 由 ChapterRepository 辨識，'
+          'Runtime 只發布 generation，Hybrid 自己重建目前 viewport。';
+
+      final changed = await runtime.loadContentAt(0);
+      await tester.pumpAndSettle();
+
+      expect(reloadCount, 0);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.state.layoutGeneration, layoutBefore);
+      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(runtime.state.visibleLocation.contentHash, changed.contentHash);
+      final after = snapshot(tester);
+      expect(after['initialRestoreCompleted'], true);
+      expect(
+        after['epochContentGeneration'],
+        runtime.state.contentGeneration,
+      );
+      expect((after['loadedContentHashes'] as Map)[0], changed.contentHash);
+      expect(after['missingParagraphKeys'], isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('positioning completes before blocked speculative chapter I/O', (
     tester,
   ) async {

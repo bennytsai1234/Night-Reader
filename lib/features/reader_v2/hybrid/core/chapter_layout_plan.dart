@@ -35,11 +35,17 @@ final class ChapterLayoutPlan {
   >
   _spans;
 
-  ChapterBlocks? materialize(ChapterText text) {
+  ChapterBlocks materialize(ChapterText text) {
     if (text.id != chapterIndex ||
         text.contentHash != contentHash ||
-        text.displayText.length != textLength)
-      return null;
+        text.displayText.length != textLength) {
+      throw StateError(
+        'ChapterLayoutPlan content identity changed inside one document '
+        'generation: expected chapter=$chapterIndex hash=$contentHash '
+        'length=$textLength, actual chapter=${text.id} '
+        'hash=${text.contentHash} length=${text.displayText.length}.',
+      );
+    }
     return ChapterBlocks(
       chapterIndex: chapterIndex,
       title: text.title,

@@ -97,10 +97,14 @@ jobs:
             test/features/reader_v2/reader_v2_content_identity_test.dart
             test/features/reader_v2/reader_v2_auto_page_controller_test.dart
             test/features/reader_v2/reader_v2_tts_highlight_follower_test.dart
+            test/features/reader_v2/reader_v2_tts_content_generation_test.dart
+            test/features/reader_v2/reader_v2_state_transition_smoke_test.dart
             test/core/engine/reader/chinese_text_converter_length_test.dart
           )
           if grep -Eq '(^lib/features/reader_v2/hybrid/|^test/features/reader_v2/hybrid/)' <<< "$changed"; then
             tests+=(
+              test/features/reader_v2/hybrid/chapter_layout_plan_test.dart
+              test/features/reader_v2/hybrid/reader_v2_content_conversion_cache_freshness_test.dart
               test/features/reader_v2/hybrid/hybrid_chapter_residency_test.dart
               test/features/reader_v2/hybrid/hybrid_pump_test.dart
               test/features/reader_v2/hybrid/hybrid_sliver_live_admission_test.dart

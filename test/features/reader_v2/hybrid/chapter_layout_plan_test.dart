@@ -35,12 +35,12 @@ void main() {
         displayText: 'abcdefgh',
         contentHash: 'content-v1',
       ),
-    )!;
+    );
     expect(restored.layoutIdentity, source.layoutIdentity);
     expect(restored.blocks.map((b) => b.text), ['abc', 'defgh']);
     expect(restored.paragraphGroups().length, 2);
     expect(
-      plan.materialize(
+      () => plan.materialize(
         ChapterText(
           id: 2,
           title: '',
@@ -49,10 +49,10 @@ void main() {
           contentHash: 'content-v2',
         ),
       ),
-      isNull,
+      throwsStateError,
     );
     expect(
-      plan.materialize(
+      () => plan.materialize(
         ChapterText(
           id: 2,
           title: '',
@@ -61,7 +61,7 @@ void main() {
           contentHash: 'content-v1',
         ),
       ),
-      isNull,
+      throwsStateError,
     );
   });
 }

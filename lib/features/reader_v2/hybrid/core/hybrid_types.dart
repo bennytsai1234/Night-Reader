@@ -52,26 +52,39 @@ final class BlockKey implements Comparable<BlockKey> {
 }
 
 final class LayoutEpoch {
-  const LayoutEpoch(this.value) : assert(value >= 0);
+  const LayoutEpoch(this.value, {this.contentGeneration = 0})
+    : assert(value >= 0),
+      assert(contentGeneration >= 0);
 
   static const LayoutEpoch initial = LayoutEpoch(0);
 
+  /// Layout-spec generation published by Runtime.
   final int value;
 
-  LayoutEpoch next() => LayoutEpoch(value + 1);
+  /// Semantic content generation published by Runtime.
+  ///
+  /// Paragraphs and measurements belong to the pair, not to layout style
+  /// alone: equal geometry with different text is still a different document.
+  final int contentGeneration;
+
+  LayoutEpoch next() =>
+      LayoutEpoch(value + 1, contentGeneration: contentGeneration);
 
   bool isCurrent(LayoutEpoch current) => this == current;
 
   @override
   bool operator ==(Object other) {
-    return other is LayoutEpoch && other.value == value;
+    return other is LayoutEpoch &&
+        other.value == value &&
+        other.contentGeneration == contentGeneration;
   }
 
   @override
-  int get hashCode => value.hashCode;
+  int get hashCode => Object.hash(value, contentGeneration);
 
   @override
-  String toString() => 'LayoutEpoch($value)';
+  String toString() =>
+      'LayoutEpoch(layout=$value, content=$contentGeneration)';
 }
 
 final class StyleFingerprint {
