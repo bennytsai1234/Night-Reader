@@ -158,6 +158,11 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Configure Gradle for CI
+        run: |
+          mkdir -p "$HOME/.gradle"
+          printf '%s\\n' 'org.gradle.vfs.watch=false' >> "$HOME/.gradle/gradle.properties"
+
       - name: Resolve dependencies
         run: flutter pub get
 
@@ -221,7 +226,7 @@ jobs:
           --code-size-directory build/size-analysis
 
       - name: Upload code size analysis
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: night-reader-code-size-${{ needs.plan-release.outputs.artifact_label }}
           path: build/size-analysis/
@@ -263,7 +268,7 @@ jobs:
 
       - name: Upload test APK artifact
         if: needs.plan-release.outputs.publish != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: night-reader-test-arm64-v8a
           path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
