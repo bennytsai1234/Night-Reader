@@ -224,7 +224,7 @@ class BookDetailProvider extends ChangeNotifier {
           bookDao: _bookDao,
           chapterDao: _chapterDao,
           contentDao: _chapterContentDao,
-          downloadService: _resolvedDownloadService,
+          downloadService: _downloadService,
           coverStorage: _coverStorage,
         );
     _book =
