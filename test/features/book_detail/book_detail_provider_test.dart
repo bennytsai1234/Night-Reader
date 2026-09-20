@@ -181,6 +181,9 @@ class _FakeDownloadService extends Fake implements DownloadService {
   int addDownloadTaskCallCount = 0;
 
   @override
+  Future<void> retireBook(String bookUrl) async {}
+
+  @override
   Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
     addDownloadTaskCallCount++;
     queuedBook = book;
@@ -330,7 +333,7 @@ void main() {
       expect(p.isLoading, isFalse);
     });
 
-    test('加入書架會用第一章初始化目前章節', () async {
+    test('加入書架不會虛構第一章閱讀進度', () async {
       final chapters = _makeChapters(3);
       final p = await makeProvider(chapters: chapters);
 
@@ -339,12 +342,12 @@ void main() {
       expect(result.success, isTrue);
       expect(p.book.chapterIndex, 0);
       expect(p.book.charOffset, 0);
-      expect(p.book.durChapterTitle, '第 0 章');
+      expect(p.book.durChapterTitle, isNull);
       final stored = await (GetIt.instance<BookDao>() as _FakeBookDao).getByUrl(
         'http://book.com',
       );
       expect(stored?.chapterIndex, 0);
-      expect(stored?.durChapterTitle, '第 0 章');
+      expect(stored?.durChapterTitle, isNull);
     });
 
     test('加入書架不會覆蓋既有閱讀進度', () async {
