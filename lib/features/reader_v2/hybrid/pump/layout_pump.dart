@@ -147,26 +147,6 @@ final class LayoutPump implements HybridLayoutPump {
     return work.result.future;
   }
 
-  @Deprecated('Use planChapterVisualLines; line breaks are reader-owned.')
-  Future<ChapterBlocks?> alignChapterBlocksToVisualLines(
-    ChapterBlocks source, {
-    required int maxBlockChars,
-    required HybridBlockTextStyle bodyStyle,
-    required double contentWidth,
-    required double? cellWidth,
-    required int textIndent,
-    LayoutTaskPriority priority = LayoutTaskPriority.visible,
-  }) => planChapterVisualLines(
-    source,
-    maxBlockChars: maxBlockChars,
-    bodyStyle: bodyStyle,
-    titleStyle: bodyStyle,
-    contentWidth: contentWidth,
-    cellWidth: cellWidth,
-    textIndent: textIndent,
-    priority: priority,
-  );
-
   @override
   void submit(LayoutTask task) {
     if (_disposed ||
