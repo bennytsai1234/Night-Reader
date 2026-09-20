@@ -10,12 +10,20 @@ final class ShapedGrapheme {
     required this.end,
     required this.left,
     required this.right,
+    required this.wordStart,
+    required this.wordEnd,
   });
 
   final int start;
   final int end;
   final double left;
   final double right;
+
+  /// Unicode word boundary reported by the same native Paragraph that shaped
+  /// this grapheme. VisualLineLayoutEngine may prefer this boundary for Latin
+  /// words, but the final break decision remains Reader-owned.
+  final int wordStart;
+  final int wordEnd;
 }
 
 final class ReaderParagraphLayout {
@@ -118,12 +126,20 @@ final class ReaderParagraphLayout {
             bounds.right < bounds.left) {
           throw StateError('Native shaper returned invalid glyph geometry.');
         }
+        final word = paragraph.getWordBoundary(
+          ui.TextPosition(
+            offset: range.start,
+            affinity: ui.TextAffinity.downstream,
+          ),
+        );
         result.add(
           ShapedGrapheme(
             start: range.start,
             end: range.end,
             left: bounds.left,
             right: bounds.right,
+            wordStart: word.start.clamp(0, text.length).toInt(),
+            wordEnd: word.end.clamp(0, text.length).toInt(),
           ),
         );
         offset = range.end;
