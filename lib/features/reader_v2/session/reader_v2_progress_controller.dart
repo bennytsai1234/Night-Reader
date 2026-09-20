@@ -86,7 +86,6 @@ class ReaderV2ProgressController {
     book.visualOffsetPx = normalized.visualOffsetPx;
     book.durChapterTitle = title;
     book.readerAnchorJson = anchorJson;
-    book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
     await bookDao.updateProgress(
       book.bookUrl,
       normalized.chapterIndex,
@@ -95,6 +94,10 @@ class ReaderV2ProgressController {
       visualOffsetPx: normalized.visualOffsetPx,
       readerAnchorJson: anchorJson,
     );
+    // The DAO write is the commit point for "started reading". Keep the
+    // in-memory model behind that boundary so a failed persistence cannot
+    // create a second, contradictory truth.
+    book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
     onProgressPersisted?.call();
   }
 
