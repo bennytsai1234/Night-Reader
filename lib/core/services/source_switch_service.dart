@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -16,6 +18,11 @@ import 'package:pool/pool.dart';
 import 'app_log_service.dart';
 import 'book_source_service.dart';
 import 'source_switch_handoff.dart';
+
+bool isSourceSwitchUnavailable(Object error) {
+  if (error is DioException) return error.type != DioExceptionType.cancel;
+  return error is AppException || error is TimeoutException;
+}
 
 bool _looksReadableSourceSwitchContent(String content) {
   final trimmed = content.trim();
@@ -111,7 +118,8 @@ class SourceSwitchService {
                   filter: (name, _) => name == book.name,
                   shouldBreak: (size) => size >= 1,
                 );
-              } catch (_) {
+              } catch (error) {
+                if (!isSourceSwitchUnavailable(error)) rethrow;
                 return const <SearchBook>[];
               }
             });
@@ -156,7 +164,8 @@ class SourceSwitchService {
           targetChapterIndex: targetChapterIndex,
           targetChapterTitle: targetChapterTitle,
         );
-      } catch (_) {
+      } catch (error) {
+        if (!isSourceSwitchUnavailable(error)) rethrow;
         continue;
       }
     }
@@ -171,7 +180,7 @@ class SourceSwitchService {
   }) async {
     final source = await _sourceDao.getByUrl(candidate.origin);
     if (source == null) {
-      throw StateError('找不到對應書源');
+      throw SourceException('找不到對應書源', sourceUrl: candidate.origin);
     }
 
     final alignmentBook = currentBook.copyWith(
@@ -181,7 +190,7 @@ class SourceSwitchService {
     final hydratedBook = await _service.getBookInfo(source, candidate.toBook());
     final chapters = await _service.getChapterList(source, hydratedBook);
     if (chapters.isEmpty) {
-      throw StateError('新來源沒有可用目錄');
+      throw SourceException('新來源沒有可用目錄', sourceUrl: candidate.origin);
     }
 
     final migratedBook = alignmentBook.migrateTo(hydratedBook, chapters);
@@ -198,7 +207,7 @@ class SourceSwitchService {
       nextChapterUrl: _nextReadableChapterUrl(chapters, resolvedTargetIndex),
     );
     if (!_looksReadableSourceSwitchContent(validatedContent)) {
-      throw StateError('目標章節內容不可讀');
+      throw SourceException('目標章節內容不可讀', sourceUrl: candidate.origin);
     }
 
     return PreparedSourceSwitch(

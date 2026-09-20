@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -75,8 +76,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       });
       try {
         await widget.bookDao.upsert(widget.book);
-      } catch (_) {
-        // 原設定回寫失敗時仍保留 UI 的舊值，並由下方錯誤提示告知此次操作失敗。
+      } catch (rollbackError, rollbackStack) {
+        AppLog.e(
+          '替換規則設定 rollback 持久化失敗: $rollbackError',
+          error: rollbackError,
+          stackTrace: rollbackStack,
+        );
       }
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -98,11 +103,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
           widget.book.origin,
         );
         for (final rule in enabledRules) {
-          try {
-            text = rule.apply(text);
-          } catch (_) {
-            // 單條規則失敗時保持測試流程不中斷，和文章處理一致。
-          }
+          text = rule.apply(text);
         }
       }
       if (!mounted) return;

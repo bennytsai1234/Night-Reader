@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -77,8 +78,6 @@ void main() {
 
   setUp(() async {
     ReaderV2ControllerHost.debugBeforeFlushProgress = null;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
-    ReaderV2Runtime.debugOnReloadContentTriggered = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     database = AppDatabase.forTesting(NativeDatabase.memory());
     book = Book(
@@ -114,8 +113,6 @@ void main() {
 
   tearDown(() async {
     ReaderV2ControllerHost.debugBeforeFlushProgress = null;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
-    ReaderV2Runtime.debugOnReloadContentTriggered = null;
     await GetIt.instance.reset();
     await database.close();
   });
@@ -376,7 +373,7 @@ void main() {
     );
     addTearDown(subscription.cancel);
     final fake = FakeReaderV2SourceSwitchService(
-      prepareError: StateError('prepare failure sentinel'),
+      prepareError: SourceException('prepare failure sentinel'),
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(location);
@@ -432,19 +429,19 @@ void main() {
     );
     addTearDown(subscription.cancel);
     final sourceCandidate = candidate();
+    final persistError = StateError('persist failure sentinel');
     final fake = FakeReaderV2SourceSwitchService(
       prepared: preparedFor(sourceCandidate, location),
-      persistError: StateError('persist failure sentinel'),
+      persistError: persistError,
     );
     final harness = await pumpPage(tester, sourceSwitchService: fake);
     harness.runtime.updateVisibleLocation(location);
 
-    final outcome = await harness.state.debugSelectSourceForTesting(
-      sourceCandidate,
+    await expectLater(
+      harness.state.debugSelectSourceForTesting(sourceCandidate),
+      throwsA(same(persistError)),
     );
     final stored = await readBook(book.bookUrl);
-    expect(outcome.success, isFalse);
-    expect(outcome.message, contains('persist failure sentinel'));
     expect(fake.prepareCalls, 1);
     expect(fake.persistCalls, 1);
     expect(find.byType(ReaderV2Page), findsOneWidget);
@@ -459,8 +456,7 @@ void main() {
     print(
       'T5 S2 persist failure DB=${locationOf(stored)} '
       'location=${harness.runtime.state.visibleLocation} '
-      'events=${eventNames.where((name) => name == AppEventBus.upBookshelf).length} '
-      'error="${outcome.message}"',
+      'events=${eventNames.where((name) => name == AppEventBus.upBookshelf).length}',
     );
   });
 

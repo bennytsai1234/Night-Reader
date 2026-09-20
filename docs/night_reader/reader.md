@@ -6,6 +6,9 @@ Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime
 
 | 責任 | Owner | 核心入口 |
 |---|---|---|
+| 搜尋結果與書籍/章節 metadata | Search / BookDetail / Bookshelf + DAO | `features/search`、`features/book_detail`、`features/bookshelf` |
+| 持久正文 | ReaderChapterContentStorage / Store | `core/services/reader_chapter_content_storage.dart`、`reader_chapter_content_store.dart` |
+| source owner atomic handoff | SourceSwitchService + SourceSwitchOperationLease | `core/services/source_switch_service.dart`、`source_switch_handoff.dart` |
 | Reader lifecycle（cold / ready / unavailable） | Runtime / StateMachine | `session/reader_v2_state.dart`、`reader_v2_state_machine.dart` |
 | 命令目標、operation identity、normal cancellation、pending layout intent | StateMachine / OperationToken | `session/reader_v2_state_machine.dart`、`reader_v2_operation_token.dart` |
 | displayText、內容轉換、committed content identity | ChapterRepository / Content | `chapter/reader_v2_chapter_repository.dart`、`reader_v2_content.dart`、`reader_v2_content_transformer.dart` |
@@ -17,6 +20,33 @@ Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime
 | 連續邊界追加 | AdmissionController | `hybrid/view/admission_controller.dart` |
 | 捲動、慣性、viewport geometry | Flutter ScrollPosition / Sliver | `hybrid/view/hybrid_scroll_view.dart`、`hybrid_block_sliver.dart` |
 | 原始文字 residency | HybridChapterRepository | `hybrid/text/hybrid_chapter_repository.dart` |
+
+## Full-chain ownership
+
+```mermaid
+flowchart LR
+    Search[搜尋 / 詳情 / 書架 metadata] --> Meta[(Book / Chapter DAO)]
+    Meta --> Open[BookOpenRoute]
+    Open --> Runtime[Reader session / operation]
+    Local[本機正文] --> Storage[ReaderChapterContentStorage]
+    Network[書源 network / rules] --> Storage
+    Storage --> Repository[ChapterRepository + content identity]
+    Repository --> Runtime
+    Runtime --> Hybrid[Hybrid B viewport / layout / geometry]
+    Hybrid --> Progress[Viewport capture / progress owner]
+    Progress --> Meta
+    Switch[SourceSwitchService atomic handoff] --> Meta
+    Switch --> Storage
+```
+
+`ReaderChapterContentStorage` 的 static in-flight ledger 與 `ChapterContentPreparationPipeline` 的 instance in-flight ledger 不是重複 cache：前者跨 storage instance 合併同一持久正文請求，後者只在單一 materializer 內合併 fetch/retry。兩者的 `reset` 只使 ledger 不再重用既有工作，不代表取消底層 Future。
+
+## Failure model
+
+- 外部 source/network/storage unavailable 可以轉成明確產品結果；候選換源失敗只淘汰該候選。
+- operation superseded / dispose / generation change 依既有 operation 與 generation ownership 處理，不改寫成 unavailable。
+- database transaction、layout/geometry/content invariant 與未知程式錯誤保留 root cause，不由 Reader UI / source-switch sheet 的 catch-all 改寫成普通失敗。
+- persisted anchor JSON 損壞是外部資料，可退回 scalar progress；其他程式錯誤不走 compatibility fallback。
 
 ## Data flow
 

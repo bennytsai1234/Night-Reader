@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/bookmark.dart';
@@ -126,6 +127,57 @@ class _SearchTrackingBookSourceService extends BookSourceService {
   }
 }
 
+class _ThrowingSearchBookSourceService extends BookSourceService {
+  _ThrowingSearchBookSourceService(this.error);
+
+  final Object error;
+
+  @override
+  Future<List<SearchBook>> preciseSearch(
+    BookSource source,
+    String name,
+    String author,
+  ) async {
+    throw error;
+  }
+
+  @override
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) async {
+    throw error;
+  }
+}
+
+class _AutoPrepareFailureBookSourceService extends BookSourceService {
+  _AutoPrepareFailureBookSourceService(this.error);
+
+  final Object error;
+
+  @override
+  Future<List<SearchBook>> preciseSearch(
+    BookSource source,
+    String name,
+    String author,
+  ) async {
+    return <SearchBook>[_candidate(source.bookSourceUrl)];
+  }
+
+  @override
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) async {
+    throw error;
+  }
+}
+
 class _EnabledBookSourceDao extends Fake implements BookSourceDao {
   _EnabledBookSourceDao(this.sources);
 
@@ -133,6 +185,14 @@ class _EnabledBookSourceDao extends Fake implements BookSourceDao {
 
   @override
   Future<List<BookSource>> getEnabled() async => sources;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async {
+    for (final source in sources) {
+      if (source.bookSourceUrl == url) return source;
+    }
+    return null;
+  }
 }
 
 BookSource _source(String url, String name) {
@@ -236,6 +296,58 @@ void main() {
       expect(sourceService.nameOnlySearchCalls, 1);
       expect(sourceService.preciseSearchCalls, 0);
     });
+
+    test('已知書源失敗只淘汰該搜尋候選', () async {
+      final source = _source('new-origin', '新源');
+      final service = SourceSwitchService(
+        service: _ThrowingSearchBookSourceService(
+          SourceException('書源搜尋不可用', sourceUrl: source.bookSourceUrl),
+        ),
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      expect(await service.searchAlternatives(_currentBook()), isEmpty);
+    });
+
+    test('未知搜尋程式錯誤不得被當成空候選', () async {
+      final source = _source('new-origin', '新源');
+      final error = StateError('search invariant broke');
+      final service = SourceSwitchService(
+        service: _ThrowingSearchBookSourceService(error),
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      await expectLater(
+        service.searchAlternatives(_currentBook()),
+        throwsA(same(error)),
+      );
+    });
+
+    test('auto prepare 只跳過已知候選 unavailable', () async {
+      final source = _source('new-origin', '新源');
+      final service = SourceSwitchService(
+        service: _AutoPrepareFailureBookSourceService(
+          SourceException('候選不可用', sourceUrl: source.bookSourceUrl),
+        ),
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      expect(await service.autoPrepareSwitch(_currentBook()), isNull);
+    });
+
+    test('auto prepare 不吞未知 prepare 錯誤', () async {
+      final source = _source('new-origin', '新源');
+      final error = StateError('prepare invariant broke');
+      final service = SourceSwitchService(
+        service: _AutoPrepareFailureBookSourceService(error),
+        sourceDao: _EnabledBookSourceDao(<BookSource>[source]),
+      );
+
+      await expectLater(
+        service.autoPrepareSwitch(_currentBook()),
+        throwsA(same(error)),
+      );
+    });
   });
 
   group('SourceSwitchService.prepareSwitch', () {
@@ -293,7 +405,7 @@ void main() {
       expect(resolution.targetChapterIndex, inInclusiveRange(0, 9));
     });
 
-    test('目標章節內容不可讀時丟 StateError', () async {
+    test('目標章節內容不可讀時回報 source unavailable', () async {
       final candidate = _candidate('new-origin');
       final chapters = _chapters(candidate.bookUrl, 100);
       final service = SourceSwitchService(
@@ -309,12 +421,12 @@ void main() {
           targetChapterTitle: '第6章',
         ),
         throwsA(
-          isA<StateError>().having((e) => e.message, 'message', '目標章節內容不可讀'),
+          isA<SourceException>().having((e) => e.message, 'message', '目標章節內容不可讀'),
         ),
       );
     });
 
-    test('新源沒有目錄時丟 StateError', () async {
+    test('新源沒有目錄時回報 source unavailable', () async {
       final candidate = _candidate('new-origin');
       final service = SourceSwitchService(
         service: _FakeBookSourceService(
@@ -331,12 +443,12 @@ void main() {
           targetChapterIndex: 5,
         ),
         throwsA(
-          isA<StateError>().having((e) => e.message, 'message', '新來源沒有可用目錄'),
+          isA<SourceException>().having((e) => e.message, 'message', '新來源沒有可用目錄'),
         ),
       );
     });
 
-    test('找不到對應書源時丟 StateError', () async {
+    test('找不到對應書源時回報 source unavailable', () async {
       final candidate = _candidate('missing-origin');
       final service = SourceSwitchService(
         service: _FakeBookSourceService(chapters: _chapters('x', 3)),
@@ -346,7 +458,7 @@ void main() {
       await expectLater(
         service.prepareSwitch(_currentBook(), candidate),
         throwsA(
-          isA<StateError>().having((e) => e.message, 'message', '找不到對應書源'),
+          isA<SourceException>().having((e) => e.message, 'message', '找不到對應書源'),
         ),
       );
     });

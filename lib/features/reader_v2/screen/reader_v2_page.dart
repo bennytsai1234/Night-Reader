@@ -489,8 +489,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         success: true,
         message: '已切換到 ${prepared.source.bookSourceName}',
       );
-    } catch (e) {
-      return (success: false, message: '換源失敗: $e');
+    } catch (error) {
+      if (!isSourceSwitchUnavailable(error)) rethrow;
+      return (success: false, message: '換源失敗: $error');
     }
   }
 

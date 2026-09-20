@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -22,16 +21,6 @@ typedef ReaderV2ViewportRestore = Future<bool> Function(
 );
 
 class ReaderV2Runtime extends ChangeNotifier {
-  /// Optional transition observation for deterministic state-transition tests.
-  ///
-  /// The production path leaves this null, and the dispatch is debug-only, so
-  /// no counter or history is allocated unless a test explicitly opts in.
-  @visibleForTesting
-  static VoidCallback? debugOnApplyPresentationTriggered;
-
-  @visibleForTesting
-  static VoidCallback? debugOnReloadContentTriggered;
-
   factory ReaderV2Runtime({
     required Book book,
     required ReaderV2ChapterRepository repository,
@@ -185,8 +174,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
     final stagedSpec = stateMachine.currentOperation?.layoutSpec ?? state.layoutSpec;
     if (stagedSpec.layoutSignature == spec.layoutSignature) return;
-    if (kDebugMode) debugOnApplyPresentationTriggered?.call();
-
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
@@ -207,7 +194,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> reloadContentPreservingLocation() async {
-    if (kDebugMode) debugOnReloadContentTriggered?.call();
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??

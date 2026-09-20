@@ -24,9 +24,13 @@ class _FakeCoverStorageService extends Fake implements BookCoverStorageService {
 }
 
 class _SourceAwareBookSourceService extends BookSourceService {
-  _SourceAwareBookSourceService(this.chaptersByOrigin);
+  _SourceAwareBookSourceService(
+    this.chaptersByOrigin, {
+    this.bookInfoErrorsByOrigin = const <String, Object>{},
+  });
 
   final Map<String, List<BookChapter>> chaptersByOrigin;
+  final Map<String, Object> bookInfoErrorsByOrigin;
 
   @override
   Future<Book> getBookInfo(
@@ -34,6 +38,8 @@ class _SourceAwareBookSourceService extends BookSourceService {
     Book book, {
     CancelToken? cancelToken,
   }) async {
+    final error = bookInfoErrorsByOrigin[source.bookSourceUrl];
+    if (error != null) throw error;
     return book;
   }
 
@@ -184,6 +190,41 @@ void main() {
     expect(await db.chapterDao.getByBook(oldUrl), isEmpty);
     expect(await db.bookDao.getByUrl(newUrl), isNotNull);
     expect(await db.chapterDao.getByBook(newUrl), hasLength(4));
+  });
+
+  test('未知換源 invariant 不得被 BookDetail 改寫成普通失敗', () async {
+    final oldUrl = 'https://old-source.example/book/1';
+    final newUrl = 'https://new-source.example/book/1';
+    final error = StateError('source handoff invariant broke');
+    final service = _SourceAwareBookSourceService(
+      <String, List<BookChapter>>{
+        'https://old-source.example': _chapters(oldUrl, 3),
+        'https://new-source.example': _chapters(newUrl, 4),
+      },
+      bookInfoErrorsByOrigin: <String, Object>{
+        'https://new-source.example': error,
+      },
+    );
+    final provider = BookDetailProvider(
+      _initialSearchBook(),
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      sourceDao: db.bookSourceDao,
+      service: service,
+      sourceSwitchService: SourceSwitchService(
+        service: service,
+        sourceDao: db.bookSourceDao,
+      ),
+      coverStorage: _FakeCoverStorageService(),
+    );
+    addTearDown(provider.dispose);
+    await _waitForInitialization(provider);
+
+    await expectLater(
+      provider.changeSource(_newSourceCandidate()),
+      throwsA(same(error)),
+    );
+    expect(provider.book.bookUrl, oldUrl);
   });
 
   test('新來源沒有目錄時換源失敗且保留舊來源狀態與資料', () async {

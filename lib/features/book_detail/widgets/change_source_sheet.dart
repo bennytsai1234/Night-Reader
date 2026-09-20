@@ -177,11 +177,6 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
         context,
       ).showSnackBar(SnackBar(content: Text(outcome.message)));
       if (outcome.success) Navigator.pop(context);
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('換源失敗：$error')));
     } finally {
       if (mounted) setState(() => _isSwitchingSource = false);
     }

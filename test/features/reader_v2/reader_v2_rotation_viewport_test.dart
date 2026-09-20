@@ -23,7 +23,6 @@ void main() {
   late List<BookChapter> chapters;
 
   setUp(() async {
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     database = AppDatabase.forTesting(NativeDatabase.memory());
     final getIt = GetIt.instance;
@@ -72,7 +71,6 @@ void main() {
   });
 
   tearDown(() async {
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
     await GetIt.instance.reset();
     await database.close();
   });
@@ -170,8 +168,6 @@ void main() {
   testWidgets('S1 continuous viewport/inset gradient measures each frame', (
     tester,
   ) async {
-    var applyCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () => applyCount += 1;
 
     var mounted = true;
     final host = ReaderV2ControllerHost(
@@ -198,7 +194,6 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(runtime.state.hasStableWorld, isTrue);
-    applyCount = 0;
 
     const frameCount = 12;
     for (var frame = 1; frame <= frameCount; frame += 1) {
@@ -229,27 +224,15 @@ void main() {
     }
     await tester.pump();
 
-    // S2 regression: the continuous stream is coalesced, but its final spec
-    // is still applied exactly once.
-    expect(applyCount, 1);
+    // Continuous viewport updates coalesce to one committed layout generation.
     expect(runtime.state.layoutSpec.viewportSize, const Size(1000, 360));
     expect(runtime.state.layoutGeneration, 1);
-    // Keep the values visible in the test output for the ledger evidence.
-    debugPrint(
-      'S1 evidence: frames=$frameCount, applyPresentation=$applyCount, '
-      'layoutGeneration=${runtime.state.layoutGeneration}, '
-      'finalSize=${runtime.state.layoutSpec.viewportSize}',
-    );
   });
 
   testWidgets(
     'S3 portrait-landscape-portrait repeated trips preserve exact anchor',
     (tester) async {
-      var applyCount = 0;
       final harness = await makeHarness(tester);
-      ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-        applyCount += 1;
-      };
       final content = await harness.runtime.loadContentAt(0);
       final offset = content.displayText.indexOf('第41句');
       expect(offset, greaterThan(0));
@@ -288,16 +271,9 @@ void main() {
         );
         expect(portrait.charOffset, location.charOffset);
       }
-
-      expect(applyCount, trips * 2);
       expect(
         harness.runtime.state.layoutGeneration,
         initialGeneration + (trips * 2),
-      );
-      debugPrint(
-        'S3 round-trip evidence: trips=$trips, applyPresentation=$applyCount, '
-        'anchorOffset=${location.charOffset}, '
-        'finalLocation=${harness.runtime.state.visibleLocation}',
       );
     },
   );

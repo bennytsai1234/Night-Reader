@@ -5,6 +5,7 @@ on:
     paths:
       - 'lib/features/reader_v2/**'
       - 'lib/features/book_detail/book_detail_provider.dart'
+      - 'lib/features/book_detail/widgets/change_source_sheet.dart'
       - 'lib/core/models/book/**'
       - 'lib/core/models/replace_rule.dart'
       - 'lib/core/engine/reader/**'
@@ -111,9 +112,10 @@ jobs:
               test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart
             )
           fi
-          if grep -Eq '(source_switch|book_detail_provider|reader_v2_page|bookmark|download|book_logic|chapter_alignment|book_cover_storage)' <<< "$changed"; then
+          if grep -Eq '(source_switch|change_source_sheet|book_detail_provider|reader_v2_page|bookmark|download|book_logic|chapter_alignment|book_cover_storage)' <<< "$changed"; then
             tests+=(
               test/features/reader_v2/reader_v2_source_switch_loop_test.dart
+              test/features/book_detail/book_detail_source_switch_test.dart
               test/core/services/source_switch_service_test.dart
               test/core/services/source_switch_progress_test.dart
               test/core/services/book_cover_storage_service_test.dart
@@ -165,6 +167,7 @@ jobs:
           flutter analyze --no-pub \
             lib/features/reader_v2 \
             lib/features/book_detail/book_detail_provider.dart \
+            lib/features/book_detail/widgets/change_source_sheet.dart \
             lib/core/models/book \
             lib/core/models/replace_rule.dart \
             lib/core/engine/reader \
@@ -196,6 +199,7 @@ jobs:
           set -o pipefail
           flutter test \
             test/features/reader_v2 \
+            test/features/book_detail/book_detail_source_switch_test.dart \
             test/core/services/chapter_content_preparation_pipeline_test.dart \
             test/core/services/source_switch_service_test.dart \
             test/core/services/source_switch_progress_test.dart \
