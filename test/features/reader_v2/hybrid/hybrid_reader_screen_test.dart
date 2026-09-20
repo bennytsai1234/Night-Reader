@@ -270,6 +270,78 @@ void main() {
           as Map<String, Object?>;
 
   testWidgets(
+    'open restores saved location only after bidirectional ready world exists',
+    (tester) async {
+      final previous = Completer<String?>();
+      final next = Completer<String?>();
+      final chapters = List.generate(
+        7,
+        (index) => chapter(index, paragraphCount: 10),
+      );
+      final saved = ReaderV2Location(
+        chapterIndex: 3,
+        charOffset: (chapters[3].content?.length ?? 0) ~/ 3,
+        visualOffsetPx: 24,
+      );
+      final runtime = makeRuntime(
+        chapters,
+        initialLocation: saved,
+        contentLoader: (index, value) {
+          if (index == 2) return previous.future;
+          if (index == 4) return next.future;
+          return Future.value(value.content);
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+
+      var completed = false;
+      final opening = runtime.openBook();
+      unawaited(opening.whenComplete(() => completed = true));
+
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(completed, isFalse);
+
+      previous.complete(chapters[2].content);
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        completed,
+        isFalse,
+        reason: 'Opening the saved location still owns the forward ready world.',
+      );
+
+      next.complete(chapters[4].content);
+      await completeWithFrames(tester, opening);
+
+      final ready = snapshot(tester);
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, saved.chapterIndex);
+      expect(
+        runtime.state.visibleLocation.charOffset,
+        saved.charOffset,
+      );
+      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3, 4]));
+      expect(
+        ready['beforeExtent'] as num,
+        greaterThanOrEqualTo(3000),
+        reason: 'Open must enter with the steady-state backward lead ready.',
+      );
+      expect(
+        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
+        greaterThanOrEqualTo(6000),
+        reason: 'Open must enter with the steady-state forward lead ready.',
+      );
+      expect(ready['missingParagraphKeys'], isEmpty);
+    },
+  );
+
+  testWidgets(
     'pending far navigation owns demand before target text finishes loading',
     (tester) async {
       final target = Completer<String?>();
