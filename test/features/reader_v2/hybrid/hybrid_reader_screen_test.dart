@@ -300,7 +300,7 @@ void main() {
   );
 
   testWidgets(
-    'chapter jump commits only after adjacent chapter world is ready',
+    'chapter jump commits only after previous chapter world is ready',
     (tester) async {
       final previous = Completer<String?>();
       final chapters = List.generate(
@@ -349,7 +349,7 @@ void main() {
   );
 
   testWidgets(
-    'jump-ready neighbor unavailability stays an external frontier',
+    'jump-ready previous chapter unavailability stays an external frontier',
     (tester) async {
       final chapters = List.generate(
         5,
