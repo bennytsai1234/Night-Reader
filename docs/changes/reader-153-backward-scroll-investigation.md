@@ -1,6 +1,6 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / jump readiness architecture implemented / conservative scheduler retained / not merged**
+Status: **OPEN / reader entry readiness architecture implemented / conservative scheduler retained / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
@@ -266,11 +266,11 @@ The reproduced asymmetry is now explained by two existing steady-state mechanism
 
 Therefore the first `N -> N-1` crossing was a cold-start hole: the jump committed before the same lead invariant used by steady-state scrolling had been established. By the time `N-1` finally appeared, `N-2` was already warming and the moving lead continued advancing, which is why sustained upward scrolling was normally smooth.
 
-## Jump readiness architecture on this branch
+## Reader entry readiness architecture on this branch
 
-A jump no longer commits when only the target viewport is ready.
+An interactive Reader entry no longer commits when only the target viewport is ready. The full ready-world barrier applies to both `open` (restoring the saved reading location) and explicit `jump`.
 
-Before a `ReaderV2OperationKind.jump` completes:
+Before a `ReaderV2OperationKind.open` or `ReaderV2OperationKind.jump` completes:
 
 - the target chapter is materialized at anchor priority;
 - the immediately previous and next chapters, when they exist, finish their ChapterBlocks / visual-line plan at visible priority;
@@ -279,15 +279,15 @@ Before a `ReaderV2OperationKind.jump` completes:
   - the target viewport itself;
   - 6000px ahead of the target.
 
-This intentionally favors a slightly longer, predictable jump transaction over exposing a partially warmed world after the jump. The user sees the jump as one operation; once it commits, both directions should already satisfy the normal scrolling readiness invariant.
+This intentionally favors a slightly longer, predictable entry transaction over exposing a partially warmed world. Opening a book restores its saved `chapterIndex + charOffset + visualOffsetPx`; explicit jump changes location. In both cases, once the Reader becomes interactive, both directions should already satisfy the normal scrolling readiness invariant.
 
 This remains distance-bounded rather than "pin three entire chapters". ParagraphCache leases already support a live viewport window independently from the idle LRU capacity, and old leases are released as the window moves.
 
 If an adjacent chapter is externally unavailable, that remains an external frontier. It does not turn a readable jump target into a global Reader failure.
 
-The heavier barrier is intentionally scoped to `jump`. Open, restore, presentation rebuild, and content reload keep their existing completion semantics.
+The heavier barrier is intentionally scoped to `open` and `jump`. Generic restore, presentation rebuild, and content reload keep their existing completion semantics.
 
-The experimental actual-cost ChapterWork metering remains reverted: jump smoothness is achieved by defining the correct transaction completion boundary, not by allowing more speculative work to run inside a frame.
+The experimental actual-cost ChapterWork metering remains reverted: entry smoothness is achieved by defining the correct transaction completion boundary, not by allowing more speculative work to run inside a frame.
 
 ---
 
