@@ -489,7 +489,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           isTitle: true,
           justify: false,
         ),
-        contentWidth: spec.contentWidth,
+        contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
         textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
         priority: anchor
@@ -1271,7 +1271,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           isTitle: head.isTitle,
           justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
-        contentWidth: spec.contentWidth,
+        contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
         textColor: widget.textColor,
         priority: _priorityFor(headKey, anchor: anchor),
@@ -1843,11 +1843,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   ReaderV2Style _overlayStyle() {
-    final specStyle = widget.runtime.state.layoutSpec.style;
+    final spec = widget.runtime.state.layoutSpec;
     return widget.style.copyWith(
       paddingTop: 0.0,
-      paddingLeft: specStyle.paddingLeft,
-      paddingRight: specStyle.paddingRight,
+      paddingLeft: spec.textPaddingLeft,
+      paddingRight: spec.textPaddingRight,
     );
   }
 
@@ -1938,8 +1938,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             cacheExtent: _viewportSize.height,
             textColor: widget.textColor,
             horizontalPadding: EdgeInsets.only(
-              left: state.layoutSpec.style.paddingLeft,
-              right: state.layoutSpec.style.paddingRight,
+              left: state.layoutSpec.textPaddingLeft,
+              right: state.layoutSpec.textPaddingRight,
             ),
             physics: _physics,
           ),
