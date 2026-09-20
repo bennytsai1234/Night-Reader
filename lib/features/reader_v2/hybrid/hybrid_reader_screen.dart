@@ -416,7 +416,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }) async {
     final neighbors = <int>[
       if (chapter > 0) chapter - 1,
-      if (chapter + 1 < widget.runtime.chapterCount) chapter + 1,
     ];
     if (neighbors.isEmpty) return isCurrent();
 
@@ -451,9 +450,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     required double target,
     required bool jumpOwnsNeighborhood,
   }) {
-    final viewportBottom = target + math.max(1, _viewportSize.height);
-    if (!jumpOwnsNeighborhood) return viewportBottom;
-    return viewportBottom + _admission.guaranteedWindow;
+    return target + math.max(1, _viewportSize.height);
   }
 
   Future<void> _nextFrame() {
