@@ -1,6 +1,6 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / backward-frontier readiness defect reproduced / conservative scheduler restored / not merged**
+Status: **OPEN / jump readiness architecture implemented / conservative scheduler retained / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
@@ -254,6 +254,38 @@ An experimental change briefly removed the conservative full-slice admission est
 The branch keeps the safer demand-priority promotion, but the reproduced backward-frontier problem is now treated as a **jump/readiness contract problem**, not something to solve by letting chapter planning run more aggressively inside a frame.
 
 The next architecture step should make jump completion wait for the required neighboring reader-ready world instead of trading hidden post-jump stalls for scheduler risk.
+
+---
+
+## Why only the first backward crossing stalled
+
+The reproduced asymmetry is now explained by two existing steady-state mechanisms:
+
+1. `windowRadius = 2` starts raw acquisition for `N-2 ... N+2` as soon as jump demand moves to chapter `N`. Every loaded resident chapter then begins background materialization.
+2. After scrolling starts, `_reconcileVisibleWindow()` continuously advances demand using a 3000px backward guaranteed window and a 6000px forward guaranteed window. As the visible chapter changes, the resident range moves with it.
+
+Therefore the first `N -> N-1` crossing was a cold-start hole: the jump committed before the same lead invariant used by steady-state scrolling had been established. By the time `N-1` finally appeared, `N-2` was already warming and the moving lead continued advancing, which is why sustained upward scrolling was normally smooth.
+
+## Jump readiness architecture on this branch
+
+A jump no longer commits when only the target viewport is ready.
+
+Before a `ReaderV2OperationKind.jump` completes:
+
+- the target chapter is materialized at anchor priority;
+- the immediately previous and next chapters, when they exist, finish their ChapterBlocks / visual-line plan at visible priority;
+- the DocumentIndex / Paragraph geometry is extended to the same readiness range used during steady-state scrolling:
+  - 3000px behind the target;
+  - the viewport itself;
+  - 6000px ahead of the target.
+
+This is distance-bounded rather than "pin three entire chapters". ParagraphCache leases already support a live viewport window independently from the idle LRU capacity, and old leases are released as the window moves.
+
+If an adjacent chapter is externally unavailable, that remains an external frontier. It does not turn a readable jump target into a global Reader failure.
+
+The heavier barrier is intentionally scoped to `jump`. Open, restore, presentation rebuild, and content reload keep their existing completion semantics.
+
+The experimental actual-cost ChapterWork metering remains reverted: jump smoothness is achieved by defining the correct transaction completion boundary, not by allowing more speculative work to run inside a frame.
 
 ---
 
