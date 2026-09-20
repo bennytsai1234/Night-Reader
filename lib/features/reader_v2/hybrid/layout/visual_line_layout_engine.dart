@@ -148,25 +148,60 @@ final class VisualLineLayoutEngine {
     required double firstLineIndent,
   }) {
     final lines = <_LineRange>[];
+    final graphemeIndexByStart = <int, int>{
+      for (var i = 0; i < shaped.length; i += 1) shaped[i].start: i,
+    };
     var lineStart = shaped.first.start;
     var lineOrigin = shaped.first.left;
     var available = contentWidth - firstLineIndent;
-    var hasGrapheme = false;
+    var index = 0;
 
-    for (final grapheme in shaped) {
+    while (index < shaped.length) {
+      final grapheme = shaped[index];
       final occupied = grapheme.right - lineOrigin;
-      if (hasGrapheme && occupied > available + _fitEpsilon) {
-        lines.add(_LineRange(lineStart, grapheme.start));
-        lineStart = grapheme.start;
-        lineOrigin = grapheme.left;
+      final hasContent = grapheme.start > lineStart;
+      if (hasContent && occupied > available + _fitEpsilon) {
+        final wordBreak = _preferredWordBreak(
+          grapheme,
+          lineStart: lineStart,
+          graphemeIndexByStart: graphemeIndexByStart,
+        );
+        final breakOffset = wordBreak ?? grapheme.start;
+        final breakIndex = graphemeIndexByStart[breakOffset];
+        if (breakIndex == null || breakOffset <= lineStart) {
+          throw StateError(
+            'Reader line policy produced an invalid break at $breakOffset.',
+          );
+        }
+        lines.add(_LineRange(lineStart, breakOffset));
+        lineStart = breakOffset;
+        lineOrigin = shaped[breakIndex].left;
         available = contentWidth;
+        index = breakIndex;
+        continue;
       }
-      hasGrapheme = true;
+      index += 1;
     }
+
     if (lineStart < windowLength) {
       lines.add(_LineRange(lineStart, windowLength));
     }
     return lines;
+  }
+
+  int? _preferredWordBreak(
+    ShapedGrapheme overflowing, {
+    required int lineStart,
+    required Map<int, int> graphemeIndexByStart,
+  }) {
+    final wordStart = overflowing.wordStart;
+    if (wordStart <= lineStart || wordStart >= overflowing.end) {
+      return null;
+    }
+    if (!graphemeIndexByStart.containsKey(wordStart)) {
+      return null;
+    }
+    return wordStart;
   }
 
   int _safeBoundary(String text, int offset) {
