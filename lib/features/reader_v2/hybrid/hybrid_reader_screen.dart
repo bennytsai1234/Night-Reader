@@ -273,6 +273,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Future<bool> _restoreCore(
     ReaderV2Location location, {
     required bool Function() isCurrent,
+    ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
     final binding = _pump;
@@ -295,6 +296,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         priority: LayoutTaskPriority.anchor,
       );
       if (blocks == null || !isCurrent()) return false;
+
+      final jumpOwnsNeighborhood =
+          operationKind == ReaderV2OperationKind.jump;
+      if (jumpOwnsNeighborhood) {
+        final neighborhoodReady = await _prepareJumpNeighborhood(
+          chapter,
+          isCurrent: isCurrent,
+        );
+        if (!neighborhoodReady || !isCurrent()) return false;
+      }
+
       final normalized = location.normalized(
         chapterCount: widget.runtime.chapterCount,
         chapterLength: blocks.displayText.length,
@@ -320,15 +332,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
         final target = _offsetForAnchor(anchor, blocks);
+        final readyTop = _jumpReadinessTop(
+          target: target ?? 0,
+          chapter: chapter,
+          location: normalized,
+          jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+        );
+        final readyBottom =
+            (target ?? 0) + math.max(1, _viewportSize.height);
         _requestWindow(
-          target ?? 0,
-          (target ?? 0) + math.max(1, _viewportSize.height),
+          readyTop,
+          readyBottom,
           anchorKey: anchor.blockKey,
         );
         final positionedTarget = _offsetForAnchor(anchor, blocks);
         if (positionedTarget != null &&
             _windowReady(
-              positionedTarget,
+              _jumpReadinessTop(
+                target: positionedTarget,
+                chapter: chapter,
+                location: normalized,
+                jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+              ),
               positionedTarget + _viewportSize.height,
             ))
           break;
@@ -382,6 +407,50 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         );
       }
     }
+  }
+
+  Future<bool> _prepareJumpNeighborhood(
+    int chapter, {
+    required bool Function() isCurrent,
+  }) async {
+    final neighbors = <int>[
+      if (chapter > 0) chapter - 1,
+      if (chapter + 1 < widget.runtime.chapterCount) chapter + 1,
+    ];
+    if (neighbors.isEmpty) return isCurrent();
+
+    Future<void> prepare(int neighbor) async {
+      try {
+        await _ensureChapterBlocks(
+          neighbor,
+          priority: LayoutTaskPriority.visible,
+        );
+      } on ReaderV2ContentUnavailableException {
+        // A broken adjacent source is an external frontier, not a reason to
+        // invalidate an otherwise readable jump target.
+      }
+    }
+
+    await Future.wait<void>(neighbors.map(prepare));
+    return isCurrent();
+  }
+
+  double _jumpReadinessTop({
+    required double target,
+    required int chapter,
+    required ReaderV2Location location,
+    required bool jumpOwnsNeighborhood,
+  }) {
+    if (!jumpOwnsNeighborhood ||
+        chapter <= 0 ||
+        location.charOffset > 0 ||
+        !_blocks.containsKey(chapter - 1)) {
+      return target;
+    }
+    // A chapter jump lands at the chapter start. Require at least one real
+    // backward block before committing the new world so the viewport cannot
+    // open exactly on an unmaterialized minScrollExtent.
+    return target - 1.0;
   }
 
   Future<void> _nextFrame() {
@@ -1200,7 +1269,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     _dragging = false;
     _sawUserScroll = false;
-    final ok = await _restoreCore(location, isCurrent: current);
+    final ok = await _restoreCore(
+      location,
+      isCurrent: current,
+      operationKind: operation?.kind,
+    );
     if (!ok || !current()) return false;
     _lastReportedLocation = location;
     _scheduleRebuild();
