@@ -239,6 +239,7 @@ final class VisualLineLayoutEngine {
     final graphemeIndexByStart = <int, int>{
       for (var i = 0; i < shaped.length; i += 1) shaped[i].start: i,
     };
+    final graphemeStarts = graphemeIndexByStart.keys.toSet();
     var lineStart = shaped.first.start;
     var lineOrigin = shaped.first.left;
     var available = contentWidth - firstLineIndent;
@@ -260,7 +261,7 @@ final class VisualLineLayoutEngine {
           text: text,
           overflowing: grapheme,
           lineStart: lineStart,
-          graphemeStarts: graphemeIndexByStart.keys.toSet(),
+          graphemeStarts: graphemeStarts,
         );
         final breakOffset = wordBreak ?? grapheme.start;
         final breakIndex = graphemeIndexByStart[breakOffset];
