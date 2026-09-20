@@ -1,6 +1,6 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / confirmed logic fixes implemented / performance hypothesis still open / not merged**
+Status: **OPEN / reproduced backward-frontier scheduler defect repaired / partial-publication hypothesis conditional / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
@@ -216,6 +216,49 @@ Do not jump straight to any of the following:
 - treat a single successful or failed reproduction as proof of a universal performance problem.
 
 The next change must follow an established root cause.
+
+---
+
+## 2026-09-20 reproducible backward-frontier finding
+
+The symptom is now reproducible on a newly opened book:
+
+- jump to a chapter;
+- immediately drag upward;
+- the previous chapter may take about 1–2 seconds to become available;
+- once that chapter has finished preparing, upward scrolling is normal;
+- downward scrolling does not show the same immediate delay.
+
+The direction asymmetry is explained by the jump contract: `jumpToChapter()` targets `charOffset: 0`, the beginning of the target chapter. Downward movement initially remains inside the already prepared target chapter, while upward movement immediately crosses the backward frontier and requires the previous chapter.
+
+### Important correction about v0.2.152
+
+v0.2.152 already had the same whole-chapter publication barrier. It also yielded chapter preparation once per semantic paragraph and only published the resulting `ChapterBlocks` after all paragraph steps completed.
+
+The same scheduler defect also existed in v0.2.152:
+
+```text
+dragging frame budget = one ballistic slice
+ChapterWork predicted cost = one entire ballistic slice
+alignment step = one semantic paragraph
+```
+
+After the first chapter step consumed any measurable time, the scheduler treated the next step as another entire slice. In practice this imposed approximately one semantic paragraph per frame even when the step was cheap.
+
+That means a chapter with roughly 60–120 paragraph steps can naturally require around 1–2 seconds at 60 Hz before the whole chapter becomes publishable. Therefore the observed delay is **not proven to be a v0.2.153-only regression**. v0.2.153 can make each step heavier because it performs Reader-owned visual-line planning, but the paragraph-count-to-frame-count floor predates that change.
+
+### Repair on this branch
+
+The pump no longer fabricates a full-slice predicted cost for chapter work that has no predictive model.
+
+- drawable layout keeps its existing trained pre-execution cost estimate;
+- chapter planning is charged by actual measured elapsed time;
+- multiple cheap chapter steps may share the same frame budget;
+- an expensive chapter step naturally consumes the remaining budget and stops further work that frame.
+
+This removes the false invariant `minimum preparation frames ~= paragraph count` without increasing the frame budget.
+
+A scheduler contract was added to prove that multiple cheap chapter steps can complete inside one sufficiently large frame budget. Partial chapter publication / reverse frontier materialization remains a conditional next step only if real-device testing still shows meaningful backward-frontier delay after this repair.
 
 ---
 
