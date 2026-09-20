@@ -273,12 +273,15 @@ A jump no longer commits when only the target viewport is ready.
 Before a `ReaderV2OperationKind.jump` completes:
 
 - the target chapter is materialized at anchor priority;
-- the immediately previous chapter, when it exists, finishes its ChapterBlocks / visual-line plan at visible priority;
-- the DocumentIndex / Paragraph geometry is extended 3000px behind the target plus the target viewport itself.
+- the immediately previous and next chapters, when they exist, finish their ChapterBlocks / visual-line plan at visible priority;
+- the DocumentIndex / Paragraph geometry is extended to the same steady-state lead used during normal scrolling:
+  - 3000px behind the target;
+  - the target viewport itself;
+  - 6000px ahead of the target.
 
-The next chapter is intentionally not part of the jump barrier. A chapter jump lands at the start of N, so downward movement still has the whole target chapter as runway; the existing steady-state forward lead can build while the user traverses N.
+This intentionally favors a slightly longer, predictable jump transaction over exposing a partially warmed world after the jump. The user sees the jump as one operation; once it commits, both directions should already satisfy the normal scrolling readiness invariant.
 
-This is backward-distance-bounded rather than "pin neighboring chapters". ParagraphCache leases already support a live viewport window independently from the idle LRU capacity, and old leases are released as the window moves.
+This remains distance-bounded rather than "pin three entire chapters". ParagraphCache leases already support a live viewport window independently from the idle LRU capacity, and old leases are released as the window moves.
 
 If an adjacent chapter is externally unavailable, that remains an external frontier. It does not turn a readable jump target into a global Reader failure.
 
