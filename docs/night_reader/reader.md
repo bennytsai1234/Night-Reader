@@ -118,7 +118,7 @@ flutter test test/core/services/source_switch_service_test.dart test/core/servic
 - `hybrid_reader_screen_test.dart`：定位、pending semantic target、材料化、跨章往返與 viewport correctness。
 - `hybrid_pump_test.dart`：共用 queue、frame credit、取消與 Paragraph leases。
 - `chapter_layout_plan_test.dart`、`hybrid_chapter_residency_test.dart`：layout identity、plan reuse 與 raw residency。
-- `hybrid_visual_layout_segmentation_test.dart`、`hybrid_visual_layout_compensation_test.dart`、`em_grid_lock_test.dart`：行界、末行補償與 typography。
+- `hybrid_visual_layout_segmentation_test.dart`、`hybrid_visual_layout_compensation_test.dart`：歷史 segmentation／末行補償 coverage；production visual-line ownership 以 `VisualLineLayoutEngine` 與 drawable invariant 為準。
 - `reader_v2_runtime_operation_test.dart`、`reader_v2_state_machine_test.dart`：operation ownership。
 - style、rotation、簡繁轉換、source-switch tests：跨模組位置與 identity 契約。
 
