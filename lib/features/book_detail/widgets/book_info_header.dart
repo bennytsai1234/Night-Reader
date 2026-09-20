@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
@@ -118,29 +119,32 @@ class BookInfoHeader extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 SizedBox(
                   width: double.infinity,
-                  child: provider.isInBookshelf
-                      ? FilledButton.icon(
-                          onPressed: () => navigateToReader(
-                            context,
-                            book,
-                            ReaderV2OpenTarget.resume(book),
-                            provider.allChapters,
-                          ),
-                          style: actionButtonStyle,
-                          icon: const Icon(Icons.menu_book_rounded, size: 18),
-                          label: Text(
-                            book.chapterIndex == 0 && book.charOffset == 0
-                                ? '開始閱讀'
-                                : '繼續閱讀',
-                          ),
-                        )
-                      : FilledButton.icon(
-                          onPressed: () => toggleBookshelf(context, provider),
-                          style: actionButtonStyle,
-                          icon: const Icon(Icons.library_add, size: 18),
-                          label: const Text('加入書架'),
-                        ),
+                  child: FilledButton.icon(
+                    onPressed: () => navigateToReader(
+                      context,
+                      book,
+                      ReaderV2OpenTarget.resume(book),
+                      provider.allChapters,
+                    ),
+                    style: actionButtonStyle,
+                    icon: const Icon(Icons.menu_book_rounded, size: 18),
+                    label: Text(
+                      book.hasStartedReading ? '繼續閱讀' : '開始閱讀',
+                    ),
+                  ),
                 ),
+                if (!provider.isInBookshelf) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => toggleBookshelf(context, provider),
+                      style: actionButtonStyle,
+                      icon: const Icon(Icons.library_add, size: 18),
+                      label: const Text('加入書架'),
+                    ),
+                  ),
+                ],
                 if (!book.isLocal)
                   Align(
                     alignment: Alignment.centerLeft,

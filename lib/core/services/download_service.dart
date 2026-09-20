@@ -1,6 +1,7 @@
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
 import 'download/download_base.dart';
@@ -159,6 +160,40 @@ class DownloadService extends DownloadBase
     tasks.removeWhere((t) => t.bookUrl == bookUrl);
     downloadDao.deleteByUrl(bookUrl);
     update();
+  }
+
+  Future<int> queueMissingForLibraryReading(
+    Book book,
+    List<BookChapter> chapters,
+  ) async {
+    if (book.isLocal || !book.isInBookshelf || chapters.isEmpty) return 0;
+    final stored = await chapterContentDao.getStoredChapterIndices(
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+    );
+    final missing = chapters
+        .where((chapter) => !stored.contains(chapter.index))
+        .toList();
+    if (missing.isEmpty) return 0;
+    await addDownloadTask(book, missing);
+    return missing.length;
+  }
+
+  Future<void> retireBook(String bookUrl) async {
+    await _initialization;
+    markTaskRetiring(bookUrl);
+    try {
+      for (final task in tasks.where((task) => task.bookUrl == bookUrl)) {
+        task.status = DownloadTask.statusPaused;
+      }
+      update();
+      await waitForTaskIdle(bookUrl);
+      await downloadDao.deleteByUrl(bookUrl);
+      tasks.removeWhere((task) => task.bookUrl == bookUrl);
+    } finally {
+      clearTaskRetiring(bookUrl);
+      update();
+    }
   }
 
   void moveTask(String bookUrl, int delta) {

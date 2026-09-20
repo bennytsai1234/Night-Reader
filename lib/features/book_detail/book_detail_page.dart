@@ -1,8 +1,7 @@
 import 'dart:io';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:super_sliver_list/super_sliver_list.dart' as super_list;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/change_cover_sheet.dart';
@@ -37,9 +36,12 @@ class BookDetailPage extends StatefulWidget {
 
 class _BookDetailPageState extends State<BookDetailPage> {
   final ScrollController _scrollController = ScrollController();
+  final super_list.ListController _chapterListController =
+      super_list.ListController();
 
   @override
   void dispose() {
+    _chapterListController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -157,7 +159,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                             ),
                           )
                         else
-                          SliverList(
+                          super_list.SuperSliverList(
+                            listController: _chapterListController,
                             delegate: SliverChildBuilderDelegate((ctx, i) {
                               final chapter = provider.filteredChapters[i];
                               final isCurrent =
@@ -301,27 +304,17 @@ class _BookDetailPageState extends State<BookDetailPage> {
       final confirmed = await _confirmAction(
         context,
         title: '移出書架',
-        message: '這本書會從書架移出，已快取正文不會被刪除。',
+        message: '這本書會從書架移出，並刪除本機正文、書籤、下載任務、目錄與封面資料。',
         confirmText: '移出',
       );
       if (!confirmed || !context.mounted) return;
       final result = await provider.setInBookshelf(false);
       if (!context.mounted) return;
       messenger.clearSnackBars();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(result.message),
-          duration: const Duration(seconds: 4),
-          persist: false,
-          action:
-              result.success
-                  ? SnackBarAction(
-                    label: '撤銷',
-                    onPressed: () => provider.setInBookshelf(true),
-                  )
-                  : null,
-        ),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(result.message)));
+      if (result.success && context.mounted) {
+        Navigator.of(context).pop();
+      }
       return;
     }
 
@@ -594,12 +587,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
         ).showSnackBar(const SnackBar(content: Text('目前閱讀章節不在目錄中')));
         return;
       }
-      final offset = 360.0 + index * 56.0;
-      final maxOffset = _scrollController.position.maxScrollExtent;
-      _scrollController.animateTo(
-        math.min(offset, maxOffset),
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
+      if (!_chapterListController.isAttached) return;
+      _chapterListController.animateToItem(
+        index: index,
+        scrollController: _scrollController,
+        alignment: 0.12,
+        duration: (_) => const Duration(milliseconds: 320),
+        curve: (_) => Curves.easeOutCubic,
       );
     });
   }

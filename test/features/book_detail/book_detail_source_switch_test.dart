@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -27,10 +28,14 @@ class _SourceAwareBookSourceService extends BookSourceService {
   _SourceAwareBookSourceService(
     this.chaptersByOrigin, {
     this.bookInfoErrorsByOrigin = const <String, Object>{},
+    this.bookInfoGateOrigin,
+    this.bookInfoGate,
   });
 
   final Map<String, List<BookChapter>> chaptersByOrigin;
   final Map<String, Object> bookInfoErrorsByOrigin;
+  final String? bookInfoGateOrigin;
+  final Completer<void>? bookInfoGate;
 
   @override
   Future<Book> getBookInfo(
@@ -40,6 +45,9 @@ class _SourceAwareBookSourceService extends BookSourceService {
   }) async {
     final error = bookInfoErrorsByOrigin[source.bookSourceUrl];
     if (error != null) throw error;
+    if (source.bookSourceUrl == bookInfoGateOrigin) {
+      await bookInfoGate?.future;
+    }
     return book;
   }
 
@@ -190,6 +198,51 @@ void main() {
     expect(await db.chapterDao.getByBook(oldUrl), isEmpty);
     expect(await db.bookDao.getByUrl(newUrl), isNotNull);
     expect(await db.chapterDao.getByBook(newUrl), hasLength(4));
+  });
+
+  test('換源 operation 不會摧毀已成立的 Book Detail ready world', () async {
+    final oldUrl = 'https://old-source.example/book/1';
+    final newUrl = 'https://new-source.example/book/1';
+    final gate = Completer<void>();
+    final service = _SourceAwareBookSourceService(
+      <String, List<BookChapter>>{
+        'https://old-source.example': _chapters(oldUrl, 3),
+        'https://new-source.example': _chapters(newUrl, 4),
+      },
+      bookInfoGateOrigin: 'https://new-source.example',
+      bookInfoGate: gate,
+    );
+    final provider = BookDetailProvider(
+      _initialSearchBook(),
+      bookDao: db.bookDao,
+      chapterDao: db.chapterDao,
+      sourceDao: db.bookSourceDao,
+      service: service,
+      sourceSwitchService: SourceSwitchService(
+        service: service,
+        sourceDao: db.bookSourceDao,
+      ),
+      coverStorage: _FakeCoverStorageService(),
+    );
+    addTearDown(provider.dispose);
+    await _waitForInitialization(provider);
+    expect(provider.hasReadyWorld, isTrue);
+
+    final switching = provider.changeSource(_newSourceCandidate());
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.isLoading, isFalse);
+    expect(provider.hasReadyWorld, isTrue);
+    expect(provider.isChangingSource, isTrue);
+    expect(provider.book.bookUrl, oldUrl);
+
+    gate.complete();
+    final result = await switching;
+
+    expect(result.success, isTrue);
+    expect(provider.isChangingSource, isFalse);
+    expect(provider.hasReadyWorld, isTrue);
+    expect(provider.book.bookUrl, newUrl);
   });
 
   test('未知換源 invariant 不得被 BookDetail 改寫成普通失敗', () async {

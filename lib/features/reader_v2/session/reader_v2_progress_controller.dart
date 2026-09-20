@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
@@ -12,12 +13,14 @@ class ReaderV2ProgressController {
     required this.book,
     required this.repository,
     required this.bookDao,
+    this.onProgressPersisted,
     this.debounce = const Duration(milliseconds: 400),
   });
 
   final Book book;
   final ReaderV2ChapterRepository repository;
   final BookDao bookDao;
+  final VoidCallback? onProgressPersisted;
   final Duration debounce;
 
   Timer? _timer;
@@ -91,6 +94,11 @@ class ReaderV2ProgressController {
       visualOffsetPx: normalized.visualOffsetPx,
       readerAnchorJson: anchorJson,
     );
+    // The DAO write is the commit point for "started reading". Keep the
+    // in-memory model behind that boundary so a failed persistence cannot
+    // create a second, contradictory truth.
+    book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
+    onProgressPersisted?.call();
   }
 
   void dispose() {

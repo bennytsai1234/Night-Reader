@@ -46,7 +46,7 @@ void main() {
   });
 
   testWidgets(
-    'BookInfoHeader shows a single primary action when not in bookshelf',
+    'BookInfoHeader keeps reading available before bookshelf membership',
     (tester) async {
       final provider = BookDetailProvider(
         AggregatedSearchBook(
@@ -79,12 +79,11 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.widgetWithText(FilledButton, '加入書架'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsNothing);
-      expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '加入書架'), findsOneWidget);
       expect(find.widgetWithText(TextButton, '換源'), findsOneWidget);
       expect(find.widgetWithText(TextButton, '背景下載'), findsNothing);
-      expect(find.byIcon(Icons.menu_book_rounded), findsNothing);
+      expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
       expect(find.byIcon(Icons.library_add), findsOneWidget);
     },
   );
@@ -187,6 +186,7 @@ void main() {
     );
     provider.book.chapterIndex = 3;
     provider.book.charOffset = 1200;
+    provider.book.durChapterTime = 1;
     ReaderV2OpenTarget? receivedTarget;
 
     Widget buildHeader() => MaterialApp(

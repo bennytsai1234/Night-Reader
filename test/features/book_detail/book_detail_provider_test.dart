@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/reader_chapter_content.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -175,10 +176,22 @@ class _RecoveringBookSourceService extends _FakeBookSourceService {
   }
 }
 
+class _FakeBookStorageService extends Fake implements BookStorageService {
+  Book? discardedBook;
+
+  @override
+  Future<void> discardBook(Book book) async {
+    discardedBook = book;
+  }
+}
+
 class _FakeDownloadService extends Fake implements DownloadService {
   Book? queuedBook;
   List<BookChapter> queuedChapters = <BookChapter>[];
   int addDownloadTaskCallCount = 0;
+
+  @override
+  Future<void> retireBook(String bookUrl) async {}
 
   @override
   Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
@@ -243,6 +256,7 @@ void main() {
     BookSourceService? service,
     DownloadService? downloadService,
     Set<int> storedIndices = const <int>{},
+    BookStorageService? bookStorageService,
   }) async {
     final chapterDao = GetIt.instance<ChapterDao>() as _FakeChapterDao;
     if (chapters.isNotEmpty) {
@@ -254,6 +268,7 @@ void main() {
       chapterContentDao: _FakeChapterContentDao(storedIndices: storedIndices),
       service: service ?? _FakeBookSourceService(chapterList: chapters),
       downloadService: downloadService ?? _FakeDownloadService(),
+      bookStorageService: bookStorageService,
     );
     for (var i = 0; i < 20 && p.isLoading; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -266,6 +281,8 @@ void main() {
       final p = await makeProvider();
       expect(p.isInBookshelf, isFalse);
       expect(p.isLoading, isFalse);
+      expect(p.worldState, BookDetailWorldState.ready);
+      expect(p.hasReadyWorld, isTrue);
     });
 
     test('DAO 中已有該書時 isInBookshelf 為 true', () async {
@@ -317,6 +334,19 @@ void main() {
   });
 
   group('BookDetailProvider - 書架操作', () {
+    test('移出書架走完整 discard owner，而不是只翻 membership flag', () async {
+      final storage = _FakeBookStorageService();
+      final p = await makeProvider(bookStorageService: storage);
+      final added = await p.setInBookshelf(true);
+      expect(added.success, isTrue);
+
+      final removed = await p.setInBookshelf(false);
+
+      expect(removed.success, isTrue);
+      expect(storage.discardedBook, same(p.book));
+      expect(p.isInBookshelf, isFalse);
+    });
+
     test('加入書架期間不切換成全頁載入狀態', () async {
       final p = await makeProvider();
 
@@ -330,7 +360,7 @@ void main() {
       expect(p.isLoading, isFalse);
     });
 
-    test('加入書架會用第一章初始化目前章節', () async {
+    test('加入書架不會虛構第一章閱讀進度', () async {
       final chapters = _makeChapters(3);
       final p = await makeProvider(chapters: chapters);
 
@@ -339,12 +369,12 @@ void main() {
       expect(result.success, isTrue);
       expect(p.book.chapterIndex, 0);
       expect(p.book.charOffset, 0);
-      expect(p.book.durChapterTitle, '第 0 章');
+      expect(p.book.durChapterTitle, isNull);
       final stored = await (GetIt.instance<BookDao>() as _FakeBookDao).getByUrl(
         'http://book.com',
       );
       expect(stored?.chapterIndex, 0);
-      expect(stored?.durChapterTitle, '第 0 章');
+      expect(stored?.durChapterTitle, isNull);
     });
 
     test('加入書架不會覆蓋既有閱讀進度', () async {
