@@ -702,6 +702,83 @@ void main() {
     });
 
     testWidgets(
+      'cheap chapter steps share one frame budget instead of one frame each',
+      (tester) async {
+        final cache = ParagraphCache();
+        final store = MeasurementStore();
+        final ns = MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: _fingerprint(),
+        );
+        final pump = LayoutPump(
+          paragraphCache: cache,
+          measurementStore: store,
+          namespace: ns,
+          governor: BudgetGovernor(
+            ballisticSliceBudget: const Duration(seconds: 1),
+          ),
+        )..onScrollStateChanged(PumpState.dragging);
+        addTearDown(() {
+          pump.dispose();
+          cache.dispose();
+        });
+        pump.setDemandRange(0, 0);
+
+        final source = ChapterBlocks(
+          chapterIndex: 0,
+          title: 'Chapter',
+          displayText: '',
+          contentHash: 'multi-step-empty',
+          blocks: const [
+            ChapterBlock(
+              key: BlockKey(chapterIndex: 0, blockIndex: 0),
+              text: '',
+              charRange: HybridTextRange(0, 0),
+              sourceParagraphIndex: 0,
+            ),
+            ChapterBlock(
+              key: BlockKey(chapterIndex: 0, blockIndex: 1),
+              text: '',
+              charRange: HybridTextRange(0, 0),
+              sourceParagraphIndex: 1,
+            ),
+            ChapterBlock(
+              key: BlockKey(chapterIndex: 0, blockIndex: 2),
+              text: '',
+              charRange: HybridTextRange(0, 0),
+              sourceParagraphIndex: 2,
+            ),
+          ],
+        );
+
+        final preparation = pump.planChapterVisualLines(
+          source,
+          maxBlockChars: 40,
+          bodyStyle: const HybridBlockTextStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+          ),
+          titleStyle: const HybridBlockTextStyle(
+            fontSize: 22,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            bold: true,
+          ),
+          contentWidth: 200,
+          cellWidth: null,
+          textIndent: 0,
+        );
+
+        expect(await pump.pumpPending(), 1);
+        final result = await preparation;
+        expect(result, isNotNull);
+        expect(result!.blocks, hasLength(3));
+        expect(pump.queueDepth, 0);
+      },
+    );
+
+    testWidgets(
       'current demand promotes reusable chapter planning without restart',
       (tester) async {
         final cache = ParagraphCache();
