@@ -701,6 +701,87 @@ void main() {
       expect(store.snapshot(ns), isEmpty);
     });
 
+    testWidgets(
+      'current demand promotes reusable chapter planning without restart',
+      (tester) async {
+        final cache = ParagraphCache();
+        final store = MeasurementStore();
+        final ns = MeasurementNamespace(
+          epoch: LayoutEpoch.initial,
+          fingerprint: _fingerprint(),
+        );
+        final pump = LayoutPump(
+          paragraphCache: cache,
+          measurementStore: store,
+          namespace: ns,
+          governor: BudgetGovernor(
+            ballisticSliceBudget: const Duration(microseconds: 1),
+          ),
+        )..onScrollStateChanged(PumpState.dragging);
+        addTearDown(() {
+          pump.dispose();
+          cache.dispose();
+        });
+        pump.setDemandRange(0, 1);
+
+        ChapterBlocks source(int chapter) => ChapterBlocks(
+          chapterIndex: chapter,
+          title: 'Chapter $chapter',
+          displayText: 'abc',
+          contentHash: 'source-$chapter',
+          blocks: [
+            ChapterBlock(
+              key: BlockKey(chapterIndex: chapter, blockIndex: 0),
+              text: 'abc',
+              charRange: const HybridTextRange(0, 3),
+              sourceParagraphIndex: 0,
+            ),
+          ],
+        );
+
+        Future<ChapterBlocks?> plan(
+          int chapter,
+          LayoutTaskPriority priority,
+        ) => pump.planChapterVisualLines(
+          source(chapter),
+          maxBlockChars: 40,
+          bodyStyle: const HybridBlockTextStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+          ),
+          titleStyle: const HybridBlockTextStyle(
+            fontSize: 22,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            bold: true,
+          ),
+          contentWidth: 1000,
+          cellWidth: null,
+          textIndent: 0,
+          priority: priority,
+        );
+
+        final firstPrefetch = plan(0, LayoutTaskPriority.prefetch);
+        final promoted = plan(1, LayoutTaskPriority.prefetch);
+        final samePromoted = plan(1, LayoutTaskPriority.anchor);
+        expect(identical(promoted, samePromoted), isTrue);
+        expect(pump.queueDepth, 2);
+
+        // A 1us dragging budget admits one ChapterWork step per manual slice.
+        // The promoted chapter must receive both slices and complete before
+        // the older prefetch task gets a turn.
+        expect(await pump.pumpPending(), 0);
+        expect(await pump.pumpPending(), 1);
+        final promotedBlocks = await promoted;
+        expect(promotedBlocks, isNotNull);
+        expect(promotedBlocks!.chapterIndex, 1);
+
+        pump.invalidateChapter(0);
+        expect(await firstPrefetch, isNull);
+      },
+    );
+
     testWidgets('repeated awaits cannot mint a second frame budget', (
       tester,
     ) async {
