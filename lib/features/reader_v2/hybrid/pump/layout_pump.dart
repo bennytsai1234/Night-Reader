@@ -26,17 +26,6 @@ final class LayoutPump implements HybridLayoutPump {
   static const VisualLineLayoutEngine _lineLayoutEngine =
       VisualLineLayoutEngine(paragraphLayout: _paragraphLayout);
 
-  @Deprecated('Typography measurement belongs to ReaderParagraphLayout.')
-  static double? measureCellWidth({
-    required double fontSize,
-    required double letterSpacing,
-    required bool bold,
-  }) => _paragraphLayout.measureCellWidth(
-    fontSize: fontSize,
-    letterSpacing: letterSpacing,
-    bold: bold,
-  );
-
   LayoutPump({
     required ParagraphCache paragraphCache,
     required HybridMeasurementStore measurementStore,
