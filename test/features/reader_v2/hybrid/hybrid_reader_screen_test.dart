@@ -361,6 +361,37 @@ void main() {
   );
 
   testWidgets(
+    'jump-ready neighbor unavailability stays an external frontier',
+    (tester) async {
+      final chapters = List.generate(
+        5,
+        (index) => chapter(index, paragraphCount: 6),
+      );
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, value) async {
+          if (index == 1) {
+            throw ReaderV2ContentUnavailableException('上一章暫時不可用');
+          }
+          return value.content;
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await completeWithFrames(tester, runtime.openBook());
+      await completeWithFrames(tester, runtime.jumpToChapter(2));
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, 2);
+      expect(runtime.pendingLocation, isNull);
+      expect(snapshot(tester)['missingParagraphKeys'], isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'speculative neighbor unavailable cannot fail the current restore target',
     (tester) async {
       final chapters = List.generate(
