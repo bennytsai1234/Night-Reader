@@ -165,7 +165,7 @@ jobs:
       - name: Configure Gradle for CI
         run: |
           mkdir -p "$HOME/.gradle"
-          printf '%s\\n' 'org.gradle.vfs.watch=false' >> "$HOME/.gradle/gradle.properties"
+          printf '%s\n' 'org.gradle.vfs.watch=false' >> "$HOME/.gradle/gradle.properties"
 
       - name: Resolve dependencies
         run: flutter pub get
