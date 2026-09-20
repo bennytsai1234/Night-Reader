@@ -1,10 +1,10 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / intentionally unresolved**
+Status: **OPEN / candidate fix implemented / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
-Purpose: Preserve the investigation context for the next reproducible occurrence. Do **not** treat this branch as a fix branch yet.
+Purpose: Preserve the investigation and carry a safe candidate repair for the confirmed demand-priority ownership defect. Keep this branch unmerged until the user chooses to validate or merge it.
 
 ## User-visible symptom observed
 
@@ -17,6 +17,31 @@ One Reader session showed this behavior after jumping chapters:
 The last observation materially weakens the claim that v0.2.153 has a universal scrolling-throughput regression. At this point the real root cause is **not confirmed**.
 
 ## Current decision
+
+A candidate repair is now implemented for one **confirmed scheduler ownership defect**:
+
+> Chapter planning priority must follow current demand, not the priority the work had when it was first created.
+
+Before this branch, a chapter could enter visual-line planning as `prefetch` and remain `prefetch` even after the viewport/frontier needed that same in-flight work. The branch now makes the existing work reusable and promotable:
+
+```text
+prefetch -> visible -> anchor
+```
+
+Promotion is monotonic. It reuses the existing in-flight work and its progress; it does not cancel, restart, or duplicate the chapter plan. The screen-side in-flight materialization object owns both the future and its current highest demand priority, so there is no second priority ledger.
+
+Viewport/frontier requests now use `visible`; explicit restore / location targeting uses `anchor`; speculative loading remains `prefetch`.
+
+This is an architecture-correct fix for the confirmed ownership defect, but it is **not proof** that this defect caused the one observed backward-scroll stall.
+
+Validation added:
+
+- a LayoutPump contract test that starts two prefetch chapter plans;
+- promotes the newer one to anchor;
+- verifies the same Future/work is reused;
+- verifies the next frame continues the promoted work before the older prefetch work.
+
+CI / Flutter execution has not been run in this session because the available environment has no Flutter/Dart runtime, GitHub Actions dispatch is not exposed through the current connector, and the local container has no outbound GitHub DNS. Do not report this branch as runtime-validated yet.
 
 Do not rewrite the line-layout pipeline merely because of this single observation.
 
@@ -110,7 +135,7 @@ These are code-review findings, not proof of the observed runtime symptom:
 1. Normal non-empty paragraphs now go through Reader-owned visual-line planning.
 2. Planning performs native shaping plus per-grapheme geometry / boundary work.
 3. Chapter publication currently waits for the chapter-level visual-line planning result before `_blocks` / Admission can expose that chapter.
-4. Existing chapter work can be born as prefetch work and does not obviously gain a new priority class merely because it later becomes imminent viewport/frontier demand.
+4. In v0.2.153 main, existing chapter work can be born as prefetch work and retain that priority even after it becomes imminent viewport/frontier demand. This branch fixes that ownership defect by promoting the same in-flight work.
 5. A pump budget cannot necessarily preempt a large synchronous planning operation in the middle of that operation.
 
 These facts make backward-frontier starvation plausible, but **not proven as the user's observed bug**.
@@ -212,7 +237,7 @@ Potential invariants to validate before implementation:
 
 1. Line-break policy ownership is separate from word-boundary facts.
 2. Readiness should be no coarser than required by the viewport.
-3. Work priority belongs to current demand, not only task birth.
+3. Work priority belongs to current demand, not only task birth. **Implemented on this branch.**
 4. Long planning work must be genuinely resumable at budget boundaries.
 5. Native shaping/painting should remain native; Reader should own only product-specific policy.
 
