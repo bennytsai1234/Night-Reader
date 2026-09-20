@@ -10,8 +10,12 @@ on:
   push:
     branches:
       - main
+      - "internal-test/**"
     paths:
       - pubspec.yaml
+      - pubspec.lock
+      - android/**
+      - .github/workflows/android-release.yml
     tags:
       - "v*"
   workflow_dispatch:
@@ -65,8 +69,8 @@ jobs:
             exit 0
           fi
 
-          # 手動執行永遠只做 signed APK 驗證，不發布。
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+          # 手動執行與 internal-test branch 永遠只做 signed APK 驗證，不發布。
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
             emit should_build true
             emit publish false
             emit target_sha "$GITHUB_SHA"
