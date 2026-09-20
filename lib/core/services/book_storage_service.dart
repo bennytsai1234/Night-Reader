@@ -45,7 +45,7 @@ class BookStorageService {
 
   Future<void> discardBook(Book book) async {
     if (_downloadService != null) {
-      await _downloadService!.retireBook(book.bookUrl);
+      await _downloadService.retireBook(book.bookUrl);
     } else {
       await _downloadDao?.deleteByUrl(book.bookUrl);
     }
