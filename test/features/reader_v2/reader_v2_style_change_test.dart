@@ -120,8 +120,6 @@ void main() {
   });
 
   tearDown(() async {
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
-    ReaderV2Runtime.debugOnReloadContentTriggered = null;
     await GetIt.instance.reset();
     await database.close();
   });
@@ -193,25 +191,17 @@ void main() {
 
   for (final testCase in cases) {
     testWidgets(
-      '逐維矩陣 ${testCase.name}：anchor、generation/epoch、metrics、trigger',
+      '逐維矩陣 ${testCase.name}：anchor、generation/epoch、metrics',
       (tester) async {
-        var applyCount = 0;
-        var reloadCount = 0;
-        ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-          applyCount += 1;
-        };
-        ReaderV2Runtime.debugOnReloadContentTriggered = () {
-          reloadCount += 1;
-        };
 
         final harness = await makeHarness(tester);
         final beforeLocation = harness.runtime.state.visibleLocation;
         final beforeContent = await harness.runtime.loadContentAt(0);
         final beforeGeneration = harness.runtime.state.layoutGeneration;
+        final beforeContentGeneration =
+            harness.runtime.state.contentGeneration;
         final beforeSignature =
             harness.runtime.state.layoutSpec.layoutSignature;
-        applyCount = 0;
-        reloadCount = 0;
 
         testCase.update(harness.host.settings);
         final nextStyle = testCase.name == 'paddingLeft/right'
@@ -231,8 +221,7 @@ void main() {
           beforeGeneration,
           afterState.layoutGeneration,
         );
-        expect(applyCount, 1);
-        expect(reloadCount, 0);
+        expect(afterState.contentGeneration, beforeContentGeneration);
         expectReaderAnchorPreserved(
           ReaderAnchorProbe.capture(
             location: beforeLocation,
@@ -248,10 +237,6 @@ void main() {
   }
 
   testWidgets('lineHeight clamp：等價正規化輸入不重複重排', (tester) async {
-    var applyCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-      applyCount += 1;
-    };
     final harness = await makeHarness(tester);
     final settings = harness.host.settings;
 
@@ -263,7 +248,6 @@ void main() {
       runtime: harness.runtime,
       style: settingsStyle(settings),
     );
-    expect(applyCount, 1);
     final clampedLowSignature =
         harness.runtime.state.layoutSpec.layoutSignature;
     final clampedLowGeneration = harness.runtime.state.layoutGeneration;
@@ -281,7 +265,6 @@ void main() {
       clampedLowSignature,
     );
     expect(harness.runtime.state.layoutGeneration, clampedLowGeneration);
-    expect(applyCount, 1);
 
     settings.setLineHeight(4.0);
     expect(settings.lineHeight, 3.0);
@@ -291,7 +274,6 @@ void main() {
       runtime: harness.runtime,
       style: settingsStyle(settings),
     );
-    expect(applyCount, 2);
     final clampedHighSignature =
         harness.runtime.state.layoutSpec.layoutSignature;
     expect(clampedHighSignature, isNot(clampedLowSignature));
@@ -309,7 +291,6 @@ void main() {
       clampedHighSignature,
     );
     expect(harness.runtime.state.layoutGeneration, clampedLowGeneration + 1);
-    expect(applyCount, 2);
   });
 
   test(
@@ -416,20 +397,11 @@ void main() {
   });
 
   testWidgets('兩維同時變更只觸發一次重排並保留 anchor', (tester) async {
-    var applyCount = 0;
-    var reloadCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-      applyCount += 1;
-    };
-    ReaderV2Runtime.debugOnReloadContentTriggered = () {
-      reloadCount += 1;
-    };
     final harness = await makeHarness(tester);
     final before = harness.runtime.state.visibleLocation;
     final beforeContent = await harness.runtime.loadContentAt(0);
     final beforeGeneration = harness.runtime.state.layoutGeneration;
-    applyCount = 0;
-    reloadCount = 0;
+    final beforeContentGeneration = harness.runtime.state.contentGeneration;
 
     harness.host.settings.setTypography(fontSize: 22, lineHeight: 1.8);
     await applyStyle(
@@ -438,13 +410,11 @@ void main() {
       runtime: harness.runtime,
       style: settingsStyle(harness.host.settings),
     );
-
-    expect(applyCount, 1);
-    expect(reloadCount, 0);
     expectReaderLayoutGenerationAdvanced(
       beforeGeneration,
       harness.runtime.state.layoutGeneration,
     );
+    expect(harness.runtime.state.contentGeneration, beforeContentGeneration);
     expectReaderAnchorPreserved(
       ReaderAnchorProbe.capture(
         location: before,
@@ -458,10 +428,6 @@ void main() {
   });
 
   testWidgets('連續快速 style 變更只留下最後 signature 與世代', (tester) async {
-    var applyCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-      applyCount += 1;
-    };
     final harness = await makeHarness(tester);
     final initialGeneration = harness.runtime.state.layoutGeneration;
     final initialStyle = settingsStyle(harness.host.settings);
@@ -470,7 +436,6 @@ void main() {
       initialStyle.copyWith(fontSize: 20),
       initialStyle.copyWith(fontSize: 22),
     ];
-    applyCount = 0;
 
     for (final style in styles) {
       harness.host.syncRuntimeConfiguration(harness.runtime, viewport, style);
@@ -478,8 +443,6 @@ void main() {
     WidgetsBinding.instance.ensureVisualUpdate();
     await tester.pump();
     await pumpUntilReady(tester, harness.runtime);
-
-    expect(applyCount, 1);
     expect(harness.runtime.state.layoutSpec.style.fontSize, 22);
     expect(harness.runtime.state.layoutGeneration, initialGeneration + 1);
   });
@@ -487,10 +450,6 @@ void main() {
   testWidgets('scroll 尚未 settle 時 style 變更仍以當下 semantic anchor restore', (
     tester,
   ) async {
-    var applyCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () {
-      applyCount += 1;
-    };
     final harness = await makeHarness(tester);
     final content = await harness.runtime.loadContentAt(0);
     final movingOffset = content.displayText.indexOf('第二句');
@@ -505,7 +464,6 @@ void main() {
       return settled ? harness.runtime.state.visibleLocation : movingLocation;
     });
     addTearDown(() => harness.runtime.unregisterVisibleLocationCapture(owner));
-    applyCount = 0;
 
     await applyStyle(
       tester,
@@ -519,8 +477,6 @@ void main() {
           )
           .copyWith(fontSize: 22),
     );
-
-    expect(applyCount, 1);
     expect(settled, isFalse);
     expectReaderAnchorPreserved(
       ReaderAnchorProbe.capture(

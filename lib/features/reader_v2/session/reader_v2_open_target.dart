@@ -24,9 +24,9 @@ class ReaderV2OpenTarget {
             Map<String, dynamic>.from(decoded),
           );
         }
-      } catch (_) {
-        // Legacy/corrupt anchor JSON must never make the book unopenable. The
-        // scalar progress columns remain the backwards-compatible fallback.
+      } on FormatException {
+        // Corrupt persisted JSON is external data. Scalar progress remains the
+        // portable fallback; unrelated programming errors must stay visible.
       }
     }
     final scalar = ReaderV2Location(

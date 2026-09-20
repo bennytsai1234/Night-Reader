@@ -24,7 +24,7 @@ flowchart LR
 
 ### 書源搜尋與取文
 
-功能頁的 Provider 呼叫書源服務；`WebBook` 與規則引擎解析書源規則，所有 HTTP 請求經 `NetworkService` 的 Dio 與攔截器送往外部網站。搜尋結果、書籍、章節、Cookie 與執行狀態依用途寫入 Drift、檔案快取或記憶體。
+搜尋／書籍詳情／書架 Provider 負責取得與保存 metadata；搜尋結果進 `SearchBookDao`，書籍與章節 metadata 進各自 DAO。正文不由搜尋層保存，而由 `ReaderChapterContentStorage / Store` 統一管理持久正文；`WebBook` 與規則引擎只負責從外部書源取得與解析資料，HTTP 經 `NetworkService` / Dio。
 
 需要登入或互動驗證的流程可使用 WebView。批次書源校驗走專用 isolate 並關閉互動式 WebView，以免背景工作要求 UI。
 
@@ -57,6 +57,8 @@ flowchart TD
 
 可見 render object、視口準備與命令各自持有 `ParagraphLease`。快取替換／逐出只釋放快取的引用，不能提前 dispose 仍被消費者使用的 native Paragraph。`ReaderV2Location` 是跨層位置契約，包含章節、UTF-16 字元位移、視覺位移及內容重映射資訊；章內進度以完整正文長度為分母，不依賴目前排完多少高度。
 
+換源由 `SourceSwitchService` 準備新 source world，先驗證目標正文，再以 download quiesce + database transaction 做 atomic handoff；成功後 Reader 以 replacement route 建立新 session。候選書源/network/rule unavailable 可作為產品失敗或跳過候選；transaction、invariant 與未知程式錯誤不得被當成「來源不可用」吞掉。
+
 ### 背景工作
 
 Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新呼叫 `configureDependencies()`，再讀取書架並執行背景任務。前景啟動不會初始化 Workmanager，目前程式碼也沒有註冊週期或一次性工作；callback 仍保留作為背景契約。任何新增背景路徑都必須假設 DI 與記憶體單例不會跨 isolate 共用。
@@ -65,8 +67,11 @@ Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新�
 
 | 狀態 | 真相來源 | 主要入口 |
 |---|---|---|
-| 書籍、書源、章節、書籤、下載、Cookie | Drift / SQLite | `lib/core/database/` 與各 DAO |
-| 正文、封面、度量與其他檔案快取 | App 私有檔案系統 | `lib/core/storage/`、Reader content storage |
+| 書籍、書源、章節 metadata、書籤、下載、Cookie | Drift / SQLite | `lib/core/database/` 與各 DAO |
+| 持久正文 | Drift / `ReaderChapterContents` | `ReaderChapterContentStorage`、`ReaderChapterContentStore` |
+| 封面與衍生檔案資產 | App 私有檔案系統 | `BookCoverStorageService` 等 storage service |
+| Reader raw-text residency | HybridChapterRepository window | Reader session 內的 bounded raw residency |
+| Layout metrics / Paragraph reuse | MeasurementStore / MetricsDiskCache / ParagraphCache | 各自 namespace、epoch 與 consumer lease；生命週期不同，不合併 |
 | 使用者偏好與主題模式 | `SharedPreferences` | `PreferKey`、`SettingsProvider`、`ThemeSettingsProvider` |
 | Reader 命令、可見位置、semantic content generation、持久化 | 各自的 runtime operation／content session／viewport／progress owner | `ReaderV2Runtime`、`ReaderV2State`、`ReaderV2Location` |
 | Active 文件幾何與切分 | DocumentIndex／ChapterLayoutPlan | Hybrid screen 的明確文件重建 |

@@ -518,9 +518,12 @@ class BookDetailProvider extends ChangeNotifier {
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
       return BookDetailOperationResult.success('已切換到 ${_book.originName}');
-    } catch (e) {
-      AppLog.e('換源失敗: $e', error: e);
-      return BookDetailOperationResult.failure('換源失敗: $e');
+    } catch (error, stackTrace) {
+      if (!isSourceSwitchUnavailable(error)) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      AppLog.e('換源失敗: $error', error: error, stackTrace: stackTrace);
+      return BookDetailOperationResult.failure('換源失敗: $error');
     } finally {
       _isLoading = false;
       notifyListeners();

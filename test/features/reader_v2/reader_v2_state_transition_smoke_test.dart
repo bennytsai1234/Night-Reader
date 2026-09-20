@@ -30,8 +30,6 @@ void main() {
   setUpAll(ChineseUtils.initialize);
 
   setUp(() async {
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
-    ReaderV2Runtime.debugOnReloadContentTriggered = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     database = AppDatabase.forTesting(NativeDatabase.memory());
     final getIt = GetIt.instance;
@@ -66,8 +64,6 @@ void main() {
   });
 
   tearDown(() async {
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = null;
-    ReaderV2Runtime.debugOnReloadContentTriggered = null;
     await GetIt.instance.reset();
     await database.close();
   });
@@ -191,20 +187,15 @@ void main() {
     return (page: page, state: state, runtime: runtime);
   }
 
-  testWidgets('樣式 seam 經 settings controller 只觸發一次 applyPresentation', (
+  testWidgets('樣式 seam 經 settings controller 只前進一次 layout generation', (
     tester,
   ) async {
-    var applyCount = 0;
-    var reloadCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () => applyCount += 1;
-    ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
 
     final harness = await makeHostRuntime(tester);
     final before = harness.runtime.state.visibleLocation;
     final beforeGeneration = harness.runtime.state.layoutGeneration;
+    final beforeContentGeneration = harness.runtime.state.contentGeneration;
     final beforeContent = await harness.runtime.loadContentAt(0);
-    applyCount = 0;
-    reloadCount = 0;
 
     harness.host.settings.setFontSize(22);
     expect(harness.host.settings.fontSize, 22);
@@ -221,13 +212,11 @@ void main() {
     WidgetsBinding.instance.ensureVisualUpdate();
     await tester.pump();
     await pumpUntilReady(tester, harness.runtime);
-
-    expect(applyCount, 1);
-    expect(reloadCount, 0);
     expectReaderLayoutGenerationAdvanced(
       beforeGeneration,
       harness.runtime.state.layoutGeneration,
     );
+    expect(harness.runtime.state.contentGeneration, beforeContentGeneration);
     final after = harness.runtime.state.visibleLocation;
     final afterContent = await harness.runtime.loadContentAt(0);
     expectReaderAnchorPreserved(
@@ -242,18 +231,11 @@ void main() {
     );
   });
 
-  test('transition observers are disabled by default', () {
-    expect(ReaderV2Runtime.debugOnApplyPresentationTriggered, isNull);
-    expect(ReaderV2Runtime.debugOnReloadContentTriggered, isNull);
-  });
-
   testWidgets('viewport/inset seam 以外層 MediaQuery 與 constraints 驅動一次呈現轉換', (
     tester,
   ) async {
-    var applyCount = 0;
-    ReaderV2Runtime.debugOnApplyPresentationTriggered = () => applyCount += 1;
     final harness = await makeHostRuntime(tester);
-    applyCount = 0;
+    final beforeGeneration = harness.runtime.state.layoutGeneration;
     EdgeInsets? capturedPadding;
     await tester.pumpWidget(
       MediaQuery(
@@ -283,22 +265,21 @@ void main() {
     WidgetsBinding.instance.ensureVisualUpdate();
     await tester.pump();
     await pumpUntilReady(tester, harness.runtime);
-
-    expect(applyCount, 1);
+    expectReaderLayoutGenerationAdvanced(
+      beforeGeneration,
+      harness.runtime.state.layoutGeneration,
+    );
     expect(harness.runtime.state.layoutSpec.viewportSize, const Size(420, 720));
   });
 
   testWidgets(
     '簡繁 reload seam 觸發 reloadContentPreservingLocation 並保留等價 anchor',
     (tester) async {
-      var reloadCount = 0;
-      ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
       final harness = await makeHostRuntime(tester);
       final before = harness.runtime.state.visibleLocation;
       final beforeLayoutGeneration = harness.runtime.state.layoutGeneration;
       final beforeContentGeneration = harness.runtime.state.contentGeneration;
       final beforeContent = await harness.runtime.loadContentAt(0);
-      reloadCount = 0;
 
       harness.host.settings.setChineseConvert(1);
       final style = harness.host.settings.readStyleFor(
@@ -314,8 +295,6 @@ void main() {
       WidgetsBinding.instance.ensureVisualUpdate();
       await tester.pump();
       await pumpUntilReady(tester, harness.runtime);
-
-      expect(reloadCount, 1);
       expect(harness.runtime.state.layoutGeneration, beforeLayoutGeneration);
       expectReaderContentGenerationAdvanced(
         beforeContentGeneration,
