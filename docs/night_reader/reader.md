@@ -83,7 +83,7 @@ flowchart TD
 - Runtime 將 committed `contentGeneration` 發布到 session state。若無 operation 時重新取得的目前可見章節 identity 改變，Runtime 會先用 `ReaderV2Location` 的 content anchor 對新正文重映射 visible location，再發布 generation。Hybrid / TTS 只消費 Runtime state，不直接觀察 repository 內部 generation；content reload 不冒充 layout change，因此不推進 `layoutGeneration`。
 - Hybrid 文件 epoch 綁定 `layoutGeneration + contentGeneration`。任一 generation 變更都由上層發布後單向重建；若 generation 在既有 Runtime operation 的 viewport transaction 期間前進，Runtime 保留同一 operation token，於新 generation 重新 resolve 同一 semantic target 後再 restore，不建立替代 operation。若當下沒有 operation，Hybrid 直接以已發布的 visible location 本地重建。若 `ChapterLayoutPlan` 在同一 generation 內遇到 content identity mismatch，視為 invariant failure。
 - `ReaderV2LayoutSpec.contentWidth` 只代表 viewport 扣除使用者 padding 後的實體可畫寬度；cell / em-grid typography metric 不得縮小或重定義它。
-- `VisualLineLayoutEngine` 是唯一 visual-line break owner：只依 native shaping 得到的 grapheme geometry 與實體寬度決定邊界；標點類別沒有否決一個仍然放得下的 grapheme 的權力，也不讀取 SkParagraph soft-wrap line boundary。
+- `VisualLineLayoutEngine` 是唯一 visual-line break owner：native grapheme geometry 決定內容是否放得下，native Unicode word boundary 只提供英文／混排的優先斷點；標點類別沒有否決一個仍然放得下的 grapheme 的權力，也不讀取 SkParagraph soft-wrap line boundary。單一英文詞本身超過整行時才退回 grapheme boundary。
 - `ReaderParagraphLayout` 只擁有 shaping 與 drawable Paragraph mechanism。reader-owned 行界以 layout-only hard break 呈現，source text 不插入換行；`ParagraphTextMap` 負責 layout offset 與 UTF-16 source offset 的雙向映射。
 - `LayoutPump` 只排程 line planning / drawable work、pending 去重/取消與 frame credit；若 native Paragraph 在 reader-owned 行界之外再次 soft-wrap，直接視為 layout invariant violation，不建立 fallback 或標點特判。
 - `DocumentIndex` 只接收連續、已精確量測的 block；active geometry 不由 raw cache eviction 反向刪除。
