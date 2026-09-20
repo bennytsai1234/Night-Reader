@@ -161,6 +161,23 @@ class DownloadService extends DownloadBase
     update();
   }
 
+  Future<int> queueMissingForLibraryReading(
+    Book book,
+    List<BookChapter> chapters,
+  ) async {
+    if (book.isLocal || !book.isInBookshelf || chapters.isEmpty) return 0;
+    final stored = await chapterContentDao.getStoredChapterIndices(
+      origin: book.origin,
+      bookUrl: book.bookUrl,
+    );
+    final missing = chapters
+        .where((chapter) => !stored.contains(chapter.index))
+        .toList();
+    if (missing.isEmpty) return 0;
+    await addDownloadTask(book, missing);
+    return missing.length;
+  }
+
   Future<void> retireBook(String bookUrl) async {
     await _initialization;
     markTaskRetiring(bookUrl);
