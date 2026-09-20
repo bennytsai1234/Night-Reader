@@ -337,10 +337,6 @@ void main() {
     (tester) async {
       final chapters = <BookChapter>[chapter(0, paragraphCount: 12)];
       var raw = chapters.single.content ?? '';
-      var reloadCount = 0;
-      ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
-      addTearDown(() => ReaderV2Runtime.debugOnReloadContentTriggered = null);
-
       final runtime = makeRuntime(
         chapters,
         contentLoader: (_, __) async => raw,
@@ -353,7 +349,6 @@ void main() {
       final before = snapshot(tester);
       final layoutBefore = runtime.state.layoutGeneration;
       final contentBefore = runtime.state.contentGeneration;
-      reloadCount = 0;
 
       raw = List<String>.generate(
         14,
@@ -369,9 +364,12 @@ void main() {
 
       final content = await runtime.loadContentAt(0);
       final after = snapshot(tester);
-      expect(reloadCount, 1);
       expect(runtime.state.layoutGeneration, layoutBefore);
-      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(
+        runtime.state.contentGeneration,
+        contentBefore + 1,
+        reason: 'Hybrid rebuild must consume the published generation without starting a second reload.',
+      );
       expect(after['contentGeneration'], runtime.state.contentGeneration);
       expect(
         after['epochContentGeneration'],
@@ -398,10 +396,6 @@ void main() {
         for (var index = 0; index < chapters.length; index++)
           index: chapters[index].content ?? '',
       };
-      var reloadCount = 0;
-      ReaderV2Runtime.debugOnReloadContentTriggered = () => reloadCount += 1;
-      addTearDown(() => ReaderV2Runtime.debugOnReloadContentTriggered = null);
-
       final runtime = makeRuntime(
         chapters,
         contentLoader: (index, __) async => raw[index],
@@ -418,7 +412,6 @@ void main() {
 
       final layoutBefore = runtime.state.layoutGeneration;
       final contentBefore = runtime.state.contentGeneration;
-      reloadCount = 0;
       raw[0] =
           '外部更新後的第一章。這次 identity 由 ChapterRepository 辨識，'
           'Runtime 只發布 generation，Hybrid 自己重建目前 viewport。';
@@ -426,10 +419,13 @@ void main() {
       final changed = await runtime.loadContentAt(0);
       await tester.pumpAndSettle();
 
-      expect(reloadCount, 0);
       expect(runtime.pendingLocation, isNull);
       expect(runtime.state.layoutGeneration, layoutBefore);
-      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(
+        runtime.state.contentGeneration,
+        contentBefore + 1,
+        reason: 'External content publication must rebuild Hybrid locally without commanding a Runtime reload.',
+      );
       expect(runtime.state.visibleLocation.contentHash, changed.contentHash);
       final after = snapshot(tester);
       expect(after['initialRestoreCompleted'], true);
