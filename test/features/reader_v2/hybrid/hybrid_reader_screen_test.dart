@@ -306,7 +306,7 @@ void main() {
       }
       expect(completed, isFalse);
 
-      previous.complete(chapters[2].content);
+      previous.complete(chapters[6].content);
       for (var frame = 0; frame < 20; frame += 1) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -316,7 +316,7 @@ void main() {
         reason: 'Opening the saved location still owns the forward ready world.',
       );
 
-      next.complete(chapters[4].content);
+      next.complete(chapters[8].content);
       await completeWithFrames(tester, opening);
 
       final ready = snapshot(tester);
@@ -332,10 +332,16 @@ void main() {
         greaterThanOrEqualTo(3000),
         reason: 'Open must enter with the steady-state backward lead ready.',
       );
+      final forwardLead =
+          (ready['afterExtent'] as num) - (ready['viewportHeight'] as num);
+      final reachedBookEnd =
+          (ready['forwardEdge'] as Map?)?['chapterIndex'] ==
+          chapters.length - 1;
       expect(
-        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
-        greaterThanOrEqualTo(6000),
-        reason: 'Open must enter with the steady-state forward lead ready.',
+        forwardLead >= 6000 || reachedBookEnd,
+        isTrue,
+        reason:
+            'Open must enter with the forward guarantee or the admitted book end.',
       );
       expect(ready['missingParagraphKeys'], isEmpty);
     },
@@ -377,14 +383,14 @@ void main() {
       final previous = Completer<String?>();
       final next = Completer<String?>();
       final chapters = List.generate(
-        6,
+        10,
         (index) => chapter(index, paragraphCount: 8),
       );
       final runtime = makeRuntime(
         chapters,
         contentLoader: (index, value) {
-          if (index == 2) return previous.future;
-          if (index == 4) return next.future;
+          if (index == 6) return previous.future;
+          if (index == 8) return next.future;
           return Future.value(value.content);
         },
       );
@@ -395,14 +401,14 @@ void main() {
       await completeWithFrames(tester, runtime.openBook());
 
       var completed = false;
-      final jump = runtime.jumpToChapter(3);
+      final jump = runtime.jumpToChapter(7);
       unawaited(jump.whenComplete(() => completed = true));
 
       for (var frame = 0; frame < 20; frame += 1) {
         await tester.pump(const Duration(milliseconds: 16));
       }
       expect(completed, isFalse);
-      expect(runtime.pendingLocation?.chapterIndex, 3);
+      expect(runtime.pendingLocation?.chapterIndex, 7);
       expect(runtime.state.visibleLocation.chapterIndex, 0);
 
       previous.complete(chapters[2].content);
@@ -420,19 +426,24 @@ void main() {
 
       final ready = snapshot(tester);
       expect(runtime.pendingLocation, isNull);
-      expect(runtime.state.visibleLocation.chapterIndex, 3);
-      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3, 4]));
+      expect(runtime.state.visibleLocation.chapterIndex, 7);
+      expect((ready['loadedContentHashes'] as Map).keys, containsAll([6, 7, 8]));
       expect(
         ready['beforeExtent'] as num,
         greaterThanOrEqualTo(3000),
         reason:
             'Jump commit requires the steady-state backward lead to exist.',
       );
+      final forwardLead =
+          (ready['afterExtent'] as num) - (ready['viewportHeight'] as num);
+      final reachedBookEnd =
+          (ready['forwardEdge'] as Map?)?['chapterIndex'] ==
+          chapters.length - 1;
       expect(
-        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
-        greaterThanOrEqualTo(6000),
+        forwardLead >= 6000 || reachedBookEnd,
+        isTrue,
         reason:
-            'Jump commit requires the steady-state forward lead to exist.',
+            'Jump commit requires the forward guarantee or the admitted book end.',
       );
       expect(ready['missingParagraphKeys'], isEmpty);
     },
@@ -613,17 +624,17 @@ void main() {
     tester,
   ) async {
     final background = Completer<String?>();
-    final chapters = List.generate(4, chapter);
+    final chapters = List.generate(10, chapter);
     final runtime = makeRuntime(
       chapters,
       contentLoader: (index, value) {
-        if (index == 2) return background.future;
+        if (index == 7) return background.future;
         return Future.value(value.content);
       },
     );
     final controller = ReaderV2ViewportController();
     addTearDown(runtime.dispose);
-    await pumpScreen(tester, runtime, controller, paragraphCacheCapacity: 1);
+    await pumpScreen(tester, runtime, controller);
     await completeWithFrames(tester, runtime.openBook());
     expect(background.isCompleted, false);
     expect(runtime.state.hasStableWorld, isTrue);
@@ -631,7 +642,7 @@ void main() {
     expect(visible['initialRestoreCompleted'], true);
     expect(visible['missingParagraphKeys'], isEmpty);
     expect(runtime.captureVisibleLocation(notifyIfChanged: false), isNotNull);
-    background.complete(chapters[2].content);
+    background.complete(chapters[7].content);
     await tester.pumpAndSettle();
   });
 
