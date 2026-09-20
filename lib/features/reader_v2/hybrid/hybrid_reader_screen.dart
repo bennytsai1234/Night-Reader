@@ -106,8 +106,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late MeasurementNamespace _namespace;
   final Map<int, ChapterLayoutPlan> _layoutPlans = <int, ChapterLayoutPlan>{};
   final Map<int, ChapterBlocks> _blocks = {};
-  final Map<int, Future<ChapterBlocks?>> _blocksInFlight = {};
-  final Map<int, LayoutTaskPriority> _chapterDemandPriority = {};
+  final Map<int, _ChapterMaterialization> _blocksInFlight = {};
   final Map<BlockKey, ParagraphLease> _viewportLeases = {};
   final Set<({MeasurementNamespace namespace, int chapter, String contentHash})>
   _warmedChapters = {};
@@ -264,7 +263,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _blocks.clear();
     _layoutPlans.clear();
     _blocksInFlight.clear();
-    _chapterDemandPriority.clear();
     _chapterRepo.invalidateLoaded(emitEvents: false);
     _warmedChapters.clear();
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
@@ -404,7 +402,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     final pending = <int, Future<({int chapter, bool unavailable})>>{
       for (final entry in _blocksInFlight.entries)
-        entry.key: _observeSpeculativeMaterialization(entry.key, entry.value),
+        entry.key: _observeSpeculativeMaterialization(
+          entry.key,
+          entry.value.future,
+        ),
     };
     if (pending.isEmpty) {
       throw StateError(
@@ -454,30 +455,25 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final cached = _blocks[chapter];
     if (cached != null) return Future.value(cached);
 
-    final currentPriority = _chapterDemandPriority[chapter];
-    if (currentPriority == null || priority.index < currentPriority.index) {
-      _chapterDemandPriority[chapter] = priority;
-    }
-
     final pending = _blocksInFlight[chapter];
     if (pending != null) {
-      _pump.promoteChapterVisualLines(
-        chapter,
-        _chapterDemandPriority[chapter]!,
-      );
-      return pending;
+      pending.promote(priority);
+      _pump.promoteChapterVisualLines(chapter, pending.priority);
+      return pending.future;
     }
+
     final binding = _pump;
     final repository = _chapterRepo;
     final preprocessor = widget.preprocessor;
     final maxBlockChars = binding.maxCharsForBudget(
       _governor.ballisticSliceBudget,
     );
-    late final Future<ChapterBlocks?> task;
+    final materialization = _ChapterMaterialization(priority);
     bool current() =>
         mounted &&
         identical(binding, _pump) &&
-        identical(_blocksInFlight[chapter], task);
+        identical(_blocksInFlight[chapter], materialization);
+    late final Future<ChapterBlocks?> task;
     task = () async {
       final text = await repository.load(chapter);
       if (!current()) return null;
@@ -509,8 +505,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         contentWidth: spec.contentWidth,
         cellWidth: spec.cellWidth,
         textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
-        priority:
-            _chapterDemandPriority[chapter] ?? LayoutTaskPriority.prefetch,
+        priority: materialization.priority,
       );
       if (blocks == null || !current()) return null;
       _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
@@ -521,11 +516,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(_warmDiskMetricsForChapter(blocks));
       return blocks;
     }();
-    _blocksInFlight[chapter] = task;
+    materialization.future = task;
+    _blocksInFlight[chapter] = materialization;
     void cleanUp() {
-      if (identical(_blocksInFlight[chapter], task)) {
+      if (identical(_blocksInFlight[chapter], materialization)) {
         _blocksInFlight.remove(chapter);
-        _chapterDemandPriority.remove(chapter);
       }
     }
 
@@ -552,10 +547,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final last = math.max(_chapterRepo.residentLast ?? chapter, chapter);
     _setDemandRange(first, last);
     final binding = _pump;
-    unawaited(_prefetchChapter(chapter, binding, priority));
+    unawaited(_materializeChapter(chapter, binding, priority));
   }
 
-  Future<void> _prefetchChapter(
+  Future<void> _materializeChapter(
     int chapter,
     LayoutPump binding,
     LayoutTaskPriority priority,
@@ -586,7 +581,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         if (!_chapterRepo.isResident(event.chapterId)) {
           _blocks.remove(event.chapterId);
           _blocksInFlight.remove(event.chapterId);
-          _chapterDemandPriority.remove(event.chapterId);
         }
         break;
       case ChapterEventKind.invalidated:
@@ -600,7 +594,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _blocks.remove(chapter);
     _layoutPlans.remove(chapter);
     _blocksInFlight.remove(chapter);
-    _chapterDemandPriority.remove(chapter);
     _warmedChapters.removeWhere((entry) => entry.chapter == chapter);
     _pump.invalidateChapter(chapter);
     _measurementStore.invalidateChapter(chapter);
@@ -2031,6 +2024,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       isCurrent: current,
     ),
   );
+}
+
+final class _ChapterMaterialization {
+  _ChapterMaterialization(this.priority);
+
+  LayoutTaskPriority priority;
+  late final Future<ChapterBlocks?> future;
+
+  void promote(LayoutTaskPriority next) {
+    if (next.index < priority.index) priority = next;
+  }
 }
 
 final class _HybridCommandQueue {
