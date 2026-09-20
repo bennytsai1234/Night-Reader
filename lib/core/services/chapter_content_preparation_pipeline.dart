@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -186,24 +188,32 @@ class ChapterContentPreparationPipeline {
         return ChapterContentPreparationResult.ready(raw);
       }
       return ChapterContentPreparationResult.failed('章節內容為空 (可能解析規則有誤)');
-    } catch (e) {
-      return ChapterContentPreparationResult.failed(_toFailureMessage(e));
+    } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel) rethrow;
+      return ChapterContentPreparationResult.failed(
+        _networkFailureMessage(error),
+      );
+    } on FileSystemException catch (error) {
+      return ChapterContentPreparationResult.failed(
+        '讀取本地書籍失敗: ${error.message}',
+      );
+    } on AppException catch (error) {
+      return ChapterContentPreparationResult.failed(
+        '加載章節失敗: ${error.message}',
+      );
     }
   }
 
-  static String _toFailureMessage(Object e) {
-    if (e is DioException) {
-      final code = e.response?.statusCode;
-      if (code != null) return '加載章節失敗: 伺服器回應 $code';
-      return switch (e.type) {
-        DioExceptionType.connectionTimeout ||
-        DioExceptionType.receiveTimeout ||
-        DioExceptionType.sendTimeout => '加載章節失敗: 連線逾時',
-        DioExceptionType.connectionError => '加載章節失敗: 網路連線失敗',
-        _ => '加載章節失敗: 網路錯誤',
-      };
-    }
-    return '加載章節失敗: $e';
+  static String _networkFailureMessage(DioException error) {
+    final code = error.response?.statusCode;
+    if (code != null) return '加載章節失敗: 伺服器回應 $code';
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout => '加載章節失敗: 連線逾時',
+      DioExceptionType.connectionError => '加載章節失敗: 網路連線失敗',
+      _ => '加載章節失敗: 網路錯誤',
+    };
   }
 
   Future<void> _storeResult({

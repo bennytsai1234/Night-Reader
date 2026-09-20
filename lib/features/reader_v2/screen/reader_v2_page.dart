@@ -144,7 +144,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _handleControllerChanged() {
     _drainRuntimeNotice();
-    _drainAutoPageNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
   }
@@ -355,12 +354,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   void _drainRuntimeNotice() {
     final notice = _host.runtime?.takeUserNotice();
-    if (!mounted || notice == null || notice.isEmpty) return;
-    _showNotice(notice);
-  }
-
-  void _drainAutoPageNotice() {
-    final notice = _host.autoPage?.takeUserNotice();
     if (!mounted || notice == null || notice.isEmpty) return;
     _showNotice(notice);
   }

@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -22,8 +24,8 @@ typedef ReaderV2TestContentLoader = Future<String?> Function(
   BookChapter chapter,
 );
 
-class ReaderV2ChapterRepositoryException implements Exception {
-  const ReaderV2ChapterRepositoryException(this.message);
+final class ReaderV2ContentUnavailableException implements Exception {
+  const ReaderV2ContentUnavailableException(this.message);
 
   final String message;
 
@@ -96,13 +98,13 @@ class ReaderV2ChapterRepository {
     final source = await _ensureSource();
     if (source == null) {
       if (book.origin == 'local') {
-        throw const ReaderV2ChapterRepositoryException('本地書籍章節目錄不存在，請重新匯入');
+        throw const ReaderV2ContentUnavailableException('本地書籍章節目錄不存在，請重新匯入');
       }
-      throw const ReaderV2ChapterRepositoryException('章節目錄載入失敗: 找不到書源');
+      throw const ReaderV2ContentUnavailableException('章節目錄載入失敗: 找不到書源');
     }
-    final fetched = await service.getChapterList(source, book);
+    final fetched = await _loadChapterListFromSource(source);
     if (fetched.isEmpty) {
-      throw const ReaderV2ChapterRepositoryException('章節目錄載入失敗: 目錄為空');
+      throw const ReaderV2ContentUnavailableException('章節目錄載入失敗: 目錄為空');
     }
     for (var i = 0; i < fetched.length; i++) {
       fetched[i].index = i;
@@ -111,6 +113,26 @@ class ReaderV2ChapterRepository {
     await chapterDao.insertChapters(fetched);
     _chapters = fetched;
     return chapters;
+  }
+
+  Future<List<BookChapter>> _loadChapterListFromSource(
+    BookSource source,
+  ) async {
+    try {
+      return await service.getChapterList(source, book);
+    } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel) rethrow;
+      final status = error.response?.statusCode;
+      throw ReaderV2ContentUnavailableException(
+        status == null
+            ? '章節目錄載入失敗: 網路錯誤'
+            : '章節目錄載入失敗: 伺服器回應 $status',
+      );
+    } on AppException catch (error) {
+      throw ReaderV2ContentUnavailableException(
+        '章節目錄載入失敗: ${error.message}',
+      );
+    }
   }
 
   BookChapter? chapterAt(int chapterIndex) {
@@ -205,7 +227,7 @@ class ReaderV2ChapterRepository {
   ) async {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
-      throw const ReaderV2ChapterRepositoryException('章節內容載入失敗: 找不到章節');
+      throw const ReaderV2ContentUnavailableException('章節內容載入失敗: 找不到章節');
     }
     final testLoader = contentLoader;
     if (testLoader != null) {
@@ -305,7 +327,7 @@ class ReaderV2ChapterRepository {
         book.bookUrl.startsWith('local://') &&
         localExtension.isNotEmpty &&
         !isSupportedLocalBookPath(book.bookUrl)) {
-      throw const ReaderV2ChapterRepositoryException('本地書格式不受支援，請使用 TXT 檔案');
+      throw const ReaderV2ContentUnavailableException('本地書格式不受支援，請使用 TXT 檔案');
     }
     final contentDao = this.contentDao;
     if (contentDao == null) return null;
@@ -332,7 +354,7 @@ class ReaderV2ChapterRepository {
       saveChapterMetadata: book.origin != 'local',
     );
     if (prepared.isFailed) {
-      throw ReaderV2ChapterRepositoryException(
+      throw ReaderV2ContentUnavailableException(
         (prepared.failureMessage ?? prepared.content).trim(),
       );
     }

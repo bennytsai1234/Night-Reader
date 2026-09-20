@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
@@ -102,7 +103,23 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     _residentLast = safeLast;
     _evictOutsideWindow();
     for (var index = safeFirst; index <= safeLast; index += 1) {
-      unawaited(load(index).then<void>((_) {}, onError: (_, _) {}));
+      unawaited(_prefetch(index));
+    }
+  }
+
+  Future<void> _prefetch(int index) async {
+    try {
+      await load(index);
+    } on ReaderV2ContentUnavailableException {
+      // Residency warming is speculative. External unavailability is allowed
+      // to stop this prefetch without pretending the operation was cancelled.
+    } catch (error, stackTrace) {
+      AppLog.e(
+        'Hybrid chapter prefetch failed unexpectedly for chapter $index',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 

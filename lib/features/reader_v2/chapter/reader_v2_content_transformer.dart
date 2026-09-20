@@ -822,13 +822,11 @@ class ReaderV2ContentTransformer {
           continue;
         }
 
-        try {
-          final previous = content;
-          content = rule.apply(content);
-          if (content != previous) {
-            effectiveRules.add(rule);
-          }
-        } catch (_) {}
+        final previous = content;
+        content = rule.apply(content);
+        if (content != previous) {
+          effectiveRules.add(rule);
+        }
       }
     }
 
@@ -896,12 +894,10 @@ class ReaderV2ContentTransformer {
     if (useReplaceRules) {
       for (final rule in rules) {
         if (rule.pattern.isEmpty) continue;
-        try {
-          final next = rule.apply(displayTitle);
-          if (next.trim().isNotEmpty) {
-            displayTitle = next;
-          }
-        } catch (_) {}
+        final next = rule.apply(displayTitle);
+        if (next.trim().isNotEmpty) {
+          displayTitle = next;
+        }
       }
     }
     return normalizeTypography(displayTitle, preserveCjkSpaces: true);

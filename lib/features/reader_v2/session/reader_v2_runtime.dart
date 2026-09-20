@@ -149,9 +149,11 @@ class ReaderV2Runtime extends ChangeNotifier {
     final token = beginRestoreOperation(location: location);
     try {
       return await _positionViewport(location: location, token: token);
-    } on ReaderV2ChapterRepositoryException catch (error) {
+    } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
       return false;
+    } catch (error, stackTrace) {
+      _rethrowOperationFailure(token, error, stackTrace);
     }
   }
 
@@ -172,8 +174,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
     try {
       await _positionViewport(location: _initialLocation, token: token);
-    } on ReaderV2ChapterRepositoryException catch (error) {
+    } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
+    } catch (error, stackTrace) {
+      _rethrowOperationFailure(token, error, stackTrace);
     }
   }
 
@@ -194,8 +198,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
     try {
       await _positionViewport(location: location, token: token);
-    } on ReaderV2ChapterRepositoryException catch (error) {
+    } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
+    } catch (error, stackTrace) {
+      _rethrowOperationFailure(token, error, stackTrace);
     }
   }
 
@@ -219,8 +225,10 @@ class ReaderV2Runtime extends ChangeNotifier {
       );
       if (!isCurrentOperationToken(token)) return;
       await _positionViewport(location: remappedLocation, token: token);
-    } on ReaderV2ChapterRepositoryException catch (error) {
+    } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
+    } catch (error, stackTrace) {
+      _rethrowOperationFailure(token, error, stackTrace);
     }
   }
 
@@ -271,7 +279,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   void _finishContentUnavailable(
     ReaderV2OperationToken token,
-    ReaderV2ChapterRepositoryException error,
+    ReaderV2ContentUnavailableException error,
   ) {
     if (!isCurrentOperationToken(token)) return;
     if (state.hasStableWorld) {
@@ -281,6 +289,18 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (!stateMachine.markUnavailable(token, error)) return;
     }
     notifyListeners();
+  }
+
+  Never _rethrowOperationFailure(
+    ReaderV2OperationToken token,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    if (isCurrentOperationToken(token)) {
+      stateMachine.abandonOperation(token);
+      notifyListeners();
+    }
+    Error.throwWithStackTrace(error, stackTrace);
   }
 
   Never _failOperationInvariant(
@@ -371,8 +391,10 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (immediateSave) {
         await viewportBridge.saveProgressLocation(state.visibleLocation);
       }
-    } on ReaderV2ChapterRepositoryException catch (error) {
+    } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
+    } catch (error, stackTrace) {
+      _rethrowOperationFailure(token, error, stackTrace);
     }
   }
 

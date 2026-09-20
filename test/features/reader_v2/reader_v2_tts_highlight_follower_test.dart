@@ -35,6 +35,29 @@ void main() {
     expect(follower.pendingHighlight, isNull);
   });
 
+  test('viewport exception is not converted into retryable false', () async {
+    final error = StateError('hybrid invariant broke');
+    final observed = Completer<Object>();
+    late ReaderV2TtsHighlightFollower follower;
+
+    runZonedGuarded(
+      () {
+        follower = ReaderV2TtsHighlightFollower(
+          ensureHighlightVisible: (_) => Future<bool>.error(error),
+        );
+        follower.update(target);
+      },
+      (caught, _) {
+        if (!observed.isCompleted) observed.complete(caught);
+      },
+    );
+
+    expect(await observed.future, same(error));
+    expect(follower.isFollowing, isFalse);
+    expect(follower.pendingHighlight, isNull);
+    expect(follower.lastFollowedHighlight, isNull);
+  });
+
   test(
     'a newer highlight supersedes an in-flight target after failure',
     () async {

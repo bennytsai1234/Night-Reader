@@ -37,15 +37,7 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   Timer? _timer;
   bool _stepping = false;
   DateTime? _lastScrollTick;
-  String? _pendingUserNotice;
-
   bool get isRunning => _timer != null;
-
-  String? takeUserNotice() {
-    final notice = _pendingUserNotice;
-    _pendingUserNotice = null;
-    return notice;
-  }
 
   void toggle() {
     if (isRunning) {
@@ -70,12 +62,10 @@ class ReaderV2AutoPageController extends ChangeNotifier {
       if (!moved) stop();
       return moved;
     } catch (error, stackTrace) {
-      // viewport command 失敗時停止自動翻頁——不停的話 16ms 週期 timer 會
-      // 反覆丟出未處理的非同步例外。
-      debugPrint('ReaderV2 auto page command failed: $error\n$stackTrace');
-      _pendingUserNotice = '自動翻頁發生錯誤，已停止';
+      // Stop the periodic producer, but do not reinterpret a thrown viewport
+      // invariant failure as the ordinary "could not move" false result.
       stop();
-      return false;
+      Error.throwWithStackTrace(error, stackTrace);
     } finally {
       _stepping = false;
     }

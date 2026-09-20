@@ -299,6 +299,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'speculative neighbor unavailable cannot fail the current restore target',
+    (tester) async {
+      final chapters = List.generate(
+        3,
+        (index) => chapter(index, paragraphCount: index == 0 ? 1 : 8),
+      );
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, value) async {
+          if (index == 1) {
+            throw ReaderV2ContentUnavailableException('鄰章暫時無法取得');
+          }
+          return value.content;
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await completeWithFrames(tester, runtime.openBook());
+      await tester.pumpAndSettle();
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.state.visibleLocation.chapterIndex, 0);
+      expect(runtime.takeUserNotice(), isNull);
+      final visible = snapshot(tester);
+      expect(visible['initialRestoreCompleted'], true);
+      expect(visible['missingParagraphKeys'], isEmpty);
+    },
+  );
+
   testWidgets('positioning completes before blocked speculative chapter I/O', (
     tester,
   ) async {
@@ -557,7 +590,7 @@ void main() {
       chapters,
       contentLoader: (index, chapter) async {
         if (index == 1) {
-          throw ReaderV2ChapterRepositoryException('目標章節暫時無法取得');
+          throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
         }
         return chapter.content;
       },

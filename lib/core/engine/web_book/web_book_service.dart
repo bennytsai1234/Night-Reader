@@ -293,8 +293,18 @@ class WebBook {
             if (newTitle != null && newTitle.toString().isNotEmpty) {
               deduped[i] = ch.copyWith(title: newTitle.toString());
             }
-          } catch (_) {
-            // 格式化失敗則保留原標題
+          } on AppException catch (error, stackTrace) {
+            AppLog.e(
+              '目錄 formatJs 規則失敗，保留原標題',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          } on TimeoutException catch (error, stackTrace) {
+            AppLog.e(
+              '目錄 formatJs 執行逾時，保留原標題',
+              error: error,
+              stackTrace: stackTrace,
+            );
           } finally {
             fmtRule?.dispose();
           }
@@ -533,9 +543,29 @@ class WebBook {
             _checkRedirect(source, res);
             _checkLoginRequired(res, stage: stage);
             return res;
-          } catch (e) {
-            if (e is DioException && CancelToken.isCancel(e)) rethrow;
-            AppLog.e('WebBook: 並發抓取失敗 $url: $e');
+          } on DioException catch (error, stackTrace) {
+            if (CancelToken.isCancel(error)) rethrow;
+            AppLog.e(
+              'WebBook: 並發網路抓取失敗 $url',
+              error: error,
+              stackTrace: stackTrace,
+            );
+            if (!allowPartial) rethrow;
+            return null;
+          } on AppException catch (error, stackTrace) {
+            AppLog.e(
+              'WebBook: 並發書源資料取得失敗 $url',
+              error: error,
+              stackTrace: stackTrace,
+            );
+            if (!allowPartial) rethrow;
+            return null;
+          } on TimeoutException catch (error, stackTrace) {
+            AppLog.e(
+              'WebBook: 並發書源資料取得逾時 $url',
+              error: error,
+              stackTrace: stackTrace,
+            );
             if (!allowPartial) rethrow;
             return null;
           } finally {

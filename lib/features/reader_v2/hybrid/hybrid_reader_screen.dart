@@ -36,6 +36,8 @@ import 'text/text_preprocessor.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
+enum _MaterializationWait { progressed, frontierUnavailable, cancelled }
+
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
     super.key,
@@ -302,6 +304,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       for (final shape in _blocks.values) {
         _admission.registerChapter(shape);
       }
+      restoreLoop:
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
         final target = _offsetForAnchor(anchor, blocks);
@@ -320,11 +323,24 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         // Cached exact metrics may advance admission synchronously, without
         // creating a layout task. Re-evaluate that progress before waiting.
         if (_documentIndex.revisionNumber != revision) continue;
-        if (!await _waitForMaterialization(isCurrent)) return false;
+        final wait = await _waitForMaterialization(isCurrent);
+        switch (wait) {
+          case _MaterializationWait.progressed:
+            continue;
+          case _MaterializationWait.frontierUnavailable:
+            break restoreLoop;
+          case _MaterializationWait.cancelled:
+            return false;
+        }
       }
       if (!isCurrent()) return false;
       final target = _offsetForAnchor(anchor, blocks);
-      if (target == null) return false;
+      if (target == null) {
+        throw StateError(
+          'Hybrid restore target has no admitted anchor geometry after '
+          'materialization completed.',
+        );
+      }
       _pendingScrollOffset = target;
       _lastReportedLocation = normalized;
       _initialRestoreCompleted = true;
@@ -361,16 +377,49 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return WidgetsBinding.instance.endOfFrame;
   }
 
-  Future<bool> _waitForMaterialization(bool Function() isCurrent) async {
-    if (!isCurrent()) return false;
+  Future<_MaterializationWait> _waitForMaterialization(
+    bool Function() isCurrent,
+  ) async {
+    if (!isCurrent()) return _MaterializationWait.cancelled;
     if (_pump.queueDepth > 0) {
       await _nextFrame();
-    } else {
-      final loads = _blocksInFlight.values.toList(growable: false);
-      if (loads.isEmpty) return false;
-      await Future.any(loads);
+      return isCurrent()
+          ? _MaterializationWait.progressed
+          : _MaterializationWait.cancelled;
     }
-    return isCurrent();
+
+    final pending = <int, Future<({int chapter, bool unavailable})>>{
+      for (final entry in _blocksInFlight.entries)
+        entry.key: _observeSpeculativeMaterialization(entry.key, entry.value),
+    };
+    if (pending.isEmpty) {
+      throw StateError(
+        'Hybrid restore stalled with no layout work or chapter acquisition in flight.',
+      );
+    }
+
+    while (pending.isNotEmpty) {
+      final outcome = await Future.any(pending.values);
+      pending.remove(outcome.chapter);
+      if (!isCurrent()) return _MaterializationWait.cancelled;
+      if (!outcome.unavailable) return _MaterializationWait.progressed;
+    }
+    return _MaterializationWait.frontierUnavailable;
+  }
+
+  Future<({int chapter, bool unavailable})> _observeSpeculativeMaterialization(
+    int chapter,
+    Future<ChapterBlocks?> load,
+  ) async {
+    try {
+      await load;
+      return (chapter: chapter, unavailable: false);
+    } on ReaderV2ContentUnavailableException {
+      // The operation target was acquired before this wait. A neighboring
+      // speculative chapter being unavailable is a bounded external frontier,
+      // not cancellation and not a failure of the target or Hybrid core.
+      return (chapter: chapter, unavailable: true);
+    }
   }
 
   bool _windowReady(double top, double bottom) {
@@ -404,62 +453,60 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         identical(binding, _pump) &&
         identical(_blocksInFlight[chapter], task);
     task = () async {
-      try {
-        final text = await repository.load(chapter);
-        if (!current()) return null;
-        final plan = _layoutPlans[chapter];
-        if (plan != null) {
-          final restored = plan.materialize(text);
-          if (restored == null) {
-            // An actual source edit ends the old document identity. Let the
-            // runtime capture/remap/restore it; never overwrite admitted keys.
-            await widget.runtime.reloadContentPreservingLocation();
-            return null;
-          }
-          _blocks[chapter] = restored;
-          _admission.registerChapter(restored);
-          return restored;
+      final text = await repository.load(chapter);
+      if (!current()) return null;
+      final plan = _layoutPlans[chapter];
+      if (plan != null) {
+        final restored = plan.materialize(text);
+        if (restored == null) {
+          // An actual source edit ends the old document identity. Let the
+          // runtime capture/remap/restore it; never overwrite admitted keys.
+          await widget.runtime.reloadContentPreservingLocation();
+          return null;
         }
-        final rough = await preprocessor.process(
-          text,
-          maxBlockChars: maxBlockChars,
-        );
-        if (!current()) return null;
-        final spec = widget.runtime.state.layoutSpec;
-        final blocks = await binding.alignChapterBlocksToVisualLines(
-          rough,
-          maxBlockChars: maxBlockChars,
-          bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
-            spec.style,
-            justify: AppConfig.readerV2ContentJustify,
-          ),
-          contentWidth: spec.contentWidth,
-          cellWidth: spec.cellWidth,
-          textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
-          priority: anchor
-              ? LayoutTaskPriority.anchor
-              : LayoutTaskPriority.prefetch,
-        );
-        if (blocks == null || !current()) return null;
-        _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
-        _blocks[chapter] = blocks;
-        _admission.registerChapter(blocks);
-        // Disk reads may improve later reuse; neither first paint nor command
-        // completion waits for this optional cache.
-        unawaited(_warmDiskMetricsForChapter(blocks));
-        return blocks;
-      } on ReaderV2ChapterRepositoryException {
-        if (anchor) rethrow;
-        return null;
+        _blocks[chapter] = restored;
+        _admission.registerChapter(restored);
+        return restored;
       }
+      final rough = await preprocessor.process(
+        text,
+        maxBlockChars: maxBlockChars,
+      );
+      if (!current()) return null;
+      final spec = widget.runtime.state.layoutSpec;
+      final blocks = await binding.alignChapterBlocksToVisualLines(
+        rough,
+        maxBlockChars: maxBlockChars,
+        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
+          spec.style,
+          justify: AppConfig.readerV2ContentJustify,
+        ),
+        contentWidth: spec.contentWidth,
+        cellWidth: spec.cellWidth,
+        textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
+        priority: anchor
+            ? LayoutTaskPriority.anchor
+            : LayoutTaskPriority.prefetch,
+      );
+      if (blocks == null || !current()) return null;
+      _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
+      _blocks[chapter] = blocks;
+      _admission.registerChapter(blocks);
+      // Disk reads may improve later reuse; neither first paint nor command
+      // completion waits for this optional cache.
+      unawaited(_warmDiskMetricsForChapter(blocks));
+      return blocks;
     }();
     _blocksInFlight[chapter] = task;
-    unawaited(
-      task.then((_) {
-        if (identical(_blocksInFlight[chapter], task))
-          _blocksInFlight.remove(chapter);
-      }),
-    );
+    void cleanUp() {
+      if (identical(_blocksInFlight[chapter], task)) {
+        _blocksInFlight.remove(chapter);
+      }
+    }
+
+    // Cleanup observes completion only. It never changes the original task's
+    // success/error semantics seen by the operation or prefetch owner.
+    unawaited(task.then<void>((_) => cleanUp(), onError: (_, _) => cleanUp()));
     return task;
   }
 
@@ -477,12 +524,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final last = math.max(_chapterRepo.residentLast ?? chapter, chapter);
     _setDemandRange(first, last);
     final binding = _pump;
-    unawaited(
-      _ensureChapterBlocks(chapter).then((blocks) {
-        if (blocks != null && mounted && identical(binding, _pump))
-          _reconcileVisibleWindow();
-      }),
-    );
+    unawaited(_prefetchChapter(chapter, binding));
+  }
+
+  Future<void> _prefetchChapter(int chapter, LayoutPump binding) async {
+    try {
+      final blocks = await _ensureChapterBlocks(chapter);
+      if (blocks != null && mounted && identical(binding, _pump)) {
+        _reconcileVisibleWindow();
+      }
+    } on ReaderV2ContentUnavailableException {
+      // Speculative neighbor acquisition may be unavailable. This is neither
+      // operation cancellation nor a Hybrid deterministic-core failure.
+    }
   }
 
   void _onChapterEvent(ChapterEvent event) {
@@ -729,7 +783,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           await _nextFrame();
         return isCurrent();
       }
-      if (!await _waitForMaterialization(isCurrent)) return false;
+      final wait = await _waitForMaterialization(isCurrent);
+      switch (wait) {
+        case _MaterializationWait.progressed:
+          continue;
+        case _MaterializationWait.frontierUnavailable:
+        case _MaterializationWait.cancelled:
+          return false;
+      }
     }
     return false;
   }
@@ -774,7 +835,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               widget.textColor,
             ),
           )) {
-        if (!await _waitForMaterialization(isCurrent)) break;
+        final wait = await _waitForMaterialization(isCurrent);
+        switch (wait) {
+          case _MaterializationWait.progressed:
+            continue;
+          case _MaterializationWait.cancelled:
+            break;
+          case _MaterializationWait.frontierUnavailable:
+            throw StateError(
+              'Hybrid target range is not materialized and only unavailable '
+              'speculative frontier work remains.',
+            );
+        }
       }
       return leases;
     } catch (_) {
@@ -1663,7 +1735,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           }
         },
       );
-    } catch (_) {}
+    } on io.FileSystemException {}
   }
 
   Future<void> _writeDiskMetrics(
@@ -1687,7 +1759,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         metrics: snapshot,
         chapterLayoutIdentities: chapterLayoutIdentities,
       );
-    } catch (_) {}
+    } on io.FileSystemException {}
   }
 
   Future<MetricsDiskCache> _obtainDiskCache() async {
