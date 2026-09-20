@@ -113,6 +113,8 @@ class BookDetailCacheStatus {
 
 enum BookDetailCacheClearTarget { content, cover, all }
 
+enum BookDetailWorldState { initializing, ready, unavailable }
+
 class BookDetailProvider extends ChangeNotifier {
   static const String _bookInfoDegradationMessage = '書籍資訊更新失敗，目前顯示已儲存內容';
 
@@ -129,7 +131,7 @@ class BookDetailProvider extends ChangeNotifier {
   late Book _book;
   List<BookChapter> _allChapters = [];
   List<BookChapter> _displayChapters = [];
-  bool _isLoading = true;
+  BookDetailWorldState _worldState = BookDetailWorldState.initializing;
   String? _loadErrorMessage;
   bool _isInBookshelf = false;
   BookSource? _currentSource;
@@ -145,7 +147,9 @@ class BookDetailProvider extends ChangeNotifier {
   List<BookChapter> get filteredChapters => _displayChapters;
   List<BookChapter> get allChapters => List.unmodifiable(_allChapters);
   int get totalChapterCount => _allChapters.length;
-  bool get isLoading => _isLoading;
+  BookDetailWorldState get worldState => _worldState;
+  bool get isLoading => _worldState == BookDetailWorldState.initializing;
+  bool get hasReadyWorld => _worldState == BookDetailWorldState.ready;
   String? get loadErrorMessage => _loadErrorMessage;
   bool get isInBookshelf => _isInBookshelf;
   BookDetailCacheStatus get cacheStatus => _cacheStatus;
@@ -247,7 +251,7 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _init() async {
     if (_disposed) return;
-    _isLoading = true;
+    _worldState = BookDetailWorldState.initializing;
     _loadErrorMessage = null;
     notifyListeners();
     try {
@@ -262,6 +266,7 @@ class BookDetailProvider extends ChangeNotifier {
       await _loadSource();
       await _loadBookInfo();
       await _loadChapters();
+      _worldState = BookDetailWorldState.ready;
       unawaited(_storeDisplayCover());
     } catch (error, stackTrace) {
       AppLog.e(
@@ -270,8 +275,8 @@ class BookDetailProvider extends ChangeNotifier {
         stackTrace: stackTrace,
       );
       _loadErrorMessage = '書籍詳情載入失敗，請重試';
+      _worldState = BookDetailWorldState.unavailable;
     } finally {
-      _isLoading = false;
       if (!_disposed) notifyListeners();
     }
   }
@@ -870,7 +875,7 @@ class BookDetailProvider extends ChangeNotifier {
     try {
       await _coverStorage.ensureDisplayCoverStored(_book);
       await _bookDao.upsert(_book);
-      if (!_isLoading && !_disposed) notifyListeners();
+      if (hasReadyWorld && !_disposed) notifyListeners();
     } catch (error) {
       AppLog.e('儲存顯示封面失敗: $error', error: error);
     }
