@@ -172,7 +172,7 @@ jobs:
 
       - name: Run critical regression checks
         run: |
-          flutter analyze \
+          flutter analyze --no-pub \
             lib/features/reader_v2 \
             lib/features/book_detail/book_detail_provider.dart \
             lib/features/source_manager \
@@ -195,7 +195,7 @@ jobs:
             test/core/services/source_switch_progress_test.dart \
             test/core/services/book_cover_storage_service_test.dart \
             test/core/services/download_scheduler_test.dart
-          flutter test test/features/reader_v2 \
+          flutter test --no-pub test/features/reader_v2 \
             test/features/source_manager/source_manager_provider_test.dart \
             test/features/source_manager/source_manager_page_smoke_test.dart \
             test/features/source_manager/source_login_test.dart \
@@ -223,11 +223,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: >-
           flutter build apk
+          --no-pub
           --release
           --split-per-abi
           --target-platform android-arm64
           --analyze-size
           --code-size-directory build/size-analysis
+
+      - name: Verify Workmanager uses AGP built-in Kotlin
+        run: |
+          built_in_output="build/workmanager_android/intermediates/built_in_kotlinc"
+          test -d "$built_in_output"
+          find "$built_in_output" -type f -name '*.class' -print -quit | grep -q .
 
       - name: Upload code size analysis
         uses: actions/upload-artifact@v7
