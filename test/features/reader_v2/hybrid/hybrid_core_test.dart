@@ -1,3 +1,4 @@
+// Temporary Chat agentic capability smoke test; no behavior change.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
