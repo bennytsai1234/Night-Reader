@@ -11,7 +11,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
+import 'package:night_reader/features/reader_v2/hybrid/layout/reader_paragraph_layout.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -294,7 +294,7 @@ void main() {
   });
 
   test(
-    'cellWidth locked and unlocked paths preserve distinct width contracts',
+    'cellWidth remains typography-only and never changes viewport content width',
     () {
       const style = ReaderV2LayoutStyle(
         fontSize: 20,
@@ -306,33 +306,39 @@ void main() {
         paddingLeft: 16,
         paddingRight: 16,
       );
-      final lockedCell = LayoutPump.measureCellWidth(
+      const paragraphLayout = ReaderParagraphLayout();
+      final measuredCell = paragraphLayout.measureCellWidth(
         fontSize: style.fontSize,
         letterSpacing: style.letterSpacing,
         bold: style.bold,
       );
-      expect(lockedCell, isNotNull);
-      final locked = ReaderV2LayoutSpec.fromViewport(
+      expect(measuredCell, isNotNull);
+      final measured = ReaderV2LayoutSpec.fromViewport(
         viewportSize: const ui.Size(413, 800),
         style: style,
-        cellWidth: lockedCell,
+        cellWidth: measuredCell,
       );
-      final unlocked = ReaderV2LayoutSpec.fromViewport(
+      final unmeasured = ReaderV2LayoutSpec.fromViewport(
         viewportSize: const ui.Size(413, 800),
         style: style,
       );
-      expect(locked.cellWidth, lockedCell);
-      expect(locked.contentWidth, isNot(unlocked.contentWidth));
-      expect(unlocked.cellWidth, isNull);
-      expect(unlocked.contentWidth, 381);
+      expect(measured.cellWidth, measuredCell);
+      expect(unmeasured.cellWidth, isNull);
+      expect(measured.contentWidth, 381);
+      expect(unmeasured.contentWidth, 381);
+      expect(measured.contentWidth, unmeasured.contentWidth);
       expect(
-        locked.style.paddingLeft +
-            locked.contentWidth +
-            locked.style.paddingRight,
+        measured.style.paddingLeft +
+            measured.contentWidth +
+            measured.style.paddingRight,
         closeTo(413, 0.001),
       );
       expect(
-        LayoutPump.measureCellWidth(fontSize: 0, letterSpacing: 0, bold: false),
+        paragraphLayout.measureCellWidth(
+          fontSize: 0,
+          letterSpacing: 0,
+          bold: false,
+        ),
         isNull,
       );
       final invalidMeasurementSpec = ReaderV2LayoutSpec.fromViewport(
@@ -340,7 +346,7 @@ void main() {
         style: style,
         cellWidth: null,
       );
-      expect(invalidMeasurementSpec.contentWidth, unlocked.contentWidth);
+      expect(invalidMeasurementSpec.contentWidth, unmeasured.contentWidth);
     },
   );
 
