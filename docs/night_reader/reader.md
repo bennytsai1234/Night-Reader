@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime` 擁有命令意圖與會話狀態，`HybridReaderScreen` 擁有目前 viewport；正文排版只走 `ReaderV2LayoutSpec → VisualLineLayoutEngine → LayoutPump / ReaderParagraphLayout → ChapterLayoutPlan → DocumentIndex → Flutter Sliver`。不存在第二套分頁 resolver、paged render model 或未掛載 Hybrid 時的 compatibility path。
+Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime` 擁有命令意圖與會話狀態，`HybridReaderScreen` 擁有目前 viewport；正文排版只走 `ReaderV2LayoutSpec → ReaderV2TextLayoutFrame → VisualLineLayoutEngine → LayoutPump / ReaderParagraphLayout → ChapterLayoutPlan → DocumentIndex → Flutter Sliver`。不存在第二套分頁 resolver、paged render model 或未掛載 Hybrid 時的 compatibility path。
 
 | 責任 | Owner | 核心入口 |
 |---|---|---|
@@ -57,7 +57,7 @@ flowchart LR
 flowchart TD
     Command[Runtime semantic target] --> Demand[Hybrid viewport demand]
     Content[displayText + contentHash] --> Pre[TextPreprocessor]
-    Width[ReaderV2LayoutSpec physical width] --> Lines[VisualLineLayoutEngine]
+    Width[ReaderV2LayoutSpec physical width] --> Frame[ReaderV2TextLayoutFrame centered drawable width]\n    Frame --> Lines[VisualLineLayoutEngine]
     Pre --> Lines
     Lines --> Pump[LayoutPump scheduler]
     Demand --> Pump
@@ -83,6 +83,7 @@ flowchart TD
 - Runtime 將 committed `contentGeneration` 發布到 session state。若無 operation 時重新取得的目前可見章節 identity 改變，Runtime 會先用 `ReaderV2Location` 的 content anchor 對新正文重映射 visible location，再發布 generation。Hybrid / TTS 只消費 Runtime state，不直接觀察 repository 內部 generation；content reload 不冒充 layout change，因此不推進 `layoutGeneration`。
 - Hybrid 文件 epoch 綁定 `layoutGeneration + contentGeneration`。任一 generation 變更都由上層發布後單向重建；若 generation 在既有 Runtime operation 的 viewport transaction 期間前進，Runtime 保留同一 operation token，於新 generation 重新 resolve 同一 semantic target 後再 restore，不建立替代 operation。若當下沒有 operation，Hybrid 直接以已發布的 visible location 本地重建。若 `ChapterLayoutPlan` 在同一 generation 內遇到 content identity mismatch，視為 invariant failure。
 - `ReaderV2LayoutSpec.contentWidth` 只代表 viewport 扣除使用者 padding 後的實體可畫寬度；cell / em-grid typography metric 不得縮小或重定義它。
+- `ReaderV2TextLayoutFrame` 擁有 physical content frame 內的正文水平放置：以實測全形 advance 推導可容納的整數 cell 寬度，殘差左右平分；visual-line planning、drawable Paragraph、實際 block padding 與 TTS overlay 必須共用同一 frame。它不得修改使用者 padding 或 viewport-owned `contentWidth`。
 - `VisualLineLayoutEngine` 是唯一 visual-line break owner：native grapheme geometry 決定內容是否放得下，native Unicode word boundary 只提供英文／混排的優先斷點；標點類別沒有否決一個仍然放得下的 grapheme 的權力，也不讀取 SkParagraph soft-wrap line boundary。單一英文詞本身超過整行時才退回 grapheme boundary。
 - `ReaderParagraphLayout` 只擁有 shaping 與 drawable Paragraph mechanism。reader-owned 行界以 layout-only hard break 呈現，source text 不插入換行；`ParagraphTextMap` 負責 layout offset 與 UTF-16 source offset 的雙向映射。
 - `LayoutPump` 只排程 line planning / drawable work、pending 去重/取消與 frame credit；若 native Paragraph 在 reader-owned 行界之外再次 soft-wrap，直接視為 layout invariant violation，不建立 fallback 或標點特判。

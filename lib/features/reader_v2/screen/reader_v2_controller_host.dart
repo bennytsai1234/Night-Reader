@@ -234,8 +234,9 @@ class ReaderV2ControllerHost {
   }
 
   ReaderV2LayoutSpec specFromStyle(Size size, ReaderV2Style style) {
-    // cellWidth 只描述全形字與首行縮排的 typography metric。
-    // ReaderV2LayoutSpec 不再允許它裁切 viewport 的實體正文寬度。
+    // cellWidth 只描述全形字 advance 的 typography metric。
+    // ReaderV2LayoutSpec 可用它推導置中的內部 text frame，但不得用它
+    // 裁切或重定義 viewport 擁有的實體 contentWidth。
     final cellWidth = const ReaderParagraphLayout().measureCellWidth(
       fontSize: style.fontSize,
       letterSpacing: style.letterSpacing,

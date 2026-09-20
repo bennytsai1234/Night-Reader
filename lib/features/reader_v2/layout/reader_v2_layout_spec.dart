@@ -41,6 +41,69 @@ class ReaderV2LayoutStyle {
   }
 }
 
+final class ReaderV2TextLayoutFrame {
+  const ReaderV2TextLayoutFrame({
+    required this.width,
+    required this.leftInset,
+    required this.rightInset,
+  });
+
+  factory ReaderV2TextLayoutFrame.centered({
+    required double contentWidth,
+    required double? cellWidth,
+  }) {
+    if (!contentWidth.isFinite || contentWidth <= 0) {
+      throw StateError('Text layout frame requires a positive content width.');
+    }
+    if (cellWidth == null ||
+        !cellWidth.isFinite ||
+        cellWidth <= 0 ||
+        contentWidth < cellWidth) {
+      return ReaderV2TextLayoutFrame(
+        width: contentWidth,
+        leftInset: 0,
+        rightInset: 0,
+      );
+    }
+
+    // The viewport still owns the physical content width. Typography only
+    // chooses a centered inner frame that can hold an integer number of
+    // measured full-width advances. A tiny paragraph slack protects native
+    // layout from float accumulation without allowing the frame to escape the
+    // physical content box.
+    const cellCountEpsilon = 0.01;
+    const paragraphSlack = 0.05;
+    final cells = ((contentWidth + cellCountEpsilon) / cellWidth).floor();
+    if (cells < 1) {
+      return ReaderV2TextLayoutFrame(
+        width: contentWidth,
+        leftInset: 0,
+        rightInset: 0,
+      );
+    }
+
+    final width = (cells * cellWidth + paragraphSlack)
+        .clamp(1.0, contentWidth)
+        .toDouble();
+    final residual = (contentWidth - width)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final leftInset = residual / 2;
+    return ReaderV2TextLayoutFrame(
+      width: width,
+      leftInset: leftInset,
+      rightInset: residual - leftInset,
+    );
+  }
+
+  /// Drawable paragraph width inside the physical content box.
+  final double width;
+
+  /// Insets relative to the physical content box, not the viewport.
+  final double leftInset;
+  final double rightInset;
+}
+
 class ReaderV2LayoutSpec {
   ReaderV2LayoutSpec({
     required this.viewportSize,
@@ -48,7 +111,11 @@ class ReaderV2LayoutSpec {
     required this.contentHeight,
     required this.style,
     this.cellWidth,
-  }) : layoutSignature = _buildSignature(
+  }) : textLayoutFrame = ReaderV2TextLayoutFrame.centered(
+         contentWidth: contentWidth,
+         cellWidth: cellWidth,
+       ),
+       layoutSignature = _buildSignature(
          viewportSize: viewportSize,
          contentWidth: contentWidth,
          contentHeight: contentHeight,
@@ -61,10 +128,22 @@ class ReaderV2LayoutSpec {
   final double contentHeight;
   final ReaderV2LayoutStyle style;
 
+  /// Typography-owned placement inside [contentWidth]. It never changes the
+  /// viewport-owned physical content width or user padding.
+  final ReaderV2TextLayoutFrame textLayoutFrame;
+
   /// 實測全形字 advance（含 letterSpacing），只屬於 typography metrics。
-  /// 目前僅供首行縮排 placeholder 等字形幾何使用；它不得改寫
-  /// [contentWidth]。正文可用寬度永遠由 viewport 與使用者 padding 決定。
+  /// 用於首行縮排 placeholder 與 [textLayoutFrame] 的內部排版幾何；
+  /// 它不得改寫 [contentWidth]。正文的實體可用寬度永遠由 viewport 與
+  /// 使用者 padding 決定。
   final double? cellWidth;
+
+  /// Effective viewport paddings used by paragraph paint/highlight. They add
+  /// the centered text-frame residual without mutating [style].
+  double get textPaddingLeft => style.paddingLeft + textLayoutFrame.leftInset;
+  double get textPaddingRight =>
+      style.paddingRight + textLayoutFrame.rightInset;
+
   final int layoutSignature;
 
   /// Shared anchor offset calculation — the vertical position in the viewport
