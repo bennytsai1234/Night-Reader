@@ -2,6 +2,10 @@ name: Android Release
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - pubspec.yaml
     tags:
       - "v*"
   workflow_dispatch:
@@ -10,13 +14,120 @@ permissions:
   contents: write
 
 jobs:
+  plan-release:
+    name: Plan release
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.plan.outputs.should_build }}
+      publish: ${{ steps.plan.outputs.publish }}
+      tag_name: ${{ steps.plan.outputs.tag_name }}
+      target_sha: ${{ steps.plan.outputs.target_sha }}
+      artifact_label: ${{ steps.plan.outputs.artifact_label }}
+      mode: ${{ steps.plan.outputs.mode }}
+
+    steps:
+      - name: Checkout release metadata
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release intent
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          raw_version="$(awk '$1 == "version:" { print $2; exit }' pubspec.yaml)"
+          test -n "$raw_version"
+          app_version="${raw_version%%+*}"
+          tag_name="v${app_version}"
+
+          emit() {
+            printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
+          }
+
+          emit tag_name "$tag_name"
+
+          # 手動執行永遠只做 signed APK 驗證，不發布。
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            emit should_build true
+            emit publish false
+            emit target_sha "$GITHUB_SHA"
+            emit artifact_label "manual-${GITHUB_SHA::7}"
+            emit mode manual-test
+            exit 0
+          fi
+
+          # 保留既有 tag-driven release；tag 必須和 pubspec 版本一致。
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [[ "$GITHUB_REF_NAME" != "$tag_name" ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $tag_name"
+              exit 1
+            fi
+            emit should_build true
+            emit publish true
+            emit target_sha "$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+            emit artifact_label "$GITHUB_REF_NAME"
+            emit mode tag
+            exit 0
+          fi
+
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Unsupported release ref: $GITHUB_REF"
+            exit 1
+          fi
+
+          # main 上只要把 pubspec 的 app version 升到尚未發布的版本，
+          # 這個 workflow 就會成為 tag / Release 的唯一發布 owner。
+          if gh release view "$tag_name" >/dev/null 2>&1; then
+            echo "Release $tag_name already exists; nothing to publish."
+            emit should_build false
+            emit publish false
+            emit target_sha "$GITHUB_SHA"
+            emit artifact_label "$tag_name"
+            emit mode already-released
+            exit 0
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/$tag_name"; then
+            # 支援「tag 已建立但 Release 尚未完成」的恢復路徑。
+            target_sha="$(git rev-list -n 1 "$tag_name")"
+            emit should_build true
+            emit publish true
+            emit target_sha "$target_sha"
+            emit artifact_label "$tag_name"
+            emit mode recover-existing-tag
+            exit 0
+          fi
+
+          latest_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1 || true)"
+          if [[ -n "$latest_tag" ]]; then
+            highest="$(printf '%s\n%s\n' "$latest_tag" "$tag_name" | sort -V | tail -n 1)"
+            if [[ "$highest" != "$tag_name" || "$latest_tag" == "$tag_name" ]]; then
+              echo "::error::pubspec version $tag_name must be newer than latest tag $latest_tag"
+              exit 1
+            fi
+          fi
+
+          emit should_build true
+          emit publish true
+          emit target_sha "$GITHUB_SHA"
+          emit artifact_label "$tag_name"
+          emit mode version-push
+
   build-release-apk:
     name: Build signed arm64-v8a release APK
+    needs: plan-release
+    if: needs.plan-release.outputs.should_build == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout release source
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan-release.outputs.target_sha }}
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -96,7 +207,7 @@ jobs:
       - name: Upload code size analysis
         uses: actions/upload-artifact@v4
         with:
-          name: night-reader-code-size-${{ github.ref_name }}
+          name: night-reader-code-size-${{ needs.plan-release.outputs.artifact_label }}
           path: build/size-analysis/
           if-no-files-found: error
           retention-days: 30
@@ -110,17 +221,22 @@ jobs:
           test -n "$manifest_path"
           grep -q 'android.permission.INTERNET' "$manifest_path"
 
-      # 只有 v* tag 觸發才發布 release；手動 workflow_dispatch 只建置、
-      # 不發布（避免從 main 觸發時建立名為 "main" 的假 release）。
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: needs.plan-release.outputs.publish == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.plan-release.outputs.tag_name }}
+          TARGET_SHA: ${{ needs.plan-release.outputs.target_sha }}
         run: |
           set -euo pipefail
           apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
+
+          if ! git show-ref --verify --quiet "refs/tags/$TAG_NAME"; then
+            git tag "$TAG_NAME" "$TARGET_SHA"
+            git push origin "refs/tags/$TAG_NAME"
+          fi
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" "$apk_path#$asset_name" --clobber
           else
@@ -129,9 +245,8 @@ jobs:
               --generate-notes
           fi
 
-      # 手動觸發時把 APK 掛成 workflow artifact，供測試安裝下載。
       - name: Upload test APK artifact
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: needs.plan-release.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: night-reader-test-arm64-v8a
