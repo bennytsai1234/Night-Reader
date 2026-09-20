@@ -765,13 +765,19 @@ void main() {
             ),
           ],
         );
-        final preparation = pump.alignChapterBlocksToVisualLines(
+        final preparation = pump.planChapterVisualLines(
           source,
           maxBlockChars: 40,
           bodyStyle: const HybridBlockTextStyle(
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
+          ),
+          titleStyle: const HybridBlockTextStyle(
+            fontSize: 22,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            bold: true,
           ),
           contentWidth: 200,
           cellWidth: null,

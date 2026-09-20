@@ -6,11 +6,11 @@ const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
 
 // 末行補償演算法版本也要進入 metrics fingerprint，避免沿用舊 Paragraph
 // 幾何；開關本身則由 StyleFingerprint.lastLineSpacingCompensation 區分。
-// emgrid-v1：em 網格鎖寬（2026-07-19）——contentWidth 修剪至實測 cell
-// 整數倍、內文 justify 改 start、縮排 placeholder 寬改 cell；幾何整批
-// 變更，舊 metrics 不可沿用（contentWidth/justify 本在 fingerprint 內，
-// 此處雙保險）。
-// systemfont-v1：移除標點子集字型（2026-07-29），改回平台字型 fallback；
-// 字形幾何可能改變，舊 metrics 不可沿用。
+// physicalwidth-v1：contentWidth 只代表 viewport 扣除使用者 padding 後的
+// 實體可畫寬度，cell metric 不再裁切正文寬度。
+// readerbreak-v1：visual-line boundary 由 Night Reader 自己依 grapheme 的
+// 真實 shaping advance 決定；SkParagraph 不再擁有 soft-wrap policy。
+// systemfont-v1：使用平台字型 fallback；字形幾何可能改變，舊 metrics
+// 不可沿用。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+emgrid-v1+systemfont-v1';
+    'fwid+lastline-v1+physicalwidth-v1+readerbreak-v1+systemfont-v1';

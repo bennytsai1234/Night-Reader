@@ -10,6 +10,8 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 
+import '../layout/reader_paragraph_layout.dart';
+import '../layout/visual_line_layout_engine.dart';
 import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
@@ -19,49 +21,10 @@ final class LayoutPump implements HybridLayoutPump {
 
   static const double lastLineLetterSpacingCap = 2.0;
   static const double _minBlockHeight = 1e-6;
-  static final Map<String, double> _cellWidthCache = <String, double>{};
-
-  static double? measureCellWidth({
-    required double fontSize,
-    required double letterSpacing,
-    required bool bold,
-  }) {
-    if (!fontSize.isFinite || fontSize <= 0) return null;
-    if (!letterSpacing.isFinite) return null;
-    final key =
-        '$fontSize|$letterSpacing|$bold|$kReaderV2CjkTypographyFeatureSignature';
-    final cached = _cellWidthCache[key];
-    if (cached != null) return cached;
-    final builder =
-        ui.ParagraphBuilder(
-            ui.ParagraphStyle(
-              textDirection: ui.TextDirection.ltr,
-              fontSize: fontSize,
-            ),
-          )
-          ..pushStyle(
-            ui.TextStyle(
-              fontSize: fontSize,
-              letterSpacing: letterSpacing,
-              fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
-              fontFeatures: kReaderV2CjkFontFeatures,
-            ),
-          )
-          ..addText('一一');
-    final paragraph = builder.build()
-      ..layout(ui.ParagraphConstraints(width: fontSize * 8));
-    double? cell;
-    final first = paragraph.getBoxesForRange(0, 1);
-    final second = paragraph.getBoxesForRange(1, 2);
-    if (first.isNotEmpty && second.isNotEmpty) {
-      final advance = second.first.left - first.first.left;
-      if (advance.isFinite && advance > 0) cell = advance;
-    }
-    paragraph.dispose();
-    if (cell == null) return null;
-    _cellWidthCache[key] = cell;
-    return cell;
-  }
+  static const ReaderParagraphLayout _paragraphLayout =
+      ReaderParagraphLayout();
+  static const VisualLineLayoutEngine _lineLayoutEngine =
+      VisualLineLayoutEngine(paragraphLayout: _paragraphLayout);
 
   LayoutPump({
     required ParagraphCache paragraphCache,
@@ -134,10 +97,11 @@ final class LayoutPump implements HybridLayoutPump {
   /// needs a discard callback to roll it back.
   void clearPendingLayouts() => _removeWhere((work) => work is _LayoutWork);
 
-  Future<ChapterBlocks?> alignChapterBlocksToVisualLines(
+  Future<ChapterBlocks?> planChapterVisualLines(
     ChapterBlocks source, {
     required int maxBlockChars,
     required HybridBlockTextStyle bodyStyle,
+    required HybridBlockTextStyle titleStyle,
     required double contentWidth,
     required double? cellWidth,
     required int textIndent,
@@ -161,6 +125,7 @@ final class LayoutPump implements HybridLayoutPump {
         source,
         maxBlockChars: math.max(1, maxBlockChars),
         bodyStyle: bodyStyle,
+        titleStyle: titleStyle,
         contentWidth: contentWidth,
         cellWidth: cellWidth,
         textIndent: textIndent,
@@ -258,6 +223,24 @@ final class LayoutPump implements HybridLayoutPump {
     final layoutPasses = _costModel.layoutPassesFor(task);
     final paragraph = _buildParagraph(task);
     final groupBlocks = task.groupBlocks;
+    if (task.readerOwnedLinePlan) {
+      if (groupBlocks.length != 1) {
+        paragraph.dispose();
+        throw StateError(
+          'Reader-owned visual-line transactions must be self-contained.',
+        );
+      }
+      final expectedLines =
+          groupBlocks.single.visualLineBreakOffsets.length + 1;
+      if (paragraph.numberOfLines != expectedLines) {
+        final nativeLineCount = paragraph.numberOfLines;
+        paragraph.dispose();
+        throw StateError(
+          'Drawable Paragraph introduced an unowned soft wrap: '
+          'planned=$expectedLines native=$nativeLineCount.',
+        );
+      }
+    }
     final splitYs = _groupSplitYs(task, paragraph);
     final metricsList = _metricsFromSplitYs(task, paragraph, splitYs);
     final keys = <BlockKey>[for (final block in groupBlocks) block.key];
@@ -301,6 +284,7 @@ final class LayoutPump implements HybridLayoutPump {
     ChapterBlocks source, {
     required int maxBlockChars,
     required HybridBlockTextStyle bodyStyle,
+    required HybridBlockTextStyle titleStyle,
     required double contentWidth,
     required double? cellWidth,
     required int textIndent,
@@ -312,8 +296,9 @@ final class LayoutPump implements HybridLayoutPump {
       final head = semanticGroup.first;
       final text = semanticGroup.map((block) => block.text).join();
       final groupStart = semanticGroup.first.charRange.start;
-      final groupEnd = semanticGroup.last.charRange.end;
-      if (head.isTitle || text.length <= maxBlockChars) {
+      final textStyle = head.isTitle ? titleStyle : bodyStyle;
+
+      if (text.isEmpty) {
         result.add(
           ChapterBlock(
             key: BlockKey(
@@ -321,7 +306,7 @@ final class LayoutPump implements HybridLayoutPump {
               blockIndex: blockIndex++,
             ),
             text: text,
-            charRange: HybridTextRange(groupStart, groupEnd),
+            charRange: HybridTextRange(groupStart, groupStart),
             sourceParagraphIndex: head.sourceParagraphIndex,
             isTitle: head.isTitle,
             isContinuation: head.isContinuation,
@@ -332,35 +317,50 @@ final class LayoutPump implements HybridLayoutPump {
         continue;
       }
 
-      final segments = <({int start, int end})>[];
-      yield* _visualLineSegments(
-        segments: segments,
-        text: text,
-        maxBlockChars: maxBlockChars,
-        textStyle: bodyStyle,
-        contentWidth: contentWidth,
-        cellWidth: cellWidth,
-        textIndent: head.isContinuation ? 0 : textIndent,
-      );
-      for (var index = 0; index < segments.length; index += 1) {
-        final segment = segments[index];
+      var cursor = 0;
+      var transactionIndex = 0;
+      while (cursor < text.length) {
+        final indentChars =
+            head.isTitle || head.isContinuation || transactionIndex > 0
+            ? 0
+            : textIndent;
+        final plan = _lineLayoutEngine.planBlock(
+          text: text,
+          start: cursor,
+          maxBlockChars: maxBlockChars,
+          textStyle: textStyle,
+          contentWidth: contentWidth,
+          cellWidth: cellWidth,
+          indentChars: indentChars,
+        );
+        if (plan.end <= cursor || plan.end > text.length) {
+          throw StateError(
+            'VisualLineLayoutEngine returned a non-advancing transaction.',
+          );
+        }
+
         result.add(
           ChapterBlock(
             key: BlockKey(
               chapterIndex: source.chapterIndex,
               blockIndex: blockIndex++,
             ),
-            text: text.substring(segment.start, segment.end),
+            text: text.substring(cursor, plan.end),
             charRange: HybridTextRange(
-              groupStart + segment.start,
-              groupStart + segment.end,
+              groupStart + cursor,
+              groupStart + plan.end,
             ),
             sourceParagraphIndex: head.sourceParagraphIndex,
-            isTitle: false,
-            isContinuation: head.isContinuation || index > 0,
-            layoutBreakBefore: head.layoutBreakBefore || index > 0,
+            isTitle: head.isTitle,
+            isContinuation: head.isContinuation || transactionIndex > 0,
+            layoutBreakBefore:
+                head.layoutBreakBefore || transactionIndex > 0,
+            visualLineBreakOffsets: plan.visualLineBreakOffsets,
           ),
         );
+        cursor = plan.end;
+        transactionIndex += 1;
+        yield null;
       }
     }
 
@@ -373,150 +373,14 @@ final class LayoutPump implements HybridLayoutPump {
     );
   }
 
-  Iterable<ChapterBlocks?> _visualLineSegments({
-    required String text,
-    required int maxBlockChars,
-    required HybridBlockTextStyle textStyle,
-    required double contentWidth,
-    required double? cellWidth,
-    required int textIndent,
-    required List<({int start, int end})> segments,
-  }) sync* {
-    final preserveLastLineCompensation =
-        _namespace.fingerprint.lastLineSpacingCompensation &&
-        textStyle.textAlign == ui.TextAlign.justify;
-    var cursor = 0;
-    while (cursor < text.length) {
-      final remaining = text.length - cursor;
-      if (remaining <= maxBlockChars) {
-        if (preserveLastLineCompensation && segments.isNotEmpty) {
-          final candidate = text.substring(cursor);
-          final probeBlock = ChapterBlock(
-            key: const BlockKey(chapterIndex: 0, blockIndex: 0),
-            text: candidate,
-            charRange: HybridTextRange(0, candidate.length),
-            sourceParagraphIndex: 0,
-            isContinuation: true,
-            layoutBreakBefore: true,
-          );
-          final probeTask = LayoutTask(
-            block: probeBlock,
-            epoch: _namespace.epoch,
-            fingerprint: _namespace.fingerprint,
-            textStyle: textStyle,
-            contentWidth: contentWidth,
-            cellWidth: cellWidth,
-          );
-          final paragraph = _buildParagraphWithLetterSpacing(
-            probeTask,
-            extraLetterSpacing: 0,
-            textAlignOverride: ui.TextAlign.start,
-          );
-          final tailLineCount = paragraph.numberOfLines;
-          paragraph.dispose();
-          yield null;
-          if (tailLineCount < 2) {
-            final previous = segments.removeLast();
-            segments.add((start: previous.start, end: text.length));
-            break;
-          }
-        }
-        segments.add((start: cursor, end: text.length));
-        break;
-      }
-
-      var probeChars = math.min(
-        remaining,
-        math.max(maxBlockChars + 1, maxBlockChars * 2),
-      );
-      int? cut;
-      while (cut == null) {
-        final probeEnd = _safeUtf16BoundaryAtOrBefore(
-          text,
-          math.min(text.length, cursor + probeChars),
-        );
-        if (probeEnd <= cursor) {
-          segments.add((start: cursor, end: text.length));
-          return;
-        }
-        final candidate = text.substring(cursor, probeEnd);
-        final probeBlock = ChapterBlock(
-          key: const BlockKey(chapterIndex: 0, blockIndex: 0),
-          text: candidate,
-          charRange: HybridTextRange(0, candidate.length),
-          sourceParagraphIndex: 0,
-          isContinuation: cursor > 0,
-          layoutBreakBefore: cursor > 0,
-        );
-        final probeTask = LayoutTask(
-          block: probeBlock,
-          epoch: _namespace.epoch,
-          fingerprint: _namespace.fingerprint,
-          textStyle: textStyle,
-          contentWidth: contentWidth,
-          cellWidth: cellWidth,
-          indentChars: cursor == 0 ? textIndent : 0,
-        );
-        final paragraph = _buildParagraphWithLetterSpacing(
-          probeTask,
-          extraLetterSpacing: 0,
-          textAlignOverride: ui.TextAlign.start,
-        );
-        try {
-          final indentLength = _indentFor(probeTask).length;
-          final lineRanges = _lineRanges(
-            paragraph,
-            indentLength + candidate.length,
-            paragraph.numberOfLines,
-          );
-          int? preferred;
-          int? firstInterior;
-          for (final range in lineRanges) {
-            final bodyEnd = (range.end - indentLength)
-                .clamp(0, candidate.length)
-                .toInt();
-            if (bodyEnd <= 0 || bodyEnd >= candidate.length) continue;
-            firstInterior ??= bodyEnd;
-            if (bodyEnd <= maxBlockChars) preferred = bodyEnd;
-          }
-          cut = preferred ?? firstInterior;
-        } finally {
-          paragraph.dispose();
-        }
-        yield null;
-        if (cut != null) break;
-        if (probeEnd >= text.length) {
-          cut = text.length - cursor;
-          break;
-        }
-        probeChars = math.min(remaining, probeChars + maxBlockChars);
-      }
-
-      final end = _safeUtf16BoundaryAtOrBefore(text, cursor + cut);
-      if (end <= cursor) {
-        segments.add((start: cursor, end: text.length));
-        break;
-      }
-      segments.add((start: cursor, end: end));
-      cursor = end;
-    }
-    return;
-  }
-
-  int _safeUtf16BoundaryAtOrBefore(String text, int offset) {
-    final safe = offset.clamp(0, text.length).toInt();
-    if (safe <= 0 || safe >= text.length) return safe;
-    final previous = text.codeUnitAt(safe - 1);
-    final next = text.codeUnitAt(safe);
-    final splitsSurrogatePair =
-        previous >= 0xD800 &&
-        previous <= 0xDBFF &&
-        next >= 0xDC00 &&
-        next <= 0xDFFF;
-    return splitsSurrogatePair ? safe - 1 : safe;
-  }
-
   ui.Paragraph _buildParagraph(LayoutTask task) {
+    if (task.readerOwnedLinePlan) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
     if (!LayoutCostModel.mayCompensateLastLine(task)) {
       return _buildParagraphWithLetterSpacing(
         task,
@@ -797,6 +661,22 @@ final class LayoutPump implements HybridLayoutPump {
     int? extraEnd,
     required ui.TextAlign textAlignOverride,
   }) {
+    if (task.readerOwnedLinePlan) {
+      final textMap = ParagraphTextMap.forBlocks(
+        task.groupBlocks,
+        indentLength: _indentFor(task).length,
+      );
+      return _paragraphLayout.build(
+        sourceText: task.combinedText,
+        textMap: textMap,
+        textStyle: task.textStyle,
+        contentWidth: task.contentWidth,
+        cellWidth: task.cellWidth,
+        textColor: task.textColor,
+        textAlign: textAlignOverride,
+      );
+    }
+
     final paragraphStyle = ui.ParagraphStyle(
       textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,

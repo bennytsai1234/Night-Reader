@@ -14,9 +14,8 @@ class AppConfig {
   /// Reader V2 B2 末行字距補償；額外排版成本高，預設關閉。
   static bool readerLastLineSpacingCompensation = false;
 
-  /// Reader V2 內文 justify 對照開關（無 UI，em-grid-lock 除錯用）。
-  /// 鎖寬後滿列天生切齊右緣，justify 只會把避頭尾列的整格殘差攤進
-  /// 字距、破壞直行格線，故預設 false（start 對齊）；真機要對照
-  /// 「justify + 鎖寬」觀感時手動改 true。
+  /// Reader V2 內文 justify 對照開關（無 UI）。
+  /// visual-line boundary 由 Reader 自己決定；justify 只能影響既定行內
+  /// 的字距呈現，不能取得換行 ownership。正式預設 false（start）。
   static bool readerV2ContentJustify = false;
 }

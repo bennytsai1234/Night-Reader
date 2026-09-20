@@ -477,12 +477,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       if (!current()) return null;
       final spec = widget.runtime.state.layoutSpec;
-      final blocks = await binding.alignChapterBlocksToVisualLines(
+      final blocks = await binding.planChapterVisualLines(
         rough,
         maxBlockChars: maxBlockChars,
         bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           justify: AppConfig.readerV2ContentJustify,
+        ),
+        titleStyle: HybridBlockTextStyle.fromLayoutStyle(
+          spec.style,
+          isTitle: true,
+          justify: false,
         ),
         contentWidth: spec.contentWidth,
         cellWidth: spec.cellWidth,
@@ -1086,22 +1091,26 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final line = _lineAt(paragraph, hit.offsetInBlock + entry.localTop);
       if (line != null) {
         final group = blocks.groupContaining(hit.key);
-        final indent = _indentCharsFor(group.first);
-        final groupTextLength = indent + _groupTextLength(group);
+        final textMap = ParagraphTextMap.forBlocks(
+          group,
+          indentLength: _indentCharsFor(group.first),
+        );
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
         );
         final boxTop = _textBoxTopForOffset(
           paragraph,
           position.offset,
-          groupTextLength,
+          textMap.paragraphLength,
         );
         lineTop = (boxTop ?? line.top) - entry.localTop;
         final groupStart = group.first.charRange.start;
         final groupEnd = group.last.charRange.end;
-        charOffset = (groupStart + math.max(0, position.offset - indent))
-            .clamp(groupStart, groupEnd)
-            .toInt();
+        charOffset =
+            (groupStart +
+                    textMap.sourceOffsetForParagraphOffset(position.offset))
+                .clamp(groupStart, groupEnd)
+                .toInt();
       }
     }
     final visual = (worldY - (hit.blockTop + lineTop))
@@ -1200,18 +1209,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final head = group.first;
     final rawEntry = _paragraphCache.acquireEntry(rawBlock.key, _epoch);
     if (rawEntry == null) return null;
-    final indent = _indentCharsFor(head);
-    final groupTextLength = indent + _groupTextLength(group);
-    final groupLocalOffset =
-        indent +
-        (charOffsetInChapter - head.charRange.start)
-            .clamp(0, groupTextLength - indent)
-            .toInt();
+    final textMap = ParagraphTextMap.forBlocks(
+      group,
+      indentLength: _indentCharsFor(head),
+    );
+    final sourceLocalOffset = (charOffsetInChapter - head.charRange.start)
+        .clamp(0, textMap.sourceLength)
+        .toInt();
+    final groupLocalOffset = textMap.paragraphOffsetForSourceOffset(
+      sourceLocalOffset,
+    );
     final paragraphY =
         _textBoxTopForOffset(
           rawEntry.paragraph,
           groupLocalOffset,
-          groupTextLength,
+          textMap.paragraphLength,
         ) ??
         0.0;
     var owningKey = rawBlock.key;
@@ -1227,14 +1239,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
     }
     return (key: owningKey, localTop: paragraphY - owningLocalTop);
-  }
-
-  int _groupTextLength(List<ChapterBlock> group) {
-    var total = 0;
-    for (final block in group) {
-      total += block.text.length;
-    }
-    return total;
   }
 
   double? _effectiveScrollOffset() {
@@ -1276,22 +1280,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             : HybridScrollDirection.forward,
         indentChars: _indentCharsFor(head),
         trailingSpacing: _trailingSpacingFor(blocks, last),
-        trailingLayoutLookahead: _layoutLookaheadAfter(blocks, last),
+        readerOwnedLinePlan: true,
       ),
     );
-  }
-
-  String _layoutLookaheadAfter(ChapterBlocks blocks, ChapterBlock block) {
-    final nextIndex = block.blockIndex + 1;
-    if (nextIndex >= blocks.blocks.length) return '';
-    final next = blocks.blocks[nextIndex];
-    if (!next.isContinuation ||
-        !next.layoutBreakBefore ||
-        next.sourceParagraphIndex != block.sourceParagraphIndex ||
-        next.text.isEmpty) {
-      return '';
-    }
-    return String.fromCharCode(next.text.runes.first);
   }
 
   LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {
@@ -1311,7 +1302,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   double _trailingSpacingFor(ChapterBlocks blocks, ChapterBlock block) {
     final style = widget.runtime.state.layoutSpec.style;
-    if (block.isTitle) return style.paragraphSpacing * 8;
     final nextIndex = block.blockIndex + 1;
     if (nextIndex < blocks.blocks.length) {
       final next = blocks.blocks[nextIndex];
@@ -1320,6 +1310,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         return 0.0;
       }
     }
+    if (block.isTitle) return style.paragraphSpacing * 8;
     return style.fontSize * style.effectiveLineHeight * style.paragraphSpacing;
   }
 

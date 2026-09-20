@@ -17,6 +17,9 @@ final class ChapterLayoutPlan {
             isTitle: block.isTitle,
             isContinuation: block.isContinuation,
             layoutBreakBefore: block.layoutBreakBefore,
+            visualLineBreakOffsets: List<int>.unmodifiable(
+              block.visualLineBreakOffsets,
+            ),
           ),
       ];
 
@@ -31,6 +34,7 @@ final class ChapterLayoutPlan {
       bool isTitle,
       bool isContinuation,
       bool layoutBreakBefore,
+      List<int> visualLineBreakOffsets,
     })
   >
   _spans;
@@ -56,7 +60,10 @@ final class ChapterLayoutPlan {
           ChapterBlock(
             key: BlockKey(chapterIndex: chapterIndex, blockIndex: i),
             text: _spans[i].isTitle
-                ? text.title
+                ? text.title.substring(
+                    _spans[i].range.start,
+                    _spans[i].range.end,
+                  )
                 : text.displayText.substring(
                     _spans[i].range.start,
                     _spans[i].range.end,
@@ -66,6 +73,7 @@ final class ChapterLayoutPlan {
             isTitle: _spans[i].isTitle,
             isContinuation: _spans[i].isContinuation,
             layoutBreakBefore: _spans[i].layoutBreakBefore,
+            visualLineBreakOffsets: _spans[i].visualLineBreakOffsets,
           ),
       ],
     );

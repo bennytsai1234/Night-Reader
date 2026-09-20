@@ -15,8 +15,9 @@ import 'reader_v2_processed_chapter.dart';
 /// 在內容轉換階段執行文字排版正規化。
 ///
 /// 無開關、恆開（2026-07-18 內化決策）：所有規則都以 CJK 脈絡判定自我防護，
-/// 中文語境下把半形/歧義寬度標點統一為佔滿全形格的碼位，讓格線對齊；
-/// 純西文脈絡（英文句、數字、URL）一律原樣保留。
+/// 中文語境下把半形/歧義寬度標點正規化為一致的 CJK 碼位；
+/// 純西文脈絡（英文句、數字、URL）一律原樣保留。這是 source typography
+/// normalization，不擁有 visual-line boundary。
 ///
 /// 這裡只處理文字本身；不要在 [ReaderV2Content.fromRaw] 之後再改字，否則
 /// displayText 的 TTS、進度錨點與 contentHash 會失去同一座標系。
@@ -43,8 +44,9 @@ String _normalizeTypographyLine(
   required bool preserveCjkSpaces,
 }) {
   final sourceRunes = line.runes.toList(growable: false);
-  // The public contract is intentionally asymmetric: CJK text is normalized
-  // for the em-grid, while a Western/other-script line remains source text.
+  // The public contract is intentionally asymmetric: CJK punctuation is
+  // normalized at the source-text layer, while Western/other-script text
+  // remains source text. This layer never decides visual-line boundaries.
   // Ambiguous punctuation such as a single ellipsis/em-dash is not enough to
   // classify the whole line as CJK; otherwise Western spacing/control/emoji
   // shaping can be changed before the local punctuation rules even run.
