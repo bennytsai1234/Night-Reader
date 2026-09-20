@@ -1,6 +1,12 @@
 name: Android Release
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - pubspec.yaml
+      - .github/workflows/android-release.yml
   push:
     branches:
       - main
@@ -48,6 +54,16 @@ jobs:
           }
 
           emit tag_name "$tag_name"
+
+          # PR 只驗證 release metadata / workflow 本身可以執行，不 build、不發布。
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            emit should_build false
+            emit publish false
+            emit target_sha "$GITHUB_SHA"
+            emit artifact_label "pr-check"
+            emit mode pr-check
+            exit 0
+          fi
 
           # 手動執行永遠只做 signed APK 驗證，不發布。
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
