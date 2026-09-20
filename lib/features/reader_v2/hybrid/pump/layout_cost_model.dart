@@ -15,6 +15,7 @@ final class LayoutCostModel {
   }
 
   static bool mayCompensateLastLine(LayoutTask task) {
+    if (task.readerOwnedLinePlan) return false;
     if (!task.fingerprint.lastLineSpacingCompensation ||
         task.block.isTitle ||
         task.trailingLayoutLookahead.isNotEmpty ||
