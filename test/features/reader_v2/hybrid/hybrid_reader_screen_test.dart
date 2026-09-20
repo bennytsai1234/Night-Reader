@@ -300,9 +300,10 @@ void main() {
   );
 
   testWidgets(
-    'chapter jump commits only after previous chapter world is ready',
+    'chapter jump commits only after bidirectional adjacent world is ready',
     (tester) async {
       final previous = Completer<String?>();
+      final next = Completer<String?>();
       final chapters = List.generate(
         6,
         (index) => chapter(index, paragraphCount: 8),
@@ -311,6 +312,7 @@ void main() {
         chapters,
         contentLoader: (index, value) {
           if (index == 2) return previous.future;
+          if (index == 4) return next.future;
           return Future.value(value.content);
         },
       );
@@ -332,24 +334,40 @@ void main() {
       expect(runtime.state.visibleLocation.chapterIndex, 0);
 
       previous.complete(chapters[2].content);
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        completed,
+        isFalse,
+        reason: 'N+1 is part of the jump-ready world too.',
+      );
+
+      next.complete(chapters[4].content);
       await completeWithFrames(tester, jump);
 
       final ready = snapshot(tester);
       expect(runtime.pendingLocation, isNull);
       expect(runtime.state.visibleLocation.chapterIndex, 3);
-      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3]));
+      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3, 4]));
       expect(
         ready['beforeExtent'] as num,
-        greaterThan(0),
+        greaterThanOrEqualTo(3000),
         reason:
-            'A chapter-start jump must expose real backward geometry before commit.',
+            'Jump commit requires the steady-state backward lead to exist.',
+      );
+      expect(
+        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
+        greaterThanOrEqualTo(6000),
+        reason:
+            'Jump commit requires the steady-state forward lead to exist.',
       );
       expect(ready['missingParagraphKeys'], isEmpty);
     },
   );
 
   testWidgets(
-    'jump-ready previous chapter unavailability stays an external frontier',
+    'jump-ready adjacent chapter unavailability stays an external frontier',
     (tester) async {
       final chapters = List.generate(
         5,
