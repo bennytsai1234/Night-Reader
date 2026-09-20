@@ -254,6 +254,24 @@ final class LayoutPump implements HybridLayoutPump {
     final layoutPasses = _costModel.layoutPassesFor(task);
     final paragraph = _buildParagraph(task);
     final groupBlocks = task.groupBlocks;
+    if (task.readerOwnedLinePlan) {
+      if (groupBlocks.length != 1) {
+        paragraph.dispose();
+        throw StateError(
+          'Reader-owned visual-line transactions must be self-contained.',
+        );
+      }
+      final expectedLines =
+          groupBlocks.single.visualLineBreakOffsets.length + 1;
+      if (paragraph.numberOfLines != expectedLines) {
+        final nativeLineCount = paragraph.numberOfLines;
+        paragraph.dispose();
+        throw StateError(
+          'Drawable Paragraph introduced an unowned soft wrap: '
+          'planned=$expectedLines native=$nativeLineCount.',
+        );
+      }
+    }
     final splitYs = _groupSplitYs(task, paragraph);
     final metricsList = _metricsFromSplitYs(task, paragraph, splitYs);
     final keys = <BlockKey>[for (final block in groupBlocks) block.key];
@@ -386,20 +404,14 @@ final class LayoutPump implements HybridLayoutPump {
     );
   }
 
-  int _safeUtf16BoundaryAtOrBefore(String text, int offset) {
-    final safe = offset.clamp(0, text.length).toInt();
-    if (safe <= 0 || safe >= text.length) return safe;
-    final previous = text.codeUnitAt(safe - 1);
-    final next = text.codeUnitAt(safe);
-    final splitsSurrogatePair =
-        previous >= 0xD800 &&
-        previous <= 0xDBFF &&
-        next >= 0xDC00 &&
-        next <= 0xDFFF;
-    return splitsSurrogatePair ? safe - 1 : safe;
-  }
-
   ui.Paragraph _buildParagraph(LayoutTask task) {
+    if (task.readerOwnedLinePlan) {
+      return _buildParagraphWithLetterSpacing(
+        task,
+        extraLetterSpacing: 0,
+        textAlignOverride: task.textStyle.textAlign,
+      );
+    }
     if (!LayoutCostModel.mayCompensateLastLine(task)) {
       return _buildParagraphWithLetterSpacing(
         task,
@@ -680,6 +692,22 @@ final class LayoutPump implements HybridLayoutPump {
     int? extraEnd,
     required ui.TextAlign textAlignOverride,
   }) {
+    if (task.readerOwnedLinePlan) {
+      final textMap = ParagraphTextMap.forBlocks(
+        task.groupBlocks,
+        indentLength: _indentFor(task).length,
+      );
+      return _paragraphLayout.build(
+        sourceText: task.combinedText,
+        textMap: textMap,
+        textStyle: task.textStyle,
+        contentWidth: task.contentWidth,
+        cellWidth: task.cellWidth,
+        textColor: task.textColor,
+        textAlign: textAlignOverride,
+      );
+    }
+
     final paragraphStyle = ui.ParagraphStyle(
       textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,
