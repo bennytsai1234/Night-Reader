@@ -297,10 +297,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       if (blocks == null || !isCurrent()) return false;
 
-      final jumpOwnsNeighborhood =
+      final operationOwnsReadyWorld =
+          operationKind == ReaderV2OperationKind.open ||
           operationKind == ReaderV2OperationKind.jump;
-      if (jumpOwnsNeighborhood) {
-        final neighborhoodReady = await _prepareJumpNeighborhood(
+      if (operationOwnsReadyWorld) {
+        final neighborhoodReady = await _prepareReadyWorldNeighbors(
           chapter,
           isCurrent: isCurrent,
         );
@@ -332,13 +333,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
         final target = _offsetForAnchor(anchor, blocks);
-        final readyTop = _jumpReadinessTop(
+        final readyTop = _readyWorldTop(
           target: target ?? 0,
-          jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+          operationOwnsReadyWorld: operationOwnsReadyWorld,
         );
-        final readyBottom = _jumpReadinessBottom(
+        final readyBottom = _readyWorldBottom(
           target: target ?? 0,
-          jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+          operationOwnsReadyWorld: operationOwnsReadyWorld,
         );
         _requestWindow(
           readyTop,
@@ -348,13 +349,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         final positionedTarget = _offsetForAnchor(anchor, blocks);
         if (positionedTarget != null &&
             _windowReady(
-              _jumpReadinessTop(
+              _readyWorldTop(
                 target: positionedTarget,
-                jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+                operationOwnsReadyWorld: operationOwnsReadyWorld,
               ),
-              _jumpReadinessBottom(
+              _readyWorldBottom(
                 target: positionedTarget,
-                jumpOwnsNeighborhood: jumpOwnsNeighborhood,
+                operationOwnsReadyWorld: operationOwnsReadyWorld,
               ),
             ))
           break;
@@ -410,7 +411,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  Future<bool> _prepareJumpNeighborhood(
+  Future<bool> _prepareReadyWorldNeighbors(
     int chapter, {
     required bool Function() isCurrent,
   }) async {
@@ -436,23 +437,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return isCurrent();
   }
 
-  double _jumpReadinessTop({
+  double _readyWorldTop({
     required double target,
-    required bool jumpOwnsNeighborhood,
+    required bool operationOwnsReadyWorld,
   }) {
-    if (!jumpOwnsNeighborhood) return target;
-    // Jump commits into the same backward lead invariant used by steady-state
-    // scrolling. The first frame therefore starts warm instead of asking the
-    // user gesture to build the lead after the target is already visible.
+    if (!operationOwnsReadyWorld) return target;
+    // Open and jump commit into the same backward lead invariant used by
+    // steady-state scrolling. The first interactive frame therefore starts
+    // warm instead of asking the user gesture to build the lead afterward.
     return target - _admission.backwardGuaranteedWindow;
   }
 
-  double _jumpReadinessBottom({
+  double _readyWorldBottom({
     required double target,
-    required bool jumpOwnsNeighborhood,
+    required bool operationOwnsReadyWorld,
   }) {
     final viewportBottom = target + math.max(1, _viewportSize.height);
-    if (!jumpOwnsNeighborhood) return viewportBottom;
+    if (!operationOwnsReadyWorld) return viewportBottom;
     return viewportBottom + _admission.guaranteedWindow;
   }
 
