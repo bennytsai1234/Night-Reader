@@ -99,6 +99,7 @@ dependencies:
   webview_flutter_android: ^4.14.0
   flutter_native_splash: ^2.4.8
   synchronized: ^3.4.1+1
+  super_sliver_list: ^0.4.1
   get_it: ^9.2.1
   logger: ^2.7.0
   permission_handler: ^13.0.1
