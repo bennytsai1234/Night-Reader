@@ -51,7 +51,7 @@ void main() {
   });
 
   testWidgets('line-boundary whitespace stays with the previous line', (
-    tester,
+    _,
   ) async {
     const text = 'aaaaa aaaaa';
     const style = HybridBlockTextStyle(
