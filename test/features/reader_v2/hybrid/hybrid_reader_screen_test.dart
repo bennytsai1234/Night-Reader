@@ -270,6 +270,78 @@ void main() {
           as Map<String, Object?>;
 
   testWidgets(
+    'open restores saved location only after bidirectional ready world exists',
+    (tester) async {
+      final previous = Completer<String?>();
+      final next = Completer<String?>();
+      final chapters = List.generate(
+        7,
+        (index) => chapter(index, paragraphCount: 10),
+      );
+      final saved = ReaderV2Location(
+        chapterIndex: 3,
+        charOffset: (chapters[3].content?.length ?? 0) ~/ 3,
+        visualOffsetPx: 24,
+      );
+      final runtime = makeRuntime(
+        chapters,
+        initialLocation: saved,
+        contentLoader: (index, value) {
+          if (index == 2) return previous.future;
+          if (index == 4) return next.future;
+          return Future.value(value.content);
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+
+      var completed = false;
+      final opening = runtime.openBook();
+      unawaited(opening.whenComplete(() => completed = true));
+
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(completed, isFalse);
+
+      previous.complete(chapters[2].content);
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        completed,
+        isFalse,
+        reason: 'Opening the saved location still owns the forward ready world.',
+      );
+
+      next.complete(chapters[4].content);
+      await completeWithFrames(tester, opening);
+
+      final ready = snapshot(tester);
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, saved.chapterIndex);
+      expect(
+        runtime.state.visibleLocation.charOffset,
+        saved.charOffset,
+      );
+      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3, 4]));
+      expect(
+        ready['beforeExtent'] as num,
+        greaterThanOrEqualTo(3000),
+        reason: 'Open must enter with the steady-state backward lead ready.',
+      );
+      expect(
+        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
+        greaterThanOrEqualTo(6000),
+        reason: 'Open must enter with the steady-state forward lead ready.',
+      );
+      expect(ready['missingParagraphKeys'], isEmpty);
+    },
+  );
+
+  testWidgets(
     'pending far navigation owns demand before target text finishes loading',
     (tester) async {
       final target = Completer<String?>();
@@ -296,6 +368,104 @@ void main() {
       expect(runtime.state.hasStableWorld, isTrue);
       expect(runtime.state.visibleLocation.chapterIndex, 9);
       expect(snapshot(tester)['missingParagraphKeys'], isEmpty);
+    },
+  );
+
+  testWidgets(
+    'chapter jump commits only after bidirectional adjacent world is ready',
+    (tester) async {
+      final previous = Completer<String?>();
+      final next = Completer<String?>();
+      final chapters = List.generate(
+        6,
+        (index) => chapter(index, paragraphCount: 8),
+      );
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, value) {
+          if (index == 2) return previous.future;
+          if (index == 4) return next.future;
+          return Future.value(value.content);
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await completeWithFrames(tester, runtime.openBook());
+
+      var completed = false;
+      final jump = runtime.jumpToChapter(3);
+      unawaited(jump.whenComplete(() => completed = true));
+
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(completed, isFalse);
+      expect(runtime.pendingLocation?.chapterIndex, 3);
+      expect(runtime.state.visibleLocation.chapterIndex, 0);
+
+      previous.complete(chapters[2].content);
+      for (var frame = 0; frame < 20; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        completed,
+        isFalse,
+        reason: 'N+1 is part of the jump-ready world too.',
+      );
+
+      next.complete(chapters[4].content);
+      await completeWithFrames(tester, jump);
+
+      final ready = snapshot(tester);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.state.visibleLocation.chapterIndex, 3);
+      expect((ready['loadedContentHashes'] as Map).keys, containsAll([2, 3, 4]));
+      expect(
+        ready['beforeExtent'] as num,
+        greaterThanOrEqualTo(3000),
+        reason:
+            'Jump commit requires the steady-state backward lead to exist.',
+      );
+      expect(
+        (ready['afterExtent'] as num) - (ready['viewportHeight'] as num),
+        greaterThanOrEqualTo(6000),
+        reason:
+            'Jump commit requires the steady-state forward lead to exist.',
+      );
+      expect(ready['missingParagraphKeys'], isEmpty);
+    },
+  );
+
+  testWidgets(
+    'jump-ready adjacent chapter unavailability stays an external frontier',
+    (tester) async {
+      final chapters = List.generate(
+        5,
+        (index) => chapter(index, paragraphCount: 6),
+      );
+      final runtime = makeRuntime(
+        chapters,
+        contentLoader: (index, value) async {
+          if (index == 1) {
+            throw ReaderV2ContentUnavailableException('上一章暫時不可用');
+          }
+          return value.content;
+        },
+      );
+      final controller = ReaderV2ViewportController();
+      addTearDown(runtime.dispose);
+
+      await pumpScreen(tester, runtime, controller);
+      await completeWithFrames(tester, runtime.openBook());
+      await completeWithFrames(tester, runtime.jumpToChapter(2));
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, 2);
+      expect(runtime.pendingLocation, isNull);
+      expect(snapshot(tester)['missingParagraphKeys'], isEmpty);
+      expect(tester.takeException(), isNull);
     },
   );
 

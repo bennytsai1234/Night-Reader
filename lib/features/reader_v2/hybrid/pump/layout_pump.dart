@@ -113,6 +113,9 @@ final class LayoutPump implements HybridLayoutPump {
     for (final work in _queue.whereType<_ChapterWork>()) {
       if (work.chapter == source.chapterIndex &&
           work.sourceIdentity == source.layoutIdentity) {
+        // Priority belongs to current demand, not to the moment this reusable
+        // chapter plan happened to enter the queue.
+        work.promote(priority.index);
         return work.result.future;
       }
     }
@@ -134,6 +137,18 @@ final class LayoutPump implements HybridLayoutPump {
     _queue.add(work);
     _scheduleFrame();
     return work.result.future;
+  }
+
+  /// Promote already queued chapter planning when speculative work becomes
+  /// current viewport demand. Promotion reuses progress; it never cancels or
+  /// duplicates the existing chapter plan.
+  void promoteChapterVisualLines(
+    int chapter,
+    LayoutTaskPriority priority,
+  ) {
+    for (final work in _queue.whereType<_ChapterWork>()) {
+      if (work.chapter == chapter) work.promote(priority.index);
+    }
   }
 
   @override
@@ -760,14 +775,26 @@ final class _LayoutWork extends _PumpWork {
 }
 
 final class _ChapterWork extends _PumpWork {
-  _ChapterWork(this.chapter, this.priority, this.sourceIdentity, this.steps);
+  _ChapterWork(
+    this.chapter,
+    int priority,
+    this.sourceIdentity,
+    this.steps,
+  ) : _priority = priority;
+
   @override
   final int chapter;
+  int _priority;
   @override
-  final int priority;
+  int get priority => _priority;
   final String sourceIdentity;
   final Iterator<ChapterBlocks?> steps;
   final Completer<ChapterBlocks?> result = Completer<ChapterBlocks?>();
+
+  void promote(int priority) {
+    if (priority < _priority) _priority = priority;
+  }
+
   @override
   bool step(LayoutPump pump) {
     if (!steps.moveNext()) {

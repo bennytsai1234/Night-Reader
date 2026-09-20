@@ -175,8 +175,8 @@ class DownloadService extends DownloadBase
         .where((chapter) => !stored.contains(chapter.index))
         .toList();
     if (missing.isEmpty) return 0;
-    await addDownloadTask(book, missing);
-    return missing.length;
+    final admitted = await ensureDownloadTask(book, missing);
+    return admitted ? missing.length : 0;
   }
 
   Future<void> retireBook(String bookUrl) async {

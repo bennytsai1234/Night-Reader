@@ -20,6 +20,90 @@ final class _LineRange {
   final int end;
 }
 
+/// Product policy for choosing a visual-line break from native shaping facts.
+///
+/// Native word boundaries are evidence, not authority. Whole-word rollback is
+/// only meaningful for Latin-style word tokens; CJK and other scripts remain
+/// grapheme-placeable so a glyph that physically fits is never moved merely
+/// because ICU grouped it into a linguistic word. Whitespace is a separator
+/// and never owns a new visual line.
+final class VisualLineBreakPolicy {
+  const VisualLineBreakPolicy();
+
+  bool isSeparator(String text, ShapedGrapheme grapheme) {
+    final slice = text.substring(grapheme.start, grapheme.end);
+    if (slice.isEmpty) return false;
+    return slice.runes.every(_isWhitespaceCodePoint);
+  }
+
+  int? preferredWordBreak({
+    required String text,
+    required ShapedGrapheme overflowing,
+    required int lineStart,
+    required Set<int> graphemeStarts,
+  }) {
+    final wordStart = overflowing.wordStart;
+    final wordEnd = overflowing.wordEnd;
+    if (wordStart <= lineStart ||
+        wordStart >= overflowing.end ||
+        wordEnd <= wordStart ||
+        wordEnd > text.length) {
+      return null;
+    }
+    if (!graphemeStarts.contains(wordStart)) return null;
+    if (!_isLatinWordSpan(text, wordStart, wordEnd)) return null;
+    return wordStart;
+  }
+
+  bool _isLatinWordSpan(String text, int start, int end) {
+    if (start < 0 || end > text.length || start >= end) return false;
+    var sawLetterOrDigit = false;
+    for (final rune in text.substring(start, end).runes) {
+      if (_isLatinLetter(rune) || _isAsciiDigit(rune)) {
+        sawLetterOrDigit = true;
+        continue;
+      }
+      if (_isCombiningMark(rune) ||
+          rune == 0x27 || // '
+          rune == 0x2019 || // ’
+          rune == 0x2D || // -
+          rune == 0x5F) {
+        continue;
+      }
+      return false;
+    }
+    return sawLetterOrDigit;
+  }
+
+  bool _isLatinLetter(int rune) =>
+      (rune >= 0x41 && rune <= 0x5A) ||
+      (rune >= 0x61 && rune <= 0x7A) ||
+      (rune >= 0x00C0 && rune <= 0x024F) ||
+      (rune >= 0x1E00 && rune <= 0x1EFF);
+
+  bool _isAsciiDigit(int rune) => rune >= 0x30 && rune <= 0x39;
+
+  bool _isCombiningMark(int rune) =>
+      (rune >= 0x0300 && rune <= 0x036F) ||
+      (rune >= 0x1AB0 && rune <= 0x1AFF) ||
+      (rune >= 0x1DC0 && rune <= 0x1DFF) ||
+      (rune >= 0x20D0 && rune <= 0x20FF) ||
+      (rune >= 0xFE20 && rune <= 0xFE2F);
+
+  bool _isWhitespaceCodePoint(int rune) =>
+      (rune >= 0x09 && rune <= 0x0D) ||
+      rune == 0x20 ||
+      rune == 0x85 ||
+      rune == 0xA0 ||
+      rune == 0x1680 ||
+      (rune >= 0x2000 && rune <= 0x200A) ||
+      rune == 0x2028 ||
+      rune == 0x2029 ||
+      rune == 0x202F ||
+      rune == 0x205F ||
+      rune == 0x3000;
+}
+
 /// Sole owner of visual-line breaking in Hybrid B.
 ///
 /// A grapheme stays on the current line whenever its shaped geometry fits the
@@ -28,9 +112,11 @@ final class _LineRange {
 final class VisualLineLayoutEngine {
   const VisualLineLayoutEngine({
     this.paragraphLayout = const ReaderParagraphLayout(),
+    this.breakPolicy = const VisualLineBreakPolicy(),
   });
 
   final ReaderParagraphLayout paragraphLayout;
+  final VisualLineBreakPolicy breakPolicy;
 
   static const int _probeLookaheadCodeUnits = 256;
   static const double _fitEpsilon = 0.01;
@@ -98,6 +184,7 @@ final class VisualLineLayoutEngine {
 
       final lines = _breakLines(
         shaped,
+        text: window,
         windowLength: window.length,
         contentWidth: contentWidth,
         firstLineIndent: indent,
@@ -143,6 +230,7 @@ final class VisualLineLayoutEngine {
 
   List<_LineRange> _breakLines(
     List<ShapedGrapheme> shaped, {
+    required String text,
     required int windowLength,
     required double contentWidth,
     required double firstLineIndent,
@@ -151,6 +239,7 @@ final class VisualLineLayoutEngine {
     final graphemeIndexByStart = <int, int>{
       for (var i = 0; i < shaped.length; i += 1) shaped[i].start: i,
     };
+    final graphemeStarts = graphemeIndexByStart.keys.toSet();
     var lineStart = shaped.first.start;
     var lineOrigin = shaped.first.left;
     var available = contentWidth - firstLineIndent;
@@ -161,10 +250,18 @@ final class VisualLineLayoutEngine {
       final occupied = grapheme.right - lineOrigin;
       final hasContent = grapheme.start > lineStart;
       if (hasContent && occupied > available + _fitEpsilon) {
-        final wordBreak = _preferredWordBreak(
-          grapheme,
+        // A separator belongs to the preceding line. Do not create a visual
+        // line whose only content is the whitespace between two words; the
+        // following token will choose the real boundary.
+        if (breakPolicy.isSeparator(text, grapheme)) {
+          index += 1;
+          continue;
+        }
+        final wordBreak = breakPolicy.preferredWordBreak(
+          text: text,
+          overflowing: grapheme,
           lineStart: lineStart,
-          graphemeIndexByStart: graphemeIndexByStart,
+          graphemeStarts: graphemeStarts,
         );
         final breakOffset = wordBreak ?? grapheme.start;
         final breakIndex = graphemeIndexByStart[breakOffset];
@@ -187,21 +284,6 @@ final class VisualLineLayoutEngine {
       lines.add(_LineRange(lineStart, windowLength));
     }
     return lines;
-  }
-
-  int? _preferredWordBreak(
-    ShapedGrapheme overflowing, {
-    required int lineStart,
-    required Map<int, int> graphemeIndexByStart,
-  }) {
-    final wordStart = overflowing.wordStart;
-    if (wordStart <= lineStart || wordStart >= overflowing.end) {
-      return null;
-    }
-    if (!graphemeIndexByStart.containsKey(wordStart)) {
-      return null;
-    }
-    return wordStart;
   }
 
   int _safeBoundary(String text, int offset) {

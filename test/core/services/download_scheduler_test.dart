@@ -154,6 +154,90 @@ void main() {
     scheduler.dispose();
   });
 
+  test('背景補內容不會把使用者暫停的任務重新排成 waiting', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    final paused = DownloadTask(
+      bookUrl: 'book/paused',
+      bookName: '暫停中的書',
+      startChapterIndex: 3,
+      endChapterIndex: 5,
+      totalCount: 3,
+      status: DownloadTask.statusPaused,
+    );
+    scheduler.tasks.add(paused);
+
+    final admitted = await scheduler.ensureDownloadTask(
+      Book(bookUrl: 'book/paused', name: '暫停中的書'),
+      <BookChapter>[
+        BookChapter(url: 'chapter/0', index: 0),
+        BookChapter(url: 'chapter/1', index: 1),
+      ],
+    );
+
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    expect(admitted, isFalse);
+    expect(dao.upserts, isEmpty);
+    expect(scheduler.tasks.single, same(paused));
+    expect(scheduler.tasks.single.status, DownloadTask.statusPaused);
+    expect(scheduler.tasks.single.startChapterIndex, 3);
+    expect(scheduler.tasks.single.endChapterIndex, 5);
+    scheduler.dispose();
+  });
+
+  test('背景補內容不會自動重試失敗任務', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    final failed = DownloadTask(
+      bookUrl: 'book/failed',
+      bookName: '失敗中的書',
+      startChapterIndex: 0,
+      endChapterIndex: 2,
+      totalCount: 3,
+      status: DownloadTask.statusFailed,
+    )..setFailure(reason: 'network', message: 'failed');
+    scheduler.tasks.add(failed);
+
+    final admitted = await scheduler.ensureDownloadTask(
+      Book(bookUrl: 'book/failed', name: '失敗中的書'),
+      <BookChapter>[BookChapter(url: 'chapter/3', index: 3)],
+    );
+
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    expect(admitted, isFalse);
+    expect(dao.upserts, isEmpty);
+    expect(scheduler.tasks.single, same(failed));
+    expect(scheduler.tasks.single.isFailed, isTrue);
+    scheduler.dispose();
+  });
+
+  test('使用者主動加入仍可取代已暫停任務', () async {
+    final scheduler = _TestDownloadScheduler()..isDownloading = true;
+    scheduler.tasks.add(
+      DownloadTask(
+        bookUrl: 'book/manual',
+        bookName: '手動下載',
+        startChapterIndex: 5,
+        endChapterIndex: 8,
+        totalCount: 4,
+        status: DownloadTask.statusPaused,
+      ),
+    );
+
+    await scheduler.addDownloadTask(
+      Book(bookUrl: 'book/manual', name: '手動下載'),
+      <BookChapter>[
+        BookChapter(url: 'chapter/1', index: 1),
+        BookChapter(url: 'chapter/2', index: 2),
+      ],
+    );
+
+    final dao = getIt<DownloadDao>() as _RecordingDownloadDao;
+    expect(dao.upserts, hasLength(1));
+    expect(scheduler.tasks.single.status, DownloadTask.statusWaiting);
+    expect(scheduler.tasks.single.startChapterIndex, 1);
+    expect(scheduler.tasks.single.endChapterIndex, 2);
+    scheduler.dispose();
+  });
+
   test('重新加入已完成任務仍會建立新的等待任務', () async {
     final scheduler = _TestDownloadScheduler()..isDownloading = true;
     scheduler.tasks.add(

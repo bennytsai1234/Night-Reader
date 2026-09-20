@@ -106,7 +106,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late MeasurementNamespace _namespace;
   final Map<int, ChapterLayoutPlan> _layoutPlans = <int, ChapterLayoutPlan>{};
   final Map<int, ChapterBlocks> _blocks = {};
-  final Map<int, Future<ChapterBlocks?>> _blocksInFlight = {};
+  final Map<int, _ChapterMaterialization> _blocksInFlight = {};
   final Map<BlockKey, ParagraphLease> _viewportLeases = {};
   final Set<({MeasurementNamespace namespace, int chapter, String contentHash})>
   _warmedChapters = {};
@@ -273,6 +273,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Future<bool> _restoreCore(
     ReaderV2Location location, {
     required bool Function() isCurrent,
+    ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
     final binding = _pump;
@@ -290,8 +291,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     binding.clearPendingLayouts();
     binding.onScrollStateChanged(PumpState.rebuilding);
     try {
-      final blocks = await _ensureChapterBlocks(chapter, anchor: true);
+      final blocks = await _ensureChapterBlocks(
+        chapter,
+        priority: LayoutTaskPriority.anchor,
+      );
       if (blocks == null || !isCurrent()) return false;
+
+      final operationOwnsReadyWorld =
+          operationKind == ReaderV2OperationKind.open ||
+          operationKind == ReaderV2OperationKind.jump;
+      if (operationOwnsReadyWorld) {
+        final neighborhoodReady = await _prepareReadyWorldNeighbors(
+          chapter,
+          isCurrent: isCurrent,
+        );
+        if (!neighborhoodReady || !isCurrent()) return false;
+      }
+
       final normalized = location.normalized(
         chapterCount: widget.runtime.chapterCount,
         chapterLength: blocks.displayText.length,
@@ -317,16 +333,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
         final target = _offsetForAnchor(anchor, blocks);
+        final readyTop = _readyWorldTop(
+          target: target ?? 0,
+          operationOwnsReadyWorld: operationOwnsReadyWorld,
+        );
+        final readyBottom = _readyWorldBottom(
+          target: target ?? 0,
+          operationOwnsReadyWorld: operationOwnsReadyWorld,
+        );
         _requestWindow(
-          target ?? 0,
-          (target ?? 0) + math.max(1, _viewportSize.height),
+          readyTop,
+          readyBottom,
           anchorKey: anchor.blockKey,
         );
         final positionedTarget = _offsetForAnchor(anchor, blocks);
         if (positionedTarget != null &&
             _windowReady(
-              positionedTarget,
-              positionedTarget + _viewportSize.height,
+              _readyWorldTop(
+                target: positionedTarget,
+                operationOwnsReadyWorld: operationOwnsReadyWorld,
+              ),
+              _readyWorldBottom(
+                target: positionedTarget,
+                operationOwnsReadyWorld: operationOwnsReadyWorld,
+              ),
             ))
           break;
         // Cached exact metrics may advance admission synchronously, without
@@ -381,6 +411,52 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
+  Future<bool> _prepareReadyWorldNeighbors(
+    int chapter, {
+    required bool Function() isCurrent,
+  }) async {
+    final neighbors = <int>[
+      if (chapter > 0) chapter - 1,
+      if (chapter + 1 < widget.runtime.chapterCount) chapter + 1,
+    ];
+    if (neighbors.isEmpty) return isCurrent();
+
+    Future<void> prepare(int neighbor) async {
+      try {
+        await _ensureChapterBlocks(
+          neighbor,
+          priority: LayoutTaskPriority.visible,
+        );
+      } on ReaderV2ContentUnavailableException {
+        // A broken adjacent chapter is an external frontier, not a reason to
+        // invalidate an otherwise readable jump target.
+      }
+    }
+
+    await Future.wait<void>(neighbors.map(prepare));
+    return isCurrent();
+  }
+
+  double _readyWorldTop({
+    required double target,
+    required bool operationOwnsReadyWorld,
+  }) {
+    if (!operationOwnsReadyWorld) return target;
+    // Open and jump commit into the same backward lead invariant used by
+    // steady-state scrolling. The first interactive frame therefore starts
+    // warm instead of asking the user gesture to build the lead afterward.
+    return target - _admission.backwardGuaranteedWindow;
+  }
+
+  double _readyWorldBottom({
+    required double target,
+    required bool operationOwnsReadyWorld,
+  }) {
+    final viewportBottom = target + math.max(1, _viewportSize.height);
+    if (!operationOwnsReadyWorld) return viewportBottom;
+    return viewportBottom + _admission.guaranteedWindow;
+  }
+
   Future<void> _nextFrame() {
     WidgetsBinding.instance.ensureVisualUpdate();
     return WidgetsBinding.instance.endOfFrame;
@@ -399,7 +475,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
     final pending = <int, Future<({int chapter, bool unavailable})>>{
       for (final entry in _blocksInFlight.entries)
-        entry.key: _observeSpeculativeMaterialization(entry.key, entry.value),
+        entry.key: _observeSpeculativeMaterialization(
+          entry.key,
+          entry.value.future,
+        ),
     };
     if (pending.isEmpty) {
       throw StateError(
@@ -444,23 +523,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   Future<ChapterBlocks?> _ensureChapterBlocks(
     int chapter, {
-    bool anchor = false,
+    LayoutTaskPriority priority = LayoutTaskPriority.prefetch,
   }) {
     final cached = _blocks[chapter];
     if (cached != null) return Future.value(cached);
+
     final pending = _blocksInFlight[chapter];
-    if (pending != null) return pending;
+    if (pending != null) {
+      pending.promote(priority);
+      _pump.promoteChapterVisualLines(chapter, pending.priority);
+      return pending.future;
+    }
+
     final binding = _pump;
     final repository = _chapterRepo;
     final preprocessor = widget.preprocessor;
     final maxBlockChars = binding.maxCharsForBudget(
       _governor.ballisticSliceBudget,
     );
-    late final Future<ChapterBlocks?> task;
+    final materialization = _ChapterMaterialization(priority);
     bool current() =>
         mounted &&
         identical(binding, _pump) &&
-        identical(_blocksInFlight[chapter], task);
+        identical(_blocksInFlight[chapter], materialization);
+    late final Future<ChapterBlocks?> task;
     task = () async {
       final text = await repository.load(chapter);
       if (!current()) return null;
@@ -492,9 +578,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
         textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
-        priority: anchor
-            ? LayoutTaskPriority.anchor
-            : LayoutTaskPriority.prefetch,
+        priority: materialization.priority,
       );
       if (blocks == null || !current()) return null;
       _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
@@ -505,9 +589,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(_warmDiskMetricsForChapter(blocks));
       return blocks;
     }();
-    _blocksInFlight[chapter] = task;
+    materialization.attach(task);
+    _blocksInFlight[chapter] = materialization;
     void cleanUp() {
-      if (identical(_blocksInFlight[chapter], task)) {
+      if (identical(_blocksInFlight[chapter], materialization)) {
         _blocksInFlight.remove(chapter);
       }
     }
@@ -526,18 +611,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _chapterRepo.setResidentRange(first, last);
   }
 
-  void _requestChapter(int chapter) {
+  void _requestChapter(
+    int chapter, {
+    LayoutTaskPriority priority = LayoutTaskPriority.prefetch,
+  }) {
     if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
     final first = math.min(_chapterRepo.residentFirst ?? chapter, chapter);
     final last = math.max(_chapterRepo.residentLast ?? chapter, chapter);
     _setDemandRange(first, last);
     final binding = _pump;
-    unawaited(_prefetchChapter(chapter, binding));
+    unawaited(_materializeChapter(chapter, binding, priority));
   }
 
-  Future<void> _prefetchChapter(int chapter, LayoutPump binding) async {
+  Future<void> _materializeChapter(
+    int chapter,
+    LayoutPump binding,
+    LayoutTaskPriority priority,
+  ) async {
     try {
-      final blocks = await _ensureChapterBlocks(chapter);
+      final blocks = await _ensureChapterBlocks(
+        chapter,
+        priority: priority,
+      );
       if (blocks != null && mounted && identical(binding, _pump)) {
         _reconcileVisibleWindow();
       }
@@ -592,7 +687,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     void request(BlockKey key, {bool anchor = false}) {
       final blocks = _blocks[key.chapterIndex];
       if (blocks == null) {
-        _requestChapter(key.chapterIndex);
+        _requestChapter(
+          key.chapterIndex,
+          priority: anchor
+              ? LayoutTaskPriority.anchor
+              : LayoutTaskPriority.visible,
+        );
         return;
       }
       final group = blocks.groupContaining(key);
@@ -655,7 +755,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _documentIndex.centerKey;
     final blocks = _blocks[edge.chapterIndex];
     if (blocks == null) {
-      _requestChapter(edge.chapterIndex);
+      _requestChapter(
+        edge.chapterIndex,
+        priority: LayoutTaskPriority.visible,
+      );
       return null;
     }
     final index = edge.blockIndex + (forward ? 1 : -1);
@@ -665,7 +768,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (chapter < 0 || chapter >= widget.runtime.chapterCount) return null;
     final neighbor = _blocks[chapter];
     if (neighbor == null) {
-      _requestChapter(chapter);
+      _requestChapter(
+        chapter,
+        priority: LayoutTaskPriority.visible,
+      );
       return null;
     }
     return (forward ? neighbor.blocks.first : neighbor.blocks.last).key;
@@ -1167,7 +1273,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     _dragging = false;
     _sawUserScroll = false;
-    final ok = await _restoreCore(location, isCurrent: current);
+    final ok = await _restoreCore(
+      location,
+      isCurrent: current,
+      operationKind: operation?.kind,
+    );
     if (!ok || !current()) return false;
     _lastReportedLocation = location;
     _scheduleRebuild();
@@ -1555,7 +1665,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (ok && isCurrent()) await _handleScrollSettled();
       return ok && isCurrent();
     }
-    final blocks = await _ensureChapterBlocks(safeChapter);
+    final blocks = await _ensureChapterBlocks(
+      safeChapter,
+      priority: LayoutTaskPriority.anchor,
+    );
     if (blocks == null || !isCurrent()) return false;
     final start = math.min(startCharOffset, endCharOffset);
     final end = math.max(startCharOffset, endCharOffset);
@@ -1988,6 +2101,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       isCurrent: current,
     ),
   );
+}
+
+final class _ChapterMaterialization {
+  _ChapterMaterialization(this.priority);
+
+  LayoutTaskPriority priority;
+  late final Future<ChapterBlocks?> future;
+
+  void attach(Future<ChapterBlocks?> task) {
+    future = task;
+  }
+
+  void promote(LayoutTaskPriority next) {
+    if (next.index < priority.index) priority = next;
+  }
 }
 
 final class _HybridCommandQueue {
