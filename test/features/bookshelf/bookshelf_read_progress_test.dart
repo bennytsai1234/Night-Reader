@@ -22,6 +22,15 @@ void main() {
     expect(bookshelfReadProgress(book(totalChapterNum: 10)), 0.0);
   });
 
+  test('只有章節或字元位置但沒有真實閱讀時間仍視為未開始', () {
+    expect(
+      bookshelfReadProgress(
+        book(totalChapterNum: 10, chapterIndex: 4, charOffset: 100),
+      ),
+      0.0,
+    );
+  });
+
   test('單章書開始閱讀後可顯示 100%', () {
     expect(
       bookshelfReadProgress(
