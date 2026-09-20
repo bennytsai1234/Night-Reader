@@ -516,7 +516,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(_warmDiskMetricsForChapter(blocks));
       return blocks;
     }();
-    materialization.future = task;
+    materialization.attach(task);
     _blocksInFlight[chapter] = materialization;
     void cleanUp() {
       if (identical(_blocksInFlight[chapter], materialization)) {
@@ -2031,6 +2031,10 @@ final class _ChapterMaterialization {
 
   LayoutTaskPriority priority;
   late final Future<ChapterBlocks?> future;
+
+  void attach(Future<ChapterBlocks?> task) {
+    future = task;
+  }
 
   void promote(LayoutTaskPriority next) {
     if (next.index < priority.index) priority = next;
