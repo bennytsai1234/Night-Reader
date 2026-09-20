@@ -138,7 +138,7 @@ jobs:
       - name: Verify validation did not modify tracked source
         if: always()
         run: git diff --exit-code
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: reader-pr-checks
@@ -211,7 +211,7 @@ jobs:
       - name: Verify validation did not modify tracked source
         if: always()
         run: git diff --exit-code
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: reader-full-checks
