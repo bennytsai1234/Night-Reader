@@ -161,6 +161,20 @@ class DownloadService extends DownloadBase
     update();
   }
 
+  Future<void> retireBook(String bookUrl) async {
+    await _initialization;
+    markTaskRetiring(bookUrl);
+    for (final task in tasks.where((task) => task.bookUrl == bookUrl)) {
+      task.status = DownloadTask.statusPaused;
+    }
+    update();
+    await waitForTaskIdle(bookUrl);
+    tasks.removeWhere((task) => task.bookUrl == bookUrl);
+    await downloadDao.deleteByUrl(bookUrl);
+    clearTaskRetiring(bookUrl);
+    update();
+  }
+
   void moveTask(String bookUrl, int delta) {
     final current = tasks.indexWhere((t) => t.bookUrl == bookUrl);
     if (current < 0) return;
