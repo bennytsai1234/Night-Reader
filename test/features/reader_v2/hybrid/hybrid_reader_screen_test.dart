@@ -306,7 +306,7 @@ void main() {
       }
       expect(completed, isFalse);
 
-      previous.complete(chapters[6].content);
+      previous.complete(chapters[2].content);
       for (var frame = 0; frame < 20; frame += 1) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -316,7 +316,7 @@ void main() {
         reason: 'Opening the saved location still owns the forward ready world.',
       );
 
-      next.complete(chapters[8].content);
+      next.complete(chapters[4].content);
       await completeWithFrames(tester, opening);
 
       final ready = snapshot(tester);
@@ -411,7 +411,7 @@ void main() {
       expect(runtime.pendingLocation?.chapterIndex, 7);
       expect(runtime.state.visibleLocation.chapterIndex, 0);
 
-      previous.complete(chapters[2].content);
+      previous.complete(chapters[6].content);
       for (var frame = 0; frame < 20; frame += 1) {
         await tester.pump(const Duration(milliseconds: 16));
       }
@@ -421,7 +421,7 @@ void main() {
         reason: 'N+1 is part of the jump-ready world too.',
       );
 
-      next.complete(chapters[4].content);
+      next.complete(chapters[8].content);
       await completeWithFrames(tester, jump);
 
       final ready = snapshot(tester);
