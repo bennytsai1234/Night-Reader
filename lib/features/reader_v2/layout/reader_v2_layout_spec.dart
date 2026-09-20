@@ -133,8 +133,9 @@ class ReaderV2LayoutSpec {
   final ReaderV2TextLayoutFrame textLayoutFrame;
 
   /// 實測全形字 advance（含 letterSpacing），只屬於 typography metrics。
-  /// 目前僅供首行縮排 placeholder 等字形幾何使用；它不得改寫
-  /// [contentWidth]。正文可用寬度永遠由 viewport 與使用者 padding 決定。
+  /// 用於首行縮排 placeholder 與 [textLayoutFrame] 的內部排版幾何；
+  /// 它不得改寫 [contentWidth]。正文的實體可用寬度永遠由 viewport 與
+  /// 使用者 padding 決定。
   final double? cellWidth;
 
   /// Effective viewport paddings used by paragraph paint/highlight. They add
