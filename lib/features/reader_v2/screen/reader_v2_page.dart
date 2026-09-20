@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
@@ -70,6 +71,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Size? _lastViewportSize;
   String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
+  bool _libraryDownloadQueued = false;
 
   /// Integration workload 的語意 probe 入口；正式頁面不透過它驅動畫面。
   @visibleForTesting
@@ -145,7 +147,28 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _handleControllerChanged() {
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
+    _maybeQueueLibraryDownload();
     _scheduleRebuild();
+  }
+
+  void _maybeQueueLibraryDownload() {
+    if (_libraryDownloadQueued ||
+        !widget.book.isInBookshelf ||
+        !widget.book.hasStartedReading ||
+        widget.book.isLocal) {
+      return;
+    }
+    final chapters = _host.runtime?.chapters ?? widget.initialChapters;
+    if (chapters.isEmpty) return;
+    _libraryDownloadQueued = true;
+    unawaited(
+      DownloadService()
+          .queueMissingForLibraryReading(widget.book, chapters)
+          .catchError((Object _) {
+            _libraryDownloadQueued = false;
+            return 0;
+          }),
+    );
   }
 
   void _scheduleRebuild() {
@@ -537,6 +560,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       bookDao: _host.dependencies.bookDao,
       chapterDao: _host.dependencies.chapterDao,
     );
+    _libraryDownloadQueued = false;
+    _maybeQueueLibraryDownload();
     if (mounted) setState(() {});
   }
 
