@@ -321,6 +321,7 @@ final class ChapterBlock {
     this.isTitle = false,
     this.isContinuation = false,
     this.layoutBreakBefore = false,
+    this.visualLineBreakOffsets = const <int>[],
   });
 
   final BlockKey key;
@@ -333,11 +334,15 @@ final class ChapterBlock {
   /// source paragraph and therefore gets no paragraph spacing/indent.
   final bool isContinuation;
 
-  /// True only when this continuation begins at a visual line boundary that
-  /// was measured with the current layout style. Unlike an arbitrary
-  /// preprocessing chunk, this boundary may safely start a new ui.Paragraph
-  /// transaction without introducing a new visible line break.
+  /// True only when this continuation begins at a reader-owned visual line
+  /// boundary. The boundary is part of the active layout plan, not a
+  /// preprocessing hint.
   final bool layoutBreakBefore;
+
+  /// Source-relative UTF-16 offsets where a new reader-owned visual line
+  /// begins inside this block. These are layout metadata only; source text is
+  /// never modified with synthetic newlines.
+  final List<int> visualLineBreakOffsets;
 
   int get chapterIndex => key.chapterIndex;
   int get blockIndex => key.blockIndex;
@@ -379,6 +384,7 @@ final class ChapterBlocks {
         block.isTitle,
         block.isContinuation,
         block.layoutBreakBefore,
+        block.visualLineBreakOffsets,
       ],
   ]);
 
@@ -405,10 +411,9 @@ final class ChapterBlocks {
     return block.charRange.start;
   }
 
-  /// Returns the blocks that still require one continuous ui.Paragraph. An
-  /// arbitrary preprocessor chunk remains grouped; a measured visual-line
-  /// boundary starts a new layout transaction while keeping semantic
-  /// continuation metadata intact.
+  /// Returns the blocks that still require one continuous ui.Paragraph. Raw
+  /// preprocessing chunks remain grouped until the reader-owned line planner
+  /// produces authoritative transaction boundaries.
   List<ChapterBlock> groupContaining(BlockKey key) {
     final index = blocks.indexWhere((block) => block.key == key);
     if (index < 0) return const <ChapterBlock>[];
@@ -446,6 +451,96 @@ final class ChapterBlocks {
       i = j;
     }
     return groups;
+  }
+}
+
+final class ParagraphTextMap {
+  ParagraphTextMap({
+    required this.sourceLength,
+    required this.indentLength,
+    List<int> visualLineBreakOffsets = const <int>[],
+  }) : visualLineBreakOffsets = List<int>.unmodifiable(
+         visualLineBreakOffsets,
+       ) {
+    var previous = 0;
+    for (final offset in this.visualLineBreakOffsets) {
+      if (offset <= previous || offset >= sourceLength) {
+        throw StateError(
+          'Visual line breaks must be strictly increasing source offsets '
+          'inside the block: offset=$offset sourceLength=$sourceLength.',
+        );
+      }
+      previous = offset;
+    }
+  }
+
+  factory ParagraphTextMap.forBlocks(
+    List<ChapterBlock> blocks, {
+    required int indentLength,
+  }) {
+    var sourceLength = 0;
+    final breaks = <int>[];
+    for (final block in blocks) {
+      for (final offset in block.visualLineBreakOffsets) {
+        breaks.add(sourceLength + offset);
+      }
+      sourceLength += block.text.length;
+    }
+    return ParagraphTextMap(
+      sourceLength: sourceLength,
+      indentLength: indentLength,
+      visualLineBreakOffsets: breaks,
+    );
+  }
+
+  final int sourceLength;
+  final int indentLength;
+  final List<int> visualLineBreakOffsets;
+
+  int get paragraphLength =>
+      indentLength + sourceLength + visualLineBreakOffsets.length;
+
+  int paragraphOffsetForSourceOffset(int sourceOffset) {
+    final safe = sourceOffset.clamp(0, sourceLength).toInt();
+    var inserted = 0;
+    for (final offset in visualLineBreakOffsets) {
+      if (offset > safe) break;
+      inserted += 1;
+    }
+    return indentLength + safe + inserted;
+  }
+
+  int sourceOffsetForParagraphOffset(int paragraphOffset) {
+    final safe = paragraphOffset.clamp(0, paragraphLength).toInt();
+    if (safe <= indentLength) return 0;
+    final bodyOffset = safe - indentLength;
+    var insertedBefore = 0;
+    for (var i = 0; i < visualLineBreakOffsets.length; i += 1) {
+      final newlineOffset = visualLineBreakOffsets[i] + i;
+      if (newlineOffset >= bodyOffset) break;
+      insertedBefore += 1;
+    }
+    return (bodyOffset - insertedBefore).clamp(0, sourceLength).toInt();
+  }
+
+  String layoutBody(String sourceText) {
+    if (sourceText.length != sourceLength) {
+      throw StateError(
+        'ParagraphTextMap source length mismatch: expected=$sourceLength '
+        'actual=${sourceText.length}.',
+      );
+    }
+    if (visualLineBreakOffsets.isEmpty) return sourceText;
+    final buffer = StringBuffer();
+    var cursor = 0;
+    for (final offset in visualLineBreakOffsets) {
+      buffer
+        ..write(sourceText.substring(cursor, offset))
+        ..write('\n');
+      cursor = offset;
+    }
+    buffer.write(sourceText.substring(cursor));
+    return buffer.toString();
   }
 }
 
@@ -581,9 +676,14 @@ final class LayoutTask {
     this.trailingSpacing = 0.0,
     this.trailingLayoutLookahead = '',
     this.cellWidth,
+    this.readerOwnedLinePlan = false,
   }) : assert(indentChars >= 0),
        assert(trailingSpacing >= 0),
-       assert(cellWidth == null || cellWidth > 0);
+       assert(cellWidth == null || cellWidth > 0),
+       assert(
+         !readerOwnedLinePlan || trailingLayoutLookahead.isEmpty,
+         'Reader-owned line plans cannot expose following-line context.',
+       );
 
   final ChapterBlock block;
   final List<ChapterBlock> continuationBlocks;
@@ -603,10 +703,9 @@ final class LayoutTask {
     return buffer.toString();
   }
 
-  /// A visual-line-aligned non-final transaction lays out one following rune
-  /// only as context. The render object clips that following line; it exists so
-  /// justify/shaping semantics of the visible last line match the unsplit
-  /// paragraph rather than treating every transaction as a paragraph end.
+  /// Legacy cross-transaction shaping context. Reader-owned line plans keep
+  /// this empty: exposing the following rune would hand soft-wrap policy back
+  /// to SkParagraph.
   final String trailingLayoutLookahead;
 
   late final String layoutText = trailingLayoutLookahead.isEmpty
@@ -623,6 +722,10 @@ final class LayoutTask {
   final int indentChars;
   final double trailingSpacing;
   final double? cellWidth;
+
+  /// The block already carries authoritative visual-line boundaries. Native
+  /// Paragraph layout may shape and paint them but may not choose new breaks.
+  final bool readerOwnedLinePlan;
 
   BlockKey get key => block.key;
 }
