@@ -97,6 +97,7 @@ class ReaderV2ControllerHost {
       book: book,
       repository: repository,
       bookDao: dependencies.bookDao,
+      onProgressPersisted: _onChanged,
     );
     final initialLocation = _initialLocationFor(spec);
     final nextRuntime = ReaderV2Runtime(
