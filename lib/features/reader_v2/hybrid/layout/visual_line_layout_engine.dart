@@ -103,7 +103,7 @@ final class VisualLineLayoutEngine {
         firstLineIndent: indent,
       );
 
-      if (probeEnd == text.length) {
+      if (probeEnd == text.length && window.length <= targetRelative) {
         return VisualLineBlockPlan(
           end: text.length,
           visualLineBreakOffsets: <int>[
@@ -112,7 +112,9 @@ final class VisualLineLayoutEngine {
         );
       }
 
-      final complete = lines.length <= 1
+      final complete = probeEnd == text.length
+          ? lines
+          : lines.length <= 1
           ? const <_LineRange>[]
           : lines.sublist(0, lines.length - 1);
       _LineRange? chosen;
