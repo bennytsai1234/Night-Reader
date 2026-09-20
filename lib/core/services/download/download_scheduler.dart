@@ -61,13 +61,54 @@ mixin DownloadScheduler on DownloadBase {
   }
 
   Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
+    await _admitDownloadTask(
+      book,
+      chapters,
+      intent: _DownloadTaskAdmissionIntent.userRequested,
+    );
+  }
+
+  /// Passive content availability may create missing work, but it never owns
+  /// the decision to resume a task the user paused or retry a failed task.
+  ///
+  /// Returns true only when a new waiting task was actually admitted.
+  Future<bool> ensureDownloadTask(
+    Book book,
+    List<BookChapter> chapters,
+  ) {
+    return _admitDownloadTask(
+      book,
+      chapters,
+      intent: _DownloadTaskAdmissionIntent.backgroundEnsure,
+    );
+  }
+
+  Future<bool> _admitDownloadTask(
+    Book book,
+    List<BookChapter> chapters, {
+    required _DownloadTaskAdmissionIntent intent,
+  }) async {
     if (chapters.isEmpty ||
         isTaskRetiring(book.bookUrl) ||
         !_addingTaskUrls.add(book.bookUrl)) {
-      return;
+      return false;
     }
     beginTaskActivity(book.bookUrl);
     try {
+      if (activeTaskUrls.contains(book.bookUrl)) return false;
+
+      var existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
+      if (existingIndex != -1) {
+        final existing = tasks[existingIndex];
+        if (existing.isWaiting || existing.isDownloading) {
+          return false;
+        }
+        if (intent == _DownloadTaskAdmissionIntent.backgroundEnsure &&
+            (existing.isPaused || existing.isFailed)) {
+          return false;
+        }
+      }
+
       final task = DownloadTask(
         bookUrl: book.bookUrl,
         bookName: book.name,
@@ -77,16 +118,8 @@ mixin DownloadScheduler on DownloadBase {
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
       );
-      if (activeTaskUrls.contains(book.bookUrl)) return;
-      var existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
-      if (existingIndex != -1) {
-        final existing = tasks[existingIndex];
-        if (existing.isWaiting || existing.isDownloading) {
-          return;
-        }
-      }
-
       await downloadDao.upsert(task);
+
       existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
       if (existingIndex != -1) {
         tasks[existingIndex] = task;
@@ -97,6 +130,7 @@ mixin DownloadScheduler on DownloadBase {
       if (!isTaskRetiring(book.bookUrl) && !isDownloading) {
         startDownloads();
       }
+      return true;
     } finally {
       _addingTaskUrls.remove(book.bookUrl);
       completeTaskActivity(book.bookUrl);
@@ -139,3 +173,6 @@ mixin DownloadScheduler on DownloadBase {
     }
   }
 }
+
+
+enum _DownloadTaskAdmissionIntent { userRequested, backgroundEnsure }
