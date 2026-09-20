@@ -119,6 +119,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   ReaderV2OperationToken? _demandOwner;
   int _windowCenter = 0;
   int _lastLayoutGeneration = 0;
+  int _lastContentGeneration = 0;
   int _runtimeLocationRevision = 0;
   ReaderV2Location? _lastReportedLocation;
   bool _initialRestoreCompleted = false;
@@ -132,12 +133,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     super.initState();
     _chapterRepo = HybridChapterRepository(
       repository: widget.runtime.repository,
+      loadContent: widget.runtime.loadContentAt,
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex);
     _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
     _refreshEpochBinding();
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
+    _lastContentGeneration = widget.runtime.state.contentGeneration;
     _lastReportedLocation = widget.runtime.state.visibleLocation;
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
     _registerRuntime();
@@ -170,9 +173,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       unawaited(_chapterRepo.dispose());
       _chapterRepo = HybridChapterRepository(
         repository: widget.runtime.repository,
+        loadContent: widget.runtime.loadContentAt,
       );
       _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
+      _lastContentGeneration = widget.runtime.state.contentGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
       _handleEpochRebuild(oldWidget.bookUrl);
@@ -212,7 +217,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _refreshEpochBinding() {
-    _epoch = LayoutEpoch(widget.runtime.state.layoutGeneration);
+    final state = widget.runtime.state;
+    _epoch = LayoutEpoch(
+      state.layoutGeneration,
+      contentGeneration: state.contentGeneration,
+    );
     _fingerprint = StyleFingerprint.fromLayoutSpec(
       widget.runtime.state.layoutSpec,
       justify: AppConfig.readerV2ContentJustify,
@@ -458,12 +467,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final plan = _layoutPlans[chapter];
       if (plan != null) {
         final restored = plan.materialize(text);
-        if (restored == null) {
-          // An actual source edit ends the old document identity. Let the
-          // runtime capture/remap/restore it; never overwrite admitted keys.
-          await widget.runtime.reloadContentPreservingLocation();
-          return null;
-        }
         _blocks[chapter] = restored;
         _admission.registerChapter(restored);
         return restored;
@@ -939,7 +942,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       'runtimeCommittedLocation': runtimeState.committedLocation.toJson(),
       'capturedLocation': captured?.toJson(),
       'layoutGeneration': runtimeState.layoutGeneration,
+      'contentGeneration': runtimeState.contentGeneration,
       'epoch': _epoch.value,
+      'epochContentGeneration': _epoch.contentGeneration,
       'documentIndexRevision': _documentIndex.revisionNumber,
       'documentIndexResetGeneration': _documentIndex.resetGeneration,
       'documentIndexCenter': keyJson(_documentIndex.centerKey),
@@ -980,14 +985,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   void _onRuntimeChanged() {
     if (!mounted) return;
-    final state = widget.runtime.state;
+    final runtime = widget.runtime;
+    final state = runtime.state;
+    final operation = runtime.stateMachine.currentOperation;
     final layoutChanged = _lastLayoutGeneration != state.layoutGeneration;
-    if (layoutChanged) {
+    final contentChanged = _lastContentGeneration != state.contentGeneration;
+    if (layoutChanged || contentChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
+      _lastContentGeneration = state.contentGeneration;
       _handleEpochRebuild(widget.bookUrl);
+      if (contentChanged && operation == null && state.hasStableWorld) {
+        _restorePublishedContentGeneration(
+          state.visibleLocation,
+          state.contentGeneration,
+        );
+      }
     }
-    final requested = widget.runtime.pendingLocation;
-    final operation = widget.runtime.stateMachine.currentOperation;
+    final requested = runtime.pendingLocation;
     if (requested != null && !identical(operation, _demandOwner)) {
       _demandOwner = operation;
       if (widget.runtime.chapterCount > 0) {
@@ -1011,6 +1025,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _publishProgress();
     }
     _scheduleRebuild();
+  }
+
+  void _restorePublishedContentGeneration(
+    ReaderV2Location location,
+    int contentGeneration,
+  ) {
+    unawaited(
+      Future<void>.microtask(() async {
+        if (!mounted) return;
+        final runtime = widget.runtime;
+        if (runtime.state.contentGeneration != contentGeneration ||
+            runtime.stateMachine.currentOperation != null) {
+          return;
+        }
+        await _restoreToLocation(location);
+      }),
+    );
   }
 
   void _restoreAttachedRuntime() {

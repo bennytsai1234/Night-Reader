@@ -195,6 +195,21 @@ void expectReaderLayoutGenerationAdvanced(
   }
 }
 
+/// Assert that a transition advanced the semantic content generation.
+void expectReaderContentGenerationAdvanced(
+  int before,
+  int after, {
+  int expectedDelta = 1,
+}) {
+  final expected = before + expectedDelta;
+  if (after != expected) {
+    throw StateError(
+      'Reader content generation mismatch: '
+      'before=$before, after=$after, expected=$expected',
+    );
+  }
+}
+
 /// Assert the D9 contract shared by runtime and hybrid epoch namespaces.
 void expectReaderEpochAlignedWithGeneration({
   required int epoch,

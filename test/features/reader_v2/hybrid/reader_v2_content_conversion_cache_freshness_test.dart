@@ -30,15 +30,15 @@ void main() {
   );
   const key = BlockKey(chapterIndex: 0, blockIndex: 0);
   final oldNamespace = MeasurementNamespace(
-    epoch: LayoutEpoch(7),
+    epoch: const LayoutEpoch(7, contentGeneration: 1),
     fingerprint: fingerprint,
   );
   final newNamespace = MeasurementNamespace(
-    epoch: LayoutEpoch(8),
+    epoch: const LayoutEpoch(7, contentGeneration: 2),
     fingerprint: fingerprint,
   );
 
-  test('MeasurementStore namespace freshness rejects the old epoch', () {
+  test('MeasurementStore rejects the previous content generation', () {
     final store = MeasurementStore();
     store.put(oldNamespace, key, const BlockMetrics(height: 10, lineCount: 1));
 
@@ -51,7 +51,7 @@ void main() {
     expect(store.get(oldNamespace, key), isNull);
   });
 
-  test('ParagraphCache namespace freshness does not reuse old Paragraph', () {
+  test('ParagraphCache does not reuse Paragraph across content generations', () {
     final cache = ParagraphCache();
     final oldParagraph = _paragraph('騄');
     final newParagraph = _paragraph('𫘧');

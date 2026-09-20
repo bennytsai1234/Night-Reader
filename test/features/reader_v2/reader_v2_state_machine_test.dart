@@ -65,6 +65,20 @@ void main() {
       expect(machine.state.hasStableWorld, isTrue);
     });
 
+    test('content generation publishes independently from layout generation', () {
+      final machine = ReaderV2StateMachine(_initialState());
+      final layoutGeneration = machine.state.layoutGeneration;
+      final layoutSignature = machine.state.layoutSpec.layoutSignature;
+
+      expect(machine.publishContentGeneration(1), isTrue);
+      expect(machine.state.contentGeneration, 1);
+      expect(machine.state.layoutGeneration, layoutGeneration);
+      expect(machine.state.layoutSpec.layoutSignature, layoutSignature);
+
+      expect(machine.publishContentGeneration(1), isFalse);
+      expect(() => machine.publishContentGeneration(0), throwsStateError);
+    });
+
     test('superseding operation inherits an uncommitted layout intent', () {
       final machine = ReaderV2StateMachine(_initialState());
       final spec = _layoutSpec(fontSize: 22);

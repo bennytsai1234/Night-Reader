@@ -85,6 +85,8 @@ class ReaderV2ChapterRepository {
   final Map<int, Future<ReaderV2Content>> _contentInFlight =
       <int, Future<ReaderV2Content>>{};
   int _contentCacheGeneration = 0;
+  int _contentGeneration = 0;
+  final Map<int, String> _materializedContentIdentities = <int, String>{};
   List<ReplaceRule>? _enabledRules;
   Future<List<ReplaceRule>>? _enabledRulesInFlight;
 
@@ -175,28 +177,37 @@ class ReaderV2ChapterRepository {
   ReaderV2Content? cachedContent(int chapterIndex) =>
       _contentCache[chapterIndex];
 
-  /// Monotonic identity for the currently materialized semantic content.
-  /// Consumers that retain UTF-16 coordinates across async work must bind
-  /// those coordinates to this generation.
-  int get contentGeneration => _contentCacheGeneration;
-
-  /// Starts a new semantic-content generation without destroying the last
-  /// committed cache if the replacement cannot be materialized.
+  /// Monotonic generation for the committed semantic document.
   ///
-  /// The generation remains monotonic on rollback so work from the abandoned
-  /// refresh can never become current later.
+  /// This is intentionally separate from [_contentCacheGeneration], which is
+  /// an internal async/cache fence and may advance during a failed refresh.
+  /// Consumers must only invalidate semantic coordinates when this committed
+  /// generation changes.
+  int get contentGeneration => _contentGeneration;
+
+  /// Refreshes semantic content without destroying the last committed world
+  /// if the replacement cannot be materialized.
+  ///
+  /// [_contentCacheGeneration] remains monotonic even on rollback so abandoned
+  /// async work cannot become current later. [contentGeneration] advances after
+  /// a successful explicit refresh, or when a reacquired materialized chapter
+  /// proves that its committed identity changed outside this repository.
   Future<ReaderV2Content> reloadContent(int chapterIndex) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
     final previousSource = _source;
     final previousRules = _enabledRules;
+    final previousIdentities = Map<int, String>.from(
+      _materializedContentIdentities,
+    );
 
     _contentCacheGeneration += 1;
     final refreshGeneration = _contentCacheGeneration;
     _source = null;
     _contentCache.clear();
     _contentInFlight.clear();
+    _materializedContentIdentities.clear();
     _enabledRules = null;
     _enabledRulesInFlight = null;
 
@@ -204,6 +215,9 @@ class ReaderV2ChapterRepository {
     try {
       final content = await loadContent(safeIndex);
       materialized = true;
+      if (_contentCacheGeneration == refreshGeneration) {
+        _contentGeneration += 1;
+      }
       return content;
     } finally {
       if (!materialized && _contentCacheGeneration == refreshGeneration) {
@@ -215,6 +229,9 @@ class ReaderV2ChapterRepository {
           ..clear()
           ..addAll(previousCache);
         _contentInFlight.clear();
+        _materializedContentIdentities
+          ..clear()
+          ..addAll(previousIdentities);
         _enabledRules = previousRules;
         _enabledRulesInFlight = null;
       }
@@ -271,6 +288,15 @@ class ReaderV2ChapterRepository {
   }
 
   void _writeToContentCache(int chapterIndex, ReaderV2Content content) {
+    final previousIdentity = _materializedContentIdentities[chapterIndex];
+    if (previousIdentity != null && previousIdentity != content.contentHash) {
+      // Persistent acquisition can change outside the active Reader (for
+      // example a downloader refresh). The content owner recognizes that
+      // identity transition here; Hybrid must never infer it from layout.
+      _contentGeneration += 1;
+    }
+    _materializedContentIdentities[chapterIndex] = content.contentHash;
+
     _contentCache.remove(chapterIndex);
     if (_contentCache.length >= _maxContentCacheSize) {
       _contentCache.remove(_contentCache.keys.first);

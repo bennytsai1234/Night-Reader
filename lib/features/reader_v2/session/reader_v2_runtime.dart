@@ -68,6 +68,7 @@ class ReaderV2Runtime extends ChangeNotifier {
            visibleLocation: initialLocation,
            layoutSpec: initialLayoutSpec,
            layoutGeneration: 0,
+           contentGeneration: repository.contentGeneration,
          ),
        ) {
     viewportBridge = ReaderV2ViewportBridge(this);
@@ -212,10 +213,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         viewportBridge.captureVisibleLocation() ??
         state.visibleLocation;
     final previousContent = repository.cachedContent(location.chapterIndex);
-    final token = stateMachine.beginContentReload(
-      location: location,
-      layoutGeneration: state.layoutGeneration + 1,
-    );
+    final token = stateMachine.beginContentReload(location: location);
     notifyListeners();
     try {
       final remappedLocation = await _remapReloadLocation(
@@ -237,7 +235,12 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2Content? previousContent,
     required ReaderV2OperationToken token,
   }) async {
-    final after = await repository.reloadContent(location.chapterIndex);
+    late final ReaderV2Content after;
+    try {
+      after = await repository.reloadContent(location.chapterIndex);
+    } finally {
+      _publishRepositoryContentGeneration();
+    }
     if (!isCurrentOperationToken(token)) return location;
     final before = previousContent;
     if (before == null) return location;
@@ -350,11 +353,49 @@ class ReaderV2Runtime extends ChangeNotifier {
     final normalized = location.normalized(
       chapterCount: repository.chapterCount,
     );
-    return repository.loadContent(normalized.chapterIndex);
+    return _loadContentAt(normalized.chapterIndex);
   }
 
   Future<ReaderV2Content> loadContentAt(int chapterIndex) {
-    return repository.loadContent(chapterIndex);
+    return _loadContentAt(chapterIndex);
+  }
+
+  Future<ReaderV2Content> _loadContentAt(int chapterIndex) async {
+    ReaderV2Content? content;
+    try {
+      content = await repository.loadContent(chapterIndex);
+      return content;
+    } finally {
+      // Repository generations fence its async/cache work. Runtime publishes
+      // that semantic generation before a caller can consume newly loaded
+      // coordinates, so Hybrid/TTS never need to infer invalidation.
+      _publishRepositoryContentGeneration(materializedContent: content);
+    }
+  }
+
+  void _publishRepositoryContentGeneration({
+    ReaderV2Content? materializedContent,
+  }) {
+    if (disposed) return;
+    final generation = repository.contentGeneration;
+    if (generation == state.contentGeneration) return;
+
+    final operation = stateMachine.currentOperation;
+    final content = materializedContent;
+    if (operation == null &&
+        content != null &&
+        content.chapterIndex == state.visibleLocation.chapterIndex) {
+      stateMachine.updateVisibleLocation(
+        ReaderV2ContentLocationMapper.resolve(
+          location: state.visibleLocation,
+          target: content,
+        ),
+      );
+    }
+
+    if (stateMachine.publishContentGeneration(generation)) {
+      notifyListeners();
+    }
   }
 
   Future<void> _jumpToChapter(int chapterIndex) {
@@ -414,57 +455,75 @@ class ReaderV2Runtime extends ChangeNotifier {
     final chapterIndex = location.chapterIndex
         .clamp(0, chapterCount - 1)
         .toInt();
-    final content = await repository.loadContent(chapterIndex);
-    if (!isCurrentOperationToken(token)) return false;
 
-    final previousGeneration = state.layoutGeneration;
-    if (!stateMachine.commitLayoutForOperation(token)) return false;
-    if (state.layoutGeneration != previousGeneration) notifyListeners();
-
-    // `charOffset` is meaningful only in the display-text identity that owned
-    // it when captured. Resume/source-switch locations carry that identity and
-    // a two-sided text anchor. Resolve it against the exact target content
-    // before the viewport sees the coordinate. Plain chapter/bookmark jumps
-    // have no identity, so resolve() preserves their scalar offset.
-    final resolved = ReaderV2ContentLocationMapper.resolve(
-      location: location.copyWith(chapterIndex: chapterIndex),
-      target: content,
-    ).normalized(
-      chapterCount: chapterCount,
-      chapterLength: content.displayText.length,
-    );
-
-    final restore = viewportBridge.viewportRestore;
-    if (restore == null) {
-      _failOperationInvariant(token, 'Reader viewport owner is not registered.');
-    }
-    AppLog.d(
-      'Reader viewport restore start op=${token.id} '
-      'target=${resolved.chapterIndex}',
-    );
-    final restored = await restore(resolved);
-    AppLog.d(
-      'Reader viewport restore done op=${token.id} restored=$restored '
-      'current=${stateMachine.isCurrent(token)} lifecycle=${state.lifecycle.name} '
-      'visible=${state.visibleLocation.chapterIndex}',
-    );
-    if (!restored) {
+    while (isCurrentOperationToken(token)) {
+      final content = await _loadContentAt(chapterIndex);
       if (!isCurrentOperationToken(token)) return false;
-      _failOperationInvariant(
-        token,
-        'Reader viewport could not materialize the current operation target.',
+
+      final previousLayoutGeneration = state.layoutGeneration;
+      if (!stateMachine.commitLayoutForOperation(token)) return false;
+      if (state.layoutGeneration != previousLayoutGeneration) {
+        notifyListeners();
+      }
+
+      // `charOffset` is meaningful only in the display-text identity that
+      // owned it when captured. Re-resolve the same operation intent whenever
+      // the semantic document generation advances during viewport work.
+      final resolved = ReaderV2ContentLocationMapper.resolve(
+        location: location.copyWith(chapterIndex: chapterIndex),
+        target: content,
+      ).normalized(
+        chapterCount: chapterCount,
+        chapterLength: content.displayText.length,
       );
+      final targetContentGeneration = state.contentGeneration;
+
+      final restore = viewportBridge.viewportRestore;
+      if (restore == null) {
+        _failOperationInvariant(
+          token,
+          'Reader viewport owner is not registered.',
+        );
+      }
+      AppLog.d(
+        'Reader viewport restore start op=${token.id} '
+        'target=${resolved.chapterIndex} '
+        'contentGeneration=$targetContentGeneration',
+      );
+      final restored = await restore(resolved);
+      AppLog.d(
+        'Reader viewport restore done op=${token.id} restored=$restored '
+        'current=${stateMachine.isCurrent(token)} lifecycle=${state.lifecycle.name} '
+        'visible=${state.visibleLocation.chapterIndex} '
+        'contentGeneration=${state.contentGeneration}',
+      );
+      if (!isCurrentOperationToken(token)) return false;
+
+      if (state.contentGeneration != targetContentGeneration) {
+        // The operation still owns the same semantic intent, but its viewport
+        // attempt belonged to an older document generation. Re-resolve it
+        // against the newly published content without creating a new token.
+        continue;
+      }
+      if (!restored) {
+        _failOperationInvariant(
+          token,
+          'Reader viewport could not materialize the current operation target.',
+        );
+      }
+
+      final completed = completeOperation(
+        token,
+        visibleLocation: resolved,
+      );
+      AppLog.d(
+        'Reader viewport complete op=${token.id} completed=$completed '
+        'lifecycle=${state.lifecycle.name} '
+        'visible=${state.visibleLocation.chapterIndex}',
+      );
+      return completed;
     }
-    if (!isCurrentOperationToken(token)) return false;
-    final completed = completeOperation(
-      token,
-      visibleLocation: resolved,
-    );
-    AppLog.d(
-      'Reader viewport complete op=${token.id} completed=$completed '
-      'lifecycle=${state.lifecycle.name} visible=${state.visibleLocation.chapterIndex}',
-    );
-    return completed;
+    return false;
   }
 
   @override

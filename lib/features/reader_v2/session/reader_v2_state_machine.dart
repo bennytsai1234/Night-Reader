@@ -55,13 +55,11 @@ class ReaderV2StateMachine {
   }
 
   ReaderV2OperationToken beginContentReload({
-    required int layoutGeneration,
     ReaderV2Location? location,
   }) {
     return _beginOperation(
       ReaderV2OperationKind.contentReload,
       targetLocation: location,
-      layoutGeneration: layoutGeneration,
     );
   }
 
@@ -78,6 +76,18 @@ class ReaderV2StateMachine {
     return current != null &&
         current.id == token.id &&
         current.kind == token.kind;
+  }
+
+  bool publishContentGeneration(int generation) {
+    if (generation < state.contentGeneration) {
+      throw StateError(
+        'Content generation cannot move backwards: '
+        'current=${state.contentGeneration}, next=$generation.',
+      );
+    }
+    if (generation == state.contentGeneration) return false;
+    state = state.copyWith(contentGeneration: generation);
+    return true;
   }
 
   bool commitLayoutForOperation(ReaderV2OperationToken token) {
