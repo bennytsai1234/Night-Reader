@@ -300,7 +300,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final jumpOwnsNeighborhood =
           operationKind == ReaderV2OperationKind.jump;
       if (jumpOwnsNeighborhood) {
-        final neighborhoodReady = await _prepareJumpNeighborhood(
+        final neighborhoodReady = await _prepareJumpBackwardNeighbor(
           chapter,
           isCurrent: isCurrent,
         );
@@ -336,10 +336,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           target: target ?? 0,
           jumpOwnsNeighborhood: jumpOwnsNeighborhood,
         );
-        final readyBottom = _jumpReadinessBottom(
-          target: target ?? 0,
-          jumpOwnsNeighborhood: jumpOwnsNeighborhood,
-        );
+        final readyBottom = _jumpReadinessBottom(target: target ?? 0);
         _requestWindow(
           readyTop,
           readyBottom,
@@ -352,10 +349,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 target: positionedTarget,
                 jumpOwnsNeighborhood: jumpOwnsNeighborhood,
               ),
-              _jumpReadinessBottom(
-                target: positionedTarget,
-                jumpOwnsNeighborhood: jumpOwnsNeighborhood,
-              ),
+              _jumpReadinessBottom(target: positionedTarget),
             ))
           break;
         // Cached exact metrics may advance admission synchronously, without
@@ -410,28 +404,20 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  Future<bool> _prepareJumpNeighborhood(
+  Future<bool> _prepareJumpBackwardNeighbor(
     int chapter, {
     required bool Function() isCurrent,
   }) async {
-    final neighbors = <int>[
-      if (chapter > 0) chapter - 1,
-    ];
-    if (neighbors.isEmpty) return isCurrent();
-
-    Future<void> prepare(int neighbor) async {
-      try {
-        await _ensureChapterBlocks(
-          neighbor,
-          priority: LayoutTaskPriority.visible,
-        );
-      } on ReaderV2ContentUnavailableException {
-        // A broken adjacent source is an external frontier, not a reason to
-        // invalidate an otherwise readable jump target.
-      }
+    if (chapter <= 0) return isCurrent();
+    try {
+      await _ensureChapterBlocks(
+        chapter - 1,
+        priority: LayoutTaskPriority.visible,
+      );
+    } on ReaderV2ContentUnavailableException {
+      // A broken previous chapter is an external frontier, not a reason to
+      // invalidate an otherwise readable jump target.
     }
-
-    await Future.wait<void>(neighbors.map(prepare));
     return isCurrent();
   }
 
@@ -446,10 +432,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return target - _admission.backwardGuaranteedWindow;
   }
 
-  double _jumpReadinessBottom({
-    required double target,
-    required bool jumpOwnsNeighborhood,
-  }) {
+  double _jumpReadinessBottom({required double target}) {
     return target + math.max(1, _viewportSize.height);
   }
 
