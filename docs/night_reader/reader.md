@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime` 擁有命令意圖與會話狀態，`HybridReaderScreen` 擁有目前 viewport，正文排版與幾何只走 `LayoutPump → ChapterLayoutPlan → DocumentIndex → Flutter Sliver`。不存在第二套分頁 resolver、paged render model 或未掛載 Hybrid 時的 compatibility path。
+Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime` 擁有命令意圖與會話狀態，`HybridReaderScreen` 擁有目前 viewport；正文排版只走 `ReaderV2LayoutSpec → VisualLineLayoutEngine → LayoutPump / ReaderParagraphLayout → ChapterLayoutPlan → DocumentIndex → Flutter Sliver`。不存在第二套分頁 resolver、paged render model 或未掛載 Hybrid 時的 compatibility path。
 
 | 責任 | Owner | 核心入口 |
 |---|---|---|
@@ -14,7 +14,10 @@ Night Reader 目前只有一套正文呈現架構：Hybrid B。 `ReaderV2Runtime
 | displayText、內容轉換、committed content identity | ChapterRepository / Content | `chapter/reader_v2_chapter_repository.dart`、`reader_v2_content.dart`、`reader_v2_content_transformer.dart` |
 | semantic content generation 發布 | Runtime / StateMachine | `session/reader_v2_runtime.dart`、`reader_v2_state.dart`、`reader_v2_state_machine.dart` |
 | 語意位置重映射與落盤 | ContentLocationMapper / ViewportBridge / ProgressController | `session/reader_v2_location.dart`、`reader_v2_viewport_bridge.dart`、`reader_v2_progress_controller.dart` |
-| 切行、Paragraph layout、pending 去重/取消、frame credit | LayoutPump | `hybrid/pump/layout_pump.dart`、`budget_governor.dart`、`layout_cost_model.dart` |
+| 正文實體可用寬度 | ReaderV2LayoutSpec | `layout/reader_v2_layout_spec.dart` |
+| visual-line break policy | VisualLineLayoutEngine | `hybrid/layout/visual_line_layout_engine.dart` |
+| native shaping / drawable Paragraph | ReaderParagraphLayout | `hybrid/layout/reader_paragraph_layout.dart` |
+| pending 去重/取消、frame credit | LayoutPump | `hybrid/pump/layout_pump.dart`、`budget_governor.dart`、`layout_cost_model.dart` |
 | Active 文件精確幾何與切分 | DocumentIndex / ChapterLayoutPlan | `hybrid/measure/document_index.dart`、`hybrid/core/chapter_layout_plan.dart` |
 | Paragraph 存活 | consumer-owned ParagraphLease | `hybrid/paragraph/paragraph_cache.dart`、`hybrid/view/cached_block_widget.dart` |
 | 連續邊界追加 | AdmissionController | `hybrid/view/admission_controller.dart` |
@@ -54,11 +57,14 @@ flowchart LR
 flowchart TD
     Command[Runtime semantic target] --> Demand[Hybrid viewport demand]
     Content[displayText + contentHash] --> Pre[TextPreprocessor]
-    Pre --> Pump[LayoutPump]
+    Width[ReaderV2LayoutSpec physical width] --> Lines[VisualLineLayoutEngine]
+    Pre --> Lines
+    Lines --> Pump[LayoutPump scheduler]
     Demand --> Pump
-    Pump --> Plan[ChapterLayoutPlan]
-    Plan --> Metrics[MeasurementStore]
-    Plan --> Paragraphs[ParagraphCache + leases]
+    Lines --> Plan[ChapterLayoutPlan]
+    Pump --> Shape[ReaderParagraphLayout]
+    Shape --> Metrics[MeasurementStore]
+    Shape --> Paragraphs[ParagraphCache + leases]
     Metrics --> Admission[AdmissionController]
     Admission --> Index[DocumentIndex]
     Index --> Sliver[CustomScrollView / HybridBlockSliver]
@@ -76,7 +82,10 @@ flowchart TD
 - ChapterRepository 擁有已 materialize 章節的 content identity：成功 explicit reload，或同一 session 重新取得某章時確認 identity 已被外部持久層更新，才推進 committed `contentGeneration`。內部 cache/work generation 可為淘汰 stale async 而獨立前進，失敗 rollback 不改變 committed content generation。
 - Runtime 將 committed `contentGeneration` 發布到 session state。若無 operation 時重新取得的目前可見章節 identity 改變，Runtime 會先用 `ReaderV2Location` 的 content anchor 對新正文重映射 visible location，再發布 generation。Hybrid / TTS 只消費 Runtime state，不直接觀察 repository 內部 generation；content reload 不冒充 layout change，因此不推進 `layoutGeneration`。
 - Hybrid 文件 epoch 綁定 `layoutGeneration + contentGeneration`。任一 generation 變更都由上層發布後單向重建；若 generation 在既有 Runtime operation 的 viewport transaction 期間前進，Runtime 保留同一 operation token，於新 generation 重新 resolve 同一 semantic target 後再 restore，不建立替代 operation。若當下沒有 operation，Hybrid 直接以已發布的 visible location 本地重建。若 `ChapterLayoutPlan` 在同一 generation 內遇到 content identity mismatch，視為 invariant failure。
-- 正文 visual-line probe 與 drawable Paragraph 都由同一 `LayoutPump` 排程；`BudgetGovernor` 只負責目前 frame 可消耗的工作量。
+- `ReaderV2LayoutSpec.contentWidth` 只代表 viewport 扣除使用者 padding 後的實體可畫寬度；cell / em-grid typography metric 不得縮小或重定義它。
+- `VisualLineLayoutEngine` 是唯一 visual-line break owner：只依 native shaping 得到的 grapheme geometry 與實體寬度決定邊界；標點類別沒有否決一個仍然放得下的 grapheme 的權力，也不讀取 SkParagraph soft-wrap line boundary。
+- `ReaderParagraphLayout` 只擁有 shaping 與 drawable Paragraph mechanism。reader-owned 行界以 layout-only hard break 呈現，source text 不插入換行；`ParagraphTextMap` 負責 layout offset 與 UTF-16 source offset 的雙向映射。
+- `LayoutPump` 只排程 line planning / drawable work、pending 去重/取消與 frame credit；若 native Paragraph 在 reader-owned 行界之外再次 soft-wrap，直接視為 layout invariant violation，不建立 fallback 或標點特判。
 - `DocumentIndex` 只接收連續、已精確量測的 block；active geometry 不由 raw cache eviction 反向刪除。
 - Paragraph 的生命週期由實際 consumer lease 擁有；cache eviction 不能 dispose 仍被 mounted widget 或 command 使用的 Paragraph。
 - native scroll position 是捲動與慣性的 owner。排版 readiness 不修改手勢位移或 ballistic trajectory。
