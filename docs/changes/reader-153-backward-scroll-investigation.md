@@ -1,10 +1,10 @@
 # Reader 153 backward-scroll investigation reserve
 
-Status: **OPEN / candidate fix implemented / not merged**
+Status: **OPEN / confirmed logic fixes implemented / performance hypothesis still open / not merged**
 
 Branch: `investigate/reader-153-backward-scroll`  
 Base: `main@f4ebd53b3b5818e6f8c3c96f2ab29ad5c76d0608` (v0.2.153 release state)  
-Purpose: Preserve the investigation and carry a safe candidate repair for the confirmed demand-priority ownership defect. Keep this branch unmerged until the user chooses to validate or merge it.
+Purpose: Preserve the investigation and carry repairs for the confirmed demand-priority, line-break-policy, whitespace, and passive-download-intent defects. The broader planner/readiness performance hypothesis remains intentionally unresolved. Keep this branch unmerged until the user chooses to validate or merge it.
 
 ## User-visible symptom observed
 
@@ -45,7 +45,7 @@ CI / Flutter execution has not been run in this session because the available en
 
 Do not rewrite the line-layout pipeline merely because of this single observation.
 
-The earlier hypothesis that the new v0.2.153 visual-line planner can starve the backward frontier remains technically plausible, but it is only a hypothesis until the behavior can be reproduced.
+The earlier hypothesis that the new v0.2.153 visual-line planner can starve the backward frontier remains technically plausible beyond the repaired demand-priority defect. The whole-chapter readiness / planner-cost portion is still only a hypothesis until the behavior can be reproduced.
 
 When this issue is seen again, resume work on this branch and first determine whether the failure is:
 
@@ -54,7 +54,7 @@ When this issue is seen again, resume work on this branch and first determine wh
 3. chapter-jump / in-flight-demand transition specific; or
 4. a general v0.2.153 visual-line planning / frontier-supply problem.
 
-No architecture change should be made before that distinction is established.
+No further planner/readiness architecture change should be made before that distinction is established.
 
 ---
 
@@ -138,7 +138,47 @@ These are code-review findings, not proof of the observed runtime symptom:
 4. In v0.2.153 main, existing chapter work can be born as prefetch work and retain that priority even after it becomes imminent viewport/frontier demand. This branch fixes that ownership defect by promoting the same in-flight work.
 5. A pump budget cannot necessarily preempt a large synchronous planning operation in the middle of that operation.
 
-These facts make backward-frontier starvation plausible, but **not proven as the user's observed bug**.
+These facts make backward-frontier starvation plausible, but **not proven as the user's observed bug**. The confirmed priority defect is repaired here; the whole-chapter readiness / planner-cost hypothesis remains open.
+
+---
+
+## Confirmed v0.2.153 defects repaired on this branch
+
+### Demand priority ownership
+
+A chapter plan is no longer stuck forever at the priority it had when it was created. The same in-flight chapter work can be promoted monotonically:
+
+```text
+prefetch -> visible -> anchor
+```
+
+Promotion reuses the same work and progress; it does not cancel, restart, or duplicate the plan.
+
+### Visual line-break policy
+
+Native word boundaries are now treated as facts, not universal line-break authority.
+
+- Latin-style tokens may prefer native word boundaries.
+- CJK and other non-Latin scripts remain grapheme-placeable, so a glyph that physically fits is not moved merely because ICU grouped it into a linguistic word.
+- Whitespace is a separator and does not become the owner of a new visual line.
+- Source text is not trimmed or rewritten to hide the issue; the repair stays in the line-break decision layer.
+
+Contracts were added for the CJK word-grouping case and a real Paragraph-shaped `aaaaa aaaaa` boundary that previously could create an empty visual line.
+
+### Passive download intent
+
+Reader auto-fill now uses a passive `ensureDownloadTask()` operation.
+
+- waiting/downloading tasks remain untouched;
+- paused tasks are not resumed or replaced;
+- failed tasks are not retried automatically;
+- explicit user `addDownloadTask()` keeps its previous authority to replace stopped/completed tasks.
+
+This keeps "content should be available" separate from "the user asked to resume/retry a download".
+
+### Validation status
+
+The production paths and added contracts have been code-reviewed, but Flutter/Dart tests have not been executed in this session because the available environment has no Flutter/Dart runtime, GitHub Actions dispatch is not exposed through the current connector, and the local container has no outbound GitHub DNS. Do not report this branch as runtime-validated yet.
 
 ---
 
@@ -148,7 +188,7 @@ There are line-break policy concerns in v0.2.153 that are independent of the int
 
 ### CJK word-boundary rollback
 
-Native Unicode word boundaries are currently used as a preferred break signal more broadly than is safe for CJK. A Chinese linguistic word boundary is not the same thing as the product's desired visual line-break rule.
+On v0.2.153 main, native Unicode word boundaries are used as a preferred break signal more broadly than is safe for CJK. **Repaired on this branch.** A Chinese linguistic word boundary is not the same thing as the product's desired visual line-break rule.
 
 Product requirement remains:
 
@@ -156,9 +196,9 @@ Product requirement remains:
 
 ### Whitespace ownership
 
-Whitespace must behave as a separator, not become a visible leading-only line or standalone visual line as a side effect of rollback.
+Whitespace must behave as a separator, not become a visible leading-only line or standalone visual line as a side effect of rollback. **Repaired on this branch.**
 
-These should eventually be solved at the line-break policy ownership level, not as one-off text cases.
+They are repaired here at the line-break policy ownership level rather than as one-off text cases.
 
 ---
 
@@ -235,13 +275,13 @@ Semantic paragraph
 
 Potential invariants to validate before implementation:
 
-1. Line-break policy ownership is separate from word-boundary facts.
+1. Line-break policy ownership is separate from word-boundary facts. **Implemented on this branch.**
 2. Readiness should be no coarser than required by the viewport.
-3. Work priority belongs to current demand, not only task birth. **Implemented on this branch.**
+3. Work priority belongs to current demand, not only task birth. **Implemented on this branch.** **Implemented on this branch.**
 4. Long planning work must be genuinely resumable at budget boundaries.
 5. Native shaping/painting should remain native; Reader should own only product-specific policy.
 
-These are **candidate invariants**, not an approved rewrite plan.
+The remaining unimplemented items are **candidate invariants**, not an approved rewrite plan.
 
 ---
 
