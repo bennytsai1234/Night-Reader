@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -21,9 +20,6 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
 class ReaderV2ControllerHost {
-  @visibleForTesting
-  static FutureOr<void> Function()? debugBeforeFlushProgress;
-
   ReaderV2ControllerHost({
     required this.book,
     required this.initialChapters,
@@ -262,10 +258,6 @@ class ReaderV2ControllerHost {
   }
 
   Future<ReaderV2Location?> flushProgress() async {
-    final hook = debugBeforeFlushProgress;
-    if (kDebugMode && hook != null) {
-      await hook();
-    }
     return runtime?.flushProgress();
   }
 

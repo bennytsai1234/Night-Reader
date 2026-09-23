@@ -564,14 +564,14 @@ class TTSService extends ChangeNotifier {
             )
             .toList(growable: false);
         final usableVoices = voices
-            .where(TTSService.isUsableVoice)
+            .where(TTSService._isUsableVoice)
             .toList(growable: false);
         final language = _language;
         if (language == null || language.trim().isEmpty) {
           return usableVoices;
         }
         final languageVoices = usableVoices
-            .where((voice) => TTSService.voiceMatchesLanguage(voice, language))
+            .where((voice) => TTSService._voiceMatchesLanguage(voice, language))
             .toList(growable: false);
         return languageVoices.isNotEmpty ? languageVoices : usableVoices;
       }
@@ -579,8 +579,7 @@ class TTSService extends ChangeNotifier {
     return const <Map<String, String>>[];
   }
 
-  @visibleForTesting
-  static bool isUsableVoice(Map<String, String> voice) {
+  static bool _isUsableVoice(Map<String, String> voice) {
     final networkRequired = voice['network_required']?.trim().toLowerCase();
     if (networkRequired == '1' || networkRequired == 'true') return false;
 
@@ -593,8 +592,7 @@ class TTSService extends ChangeNotifier {
     return !features.contains('notinstalled');
   }
 
-  @visibleForTesting
-  static bool voiceMatchesLanguage(Map<String, String> voice, String language) {
+  static bool _voiceMatchesLanguage(Map<String, String> voice, String language) {
     final target = _normalizeLocale(language);
     final locale = _normalizeLocale(voice['locale'] ?? '');
     if (target.isEmpty || locale.isEmpty) return true;

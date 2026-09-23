@@ -106,13 +106,12 @@ class CacheManager {
     await for (final entity in cacheDir.list(followLinks: false)) {
       if (entity is File &&
           !_digestFileName.hasMatch(p.basename(entity.path))) {
-        await deleteLegacyFileIfPresent(entity);
+        await _deleteLegacyFileIfPresent(entity);
       }
     }
   }
 
-  @visibleForTesting
-  static Future<void> deleteLegacyFileIfPresent(File file) async {
+  static Future<void> _deleteLegacyFileIfPresent(File file) async {
     try {
       await file.delete();
     } on FileSystemException {

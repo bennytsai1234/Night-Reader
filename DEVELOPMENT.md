@@ -11,45 +11,37 @@
 
 ## 安裝與基本驗證
 
-在 repo 根目錄執行：
+在 repo 根目錄先執行：
 
 ```bash
 flutter pub get
 flutter analyze
-flutter test
 ```
 
-這三個命令是一般修改的基本驗證。`flutter run` 用於本機 Android debug 與執行驗證；release APK 不在本機建置，由 GitHub Actions 處理。
+一般修改不再預設跑整套 `flutter test`。測試以「受影響責任的 contract / invariant」為單位；只有跨模組重構、廣泛相依性變更或需要完整回歸時，才跑全套。`flutter run` 用於本機 Android debug 與執行驗證；release APK 不在本機建置，由 GitHub Actions 處理。
 
 若只修改單一模組，可先執行相應測試縮短回饋時間，完成後再依改動風險決定是否跑全套。例如：
 
 ```bash
 flutter test test/features/reader_v2
 flutter test test/features/source_manager
-flutter test test/shared/theme/theme_customization_test.dart
 ```
 
 ## Reader 驗證入口
 
-目前 Reader 的責任與資料流以 [Reader 模組地圖](docs/night_reader/reader.md) 為準。不要以歷史 P/T/C package 或已移除的 paged-reader 類別當成現行規格。
-
-| 目的 | 測試入口 |
-|---|---|
-| Runtime operation identity / viewport owner | `reader_v2_runtime_operation_test.dart`、`reader_v2_state_machine_test.dart`、`reader_v2_viewport_bridge_test.dart` |
-| Hybrid geometry / materialization / navigation | `test/features/reader_v2/hybrid/hybrid_reader_screen_test.dart` |
-| Layout queue / frame budget / Paragraph lifetime | `hybrid_pump_test.dart`、`cached_block_repaint_test.dart` |
-| Segmentation / typography | `hybrid_visual_layout_segmentation_test.dart`、`hybrid_visual_layout_compensation_test.dart`、`em_grid_lock_test.dart` |
-| Style / viewport / rotation | `reader_v2_style_change_test.dart`、`reader_v2_rotation_viewport_test.dart` |
-| 簡繁內容與位置重映射 | `reader_v2_chinese_convert_loop_test.dart`、`hybrid/reader_v2_content_conversion_cache_freshness_test.dart` |
-| 換源與進度 | `reader_v2_source_switch_loop_test.dart`、`test/core/services/source_switch_service_test.dart`、`source_switch_progress_test.dart` |
-
-Reader subtree：
+Reader 的自動 correctness suite 已收斂為少量架構 contract，不追 coverage，也不以 Widget 內部狀態作為 correctness owner。
 
 ```bash
-flutter test test/features/reader_v2
+flutter test \
+  test/features/reader_v2/reader_v2_state_machine_test.dart \
+  test/features/reader_v2/reader_v2_runtime_operation_test.dart \
+  test/features/reader_v2/hybrid/hybrid_pump_test.dart \
+  test/core/services/source_switch_service_test.dart
 ```
 
-若觸及簡繁 converter，再補 `test/core/engine/reader/chinese_text_converter_length_test.dart`。Widget tests 是 host correctness 證據，不等同 Android 裝置行為。
+其中 `reader_v2_state_machine_test.dart` 已包含 content identity / anchor migration 契約；`hybrid_pump_test.dart` 已合併 DocumentIndex fuzz、measurement 與 continuous paragraph layout 等核心幾何不變量。
+
+禁止為了讓測試可觀測而在 production 新增 `debug*`、`*ForTesting`、test-only getter、靜態 hook 或 UI state snapshot。若一個 invariant 只能靠穿透 Widget/private state 驗證，優先把 invariant 下沉到真正 owner 的 state machine / service / geometry contract，而不是替 UI 開測試洞。
 
 ## Android 執行驗證
 
@@ -60,7 +52,7 @@ flutter devices
 adb devices -l
 ```
 
-repo 的通用 Android integration runner 是 `tool/run_android_integration_test.ps1`。Reader 的 PR CI `.github/workflows/reader-v2.yml` 只負責 `flutter analyze` 與 Reader/source-switch 一般測試；不啟動 Android emulator，也不把 integration journey 當成自動 correctness gate。需要裝置／體感驗證時，由人類依改動範圍在實體裝置或 AVD 手動重現。
+repo 的通用 Android integration runner 是 `tool/run_android_integration_test.ps1`，目前只保留 `正常 debug App smoke` 作為裝置 boot smoke。Reader 的 PR CI `.github/workflows/reader-v2.yml` 只負責 `flutter analyze` 與核心 Reader/source-switch contract tests；不啟動 Android emulator，也不維護自動 Reader journey。滑動、排版體感、動畫與裝置生命週期由人類依改動範圍在實體裝置或 AVD 做 smoke 驗證。
 
 本機 debug 可用 `flutter run -d <device-id>` 重現 UI 行為；release APK 仍由 GitHub Actions 建置。不要在文件中綁定某一個 emulator serial、已移除的 workload script 或歷史 performance gate。
 
@@ -92,29 +84,17 @@ adb -s <device-id> shell dumpsys package com.inkpage.reader.debug
 
 這台 vivo 已實測 `adb shell pm install -r` 也會被導向相同的 `PackageInterceptActivity`；Android／vivo 沒有可由一般 ADB shell 使用的通用「強制略過風險確認」旗標。`-r` 只代表保留資料更新、`-d` 只處理降版、`-g` 只處理執行期權限，均不能取消 OEM 確認。若要減少提示，只能在手機的開發者選項／安全設定中尋找廠商提供的 USB 安裝或 ADB 安裝驗證開關；這是裝置設定，不由 App 或 runner 強行修改。
 
-整合測試需要已連線的 Android 裝置或 AVD：
+自動 Android `integration_test`、專用 fresh-engine 啟動路徑與 test plugin registrant 已移除。裝置 smoke 直接使用正常 debug App，不建立另一套測試 App lifecycle。
 
-在 vivo V2417A 上，ROM 會把 Flutter logcat 裡的 VM Service URL 遮成星號；標準 runner 可能因此停在 `Waiting for VM Service port to be available...`，但不代表裝置端測試沒有執行。這類裝置請使用 repo 內的 PowerShell runner：
-
-```powershell
-.\tool\run_android_integration_test.ps1 -DeviceId <device-id>
-```
-
-runner 會先建置一般 debug APK 並建立暫存 backup，再建置測試 APK、安裝並以 test flags 啟動，等待該次 process 的 `All tests passed!`。測試成功、失敗或逾時都會進入 restore：優先重建一般 debug，若重建失敗則使用測試前 backup；最後還會驗證 `am start -W` 的 `Status: ok`、前景 Activity 與 `夜讀 Ready to Run`。若 vivo 顯示未知來源／風險確認頁，必須在手機上按「繼續安裝」；runner 只接受 ADB exit code 0 且輸出包含 `Success` 作為安裝成功證據。`integration_test` build 會覆寫 `build/app/outputs/flutter-apk/app-debug.apk`，所以不要中斷 restore 安裝；該步驟若再次出現 vivo 確認頁，也要按「繼續安裝」。runner 會依裝置目前的 `versionCode` 自動避免 downgrade。
-
-`integration_test` 建置產物是測試專用 APK，不能當成一般 App 直接從 launcher／ADB 啟動；它需要 test flags 與測試 VM。若要手動啟動正常 debug App，先重新執行 `flutter build apk --debug`，再安裝 `build/app/outputs/flutter-apk/app-debug.apk`。使用上述 runner 則會自動在測試前備份、測試後重建並還原一般 APK。
-
-不會把 `SkipTestBuild` 或 `SkipRestoreInstall` 暴露成日常流程選項；這是刻意限制，避免把一般 APK／過期 APK 當成測試 APK，或讓測試 APK 留在手機上。
-
-模擬器或不會遮罩 VM Service URL 的裝置，才可使用 Flutter 標準命令：
+建置、安裝與啟動：
 
 ```bash
-flutter test integration_test/app_boot_test.dart -d <device-id> --disable-service-auth-codes --disable-service-origin-check
+flutter build apk --debug --build-number=<number>
+adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
+adb -s <device-id> shell am start -W -n com.inkpage.reader.debug/com.inkpage.reader.MainActivity
 ```
 
-目前 `AudioServiceActivity` 在 vivo 實體機上的 cached Flutter engine 會讓 integration test 的 VM service 連線失敗，因此測試啟動需要上述兩個參數；`MainActivity` 會在測試模式使用 fresh engine。一般 `flutter run` 不需要這兩個參數。這個 workaround 的限制是 boot smoke test 的 fresh engine 會刻意不註冊 `audio_service`，所以它驗證的是 App 初始化與書架，不等於 TTS／AudioService 播放鏈已通過真機測試。
-
-這個 boot smoke test 只驗證真實 App 能完成初始化並進入「書架」；Reader V2 的內容、滑動與排版仍須依改動執行相應 Widget 測試與實機流程。TTS／AudioService 屬於可選啟動能力，會在 App 首畫面後背景初始化，不應阻塞原生 Splash 或書架顯示。
+Reader smoke 至少覆蓋：開書、恢復上次位置、上下高速捲動、跳章、返回相鄰章、關閉再開恢復位置。UI、動畫、手勢與實機效能以正常產品路徑驗證，不再為自動 journey 修改 production 啟動架構。
 
 變更涉及 UI、閱讀器互動、滾動、動畫、App lifecycle、本機儲存、Android plugin 或執行效能時，除了 analyze／test，還要重現受影響流程。依問題留下相應證據：
 
@@ -152,7 +132,6 @@ Windows 可在 WSL 或其他具備 Bash、Python 3 與 Flutter 的環境執行�
 ```bash
 dart run build_runner build --delete-conflicting-outputs
 flutter analyze
-flutter test
 ```
 
 表結構變更還要在 `AppDatabase` 提供 schema migration；只更新 `.g.dart` 不代表既有使用者資料可升級。

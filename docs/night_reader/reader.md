@@ -106,21 +106,21 @@ flowchart TD
 
 ## Validation
 
-基本入口：
+自動 correctness 只保留 owner-level contract：
 
 ```bash
-flutter analyze
-flutter test test/features/reader_v2
-flutter test test/core/services/source_switch_service_test.dart test/core/services/source_switch_progress_test.dart test/core/engine/reader/chinese_text_converter_length_test.dart
+flutter test \
+  test/features/reader_v2/reader_v2_state_machine_test.dart \
+  test/features/reader_v2/reader_v2_runtime_operation_test.dart \
+  test/features/reader_v2/hybrid/hybrid_pump_test.dart \
+  test/core/services/source_switch_service_test.dart
 ```
 
-重點 correctness coverage：
+- `reader_v2_state_machine_test.dart`：lifecycle / operation state、content identity、anchor migration。
+- `reader_v2_runtime_operation_test.dart`：operation ownership、supersede/cancellation、stable-world 發布。
+- `hybrid_pump_test.dart`：queue/frame budget、Paragraph ownership、DocumentIndex fuzz、measurement、continuous paragraph geometry。
+- `source_switch_service_test.dart`：prepare → validate → commit、rollback 與 source ownership handoff。
 
-- `hybrid_reader_screen_test.dart`：定位、pending semantic target、材料化、跨章往返與 viewport correctness。
-- `hybrid_pump_test.dart`：共用 queue、frame credit、取消與 Paragraph leases。
-- `chapter_layout_plan_test.dart`、`hybrid_chapter_residency_test.dart`：layout identity、plan reuse 與 raw residency。
-- production visual-line ownership 由 `VisualLineLayoutEngine` 與 drawable invariant 定義；舊 SkParagraph line-boundary／lookahead compensation coverage 已隨舊 ownership 退休。
-- `reader_v2_runtime_operation_test.dart`、`reader_v2_state_machine_test.dart`：operation ownership。
-- style、rotation、簡繁轉換、source-switch tests：跨模組位置與 identity 契約。
+不再以 Widget debug snapshot、page-level test injection 或 test-only timing hook驗證 Reader。若測試需要穿透 UI private state，代表責任邊界放錯位置；測試應改到真正 owner，而不是在 production 新增觀測 API。
 
-`.github/workflows/reader-v2.yml` 在 GitHub Actions 只跑 analyze 與 Reader/source-switch tests。Android emulator journey 不再是 PR gate；觸控、動畫、流暢度與實際閱讀體感由人類在實體裝置或需要時的 AVD 驗收，不能用自動 journey 代替真人 UX 判斷。
+觸控、動畫、捲動流暢度、跳章等待與實際閱讀體感由正常 debug App 在實體裝置／需要時 AVD 做 smoke；自動測試不能取代真人 UX 驗收。

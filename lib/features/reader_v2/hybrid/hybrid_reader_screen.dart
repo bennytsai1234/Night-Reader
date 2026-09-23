@@ -3,8 +3,7 @@ import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, visibleForTesting;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -984,109 +983,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         ),
       );
     }
-  }
-
-  @visibleForTesting
-  Map<String, Object?> debugSnapshot() {
-    final controller = _scrollController;
-    final position = controller != null && controller.hasClients
-        ? controller.position
-        : null;
-    final offset = _effectiveScrollOffset();
-    final viewportHeight = _viewportSize.height;
-    final hasViewport = offset != null && viewportHeight > 0;
-    final visibleKeys = hasViewport
-        ? _documentIndex
-              .keysInRange(offset, offset + viewportHeight)
-              .toList(growable: false)
-        : const <BlockKey>[];
-    final missingParagraphKeys = <BlockKey>[];
-    for (final key in visibleKeys) {
-      if (!_paragraphCache.containsFresh(key, _epoch, widget.textColor)) {
-        missingParagraphKeys.add(key);
-      }
-    }
-
-    final captured = _captureVisibleLocation();
-    final runtimeState = widget.runtime.state;
-    Map<String, int> keyJson(BlockKey key) => <String, int>{
-      'chapterIndex': key.chapterIndex,
-      'blockIndex': key.blockIndex,
-    };
-
-    double? finiteOrNull(double value) => value.isFinite ? value : null;
-
-    bool isConsecutive(BlockKey previous, BlockKey next) {
-      if (previous.chapterIndex == next.chapterIndex) {
-        return next.blockIndex == previous.blockIndex + 1;
-      }
-      return next.chapterIndex == previous.chapterIndex + 1 &&
-          next.blockIndex == 0;
-    }
-
-    final visibleKeysContiguous = visibleKeys.length < 2
-        ? true
-        : Iterable<int>.generate(visibleKeys.length - 1).every(
-            (index) =>
-                isConsecutive(visibleKeys[index], visibleKeys[index + 1]),
-          );
-    final visibleChapters = <int>[];
-    for (final key in visibleKeys) {
-      if (visibleChapters.isEmpty || visibleChapters.last != key.chapterIndex) {
-        visibleChapters.add(key.chapterIndex);
-      }
-    }
-
-    return <String, Object?>{
-      'lifecycle': runtimeState.lifecycle.name,
-      'scrollOffset': finiteOrNull(offset ?? double.nan),
-      'viewportHeight': finiteOrNull(viewportHeight),
-      'viewportBottom': hasViewport
-          ? finiteOrNull(offset + viewportHeight)
-          : null,
-      'isScrolling': position?.isScrollingNotifier.value ?? false,
-      'dragging': _dragging,
-      'initialRestoreCompleted': _initialRestoreCompleted,
-      'runtimeLocationRevision': _runtimeLocationRevision,
-      'pendingLocation': widget.runtime.pendingLocation?.toJson(),
-      'runtimeVisibleLocation': runtimeState.visibleLocation.toJson(),
-      'runtimeCommittedLocation': runtimeState.committedLocation.toJson(),
-      'capturedLocation': captured?.toJson(),
-      'layoutGeneration': runtimeState.layoutGeneration,
-      'contentGeneration': runtimeState.contentGeneration,
-      'epoch': _epoch.value,
-      'epochContentGeneration': _epoch.contentGeneration,
-      'documentIndexRevision': _documentIndex.revisionNumber,
-      'documentIndexResetGeneration': _documentIndex.resetGeneration,
-      'documentIndexCenter': keyJson(_documentIndex.centerKey),
-      'admittedCount': _documentIndex.admittedCount,
-      'beforeCount': _documentIndex.beforeCount,
-      'centerAndAfterCount': _documentIndex.centerAndAfterCount,
-      'beforeExtent': finiteOrNull(_documentIndex.beforeExtent),
-      'afterExtent': finiteOrNull(_documentIndex.afterExtent),
-      'backwardEdge': _documentIndex.backwardEdgeKey == null
-          ? null
-          : keyJson(_documentIndex.backwardEdgeKey!),
-      'forwardEdge': _documentIndex.forwardEdgeKey == null
-          ? null
-          : keyJson(_documentIndex.forwardEdgeKey!),
-      'visibleKeys': [for (final key in visibleKeys) keyJson(key)],
-      'visibleChapters': visibleChapters,
-      'visibleKeysContiguous': visibleKeysContiguous,
-      'missingParagraphKeys': [
-        for (final key in missingParagraphKeys) keyJson(key),
-      ],
-      'paragraphCacheLength': _paragraphCache.length,
-      'loadedChapterCount': _blocks.length,
-      'loadedContentHashes': {
-        for (final entry in _blocks.entries) entry.key: entry.value.contentHash,
-      },
-      'chaptersInFlight': _blocksInFlight.keys.toList(growable: false),
-      'residentFirstChapter': _chapterRepo.residentFirst,
-      'residentLastChapter': _chapterRepo.residentLast,
-      'pumpQueueDepth': _pump.queueDepth,
-      'discardedLayoutTasks': _pump.discardedWorkCount,
-    };
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {

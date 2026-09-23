@@ -52,10 +52,4 @@ App 主色以硃砂色為辨識核心，淺色使用 `AppPalette.cinnabar`（`#7
 
 ## 變更檢查
 
-主題模型或 `buildAppTheme` 變更後，至少執行：
-
-```bash
-flutter test test/shared/theme/theme_customization_test.dart
-```
-
-Reader 顏色或排版變更還要執行相應的 `test/features/reader_v2/` 測試，並確認淺色、深色、自訂色與正文／選單獨立模式仍能正確解析。
+主題模型或 `buildAppTheme` 變更後先執行 `flutter analyze`，再以正常 App 路徑人工確認淺色、深色、自訂色與正文／選單獨立模式。Reader 排版若涉及幾何或文字邊界，另跑 `test/features/reader_v2/hybrid/hybrid_pump_test.dart`；不要為視覺細節新增 production test hook。

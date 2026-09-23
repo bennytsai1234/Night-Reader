@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
@@ -16,9 +15,6 @@ import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
 final class LayoutPump implements HybridLayoutPump {
-  @visibleForTesting
-  static void Function()? debugOnIntermediateParagraphDisposed;
-
   static const double lastLineLetterSpacingCap = 2.0;
   static const double _minBlockHeight = 1e-6;
   static const ReaderParagraphLayout _paragraphLayout =
@@ -292,7 +288,6 @@ final class LayoutPump implements HybridLayoutPump {
 
   void _disposeIntermediateParagraph(ui.Paragraph paragraph) {
     paragraph.dispose();
-    debugOnIntermediateParagraphDisposed?.call();
   }
 
   Iterable<ChapterBlocks?> _alignmentSteps(

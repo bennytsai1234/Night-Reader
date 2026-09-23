@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -58,7 +57,7 @@ class AppUpdateService {
       if (apkAsset == null) return null;
 
       final current = await _currentVersionLoader();
-      if (!isNewer(tagName, current)) return null;
+      if (!_isNewer(tagName, current)) return null;
 
       return UpdateInfo(
         versionName: _stripV(tagName),
@@ -75,10 +74,7 @@ class AppUpdateService {
   }
 
   /// 版本比對 — 拆 semver 逐段比，無法解析的視為非新版。
-  ///
-  /// 公開供測試。
-  @visibleForTesting
-  static bool isNewer(String tagName, String current) {
+  static bool _isNewer(String tagName, String current) {
     final newParts = _parseSemver(_stripV(tagName));
     final curParts = _parseSemver(_stripV(current));
     if (newParts == null || curParts == null) return false;

@@ -921,15 +921,6 @@ class ReaderV2ContentTransformWorker {
   static final ReaderV2ContentTransformWorker instance =
       ReaderV2ContentTransformWorker._();
 
-  /// 測試鉤子：字典原文提供者。預設從 rootBundle 取（啟動時已載入快取）。
-  @visibleForTesting
-  static Future<List<String>?> Function() dictionaryDataLoader =
-      loadDictionaryDataFromBundle;
-
-  /// 測試鉤子：強制停用 worker，讓 process 走 compute 退回路徑。
-  @visibleForTesting
-  static bool debugDisableWorker = false;
-
   Future<SendPort?>? _starting;
   ReceivePort? _responses;
   Isolate? _isolate;
@@ -938,8 +929,7 @@ class ReaderV2ContentTransformWorker {
   final Map<int, Completer<Map<String, Object?>?>> _pending =
       <int, Completer<Map<String, Object?>?>>{};
 
-  @visibleForTesting
-  static Future<List<String>?> loadDictionaryDataFromBundle() async {
+  static Future<List<String>?> _loadDictionaryDataFromBundle() async {
     try {
       return await Future.wait(
         ChineseUtils.dictionaryAssetPaths.map(rootBundle.loadString),
@@ -950,7 +940,7 @@ class ReaderV2ContentTransformWorker {
   }
 
   Future<Map<String, Object?>?> process(Map<String, Object?> args) async {
-    if (debugDisableWorker || _broken) return null;
+    if (_broken) return null;
     SendPort? commands;
     try {
       commands = await (_starting ??= _start());
@@ -1017,7 +1007,7 @@ class ReaderV2ContentTransformWorker {
     }
     final commands = await handshake.future;
     if (commands == null) return null;
-    final dictionaryData = await dictionaryDataLoader();
+    final dictionaryData = await _loadDictionaryDataFromBundle();
     if (dictionaryData != null && dictionaryData.length == 4) {
       commands.send(<String, Object?>{'type': 'dict', 'data': dictionaryData});
     }
@@ -1035,13 +1025,6 @@ class ReaderV2ContentTransformWorker {
     _responses = null;
     _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
-  }
-
-  @visibleForTesting
-  void debugReset() {
-    _markBroken();
-    _broken = false;
-    _starting = null;
   }
 
   static void _workerMain(SendPort replyPort) {

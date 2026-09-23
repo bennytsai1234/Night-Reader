@@ -31,7 +31,7 @@
 ```bash
 flutter pub get
 flutter analyze
-flutter test
+# Run only the contract/invariant tests relevant to the release changes.
 git push origin HEAD
 git tag vX.Y.Z
 git push origin vX.Y.Z

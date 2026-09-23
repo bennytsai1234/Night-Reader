@@ -780,6 +780,4 @@ class AnalyzeUrl {
     return headers.keys.any((key) => key.toLowerCase() == 'content-type');
   }
 
-  @visibleForTesting
-  Map<String, String> buildRequestHeadersForTesting() => _buildRequestHeaders();
 }

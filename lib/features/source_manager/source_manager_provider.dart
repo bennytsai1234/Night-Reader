@@ -190,8 +190,6 @@ class SourceImportService {
     return _importPayloadToText(response.data);
   }
 
-  @visibleForTesting
-  String importPayloadToTextForTest(dynamic data) => _importPayloadToText(data);
 
   Future<List<BookSource>> _prepareImportSources(
     List<BookSource> sources,
@@ -726,7 +724,7 @@ class SourceManagerProvider with ChangeNotifier {
     String fileName = 'sources',
   }) async {
     final jsonStr = jsonEncode(sources.map((s) => s.toJson()).toList());
-    final baseName = sanitizeExportBaseName(fileName);
+    final baseName = _sanitizeExportBaseName(fileName);
     final file = await AppStoragePaths.shareExportFile('$baseName.json');
     await file.writeAsString(jsonStr);
     await SharePlus.instance.share(
@@ -734,8 +732,7 @@ class SourceManagerProvider with ChangeNotifier {
     );
   }
 
-  @visibleForTesting
-  static String sanitizeExportBaseName(String fileName) {
+  static String _sanitizeExportBaseName(String fileName) {
     var baseName =
         fileName
             .replaceAll(RegExp(r'\.(legado|json)$', caseSensitive: false), '')
@@ -774,7 +771,7 @@ class SourceManagerProvider with ChangeNotifier {
     );
     // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
     const clipboardSafeBytes = 512 * 1024;
-    if (shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {
+    if (_shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {
       final fileName =
           selectedFullSources.length == 1
               ? selectedFullSources.first.bookSourceName
@@ -786,8 +783,7 @@ class SourceManagerProvider with ChangeNotifier {
     return true; // true = 已複製至剪貼簿
   }
 
-  @visibleForTesting
-  static bool shouldShareExportPayload(
+  static bool _shouldShareExportPayload(
     String value, {
     int limitBytes = 512 * 1024,
   }) => utf8.encode(value).length > limitBytes;
@@ -1052,9 +1048,6 @@ class SourceManagerProvider with ChangeNotifier {
     return _importService.fetchImportTextFromUrl(url);
   }
 
-  @visibleForTesting
-  String importPayloadToTextForTest(dynamic data) =>
-      _importService.importPayloadToTextForTest(data);
 
   Future<int> importFromText(String text) async {
     return await importFromJson(text);

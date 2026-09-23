@@ -37,17 +37,11 @@ class ReaderV2Page extends StatefulWidget {
     required this.book,
     this.openTarget,
     this.initialChapters = const <BookChapter>[],
-    @visibleForTesting this.sourceSwitchService,
   });
 
   final Book book;
   final ReaderV2OpenTarget? openTarget;
   final List<BookChapter> initialChapters;
-
-  /// Test-only service injection. Normal app routes leave this null and keep
-  /// constructing the same concrete service in the page state.
-  @visibleForTesting
-  final SourceSwitchService? sourceSwitchService;
 
   @override
   State<ReaderV2Page> createState() => _ReaderV2PageState();
@@ -73,54 +67,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   bool _rebuildQueued = false;
   bool _libraryDownloadQueued = false;
 
-  /// Integration workload 的語意 probe 入口；正式頁面不透過它驅動畫面。
-  @visibleForTesting
-  ReaderV2Runtime? get debugRuntime => _host.runtime;
-
-  @visibleForTesting
-  ReaderV2SettingsController get debugSettings => _host.settings;
-
-  @visibleForTesting
-  SourceSwitchService get debugSourceSwitchService => _sourceSwitchService;
-
-  @visibleForTesting
-  Future<ChangeSourceOutcome> debugSelectSourceForTesting(
-    SearchBook candidate,
-  ) {
-    return _handleChangeSourceSelected(candidate);
-  }
-
-  /// Test-only equivalent of the successful reader source-switch route.
-  ///
-  /// The normal UI calls the same replacement helper after the source sheet
-  /// closes; keeping this seam in the page lets widget tests exercise the
-  /// actual replacement/dispose ordering without opening a network-backed
-  /// source sheet.
-  @visibleForTesting
-  Future<ChangeSourceOutcome> debugSelectSourceAndReplaceForTesting(
-    SearchBook candidate,
-  ) async {
-    PreparedSourceSwitch? preparedSwitch;
-    final outcome = await _handleChangeSourceSelected(
-      candidate,
-      onSuccess: (value) => preparedSwitch = value,
-    );
-    if (mounted && outcome.success && preparedSwitch != null) {
-      _pushReplacementForPreparedSwitch(preparedSwitch!);
-    }
-    return outcome;
-  }
-
   @override
   void initState() {
     super.initState();
-    _sourceSwitchService =
-        widget.sourceSwitchService ??
-        SourceSwitchService(
-          operationQuiescer: (oldBook) =>
-              DownloadService().quiesceForSourceSwitch(oldBook),
-          assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
-        );
+    _sourceSwitchService = SourceSwitchService(
+      operationQuiescer: (oldBook) =>
+          DownloadService().quiesceForSourceSwitch(oldBook),
+      assetRetirer: BookCoverStorageService().handoffSourceSwitchAssets,
+    );
     _host = ReaderV2ControllerHost(
       book: widget.book,
       initialChapters: widget.initialChapters,

@@ -78,22 +78,6 @@ class CrashHandler {
     return '${error.toString()}\n${stack?.toString() ?? '<no stack trace>'}';
   }
 
-  /// Resets the short-window duplicate guard for deterministic unit tests.
-  @visibleForTesting
-  static void resetErrorDeduplicationForTesting() {
-    _recentErrorFingerprints.clear();
-  }
-
-  /// Exposes the decision without touching the filesystem in unit tests.
-  @visibleForTesting
-  static bool shouldRecordErrorForTesting(
-    Object error,
-    StackTrace? stack, {
-    required DateTime now,
-  }) {
-    return _shouldRecordError(error, stack, now: now);
-  }
-
   /// 異常吸收邏輯 (原 Android shouldAbsorb)
   /// 避免一些不影響運行但頻繁觸發的系統級異常阻塞日誌
   static bool _shouldAbsorb(Object e) {
