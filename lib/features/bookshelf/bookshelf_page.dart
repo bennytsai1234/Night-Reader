@@ -15,6 +15,8 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_card.dart';
 
 enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
 
@@ -128,7 +130,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               size: 20,
                               color: Theme.of(context).iconTheme.color,
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: AppSpacing.md),
                             Text(provider.isGridView ? '列表視圖' : '網格視圖'),
                           ],
                         ),
@@ -138,7 +140,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.file_open_outlined, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('加入本地書籍'),
                           ],
                         ),
@@ -148,7 +150,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.sort, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('排序'),
                           ],
                         ),
@@ -158,7 +160,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.format_list_bulleted, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('書架管理'),
                           ],
                         ),
@@ -169,7 +171,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.file_download_outlined, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('從網址匯入書架'),
                           ],
                         ),
@@ -179,7 +181,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.file_download_outlined, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('從檔案匯入書架'),
                           ],
                         ),
@@ -189,7 +191,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Row(
                           children: [
                             Icon(Icons.file_upload_outlined, size: 20),
-                            SizedBox(width: 12),
+                            SizedBox(width: AppSpacing.md),
                             Text('匯出書架'),
                           ],
                         ),
@@ -540,7 +542,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     return ListView.separated(
       padding: const EdgeInsets.all(AppSpacing.md),
       itemCount: provider.books.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, index) =>
           _buildBookItem(context, provider.books[index]),
     );
@@ -555,8 +557,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
         // The previous ratio overflowed by 1.5 px on the phone's narrow
         // logical width after Flutter rounded the grid constraints.
         childAspectRatio: 0.52,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisSpacing: AppSpacing.md,
+        mainAxisSpacing: AppSpacing.md,
       ),
       itemCount: provider.books.length,
       itemBuilder: (context, index) =>
@@ -620,7 +622,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                           : [],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.xs - 1),
+                      borderRadius: AppRadius.cardXs,
                       child: BookCoverWidget(
                         bookName: book.name,
                         coverUrl: book.getDisplayCover(),
@@ -632,11 +634,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 book.name,
-                style: TextStyle(
-                  fontSize: 12,
+                style: AppTextStyles.labelXs.copyWith(
                   fontWeight: FontWeight.w600,
                   height: 1.25,
                   color: colors.primary,
@@ -644,12 +645,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Container(
                 height: 2,
                 decoration: BoxDecoration(
                   color: colors.border,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: AppRadius.pillShape,
                 ),
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -658,7 +659,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: AppRadius.pillShape,
                       ),
                     ),
                   ),
@@ -693,7 +694,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final theme = Theme.of(context);
     final colors = _bookItemColors(theme, isSelected);
 
-    return InkWell(
+    return AppCard(
       onLongPress: _isMultiSelect ? null : () => _openDetail(context, book),
       onTap: () {
         if (_isMultiSelect) {
@@ -706,23 +707,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
           _openBook(context, book);
         }
       },
-      child: Container(
-        height: 120,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: AppRadius.cardLg,
-          border: Border.all(color: colors.border, width: isSelected ? 2 : 1),
-          boxShadow: theme.cardTheme.shadowColor != null
-              ? [
-                  BoxShadow(
-                    color: theme.cardTheme.shadowColor!,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
+      borderSide: isSelected
+          ? BorderSide(color: colors.border, width: 2)
+          : null,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: SizedBox(
+        height: 100,
         child: Row(
           children: [
             Hero(
@@ -732,50 +722,49 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 coverUrl: book.getDisplayCover(),
                 width: 72,
                 height: 100,
-                borderRadius: AppRadius.cardSm,
+                borderRadius: AppRadius.cardXs,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     book.name,
-                    style: TextStyle(
-                      fontSize: 15,
+                    style: AppTextStyles.uiMd.copyWith(
                       fontWeight: FontWeight.w600,
                       color: colors.primary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     book.author,
-                    style: TextStyle(fontSize: 11, color: colors.tertiary),
+                    style: AppTextStyles.bodyXs.copyWith(color: colors.tertiary),
                     maxLines: 1,
                   ),
                   const Spacer(),
                   Text(
                     '讀至：${book.durChapterTitle}',
-                    style: TextStyle(fontSize: 11, color: colors.secondary),
+                    style: AppTextStyles.bodyXs.copyWith(color: colors.secondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     '最新：${book.latestChapterTitle}',
-                    style: TextStyle(fontSize: 10, color: colors.tertiary),
+                    style: AppTextStyles.bodyXs.copyWith(color: colors.tertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: AppSpacing.sm),
                   Container(
                     height: 2,
                     decoration: BoxDecoration(
                       color: colors.border,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: AppRadius.pillShape,
                     ),
                     child: Align(
                       alignment: Alignment.centerLeft,
@@ -784,7 +773,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: AppRadius.pillShape,
                           ),
                         ),
                       ),

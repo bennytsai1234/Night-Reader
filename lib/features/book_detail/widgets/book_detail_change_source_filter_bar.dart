@@ -24,20 +24,21 @@ class BookDetailChangeSourceFilterBar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               itemCount: provider.groups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
               itemBuilder: (ctx, index) {
                 final group = provider.groups[index];
                 final isSelected = provider.selectedGroup == group;
+                final scheme = Theme.of(context).colorScheme;
                 return FilterChip(
                   label: Text(
                     group,
                     style: AppTextStyles.labelSm.copyWith(
-                      color: isSelected ? Colors.white : null,
+                      color: isSelected ? scheme.onPrimary : null,
                     ),
                   ),
                   selected: isSelected,
                   onSelected: (val) => provider.updateSelectedGroup(group),
-                  selectedColor: Theme.of(context).colorScheme.primary,
+                  selectedColor: scheme.primary,
                   showCheckmark: false,
                   padding: EdgeInsets.zero,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

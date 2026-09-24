@@ -15,12 +15,14 @@ class BookInfoIntro extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(),
+          Divider(
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4),
+            height: AppSpacing.xl,
+          ),
           Text(
             '簡介',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              height: 1.3,
-              fontWeight: FontWeight.w700,
+            style: AppTextStyles.titleMd.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: AppSpacing.sm),

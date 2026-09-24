@@ -39,7 +39,7 @@ class BookInfoHeader extends StatelessWidget {
     final actionButtonStyle = ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(Size.fromHeight(44)),
       padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
+        EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
       ),
       textStyle: WidgetStatePropertyAll(
         Theme.of(context).textTheme.labelLarge
@@ -72,11 +72,11 @@ class BookInfoHeader extends StatelessWidget {
                 author: book.author,
                 width: 100,
                 height: 140,
-                borderRadius: AppRadius.cardMd,
+                borderRadius: AppRadius.cardXs,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

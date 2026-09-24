@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_card.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
@@ -142,39 +143,19 @@ class SettingsPage extends StatelessWidget {
   Widget _buildProfileCard(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
       ),
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? scheme.surface,
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: AppRadius.cardLg,
-        boxShadow: theme.cardTheme.shadowColor != null
-            ? [
-                BoxShadow(
-                  color: theme.cardTheme.shadowColor!,
-                  blurRadius: AppSpacing.sm,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : [],
-      ),
       child: Row(
         children: [
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               borderRadius: AppRadius.cardMd,
-              boxShadow: [
-                BoxShadow(
-                  color: scheme.shadow.withValues(alpha: 0.06),
-                  spreadRadius: 1,
-                ),
-              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: Image.asset('assets/ui/app_icon.webp', fit: BoxFit.cover),
@@ -186,10 +167,7 @@ class SettingsPage extends StatelessWidget {
               children: [
                 Text(
                   '夜讀',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    height: 1.3,
+                  style: AppTextStyles.titleMd.copyWith(
                     letterSpacing: 1.6,
                     color: scheme.onSurface,
                   ),
@@ -198,7 +176,6 @@ class SettingsPage extends StatelessWidget {
                 Text(
                   '閱讀，從這裡開始',
                   style: AppTextStyles.bodySm.copyWith(
-                    height: 1.4,
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
@@ -217,7 +194,6 @@ class SettingsPage extends StatelessWidget {
             child: Text(
               '本地',
               style: AppTextStyles.labelXs.copyWith(
-                height: 1.2,
                 fontWeight: FontWeight.w600,
                 color: scheme.primary,
                 letterSpacing: 0.2,
@@ -251,21 +227,9 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _buildPanel(BuildContext context, List<Widget> children) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Material(
-        color: theme.cardTheme.color ?? scheme.surface,
-        elevation: theme.cardTheme.elevation ?? 0,
-        shadowColor: theme.cardTheme.shadowColor,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.cardLg,
-          side: BorderSide(color: scheme.outlineVariant),
-        ),
-        child: Column(children: children),
-      ),
+      child: Column(children: children),
     );
   }
 

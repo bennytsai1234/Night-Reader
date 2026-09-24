@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'reader_v2_menu_palette.dart';
 
 class ReaderV2ChapterNavigationState {
@@ -103,9 +105,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
               Container(
                 padding: EdgeInsets.fromLTRB(
                   0,
-                  8,
+                  AppSpacing.sm,
                   0,
-                  MediaQuery.of(context).padding.bottom + 8,
+                  MediaQuery.of(context).padding.bottom + AppSpacing.sm,
                 ),
                 decoration: BoxDecoration(
                   color: menuStyle.background,
@@ -122,7 +124,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildChapterSlider(context, menuStyle),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     _buildMainActions(menuStyle),
                   ],
                 ),
@@ -214,7 +216,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: menuStyle.foreground,
                 ),
-                child: const Text('上一章', style: TextStyle(fontSize: 14)),
+                child: Text('上一章', style: AppTextStyles.uiSm.copyWith(color: menuStyle.foreground)),
               ),
               Expanded(
                 child: SliderTheme(
@@ -235,7 +237,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: menuStyle.foreground,
                 ),
-                child: const Text('下一章', style: TextStyle(fontSize: 14)),
+                child: Text('下一章', style: AppTextStyles.uiSm.copyWith(color: menuStyle.foreground)),
               ),
             ],
           ),
@@ -315,10 +317,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, color: menuStyle.foreground, size: 22),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 label,
-                style: TextStyle(color: menuStyle.foreground, fontSize: 11),
+                style: AppTextStyles.uiXs.copyWith(color: menuStyle.foreground),
               ),
             ],
           ),

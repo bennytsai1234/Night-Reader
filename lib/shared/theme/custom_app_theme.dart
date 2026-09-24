@@ -73,7 +73,15 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
     ),
     cardTheme: CardThemeData(
       elevation: brightness == Brightness.light ? 1 : 0,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.cardLg,
+        side: BorderSide(
+          color: colors.border.withValues(
+            alpha: brightness == Brightness.light ? 0.35 : 0.6,
+          ),
+          width: 0.5,
+        ),
+      ),
       color: colors.surface,
       shadowColor:
           brightness == Brightness.light ? const Color(0x0A241C10) : null,

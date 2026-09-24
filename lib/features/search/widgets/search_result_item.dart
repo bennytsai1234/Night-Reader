@@ -65,11 +65,11 @@ class _SearchResultItemState extends State<SearchResultItem> {
               margin: const EdgeInsets.only(left: AppSpacing.sm),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm,
-                vertical: 2,
+                vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer,
-                borderRadius: AppRadius.cardMd,
+                borderRadius: AppRadius.pillShape,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -85,6 +85,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                     style: AppTextStyles.labelXs.copyWith(
                       height: 1.2,
                       color: theme.colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -96,17 +97,18 @@ class _SearchResultItemState extends State<SearchResultItem> {
               margin: const EdgeInsets.only(left: AppSpacing.sm),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sm,
-                vertical: 2,
+                vertical: AppSpacing.xs,
               ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer,
-                borderRadius: AppRadius.cardMd,
+                borderRadius: AppRadius.pillShape,
               ),
               child: Text(
                 '$sourceCount 個書源',
                 style: AppTextStyles.labelXs.copyWith(
                   height: 1.2,
                   color: theme.colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),

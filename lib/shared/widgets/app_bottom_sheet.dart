@@ -49,7 +49,7 @@ class AppBottomSheet extends StatelessWidget {
                           color: Theme.of(
                             context,
                           ).dividerColor.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: AppRadius.pillShape,
                         ),
                       ),
                     ),
@@ -71,7 +71,7 @@ class AppBottomSheet extends StatelessWidget {
                             size: 20,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: AppSpacing.md),
                       ],
                       Expanded(
                         child: Semantics(
@@ -80,8 +80,8 @@ class AppBottomSheet extends StatelessWidget {
                             title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleSm.copyWith(
-                              fontWeight: FontWeight.w800,
+                            style: AppTextStyles.titleMd.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),

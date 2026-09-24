@@ -34,11 +34,11 @@ class ReplaceEditTestPanel extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.bug_report, size: 18, color: context.warning),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               const Text('規則調試', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           TextField(
             controller: testInputCtrl,
             decoration: const InputDecoration(
@@ -49,19 +49,19 @@ class ReplaceEditTestPanel extends StatelessWidget {
             maxLines: 3,
             style: AppTextStyles.bodyXs,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             '替換結果:',
             style: AppTextStyles.labelSm.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
               borderRadius: AppRadius.cardXs,
             ),
             child: Text(

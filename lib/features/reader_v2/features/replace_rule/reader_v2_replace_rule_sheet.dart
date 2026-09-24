@@ -8,6 +8,8 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
@@ -214,12 +216,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             await widget.onReload();
           },
         ),
-        const SizedBox(height: 8),
-        const Text(
+        const SizedBox(height: AppSpacing.sm),
+        Text(
           '即時測試',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          style: AppTextStyles.uiSm.copyWith(fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: _testController,
           minLines: 3,
@@ -229,14 +231,14 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             FilledButton(
               onPressed: _testing ? null : _runTest,
               child: Text(_testing ? '測試中…' : '執行測試'),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             TextButton(
               onPressed:
                   _updatingToggle
@@ -257,13 +259,13 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppRadius.cardMd,
           ),
           child: Text(_testResult.isEmpty ? '測試結果會顯示在這裡' : _testResult),
         ),

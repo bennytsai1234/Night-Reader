@@ -5,6 +5,8 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_acti
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_theme.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ReaderV2SettingsSheets {
@@ -145,11 +147,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
       title: '外觀與排版',
       icon: Icons.format_paint_outlined,
       children: [
-        const SheetSection(
+        SheetSection(
           title: '閱讀主題',
           trailing: Text(
             '正文背景與文字',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+            style: AppTextStyles.uiXs.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         ListenableBuilder(
@@ -160,11 +164,13 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
                 onSelected: settings.setTheme,
               ),
         ),
-        const SheetSection(
+        SheetSection(
           title: '選單樣式',
           trailing: Text(
             '選單與工具列配色',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+            style: AppTextStyles.uiXs.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         ListenableBuilder(
@@ -353,7 +359,7 @@ class _ReaderThemeSelector extends StatelessWidget {
                     color:
                         selected
                             ? Theme.of(context).colorScheme.primary
-                            : Colors.grey.withValues(alpha: 0.2),
+                            : Theme.of(context).colorScheme.outlineVariant,
                     width: selected ? 3 : 1,
                   ),
                 ),
@@ -449,14 +455,16 @@ class _ReaderAdvancedSheet extends StatelessWidget {
               ],
             ),
             const Divider(height: 32),
-            const SheetSection(
+            SheetSection(
               title: '點擊區域設定',
               trailing: Text(
                 '九宮格配置',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+                style: AppTextStyles.uiXs.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _ClickActionGrid(settings: settings),
           ],
         );
@@ -480,8 +488,8 @@ class _ClickActionGrid extends StatelessWidget {
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           childAspectRatio: 1.4,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
+          crossAxisSpacing: AppSpacing.sm,
+          mainAxisSpacing: AppSpacing.sm,
         ),
         itemCount: 9,
         itemBuilder: (context, index) {
@@ -502,9 +510,9 @@ class _ClickActionGrid extends StatelessWidget {
                   color:
                       isCenter
                           ? Theme.of(context).colorScheme.primary
-                          : Colors.grey.withValues(alpha: 0.1),
+                          : Theme.of(context).colorScheme.outlineVariant,
                 ),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppRadius.cardMd,
               ),
               child: Center(
                 child: Text(

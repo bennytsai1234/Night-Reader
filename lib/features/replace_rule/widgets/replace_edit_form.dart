@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class ReplaceEditForm extends StatelessWidget {
   final TextEditingController nameCtrl;
@@ -28,7 +29,7 @@ class ReplaceEditForm extends StatelessWidget {
           ),
           validator: (v) => v!.trim().isEmpty ? '名稱不能為空' : null,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         Row(
           children: [
             Expanded(
@@ -40,7 +41,7 @@ class ReplaceEditForm extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: TextFormField(
                 controller: timeoutCtrl,
@@ -53,7 +54,7 @@ class ReplaceEditForm extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         TextFormField(
           controller: patternCtrl,
           decoration: const InputDecoration(
@@ -63,7 +64,7 @@ class ReplaceEditForm extends StatelessWidget {
           maxLines: 3,
           validator: (v) => v!.trim().isEmpty ? '正則內容不能為空' : null,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         TextFormField(
           controller: replacementCtrl,
           decoration: const InputDecoration(

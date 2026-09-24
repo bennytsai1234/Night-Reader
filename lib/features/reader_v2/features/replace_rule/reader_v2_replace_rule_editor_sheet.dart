@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
@@ -164,10 +165,10 @@ class _ReaderV2ReplaceRuleEditorSheetState
                 patternCtrl: _patternCtrl,
                 replacementCtrl: _replacementCtrl,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 12),
+                childrenPadding: const EdgeInsets.only(bottom: AppSpacing.md),
                 title: const Text('進階範圍設定'),
                 children: [
                   TextFormField(
@@ -177,7 +178,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
                       border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _excludeScopeCtrl,
                     decoration: const InputDecoration(
@@ -201,7 +202,7 @@ class _ReaderV2ReplaceRuleEditorSheetState
                 onContentChanged:
                     (value) => setState(() => _scopeContent = value),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               ReplaceEditTestPanel(
                 testInputCtrl: _testInputCtrl,
                 testResult: _testResult,
