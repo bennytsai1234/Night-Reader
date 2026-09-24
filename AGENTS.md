@@ -23,23 +23,28 @@
 
 ## 發布流程
 
-- 發布由 `.github/workflows/android-release.yml` 處理。
-- 當推送符合 `v*` 格式的 tag 時工作流程會自動觸發，亦可透過 `workflow_dispatch` 手動啟動。
-- 標準發布流程：
+- 專案採用**版本號驅動自動發布（Version-Driven Release）**，由 `.github/workflows/android-release.yml` 全權處理。
+- 當向 `main` 分支推送包含新版本號（`pubspec.yaml` 中的 `version: X.Y.Z+build`）的 commit 時，GitHub Actions 會自動觸發正式發布流程：
+  1. 自動校驗版本號並推導標籤名稱（`vX.Y.Z`）。
+  2. 執行核心架構契約測試與靜態分析。
+  3. 編譯並簽章 Android `arm64-v8a` Release APK。
+  4. **由 GitHub Actions 在雲端自動建立 `vX.Y.Z` tag、推送到遠端，並發布 GitHub Release**。
+- **標準發布流程**：
 
 ```bash
-flutter pub get
+# 1. 更新 pubspec.yaml 中的版本號（例如 version: 0.2.155+172）
 flutter analyze
-# 僅執行與本次發布變更相關的契約／不變量測試
-git push origin HEAD
-git tag vX.Y.Z
-git push origin vX.Y.Z
+flutter test
+git add pubspec.yaml
+git commit -m "release: bump version to 0.2.155+172"
+git push origin main
 ```
 
-- 若需變更版本號等 metadata，在打 tag 前先更新 `pubspec.yaml` 並先行 commit。
-- 在建立或推送 release tag 前，務必先將 release commit 的分支推送到遠端。切勿對未發布的本機 commit 打 tag。
-- 推送 release tag 後，檢查一次 GitHub Actions 並確認 Android Release 工作流程已開始建置。
-- 一旦遠端工作流程已明確開始建置，即可結束任務，無需等待建置完成。
+- **注意事項**：
+  - **切勿在本機手動建立或推送 `v*` tag**；Tag 的唯一擁有者為雲端 GitHub Actions 流水線。
+  - 推送 release commit 到 `main` 後，檢查一次 GitHub Actions 並確認 Android Release 工作流程已開始執行。
+  - 一旦遠端工作流程已明確開始建置，即可結束任務，無需等待建置完成。
+  - 手動 `workflow_dispatch` 或 `internal-test/**` 分支永遠只會建置測試 APK artifact，不會發布 Release 或打 Tag。
 
 ## 文件
 

@@ -165,7 +165,7 @@ String? quickJsUnavailableReason() {
   }
 
   final reason =
-      'QuickJS runtime unavailable: set LIBQUICKJSC_TEST_PATH or use tool/flutter_test_with_quickjs.sh '
+      'QuickJS runtime unavailable: set LIBQUICKJSC_TEST_PATH '
       '(looked for ${platformInfo.libraryFileName})';
   _quickJsUnavailableReasonCache = reason;
   return reason;

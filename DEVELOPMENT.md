@@ -39,24 +39,6 @@ flutter test
 - **雲端建置與發布（GitHub Actions）**：所有軟體建置（Build）與 Release 發布一律由 GitHub Actions 雲端工作流程負責，本機不進行軟體建置與本機除錯執行。
 - **Android 實機與執行期驗證**：實機行為驗證為使用者的專屬任務。Agent 不得主動要求、提及或承擔實機驗證。
 
-## 書源驗證
-
-規則引擎、網路、Cookie、搜尋、目錄或正文解析變更，除單元測試外，應使用 `tool/` 的真實書源腳本重現對應流程：
-
-- `tool/source_single_debug_test.dart`：單一書源逐階段偵錯。
-- `tool/source_batch_validation_test.dart`：批次書源校驗。
-- `tool/live_source_validation_test.dart`：live 書源驗證。
-- `tool/explore_batch_validation_test.dart`：發現分類驗證。
-
-批次校驗包裝腳本需要 Bash，並會設定本機 QuickJS library 路徑：
-
-```bash
-tool/run_source_validation.sh 0 10
-tool/flutter_test_with_quickjs.sh tool/source_single_debug_test.dart
-```
-
-Windows 可在 WSL 或其他具備 Bash、Python 3 與 Flutter 的環境執行這些 `.sh` 腳本。校驗會存取真實網站，結果需要區分 App 規則錯誤、執行環境缺件與上游網站異常。
-
 ## Drift 生成與 schema
 
 修改 `lib/core/database/tables/`、DAO 定義或 Drift annotation 後執行：
@@ -103,9 +85,11 @@ flutter analyze
 
 ## 發布
 
-發布由 `.github/workflows/android-release.yml` 處理。完整順序、版號與 tag 約束以 [AGENTS.md](AGENTS.md) 的 `Release Publishing` 為準。
+發布採用版本號驅動自動發布（Version-Driven Release），由 `.github/workflows/android-release.yml` 處理。
 
-一般開發完成後不應自行建立 release tag。手動 `workflow_dispatch` 會建置測試 APK artifact，但不建立 GitHub Release。
+- **標準發布流程**：在 `pubspec.yaml` 更新版本號（如 `version: X.Y.Z+build`）並推送至 `main` 分支。GitHub Actions 會自動校驗、編譯簽名 APK、在遠端建立 `vX.Y.Z` tag 並發布 GitHub Release。
+- **本機切勿手動建立 tag**：tag 由 GitHub Actions 雲端自動建立與推送。
+- 手動 `workflow_dispatch` 僅建置測試 APK artifact，不建立 GitHub Release。完整規範見 [AGENTS.md](AGENTS.md)。
 
 ## 文件導覽
 
