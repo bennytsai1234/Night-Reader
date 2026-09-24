@@ -20,7 +20,6 @@ import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';

@@ -18,18 +18,7 @@ flutter pub get
 flutter analyze
 ```
 
-一般修改不再預設跑整套 `flutter test`。測試以「受影響責任的 contract / invariant」為單位；只有跨模組重構、廣泛相依性變更或需要完整回歸時，才跑全套。`flutter run` 用於本機 Android debug 與執行驗證；release APK 不在本機建置，由 GitHub Actions 處理。
-
-若只修改單一模組，可先執行相應測試縮短回饋時間，完成後再依改動風險決定是否跑全套。例如：
-
-```bash
-flutter test test/features/reader_v2
-flutter test test/features/source_manager
-```
-
-## Reader 驗證入口
-
-Reader 的自動 correctness suite 已收斂為少量架構 contract，不追 coverage，也不以 Widget 內部狀態作為 correctness owner。
+測試以「受影響責任的 contract / invariant」為單位，核心契約位於 `test/` 目錄。例如修改閱讀器排版與切源時，執行核心契約測試：
 
 ```bash
 flutter test \
@@ -39,73 +28,17 @@ flutter test \
   test/core/services/source_switch_service_test.dart
 ```
 
-其中 `reader_v2_state_machine_test.dart` 已包含 content identity / anchor migration 契約；`hybrid_pump_test.dart` 已合併 DocumentIndex fuzz、measurement 與 continuous paragraph layout 等核心幾何不變量。
-
-禁止為了讓測試可觀測而在 production 新增 `debug*`、`*ForTesting`、test-only getter、靜態 hook 或 UI state snapshot。若一個 invariant 只能靠穿透 Widget/private state 驗證，優先把 invariant 下沉到真正 owner 的 state machine / service / geometry contract，而不是替 UI 開測試洞。
-
-## Android 執行驗證
-
-一般裝置驗證先確認：
+全套契約測試可直接執行：
 
 ```bash
-flutter devices
-adb devices -l
+flutter test
 ```
 
-repo 的通用 Android integration runner 是 `tool/run_android_integration_test.ps1`，目前只保留 `正常 debug App smoke` 作為裝置 boot smoke。Reader 的 PR CI `.github/workflows/reader-v2.yml` 只負責 `flutter analyze` 與核心 Reader/source-switch contract tests；不啟動 Android emulator，也不維護自動 Reader journey。滑動、排版體感、動畫與裝置生命週期由人類依改動範圍在實體裝置或 AVD 做 smoke 驗證。
+## 驗證職責與邊界
 
-本機 debug 可用 `flutter run -d <device-id>` 重現 UI 行為；release APK 仍由 GitHub Actions 建置。不要在文件中綁定某一個 emulator serial、已移除的 workload script 或歷史 performance gate。
-
-### 實體 Android 裝置與 Wi-Fi ADB
-
-Android 11 以上的手機可以在「開發人員選項 → 無線偵錯」啟用 ADB。第一次連線通常需要以配對碼完成配對；之後以裝置顯示的 ADB 連線埠建立連線：
-
-```bash
-adb pair <phone-ip>:<pairing-port>
-adb connect <phone-ip>:<adb-port>
-adb devices -l
-flutter devices
-flutter run -d <device-id>
-```
-
-本專案的本機 debug build 使用 `com.inkpage.reader.debug`，正式版仍是 `com.inkpage.reader`。因此可以在同一支手機上保留正式版資料，再以 debug 版測試；debug 版資料目錄與正式版分開。若要以 APK 方式安裝：
-
-```bash
-flutter build apk --debug --build-number=<number>
-adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
-adb -s <device-id> shell am start -n com.inkpage.reader.debug/com.inkpage.reader.MainActivity
-```
-
-vivo 等 ROM 可能會先顯示「未知來源／風險」確認頁。按下「繼續安裝」後安裝器正常關閉是完成後的正常行為；以 ADB 是否回報 `Success`，以及下列 package 查詢是否顯示新 `versionCode` 作為安裝成功判定：
-
-```bash
-adb -s <device-id> shell dumpsys package com.inkpage.reader.debug
-```
-
-這台 vivo 已實測 `adb shell pm install -r` 也會被導向相同的 `PackageInterceptActivity`；Android／vivo 沒有可由一般 ADB shell 使用的通用「強制略過風險確認」旗標。`-r` 只代表保留資料更新、`-d` 只處理降版、`-g` 只處理執行期權限，均不能取消 OEM 確認。若要減少提示，只能在手機的開發者選項／安全設定中尋找廠商提供的 USB 安裝或 ADB 安裝驗證開關；這是裝置設定，不由 App 或 runner 強行修改。
-
-自動 Android `integration_test`、專用 fresh-engine 啟動路徑與 test plugin registrant 已移除。裝置 smoke 直接使用正常 debug App，不建立另一套測試 App lifecycle。
-
-建置、安裝與啟動：
-
-```bash
-flutter build apk --debug --build-number=<number>
-adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
-adb -s <device-id> shell am start -W -n com.inkpage.reader.debug/com.inkpage.reader.MainActivity
-```
-
-Reader smoke 至少覆蓋：開書、恢復上次位置、上下高速捲動、跳章、返回相鄰章、關閉再開恢復位置。UI、動畫、手勢與實機效能以正常產品路徑驗證，不再為自動 journey 修改 production 啟動架構。
-
-變更涉及 UI、閱讀器互動、滾動、動畫、App lifecycle、本機儲存、Android plugin 或執行效能時，除了 analyze／test，還要重現受影響流程。依問題留下相應證據：
-
-| 問題類型 | 驗證證據 |
-|---|---|
-| 版面、主題、Dialog、選單與 loading／empty／error 狀態 | 模擬器或裝置截圖，以及可重現的操作路徑 |
-| 例外、背景任務、lifecycle、native plugin、GC 或 ANR | `flutter logs -d <device-id>` 或 `adb logcat` 的相關片段 |
-| 捲動、翻頁、動畫與排版效能 | Flutter frame timing、DevTools Performance；需要 Android 系統層證據時使用 Perfetto |
-| 只改純邏輯或資料轉換 | 對應單元測試；沒有執行 UI 時不要宣稱畫面行為已驗證 |
-
-實機保留給 release 前驗收，以及模擬器無法代表的觸控、特定 Android／廠牌行為或效能問題。交付說明要分開列出已驗證、尚未驗證與根據證據的推論。
+- **靜態與合約測試層（Agent / CI 邊界）**：以 `flutter analyze` 與 `test/` 下的核心架構契約測試為唯一自動化驗證基準。禁止為了讓測試可觀測而在 production 新增 `debug*`、`*ForTesting`、test-only getter、靜態 hook 或 UI state snapshot。
+- **Android 實機與執行期驗證（使用者 / 人類開發者任務）**：涉及 UI 視覺狀態、閱讀器手勢、滾動流暢度、動畫、生命週期或實機效能之驗收，為使用者的專屬任務。Agent 不得主動要求、提及或承擔實機驗證。
+- **本機除錯**：本機可使用 `flutter run -d <device-id>` 進行 UI 除錯。本專案本機 debug build 使用 `com.inkpage.reader.debug`，正式發布版為 `com.inkpage.reader`。Release APK 建置與發布由 GitHub Actions 負責。
 
 ## 書源驗證
 

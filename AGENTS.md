@@ -17,9 +17,8 @@
 ## Runtime Validation
 
 - Use `flutter analyze` and relevant `flutter test` targets as the basic validation layer.
-- For Android UI, reader interaction, scrolling, animation, lifecycle, storage, native-plugin, or runtime-performance changes, also run the affected flow with `flutter run` on an Android emulator or device.
-- Match evidence to the problem: screenshots for visual state, ADB/logcat for runtime failures, and Flutter frame timing, DevTools Performance, or Perfetto for performance claims.
-- Report what was verified, what remains unverified, and what is an evidence-based inference as separate statements.
+- Android 實機與模擬器驗證（包含 UI、手勢互動、滾動、動畫、lifecycle、原生外掛或執行效能等實機行為）為使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，亦無需在回報中將實機驗證列為待辦或未驗證要求。
+- Report what was verified, what remains unverified, and what is an evidence-based inference as separate statements, scoped strictly to Agent-deliverable validation (static analysis and automated contract tests).
 - Local debug runs are part of development. Release APK builds and publishing remain the responsibility of `.github/workflows/android-release.yml`.
 
 ## Release Publishing

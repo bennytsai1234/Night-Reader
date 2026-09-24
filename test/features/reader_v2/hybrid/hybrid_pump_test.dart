@@ -1962,11 +1962,14 @@ ui.Paragraph _paragraph(String text) {
   return builder.build()..layout(const ui.ParagraphConstraints(width: 100));
 }
 
-StyleFingerprint _fingerprint({bool lastLineSpacingCompensation = false}) {
+StyleFingerprint _fingerprint({
+  double width = 320,
+  bool lastLineSpacingCompensation = false,
+}) {
   return StyleFingerprint(
-    viewportWidth: 320,
+    viewportWidth: width,
     viewportHeight: 640,
-    contentWidth: 288,
+    contentWidth: width - 32,
     contentHeight: 600,
     fontSize: 18,
     lineHeight: 1.5,
@@ -1983,6 +1986,32 @@ StyleFingerprint _fingerprint({bool lastLineSpacingCompensation = false}) {
     fontFamilySignature: 'system',
     platformFontSignature: 'test',
     lastLineSpacingCompensation: lastLineSpacingCompensation,
+  );
+}
+
+ChapterBlocks _chapterBlocks(int chapterIndex, int count) {
+  return ChapterBlocks(
+    chapterIndex: chapterIndex,
+    title: '',
+    displayText: 'x' * count,
+    contentHash: 'hash-$chapterIndex',
+    blocks: List<ChapterBlock>.generate(
+      count,
+      (index) => ChapterBlock(
+        key: BlockKey(chapterIndex: chapterIndex, blockIndex: index),
+        text: 'x',
+        charRange: HybridTextRange(index, index + 1),
+        sourceParagraphIndex: index,
+      ),
+    ),
+  );
+}
+
+BlockReady _ready(int chapterIndex, int blockIndex) {
+  return BlockReady(
+    key: BlockKey(chapterIndex: chapterIndex, blockIndex: blockIndex),
+    epoch: LayoutEpoch.initial,
+    metrics: const BlockMetrics(height: 100, lineCount: 1),
   );
 }
 
