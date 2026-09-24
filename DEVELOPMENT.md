@@ -1,6 +1,6 @@
 # 夜讀 Night Reader — 開發指南
 
-本文件說明目前可重現的本機工具鏈、驗證方式、生成流程與除錯入口。產品能力見 [README.md](README.md)，執行架構見 [docs/architecture.md](docs/architecture.md)。
+本文件說明目前可重現的本機工具鏈、驗證方式、生成流程與除錯入口。產品能力見 [README.md](README.md)。
 
 ## 工具鏈
 
@@ -112,4 +112,3 @@ flutter analyze
 
 - [README.md](README.md)：產品定位、功能與使用者快速開始。
 - [DESIGN.md](DESIGN.md)：色彩、字階、間距、主題與元件規則。
-- [docs/architecture.md](docs/architecture.md)：跨模組執行流程與狀態歸屬。

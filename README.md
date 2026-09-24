@@ -286,7 +286,6 @@ APK 透過 GitHub Actions 建置並發布至 GitHub Releases。
 
 - [DEVELOPMENT.md](DEVELOPMENT.md)：本機工具鏈、驗證與除錯入口
 - [DESIGN.md](DESIGN.md)：視覺、主題與互動系統
-- [docs/architecture.md](docs/architecture.md)：執行流程與狀態歸屬
 
 基本驗證：
 

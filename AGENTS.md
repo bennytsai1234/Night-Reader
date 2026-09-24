@@ -46,4 +46,3 @@ git push origin vX.Y.Z
 - 面向人類的使用者概觀：`README.md`。
 - 本機設定、驗證與除錯：`DEVELOPMENT.md`。
 - 視覺與互動設計系統：`DESIGN.md`。
-- 跨模組執行期與狀態歸屬：`docs/architecture.md`。
