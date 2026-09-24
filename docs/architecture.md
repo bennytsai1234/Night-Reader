@@ -91,5 +91,3 @@ Workmanager 的 `callbackDispatcher()` 在另一個 isolate 執行，會重新�
 ## 部署
 
 目前發布目標是 Android `arm64-v8a`。`.github/workflows/android-release.yml` 在 `v*` tag 時建置簽章 APK 並發布 GitHub Release；手動 `workflow_dispatch` 只建置測試 artifact。標準發布順序與檢查以根目錄 `AGENTS.md` 為準。
-
-模組責任與修改入口請從 [Codebase Atlas](night_reader_index.md) 進入。

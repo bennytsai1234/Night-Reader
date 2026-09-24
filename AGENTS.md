@@ -47,4 +47,3 @@ git push origin vX.Y.Z
 - Local setup, validation, and debugging: `DEVELOPMENT.md`.
 - Visual and interaction system: `DESIGN.md`.
 - Cross-module runtime and state ownership: `docs/architecture.md`.
-- Code navigation map: `docs/night_reader_index.md`.

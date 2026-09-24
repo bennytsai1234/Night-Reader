@@ -113,4 +113,3 @@ flutter analyze
 - [README.md](README.md)：產品定位、功能與使用者快速開始。
 - [DESIGN.md](DESIGN.md)：色彩、字階、間距、主題與元件規則。
 - [docs/architecture.md](docs/architecture.md)：跨模組執行流程與狀態歸屬。
-- [docs/night_reader_index.md](docs/night_reader_index.md)：Codebase Atlas 模組導航與修改入口。
