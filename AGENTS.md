@@ -17,9 +17,9 @@
 ## 執行期驗證
 
 - 以 `flutter analyze` 與相關的 `flutter test` 作為基礎驗證層。
+- 專案軟體建置與正式發布一律由 GitHub Actions（`.github/workflows/android-release.yml`）負責，本機不進行軟體建置與本機除錯執行。
 - Android 實機與模擬器驗證（包含 UI、手勢互動、滾動、動畫、生命週期、原生外掛或執行效能等實機行為）為使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，亦無需在回報中將實機驗證列為待辦或未驗證要求。
 - 將已驗證、尚未驗證與有證據支持的推論分開陳述，且範圍僅限於 Agent 可交付的驗證（靜態分析與自動化架構契約測試）。
-- 本機 debug 執行屬於開發流程。正式 Release APK 建置與發布由 `.github/workflows/android-release.yml` 負責。
 
 ## 發布流程
 
