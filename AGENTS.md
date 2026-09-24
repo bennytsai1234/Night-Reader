@@ -1,49 +1,49 @@
-# Project Rules
+# 專案規則
 
-## Project Overview
+## 專案概觀
 
-- This is the Flutter/Dart project `night_reader`.
-- The app display name is `夜讀`.
+- 本專案為 Flutter/Dart 專案 `night_reader`。
+- App 顯示名稱為 `夜讀`。
 
-## Language
+## 語言
 
-- Use Traditional Chinese for user-facing communication and project-rule discussion.
+- 面向使用者的溝通與專案規則討論一律使用繁體中文。
 
-## Maintenance Scope
+## 維護範圍
 
-- The project is in feature freeze. Prefer maintenance, bug fixes, compatibility work, performance tuning, refactoring, and improvements within existing capabilities.
-- Do not add a new product-line feature unless the user explicitly expands the scope.
+- 專案目前處於功能凍結（Feature Freeze）狀態。優先進行現有能力範圍內的維護、問題修復、相容性調整、效能調校、重構與改進。
+- 除非使用者明確擴大範圍，否則不得新增產品線功能。
 
-## Runtime Validation
+## 執行期驗證
 
-- Use `flutter analyze` and relevant `flutter test` targets as the basic validation layer.
-- Android 實機與模擬器驗證（包含 UI、手勢互動、滾動、動畫、lifecycle、原生外掛或執行效能等實機行為）為使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，亦無需在回報中將實機驗證列為待辦或未驗證要求。
-- Report what was verified, what remains unverified, and what is an evidence-based inference as separate statements, scoped strictly to Agent-deliverable validation (static analysis and automated contract tests).
-- Local debug runs are part of development. Release APK builds and publishing remain the responsibility of `.github/workflows/android-release.yml`.
+- 以 `flutter analyze` 與相關的 `flutter test` 作為基礎驗證層。
+- Android 實機與模擬器驗證（包含 UI、手勢互動、滾動、動畫、生命週期、原生外掛或執行效能等實機行為）為使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，亦無需在回報中將實機驗證列為待辦或未驗證要求。
+- 將已驗證、尚未驗證與有證據支持的推論分開陳述，且範圍僅限於 Agent 可交付的驗證（靜態分析與自動化架構契約測試）。
+- 本機 debug 執行屬於開發流程。正式 Release APK 建置與發布由 `.github/workflows/android-release.yml` 負責。
 
-## Release Publishing
+## 發布流程
 
-- Release publishing is handled by `.github/workflows/android-release.yml`.
-- The workflow runs when a tag matching `v*` is pushed, and can also be started with `workflow_dispatch`.
-- Standard release flow:
+- 發布由 `.github/workflows/android-release.yml` 處理。
+- 當推送符合 `v*` 格式的 tag 時工作流程會自動觸發，亦可透過 `workflow_dispatch` 手動啟動。
+- 標準發布流程：
 
 ```bash
 flutter pub get
 flutter analyze
-# Run only the contract/invariant tests relevant to the release changes.
+# 僅執行與本次發布變更相關的契約／不變量測試
 git push origin HEAD
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-- If version metadata changes are needed, update `pubspec.yaml` before tagging and commit that change first.
-- Always push the release commit branch before creating or pushing the release tag. Do not tag unpublished local commits.
-- After pushing the release tag, check GitHub Actions once and confirm the Android Release workflow has started building.
-- Once the remote workflow is visibly building, it is acceptable to close the task without waiting for the build to finish.
+- 若需變更版本號等 metadata，在打 tag 前先更新 `pubspec.yaml` 並先行 commit。
+- 在建立或推送 release tag 前，務必先將 release commit 的分支推送到遠端。切勿對未發布的本機 commit 打 tag。
+- 推送 release tag 後，檢查一次 GitHub Actions 並確認 Android Release 工作流程已開始建置。
+- 一旦遠端工作流程已明確開始建置，即可結束任務，無需等待建置完成。
 
-## Documentation
+## 文件
 
-- Human-facing project overview: `README.md`.
-- Local setup, validation, and debugging: `DEVELOPMENT.md`.
-- Visual and interaction system: `DESIGN.md`.
-- Cross-module runtime and state ownership: `docs/architecture.md`.
+- 面向人類的使用者概觀：`README.md`。
+- 本機設定、驗證與除錯：`DEVELOPMENT.md`。
+- 視覺與互動設計系統：`DESIGN.md`。
+- 跨模組執行期與狀態歸屬：`docs/architecture.md`。

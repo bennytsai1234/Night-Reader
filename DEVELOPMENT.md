@@ -18,7 +18,7 @@ flutter pub get
 flutter analyze
 ```
 
-測試以「受影響責任的 contract / invariant」為單位，核心契約位於 `test/` 目錄。例如修改閱讀器排版與切源時，執行核心契約測試：
+測試以「受影響責任的契約／不變量（contract / invariant）」為單位，核心契約位於 `test/` 目錄。例如修改閱讀器排版與換源時，執行核心契約測試：
 
 ```bash
 flutter test \
@@ -36,9 +36,9 @@ flutter test
 
 ## 驗證職責與邊界
 
-- **靜態與合約測試層（Agent / CI 邊界）**：以 `flutter analyze` 與 `test/` 下的核心架構契約測試為唯一自動化驗證基準。禁止為了讓測試可觀測而在 production 新增 `debug*`、`*ForTesting`、test-only getter、靜態 hook 或 UI state snapshot。
+- **靜態與契約測試層（Agent / CI 邊界）**：以 `flutter analyze` 與 `test/` 下的核心架構契約測試為唯一自動化驗證基準。禁止為了讓測試可觀測而在正式程式碼（production）新增 `debug*`、`*ForTesting`、測試專用 getter、靜態 hook 或 UI 狀態快照（state snapshot）。
 - **Android 實機與執行期驗證（使用者 / 人類開發者任務）**：涉及 UI 視覺狀態、閱讀器手勢、滾動流暢度、動畫、生命週期或實機效能之驗收，為使用者的專屬任務。Agent 不得主動要求、提及或承擔實機驗證。
-- **本機除錯**：本機可使用 `flutter run -d <device-id>` 進行 UI 除錯。本專案本機 debug build 使用 `com.inkpage.reader.debug`，正式發布版為 `com.inkpage.reader`。Release APK 建置與發布由 GitHub Actions 負責。
+- **本機除錯**：本機可使用 `flutter run -d <device-id>` 進行 UI 除錯。本專案本機除錯建置（debug build）使用 `com.inkpage.reader.debug`，正式發布版為 `com.inkpage.reader`。Release APK 建置與發布由 GitHub Actions 負責。
 
 ## 書源驗證
 
