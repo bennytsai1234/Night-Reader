@@ -36,6 +36,8 @@ class BookCoverWidget extends StatelessWidget {
             ? '《$bookName》封面'
             : '《$bookName》封面，作者 $trimmedAuthor';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Semantics(
       image: true,
       label: semanticLabel,
@@ -45,17 +47,69 @@ class BookCoverWidget extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             borderRadius: effectiveBorderRadius,
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x0A241C10),
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.45)
+                    : const Color(0x1A241C10),
+                blurRadius: 5,
+                offset: const Offset(1, 2),
+              ),
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.25)
+                    : const Color(0x0D000000),
                 blurRadius: 2,
-                offset: Offset(0, 1),
+                offset: const Offset(0, 1),
               ),
             ],
           ),
           child: ClipRRect(
             borderRadius: effectiveBorderRadius,
-            child: _buildCover(context),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildCover(context),
+                // Book Spine and tactile lighting overlay
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: effectiveBorderRadius,
+                        gradient: const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Color(0x33000000), // Left spine dark edge
+                            Color(0x14000000), // Spine crease
+                            Color(0x00000000), // Main book face
+                            Color(0x00000000), // Main book face
+                            Color(0x0F000000), // Right page edge shadow
+                          ],
+                          stops: [0.0, 0.05, 0.16, 0.94, 1.0],
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Subtle spine hinge highlight line (1px white glint near left edge)
+                Positioned(
+                  left: 3.0,
+                  top: 0,
+                  bottom: 0,
+                  width: 0.75,
+                  child: IgnorePointer(
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -152,7 +206,7 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  /// 實作文字封面 (對標 Android 預設文字封面)
+  /// 實作文字封面 (經典精裝紙本書冊標籤質感)
   Widget _buildTextCover() {
     final int colorIndex = bookName.hashCode.abs() % _coverColors.length;
     final Color color = _coverColors[colorIndex];
@@ -162,22 +216,46 @@ class BookCoverWidget extends StatelessWidget {
     return Container(
       color: color,
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              displayChar,
-              style: AppTextStyles.titleSm.copyWith(color: foregroundColor),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: foregroundColor.withValues(alpha: 0.38),
+              width: 0.75,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '無封面',
-              style: AppTextStyles.labelXs.copyWith(
-                color: foregroundColor,
-                fontWeight: FontWeight.w600,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                displayChar,
+                style: AppTextStyles.titleSm.copyWith(
+                  color: foregroundColor,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Container(
+                width: 14,
+                height: 1,
+                color: foregroundColor.withValues(alpha: 0.4),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                bookName,
+                style: AppTextStyles.labelXs.copyWith(
+                  color: foregroundColor.withValues(alpha: 0.9),
+                  fontSize: 8,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );

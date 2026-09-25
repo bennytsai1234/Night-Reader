@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
@@ -96,37 +97,47 @@ class ReaderV2BottomMenu extends StatelessWidget {
         ignoring: !controlsVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+          curve: Curves.easeOutCubic,
           offset: controlsVisible ? Offset.zero : const Offset(0, 1.15),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildFloatingButtons(menuStyle),
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  0,
-                  AppSpacing.sm,
-                  0,
-                  MediaQuery.of(context).padding.bottom + AppSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: menuStyle.background,
-                  border: Border(top: BorderSide(color: menuStyle.outline)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: menuStyle.scrim,
-                      blurRadius: 18,
-                      offset: const Offset(0, -6),
+              ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(
+                      0,
+                      AppSpacing.sm,
+                      0,
+                      MediaQuery.of(context).padding.bottom + AppSpacing.sm,
                     ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildChapterSlider(context, menuStyle),
-                    const SizedBox(height: AppSpacing.sm),
-                    _buildMainActions(menuStyle),
-                  ],
+                    decoration: BoxDecoration(
+                      color: menuStyle.background.withValues(alpha: 0.94),
+                      border: Border(
+                        top: BorderSide(
+                          color: menuStyle.outline.withValues(alpha: 0.4),
+                          width: 0.5,
+                        ),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: menuStyle.scrim.withValues(alpha: 0.16),
+                          blurRadius: 20,
+                          offset: const Offset(0, -6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildChapterSlider(context, menuStyle),
+                        const SizedBox(height: AppSpacing.sm),
+                        _buildMainActions(menuStyle),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],

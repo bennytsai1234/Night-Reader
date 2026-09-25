@@ -604,34 +604,30 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 aspectRatio: 0.72,
                 child: Hero(
                   tag: BookCoverWidget.heroTag(book.bookUrl),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: colors.border,
-                        width: isSelected ? 2 : 1,
-                      ),
-                      borderRadius: AppRadius.cardXs,
-                      boxShadow: theme.cardTheme.shadowColor != null
-                          ? [
-                              BoxShadow(
-                                color: theme.cardTheme.shadowColor!,
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
-                              ),
-                            ]
-                          : [],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: AppRadius.cardXs,
-                      child: BookCoverWidget(
-                        bookName: book.name,
-                        coverUrl: book.getDisplayCover(),
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                  ),
+                  child: isSelected
+                      ? Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: theme.colorScheme.primary,
+                              width: 2.5,
+                            ),
+                            borderRadius: AppRadius.cardXs,
+                          ),
+                          child: BookCoverWidget(
+                            bookName: book.name,
+                            coverUrl: book.getDisplayCover(),
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: AppRadius.cardXs,
+                          ),
+                        )
+                      : BookCoverWidget(
+                          bookName: book.name,
+                          coverUrl: book.getDisplayCover(),
+                          width: double.infinity,
+                          height: double.infinity,
+                          borderRadius: AppRadius.cardXs,
+                        ),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -647,9 +643,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
               ),
               const SizedBox(height: AppSpacing.xs),
               Container(
-                height: 2,
+                height: 3,
+                margin: const EdgeInsets.only(top: 2),
                 decoration: BoxDecoration(
-                  color: colors.border,
+                  color: colors.border.withValues(alpha: 0.28),
                   borderRadius: AppRadius.pillShape,
                 ),
                 child: Align(
@@ -761,9 +758,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Container(
-                    height: 2,
+                    height: 3,
+                    margin: const EdgeInsets.only(top: 2),
                     decoration: BoxDecoration(
-                      color: colors.border,
+                      color: colors.border.withValues(alpha: 0.28),
                       borderRadius: AppRadius.pillShape,
                     ),
                     child: Align(

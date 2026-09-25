@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'reader_v2_menu_palette.dart';
 
@@ -42,27 +43,37 @@ class ReaderV2TopMenu extends StatelessWidget {
         ignoring: !controlsVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+          curve: Curves.easeOutCubic,
           offset: controlsVisible ? Offset.zero : const Offset(0, -1.15),
-          child: Container(
-            decoration: BoxDecoration(
-              color: menuStyle.background,
-              border: Border(bottom: BorderSide(color: menuStyle.outline)),
-              boxShadow: [
-                BoxShadow(
-                  color: menuStyle.scrim,
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: menuStyle.background.withValues(alpha: 0.94),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: menuStyle.outline.withValues(alpha: 0.4),
+                      width: 0.5,
+                    ),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: menuStyle.scrim.withValues(alpha: 0.16),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildAppBar(menuStyle),
-                if (showReadTitleAddition) _buildAdditionInfo(menuStyle),
-              ],
+                padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildAppBar(menuStyle),
+                    if (showReadTitleAddition) _buildAdditionInfo(menuStyle),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
