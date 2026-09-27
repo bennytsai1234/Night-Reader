@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/settings_section_title.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
@@ -36,7 +37,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
           children: [
-            _sectionTitle('Cookie / WebView'),
+            const SettingsSectionTitle('Cookie / WebView'),
             ListTile(
               leading: const Icon(Icons.cookie_outlined),
               title: const Text('清除全部 Cookie'),
@@ -88,10 +89,10 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                   ),
             ),
             const Divider(),
-            _sectionTitle('權限狀態'),
+            const SettingsSectionTitle('權限狀態'),
             _buildPermissionSection(),
             const Divider(),
-            _sectionTitle('說明'),
+            const SettingsSectionTitle('說明'),
             ListTile(
               leading: const Icon(Icons.privacy_tip_outlined),
               title: const Text('隱私說明'),
@@ -121,25 +122,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                   ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.xl,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Text(
-        title,
-        style: AppTextStyles.bodySm.copyWith(
-          height: 1.3,
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

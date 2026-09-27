@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'reader_v2_menu_palette.dart';
 
 class ReaderV2TopMenu extends StatelessWidget {
@@ -91,10 +92,10 @@ class ReaderV2TopMenu extends StatelessWidget {
         Expanded(
           child: Text(
             bookName,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ).copyWith(color: menuStyle.foreground),
+            style: AppTextStyles.titleSm.copyWith(
+              fontWeight: FontWeight.w600,
+              color: menuStyle.foreground,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -117,9 +118,8 @@ class ReaderV2TopMenu extends StatelessWidget {
               children: [
                 Text(
                   chapterTitle,
-                  style: TextStyle(
+                  style: AppTextStyles.labelSm.copyWith(
                     color: menuStyle.mutedForeground,
-                    fontSize: 12,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -127,9 +127,8 @@ class ReaderV2TopMenu extends StatelessWidget {
                 if (chapterUrl.isNotEmpty)
                   Text(
                     chapterUrl,
-                    style: TextStyle(
+                    style: AppTextStyles.micro.copyWith(
                       color: menuStyle.mutedForeground,
-                      fontSize: 10,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -147,10 +146,9 @@ class ReaderV2TopMenu extends StatelessWidget {
             ),
             child: Text(
               originName,
-              style: TextStyle(
+              style: AppTextStyles.micro.copyWith(
                 color: menuStyle.foreground,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),

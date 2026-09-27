@@ -34,6 +34,8 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 `AppTextStyles` 為全域 App 介面的字階規範：
 - **標題階層**：`titleMd`（17）至 `titleXl`（24），一律採用 `FontWeight.w600`，避免過粗的 bold 破壞版面典雅感。App bar 標題固定 18、`FontWeight.w600`。
 - **UI 資訊與標籤**：`uiXs`（11）、`uiSm`（13）、`uiMd`（15），字距維持微量緊湊，字重以 `FontWeight.w500` 提供清晰指示。
+- **極小輔助文字**：`micro`（10）僅用於徽章、書源標記與網址等輔助資訊。元件內不寫死 `fontSize`，一律取用 `AppTextStyles`。
+- **設定頁區塊標題**：統一使用 `SettingsSectionTitle`（`lib/shared/widgets/settings_section_title.dart`）；底部面板內使用 `SheetSection`。
 - **正文閱讀排版**：獨立於 App UI，由 `ReadingTheme` 與 Reader V2 共同驅動。
   - 行高標準推薦 `1.6 ~ 1.7`，行寬建議容納 `38 ~ 44` 字。
   - 段距設為 `0.8 ~ 1.2` 行高，中文字符預設空兩格（`\u3000\u3000`），保留經典出版物的視覺節奏。
@@ -53,10 +55,17 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 2. **閱讀器選單（Bottom & Top Menu）**：
    - 採半透明柔和磨砂質感（96% 表面色搭配微漫射擴散陰影），杜絕突兀的黑底大板塊。
    - 動態過渡採用 `Curves.easeOutCubic`（200ms），滑入平順流暢，無卡頓感。
+   - 閱讀器內的設定面板（外觀與排版、進階設定、朗讀）一律經由 `ReaderV2MenuSheet` 開啟，配色跟隨選單主題（`ReaderV2MenuStyle.toSheetTheme`），不使用 App 主題。
+   - 「外觀與排版」面板最高 60% 螢幕、不加暗色遮罩，常用項（主題、字號、行高）在第一層，其餘收在「更多排版」，調整時正文保持可見。
+   - 閱讀器面板與「閱讀偏好」設定頁共用 `reader_v2_settings_sections.dart` 的區塊，新增閱讀設定時只在該處實作一次。
 3. **書籍卡片與清單**：
    - 書名保持最多 2 行，次要狀態（進度、章節更新）採用靜態次要墨色。
    - 點擊回饋使用極淡水波紋（Ripple Alpha <= 0.08），避免深色大範圍跳閃。
-4. **狀態視圖（Empty / Error State）**：
+4. **數值設定**：
+   - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。
+   - 每個設定宣告明確的 `min`／`max`／`step`，輸出值對齊步進格點，不產生拖動條式的任意小數。
+   - 拖動條只保留給「位置型」操作（章節進度）與連續色彩調整（顏色選擇器 RGB/HSV），不用於需要精確數值的設定。
+5. **狀態視圖（Empty / Error State）**：
    - 採用柔和描邊圖示（Outline Icons）搭配暖灰文案，傳遞平靜、沉穩的空狀態氛圍。
 
 ## 變更檢查

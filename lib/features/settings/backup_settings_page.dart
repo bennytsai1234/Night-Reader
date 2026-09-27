@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/settings_section_title.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
@@ -29,7 +30,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
           children: [
-            _buildSectionTitle('本地備份與還原'),
+            const SettingsSectionTitle('本地備份與還原'),
             ListTile(
               title: const Text('建立備份'),
               subtitle: Text(
@@ -54,25 +55,6 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
                 child: Center(child: CircularProgressIndicator()),
               ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.xl,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Text(
-        title,
-        style: AppTextStyles.bodySm.copyWith(
-          height: 1.3,
-          fontWeight: FontWeight.w700,
-          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );

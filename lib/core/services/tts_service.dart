@@ -68,6 +68,48 @@ class TTSService extends ChangeNotifier {
 
   TTSService._internal();
 
+  /// 朗讀參數的合法範圍；閱讀器朗讀面板與「朗讀與語音」設定頁共用。
+  static const double minRate = 0.5;
+  static const double maxRate = 1.5;
+  static const double minPitch = 0.5;
+  static const double maxPitch = 1.5;
+  static const double minVolume = 0.0;
+  static const double maxVolume = 1.0;
+
+  static double _clampParam(
+    double value,
+    double min,
+    double max,
+    double fallback,
+  ) {
+    if (!value.isFinite) return fallback;
+    return value.clamp(min, max).toDouble();
+  }
+
+  /// 從偏好設定還原朗讀參數。
+  ///
+  /// 語速與音調以閱讀器朗讀面板的鍵為準；舊版設定頁鍵
+  /// （`ttsSpeechRate`／`speech_pitch`）只在新鍵不存在時作為遷移來源。
+  Future<void> _loadSavedSpeechParams() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rate =
+          prefs.getDouble(PreferKey.readerTtsRate) ??
+          prefs.getDouble(PreferKey.ttsSpeechRate);
+      final pitch =
+          prefs.getDouble(PreferKey.readerTtsPitch) ??
+          prefs.getDouble(PreferKey.speechPitch);
+      final volume = prefs.getDouble(PreferKey.speechVolume);
+      if (rate != null) _rate = _clampParam(rate, minRate, maxRate, 1.0);
+      if (pitch != null) _pitch = _clampParam(pitch, minPitch, maxPitch, 1.0);
+      if (volume != null) {
+        _volume = _clampParam(volume, minVolume, maxVolume, 1.0);
+      }
+    } catch (e) {
+      AppLog.e('TTSService: load speech params failed: $e', error: e);
+    }
+  }
+
   /// 啟動後初始化 TTS；不得讓可選的 TTS 能力阻塞 App 首畫面。
   Future<void> init() {
     if (_isInitialized) return Future<void>.value();
@@ -80,6 +122,8 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
+    await _loadSavedSpeechParams();
+    notifyListeners();
     try {
       await _ensureAudioHandler();
       await _initTts();
@@ -337,28 +381,38 @@ class TTSService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 先完成 init()（含從偏好設定還原參數），再寫入新值，
+  // 避免初始化晚於使用者調整而把新值覆蓋回舊值。
   Future<void> setPitch(double pitch) async {
-    _pitch = pitch;
     await init();
-    if (!_isInitialized) return;
-    await _flutterTts.setPitch(pitch);
+    _pitch = _clampParam(pitch, minPitch, maxPitch, _pitch);
     notifyListeners();
+    await _saveDouble(PreferKey.readerTtsPitch, _pitch);
+    if (!_isInitialized) return;
+    await _flutterTts.setPitch(_pitch);
   }
 
   Future<void> setRate(double rate) async {
-    _rate = rate;
     await init();
-    if (!_isInitialized) return;
-    await _flutterTts.setSpeechRate(rate);
+    _rate = _clampParam(rate, minRate, maxRate, _rate);
     notifyListeners();
+    await _saveDouble(PreferKey.readerTtsRate, _rate);
+    if (!_isInitialized) return;
+    await _flutterTts.setSpeechRate(_rate);
   }
 
   Future<void> setVolume(double volume) async {
-    _volume = volume;
     await init();
-    if (!_isInitialized) return;
-    await _flutterTts.setVolume(volume);
+    _volume = _clampParam(volume, minVolume, maxVolume, _volume);
     notifyListeners();
+    await _saveDouble(PreferKey.speechVolume, _volume);
+    if (!_isInitialized) return;
+    await _flutterTts.setVolume(_volume);
+  }
+
+  Future<void> _saveDouble(String key, double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(key, value);
   }
 
   Future<void> setEngine(String? engine) async {

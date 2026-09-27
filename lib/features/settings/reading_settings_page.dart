@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
-import 'package:night_reader/features/reader_v2/features/settings/reader_v2_setting_components.dart';
 
-import 'click_action_config_page.dart';
-
+/// 閱讀偏好：與閱讀器內「外觀與排版」「進階設定」面板使用同一組區塊與
+/// 同一個 controller 型別，兩處設定的讀寫路徑一致。
 class ReadingSettingsPage extends StatefulWidget {
   const ReadingSettingsPage({super.key});
 
@@ -14,32 +13,31 @@ class ReadingSettingsPage extends StatefulWidget {
 }
 
 class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
-  final ReaderV2PrefsRepository _prefsRepository =
-      const ReaderV2PrefsRepository();
-  ReaderV2PrefsSnapshot? _prefs;
+  final ReaderV2SettingsController _settings = ReaderV2SettingsController();
   Object? _loadError;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
+    _load();
   }
 
-  Future<void> _loadPrefs() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _loadError = null;
-      });
-    }
+  @override
+  void dispose() {
+    _settings.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
-      final snapshot = await _prefsRepository.load();
+      await _settings.loadSettings();
       if (!mounted) return;
-      setState(() {
-        _prefs = snapshot;
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -49,121 +47,28 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
     }
   }
 
-  void _updatePrefs(ReaderV2PrefsSnapshot next) {
-    setState(() {
-      _prefs = next;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final prefs = _prefs;
     return Scaffold(
       appBar: AppBar(title: const Text('閱讀偏好')),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null || prefs == null
-              ? _buildLoadError(context)
-              : ListTileTheme(
-                data: const ListTileThemeData(
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                ),
-                child: ListView(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-                  children: [
-                    _buildSectionTitle('操作'),
-                    ListTile(
-                      title: const Text('點擊區域設定'),
-                      subtitle: Text(
-                        '自訂閱讀畫面各區域的點擊行為',
-                        style: AppTextStyles.bodySm.copyWith(height: 1.4),
-                      ),
-                      leading: const Icon(Icons.touch_app),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ClickActionConfigPage(),
-                          ),
-                        );
-                        _loadPrefs();
-                      },
-                    ),
-                    const Divider(),
-                    _buildSectionTitle('自動翻頁'),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                      ),
-                      child: ReaderV2SettingComponents.buildSliderRow(
-                        label: '速度',
-                        value: prefs.autoPageSpeed,
-                        min: ReaderV2PrefsRepository.minAutoPageSpeed,
-                        max: ReaderV2PrefsRepository.maxAutoPageSpeed,
-                        divisions: 43,
-                        valueFormatter: (value) => '${(value * 100).round()}%',
-                        onChanged: (value) {
-                          _updatePrefs(
-                            prefs.copyWith(autoPageSpeed: value),
-                          );
-                          _prefsRepository.saveAutoPageSpeed(value);
-                        },
-                      ),
-                    ),
-                    const Divider(),
-                    _buildSectionTitle('內容'),
-                    ListTile(
-                      title: const Text('繁簡轉換'),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.xs),
-                        child: Wrap(
-                          spacing: AppSpacing.sm,
-                          runSpacing: AppSpacing.sm,
-                          children: [
-                            ReaderV2SettingComponents.buildChoiceChip(
-                              label: '不轉換',
-                              value: 0,
-                              groupValue: prefs.chineseConvert,
-                              onSelected: (value) {
-                                _updatePrefs(
-                                  prefs.copyWith(chineseConvert: value),
-                                );
-                                _prefsRepository.saveChineseConvert(value);
-                              },
-                            ),
-                            ReaderV2SettingComponents.buildChoiceChip(
-                              label: '簡轉繁',
-                              value: 1,
-                              groupValue: prefs.chineseConvert,
-                              onSelected: (value) {
-                                _updatePrefs(
-                                  prefs.copyWith(chineseConvert: value),
-                                );
-                                _prefsRepository.saveChineseConvert(value);
-                              },
-                            ),
-                            ReaderV2SettingComponents.buildChoiceChip(
-                              label: '繁轉簡',
-                              value: 2,
-                              groupValue: prefs.chineseConvert,
-                              onSelected: (value) {
-                                _updatePrefs(
-                                  prefs.copyWith(chineseConvert: value),
-                                );
-                                _prefsRepository.saveChineseConvert(value);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? _buildLoadError(context)
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                0,
+                AppSpacing.xl,
+                AppSpacing.xxl,
               ),
+              children: [
+                ReaderV2TypographySection(settings: _settings),
+                ReaderV2AutoPageSection(settings: _settings),
+                ReaderV2ChineseConvertSection(settings: _settings),
+                ReaderV2ClickActionSection(settings: _settings),
+              ],
+            ),
     );
   }
 
@@ -183,30 +88,11 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
             const Text('閱讀偏好載入失敗'),
             const SizedBox(height: AppSpacing.md),
             FilledButton.icon(
-              onPressed: _loadPrefs,
+              onPressed: _load,
               icon: const Icon(Icons.refresh),
               label: const Text('重試'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.xl,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Text(
-        title,
-        style: AppTextStyles.bodySm.copyWith(
-          height: 1.3,
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

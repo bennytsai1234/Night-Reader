@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/widgets/settings_section_title.dart';
 
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -23,7 +24,10 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: [
           _buildProfileCard(context),
-          _buildSectionTitle(context, '閱讀'),
+          const SettingsSectionTitle(
+            '閱讀',
+            horizontalPadding: AppSpacing.xl,
+          ),
           _buildPanel(context, [
             _buildListTile(
               context,
@@ -39,7 +43,7 @@ class SettingsPage extends StatelessWidget {
               context,
               icon: Icons.tune_outlined,
               title: '閱讀偏好',
-              summary: '操作、自動翻頁與內容轉換',
+              summary: '排版、自動翻頁、繁簡轉換與點擊區域',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ReadingSettingsPage()),
@@ -47,7 +51,10 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-          _buildSectionTitle(context, '書源'),
+          const SettingsSectionTitle(
+            '書源',
+            horizontalPadding: AppSpacing.xl,
+          ),
           _buildPanel(context, [
             _buildListTile(
               context,
@@ -60,7 +67,10 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-          _buildSectionTitle(context, '個人化'),
+          const SettingsSectionTitle(
+            '個人化',
+            horizontalPadding: AppSpacing.xl,
+          ),
           _buildPanel(context, [
             _buildListTile(
               context,
@@ -94,7 +104,10 @@ class SettingsPage extends StatelessWidget {
               isLast: true,
             ),
           ]),
-          _buildSectionTitle(context, '工具與其他'),
+          const SettingsSectionTitle(
+            '工具與其他',
+            horizontalPadding: AppSpacing.xl,
+          ),
           _buildPanel(context, [
             _buildListTile(
               context,
@@ -201,27 +214,6 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(BuildContext context, String title) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.sm,
-      ),
-      child: Text(
-        title,
-        style: AppTextStyles.labelXs.copyWith(
-          height: 1.2,
-          letterSpacing: 1.8,
-          color: scheme.primary,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }

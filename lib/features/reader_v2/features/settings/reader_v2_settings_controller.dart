@@ -15,6 +15,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   static const double minReadableLineHeight = ReaderV2Style.minReadableLineHeight;
+  static const double maxReadableLineHeight = ReaderV2Style.maxReadableLineHeight;
   static const double minAutoPageSpeed = ReaderV2PrefsRepository.minAutoPageSpeed;
   static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
 
@@ -175,6 +176,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  /// 將字號、行高、字距、段距與首行縮排恢復為預設值。
+  void resetTypography() {
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    setTypography(
+      fontSize: defaults.fontSize,
+      lineHeight: defaults.lineHeight,
+      paragraphSpacing: defaults.paragraphSpacing,
+      letterSpacing: defaults.letterSpacing,
+    );
+    if (textIndent != defaults.textIndent) setTextIndent(defaults.textIndent);
+  }
+
   void setTextIndent(int value) {
     textIndent = value;
     unawaited(_prefsRepository.saveTextIndent(value));
@@ -227,6 +240,12 @@ class ReaderV2SettingsController extends ChangeNotifier {
   void setClickAction(int zone, int action) {
     if (zone < 0 || zone >= clickActions.length) return;
     clickActions[zone] = action;
+    unawaited(_prefsRepository.saveClickActions(clickActions));
+    notifyListeners();
+  }
+
+  void resetClickActions() {
+    clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
     unawaited(_prefsRepository.saveClickActions(clickActions));
     notifyListeners();
   }

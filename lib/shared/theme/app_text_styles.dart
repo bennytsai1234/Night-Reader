@@ -65,6 +65,9 @@ class AppTextStyles {
   // Legacy mappings for incremental migration
   static const TextStyle labelXs = TextStyle(fontSize: 11, height: 1.2);
   static const TextStyle labelSm = TextStyle(fontSize: 12, height: 1.2);
+
+  /// 徽章、標籤等極小輔助文字（書源標記、網址）。
+  static const TextStyle micro = TextStyle(fontSize: 10, height: 1.2);
   static const TextStyle titleSm = TextStyle(
     fontSize: 18,
     height: 1.3,

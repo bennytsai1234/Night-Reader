@@ -161,11 +161,7 @@ class ReaderV2TtsController extends ChangeNotifier
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedRate = prefs.getDouble(PreferKey.readerTtsRate);
-    final savedPitch = prefs.getDouble(PreferKey.readerTtsPitch);
     final savedLanguage = prefs.getString(PreferKey.readerTtsLanguage);
-    if (savedRate != null) await _tts.setRate(savedRate);
-    if (savedPitch != null) await _tts.setPitch(savedPitch);
     if (savedLanguage != null && savedLanguage.isNotEmpty) {
       await _tts.setLanguage(savedLanguage);
     }
@@ -228,17 +224,14 @@ class ReaderV2TtsController extends ChangeNotifier
 
   @override
   Future<void> setRate(double value) async {
+    // 語速的保存與範圍由 TTSService 負責。
     await _tts.setRate(value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(PreferKey.readerTtsRate, value);
     notifyListeners();
   }
 
   @override
   Future<void> setPitch(double value) async {
     await _tts.setPitch(value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(PreferKey.readerTtsPitch, value);
     notifyListeners();
   }
 

@@ -54,4 +54,55 @@ class ReaderV2MenuStyle {
       scrim: Colors.black.withValues(alpha: 0.18),
     );
   }
+
+  /// 閱讀器內設定面板（排版、進階、朗讀）使用的主題：
+  /// 以選單配色覆寫 App 主題，讓面板與上下選單屬於同一個視覺區域。
+  ThemeData toSheetTheme(ThemeData base) {
+    final surface = background.withValues(alpha: 1);
+    final dark = surface.computeLuminance() < 0.5;
+    final elevated = Color.alphaBlend(backgroundElevated, surface);
+    final accentContainer = Color.alphaBlend(accentMuted, surface);
+    final onAccent =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+            ? Colors.white
+            : Colors.black;
+    final strongOutline = Color.alphaBlend(
+      foreground.withValues(alpha: 0.32),
+      surface,
+    );
+    final colorScheme = base.colorScheme.copyWith(
+      brightness: dark ? Brightness.dark : Brightness.light,
+      primary: accent,
+      onPrimary: onAccent,
+      primaryContainer: accentContainer,
+      onPrimaryContainer: foreground,
+      secondaryContainer: accentContainer,
+      onSecondaryContainer: foreground,
+      surface: surface,
+      onSurface: foreground,
+      onSurfaceVariant: mutedForeground,
+      surfaceContainerLowest: surface,
+      surfaceContainerLow: surface,
+      surfaceContainer: elevated,
+      surfaceContainerHigh: elevated,
+      surfaceContainerHighest: elevated,
+      outline: strongOutline,
+      outlineVariant: outline,
+    );
+    return base.copyWith(
+      colorScheme: colorScheme,
+      canvasColor: surface,
+      dividerColor: outline,
+      iconTheme: base.iconTheme.copyWith(color: foreground),
+      textTheme: base.textTheme.apply(
+        bodyColor: foreground,
+        displayColor: foreground,
+      ),
+      bottomSheetTheme: base.bottomSheetTheme.copyWith(
+        backgroundColor: surface,
+        modalBackgroundColor: surface,
+      ),
+      dialogTheme: base.dialogTheme.copyWith(backgroundColor: elevated),
+    );
+  }
 }

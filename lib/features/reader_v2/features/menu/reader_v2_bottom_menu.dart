@@ -214,9 +214,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 '本章 ${(navigation.scrubPercent / 10).round()}/10',
-                style: TextStyle(
+                style: AppTextStyles.labelXs.copyWith(
                   color: menuStyle.mutedForeground,
-                  fontSize: 11,
                 ),
               ),
             ),

@@ -83,9 +83,6 @@ class SettingsProvider extends SettingsProviderBase {
   bool mediaButtonPerNext = false;
   bool readAloudByPage = false;
   bool streamReadAloudAudio = false;
-  double speechRate = 1.0;
-  double speechPitch = 1.0;
-  double speechVolume = 1.0;
   String ttsSourceKey = _systemTtsSourceKey;
 
   // 其他
@@ -212,18 +209,11 @@ class SettingsProvider extends SettingsProviderBase {
         prefs.getBool(PreferKey.streamReadAloudAudio) ?? false;
     readAloudByMediaButton =
         prefs.getBool(PreferKey.readAloudByMediaButton) ?? false;
-    speechRate = prefs.getDouble(PreferKey.ttsSpeechRate) ?? 1.0;
-    speechPitch = prefs.getDouble(PreferKey.speechPitch) ?? 1.0;
-    speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
     ttsSourceKey = _systemTtsSourceKey;
 
-    unawaited(_applyTtsSettingSafely(TTSService().setRate(speechRate), 'rate'));
-    unawaited(
-      _applyTtsSettingSafely(TTSService().setPitch(speechPitch), 'pitch'),
-    );
-    unawaited(
-      _applyTtsSettingSafely(TTSService().setVolume(speechVolume), 'volume'),
-    );
+    // 朗讀參數（語速／音調／音量）由 TTSService 自行保存與還原；
+    // 這裡只在啟動後觸發初始化，不阻塞首畫面。
+    unawaited(_applyTtsSettingSafely(TTSService().init(), 'init'));
   }
 
   /// 僅用於清理舊版非 system TTS 書源設定（migration），在建構後非同步執行，不影響 UI 渲染。
@@ -233,27 +223,5 @@ class SettingsProvider extends SettingsProviderBase {
     if (savedTtsSource != null && savedTtsSource != _systemTtsSourceKey) {
       await prefs.setString(PreferKey.ttsSource, _systemTtsSourceKey);
     }
-  }
-
-  // --- 朗讀速率 ---
-  void setSpeechRate(double v) {
-    speechRate = v;
-    unawaited(_applyTtsSettingSafely(TTSService().setRate(v), 'rate'));
-    save(PreferKey.ttsSpeechRate, v);
-    update();
-  }
-
-  void setSpeechPitch(double v) {
-    speechPitch = v;
-    unawaited(_applyTtsSettingSafely(TTSService().setPitch(v), 'pitch'));
-    save(PreferKey.speechPitch, v);
-    update();
-  }
-
-  void setSpeechVolume(double v) {
-    speechVolume = v;
-    unawaited(_applyTtsSettingSafely(TTSService().setVolume(v), 'volume'));
-    save(PreferKey.speechVolume, v);
-    update();
   }
 }

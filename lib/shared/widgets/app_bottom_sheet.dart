@@ -9,6 +9,9 @@ class AppBottomSheet extends StatelessWidget {
   final Widget? trailing;
   final bool showDragHandle;
 
+  /// 底欄最大高度佔螢幕高度的比例；需要同時看到正文的面板使用較小值。
+  final double maxHeightFactor;
+
   const AppBottomSheet({
     super.key,
     required this.title,
@@ -16,11 +19,12 @@ class AppBottomSheet extends StatelessWidget {
     required this.children,
     this.trailing,
     this.showDragHandle = true,
+    this.maxHeightFactor = 0.9,
   });
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.9;
+    final maxHeight = MediaQuery.sizeOf(context).height * maxHeightFactor;
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -148,12 +152,14 @@ class AppBottomSheet extends StatelessWidget {
     bool useSafeArea = false,
     bool? showDragHandle,
     Color? backgroundColor,
+    Color? barrierColor,
     ShapeBorder? shape,
     Clip? clipBehavior,
   }) {
     return showModalBottomSheet<T>(
       context: context,
       builder: builder,
+      barrierColor: barrierColor,
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
       showDragHandle: showDragHandle,

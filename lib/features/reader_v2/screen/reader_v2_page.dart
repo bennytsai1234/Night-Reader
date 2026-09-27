@@ -18,6 +18,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host
 import 'package:night_reader/features/reader_v2/use_cases/reader_v2_page_coordinator.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
@@ -399,7 +400,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void _showTts() {
     final tts = _host.tts;
     if (tts == null) return;
-    ReaderV2TtsSheet.show(context, tts: tts);
+    ReaderV2MenuSheet.show<void>(
+      context,
+      settings: _host.settings,
+      builder: (_) => ReaderV2TtsPanel(tts: tts),
+    );
   }
 
   Future<void> _showChangeSource() async {

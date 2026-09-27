@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -241,7 +242,7 @@ class _Preview extends StatelessWidget {
                           Text('主題即時預覽', style: TextStyle(color: c.textPrimary)),
                           Text(
                             '主要畫面、卡片與導覽',
-                            style: TextStyle(color: c.textSecondary, fontSize: 12),
+                            style: AppTextStyles.labelSm.copyWith(color: c.textSecondary),
                           ),
                         ],
                       ),
@@ -288,7 +289,7 @@ class _Preview extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   '方案名稱只代表切換槽位，實際顏色由你自訂。',
-                  style: TextStyle(color: c.secondaryText, fontSize: 12),
+                  style: AppTextStyles.labelSm.copyWith(color: c.secondaryText),
                 ),
               ],
             )
