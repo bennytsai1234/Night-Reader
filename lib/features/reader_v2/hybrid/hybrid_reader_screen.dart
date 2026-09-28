@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
@@ -1319,16 +1319,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         return 0.0;
       }
     }
-    final lineExtent = style.fontSize * style.effectiveLineHeight;
-    final spacing = block.isTitle
-        ? style.paragraphSpacing * 8
-        : lineExtent * style.paragraphSpacing;
-    // 章末與下一章標題之間多留空行，讓章節交界和一般段落分隔有明顯區別。
-    // 空白屬於章末 block 的量測高度，捲動、定位與進度都沿用同一份幾何。
-    if (isChapterEnd) {
-      return spacing + lineExtent * kReaderV2ChapterGapLines;
-    }
-    return spacing;
+    return readerV2BlockTrailingSpacing(
+      style,
+      isTitle: block.isTitle,
+      isChapterEnd: isChapterEnd,
+    );
   }
 
   ReaderV2Location? _captureAndReport({required bool notify}) {

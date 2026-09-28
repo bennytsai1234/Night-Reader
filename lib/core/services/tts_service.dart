@@ -92,6 +92,15 @@ class TTSService extends ChangeNotifier {
 
   double get _engineRate => _rate * _flutterTtsNormalRate;
 
+  /// 已保存語速的使用者倍速：新鍵優先；舊版鍵存的是 flutter_tts 刻度
+  /// （0.5 = 正常），換算後實際朗讀速度不變。
+  @visibleForTesting
+  static double? resolveStoredRate({double? multiplier, double? legacyRate}) {
+    if (multiplier != null) return multiplier;
+    if (legacyRate == null) return null;
+    return legacyRate / _flutterTtsNormalRate;
+  }
+
   static double _clampParam(
     double value,
     double min,
@@ -111,12 +120,12 @@ class TTSService extends ChangeNotifier {
   Future<void> _loadSavedSpeechParams() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final legacyRate =
-          prefs.getDouble(PreferKey.readerTtsRate) ??
-          prefs.getDouble(PreferKey.ttsSpeechRate);
-      final rate =
-          prefs.getDouble(PreferKey.readerTtsSpeedMultiplier) ??
-          (legacyRate == null ? null : legacyRate / _flutterTtsNormalRate);
+      final rate = resolveStoredRate(
+        multiplier: prefs.getDouble(PreferKey.readerTtsSpeedMultiplier),
+        legacyRate:
+            prefs.getDouble(PreferKey.readerTtsRate) ??
+            prefs.getDouble(PreferKey.ttsSpeechRate),
+      );
       final pitch =
           prefs.getDouble(PreferKey.readerTtsPitch) ??
           prefs.getDouble(PreferKey.speechPitch);

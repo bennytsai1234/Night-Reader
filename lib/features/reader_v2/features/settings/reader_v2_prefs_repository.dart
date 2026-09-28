@@ -75,8 +75,10 @@ class ReaderV2PrefsSnapshot {
       paddingTop: 0.0,
       paddingBottom: 0.0,
       hideStatusBar: false,
+      // 頁首預設關閉：狀態列顯示時多一條頁首只會重複系統時鐘；
+      // 隱藏狀態列後由使用者決定鏡頭那一行放什麼。
       headerInfo: const ReaderV2InfoSlots(
-        left: ReaderV2InfoItem.time,
+        left: ReaderV2InfoItem.none,
         right: ReaderV2InfoItem.none,
       ),
       footerInfo: const ReaderV2InfoSlots(

@@ -8,11 +8,18 @@ import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.da
 final class AdmissionController extends ChangeNotifier {
   AdmissionController({
     required this.documentIndex,
-    this.guaranteedWindow = 6000,
+    this.guaranteedWindow = 3000,
     this.backwardGuaranteedWindow = 3000,
   });
 
   final DocumentIndex documentIndex;
+
+  /// 視窗下緣之後／上緣之前必須已排版的距離（px）；捲動中與開書、跳章
+  /// 提交都以同一組領先量為準。
+  ///
+  /// LayoutPump 在拖動與慣性捲動期間仍持續取得每幀時間片補足領先量，
+  /// 領先量只需吸收短暫的速度尖峰，不必預先囤積大量正文；前後對稱即可，
+  /// 同時縮短開書與跳章前的等待。
   final double guaranteedWindow;
   final double backwardGuaranteedWindow;
   StreamSubscription<BlockReady>? _subscription;

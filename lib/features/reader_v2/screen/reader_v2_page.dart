@@ -423,12 +423,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           leading: const Icon(Icons.settings_suggest_rounded),
           title: const Text('全域系統設定'),
           subtitle: const Text('備份、還原與解析引擎配置'),
-          onTap: () {
+          onTap: () async {
             Navigator.pop(context);
-            Navigator.push(
+            await Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SettingsPage()),
             );
+            // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
+            // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
+            if (mounted) unawaited(_host.settings.loadSettings());
           },
         ),
       ],

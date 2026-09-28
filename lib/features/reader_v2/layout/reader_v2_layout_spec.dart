@@ -2,6 +2,24 @@ import 'package:flutter/widgets.dart';
 
 import 'reader_v2_typography.dart';
 
+/// 一段正文（或標題）之後的留白高度，計入該 block 的量測高度。
+///
+/// 章末多留 [kReaderV2ChapterGapLines] 行，讓章節交界和一般段落分隔
+/// 有明顯區別。空白屬於章末 block 自己的高度，捲動、定位與進度都沿用
+/// 同一份幾何，不需要另外的特例。
+double readerV2BlockTrailingSpacing(
+  ReaderV2LayoutStyle style, {
+  required bool isTitle,
+  required bool isChapterEnd,
+}) {
+  final lineExtent = style.fontSize * style.effectiveLineHeight;
+  final spacing = isTitle
+      ? style.paragraphSpacing * 8
+      : lineExtent * style.paragraphSpacing;
+  if (!isChapterEnd) return spacing;
+  return spacing + lineExtent * kReaderV2ChapterGapLines;
+}
+
 class ReaderV2LayoutStyle {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;

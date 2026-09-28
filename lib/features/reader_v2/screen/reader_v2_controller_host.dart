@@ -43,7 +43,12 @@ class ReaderV2ControllerHost {
     );
     _lastContentSettingsGeneration = settings.contentSettingsGeneration;
     unawaited(settings.loadSettings());
+    // 自動翻頁只在畫面可見時有意義：螢幕關閉或切到其他 App 時，
+    // Timer 仍會在背景捲動正文，使用者回來時位置已被推後數頁。
+    _lifecycleListener = AppLifecycleListener(onHide: () => autoPage?.stop());
   }
+
+  late final AppLifecycleListener _lifecycleListener;
 
   final Book book;
   final List<BookChapter> initialChapters;
@@ -271,6 +276,7 @@ class ReaderV2ControllerHost {
   }
 
   void dispose() {
+    _lifecycleListener.dispose();
     settings.removeListener(_onSettingsChanged);
     menu.removeListener(_onControllerChanged);
     autoPage?.removeListener(_onControllerChanged);

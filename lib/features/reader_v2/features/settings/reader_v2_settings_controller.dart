@@ -64,6 +64,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
   Future<void> loadSettings() async {
     final snapshot = await _prefsRepository.load();
     _persisted = snapshot;
+    // 別處（例如「閱讀偏好」頁）改了繁簡轉換時，重新載入也必須讓正文重轉。
+    if (snapshot.chineseConvert != chineseConvert) {
+      _contentSettingsGeneration += 1;
+    }
     _initFromCache(snapshot);
     _normalizeDayNightThemeIndexes();
     notifyListeners();
