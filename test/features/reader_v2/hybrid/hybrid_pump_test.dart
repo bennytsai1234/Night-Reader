@@ -11,7 +11,6 @@ import 'package:night_reader/features/reader_v2/hybrid/pump/budget_governor.dart
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/measurement_store.dart';
 import 'package:night_reader/features/reader_v2/hybrid/paragraph/paragraph_cache.dart';
-import 'package:night_reader/features/reader_v2/hybrid/pump/layout_cost_model.dart';
 import 'package:night_reader/features/reader_v2/hybrid/pump/layout_pump.dart';
 
 void main() {
@@ -230,258 +229,6 @@ void main() {
       cache.dispose();
     });
 
-    test('B2 末行字距補償增加末行寬度但不超過內容寬', () async {
-      final b2Store = MeasurementStore();
-      final b2Cache = ParagraphCache();
-      final b2Fingerprint = _fingerprint(lastLineSpacingCompensation: true);
-      final baselineStore = MeasurementStore();
-      final baselineCache = ParagraphCache();
-      final baselineFingerprint = _fingerprint();
-      final b2Pump = LayoutPump(
-        paragraphCache: b2Cache,
-        measurementStore: b2Store,
-        namespace: MeasurementNamespace(
-          epoch: LayoutEpoch.initial,
-          fingerprint: b2Fingerprint,
-        ),
-      );
-      final baselinePump = LayoutPump(
-        paragraphCache: baselineCache,
-        measurementStore: baselineStore,
-        namespace: MeasurementNamespace(
-          epoch: LayoutEpoch.initial,
-          fingerprint: baselineFingerprint,
-        ),
-      );
-      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
-      LayoutTask taskFor(StyleFingerprint fingerprint) {
-        return LayoutTask(
-          block: const ChapterBlock(
-            key: key,
-            text: '這是一段足夠長的中文測試文字，用來確保排版會產生上方滿行與最後短行。',
-            charRange: HybridTextRange(0, 33),
-            sourceParagraphIndex: 0,
-          ),
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-          textStyle: const HybridBlockTextStyle(
-            fontSize: 18,
-            lineHeight: 1.5,
-            letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
-          ),
-          contentWidth: 150,
-        );
-      }
-
-      b2Pump.submit(taskFor(b2Fingerprint));
-      baselinePump.submit(taskFor(baselineFingerprint));
-
-      expect(await b2Pump.pumpPending(), 1);
-      expect(await baselinePump.pumpPending(), 1);
-      final paragraph = b2Cache.acquire(key, LayoutEpoch.initial)!;
-      final baselineParagraph = baselineCache.acquire(
-        key,
-        LayoutEpoch.initial,
-      )!;
-      final lines = paragraph.computeLineMetrics();
-      final baselineLines = baselineParagraph.computeLineMetrics();
-      expect(lines.length, greaterThan(1));
-      expect(lines.last.width, greaterThan(0));
-      expect(lines.last.width, greaterThan(baselineLines.last.width));
-      expect(lines.last.width, lessThanOrEqualTo(150.01));
-
-      b2Pump.dispose();
-      b2Cache.dispose();
-      baselinePump.dispose();
-      baselineCache.dispose();
-    });
-
-    test('B2 末行補償：近滿末行不得把末字擠到下一行', () async {
-      final store = MeasurementStore();
-      final cache = ParagraphCache();
-      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
-      final pump = LayoutPump(
-        paragraphCache: cache,
-        measurementStore: store,
-        namespace: MeasurementNamespace(
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-        ),
-      );
-      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
-      const fontSize = 20.0;
-      // 27 個無標點字元 + 寬 9 字 + 1px 殘餘 → 9/9/9 三行；末行 headroom
-      // 僅 1px。補償上限若誤用間隙數（8）作分母，總增量 9×0.125 會超寬
-      // 而把末字擠成第四行孤行。
-      final text = '夜' * 27;
-      pump.submit(
-        LayoutTask(
-          block: ChapterBlock(
-            key: key,
-            text: text,
-            charRange: const HybridTextRange(0, 27),
-            sourceParagraphIndex: 0,
-          ),
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-          textStyle: const HybridBlockTextStyle(
-            fontSize: fontSize,
-            lineHeight: 1.5,
-            letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
-          ),
-          contentWidth: fontSize * 9 + 1,
-        ),
-      );
-
-      expect(await pump.pumpPending(), 1);
-      final paragraph = cache.acquire(key, LayoutEpoch.initial)!;
-      final lines = paragraph.computeLineMetrics();
-      expect(lines.length, 3, reason: '補償不得改變斷行（末字回捲即為 off-by-one）');
-      expect(
-        lines.last.width,
-        lessThanOrEqualTo(fontSize * 9 + 1 + 0.01),
-        reason: '末行寬不得超出內容寬',
-      );
-      pump.dispose();
-      cache.dispose();
-    });
-
-    test('B2 條件式 Pass 2：必為單行的 block 不進兩段式路徑', () {
-      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
-      LayoutTask taskFor(String text, {double contentWidth = 240}) {
-        return LayoutTask(
-          block: ChapterBlock(
-            key: const BlockKey(chapterIndex: 0, blockIndex: 0),
-            text: text,
-            charRange: HybridTextRange(0, text.length),
-            sourceParagraphIndex: 0,
-          ),
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-          textStyle: const HybridBlockTextStyle(
-            fontSize: 20,
-            lineHeight: 1.5,
-            letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
-          ),
-          contentWidth: contentWidth,
-          indentChars: 2,
-        );
-      }
-
-      final costModel = LayoutCostModel();
-      // 縮排 2 + 6 字 = 8 units ≤ 12 units 寬 → 必為單行，單次 layout。
-      final short = taskFor('「好。」他說', contentWidth: 240);
-      expect(LayoutCostModel.mayCompensateLastLine(short), isFalse);
-      expect(costModel.layoutPassesFor(short), 1.0);
-      // 縮排 2 + 16 字 = 18 units > 12 units 寬 → 可能 soft-wrap，兩段式。
-      final long = taskFor('衝在最前面的妖怪頭顱便滾落在地。', contentWidth: 240);
-      expect(LayoutCostModel.mayCompensateLastLine(long), isTrue);
-      expect(costModel.layoutPassesFor(long), 2.0);
-      // B2 關閉時一律單次。
-      expect(
-        costModel.layoutPassesFor(
-          LayoutTask(
-            block: long.block,
-            epoch: LayoutEpoch.initial,
-            fingerprint: _fingerprint(),
-            textStyle: long.textStyle,
-            contentWidth: 240,
-            indentChars: 2,
-          ),
-        ),
-        1.0,
-      );
-    });
-
-    test('B2 開啟時末行 getBoxesForRange 幾何與畫面一致（TTS 高亮契約）', () async {
-      final store = MeasurementStore();
-      final cache = ParagraphCache();
-      final fingerprint = _fingerprint(lastLineSpacingCompensation: true);
-      final pump = LayoutPump(
-        paragraphCache: cache,
-        measurementStore: store,
-        namespace: MeasurementNamespace(
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-        ),
-      );
-      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
-      const fontSize = 20.0;
-      const indentChars = 2;
-      const text = '衝在最前面的妖怪頭顱便滾落在地面上。';
-      // 縮排 2 + 18 字 = 20 units；寬 16.4 units → 首行 soft-wrap、
-      // 末行 4 字有大量 headroom，B2 補償必然生效（受 cap 限制）。
-      const contentWidth = fontSize * 16.4;
-      pump.submit(
-        LayoutTask(
-          block: const ChapterBlock(
-            key: key,
-            text: text,
-            charRange: HybridTextRange(0, 18),
-            sourceParagraphIndex: 0,
-          ),
-          epoch: LayoutEpoch.initial,
-          fingerprint: fingerprint,
-          textStyle: const HybridBlockTextStyle(
-            fontSize: fontSize,
-            lineHeight: 1.5,
-            letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
-          ),
-          contentWidth: contentWidth,
-          indentChars: indentChars,
-        ),
-      );
-
-      expect(await pump.pumpPending(), 1);
-      final paragraph = cache.acquire(key, LayoutEpoch.initial)!;
-      final lines = paragraph.computeLineMetrics();
-      expect(lines.length, 2);
-      expect(
-        lines.last.width,
-        greaterThan(fontSize * 4),
-        reason: 'B2 須實際生效（末行寬 > 自然寬）',
-      );
-
-      // TTS 高亮以 displayText offset + 縮排位移換 boxes；B2 的
-      // letterSpacing span 不得讓 boxes 與實繪 glyph 幾何脫鉤：
-      // 末行各字 box 必須連續相接（無累積漂移）、落在第二行、
-      // 總覆蓋範圍與 LineMetrics 寬一致。實測 SkParagraph 把
-      // letterSpacing 前後各半分攤在字形兩側，行首容許半個 spacing
-      // 的起始偏移（≤ cap 2.0）。
-      final lastLineStart = indentChars + 14; // 首行 14 字 + 縮排
-      double? expectedLeft;
-      var firstLeft = 0.0;
-      for (var offset = lastLineStart; offset < indentChars + 18; offset += 1) {
-        final box = paragraph.getBoxesForRange(offset, offset + 1).single;
-        if (expectedLeft == null) {
-          firstLeft = box.left;
-          expect(
-            firstLeft,
-            inInclusiveRange(0.0, LayoutPump.lastLineLetterSpacingCap),
-          );
-        } else {
-          expect(
-            box.left,
-            closeTo(expectedLeft, 0.01),
-            reason: '末行 box 必須連續相接',
-          );
-        }
-        expect(box.top, greaterThan(lines.first.height - 0.01));
-        expectedLeft = box.right;
-      }
-      expect(
-        expectedLeft!,
-        closeTo(lines.last.width, LayoutPump.lastLineLetterSpacingCap),
-        reason: '末行 boxes 覆蓋範圍不得偏離 LineMetrics 寬',
-      );
-      pump.dispose();
-      cache.dispose();
-    });
-
     test('justify 下段首縮排以 placeholder 保留原寬，字距不吸收縮排寬度', () async {
       final store = MeasurementStore();
       final cache = ParagraphCache();
@@ -620,7 +367,7 @@ void main() {
           0,
           MeasurementNamespace(
             epoch: LayoutEpoch.initial,
-            fingerprint: _fingerprint(lastLineSpacingCompensation: true),
+            fingerprint: _fingerprint(width: 321),
           ),
         ),
       );
@@ -1962,10 +1709,7 @@ ui.Paragraph _paragraph(String text) {
   return builder.build()..layout(const ui.ParagraphConstraints(width: 100));
 }
 
-StyleFingerprint _fingerprint({
-  double width = 320,
-  bool lastLineSpacingCompensation = false,
-}) {
+StyleFingerprint _fingerprint({double width = 320}) {
   return StyleFingerprint(
     viewportWidth: width,
     viewportHeight: 640,
@@ -1985,7 +1729,6 @@ StyleFingerprint _fingerprint({
     textScaleFactor: 1,
     fontFamilySignature: 'system',
     platformFontSignature: 'test',
-    lastLineSpacingCompensation: lastLineSpacingCompensation,
   );
 }
 

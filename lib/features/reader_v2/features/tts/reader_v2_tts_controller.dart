@@ -124,38 +124,29 @@ class ReaderV2TtsController extends ChangeNotifier
   String? get language => _tts.language;
   ReaderV2Location? get speechStartLocation => _speechStartLocation;
 
+  /// 目前句段一定高亮；引擎回報字詞進度時，另外標出正在朗讀的字詞。
+  /// 引擎的 offset 相對於本句段文字，這裡換成章節座標。
   ReaderV2TtsHighlight? get currentHighlight {
     final segment = _currentSegment;
     if (segment == null) return null;
-    final wordStart = _tts.currentWordStart;
     final segmentLength = segment.text.length;
+    final wordStart = _tts.currentWordStart;
     if (wordStart < 0 || segmentLength <= 0 || wordStart >= segmentLength) {
       return ReaderV2TtsHighlight(
         chapterIndex: segment.chapterIndex,
-        highlightStart: segment.startCharOffset,
-        highlightEnd: segment.endCharOffset,
+        sentenceStart: segment.startCharOffset,
+        sentenceEnd: segment.endCharOffset,
       );
     }
-    final boundedWordStart = wordStart.clamp(0, segmentLength - 1).toInt();
-    final wordEnd = _tts.currentWordEnd > boundedWordStart
-        ? _tts.currentWordEnd
-        : boundedWordStart + 1;
-    final boundedWordEnd = wordEnd
-        .clamp(boundedWordStart + 1, segmentLength)
+    final wordEnd = _tts.currentWordEnd
+        .clamp(wordStart + 1, segmentLength)
         .toInt();
     return ReaderV2TtsHighlight(
       chapterIndex: segment.chapterIndex,
-      highlightStart: segment.startCharOffset + boundedWordStart,
-      highlightEnd: segment.startCharOffset + boundedWordEnd,
-    );
-  }
-
-  ReaderV2Location? get highlightLocation {
-    final highlight = currentHighlight;
-    if (highlight == null) return null;
-    return ReaderV2Location(
-      chapterIndex: highlight.chapterIndex,
-      charOffset: highlight.highlightStart,
+      sentenceStart: segment.startCharOffset,
+      sentenceEnd: segment.endCharOffset,
+      wordStart: segment.startCharOffset + wordStart,
+      wordEnd: segment.startCharOffset + wordEnd,
     );
   }
 

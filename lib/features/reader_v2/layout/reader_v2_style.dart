@@ -1,3 +1,5 @@
+import 'reader_v2_typography.dart';
+
 class ReaderV2Style {
   static const double minReadableLineHeight = 1.2;
   static const double maxReadableLineHeight = 3.0;
@@ -14,8 +16,8 @@ class ReaderV2Style {
     required this.paddingRight,
     this.bold = false,
     this.textIndent = 0,
-    this.lastLineSpacingCompensation = false,
-  });
+    double? titleFontSize,
+  }) : titleFontSize = titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
 
   final double fontSize;
   final double lineHeight;
@@ -27,7 +29,9 @@ class ReaderV2Style {
   final double paddingRight;
   final bool bold;
   final int textIndent;
-  final bool lastLineSpacingCompensation;
+
+  /// 章節標題字號；未指定時比正文大 [kReaderV2DefaultTitleSizeDelta]。
+  final double titleFontSize;
 
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
@@ -47,7 +51,7 @@ class ReaderV2Style {
     double? paddingRight,
     bool? bold,
     int? textIndent,
-    bool? lastLineSpacingCompensation,
+    double? titleFontSize,
   }) {
     return ReaderV2Style(
       fontSize: fontSize ?? this.fontSize,
@@ -60,8 +64,7 @@ class ReaderV2Style {
       paddingRight: paddingRight ?? this.paddingRight,
       bold: bold ?? this.bold,
       textIndent: textIndent ?? this.textIndent,
-      lastLineSpacingCompensation:
-          lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
+      titleFontSize: titleFontSize ?? this.titleFontSize,
     );
   }
 
@@ -78,7 +81,7 @@ class ReaderV2Style {
         other.paddingRight == paddingRight &&
         other.bold == bold &&
         other.textIndent == textIndent &&
-        other.lastLineSpacingCompensation == lastLineSpacingCompensation;
+        other.titleFontSize == titleFontSize;
   }
 
   @override
@@ -93,6 +96,6 @@ class ReaderV2Style {
     paddingRight,
     bold,
     textIndent,
-    lastLineSpacingCompensation,
+    titleFontSize,
   );
 }

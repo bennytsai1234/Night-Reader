@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
+import 'core/services/chinese_display.dart';
 import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
@@ -272,7 +273,8 @@ class ReaderApp extends StatelessWidget {
           ),
           themeMode: settings.themeMode,
           locale: settings.locale,
-          builder: (context, child) => child ?? const SizedBox.shrink(),
+          builder: (context, child) =>
+              ChineseDisplayScope(child: child ?? const SizedBox.shrink()),
           home: const _AssociationLifecycleHost(child: MainPage()),
         );
       },

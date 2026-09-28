@@ -23,8 +23,8 @@ class ReaderV2PageCoordinator {
         if (ensureVisible == null) return Future<bool>.value(false);
         return ensureVisible(
           chapterIndex: highlight.chapterIndex,
-          startCharOffset: highlight.highlightStart,
-          endCharOffset: highlight.highlightEnd,
+          startCharOffset: highlight.sentenceStart,
+          endCharOffset: highlight.sentenceEnd,
         );
       },
     );
@@ -69,9 +69,6 @@ class ReaderV2PageCoordinator {
         return;
       case ReaderV2TapAction.toggleTts:
         unawaited(_host.tts?.toggle());
-        return;
-      case ReaderV2TapAction.bookmark:
-        unawaited(toggleBookmark());
         return;
     }
   }
@@ -163,18 +160,9 @@ class ReaderV2PageCoordinator {
     autoPage.toggle();
   }
 
-  Future<void> toggleBookmark() async {
-    final bookmark = _host.bookmark;
-    if (bookmark == null) {
-      _showNotice('書籤資料庫不可用');
-      return;
-    }
-    await bookmark.addVisibleLocationBookmark();
-    _showNotice('已加入書籤');
-  }
-
   void maybeFollowTtsHighlight() {
-    _ttsFollower.update(_host.tts?.currentHighlight);
+    // 視窗只在換句時跟隨；句內逐字前進不觸發捲動。
+    _ttsFollower.update(_host.tts?.currentHighlight?.sentence);
   }
 
   void openReplaceRule(BuildContext context) {

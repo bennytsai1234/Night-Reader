@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import '../../models/book.dart';
 import '../../models/chapter.dart';
-import '../../models/bookmark.dart';
 import '../../models/replace_rule.dart';
 import '../../models/book_source.dart';
 import '../../models/book_group.dart';
@@ -384,30 +383,6 @@ class ReplaceRules extends Table {
   TextColumn get group => text().named('group').nullable()();
   IntColumn get order =>
       integer().named('order').withDefault(const Constant(0))();
-}
-
-// ───────────── Bookmarks ─────────────
-@UseRowClass(Bookmark, generateInsertable: true)
-class Bookmarks extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  IntColumn get time => integer()();
-  TextColumn get bookName => text().named('bookName')();
-  TextColumn get bookAuthor =>
-      text().named('bookAuthor').nullable().map(const EmptyStringConverter())();
-  IntColumn get chapterIndex =>
-      integer().named('chapterIndex').withDefault(const Constant(0))();
-  IntColumn get chapterPos =>
-      integer().named('chapterPos').withDefault(const Constant(0))();
-  TextColumn get chapterName =>
-      text()
-          .named('chapterName')
-          .nullable()
-          .map(const EmptyStringConverter())();
-  TextColumn get bookUrl => text().named('bookUrl')();
-  TextColumn get bookText =>
-      text().named('bookText').nullable().map(const EmptyStringConverter())();
-  TextColumn get content =>
-      text().nullable().map(const EmptyStringConverter())();
 }
 
 // ───────────── Cookies ─────────────

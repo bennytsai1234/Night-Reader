@@ -1689,17 +1689,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return Rect.fromLTRB(0, top, 0, bottom);
   }
 
-  List<HybridLineBox> _ttsLineBoxes(ReaderV2TtsHighlight highlight) {
+  /// [start, end) 在畫面上的字形範圍，每條視覺行一個框。
+  ///
+  /// 框的左右取自 Paragraph 的 glyph boxes，而不是整行寬：句段從行中間
+  /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。
+  List<HybridLineBox> _ttsLineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
-    final blocks = _blocks[highlight.chapterIndex];
+    final blocks = _blocks[chapterIndex];
     if (offset == null || blocks == null) return const <HybridLineBox>[];
-    final range = HybridTextRange(
-      math.max(0, highlight.highlightStart),
-      math.max(0, highlight.highlightEnd),
-    );
+    final range = HybridTextRange(math.max(0, start), math.max(0, end));
     if (range.isEmpty) return const <HybridLineBox>[];
+    final paintLeft = widget.runtime.state.layoutSpec.textPaddingLeft;
     final result = <HybridLineBox>[];
-    final seenLines = <({BlockKey key, double top, double bottom})>{};
     final blockList = blocks.blocks;
     var low = 0;
     var high = blockList.length;
@@ -1719,26 +1720,28 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (top == null) continue;
       final boxes = _blockLocalBoxesForRange(blocks, block, range);
       if (boxes == null || boxes.isEmpty) continue;
-      final clipped = HybridTextRange(
-        math.max(range.start, block.charRange.start),
-        math.min(range.end, block.charRange.end),
-      );
+      // 同一條視覺行可能回傳多個 run 的 box，合併成一個框。
+      final lines = <double, ui.TextBox>{};
       for (final box in boxes) {
-        final screenTop = top + box.top - offset;
-        final screenBottom = top + box.bottom - offset;
-        if (!seenLines.add((
-          key: block.key,
-          top: screenTop,
-          bottom: screenBottom,
-        ))) {
-          continue;
-        }
+        final key = box.top.roundToDouble();
+        final existing = lines[key];
+        lines[key] = existing == null
+            ? box
+            : ui.TextBox.fromLTRBD(
+                math.min(existing.left, box.left),
+                math.min(existing.top, box.top),
+                math.max(existing.right, box.right),
+                math.max(existing.bottom, box.bottom),
+                box.direction,
+              );
+      }
+      for (final box in lines.values) {
         result.add(
           HybridLineBox(
-            key: block.key,
-            top: screenTop,
-            bottom: screenBottom,
-            charRange: clipped,
+            left: paintLeft + box.left,
+            top: top + box.top - offset,
+            right: paintLeft + box.right,
+            bottom: top + box.bottom - offset,
           ),
         );
       }
@@ -1857,15 +1860,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return boxes.first.top;
   }
 
-  ReaderV2Style _overlayStyle() {
-    final spec = widget.runtime.state.layoutSpec;
-    return widget.style.copyWith(
-      paddingTop: 0.0,
-      paddingLeft: spec.textPaddingLeft,
-      paddingRight: spec.textPaddingRight,
-    );
-  }
-
   Widget _buildLoading(ReaderV2State state) {
     final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;
     final message = unavailable
@@ -1967,11 +1961,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 child: ListenableBuilder(
                   listenable: controller,
                   builder: (context, _) {
+                    final wordStart = highlight.wordStart;
+                    final wordEnd = highlight.wordEnd;
                     return HybridTtsHighlightOverlay(
-                      lines: _ttsLineBoxes(highlight),
-                      style: _overlayStyle(),
+                      sentence: _ttsLineBoxes(
+                        highlight.chapterIndex,
+                        highlight.sentenceStart,
+                        highlight.sentenceEnd,
+                      ),
+                      word: highlight.hasWord
+                          ? _ttsLineBoxes(
+                              highlight.chapterIndex,
+                              wordStart!,
+                              wordEnd!,
+                            )
+                          : const <HybridLineBox>[],
                       textColor: widget.textColor,
-                      highlight: highlight,
                     );
                   },
                 ),

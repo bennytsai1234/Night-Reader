@@ -701,11 +701,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
   Book map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Book(
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
+      bookUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookUrl'],
+      )!,
       tocUrl: $BooksTable.$convertertocUrl.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -724,11 +723,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
           data['${effectivePrefix}originName'],
         ),
       ),
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
       author: $BooksTable.$converterauthor.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -771,87 +769,74 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.string,
         data['${effectivePrefix}charset'],
       ),
-      type:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}type'],
-          )!,
-      group:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}group'],
-          )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}type'],
+      )!,
+      group: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}group'],
+      )!,
       latestChapterTitle: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}latestChapterTitle'],
       ),
-      latestChapterTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}latestChapterTime'],
-          )!,
-      lastCheckTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastCheckTime'],
-          )!,
-      lastCheckCount:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastCheckCount'],
-          )!,
-      totalChapterNum:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}totalChapterNum'],
-          )!,
+      latestChapterTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}latestChapterTime'],
+      )!,
+      lastCheckTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastCheckTime'],
+      )!,
+      lastCheckCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastCheckCount'],
+      )!,
+      totalChapterNum: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}totalChapterNum'],
+      )!,
       durChapterTitle: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}durChapterTitle'],
       ),
-      chapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}chapterIndex'],
-          )!,
-      charOffset:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}charOffset'],
-          )!,
-      visualOffsetPx:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.double,
-            data['${effectivePrefix}visualOffsetPx'],
-          )!,
+      chapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}chapterIndex'],
+      )!,
+      charOffset: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}charOffset'],
+      )!,
+      visualOffsetPx: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}visualOffsetPx'],
+      )!,
       readerAnchorJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}readerAnchorJson'],
       ),
-      durChapterTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}durChapterTime'],
-          )!,
+      durChapterTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durChapterTime'],
+      )!,
       wordCount: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}wordCount'],
       ),
-      canUpdate:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}canUpdate'],
-          )!,
-      order:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}order'],
-          )!,
-      originOrder:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}originOrder'],
-          )!,
+      canUpdate: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}canUpdate'],
+      )!,
+      order: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order'],
+      )!,
+      originOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}originOrder'],
+      )!,
       variable: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}variable'],
@@ -862,16 +847,14 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
           data['${effectivePrefix}readConfig'],
         ),
       ),
-      syncTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}syncTime'],
-          )!,
-      isInBookshelf:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isInBookshelf'],
-          )!,
+      syncTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}syncTime'],
+      )!,
+      isInBookshelf: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isInBookshelf'],
+      )!,
     );
   }
 
@@ -1719,47 +1702,40 @@ class $ChaptersTable extends Chapters
   BookChapter map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return BookChapter(
-      url:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}url'],
-          )!,
-      title:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}title'],
-          )!,
-      isVolume:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isVolume'],
-          )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      isVolume: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isVolume'],
+      )!,
       baseUrl: $ChaptersTable.$converterbaseUrl.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}baseUrl'],
         ),
       ),
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
-      index:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}index'],
-          )!,
-      isVip:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isVip'],
-          )!,
-      isPay:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isPay'],
-          )!,
+      bookUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookUrl'],
+      )!,
+      index: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}index'],
+      )!,
+      isVip: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isVip'],
+      )!,
+      isPay: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isPay'],
+      )!,
       resourceUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}resourceUrl'],
@@ -2266,49 +2242,42 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
   ReaderChapterContent map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ReaderChapterContent(
-      contentKey:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}contentKey'],
-          )!,
-      origin:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}origin'],
-          )!,
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
-      chapterUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}chapterUrl'],
-          )!,
-      chapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}chapterIndex'],
-          )!,
+      contentKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contentKey'],
+      )!,
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      )!,
+      bookUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookUrl'],
+      )!,
+      chapterUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapterUrl'],
+      )!,
+      chapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}chapterIndex'],
+      )!,
       content: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}content'],
       ),
-      status:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}status'],
-          )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}status'],
+      )!,
       failureMessage: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}failureMessage'],
       ),
-      updatedAt:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}updatedAt'],
-          )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updatedAt'],
+      )!,
     );
   }
 
@@ -2366,15 +2335,13 @@ class ReaderChapterContent extends DataClass
       bookUrl: Value(bookUrl),
       chapterUrl: Value(chapterUrl),
       chapterIndex: Value(chapterIndex),
-      content:
-          content == null && nullToAbsent
-              ? const Value.absent()
-              : Value(content),
+      content: content == null && nullToAbsent
+          ? const Value.absent()
+          : Value(content),
       status: Value(status),
-      failureMessage:
-          failureMessage == null && nullToAbsent
-              ? const Value.absent()
-              : Value(failureMessage),
+      failureMessage: failureMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureMessage),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2430,28 +2397,29 @@ class ReaderChapterContent extends DataClass
     chapterIndex: chapterIndex ?? this.chapterIndex,
     content: content.present ? content.value : this.content,
     status: status ?? this.status,
-    failureMessage:
-        failureMessage.present ? failureMessage.value : this.failureMessage,
+    failureMessage: failureMessage.present
+        ? failureMessage.value
+        : this.failureMessage,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   ReaderChapterContent copyWithCompanion(ReaderChapterContentsCompanion data) {
     return ReaderChapterContent(
-      contentKey:
-          data.contentKey.present ? data.contentKey.value : this.contentKey,
+      contentKey: data.contentKey.present
+          ? data.contentKey.value
+          : this.contentKey,
       origin: data.origin.present ? data.origin.value : this.origin,
       bookUrl: data.bookUrl.present ? data.bookUrl.value : this.bookUrl,
-      chapterUrl:
-          data.chapterUrl.present ? data.chapterUrl.value : this.chapterUrl,
-      chapterIndex:
-          data.chapterIndex.present
-              ? data.chapterIndex.value
-              : this.chapterIndex,
+      chapterUrl: data.chapterUrl.present
+          ? data.chapterUrl.value
+          : this.chapterUrl,
+      chapterIndex: data.chapterIndex.present
+          ? data.chapterIndex.value
+          : this.chapterIndex,
       content: data.content.present ? data.content.value : this.content,
       status: data.status.present ? data.status.value : this.status,
-      failureMessage:
-          data.failureMessage.present
-              ? data.failureMessage.value
-              : this.failureMessage,
+      failureMessage: data.failureMessage.present
+          ? data.failureMessage.value
+          : this.failureMessage,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -3232,53 +3200,46 @@ class $BookSourcesTable extends BookSources
   BookSource map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return BookSource(
-      bookSourceUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookSourceUrl'],
-          )!,
-      bookSourceName:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookSourceName'],
-          )!,
+      bookSourceUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookSourceUrl'],
+      )!,
+      bookSourceName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookSourceName'],
+      )!,
       bookSourceGroup: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}bookSourceGroup'],
       ),
-      bookSourceType:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}bookSourceType'],
-          )!,
+      bookSourceType: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bookSourceType'],
+      )!,
       bookUrlPattern: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}bookUrlPattern'],
       ),
-      customOrder:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}customOrder'],
-          )!,
-      enabled:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabled'],
-          )!,
-      enabledExplore:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabledExplore'],
-          )!,
+      customOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}customOrder'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      enabledExplore: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabledExplore'],
+      )!,
       jsLib: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}jsLib'],
       ),
-      enabledCookieJar:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabledCookieJar'],
-          )!,
+      enabledCookieJar: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabledCookieJar'],
+      )!,
       concurrentRate: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}concurrentRate'],
@@ -3311,21 +3272,18 @@ class $BookSourcesTable extends BookSources
         DriftSqlType.string,
         data['${effectivePrefix}variableComment'],
       ),
-      lastUpdateTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastUpdateTime'],
-          )!,
-      respondTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}respondTime'],
-          )!,
-      weight:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}weight'],
-          )!,
+      lastUpdateTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastUpdateTime'],
+      )!,
+      respondTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}respondTime'],
+      )!,
+      weight: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}weight'],
+      )!,
       exploreUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}exploreUrl'],
@@ -3994,40 +3952,34 @@ class $BookGroupsTable extends BookGroups
   BookGroup map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return BookGroup(
-      groupId:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}groupId'],
-          )!,
-      groupName:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}groupName'],
-          )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}groupId'],
+      )!,
+      groupName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}groupName'],
+      )!,
       coverPath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}coverPath'],
       ),
-      order:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}order'],
-          )!,
-      enableRefresh:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enableRefresh'],
-          )!,
-      show:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}show'],
-          )!,
-      bookSort:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}bookSort'],
-          )!,
+      order: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order'],
+      )!,
+      enableRefresh: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enableRefresh'],
+      )!,
+      show: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show'],
+      )!,
+      bookSort: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bookSort'],
+      )!,
     );
   }
 
@@ -4251,21 +4203,18 @@ class $SearchHistoryTableTable extends SearchHistoryTable
   SearchHistoryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SearchHistoryRow(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      keyword:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}keyword'],
-          )!,
-      searchTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}searchTime'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      keyword: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}keyword'],
+      )!,
+      searchTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}searchTime'],
+      )!,
     );
   }
 
@@ -4333,8 +4282,9 @@ class SearchHistoryRow extends DataClass
     return SearchHistoryRow(
       id: data.id.present ? data.id.value : this.id,
       keyword: data.keyword.present ? data.keyword.value : this.keyword,
-      searchTime:
-          data.searchTime.present ? data.searchTime.value : this.searchTime,
+      searchTime: data.searchTime.present
+          ? data.searchTime.value
+          : this.searchTime,
     );
   }
 
@@ -4693,11 +4643,10 @@ class $ReplaceRulesTable extends ReplaceRules
   ReplaceRule map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ReplaceRule(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
       name: $ReplaceRulesTable.$convertername.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -4708,11 +4657,10 @@ class $ReplaceRulesTable extends ReplaceRules
         DriftSqlType.string,
         data['${effectivePrefix}group'],
       ),
-      pattern:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}pattern'],
-          )!,
+      pattern: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pattern'],
+      )!,
       replacement: $ReplaceRulesTable.$converterreplacement.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -4723,40 +4671,34 @@ class $ReplaceRulesTable extends ReplaceRules
         DriftSqlType.string,
         data['${effectivePrefix}scope'],
       ),
-      scopeTitle:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}scopeTitle'],
-          )!,
-      scopeContent:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}scopeContent'],
-          )!,
+      scopeTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}scopeTitle'],
+      )!,
+      scopeContent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}scopeContent'],
+      )!,
       excludeScope: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}excludeScope'],
       ),
-      isEnabled:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isEnabled'],
-          )!,
-      isRegex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isRegex'],
-          )!,
-      timeoutMillisecond:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}timeoutMillisecond'],
-          )!,
-      order:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}order'],
-          )!,
+      isEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isEnabled'],
+      )!,
+      isRegex: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}isRegex'],
+      )!,
+      timeoutMillisecond: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}timeoutMillisecond'],
+      )!,
+      order: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order'],
+      )!,
     );
   }
 
@@ -4978,441 +4920,6 @@ extension ReplaceRuleToInsertable on ReplaceRule {
   }
 }
 
-class $BookmarksTable extends Bookmarks
-    with TableInfo<$BookmarksTable, Bookmark> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $BookmarksTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'PRIMARY KEY AUTOINCREMENT',
-    ),
-  );
-  static const VerificationMeta _timeMeta = const VerificationMeta('time');
-  @override
-  late final GeneratedColumn<int> time = GeneratedColumn<int>(
-    'time',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _bookNameMeta = const VerificationMeta(
-    'bookName',
-  );
-  @override
-  late final GeneratedColumn<String> bookName = GeneratedColumn<String>(
-    'bookName',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  @override
-  late final GeneratedColumnWithTypeConverter<String, String> bookAuthor =
-      GeneratedColumn<String>(
-        'bookAuthor',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<String>($BookmarksTable.$converterbookAuthor);
-  static const VerificationMeta _chapterIndexMeta = const VerificationMeta(
-    'chapterIndex',
-  );
-  @override
-  late final GeneratedColumn<int> chapterIndex = GeneratedColumn<int>(
-    'chapterIndex',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _chapterPosMeta = const VerificationMeta(
-    'chapterPos',
-  );
-  @override
-  late final GeneratedColumn<int> chapterPos = GeneratedColumn<int>(
-    'chapterPos',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  @override
-  late final GeneratedColumnWithTypeConverter<String, String> chapterName =
-      GeneratedColumn<String>(
-        'chapterName',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<String>($BookmarksTable.$converterchapterName);
-  static const VerificationMeta _bookUrlMeta = const VerificationMeta(
-    'bookUrl',
-  );
-  @override
-  late final GeneratedColumn<String> bookUrl = GeneratedColumn<String>(
-    'bookUrl',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  @override
-  late final GeneratedColumnWithTypeConverter<String, String> bookText =
-      GeneratedColumn<String>(
-        'bookText',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<String>($BookmarksTable.$converterbookText);
-  @override
-  late final GeneratedColumnWithTypeConverter<String, String> content =
-      GeneratedColumn<String>(
-        'content',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<String>($BookmarksTable.$convertercontent);
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    time,
-    bookName,
-    bookAuthor,
-    chapterIndex,
-    chapterPos,
-    chapterName,
-    bookUrl,
-    bookText,
-    content,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'bookmarks';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<Bookmark> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('time')) {
-      context.handle(
-        _timeMeta,
-        time.isAcceptableOrUnknown(data['time']!, _timeMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_timeMeta);
-    }
-    if (data.containsKey('bookName')) {
-      context.handle(
-        _bookNameMeta,
-        bookName.isAcceptableOrUnknown(data['bookName']!, _bookNameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_bookNameMeta);
-    }
-    if (data.containsKey('chapterIndex')) {
-      context.handle(
-        _chapterIndexMeta,
-        chapterIndex.isAcceptableOrUnknown(
-          data['chapterIndex']!,
-          _chapterIndexMeta,
-        ),
-      );
-    }
-    if (data.containsKey('chapterPos')) {
-      context.handle(
-        _chapterPosMeta,
-        chapterPos.isAcceptableOrUnknown(data['chapterPos']!, _chapterPosMeta),
-      );
-    }
-    if (data.containsKey('bookUrl')) {
-      context.handle(
-        _bookUrlMeta,
-        bookUrl.isAcceptableOrUnknown(data['bookUrl']!, _bookUrlMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_bookUrlMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Bookmark map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Bookmark(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      time:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}time'],
-          )!,
-      bookName:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookName'],
-          )!,
-      bookAuthor: $BookmarksTable.$converterbookAuthor.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}bookAuthor'],
-        ),
-      ),
-      chapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}chapterIndex'],
-          )!,
-      chapterPos:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}chapterPos'],
-          )!,
-      chapterName: $BookmarksTable.$converterchapterName.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}chapterName'],
-        ),
-      ),
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
-      bookText: $BookmarksTable.$converterbookText.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}bookText'],
-        ),
-      ),
-      content: $BookmarksTable.$convertercontent.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}content'],
-        ),
-      ),
-    );
-  }
-
-  @override
-  $BookmarksTable createAlias(String alias) {
-    return $BookmarksTable(attachedDatabase, alias);
-  }
-
-  static TypeConverter<String, String?> $converterbookAuthor =
-      const EmptyStringConverter();
-  static TypeConverter<String, String?> $converterchapterName =
-      const EmptyStringConverter();
-  static TypeConverter<String, String?> $converterbookText =
-      const EmptyStringConverter();
-  static TypeConverter<String, String?> $convertercontent =
-      const EmptyStringConverter();
-}
-
-class BookmarksCompanion extends UpdateCompanion<Bookmark> {
-  final Value<int> id;
-  final Value<int> time;
-  final Value<String> bookName;
-  final Value<String> bookAuthor;
-  final Value<int> chapterIndex;
-  final Value<int> chapterPos;
-  final Value<String> chapterName;
-  final Value<String> bookUrl;
-  final Value<String> bookText;
-  final Value<String> content;
-  const BookmarksCompanion({
-    this.id = const Value.absent(),
-    this.time = const Value.absent(),
-    this.bookName = const Value.absent(),
-    this.bookAuthor = const Value.absent(),
-    this.chapterIndex = const Value.absent(),
-    this.chapterPos = const Value.absent(),
-    this.chapterName = const Value.absent(),
-    this.bookUrl = const Value.absent(),
-    this.bookText = const Value.absent(),
-    this.content = const Value.absent(),
-  });
-  BookmarksCompanion.insert({
-    this.id = const Value.absent(),
-    required int time,
-    required String bookName,
-    this.bookAuthor = const Value.absent(),
-    this.chapterIndex = const Value.absent(),
-    this.chapterPos = const Value.absent(),
-    this.chapterName = const Value.absent(),
-    required String bookUrl,
-    this.bookText = const Value.absent(),
-    this.content = const Value.absent(),
-  }) : time = Value(time),
-       bookName = Value(bookName),
-       bookUrl = Value(bookUrl);
-  static Insertable<Bookmark> custom({
-    Expression<int>? id,
-    Expression<int>? time,
-    Expression<String>? bookName,
-    Expression<String>? bookAuthor,
-    Expression<int>? chapterIndex,
-    Expression<int>? chapterPos,
-    Expression<String>? chapterName,
-    Expression<String>? bookUrl,
-    Expression<String>? bookText,
-    Expression<String>? content,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (time != null) 'time': time,
-      if (bookName != null) 'bookName': bookName,
-      if (bookAuthor != null) 'bookAuthor': bookAuthor,
-      if (chapterIndex != null) 'chapterIndex': chapterIndex,
-      if (chapterPos != null) 'chapterPos': chapterPos,
-      if (chapterName != null) 'chapterName': chapterName,
-      if (bookUrl != null) 'bookUrl': bookUrl,
-      if (bookText != null) 'bookText': bookText,
-      if (content != null) 'content': content,
-    });
-  }
-
-  BookmarksCompanion copyWith({
-    Value<int>? id,
-    Value<int>? time,
-    Value<String>? bookName,
-    Value<String>? bookAuthor,
-    Value<int>? chapterIndex,
-    Value<int>? chapterPos,
-    Value<String>? chapterName,
-    Value<String>? bookUrl,
-    Value<String>? bookText,
-    Value<String>? content,
-  }) {
-    return BookmarksCompanion(
-      id: id ?? this.id,
-      time: time ?? this.time,
-      bookName: bookName ?? this.bookName,
-      bookAuthor: bookAuthor ?? this.bookAuthor,
-      chapterIndex: chapterIndex ?? this.chapterIndex,
-      chapterPos: chapterPos ?? this.chapterPos,
-      chapterName: chapterName ?? this.chapterName,
-      bookUrl: bookUrl ?? this.bookUrl,
-      bookText: bookText ?? this.bookText,
-      content: content ?? this.content,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (time.present) {
-      map['time'] = Variable<int>(time.value);
-    }
-    if (bookName.present) {
-      map['bookName'] = Variable<String>(bookName.value);
-    }
-    if (bookAuthor.present) {
-      map['bookAuthor'] = Variable<String>(
-        $BookmarksTable.$converterbookAuthor.toSql(bookAuthor.value),
-      );
-    }
-    if (chapterIndex.present) {
-      map['chapterIndex'] = Variable<int>(chapterIndex.value);
-    }
-    if (chapterPos.present) {
-      map['chapterPos'] = Variable<int>(chapterPos.value);
-    }
-    if (chapterName.present) {
-      map['chapterName'] = Variable<String>(
-        $BookmarksTable.$converterchapterName.toSql(chapterName.value),
-      );
-    }
-    if (bookUrl.present) {
-      map['bookUrl'] = Variable<String>(bookUrl.value);
-    }
-    if (bookText.present) {
-      map['bookText'] = Variable<String>(
-        $BookmarksTable.$converterbookText.toSql(bookText.value),
-      );
-    }
-    if (content.present) {
-      map['content'] = Variable<String>(
-        $BookmarksTable.$convertercontent.toSql(content.value),
-      );
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('BookmarksCompanion(')
-          ..write('id: $id, ')
-          ..write('time: $time, ')
-          ..write('bookName: $bookName, ')
-          ..write('bookAuthor: $bookAuthor, ')
-          ..write('chapterIndex: $chapterIndex, ')
-          ..write('chapterPos: $chapterPos, ')
-          ..write('chapterName: $chapterName, ')
-          ..write('bookUrl: $bookUrl, ')
-          ..write('bookText: $bookText, ')
-          ..write('content: $content')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class _$BookmarkInsertable implements Insertable<Bookmark> {
-  Bookmark _object;
-  _$BookmarkInsertable(this._object);
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    return BookmarksCompanion(
-      id: Value(_object.id),
-      time: Value(_object.time),
-      bookName: Value(_object.bookName),
-      bookAuthor: Value(_object.bookAuthor),
-      chapterIndex: Value(_object.chapterIndex),
-      chapterPos: Value(_object.chapterPos),
-      chapterName: Value(_object.chapterName),
-      bookUrl: Value(_object.bookUrl),
-      bookText: Value(_object.bookText),
-      content: Value(_object.content),
-    ).toColumns(false);
-  }
-}
-
-extension BookmarkToInsertable on Bookmark {
-  _$BookmarkInsertable toInsertable() {
-    return _$BookmarkInsertable(this);
-  }
-}
-
 class $CookiesTable extends Cookies with TableInfo<$CookiesTable, Cookie> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -5475,16 +4982,14 @@ class $CookiesTable extends Cookies with TableInfo<$CookiesTable, Cookie> {
   Cookie map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Cookie(
-      url:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}url'],
-          )!,
-      cookie:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}cookie'],
-          )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      cookie: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cookie'],
+      )!,
     );
   }
 
@@ -5703,16 +5208,14 @@ class $DictRulesTable extends DictRules
   DictRule map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DictRule(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
       urlRule: $DictRulesTable.$converterurlRule.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -5725,16 +5228,14 @@ class $DictRulesTable extends DictRules
           data['${effectivePrefix}showRule'],
         ),
       ),
-      enabled:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabled'],
-          )!,
-      sortNumber:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}sortNumber'],
-          )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      sortNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sortNumber'],
+      )!,
     );
   }
 
@@ -6133,21 +5634,18 @@ class $HttpTtsTableTable extends HttpTtsTable
   HttpTTS map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return HttpTTS(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
-      url:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}url'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
       contentType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}contentType'],
@@ -6172,20 +5670,18 @@ class $HttpTtsTableTable extends HttpTtsTable
         DriftSqlType.string,
         data['${effectivePrefix}jsLib'],
       ),
-      enabledCookieJar:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabledCookieJar'],
-          )!,
+      enabledCookieJar: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabledCookieJar'],
+      )!,
       loginCheckJs: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}loginCheckJs'],
       ),
-      lastUpdateTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastUpdateTime'],
-          )!,
+      lastUpdateTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastUpdateTime'],
+      )!,
     );
   }
 
@@ -6512,31 +6008,26 @@ class $ReadRecordsTable extends ReadRecords
   ReadRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ReadRecord(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      deviceId:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}deviceId'],
-          )!,
-      bookName:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookName'],
-          )!,
-      readTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}readTime'],
-          )!,
-      lastRead:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastRead'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
+      bookName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookName'],
+      )!,
+      readTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}readTime'],
+      )!,
+      lastRead: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastRead'],
+      )!,
     );
   }
 
@@ -6765,30 +6256,26 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
   Server map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Server(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
-      type:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}type'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
       config: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}config'],
       ),
-      sortNumber:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}sortNumber'],
-          )!,
+      sortNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sortNumber'],
+      )!,
     );
   }
 
@@ -7049,35 +6536,30 @@ class $TxtTocRulesTable extends TxtTocRules
   TxtTocRule map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return TxtTocRule(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
-      rule:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}rule'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      rule: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rule'],
+      )!,
       example: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}example'],
       ),
-      serialNumber:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}serialNumber'],
-          )!,
-      enable:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enable'],
-          )!,
+      serialNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}serialNumber'],
+      )!,
+      enable: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enable'],
+      )!,
     );
   }
 
@@ -7286,20 +6768,18 @@ class $CacheTableTable extends CacheTable
   Cache map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Cache(
-      key:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}key'],
-          )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
       value: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}value'],
       ),
-      deadline:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}deadline'],
-          )!,
+      deadline: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}deadline'],
+      )!,
     );
   }
 
@@ -7492,27 +6972,24 @@ class $KeyboardAssistsTable extends KeyboardAssists
   KeyboardAssist map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return KeyboardAssist(
-      type:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}type'],
-          )!,
-      key:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}key'],
-          )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}type'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
       value: $KeyboardAssistsTable.$convertervalue.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}value'],
         ),
       ),
-      serialNo:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}serialNo'],
-          )!,
+      serialNo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}serialNo'],
+      )!,
     );
   }
 
@@ -7764,36 +7241,30 @@ class $RuleSubsTable extends RuleSubs with TableInfo<$RuleSubsTable, RuleSub> {
   RuleSub map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return RuleSub(
-      id:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}id'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
-      url:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}url'],
-          )!,
-      type:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}type'],
-          )!,
-      enabled:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}enabled'],
-          )!,
-      order:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}order'],
-          )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}type'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      order: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order'],
+      )!,
     );
   }
 
@@ -8216,16 +7687,14 @@ class $SearchBooksTable extends SearchBooks
   SearchBook map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SearchBook(
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
-      name:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}name'],
-          )!,
+      bookUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookUrl'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
       author: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}author'],
@@ -8260,21 +7729,18 @@ class $SearchBooksTable extends SearchBooks
         DriftSqlType.string,
         data['${effectivePrefix}originName'],
       ),
-      originOrder:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}originOrder'],
-          )!,
-      type:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}type'],
-          )!,
-      addTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}addTime'],
-          )!,
+      originOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}originOrder'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}type'],
+      )!,
+      addTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}addTime'],
+      )!,
       variable: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}variable'],
@@ -8773,56 +8239,46 @@ class $DownloadTasksTable extends DownloadTasks
   DownloadTask map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DownloadTask(
-      bookUrl:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookUrl'],
-          )!,
-      bookName:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}bookName'],
-          )!,
-      startChapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}startChapterIndex'],
-          )!,
-      endChapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}endChapterIndex'],
-          )!,
-      currentChapterIndex:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}currentChapterIndex'],
-          )!,
-      status:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}status'],
-          )!,
-      totalCount:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}totalChapterCount'],
-          )!,
-      successCount:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}successCount'],
-          )!,
-      errorCount:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}errorCount'],
-          )!,
-      lastUpdateTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}addTime'],
-          )!,
+      bookUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookUrl'],
+      )!,
+      bookName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookName'],
+      )!,
+      startChapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}startChapterIndex'],
+      )!,
+      endChapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}endChapterIndex'],
+      )!,
+      currentChapterIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currentChapterIndex'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}status'],
+      )!,
+      totalCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}totalChapterCount'],
+      )!,
+      successCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}successCount'],
+      )!,
+      errorCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}errorCount'],
+      )!,
+      lastUpdateTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}addTime'],
+      )!,
     );
   }
 
@@ -9095,21 +8551,18 @@ class $SearchKeywordsTable extends SearchKeywords
   SearchKeyword map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SearchKeyword(
-      word:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.string,
-            data['${effectivePrefix}word'],
-          )!,
-      usage:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}usage'],
-          )!,
-      lastUseTime:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}lastUseTime'],
-          )!,
+      word: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}word'],
+      )!,
+      usage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}usage'],
+      )!,
+      lastUseTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastUseTime'],
+      )!,
     );
   }
 
@@ -9225,7 +8678,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SearchHistoryTableTable searchHistoryTable =
       $SearchHistoryTableTable(this);
   late final $ReplaceRulesTable replaceRules = $ReplaceRulesTable(this);
-  late final $BookmarksTable bookmarks = $BookmarksTable(this);
   late final $CookiesTable cookies = $CookiesTable(this);
   late final $DictRulesTable dictRules = $DictRulesTable(this);
   late final $HttpTtsTableTable httpTtsTable = $HttpTtsTableTable(this);
@@ -9244,7 +8696,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ChapterDao chapterDao = ChapterDao(this as AppDatabase);
   late final BookSourceDao bookSourceDao = BookSourceDao(this as AppDatabase);
   late final BookGroupDao bookGroupDao = BookGroupDao(this as AppDatabase);
-  late final BookmarkDao bookmarkDao = BookmarkDao(this as AppDatabase);
   late final ReplaceRuleDao replaceRuleDao = ReplaceRuleDao(
     this as AppDatabase,
   );
@@ -9281,7 +8732,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     bookGroups,
     searchHistoryTable,
     replaceRules,
-    bookmarks,
     cookies,
     dictRules,
     httpTtsTable,
@@ -9297,86 +8747,84 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
 }
 
-typedef $$BooksTableCreateCompanionBuilder =
-    BooksCompanion Function({
-      required String bookUrl,
-      Value<String> tocUrl,
-      Value<String> origin,
-      Value<String> originName,
-      required String name,
-      Value<String> author,
-      Value<String?> kind,
-      Value<String?> customTag,
-      Value<String?> coverUrl,
-      Value<String?> coverLocalPath,
-      Value<String?> customCoverUrl,
-      Value<String?> customCoverLocalPath,
-      Value<String?> intro,
-      Value<String?> customIntro,
-      Value<String?> charset,
-      Value<int> type,
-      Value<int> group,
-      Value<String?> latestChapterTitle,
-      Value<int> latestChapterTime,
-      Value<int> lastCheckTime,
-      Value<int> lastCheckCount,
-      Value<int> totalChapterNum,
-      Value<String?> durChapterTitle,
-      Value<int> chapterIndex,
-      Value<int> charOffset,
-      Value<double> visualOffsetPx,
-      Value<String?> readerAnchorJson,
-      Value<int> durChapterTime,
-      Value<String?> wordCount,
-      Value<bool> canUpdate,
-      Value<int> order,
-      Value<int> originOrder,
-      Value<String?> variable,
-      Value<ReadConfig?> readConfig,
-      Value<int> syncTime,
-      Value<bool> isInBookshelf,
-      Value<int> rowid,
-    });
-typedef $$BooksTableUpdateCompanionBuilder =
-    BooksCompanion Function({
-      Value<String> bookUrl,
-      Value<String> tocUrl,
-      Value<String> origin,
-      Value<String> originName,
-      Value<String> name,
-      Value<String> author,
-      Value<String?> kind,
-      Value<String?> customTag,
-      Value<String?> coverUrl,
-      Value<String?> coverLocalPath,
-      Value<String?> customCoverUrl,
-      Value<String?> customCoverLocalPath,
-      Value<String?> intro,
-      Value<String?> customIntro,
-      Value<String?> charset,
-      Value<int> type,
-      Value<int> group,
-      Value<String?> latestChapterTitle,
-      Value<int> latestChapterTime,
-      Value<int> lastCheckTime,
-      Value<int> lastCheckCount,
-      Value<int> totalChapterNum,
-      Value<String?> durChapterTitle,
-      Value<int> chapterIndex,
-      Value<int> charOffset,
-      Value<double> visualOffsetPx,
-      Value<String?> readerAnchorJson,
-      Value<int> durChapterTime,
-      Value<String?> wordCount,
-      Value<bool> canUpdate,
-      Value<int> order,
-      Value<int> originOrder,
-      Value<String?> variable,
-      Value<ReadConfig?> readConfig,
-      Value<int> syncTime,
-      Value<bool> isInBookshelf,
-      Value<int> rowid,
-    });
+typedef $$BooksTableCreateCompanionBuilder = BooksCompanion Function({
+  required String bookUrl,
+  Value<String> tocUrl,
+  Value<String> origin,
+  Value<String> originName,
+  required String name,
+  Value<String> author,
+  Value<String?> kind,
+  Value<String?> customTag,
+  Value<String?> coverUrl,
+  Value<String?> coverLocalPath,
+  Value<String?> customCoverUrl,
+  Value<String?> customCoverLocalPath,
+  Value<String?> intro,
+  Value<String?> customIntro,
+  Value<String?> charset,
+  Value<int> type,
+  Value<int> group,
+  Value<String?> latestChapterTitle,
+  Value<int> latestChapterTime,
+  Value<int> lastCheckTime,
+  Value<int> lastCheckCount,
+  Value<int> totalChapterNum,
+  Value<String?> durChapterTitle,
+  Value<int> chapterIndex,
+  Value<int> charOffset,
+  Value<double> visualOffsetPx,
+  Value<String?> readerAnchorJson,
+  Value<int> durChapterTime,
+  Value<String?> wordCount,
+  Value<bool> canUpdate,
+  Value<int> order,
+  Value<int> originOrder,
+  Value<String?> variable,
+  Value<ReadConfig?> readConfig,
+  Value<int> syncTime,
+  Value<bool> isInBookshelf,
+  Value<int> rowid,
+});
+typedef $$BooksTableUpdateCompanionBuilder = BooksCompanion Function({
+  Value<String> bookUrl,
+  Value<String> tocUrl,
+  Value<String> origin,
+  Value<String> originName,
+  Value<String> name,
+  Value<String> author,
+  Value<String?> kind,
+  Value<String?> customTag,
+  Value<String?> coverUrl,
+  Value<String?> coverLocalPath,
+  Value<String?> customCoverUrl,
+  Value<String?> customCoverLocalPath,
+  Value<String?> intro,
+  Value<String?> customIntro,
+  Value<String?> charset,
+  Value<int> type,
+  Value<int> group,
+  Value<String?> latestChapterTitle,
+  Value<int> latestChapterTime,
+  Value<int> lastCheckTime,
+  Value<int> lastCheckCount,
+  Value<int> totalChapterNum,
+  Value<String?> durChapterTitle,
+  Value<int> chapterIndex,
+  Value<int> charOffset,
+  Value<double> visualOffsetPx,
+  Value<String?> readerAnchorJson,
+  Value<int> durChapterTime,
+  Value<String?> wordCount,
+  Value<bool> canUpdate,
+  Value<int> order,
+  Value<int> originOrder,
+  Value<String?> variable,
+  Value<ReadConfig?> readConfig,
+  Value<int> syncTime,
+  Value<bool> isInBookshelf,
+  Value<int> rowid,
+});
 
 class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
   $$BooksTableFilterComposer({
@@ -9940,12 +9388,12 @@ class $$BooksTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$BooksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$BooksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$BooksTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$BooksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BooksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BooksTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> bookUrl = const Value.absent(),
@@ -10102,16 +9550,9 @@ class $$BooksTableTableManager
                 isInBookshelf: isInBookshelf,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -10131,46 +9572,44 @@ typedef $$BooksTableProcessedTableManager =
       Book,
       PrefetchHooks Function()
     >;
-typedef $$ChaptersTableCreateCompanionBuilder =
-    ChaptersCompanion Function({
-      required String url,
-      required String title,
-      Value<bool> isVolume,
-      Value<String> baseUrl,
-      required String bookUrl,
-      required int index,
-      Value<bool> isVip,
-      Value<bool> isPay,
-      Value<String?> resourceUrl,
-      Value<String?> tag,
-      Value<String?> wordCount,
-      Value<int?> start,
-      Value<int?> end,
-      Value<String?> startFragmentId,
-      Value<String?> endFragmentId,
-      Value<String?> variable,
-      Value<int> rowid,
-    });
-typedef $$ChaptersTableUpdateCompanionBuilder =
-    ChaptersCompanion Function({
-      Value<String> url,
-      Value<String> title,
-      Value<bool> isVolume,
-      Value<String> baseUrl,
-      Value<String> bookUrl,
-      Value<int> index,
-      Value<bool> isVip,
-      Value<bool> isPay,
-      Value<String?> resourceUrl,
-      Value<String?> tag,
-      Value<String?> wordCount,
-      Value<int?> start,
-      Value<int?> end,
-      Value<String?> startFragmentId,
-      Value<String?> endFragmentId,
-      Value<String?> variable,
-      Value<int> rowid,
-    });
+typedef $$ChaptersTableCreateCompanionBuilder = ChaptersCompanion Function({
+  required String url,
+  required String title,
+  Value<bool> isVolume,
+  Value<String> baseUrl,
+  required String bookUrl,
+  required int index,
+  Value<bool> isVip,
+  Value<bool> isPay,
+  Value<String?> resourceUrl,
+  Value<String?> tag,
+  Value<String?> wordCount,
+  Value<int?> start,
+  Value<int?> end,
+  Value<String?> startFragmentId,
+  Value<String?> endFragmentId,
+  Value<String?> variable,
+  Value<int> rowid,
+});
+typedef $$ChaptersTableUpdateCompanionBuilder = ChaptersCompanion Function({
+  Value<String> url,
+  Value<String> title,
+  Value<bool> isVolume,
+  Value<String> baseUrl,
+  Value<String> bookUrl,
+  Value<int> index,
+  Value<bool> isVip,
+  Value<bool> isPay,
+  Value<String?> resourceUrl,
+  Value<String?> tag,
+  Value<String?> wordCount,
+  Value<int?> start,
+  Value<int?> end,
+  Value<String?> startFragmentId,
+  Value<String?> endFragmentId,
+  Value<String?> variable,
+  Value<int> rowid,
+});
 
 class $$ChaptersTableFilterComposer
     extends Composer<_$AppDatabase, $ChaptersTable> {
@@ -10440,12 +9879,12 @@ class $$ChaptersTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$ChaptersTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$ChaptersTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$ChaptersTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$ChaptersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ChaptersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ChaptersTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> url = const Value.absent(),
@@ -10522,16 +9961,9 @@ class $$ChaptersTableTableManager
                 variable: variable,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -10762,18 +10194,18 @@ class $$ReaderChapterContentsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$ReaderChapterContentsTableFilterComposer(
+          createFilteringComposer: () =>
+              $$ReaderChapterContentsTableFilterComposer(
                 $db: db,
                 $table: table,
               ),
-          createOrderingComposer:
-              () => $$ReaderChapterContentsTableOrderingComposer(
+          createOrderingComposer: () =>
+              $$ReaderChapterContentsTableOrderingComposer(
                 $db: db,
                 $table: table,
               ),
-          createComputedFieldComposer:
-              () => $$ReaderChapterContentsTableAnnotationComposer(
+          createComputedFieldComposer: () =>
+              $$ReaderChapterContentsTableAnnotationComposer(
                 $db: db,
                 $table: table,
               ),
@@ -10825,16 +10257,9 @@ class $$ReaderChapterContentsTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -11428,13 +10853,12 @@ class $$BookSourcesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$BookSourcesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$BookSourcesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$BookSourcesTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$BookSourcesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BookSourcesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BookSourcesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> bookSourceUrl = const Value.absent(),
@@ -11567,16 +10991,9 @@ class $$BookSourcesTableTableManager
                 ruleReview: ruleReview,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -11599,26 +11016,24 @@ typedef $$BookSourcesTableProcessedTableManager =
       BookSource,
       PrefetchHooks Function()
     >;
-typedef $$BookGroupsTableCreateCompanionBuilder =
-    BookGroupsCompanion Function({
-      Value<int> groupId,
-      required String groupName,
-      Value<int> order,
-      Value<bool> show,
-      Value<String?> coverPath,
-      Value<bool> enableRefresh,
-      Value<int> bookSort,
-    });
-typedef $$BookGroupsTableUpdateCompanionBuilder =
-    BookGroupsCompanion Function({
-      Value<int> groupId,
-      Value<String> groupName,
-      Value<int> order,
-      Value<bool> show,
-      Value<String?> coverPath,
-      Value<bool> enableRefresh,
-      Value<int> bookSort,
-    });
+typedef $$BookGroupsTableCreateCompanionBuilder = BookGroupsCompanion Function({
+  Value<int> groupId,
+  required String groupName,
+  Value<int> order,
+  Value<bool> show,
+  Value<String?> coverPath,
+  Value<bool> enableRefresh,
+  Value<int> bookSort,
+});
+typedef $$BookGroupsTableUpdateCompanionBuilder = BookGroupsCompanion Function({
+  Value<int> groupId,
+  Value<String> groupName,
+  Value<int> order,
+  Value<bool> show,
+  Value<String?> coverPath,
+  Value<bool> enableRefresh,
+  Value<int> bookSort,
+});
 
 class $$BookGroupsTableFilterComposer
     extends Composer<_$AppDatabase, $BookGroupsTable> {
@@ -11766,12 +11181,12 @@ class $$BookGroupsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$BookGroupsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$BookGroupsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$BookGroupsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$BookGroupsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BookGroupsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BookGroupsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> groupId = const Value.absent(),
@@ -11808,16 +11223,9 @@ class $$BookGroupsTableTableManager
                 enableRefresh: enableRefresh,
                 bookSort: bookSort,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -11950,18 +11358,12 @@ class $$SearchHistoryTableTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$SearchHistoryTableTableFilterComposer(
-                $db: db,
-                $table: table,
-              ),
-          createOrderingComposer:
-              () => $$SearchHistoryTableTableOrderingComposer(
-                $db: db,
-                $table: table,
-              ),
-          createComputedFieldComposer:
-              () => $$SearchHistoryTableTableAnnotationComposer(
+          createFilteringComposer: () =>
+              $$SearchHistoryTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SearchHistoryTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SearchHistoryTableTableAnnotationComposer(
                 $db: db,
                 $table: table,
               ),
@@ -11985,16 +11387,9 @@ class $$SearchHistoryTableTableTableManager
                 keyword: keyword,
                 searchTime: searchTime,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -12289,13 +11684,12 @@ class $$ReplaceRulesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$ReplaceRulesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$ReplaceRulesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$ReplaceRulesTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$ReplaceRulesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReplaceRulesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReplaceRulesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -12356,16 +11750,9 @@ class $$ReplaceRulesTableTableManager
                 group: group,
                 order: order,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -12388,322 +11775,16 @@ typedef $$ReplaceRulesTableProcessedTableManager =
       ReplaceRule,
       PrefetchHooks Function()
     >;
-typedef $$BookmarksTableCreateCompanionBuilder =
-    BookmarksCompanion Function({
-      Value<int> id,
-      required int time,
-      required String bookName,
-      Value<String> bookAuthor,
-      Value<int> chapterIndex,
-      Value<int> chapterPos,
-      Value<String> chapterName,
-      required String bookUrl,
-      Value<String> bookText,
-      Value<String> content,
-    });
-typedef $$BookmarksTableUpdateCompanionBuilder =
-    BookmarksCompanion Function({
-      Value<int> id,
-      Value<int> time,
-      Value<String> bookName,
-      Value<String> bookAuthor,
-      Value<int> chapterIndex,
-      Value<int> chapterPos,
-      Value<String> chapterName,
-      Value<String> bookUrl,
-      Value<String> bookText,
-      Value<String> content,
-    });
-
-class $$BookmarksTableFilterComposer
-    extends Composer<_$AppDatabase, $BookmarksTable> {
-  $$BookmarksTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get time => $composableBuilder(
-    column: $table.time,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get bookName => $composableBuilder(
-    column: $table.bookName,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<String, String, String> get bookAuthor =>
-      $composableBuilder(
-        column: $table.bookAuthor,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-
-  ColumnFilters<int> get chapterIndex => $composableBuilder(
-    column: $table.chapterIndex,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get chapterPos => $composableBuilder(
-    column: $table.chapterPos,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<String, String, String> get chapterName =>
-      $composableBuilder(
-        column: $table.chapterName,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-
-  ColumnFilters<String> get bookUrl => $composableBuilder(
-    column: $table.bookUrl,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<String, String, String> get bookText =>
-      $composableBuilder(
-        column: $table.bookText,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-
-  ColumnWithTypeConverterFilters<String, String, String> get content =>
-      $composableBuilder(
-        column: $table.content,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-}
-
-class $$BookmarksTableOrderingComposer
-    extends Composer<_$AppDatabase, $BookmarksTable> {
-  $$BookmarksTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get time => $composableBuilder(
-    column: $table.time,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get bookName => $composableBuilder(
-    column: $table.bookName,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get bookAuthor => $composableBuilder(
-    column: $table.bookAuthor,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get chapterIndex => $composableBuilder(
-    column: $table.chapterIndex,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get chapterPos => $composableBuilder(
-    column: $table.chapterPos,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get chapterName => $composableBuilder(
-    column: $table.chapterName,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get bookUrl => $composableBuilder(
-    column: $table.bookUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get bookText => $composableBuilder(
-    column: $table.bookText,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get content => $composableBuilder(
-    column: $table.content,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$BookmarksTableAnnotationComposer
-    extends Composer<_$AppDatabase, $BookmarksTable> {
-  $$BookmarksTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<int> get time =>
-      $composableBuilder(column: $table.time, builder: (column) => column);
-
-  GeneratedColumn<String> get bookName =>
-      $composableBuilder(column: $table.bookName, builder: (column) => column);
-
-  GeneratedColumnWithTypeConverter<String, String> get bookAuthor =>
-      $composableBuilder(
-        column: $table.bookAuthor,
-        builder: (column) => column,
-      );
-
-  GeneratedColumn<int> get chapterIndex => $composableBuilder(
-    column: $table.chapterIndex,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get chapterPos => $composableBuilder(
-    column: $table.chapterPos,
-    builder: (column) => column,
-  );
-
-  GeneratedColumnWithTypeConverter<String, String> get chapterName =>
-      $composableBuilder(
-        column: $table.chapterName,
-        builder: (column) => column,
-      );
-
-  GeneratedColumn<String> get bookUrl =>
-      $composableBuilder(column: $table.bookUrl, builder: (column) => column);
-
-  GeneratedColumnWithTypeConverter<String, String> get bookText =>
-      $composableBuilder(column: $table.bookText, builder: (column) => column);
-
-  GeneratedColumnWithTypeConverter<String, String> get content =>
-      $composableBuilder(column: $table.content, builder: (column) => column);
-}
-
-class $$BookmarksTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $BookmarksTable,
-          Bookmark,
-          $$BookmarksTableFilterComposer,
-          $$BookmarksTableOrderingComposer,
-          $$BookmarksTableAnnotationComposer,
-          $$BookmarksTableCreateCompanionBuilder,
-          $$BookmarksTableUpdateCompanionBuilder,
-          (Bookmark, BaseReferences<_$AppDatabase, $BookmarksTable, Bookmark>),
-          Bookmark,
-          PrefetchHooks Function()
-        > {
-  $$BookmarksTableTableManager(_$AppDatabase db, $BookmarksTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer:
-              () => $$BookmarksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$BookmarksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$BookmarksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                Value<int> time = const Value.absent(),
-                Value<String> bookName = const Value.absent(),
-                Value<String> bookAuthor = const Value.absent(),
-                Value<int> chapterIndex = const Value.absent(),
-                Value<int> chapterPos = const Value.absent(),
-                Value<String> chapterName = const Value.absent(),
-                Value<String> bookUrl = const Value.absent(),
-                Value<String> bookText = const Value.absent(),
-                Value<String> content = const Value.absent(),
-              }) => BookmarksCompanion(
-                id: id,
-                time: time,
-                bookName: bookName,
-                bookAuthor: bookAuthor,
-                chapterIndex: chapterIndex,
-                chapterPos: chapterPos,
-                chapterName: chapterName,
-                bookUrl: bookUrl,
-                bookText: bookText,
-                content: content,
-              ),
-          createCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                required int time,
-                required String bookName,
-                Value<String> bookAuthor = const Value.absent(),
-                Value<int> chapterIndex = const Value.absent(),
-                Value<int> chapterPos = const Value.absent(),
-                Value<String> chapterName = const Value.absent(),
-                required String bookUrl,
-                Value<String> bookText = const Value.absent(),
-                Value<String> content = const Value.absent(),
-              }) => BookmarksCompanion.insert(
-                id: id,
-                time: time,
-                bookName: bookName,
-                bookAuthor: bookAuthor,
-                chapterIndex: chapterIndex,
-                chapterPos: chapterPos,
-                chapterName: chapterName,
-                bookUrl: bookUrl,
-                bookText: bookText,
-                content: content,
-              ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$BookmarksTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $BookmarksTable,
-      Bookmark,
-      $$BookmarksTableFilterComposer,
-      $$BookmarksTableOrderingComposer,
-      $$BookmarksTableAnnotationComposer,
-      $$BookmarksTableCreateCompanionBuilder,
-      $$BookmarksTableUpdateCompanionBuilder,
-      (Bookmark, BaseReferences<_$AppDatabase, $BookmarksTable, Bookmark>),
-      Bookmark,
-      PrefetchHooks Function()
-    >;
-typedef $$CookiesTableCreateCompanionBuilder =
-    CookiesCompanion Function({
-      required String url,
-      required String cookie,
-      Value<int> rowid,
-    });
-typedef $$CookiesTableUpdateCompanionBuilder =
-    CookiesCompanion Function({
-      Value<String> url,
-      Value<String> cookie,
-      Value<int> rowid,
-    });
+typedef $$CookiesTableCreateCompanionBuilder = CookiesCompanion Function({
+  required String url,
+  required String cookie,
+  Value<int> rowid,
+});
+typedef $$CookiesTableUpdateCompanionBuilder = CookiesCompanion Function({
+  Value<String> url,
+  Value<String> cookie,
+  Value<int> rowid,
+});
 
 class $$CookiesTableFilterComposer
     extends Composer<_$AppDatabase, $CookiesTable> {
@@ -12781,38 +11862,25 @@ class $$CookiesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$CookiesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$CookiesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$CookiesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> url = const Value.absent(),
-                Value<String> cookie = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => CookiesCompanion(url: url, cookie: cookie, rowid: rowid),
-          createCompanionCallback:
-              ({
-                required String url,
-                required String cookie,
-                Value<int> rowid = const Value.absent(),
-              }) => CookiesCompanion.insert(
-                url: url,
-                cookie: cookie,
-                rowid: rowid,
-              ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          createFilteringComposer: () =>
+              $$CookiesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CookiesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CookiesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> url = const Value.absent(),
+            Value<String> cookie = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => CookiesCompanion(url: url, cookie: cookie, rowid: rowid),
+          createCompanionCallback: ({
+            required String url,
+            required String cookie,
+            Value<int> rowid = const Value.absent(),
+          }) => CookiesCompanion.insert(url: url, cookie: cookie, rowid: rowid),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -12832,24 +11900,22 @@ typedef $$CookiesTableProcessedTableManager =
       Cookie,
       PrefetchHooks Function()
     >;
-typedef $$DictRulesTableCreateCompanionBuilder =
-    DictRulesCompanion Function({
-      Value<int> id,
-      required String name,
-      Value<String> urlRule,
-      Value<String> showRule,
-      Value<bool> enabled,
-      Value<int> sortNumber,
-    });
-typedef $$DictRulesTableUpdateCompanionBuilder =
-    DictRulesCompanion Function({
-      Value<int> id,
-      Value<String> name,
-      Value<String> urlRule,
-      Value<String> showRule,
-      Value<bool> enabled,
-      Value<int> sortNumber,
-    });
+typedef $$DictRulesTableCreateCompanionBuilder = DictRulesCompanion Function({
+  Value<int> id,
+  required String name,
+  Value<String> urlRule,
+  Value<String> showRule,
+  Value<bool> enabled,
+  Value<int> sortNumber,
+});
+typedef $$DictRulesTableUpdateCompanionBuilder = DictRulesCompanion Function({
+  Value<int> id,
+  Value<String> name,
+  Value<String> urlRule,
+  Value<String> showRule,
+  Value<bool> enabled,
+  Value<int> sortNumber,
+});
 
 class $$DictRulesTableFilterComposer
     extends Composer<_$AppDatabase, $DictRulesTable> {
@@ -12983,12 +12049,12 @@ class $$DictRulesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$DictRulesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$DictRulesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$DictRulesTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$DictRulesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DictRulesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DictRulesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -13021,16 +12087,9 @@ class $$DictRulesTableTableManager
                 enabled: enabled,
                 sortNumber: sortNumber,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -13297,13 +12356,12 @@ class $$HttpTtsTableTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$HttpTtsTableTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$HttpTtsTableTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$HttpTtsTableTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$HttpTtsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HttpTtsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HttpTtsTableTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -13360,16 +12418,9 @@ class $$HttpTtsTableTableTableManager
                 loginCheckJs: loginCheckJs,
                 lastUpdateTime: lastUpdateTime,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -13524,13 +12575,12 @@ class $$ReadRecordsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$ReadRecordsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$ReadRecordsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$ReadRecordsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$ReadRecordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReadRecordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReadRecordsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -13559,16 +12609,9 @@ class $$ReadRecordsTableTableManager
                 readTime: readTime,
                 lastRead: lastRead,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -13591,22 +12634,20 @@ typedef $$ReadRecordsTableProcessedTableManager =
       ReadRecord,
       PrefetchHooks Function()
     >;
-typedef $$ServersTableCreateCompanionBuilder =
-    ServersCompanion Function({
-      Value<int> id,
-      required String name,
-      required String type,
-      Value<String?> config,
-      Value<int> sortNumber,
-    });
-typedef $$ServersTableUpdateCompanionBuilder =
-    ServersCompanion Function({
-      Value<int> id,
-      Value<String> name,
-      Value<String> type,
-      Value<String?> config,
-      Value<int> sortNumber,
-    });
+typedef $$ServersTableCreateCompanionBuilder = ServersCompanion Function({
+  Value<int> id,
+  required String name,
+  required String type,
+  Value<String?> config,
+  Value<int> sortNumber,
+});
+typedef $$ServersTableUpdateCompanionBuilder = ServersCompanion Function({
+  Value<int> id,
+  Value<String> name,
+  Value<String> type,
+  Value<String?> config,
+  Value<int> sortNumber,
+});
 
 class $$ServersTableFilterComposer
     extends Composer<_$AppDatabase, $ServersTable> {
@@ -13725,12 +12766,12 @@ class $$ServersTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$ServersTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$ServersTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$ServersTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$ServersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ServersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ServersTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -13759,16 +12800,9 @@ class $$ServersTableTableManager
                 config: config,
                 sortNumber: sortNumber,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -13940,13 +12974,12 @@ class $$TxtTocRulesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$TxtTocRulesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$TxtTocRulesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$TxtTocRulesTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$TxtTocRulesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TxtTocRulesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TxtTocRulesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -13979,16 +13012,9 @@ class $$TxtTocRulesTableTableManager
                 serialNumber: serialNumber,
                 enable: enable,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -14011,20 +13037,18 @@ typedef $$TxtTocRulesTableProcessedTableManager =
       TxtTocRule,
       PrefetchHooks Function()
     >;
-typedef $$CacheTableTableCreateCompanionBuilder =
-    CacheTableCompanion Function({
-      required String key,
-      Value<String?> value,
-      Value<int> deadline,
-      Value<int> rowid,
-    });
-typedef $$CacheTableTableUpdateCompanionBuilder =
-    CacheTableCompanion Function({
-      Value<String> key,
-      Value<String?> value,
-      Value<int> deadline,
-      Value<int> rowid,
-    });
+typedef $$CacheTableTableCreateCompanionBuilder = CacheTableCompanion Function({
+  required String key,
+  Value<String?> value,
+  Value<int> deadline,
+  Value<int> rowid,
+});
+typedef $$CacheTableTableUpdateCompanionBuilder = CacheTableCompanion Function({
+  Value<String> key,
+  Value<String?> value,
+  Value<int> deadline,
+  Value<int> rowid,
+});
 
 class $$CacheTableTableFilterComposer
     extends Composer<_$AppDatabase, $CacheTableTable> {
@@ -14115,12 +13139,12 @@ class $$CacheTableTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$CacheTableTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$CacheTableTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$CacheTableTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$CacheTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CacheTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CacheTableTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> key = const Value.absent(),
@@ -14145,16 +13169,9 @@ class $$CacheTableTableTableManager
                 deadline: deadline,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -14303,19 +13320,12 @@ class $$KeyboardAssistsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () =>
-                  $$KeyboardAssistsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$KeyboardAssistsTableOrderingComposer(
-                $db: db,
-                $table: table,
-              ),
-          createComputedFieldComposer:
-              () => $$KeyboardAssistsTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
+          createFilteringComposer: () =>
+              $$KeyboardAssistsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$KeyboardAssistsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$KeyboardAssistsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> key = const Value.absent(),
@@ -14344,16 +13354,9 @@ class $$KeyboardAssistsTableTableManager
                 serialNo: serialNo,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -14376,24 +13379,22 @@ typedef $$KeyboardAssistsTableProcessedTableManager =
       KeyboardAssist,
       PrefetchHooks Function()
     >;
-typedef $$RuleSubsTableCreateCompanionBuilder =
-    RuleSubsCompanion Function({
-      Value<int> id,
-      required String name,
-      required String url,
-      Value<int> type,
-      Value<bool> enabled,
-      Value<int> order,
-    });
-typedef $$RuleSubsTableUpdateCompanionBuilder =
-    RuleSubsCompanion Function({
-      Value<int> id,
-      Value<String> name,
-      Value<String> url,
-      Value<int> type,
-      Value<bool> enabled,
-      Value<int> order,
-    });
+typedef $$RuleSubsTableCreateCompanionBuilder = RuleSubsCompanion Function({
+  Value<int> id,
+  required String name,
+  required String url,
+  Value<int> type,
+  Value<bool> enabled,
+  Value<int> order,
+});
+typedef $$RuleSubsTableUpdateCompanionBuilder = RuleSubsCompanion Function({
+  Value<int> id,
+  Value<String> name,
+  Value<String> url,
+  Value<int> type,
+  Value<bool> enabled,
+  Value<int> order,
+});
 
 class $$RuleSubsTableFilterComposer
     extends Composer<_$AppDatabase, $RuleSubsTable> {
@@ -14523,12 +13524,12 @@ class $$RuleSubsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$RuleSubsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$RuleSubsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$RuleSubsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$RuleSubsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RuleSubsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RuleSubsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -14561,16 +13562,9 @@ class $$RuleSubsTableTableManager
                 enabled: enabled,
                 order: order,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -14884,13 +13878,12 @@ class $$SearchBooksTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$SearchBooksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () => $$SearchBooksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () =>
-                  $$SearchBooksTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer: () =>
+              $$SearchBooksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SearchBooksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SearchBooksTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> bookUrl = const Value.absent(),
@@ -14963,16 +13956,9 @@ class $$SearchBooksTableTableManager
                 tocUrl: tocUrl,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -15221,16 +14207,12 @@ class $$DownloadTasksTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$DownloadTasksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () =>
-                  $$DownloadTasksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$DownloadTasksTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
+          createFilteringComposer: () =>
+              $$DownloadTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DownloadTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DownloadTasksTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> bookUrl = const Value.absent(),
@@ -15283,16 +14265,9 @@ class $$DownloadTasksTableTableManager
                 lastUpdateTime: lastUpdateTime,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -15426,16 +14401,12 @@ class $$SearchKeywordsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer:
-              () => $$SearchKeywordsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer:
-              () =>
-                  $$SearchKeywordsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer:
-              () => $$SearchKeywordsTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
+          createFilteringComposer: () =>
+              $$SearchKeywordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SearchKeywordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SearchKeywordsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> word = const Value.absent(),
@@ -15460,16 +14431,9 @@ class $$SearchKeywordsTableTableManager
                 lastUseTime: lastUseTime,
                 rowid: rowid,
               ),
-          withReferenceMapper:
-              (p0) =>
-                  p0
-                      .map(
-                        (e) => (
-                          e.readTable(table),
-                          BaseReferences(db, table, e),
-                        ),
-                      )
-                      .toList(),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -15510,8 +14474,6 @@ class $AppDatabaseManager {
       $$SearchHistoryTableTableTableManager(_db, _db.searchHistoryTable);
   $$ReplaceRulesTableTableManager get replaceRules =>
       $$ReplaceRulesTableTableManager(_db, _db.replaceRules);
-  $$BookmarksTableTableManager get bookmarks =>
-      $$BookmarksTableTableManager(_db, _db.bookmarks);
   $$CookiesTableTableManager get cookies =>
       $$CookiesTableTableManager(_db, _db.cookies);
   $$DictRulesTableTableManager get dictRules =>

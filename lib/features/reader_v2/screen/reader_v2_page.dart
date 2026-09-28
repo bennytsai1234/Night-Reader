@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
@@ -577,7 +578,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         .toInt();
   }
 
+  /// 目錄、選單與資訊列顯示用的章節標題，套用閱讀設定的繁簡轉換。
   String _chapterTitleAt(int index) {
+    return ChineseDisplay.convert(
+      _rawChapterTitleAt(index),
+      convertType: _host.settings.chineseConvert,
+    );
+  }
+
+  String _rawChapterTitleAt(int index) {
     final runtime = _host.runtime;
     if (runtime != null) return runtime.titleFor(index);
     if (index < 0 || index >= widget.initialChapters.length) return '';

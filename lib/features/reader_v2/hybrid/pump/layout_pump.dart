@@ -15,7 +15,6 @@ import 'budget_governor.dart';
 import 'layout_cost_model.dart';
 
 final class LayoutPump implements HybridLayoutPump {
-  static const double lastLineLetterSpacingCap = 2.0;
   static const double _minBlockHeight = 1e-6;
   static const ReaderParagraphLayout _paragraphLayout =
       ReaderParagraphLayout();
@@ -231,7 +230,6 @@ final class LayoutPump implements HybridLayoutPump {
 
   void _layoutTask(LayoutTask task) {
     final started = Stopwatch()..start();
-    final layoutPasses = _costModel.layoutPassesFor(task);
     final paragraph = _buildParagraph(task);
     final groupBlocks = task.groupBlocks;
     if (task.readerOwnedLinePlan) {
@@ -269,7 +267,6 @@ final class LayoutPump implements HybridLayoutPump {
     _costModel.record(
       charCount: task.layoutText.length,
       elapsed: elapsed,
-      layoutPasses: layoutPasses,
     );
     for (var i = 0; i < keys.length; i += 1) {
       _completed.add(
@@ -284,10 +281,6 @@ final class LayoutPump implements HybridLayoutPump {
     _disposed = true;
     _removeWhere((_) => true);
     unawaited(_completed.close());
-  }
-
-  void _disposeIntermediateParagraph(ui.Paragraph paragraph) {
-    paragraph.dispose();
   }
 
   Iterable<ChapterBlocks?> _alignmentSteps(
@@ -384,119 +377,7 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   ui.Paragraph _buildParagraph(LayoutTask task) {
-    if (task.readerOwnedLinePlan) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
-    if (!LayoutCostModel.mayCompensateLastLine(task)) {
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: 0,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    }
-
-    final paragraph = _buildParagraphWithLetterSpacing(
-      task,
-      extraLetterSpacing: 0,
-      textAlignOverride: ui.TextAlign.start,
-    );
-
-    try {
-      final lines = paragraph.computeLineMetrics();
-      if (lines.length < 2) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-      final lastLineIndex = lines.lastIndexWhere((line) => line.hardBreak);
-      if (lastLineIndex <= 0) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-      final indent = _indentFor(task);
-      final renderedText = '$indent${task.layoutText}';
-      final textLength = renderedText.length;
-      final lineRanges = _lineRanges(paragraph, textLength, lines.length);
-      if (lineRanges.length <= lastLineIndex) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-
-      final extraLetterSpacing = _averageJustifyExpansion(
-        paragraph,
-        lines,
-        lineRanges,
-        renderedText,
-        lastLineIndex,
-        task,
-      );
-      if (extraLetterSpacing <= 0) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-
-      final lastLine = lineRanges[lastLineIndex];
-      final lastLineBoxes = _boxesForTextClusters(
-        paragraph,
-        renderedText,
-        lastLine,
-      );
-      final lastLineGaps = lastLineBoxes.length - 1;
-      if (lastLineGaps <= 0) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-      final lastLineHeadroom =
-          (task.contentWidth - lines[lastLineIndex].width) /
-          lastLineBoxes.length.toDouble();
-      final safeExtraLetterSpacing = extraLetterSpacing
-          .clamp(0.0, lastLineHeadroom > 0 ? lastLineHeadroom : 0.0)
-          .toDouble();
-      if (safeExtraLetterSpacing <= 0) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-      final start = lastLine.start.clamp(indent.length, textLength).toInt();
-      final end = lastLine.end.clamp(start, textLength).toInt();
-      if (end <= start) {
-        return _buildParagraphWithLetterSpacing(
-          task,
-          extraLetterSpacing: 0,
-          textAlignOverride: task.textStyle.textAlign,
-        );
-      }
-
-      return _buildParagraphWithLetterSpacing(
-        task,
-        extraLetterSpacing: safeExtraLetterSpacing,
-        extraStart: start,
-        extraEnd: end,
-        textAlignOverride: task.textStyle.textAlign,
-      );
-    } finally {
-      _disposeIntermediateParagraph(paragraph);
-    }
+    return _buildParagraphFor(task);
   }
 
   double _visibleParagraphBottom(LayoutTask task, ui.Paragraph paragraph) {
@@ -597,80 +478,8 @@ final class LayoutPump implements HybridLayoutPump {
     return boxes.first.top;
   }
 
-  double _averageJustifyExpansion(
-    ui.Paragraph paragraph,
-    List<ui.LineMetrics> lines,
-    List<ui.TextRange> lineRanges,
-    String renderedText,
-    int lastLineIndex,
-    LayoutTask task,
-  ) {
-    final expansions = <double>[];
-    for (var index = 0; index < lastLineIndex; index += 1) {
-      if (lines[index].hardBreak) continue;
-      final line = lineRanges[index];
-      final boxes = _boxesForTextClusters(paragraph, renderedText, line);
-      final gaps = boxes.length - 1;
-      if (gaps <= 0) continue;
-
-      final expansion =
-          (task.contentWidth - lines[index].width) / gaps.toDouble();
-      if (expansion.isFinite && expansion > 0) {
-        expansions.add(expansion);
-      }
-    }
-    if (expansions.isEmpty) return 0;
-    final average =
-        expansions.reduce((total, value) => total + value) / expansions.length;
-    return average.clamp(0.0, lastLineLetterSpacingCap).toDouble();
-  }
-
-  List<ui.TextBox> _boxesForTextClusters(
-    ui.Paragraph paragraph,
-    String renderedText,
-    ui.TextRange range,
-  ) {
-    final boxes = <ui.TextBox>[];
-    var offset = range.start;
-    while (offset < range.end) {
-      final codeUnit = renderedText.codeUnitAt(offset);
-      final isHighSurrogate = codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
-      final clusterEnd = (offset + (isHighSurrogate ? 2 : 1))
-          .clamp(0, range.end)
-          .toInt();
-      if (clusterEnd <= offset) break;
-      boxes.addAll(paragraph.getBoxesForRange(offset, clusterEnd));
-      offset = clusterEnd;
-    }
-    return boxes;
-  }
-
-  List<ui.TextRange> _lineRanges(
-    ui.Paragraph paragraph,
-    int textLength,
-    int lineCount,
-  ) {
-    final ranges = <ui.TextRange>[];
-    var offset = 0;
-    while (ranges.length < lineCount && offset < textLength) {
-      final range = paragraph.getLineBoundary(
-        ui.TextPosition(offset: offset, affinity: ui.TextAffinity.downstream),
-      );
-      if (!range.isValid || range.end <= offset) break;
-      ranges.add(range);
-      if (range.end >= textLength) break;
-      offset = range.end;
-    }
-    return ranges;
-  }
-
-  ui.Paragraph _buildParagraphWithLetterSpacing(
-    LayoutTask task, {
-    required double extraLetterSpacing,
-    int? extraStart,
-    int? extraEnd,
-    required ui.TextAlign textAlignOverride,
-  }) {
+  ui.Paragraph _buildParagraphFor(LayoutTask task) {
+    final textAlignOverride = task.textStyle.textAlign;
     if (task.readerOwnedLinePlan) {
       final textMap = ParagraphTextMap.forBlocks(
         task.groupBlocks,
@@ -695,7 +504,6 @@ final class LayoutPump implements HybridLayoutPump {
     );
     final indentLength = _indentFor(task).length;
     final body = task.layoutText;
-    final textLength = indentLength + body.length;
     final builder = ui.ParagraphBuilder(paragraphStyle)
       ..pushStyle(_textStyle(task));
     final indentCellWidth = task.cellWidth ?? task.textStyle.fontSize;
@@ -706,25 +514,7 @@ final class LayoutPump implements HybridLayoutPump {
         ui.PlaceholderAlignment.bottom,
       );
     }
-    final start = extraStart?.clamp(indentLength, textLength).toInt();
-    final end = extraEnd?.clamp(start ?? indentLength, textLength).toInt();
-    if (extraLetterSpacing > 0 && start != null && end != null && end > start) {
-      final bodyStart = start - indentLength;
-      final bodyEnd = end - indentLength;
-      if (bodyStart > 0) builder.addText(body.substring(0, bodyStart));
-      builder
-        ..pushStyle(
-          _textStyle(
-            task,
-            letterSpacing: task.textStyle.letterSpacing + extraLetterSpacing,
-          ),
-        )
-        ..addText(body.substring(bodyStart, bodyEnd))
-        ..pop();
-      if (bodyEnd < body.length) builder.addText(body.substring(bodyEnd));
-    } else {
-      builder.addText(body);
-    }
+    builder.addText(body);
     return builder.build()
       ..layout(ui.ParagraphConstraints(width: task.contentWidth));
   }

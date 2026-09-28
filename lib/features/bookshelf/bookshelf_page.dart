@@ -17,6 +17,7 @@ import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_card.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
 
@@ -614,7 +615,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             borderRadius: AppRadius.cardXs,
                           ),
                           child: BookCoverWidget(
-                            bookName: book.name,
+                            bookName: context.zh(book.name),
                             coverUrl: book.getDisplayCover(),
                             width: double.infinity,
                             height: double.infinity,
@@ -622,7 +623,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                           ),
                         )
                       : BookCoverWidget(
-                          bookName: book.name,
+                          bookName: context.zh(book.name),
                           coverUrl: book.getDisplayCover(),
                           width: double.infinity,
                           height: double.infinity,
@@ -632,7 +633,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                book.name,
+                context.zh(book.name),
                 style: AppTextStyles.labelXs.copyWith(
                   fontWeight: FontWeight.w600,
                   height: 1.25,
@@ -715,7 +716,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
             Hero(
               tag: BookCoverWidget.heroTag(book.bookUrl),
               child: BookCoverWidget(
-                bookName: book.name,
+                bookName: context.zh(book.name),
                 coverUrl: book.getDisplayCover(),
                 width: 72,
                 height: 100,
@@ -728,7 +729,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    book.name,
+                    context.zh(book.name),
                     style: AppTextStyles.uiMd.copyWith(
                       fontWeight: FontWeight.w600,
                       color: colors.primary,
@@ -738,20 +739,20 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    book.author,
+                    context.zh(book.author),
                     style: AppTextStyles.bodyXs.copyWith(color: colors.tertiary),
                     maxLines: 1,
                   ),
                   const Spacer(),
                   Text(
-                    '讀至：${book.durChapterTitle}',
+                    '讀至：${context.zh(book.durChapterTitle ?? '')}',
                     style: AppTextStyles.bodyXs.copyWith(color: colors.secondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    '最新：${book.latestChapterTitle}',
+                    '最新：${context.zh(book.latestChapterTitle ?? '')}',
                     style: AppTextStyles.bodyXs.copyWith(color: colors.tertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -821,7 +822,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('確認刪除'),
         content: Text(
-          '將永久刪除這 ${_selectedUrls.length} 本書，以及本機章節、正文快取、書籤、下載任務與封面資料。此操作無法復原。',
+          '將永久刪除這 ${_selectedUrls.length} 本書，以及本機章節、正文快取、下載任務與封面資料。此操作無法復原。',
         ),
         actions: [
           TextButton(

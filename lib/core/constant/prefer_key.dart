@@ -177,6 +177,7 @@ class PreferKey {
 
   // Reader settings
   static const String readerFontSize = 'reader_font_size';
+  static const String readerTitleFontSize = 'reader_title_font_size';
   static const String readerLineHeight = 'reader_line_height';
   static const String readerParagraphSpacing = 'reader_paragraph_spacing';
   static const String readerLetterSpacing = 'reader_letter_spacing';
@@ -188,8 +189,6 @@ class PreferKey {
   static const String readerPageTurnMode = 'reader_page_turn_mode';
   static const String readerAutoPageSpeed = 'reader_auto_page_speed';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
-  static const String readerLastLineSpacingCompensation =
-      'reader_last_line_spacing_compensation';
   /// 舊版語速（flutter_tts 刻度，0.5 = 正常）；僅作遷移來源。
   static const String readerTtsRate = 'reader_tts_rate';
 

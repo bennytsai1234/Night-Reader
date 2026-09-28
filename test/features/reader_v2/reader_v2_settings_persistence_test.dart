@@ -88,6 +88,20 @@ void main() {
     page.dispose();
   });
 
+  test('unsaved title size keeps the old body + 4 appearance', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreferKey.readerFontSize: 24.0,
+    });
+    final snapshot = await const ReaderV2PrefsRepository().load();
+    expect(snapshot.titleFontSize, 28.0);
+
+    final settings = ReaderV2SettingsController();
+    await settings.loadSettings();
+    settings.setTypography(fontSize: 30);
+    expect(settings.titleFontSize, 28.0, reason: '標題字號獨立於正文');
+    settings.dispose();
+  });
+
   test('malformed stored info slots fall back safely', () {
     expect(ReaderV2InfoSlots.decode('garbage'), isNull);
     expect(

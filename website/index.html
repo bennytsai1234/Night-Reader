@@ -460,35 +460,12 @@
       color: var(--d-sub);
       font-variant-numeric: tabular-nums;
     }
-    .demo-batt { display: inline-flex; align-items: center; gap: 5px; }
-    .demo-batt i {
-      width: 17px; height: 9px;
-      border: 1px solid var(--d-sub);
-      border-radius: 2.5px;
-      position: relative;
-      display: inline-block;
-    }
-    .demo-batt i::before {
-      content: '';
-      position: absolute; inset: 1.5px;
-      right: 35%;
-      background: var(--d-sub);
-      border-radius: 1px;
-    }
-    .demo-batt i::after {
-      content: '';
-      position: absolute;
-      right: -3px; top: 2px;
-      width: 1.5px; height: 3.5px;
-      background: var(--d-sub);
-      border-radius: 1px;
-    }
 
     .demo-page {
       flex: 1;
-      padding: 14px 22px 10px;
+      padding: 14px var(--d-pad, 22px) 10px;
       overflow: hidden;
-      font-family: var(--d-font, var(--font-display));
+      font-family: var(--font-display);
       font-size: var(--d-fs, 17px);
       line-height: var(--d-lh, 1.95);
       color: var(--d-ink);
@@ -497,7 +474,6 @@
       -webkit-mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
       mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
     }
-    .demo-page.f-sans { --d-font: var(--font-body); }
     .demo-title {
       font-family: var(--font-display);
       font-size: 1.25em;
@@ -654,10 +630,11 @@
     }
     .tts-line span {
       border-radius: 4px;
-      padding: 1px 2px;
-      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+      padding: 1px 0;
+      background: color-mix(in srgb, var(--lamp) 16%, transparent);
+      transition: background var(--dur-fast) ease;
     }
-    .tts-line span.lit { background: var(--lamp); color: var(--ink-0); }
+    .tts-line span.lit { background: color-mix(in srgb, var(--lamp) 42%, transparent); }
     .tts-bar { display: flex; align-items: center; gap: 12px; }
     .tts-play {
       width: 30px; height: 30px;
@@ -1135,7 +1112,7 @@
         <div class="sec-head reveal">
           <p class="sec-vol">卷一</p>
           <h2>一字一句，都聽你的</h2>
-          <p class="sec-sub">自製排版引擎，字號、行高、字距、段距、縮排、邊距皆可獨立調校，標點避頭尾。下面這一頁是活的 — 動手調調看。</p>
+          <p class="sec-sub">自製排版引擎，字號、標題字號、行高、字距、段距、縮排與四邊邊距皆可獨立調校；全形標點置中、引號統一為「」『』。下面這一頁是活的 — 動手調調看。</p>
         </div>
 
         <div class="demo-wrap">
@@ -1145,7 +1122,7 @@
               <div class="phone-screen">
                 <div class="demo-status" aria-hidden="true">
                   <span>23:47</span>
-                  <span class="demo-batt">86%<i></i></span>
+                  <span>1/24</span>
                 </div>
                 <div class="demo-page" id="demoPage">
                   <p class="demo-title">秋夜</p>
@@ -1155,8 +1132,8 @@
                   <p>我不知道那些花草真叫什麼名字，人們叫他們什麼名字。我記得有一種開過極細小的粉紅花，現在還開著，但是更極細小了，她在冷的夜氣中，瑟縮地做夢……</p>
                 </div>
                 <div class="demo-foot" aria-hidden="true">
-                  <span>秋夜・第 1 / 24 頁</span>
-                  <span>4%</span>
+                  <span>秋夜</span>
+                  <span>2.1%</span>
                 </div>
               </div>
             </div>
@@ -1164,7 +1141,7 @@
 
           <div class="demo-controls reveal" style="--rd: 120ms">
             <p class="lead">這不是截圖，是排版。</p>
-            <p class="lead-sub">拖動滑桿、切換字體與主題，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
+            <p class="lead-sub">拖動滑桿、調整邊距與主題，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
 
             <div class="ctrl-row">
               <label class="ctrl-label" for="fsRange">字號<output id="fsVal">17 px</output></label>
@@ -1175,11 +1152,8 @@
               <input type="range" id="lhRange" min="150" max="240" step="5" value="195" />
             </div>
             <div class="ctrl-row">
-              <p class="ctrl-label" id="fontSegLabel">字體</p>
-              <div class="seg" role="group" aria-labelledby="fontSegLabel" id="fontSeg">
-                <button type="button" class="active" data-font="serif">明體</button>
-                <button type="button" data-font="sans">黑體</button>
-              </div>
+              <label class="ctrl-label" for="padRange">左右邊距<output id="padVal">22 px</output></label>
+              <input type="range" id="padRange" min="0" max="40" step="2" value="22" />
             </div>
             <div class="ctrl-row themes">
               <p class="ctrl-label" id="themeLabel">閱讀主題</p>
@@ -1190,7 +1164,7 @@
               </div>
             </div>
 
-            <p class="demo-note">※ 此為網頁模擬示意。實際 App 由自製 Canvas 排版引擎渲染，另支援字距、段距、邊距、首行縮排與上下滾動翻頁模式。</p>
+            <p class="demo-note">※ 此為網頁模擬示意。實際 App 由自製 Canvas 排版引擎渲染，採上下連續捲動；另可調整字距、段距、首行縮排、標題字號，隱藏系統狀態列，並自訂頁首與頁尾顯示的時間、章節與進度。</p>
           </div>
         </div>
       </div>
@@ -1212,7 +1186,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
             </div>
             <h3>語音朗讀 TTS</h3>
-            <p>逐段高亮跟讀、斷點續讀、自動接章。語速、音調、音量與音色皆可調，並支援切換系統語音引擎 — 眼睛累了，就讓耳朵接手。</p>
+            <p>整句高亮跟讀（語音引擎支援時逐字加深）、斷點續讀、自動接章。語速、音調、音量與音色皆可調，並支援切換系統語音引擎 — 眼睛累了，就讓耳朵接手。</p>
             <div class="tts-stage" aria-hidden="true">
               <p class="tts-line" id="ttsLine"><span>月光</span><span>如</span><span>流水</span><span>一般，</span><span>靜靜地</span><span>瀉在</span><span>這一片</span><span>葉子</span><span>和</span><span>花上。</span></p>
               <div class="tts-bar">
@@ -1264,15 +1238,15 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </div>
             <h3>書源管理</h3>
-            <p>匯入、匯出、批次有效性校驗、訂閱自動更新與規則偵錯工具，一應俱全。</p>
+            <p>匯入、匯出、批次有效性校驗與規則偵錯工具，一應俱全。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
             <div class="cell-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             </div>
-            <h3>書架與書籤</h3>
-            <p>封面、閱讀進度與快取狀態一目了然；書籤標記段落，隨時跳回那一行。</p>
+            <h3>書架與進度</h3>
+            <p>封面、閱讀進度與快取狀態一目了然；再開書時回到上次讀到的那一行。</p>
           </div>
 
           <div class="cell reveal">
@@ -1288,7 +1262,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             </div>
             <h3>一鍵備份還原</h3>
-            <p>書架、書源、替換規則、書籤、進度與設定一次打包，換機重裝完整還原。</p>
+            <p>書架、書源、替換規則、進度與設定一次打包，換機重裝完整還原。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
@@ -1304,7 +1278,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg>
             </div>
             <h3>自訂主題外觀</h3>
-            <p>閱讀背景、字體與配色隨心切換，深夜讀書也不刺眼。</p>
+            <p>閱讀區、選單與 App 介面的淺色／深色與配色可分別設定，深夜讀書也不刺眼。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 60ms">
@@ -1320,7 +1294,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </div>
             <h3>繁簡轉換</h3>
-            <p>不轉換、簡轉繁、繁轉簡三種模式，貼合你的閱讀習慣。</p>
+            <p>不轉換、簡轉繁、繁轉簡三種模式；正文、章節目錄、書名與簡介一併轉換。</p>
           </div>
 
         </div>
@@ -1462,7 +1436,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>不會。夜讀提供了非常便利的「一鍵備份還原」功能。您可以在舊手機上將書架、匯入的書源、替換規則、書籤、歷史進度及偏好設定一次性打包備份，並將備份檔移轉至新手機匯入還原，即可無縫繼續您的閱讀之旅。</p>
+              <p>不會。夜讀提供了非常便利的「一鍵備份還原」功能。您可以在舊手機上將書架、匯入的書源、替換規則、歷史進度及偏好設定一次性打包備份，並將備份檔移轉至新手機匯入還原，即可無縫繼續您的閱讀之旅。</p>
             </div>
           </div>
         </div>
@@ -1609,12 +1583,11 @@
         lhVal.textContent = lh;
       });
 
-      document.getElementById('fontSeg').addEventListener('click', function (e) {
-        var btn = e.target.closest('button');
-        if (!btn) return;
-        this.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        page.classList.toggle('f-sans', btn.dataset.font === 'sans');
+      var padRange = document.getElementById('padRange');
+      var padVal = document.getElementById('padVal');
+      padRange.addEventListener('input', function () {
+        page.style.setProperty('--d-pad', padRange.value + 'px');
+        padVal.textContent = padRange.value + ' px';
       });
 
       document.getElementById('themeSwatches').addEventListener('click', function (e) {
@@ -1625,7 +1598,7 @@
         phone.className = 'phone' + (btn.dataset.theme ? ' ' + btn.dataset.theme : '');
       });
 
-      /* ---- TTS 逐段高亮 ---- */
+      /* ---- TTS 高亮：整句淡底、正在朗讀的字詞加深（與 App 相同） ---- */
       (function ttsDemo() {
         var line = document.getElementById('ttsLine');
         if (!line) return;

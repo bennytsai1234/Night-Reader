@@ -326,7 +326,7 @@ class PrivacyNoticePage extends StatelessWidget {
       sections: [
         _NoticeSection(
           title: '本地資料',
-          body: '書架、書源、章節、正文快取、書籤、閱讀進度、閱讀設定、替換規則與 TTS 設定會保存在本機資料庫或本機偏好設定中。',
+          body: '書架、書源、章節、正文快取、閱讀進度、閱讀設定、替換規則與 TTS 設定會保存在本機資料庫或本機偏好設定中。',
         ),
         _NoticeSection(
           title: 'Cookie 與 WebView',
@@ -340,7 +340,7 @@ class PrivacyNoticePage extends StatelessWidget {
         ),
         _NoticeSection(
           title: '備份資料',
-          body: '備份檔會包含書架、書源、書籤、閱讀進度、設定、規則與已快取正文等資料。備份檔目前不加密，請自行保存於可信位置。',
+          body: '備份檔會包含書架、書源、閱讀進度、設定、規則與已快取正文等資料。備份檔目前不加密，請自行保存於可信位置。',
         ),
         _NoticeSection(
           title: 'Crash log',

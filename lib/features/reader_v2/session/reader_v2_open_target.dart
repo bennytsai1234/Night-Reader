@@ -1,11 +1,10 @@
 import 'dart:convert';
 
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/bookmark.dart';
 
 import 'reader_v2_location.dart';
 
-enum ReaderV2OpenIntent { resume, chapterStart, bookmark }
+enum ReaderV2OpenIntent { resume, chapterStart }
 
 class ReaderV2OpenTarget {
   const ReaderV2OpenTarget({required this.location, required this.intent});
@@ -57,17 +56,6 @@ class ReaderV2OpenTarget {
           ReaderV2Location(
             chapterIndex: chapterIndex,
             charOffset: 0,
-          ).normalized(),
-    );
-  }
-
-  factory ReaderV2OpenTarget.bookmark(Bookmark bookmark) {
-    return ReaderV2OpenTarget(
-      intent: ReaderV2OpenIntent.bookmark,
-      location:
-          ReaderV2Location(
-            chapterIndex: bookmark.chapterIndex,
-            charOffset: bookmark.chapterPos,
           ).normalized(),
     );
   }

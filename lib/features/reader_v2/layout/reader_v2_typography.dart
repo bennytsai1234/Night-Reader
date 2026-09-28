@@ -16,8 +16,8 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
   countryCode: 'TW',
 );
 
-// 末行補償演算法版本也要進入 metrics fingerprint，避免沿用舊 Paragraph
-// 幾何；開關本身則由 StyleFingerprint.lastLineSpacingCompensation 區分。
+// lastline-v1 為已移除的末行字距補償所留；保留字串以免無謂地讓既有
+// metrics 快取失效。
 // physicalwidth-v1：contentWidth 只代表 viewport 扣除使用者 padding 後的
 // 實體可畫寬度，cell metric 不再裁切正文寬度。
 // centered-text-frame-v1：typography 在 physical content frame 內建立置中的
@@ -32,6 +32,9 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
 // 舊的章末高度不可沿用。
 const String kReaderV2CjkTypographyFeatureSignature =
     'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v1';
+
+/// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
+const double kReaderV2DefaultTitleSizeDelta = 4.0;
 
 /// 章末與下一章標題之間，在一般段距之外額外保留的行數。
 const double kReaderV2ChapterGapLines = 2.0;

@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
-import 'package:night_reader/core/database/dao/bookmark_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book/chapter_alignment.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -225,9 +223,8 @@ class SourceSwitchService {
   ///
   /// Only a [PreparedSourceSwitch] can cross this boundary: target content
   /// validation has already succeeded, so commit publishes book metadata,
-  /// chapters and that exact target body as one authoritative world. Logical
-  /// bookmarks are rebound to the new chapter identity in the same transaction
-  /// while obsolete source-owned content is retired;
+  /// chapters and that exact target body as one authoritative world, while
+  /// obsolete source-owned content is retired in the same transaction;
   /// any failure rolls the whole handoff back to the old world.
   Future<void> commitSwitch(
     Book oldBook,
@@ -239,7 +236,6 @@ class SourceSwitchService {
     final db = books.appDatabase;
     final chaptersDao = chapterDao ?? ChapterDao(db);
     final contentDao = ReaderChapterContentDao(db);
-    final bookmarkDao = BookmarkDao(db);
     final migratedBook = prepared.migratedBook;
     final sourceIdentityChanged =
         oldBook.origin != migratedBook.origin ||
@@ -255,27 +251,6 @@ class SourceSwitchService {
         await chaptersDao.deleteByBook(migratedBook.bookUrl);
         await books.upsert(migratedBook);
         await chaptersDao.insertChapters(prepared.chapters);
-
-        final bookmarks = await bookmarkDao.getByBook(oldBook.bookUrl);
-        for (final bookmark in bookmarks) {
-          final alignedIndex = alignChapterIndex(
-            oldIndex: bookmark.chapterIndex,
-            oldTitle: bookmark.chapterName,
-            oldTotalCount: oldBook.totalChapterNum,
-            newChapters: prepared.chapters,
-          );
-          final alignedChapter = prepared.chapters[alignedIndex];
-          await bookmarkDao.upsert(
-            bookmark.copyWith(
-              bookUrl: migratedBook.bookUrl,
-              chapterIndex: alignedIndex,
-              chapterName: alignedChapter.title,
-              // Bookmark.chapterPos is a UTF-16 scalar in the old source body.
-              // It has no authority in another source without a content anchor.
-              chapterPos: 0,
-            ),
-          );
-        }
 
         final targetChapter = prepared.targetChapter;
         await contentDao.saveContent(

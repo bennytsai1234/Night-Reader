@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
@@ -27,11 +28,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
   final ReaderV2PrefsRepository _prefsRepository;
 
   double fontSize = 18.0;
+  double titleFontSize = 18.0 + kReaderV2DefaultTitleSizeDelta;
   double lineHeight = 1.5;
   double paragraphSpacing = 1.0;
   double letterSpacing = 0.0;
   int textIndent = 2;
-  bool lastLineSpacingCompensation = false;
   double paddingHorizontal = 16.0;
   double paddingTop = 0.0;
   double paddingBottom = 0.0;
@@ -69,17 +70,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
       _contentSettingsGeneration += 1;
     }
     _initFromCache(snapshot);
+    ChineseDisplay.mode.value = chineseConvert;
     _normalizeDayNightThemeIndexes();
     notifyListeners();
   }
 
   void _initFromCache(ReaderV2PrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
+    titleFontSize = snapshot.titleFontSize;
     lineHeight = ReaderV2Style.normalizeLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
-    lastLineSpacingCompensation = snapshot.lastLineSpacingCompensation;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
     autoPageSpeed = _normalizeAutoPageSpeed(snapshot.autoPageSpeed);
     chineseConvert = snapshot.chineseConvert;
@@ -155,7 +157,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingRight: paddingHorizontal,
       bold: false,
       textIndent: textIndent,
-      lastLineSpacingCompensation: lastLineSpacingCompensation,
+      titleFontSize: titleFontSize,
     );
   }
 
@@ -209,6 +211,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   void setTypography({
     double? fontSize,
+    double? titleFontSize,
     double? lineHeight,
     double? paragraphSpacing,
     double? letterSpacing,
@@ -224,6 +227,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
         () => _prefsRepository.saveFontSize(fontSize),
         onSaved: (p) => p.copyWith(fontSize: fontSize),
         restore: (p) => this.fontSize = p.fontSize,
+      );
+    }
+    if (titleFontSize != null) {
+      if (this.titleFontSize != titleFontSize) {
+        this.titleFontSize = titleFontSize;
+        changed = true;
+      }
+      _persist(
+        'titleFontSize',
+        () => _prefsRepository.saveTitleFontSize(titleFontSize),
+        onSaved: (p) => p.copyWith(titleFontSize: titleFontSize),
+        restore: (p) => this.titleFontSize = p.titleFontSize,
       );
     }
     if (lineHeight != null) {
@@ -272,6 +287,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setTypography(
       fontSize: defaults.fontSize,
+      titleFontSize: defaults.titleFontSize,
       lineHeight: defaults.lineHeight,
       paragraphSpacing: defaults.paragraphSpacing,
       letterSpacing: defaults.letterSpacing,
@@ -286,22 +302,6 @@ class ReaderV2SettingsController extends ChangeNotifier {
       () => _prefsRepository.saveTextIndent(value),
       onSaved: (p) => p.copyWith(textIndent: value),
       restore: (p) => textIndent = p.textIndent,
-    );
-    notifyListeners();
-  }
-
-  void setLastLineSpacingCompensation(bool value) {
-    if (lastLineSpacingCompensation == value) return;
-    lastLineSpacingCompensation = value;
-    _persist(
-      'lastLineSpacingCompensation',
-      () => _prefsRepository.saveLastLineSpacingCompensation(value),
-      onSaved: (p) => p.copyWith(lastLineSpacingCompensation: value),
-      restore: (p) {
-        lastLineSpacingCompensation = p.lastLineSpacingCompensation;
-        AppConfig.readerLastLineSpacingCompensation =
-            p.lastLineSpacingCompensation;
-      },
     );
     notifyListeners();
   }
@@ -365,6 +365,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (chineseConvert == value) return;
     chineseConvert = value;
     _contentSettingsGeneration += 1;
+    ChineseDisplay.mode.value = value;
     _persist(
       'chineseConvert',
       () => _prefsRepository.saveChineseConvert(value),
@@ -373,6 +374,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
         if (chineseConvert == p.chineseConvert) return;
         chineseConvert = p.chineseConvert;
         _contentSettingsGeneration += 1;
+        ChineseDisplay.mode.value = p.chineseConvert;
       },
     );
     notifyListeners();

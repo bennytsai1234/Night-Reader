@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
@@ -257,7 +258,7 @@ class ReaderV2PageShell extends StatelessWidget {
                 controlsVisible: controlsVisible,
                 menuBackgroundColor: menuBackgroundColor,
                 menuTextColor: menuTextColor,
-                bookName: book.name,
+                bookName: context.zh(book.name),
                 chapterTitle: chapterTitle,
                 chapterUrl: chapterUrl,
                 originName: originName,
@@ -379,12 +380,12 @@ class _InfoRow extends StatelessWidget {
 
   Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
     final colors = _infoColors(shell);
-    final left = _itemWidget(slots.left, progress, TextAlign.left);
-    final right = _itemWidget(slots.right, progress, TextAlign.right);
+    final left = _itemWidget(context, slots.left, progress, TextAlign.left);
+    final right = _itemWidget(context, slots.right, progress, TextAlign.right);
     final semantics = [
       if (showAutoPage) '自動翻頁中',
-      ?_itemSemantics(slots.left, progress),
-      ?_itemSemantics(slots.right, progress),
+      ?_itemSemantics(context, slots.left, progress),
+      ?_itemSemantics(context, slots.right, progress),
     ].join('，');
     return Semantics(
       container: true,
@@ -447,27 +448,36 @@ class _InfoRow extends StatelessWidget {
   }
 
   Widget? _itemWidget(
+    BuildContext context,
     ReaderV2InfoItem item,
     HybridProgressSnapshot? progress,
     TextAlign align,
   ) {
     if (item == ReaderV2InfoItem.none) return null;
     if (item == ReaderV2InfoItem.time) return _ReaderClock(textAlign: align);
-    return Text(_itemText(item, progress) ?? '', textAlign: align);
+    return Text(_itemText(context, item, progress) ?? '', textAlign: align);
   }
 
-  String? _itemSemantics(ReaderV2InfoItem item, HybridProgressSnapshot? progress) {
+  String? _itemSemantics(
+    BuildContext context,
+    ReaderV2InfoItem item,
+    HybridProgressSnapshot? progress,
+  ) {
     if (item == ReaderV2InfoItem.time) {
       return '時間 ${DateFormat('HH:mm').format(DateTime.now())}';
     }
-    return _itemText(item, progress);
+    return _itemText(context, item, progress);
   }
 
-  String? _itemText(ReaderV2InfoItem item, HybridProgressSnapshot? progress) {
+  String? _itemText(
+    BuildContext context,
+    ReaderV2InfoItem item,
+    HybridProgressSnapshot? progress,
+  ) {
     final navigation = shell.navigation;
     return switch (item) {
       ReaderV2InfoItem.none || ReaderV2InfoItem.time => null,
-      ReaderV2InfoItem.bookName => shell.book.name,
+      ReaderV2InfoItem.bookName => context.zh(shell.book.name),
       ReaderV2InfoItem.chapterTitle => shell.chapterTitle,
       ReaderV2InfoItem.chapterIndex =>
         progress?.chapterIndexLabel ??

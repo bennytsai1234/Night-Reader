@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 
 import '../book_detail_provider.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 class BookInfoHeader extends StatelessWidget {
   final Book book;
@@ -68,8 +69,8 @@ class BookInfoHeader extends StatelessWidget {
               tag: BookCoverWidget.heroTag(book.bookUrl),
               child: BookCoverWidget(
                 coverUrl: coverUrl,
-                bookName: book.name,
-                author: book.author,
+                bookName: context.zh(book.name),
+                author: context.zh(book.author),
                 width: 100,
                 height: 140,
                 borderRadius: AppRadius.cardXs,
@@ -85,7 +86,7 @@ class BookInfoHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(book.name, style: AppTextStyles.titleMd),
+                      child: Text(context.zh(book.name), style: AppTextStyles.titleMd),
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
@@ -96,7 +97,7 @@ class BookInfoHeader extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text('作者：${book.author}', style: AppTextStyles.bodyMd),
+                Text('作者：${context.zh(book.author)}', style: AppTextStyles.bodyMd),
                 const SizedBox(height: AppSpacing.xs),
                 if (book.isLocal)
                   Text('來源：${book.originName}', style: AppTextStyles.bodySm)

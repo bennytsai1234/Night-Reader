@@ -6,7 +6,6 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
 import 'package:night_reader/features/reader_v2/screen/dependencies/reader_v2_dependencies.dart';
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
-import 'package:night_reader/features/reader_v2/features/bookmark/reader_v2_bookmark_controller.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
@@ -39,7 +38,6 @@ class ReaderV2ControllerHost {
       bookDao: dependencies.bookDao,
       chapterDao: dependencies.chapterDao,
       contentDao: dependencies.readerChapterContentDao,
-      bookmarkDao: dependencies.bookmarkDao,
     );
     _lastContentSettingsGeneration = settings.contentSettingsGeneration;
     unawaited(settings.loadSettings());
@@ -67,7 +65,6 @@ class ReaderV2ControllerHost {
   ReaderV2Runtime? runtime;
   ReaderV2TtsController? tts;
   ReaderV2AutoPageController? autoPage;
-  ReaderV2BookmarkController? bookmark;
 
   Size? _lastViewportSize;
   int? _lastLayoutSignature;
@@ -122,14 +119,6 @@ class ReaderV2ControllerHost {
     runtime = nextRuntime;
     tts = nextTts;
     autoPage = nextAutoPage;
-    final bookmarkDao = dependencies.bookmarkDao;
-    if (bookmarkDao != null) {
-      bookmark = ReaderV2BookmarkController(
-        book: book,
-        runtime: nextRuntime,
-        bookmarkDao: bookmarkDao,
-      );
-    }
     _lastLayoutSignature = spec.layoutSignature;
     unawaited(nextTts.loadSettings());
     _openRuntimeAfterFirstFrame(nextRuntime);
@@ -257,7 +246,7 @@ class ReaderV2ControllerHost {
         paddingRight: style.paddingRight,
         bold: style.bold,
         textIndent: style.textIndent,
-        lastLineSpacingCompensation: style.lastLineSpacingCompensation,
+        titleFontSize: style.titleFontSize,
       ),
     );
   }

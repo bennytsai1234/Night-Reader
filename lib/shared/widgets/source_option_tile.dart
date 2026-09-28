@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 class SourceOptionTile extends StatelessWidget {
   final SearchBook searchBook;
@@ -46,7 +47,7 @@ class SourceOptionTile extends StatelessWidget {
           children: [
             if ((searchBook.author ?? '').isNotEmpty)
               Text(
-                '作者: ${searchBook.author}',
+                '作者: ${context.zh(searchBook.author ?? '')}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -55,7 +56,7 @@ class SourceOptionTile extends StatelessWidget {
               ),
             const SizedBox(height: 2),
             Text(
-              '最新: ${searchBook.latestChapterTitle ?? '無最新章節資訊'}',
+              '最新: ${context.zh(searchBook.latestChapterTitle ?? '無最新章節資訊')}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.tertiary,
               ),

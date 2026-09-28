@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../../book_detail/book_detail_page.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
 /// (對標 Android ExploreShowAdapter + item_search 佈局)
@@ -36,8 +37,8 @@ class ExploreBookItem extends StatelessWidget {
           children: [
             BookCoverWidget(
               coverUrl: book.coverUrl,
-              bookName: book.name,
-              author: book.author,
+              bookName: context.zh(book.name),
+              author: context.zh(book.author ?? ''),
               width: 56,
               height: 75,
               borderRadius: AppRadius.cardXs,
@@ -51,7 +52,7 @@ class ExploreBookItem extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          book.name,
+                          context.zh(book.name),
                           style: theme.textTheme.titleSmall?.copyWith(
                             height: 1.3,
                             fontWeight: FontWeight.w600,
@@ -86,7 +87,7 @@ class ExploreBookItem extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
-                      '作者：${book.author}',
+                      '作者：${context.zh(book.author!)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -98,7 +99,7 @@ class ExploreBookItem extends StatelessWidget {
                       book.latestChapterTitle!.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '最新：${book.latestChapterTitle}',
+                      '最新：${context.zh(book.latestChapterTitle!)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -110,7 +111,7 @@ class ExploreBookItem extends StatelessWidget {
                   if (book.intro != null && book.intro!.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                      context.zh(book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim()),
                       style: theme.textTheme.bodySmall?.copyWith(
                         height: 1.45,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -124,7 +125,7 @@ class ExploreBookItem extends StatelessWidget {
                     Wrap(
                       spacing: AppSpacing.xs,
                       runSpacing: AppSpacing.xs,
-                      children: _buildKindTags(theme),
+                      children: _buildKindTags(context, theme),
                     ),
                   ],
                 ],
@@ -136,9 +137,10 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildKindTags(ThemeData theme) {
+  List<Widget> _buildKindTags(BuildContext context, ThemeData theme) {
     final kinds =
-        book.kind!
+        context
+            .zh(book.kind!)
             .split(RegExp(r'[,，]'))
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)

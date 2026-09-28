@@ -10,7 +10,6 @@ import '../database/dao/book_dao.dart';
 import '../database/dao/book_source_dao.dart';
 import '../database/dao/chapter_dao.dart';
 import '../database/dao/book_group_dao.dart';
-import '../database/dao/bookmark_dao.dart';
 import '../database/dao/cache_dao.dart';
 import '../database/dao/cookie_dao.dart';
 import '../database/dao/download_dao.dart';
@@ -61,9 +60,6 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<BookGroupDao>(
     () => BookGroupDao(getIt<AppDatabase>()),
-  );
-  getIt.registerLazySingleton<BookmarkDao>(
-    () => BookmarkDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<CacheDao>(() => CacheDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<CookieDao>(() => CookieDao(getIt<AppDatabase>()));

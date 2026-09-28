@@ -1,11 +1,14 @@
-import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2PrefsSnapshot {
   final double fontSize;
+
+  /// 章節標題字號。未保存過時沿用舊版規則（正文 + 4），外觀不變。
+  final double titleFontSize;
   final double lineHeight;
   final double paragraphSpacing;
   final double letterSpacing;
@@ -16,7 +19,6 @@ class ReaderV2PrefsSnapshot {
   final int menuThemeIndex;
   final double autoPageSpeed;
   final int chineseConvert;
-  final bool lastLineSpacingCompensation;
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
@@ -34,6 +36,7 @@ class ReaderV2PrefsSnapshot {
 
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
+    required this.titleFontSize,
     required this.lineHeight,
     required this.paragraphSpacing,
     required this.letterSpacing,
@@ -44,7 +47,6 @@ class ReaderV2PrefsSnapshot {
     required this.menuThemeIndex,
     required this.autoPageSpeed,
     required this.chineseConvert,
-    required this.lastLineSpacingCompensation,
     required this.showAddToShelfAlert,
     required this.clickActions,
     required this.paddingHorizontal,
@@ -58,6 +60,7 @@ class ReaderV2PrefsSnapshot {
   factory ReaderV2PrefsSnapshot.defaults() {
     return ReaderV2PrefsSnapshot(
       fontSize: 18.0,
+      titleFontSize: 18.0 + kReaderV2DefaultTitleSizeDelta,
       lineHeight: 1.5,
       paragraphSpacing: 1.0,
       letterSpacing: 0.0,
@@ -68,7 +71,6 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: 0,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
-      lastLineSpacingCompensation: AppConfig.readerLastLineSpacingCompensation,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
       paddingHorizontal: 16.0,
@@ -90,6 +92,7 @@ class ReaderV2PrefsSnapshot {
 
   ReaderV2PrefsSnapshot copyWith({
     double? fontSize,
+    double? titleFontSize,
     double? lineHeight,
     double? paragraphSpacing,
     double? letterSpacing,
@@ -100,7 +103,6 @@ class ReaderV2PrefsSnapshot {
     int? menuThemeIndex,
     double? autoPageSpeed,
     int? chineseConvert,
-    bool? lastLineSpacingCompensation,
     bool? showAddToShelfAlert,
     List<int>? clickActions,
     double? paddingHorizontal,
@@ -112,6 +114,7 @@ class ReaderV2PrefsSnapshot {
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
+      titleFontSize: titleFontSize ?? this.titleFontSize,
       lineHeight: lineHeight ?? this.lineHeight,
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
       letterSpacing: letterSpacing ?? this.letterSpacing,
@@ -122,8 +125,6 @@ class ReaderV2PrefsSnapshot {
       menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
       autoPageSpeed: autoPageSpeed ?? this.autoPageSpeed,
       chineseConvert: chineseConvert ?? this.chineseConvert,
-      lastLineSpacingCompensation:
-          lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
       paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
@@ -158,8 +159,13 @@ class ReaderV2PrefsRepository {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     final themeIndex =
         prefs.getInt(PreferKey.readerThemeIndex) ?? defaults.themeIndex;
+    final fontSize =
+        prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize;
     final snapshot = ReaderV2PrefsSnapshot(
-      fontSize: prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize,
+      fontSize: fontSize,
+      titleFontSize:
+          prefs.getDouble(PreferKey.readerTitleFontSize) ??
+          fontSize + kReaderV2DefaultTitleSizeDelta,
       lineHeight:
           prefs.getDouble(PreferKey.readerLineHeight) ?? defaults.lineHeight,
       paragraphSpacing:
@@ -186,9 +192,6 @@ class ReaderV2PrefsRepository {
       chineseConvert:
           prefs.getInt(PreferKey.readerChineseConvert) ??
           defaults.chineseConvert,
-      lastLineSpacingCompensation:
-          prefs.getBool(PreferKey.readerLastLineSpacingCompensation) ??
-          defaults.lastLineSpacingCompensation,
       showAddToShelfAlert:
           prefs.getBool(PreferKey.showAddToShelfAlert) ??
           defaults.showAddToShelfAlert,
@@ -216,13 +219,16 @@ class ReaderV2PrefsRepository {
           ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerFooterInfo)) ??
           defaults.footerInfo,
     );
-    _syncAppConfig(snapshot);
     _latestSnapshot = snapshot;
     return snapshot;
   }
 
   Future<void> saveFontSize(double value) {
     return _setDouble(PreferKey.readerFontSize, value);
+  }
+
+  Future<void> saveTitleFontSize(double value) {
+    return _setDouble(PreferKey.readerTitleFontSize, value);
   }
 
   Future<void> saveLineHeight(double value) {
@@ -266,11 +272,6 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveChineseConvert(int value) {
     return _setInt(PreferKey.readerChineseConvert, value);
-  }
-
-  Future<void> saveLastLineSpacingCompensation(bool value) {
-    AppConfig.readerLastLineSpacingCompensation = value;
-    return _setBool(PreferKey.readerLastLineSpacingCompensation, value);
   }
 
   Future<void> saveShowAddToShelfAlert(bool value) {
@@ -336,11 +337,6 @@ class ReaderV2PrefsRepository {
 
   void _ensureSaved(String key, bool saved) {
     if (!saved) throw StateError('SharedPreferences rejected $key');
-  }
-
-  void _syncAppConfig(ReaderV2PrefsSnapshot snapshot) {
-    AppConfig.readerLastLineSpacingCompensation =
-        snapshot.lastLineSpacingCompensation;
   }
 
   List<int> _parseClickActions(String? stored) {

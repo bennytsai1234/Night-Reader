@@ -70,7 +70,17 @@ final class ReaderV2TtsSegmenter {
       final length = index - start + 1;
       if (length < minSegmentLength && index + 1 < chapterEnd) continue;
       final codeUnit = text.codeUnitAt(index);
-      if (_isSegmentBoundary(codeUnit)) return index + 1;
+      if (_isSegmentBoundary(codeUnit)) {
+        // 「走吧。」的句號之後還有收引號：收引號屬於這一句，不能留到
+        // 下一句開頭，否則下一句的高亮會從一個孤立的「」」開始。
+        var end = index + 1;
+        if (codeUnit != 0x0A) {
+          while (end < chapterEnd && _isClosingPunctuation(text.codeUnitAt(end))) {
+            end += 1;
+          }
+        }
+        return end;
+      }
     }
     for (var index = preferredLimit - 1; index > start; index -= 1) {
       if (_isWhitespace(text.codeUnitAt(index))) return index;
@@ -103,6 +113,22 @@ final class ReaderV2TtsSegmenter {
 
   bool _isLowSurrogate(int codeUnit) {
     return codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+  }
+
+  bool _isClosingPunctuation(int codeUnit) {
+    switch (codeUnit) {
+      case 0x22: // "
+      case 0x27: // '
+      case 0x29: // )
+      case 0x2019: // ’
+      case 0x201D: // ”
+      case 0x300D: // 」
+      case 0x300F: // 』
+      case 0x3011: // 】
+      case 0xFF09: // ）
+        return true;
+    }
+    return false;
   }
 
   bool _isSegmentBoundary(int codeUnit) {

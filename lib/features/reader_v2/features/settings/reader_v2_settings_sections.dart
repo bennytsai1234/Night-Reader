@@ -42,10 +42,12 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
 
   Timer? _typographyCommitTimer;
   bool _fontSizeDirty = false;
+  bool _titleFontSizeDirty = false;
   bool _lineHeightDirty = false;
   bool _letterSpacingDirty = false;
   bool _paragraphSpacingDirty = false;
   late double _fontSize;
+  late double _titleFontSize;
   late double _lineHeight;
   late double _letterSpacing;
   late double _paragraphSpacing;
@@ -56,6 +58,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     super.initState();
     final settings = widget.settings;
     _fontSize = settings.fontSize;
+    _titleFontSize = settings.titleFontSize;
     _lineHeight = settings.lineHeight;
     _letterSpacing = settings.letterSpacing;
     _paragraphSpacing = settings.paragraphSpacing;
@@ -71,6 +74,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
 
   bool get _hasDirtyTypography =>
       _fontSizeDirty ||
+      _titleFontSizeDirty ||
       _lineHeightDirty ||
       _letterSpacingDirty ||
       _paragraphSpacingDirty;
@@ -78,6 +82,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   bool get _isDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return _fontSize == defaults.fontSize &&
+        _titleFontSize == defaults.titleFontSize &&
         _lineHeight == defaults.lineHeight &&
         _letterSpacing == defaults.letterSpacing &&
         _paragraphSpacing == defaults.paragraphSpacing &&
@@ -90,6 +95,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     // controller 的通知也可能只是縮排或主題變更；統一重建以更新相依顯示。
     setState(() {
       if (!_fontSizeDirty) _fontSize = settings.fontSize;
+      if (!_titleFontSizeDirty) _titleFontSize = settings.titleFontSize;
       if (!_lineHeightDirty) _lineHeight = settings.lineHeight;
       if (!_letterSpacingDirty) _letterSpacing = settings.letterSpacing;
       if (!_paragraphSpacingDirty) {
@@ -113,12 +119,14 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     _typographyCommitTimer = null;
     if (!_hasDirtyTypography) return;
     final fontSize = _fontSizeDirty ? _fontSize : null;
+    final titleFontSize = _titleFontSizeDirty ? _titleFontSize : null;
     final lineHeight = _lineHeightDirty ? _lineHeight : null;
     final letterSpacing = _letterSpacingDirty ? _letterSpacing : null;
     final paragraphSpacing = _paragraphSpacingDirty ? _paragraphSpacing : null;
     _clearDirty();
     widget.settings.setTypography(
       fontSize: fontSize,
+      titleFontSize: titleFontSize,
       lineHeight: lineHeight,
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
@@ -127,6 +135,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
 
   void _clearDirty() {
     _fontSizeDirty = false;
+    _titleFontSizeDirty = false;
     _lineHeightDirty = false;
     _letterSpacingDirty = false;
     _paragraphSpacingDirty = false;
@@ -144,7 +153,6 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
-    final colorScheme = Theme.of(context).colorScheme;
     final secondary = <Widget>[
       NumberStepperRow(
         label: '字距',
@@ -176,21 +184,6 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
         value: settings.textIndent,
         onChanged: settings.setTextIndent,
       ),
-      SwitchListTile.adaptive(
-        contentPadding: EdgeInsets.zero,
-        title: Text(
-          '末行字距補償',
-          style: AppTextStyles.uiMd.copyWith(color: colorScheme.onSurface),
-        ),
-        subtitle: Text(
-          '讓末行貼近上方滿行字距；每段會額外排版一次',
-          style: AppTextStyles.bodyXs.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        value: settings.lastLineSpacingCompensation,
-        onChanged: settings.setLastLineSpacingCompensation,
-      ),
       ...widget.moreChildren,
     ];
 
@@ -217,6 +210,18 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           onChanged: (value) {
             setState(() => _fontSize = value);
             _fontSizeDirty = true;
+            _scheduleTypographyCommit();
+          },
+        ),
+        NumberStepperRow(
+          label: '標題字號',
+          value: _titleFontSize,
+          min: 14,
+          max: 48,
+          step: 1,
+          onChanged: (value) {
+            setState(() => _titleFontSize = value);
+            _titleFontSizeDirty = true;
             _scheduleTypographyCommit();
           },
         ),

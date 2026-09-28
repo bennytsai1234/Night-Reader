@@ -36,8 +36,8 @@ class ReaderV2LayoutStyle {
     required this.paddingRight,
     this.bold = false,
     this.textIndent = 0,
-    this.lastLineSpacingCompensation = false,
-  });
+    double? titleFontSize,
+  }) : titleFontSize = titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
 
   final double fontSize;
   final double lineHeight;
@@ -49,7 +49,7 @@ class ReaderV2LayoutStyle {
   final double paddingRight;
   final bool bold;
   final int textIndent;
-  final bool lastLineSpacingCompensation;
+  final double titleFontSize;
 
   double get effectiveLineHeight => normalizeLineHeight(lineHeight);
 
@@ -203,7 +203,7 @@ class ReaderV2LayoutSpec {
             paddingRight: style.paddingRight,
             bold: style.bold,
             textIndent: style.textIndent,
-            lastLineSpacingCompensation: style.lastLineSpacingCompensation,
+            titleFontSize: style.titleFontSize,
           );
     final effectiveCell =
         cellWidth != null && cellWidth.isFinite && cellWidth > 0
@@ -241,7 +241,7 @@ class ReaderV2LayoutSpec {
       style.paddingRight,
       style.textIndent,
       style.bold,
-      style.lastLineSpacingCompensation,
+      style.titleFontSize,
       kReaderV2CjkTypographyFeatureSignature,
     );
   }

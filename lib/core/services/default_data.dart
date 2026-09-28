@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
@@ -91,6 +93,10 @@ class DefaultData {
     try {
       await ChineseUtils.initialize();
       ChineseUtils.s2t('');
+      final prefs = await SharedPreferences.getInstance();
+      ChineseDisplay.dictionaryReady(
+        prefs.getInt(PreferKey.readerChineseConvert),
+      );
     } catch (e) {
       AppLog.e('ChineseUtils warmup error: $e', error: e);
     }

@@ -22,6 +22,7 @@ import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
 import 'widgets/change_source_sheet.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 class BookDetailPage extends StatefulWidget {
   final Book? book;
@@ -175,7 +176,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                         )
                                         : null,
                                 title: Text(
-                                  chapter.title,
+                                  context.zh(chapter.title),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -304,7 +305,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       final confirmed = await _confirmAction(
         context,
         title: '移出書架',
-        message: '這本書會從書架移出，並刪除本機正文、書籤、下載任務、目錄與封面資料。',
+        message: '這本書會從書架移出，並刪除本機正文、下載任務、目錄與封面資料。',
         confirmText: '移出',
       );
       if (!confirmed || !context.mounted) return;

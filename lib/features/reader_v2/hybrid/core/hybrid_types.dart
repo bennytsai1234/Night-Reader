@@ -108,7 +108,7 @@ final class StyleFingerprint {
     required this.fontFamilySignature,
     required this.platformFontSignature,
     this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
-    this.lastLineSpacingCompensation = false,
+    this.titleFontSize = 0,
   });
 
   factory StyleFingerprint.fromLayoutSpec(
@@ -138,7 +138,7 @@ final class StyleFingerprint {
       textScaleFactor: textScaleFactor,
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
-      lastLineSpacingCompensation: style.lastLineSpacingCompensation,
+      titleFontSize: style.titleFontSize,
     );
   }
 
@@ -161,7 +161,9 @@ final class StyleFingerprint {
   final String fontFamilySignature;
   final String platformFontSignature;
   final String typographyFeatureSignature;
-  final bool lastLineSpacingCompensation;
+
+  /// 標題 block 的量測高度取決於標題字號，必須進入快取鍵。
+  final double titleFontSize;
 
   int get stableHash => Object.hash(
     viewportWidth,
@@ -183,7 +185,7 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
-    lastLineSpacingCompensation,
+    titleFontSize,
   );
 
   String get stableKey => jsonEncode(<Object>[
@@ -206,7 +208,7 @@ final class StyleFingerprint {
     fontFamilySignature,
     platformFontSignature,
     typographyFeatureSignature,
-    lastLineSpacingCompensation,
+    titleFontSize,
   ]);
 
   @override
@@ -231,7 +233,7 @@ final class StyleFingerprint {
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
         other.typographyFeatureSignature == typographyFeatureSignature &&
-        other.lastLineSpacingCompensation == lastLineSpacingCompensation;
+        other.titleFontSize == titleFontSize;
   }
 
   @override
@@ -646,7 +648,7 @@ final class HybridBlockTextStyle {
     bool justify = true,
   }) {
     return HybridBlockTextStyle(
-      fontSize: isTitle ? style.fontSize + 4 : style.fontSize,
+      fontSize: isTitle ? style.titleFontSize : style.fontSize,
       lineHeight: style.effectiveLineHeight,
       letterSpacing: style.letterSpacing,
       bold: isTitle || style.bold,
@@ -742,16 +744,18 @@ final class BlockReady {
   final BlockMetrics metrics;
 }
 
+/// 一段文字在畫面上一條視覺行內實際佔據的範圍（viewport 座標）。
 final class HybridLineBox {
   const HybridLineBox({
-    required this.key,
+    required this.left,
     required this.top,
+    required this.right,
     required this.bottom,
-    required this.charRange,
-  }) : assert(bottom >= top);
+  }) : assert(bottom >= top),
+       assert(right >= left);
 
-  final BlockKey key;
+  final double left;
   final double top;
+  final double right;
   final double bottom;
-  final HybridTextRange charRange;
 }

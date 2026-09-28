@@ -4,8 +4,7 @@ enum ReaderV2TapAction {
   prevPage(2, '上一頁'),
   nextChapter(3, '下一章'),
   prevChapter(4, '上一章'),
-  toggleTts(5, '朗讀'),
-  bookmark(7, '加入書籤');
+  toggleTts(5, '朗讀');
 
   const ReaderV2TapAction(this.code, this.label);
 

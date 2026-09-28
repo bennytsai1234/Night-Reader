@@ -6,6 +6,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../search_provider.dart';
 import '../../book_detail/book_detail_page.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 class SearchResultItem extends StatefulWidget {
   final AggregatedSearchBook result;
@@ -30,8 +31,8 @@ class _SearchResultItemState extends State<SearchResultItem> {
     final sourceCount = widget.result.sources.length;
     final theme = Theme.of(context);
     final metadata = formatSearchResultMetadata(
-      author: book.author,
-      kind: book.kind,
+      author: context.zh(book.author),
+      kind: context.zh(book.kind ?? ''),
       wordCount: book.wordCount,
     );
     return ListTile(
@@ -41,8 +42,8 @@ class _SearchResultItemState extends State<SearchResultItem> {
       ),
       leading: BookCoverWidget(
         coverUrl: book.coverUrl,
-        bookName: book.name,
-        author: book.author,
+        bookName: context.zh(book.name),
+        author: context.zh(book.author),
         width: 45,
         height: 60,
         borderRadius: AppRadius.cardXs,
@@ -51,7 +52,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
         children: [
           Expanded(
             child: Text(
-              book.name,
+              context.zh(book.name),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall?.copyWith(
@@ -124,7 +125,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '最新：${_valueOrFallback(book.latestChapterTitle, '暫無')}',
+            '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.bodySm.copyWith(

@@ -1,133 +1,103 @@
 import 'package:flutter/material.dart';
 
-import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 
+/// 朗讀高亮：句段淡淡地鋪底，正在朗讀的字詞以燈色實底標出。
+///
+/// 框貼著字形，不是整行色帶；引擎不回報字詞進度時只有句段鋪底。
 final class HybridTtsHighlightOverlay extends StatelessWidget {
   const HybridTtsHighlightOverlay({
     super.key,
-    required this.lines,
-    required this.style,
+    required this.sentence,
+    required this.word,
     required this.textColor,
-    required this.highlight,
   });
 
-  final List<HybridLineBox> lines;
-  final ReaderV2Style style;
+  final List<HybridLineBox> sentence;
+  final List<HybridLineBox> word;
   final Color textColor;
-  final ReaderV2TtsHighlight? highlight;
 
   @override
   Widget build(BuildContext context) {
-    final current = highlight;
-    if (current == null || !current.isValid) return const SizedBox.shrink();
+    if (sentence.isEmpty && word.isEmpty) return const SizedBox.shrink();
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
           painter: HybridTtsHighlightPainter(
-            lines: lines,
-            style: style,
-            textColor: textColor,
-            highlight: current,
+            sentence: sentence,
+            word: word,
+            highlightColor: _highlightColor(),
           ),
           size: Size.infinite,
         ),
       ),
     );
   }
-}
 
-final class HybridTtsHighlightPainter extends CustomPainter {
-  const HybridTtsHighlightPainter({
-    required this.lines,
-    required this.style,
-    required this.textColor,
-    required this.highlight,
-  });
-
-  final List<HybridLineBox> lines;
-  final ReaderV2Style style;
-  final Color textColor;
-  final ReaderV2TtsHighlight highlight;
-
-  static List<Rect> rectsFor({
-    required List<HybridLineBox> lines,
-    required ReaderV2Style style,
-    required Size size,
-    required ReaderV2TtsHighlight highlight,
-  }) {
-    final range = HybridTextRange(
-      highlight.highlightStart,
-      highlight.highlightEnd,
-    );
-    final left = (style.paddingLeft - 6).clamp(0.0, size.width).toDouble();
-    final right =
-        (size.width - style.paddingRight + 6)
-            .clamp(left, size.width)
-            .toDouble();
-    final maxBottom = size.height.isFinite ? size.height : double.infinity;
-    final rects = <Rect>[];
-    final seen = <Rect>{};
-    for (final line in lines) {
-      if (line.key.chapterIndex != highlight.chapterIndex) continue;
-      if (!line.charRange.intersects(range)) continue;
-      final top = (style.paddingTop + line.top - 1).clamp(0.0, maxBottom);
-      final bottom = (style.paddingTop + line.bottom + 1).clamp(
-        top.toDouble(),
-        maxBottom,
-      );
-      final rect = Rect.fromLTRB(
-        left,
-        top.toDouble(),
-        right,
-        bottom.toDouble(),
-      );
-      if (seen.add(rect)) rects.add(rect);
-    }
-    return rects;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rects = rectsFor(
-      lines: lines,
-      style: style,
-      size: size,
-      highlight: highlight,
-    );
-    if (rects.isEmpty) return;
+  Color _highlightColor() {
     final darkReader = textColor.computeLuminance() > 0.5;
     final custom = ThemeSettingsProvider.resolveReaderAreaColors(
       dark: darkReader,
       menu: false,
     );
-    final highlightColor = custom?.highlight ?? const Color(0xFFFFC857);
-    final shadowPaint =
-        Paint()
-          ..color = highlightColor.withValues(alpha: 0.14)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-    final fillPaint =
-        Paint()..color = highlightColor.withValues(alpha: 0.20);
-    final strokePaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.8
-          ..color = textColor.withValues(alpha: 0.10);
-    for (final rect in rects) {
-      final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(6));
-      canvas.drawRRect(rounded.inflate(2), shadowPaint);
-      canvas.drawRRect(rounded, fillPaint);
-      canvas.drawRRect(rounded, strokePaint);
+    return custom?.highlight ?? const Color(0xFFFFC857);
+  }
+}
+
+final class HybridTtsHighlightPainter extends CustomPainter {
+  const HybridTtsHighlightPainter({
+    required this.sentence,
+    required this.word,
+    required this.highlightColor,
+  });
+
+  final List<HybridLineBox> sentence;
+  final List<HybridLineBox> word;
+  final Color highlightColor;
+
+  static const double _sentenceAlpha = 0.16;
+  static const double _wordAlpha = 0.42;
+  static const Radius _radius = Radius.circular(4);
+
+  /// 框略為外擴，讓色塊包住字形而不是切齊字緣。
+  static Rect rectOf(HybridLineBox box) =>
+      Rect.fromLTRB(box.left - 2, box.top, box.right + 2, box.bottom);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sentencePaint = Paint()
+      ..color = highlightColor.withValues(alpha: _sentenceAlpha);
+    for (final box in sentence) {
+      canvas.drawRRect(RRect.fromRectAndRadius(rectOf(box), _radius), sentencePaint);
+    }
+    final wordPaint = Paint()
+      ..color = highlightColor.withValues(alpha: _wordAlpha);
+    for (final box in word) {
+      canvas.drawRRect(RRect.fromRectAndRadius(rectOf(box), _radius), wordPaint);
     }
   }
 
   @override
   bool shouldRepaint(HybridTtsHighlightPainter oldDelegate) {
-    return oldDelegate.lines != lines ||
-        oldDelegate.style != style ||
-        oldDelegate.textColor != textColor ||
-        oldDelegate.highlight != highlight;
+    return !_sameBoxes(oldDelegate.sentence, sentence) ||
+        !_sameBoxes(oldDelegate.word, word) ||
+        oldDelegate.highlightColor != highlightColor;
+  }
+
+  static bool _sameBoxes(List<HybridLineBox> a, List<HybridLineBox> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i += 1) {
+      final x = a[i];
+      final y = b[i];
+      if (x.left != y.left ||
+          x.top != y.top ||
+          x.right != y.right ||
+          x.bottom != y.bottom) {
+        return false;
+      }
+    }
+    return true;
   }
 }

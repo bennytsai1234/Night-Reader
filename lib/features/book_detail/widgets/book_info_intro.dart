@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 
 class BookInfoIntro extends StatelessWidget {
   final Book book;
@@ -27,7 +28,7 @@ class BookInfoIntro extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            book.intro ?? '暫無簡介',
+            context.zh(book.intro ?? '暫無簡介'),
             style: AppTextStyles.bodyBase.copyWith(height: 1.55),
           ),
           const SizedBox(height: AppSpacing.lg),

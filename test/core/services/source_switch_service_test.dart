@@ -8,7 +8,6 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/bookmark.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -558,63 +557,6 @@ void main() {
       );
     });
 
-    test('書籤跟 logical book 原子移交，舊正文 scalar offset 不跨來源沿用', () async {
-      final oldBook = _currentBook(
-        chapterIndex: 1,
-        durChapterTitle: '第2章',
-        totalChapterNum: 3,
-      );
-      await db.bookDao.upsert(oldBook);
-      await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
-      await db.bookmarkDao.upsert(
-        Bookmark(
-          id: 41,
-          time: 1,
-          bookName: oldBook.name,
-          bookAuthor: oldBook.author,
-          chapterIndex: 1,
-          chapterPos: 77,
-          chapterName: '第2章',
-          bookUrl: oldBook.bookUrl,
-          bookText: '使用者當時看到的原文',
-          content: '使用者筆記',
-        ),
-      );
-
-      final candidate = _candidate('new-origin');
-      final chapters = _chapters(candidate.bookUrl, 5);
-      final service = SourceSwitchService(
-        service: _FakeBookSourceService(chapters: chapters),
-        sourceDao: db.bookSourceDao,
-      );
-      final prepared = await service.prepareSwitch(
-        oldBook,
-        candidate,
-        targetChapterIndex: 1,
-        targetChapterTitle: '第2章',
-      );
-
-      await service.commitSwitch(
-        oldBook,
-        prepared,
-        bookDao: db.bookDao,
-        chapterDao: db.chapterDao,
-      );
-
-      expect(await db.bookmarkDao.getByBook(oldBook.bookUrl), isEmpty);
-      final migratedBookmarks = await db.bookmarkDao.getByBook(
-        prepared.migratedBook.bookUrl,
-      );
-      expect(migratedBookmarks, hasLength(1));
-      final bookmark = migratedBookmarks.single;
-      expect(bookmark.id, 41);
-      expect(bookmark.chapterIndex, 1);
-      expect(bookmark.chapterName, '第2章');
-      expect(bookmark.chapterPos, 0);
-      expect(bookmark.bookText, '使用者當時看到的原文');
-      expect(bookmark.content, '使用者筆記');
-    });
-
     test('operation owner 在 commit transaction 內退休，成功後才 finalize', () async {
       final oldBook = _currentBook();
       await db.bookDao.upsert(oldBook);
@@ -723,7 +665,7 @@ void main() {
       expect(entries.single.content, resolution.validatedContent);
     });
 
-    test('commit 失敗時 operation retirement 與書籤 migration 一起回滾', () async {
+    test('commit 失敗時 operation retirement 一起回滾', () async {
       final oldBook = _currentBook(
         chapterIndex: 1,
         durChapterTitle: '第2章',
@@ -731,17 +673,6 @@ void main() {
       );
       await db.bookDao.upsert(oldBook);
       await db.chapterDao.insertChapters(_chapters(oldBook.bookUrl, 3));
-      await db.bookmarkDao.upsert(
-        Bookmark(
-          id: 42,
-          time: 1,
-          chapterIndex: 1,
-          chapterPos: 33,
-          chapterName: '第2章',
-          bookUrl: oldBook.bookUrl,
-          content: '保留的筆記',
-        ),
-      );
       await db.downloadDao.upsert(
         DownloadTask(
           bookUrl: oldBook.bookUrl,
@@ -764,7 +695,7 @@ void main() {
       final prepared = await service.prepareSwitch(oldBook, candidate);
 
       await db.customStatement('''
-        CREATE TRIGGER fail_source_switch_bookmark_handoff
+        CREATE TRIGGER fail_source_switch_handoff
         BEFORE INSERT ON reader_chapter_contents
         WHEN NEW.origin = 'new-origin'
         BEGIN
@@ -785,9 +716,6 @@ void main() {
       expect(lease.retiredInTransaction, isTrue);
       expect(lease.committedCalled, isFalse);
       expect(lease.rolledBackCalled, isTrue);
-      final oldBookmarks = await db.bookmarkDao.getByBook(oldBook.bookUrl);
-      expect(oldBookmarks, hasLength(1));
-      expect(oldBookmarks.single.chapterPos, 33);
       expect(
         (await db.downloadDao.getAll())
             .where((task) => task.bookUrl == oldBook.bookUrl),

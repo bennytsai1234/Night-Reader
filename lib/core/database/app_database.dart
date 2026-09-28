@@ -7,7 +7,6 @@ import 'tables/app_tables.dart';
 // model imports required by app_database.g.dart (part shares this namespace)
 import '../models/book.dart';
 import '../models/chapter.dart';
-import '../models/bookmark.dart';
 import '../models/replace_rule.dart';
 import '../models/book_source.dart';
 import '../models/book_group.dart';
@@ -27,7 +26,6 @@ import 'dao/book_dao.dart';
 import 'dao/chapter_dao.dart';
 import 'dao/book_source_dao.dart';
 import 'dao/book_group_dao.dart';
-import 'dao/bookmark_dao.dart';
 import 'dao/replace_rule_dao.dart';
 import 'dao/search_history_dao.dart';
 import 'dao/cookie_dao.dart';
@@ -55,7 +53,6 @@ part 'app_database.g.dart';
     BookGroups,
     SearchHistoryTable,
     ReplaceRules,
-    Bookmarks,
     Cookies,
     DictRules,
     HttpTtsTable,
@@ -74,7 +71,6 @@ part 'app_database.g.dart';
     ChapterDao,
     BookSourceDao,
     BookGroupDao,
-    BookmarkDao,
     ReplaceRuleDao,
     SearchHistoryDao,
     CookieDao,
@@ -99,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -110,6 +106,11 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await _createPerformanceIndexes();
+      }
+      if (from < 3) {
+        // 書籤功能已移除；表與索引一併刪除，不留無人使用的資料。
+        await customStatement('DROP INDEX IF EXISTS idx_bookmarks_book');
+        await customStatement('DROP TABLE IF EXISTS bookmarks');
       }
     },
     beforeOpen: (_) async {
@@ -167,10 +168,6 @@ class AppDatabase extends _$AppDatabase {
     '''
     CREATE INDEX IF NOT EXISTS idx_replace_rules_enabled_order
     ON replace_rules (isEnabled, "order")
-    ''',
-    '''
-    CREATE INDEX IF NOT EXISTS idx_bookmarks_book
-    ON bookmarks (bookUrl)
     ''',
     '''
     CREATE INDEX IF NOT EXISTS idx_read_records_name
