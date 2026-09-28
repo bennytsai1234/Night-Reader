@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
@@ -18,6 +21,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
   static const double maxReadableLineHeight = ReaderV2Style.maxReadableLineHeight;
   static const double minAutoPageSpeed = ReaderV2PrefsRepository.minAutoPageSpeed;
   static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
+  static const double minPagePadding = ReaderV2PrefsRepository.minPagePadding;
+  static const double maxPagePadding = ReaderV2PrefsRepository.maxPagePadding;
 
   final ReaderV2PrefsRepository _prefsRepository;
 
@@ -27,7 +32,12 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double letterSpacing = 0.0;
   int textIndent = 2;
   bool lastLineSpacingCompensation = false;
-  double textPadding = 16.0;
+  double paddingHorizontal = 16.0;
+  double paddingTop = 0.0;
+  double paddingBottom = 0.0;
+  bool hideStatusBar = false;
+  ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
+  ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
   int themeIndex = 0;
   int lastDayThemeIndex = 0;
   int lastNightThemeIndex = 1;
@@ -38,11 +48,22 @@ class ReaderV2SettingsController extends ChangeNotifier {
   List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
   int _contentSettingsGeneration = 0;
 
+  /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
+  ReaderV2PrefsSnapshot _persisted = ReaderV2PrefsRepository.cachedSnapshot;
+  final Map<String, int> _saveGenerations = <String, int>{};
+  final StreamController<String> _saveFailures =
+      StreamController<String>.broadcast();
+  bool _disposed = false;
+
+  /// 設定保存失敗（已還原為先前的值）時發出的提示訊息。
+  Stream<String> get saveFailures => _saveFailures.stream;
+
   int get contentSettingsGeneration => _contentSettingsGeneration;
   bool get showReadTitleAddition => true;
 
   Future<void> loadSettings() async {
     final snapshot = await _prefsRepository.load();
+    _persisted = snapshot;
     _initFromCache(snapshot);
     _normalizeDayNightThemeIndexes();
     notifyListeners();
@@ -63,6 +84,51 @@ class ReaderV2SettingsController extends ChangeNotifier {
     clickActions = List<int>.from(snapshot.clickActions);
     lastDayThemeIndex = snapshot.lastDayThemeIndex;
     lastNightThemeIndex = snapshot.lastNightThemeIndex;
+    paddingHorizontal = snapshot.paddingHorizontal;
+    paddingTop = snapshot.paddingTop;
+    paddingBottom = snapshot.paddingBottom;
+    hideStatusBar = snapshot.hideStatusBar;
+    headerInfo = snapshot.headerInfo;
+    footerInfo = snapshot.footerInfo;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_saveFailures.close());
+    super.dispose();
+  }
+
+  /// 寫入偏好設定。記憶體中的值先行更新讓畫面即時反應；寫入失敗時，
+  /// 以最後一次成功落地的值還原並通知，避免畫面顯示一個重開後就消失的設定。
+  ///
+  /// [field] 區分各設定的寫入序號：連續調整時只有該設定最新一次寫入的
+  /// 失敗會觸發還原，較早的失敗不得把較新的值蓋回去。
+  void _persist(
+    String field,
+    Future<void> Function() write, {
+    required ReaderV2PrefsSnapshot Function(ReaderV2PrefsSnapshot persisted)
+    onSaved,
+    required void Function(ReaderV2PrefsSnapshot persisted) restore,
+  }) {
+    final generation = (_saveGenerations[field] ?? 0) + 1;
+    _saveGenerations[field] = generation;
+    unawaited(
+      Future<void>.sync(write).then(
+        (_) => _persisted = onSaved(_persisted),
+        onError: (Object error, StackTrace stack) {
+          AppLog.e(
+            'Reader settings: save $field failed: $error',
+            error: error,
+            stackTrace: stack,
+          );
+          if (_disposed || _saveGenerations[field] != generation) return;
+          restore(_persisted);
+          notifyListeners();
+          _saveFailures.add('設定儲存失敗，已恢復原本的值');
+        },
+      ),
+    );
   }
 
   ReaderV2Style readStyleFor(
@@ -81,8 +147,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paragraphSpacing: paragraphSpacing,
       paddingTop: top,
       paddingBottom: bottom,
-      paddingLeft: textPadding,
-      paddingRight: textPadding,
+      paddingLeft: paddingHorizontal,
+      paddingRight: paddingHorizontal,
       bold: false,
       textIndent: textIndent,
       lastLineSpacingCompensation: lastLineSpacingCompensation,
@@ -149,7 +215,12 @@ class ReaderV2SettingsController extends ChangeNotifier {
         this.fontSize = fontSize;
         changed = true;
       }
-      unawaited(_prefsRepository.saveFontSize(fontSize));
+      _persist(
+        'fontSize',
+        () => _prefsRepository.saveFontSize(fontSize),
+        onSaved: (p) => p.copyWith(fontSize: fontSize),
+        restore: (p) => this.fontSize = p.fontSize,
+      );
     }
     if (lineHeight != null) {
       final normalized = ReaderV2Style.normalizeLineHeight(lineHeight);
@@ -157,21 +228,37 @@ class ReaderV2SettingsController extends ChangeNotifier {
         this.lineHeight = normalized;
         changed = true;
       }
-      unawaited(_prefsRepository.saveLineHeight(normalized));
+      _persist(
+        'lineHeight',
+        () => _prefsRepository.saveLineHeight(normalized),
+        onSaved: (p) => p.copyWith(lineHeight: normalized),
+        restore: (p) =>
+            this.lineHeight = ReaderV2Style.normalizeLineHeight(p.lineHeight),
+      );
     }
     if (paragraphSpacing != null) {
       if (this.paragraphSpacing != paragraphSpacing) {
         this.paragraphSpacing = paragraphSpacing;
         changed = true;
       }
-      unawaited(_prefsRepository.saveParagraphSpacing(paragraphSpacing));
+      _persist(
+        'paragraphSpacing',
+        () => _prefsRepository.saveParagraphSpacing(paragraphSpacing),
+        onSaved: (p) => p.copyWith(paragraphSpacing: paragraphSpacing),
+        restore: (p) => this.paragraphSpacing = p.paragraphSpacing,
+      );
     }
     if (letterSpacing != null) {
       if (this.letterSpacing != letterSpacing) {
         this.letterSpacing = letterSpacing;
         changed = true;
       }
-      unawaited(_prefsRepository.saveLetterSpacing(letterSpacing));
+      _persist(
+        'letterSpacing',
+        () => _prefsRepository.saveLetterSpacing(letterSpacing),
+        onSaved: (p) => p.copyWith(letterSpacing: letterSpacing),
+        restore: (p) => this.letterSpacing = p.letterSpacing,
+      );
     }
     if (changed) notifyListeners();
   }
@@ -190,14 +277,28 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   void setTextIndent(int value) {
     textIndent = value;
-    unawaited(_prefsRepository.saveTextIndent(value));
+    _persist(
+      'textIndent',
+      () => _prefsRepository.saveTextIndent(value),
+      onSaved: (p) => p.copyWith(textIndent: value),
+      restore: (p) => textIndent = p.textIndent,
+    );
     notifyListeners();
   }
 
   void setLastLineSpacingCompensation(bool value) {
     if (lastLineSpacingCompensation == value) return;
     lastLineSpacingCompensation = value;
-    unawaited(_prefsRepository.saveLastLineSpacingCompensation(value));
+    _persist(
+      'lastLineSpacingCompensation',
+      () => _prefsRepository.saveLastLineSpacingCompensation(value),
+      onSaved: (p) => p.copyWith(lastLineSpacingCompensation: value),
+      restore: (p) {
+        lastLineSpacingCompensation = p.lastLineSpacingCompensation;
+        AppConfig.readerLastLineSpacingCompensation =
+            p.lastLineSpacingCompensation;
+      },
+    );
     notifyListeners();
   }
 
@@ -205,26 +306,53 @@ class ReaderV2SettingsController extends ChangeNotifier {
     final normalized = _normalizeAutoPageSpeed(value);
     if ((autoPageSpeed - normalized).abs() < 0.001) return;
     autoPageSpeed = normalized;
-    unawaited(_prefsRepository.saveAutoPageSpeed(normalized));
+    _persist(
+      'autoPageSpeed',
+      () => _prefsRepository.saveAutoPageSpeed(normalized),
+      onSaved: (p) => p.copyWith(autoPageSpeed: normalized),
+      restore: (p) => autoPageSpeed = _normalizeAutoPageSpeed(p.autoPageSpeed),
+    );
     notifyListeners();
   }
 
   void setTheme(int value) {
-    themeIndex = _normalizeThemeIndex(value);
-    unawaited(_prefsRepository.saveThemeIndex(themeIndex));
-    if (isReaderDarkMode) {
-      lastNightThemeIndex = themeIndex;
-      unawaited(_prefsRepository.saveNightThemeIndex(themeIndex));
+    final next = _normalizeThemeIndex(value);
+    themeIndex = next;
+    final night = isReaderDarkMode;
+    if (night) {
+      lastNightThemeIndex = next;
     } else {
-      lastDayThemeIndex = themeIndex;
-      unawaited(_prefsRepository.saveDayThemeIndex(themeIndex));
+      lastDayThemeIndex = next;
     }
+    _persist(
+      'theme',
+      () => Future.wait<void>([
+        _prefsRepository.saveThemeIndex(next),
+        night
+            ? _prefsRepository.saveNightThemeIndex(next)
+            : _prefsRepository.saveDayThemeIndex(next),
+      ]),
+      onSaved: (p) => night
+          ? p.copyWith(themeIndex: next, lastNightThemeIndex: next)
+          : p.copyWith(themeIndex: next, lastDayThemeIndex: next),
+      restore: (p) {
+        themeIndex = _normalizeThemeIndex(p.themeIndex);
+        lastDayThemeIndex = p.lastDayThemeIndex;
+        lastNightThemeIndex = p.lastNightThemeIndex;
+      },
+    );
     notifyListeners();
   }
 
   void setMenuTheme(int value) {
-    menuThemeIndex = _normalizeThemeIndex(value);
-    unawaited(_prefsRepository.saveMenuThemeIndex(menuThemeIndex));
+    final next = _normalizeThemeIndex(value);
+    menuThemeIndex = next;
+    _persist(
+      'menuTheme',
+      () => _prefsRepository.saveMenuThemeIndex(next),
+      onSaved: (p) => p.copyWith(menuThemeIndex: next),
+      restore: (p) => menuThemeIndex = _normalizeThemeIndex(p.menuThemeIndex),
+    );
     ThemeSettingsProvider.saveMenuBuiltInIndex(isMenuDarkMode, menuThemeIndex);
     notifyListeners();
   }
@@ -233,20 +361,139 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (chineseConvert == value) return;
     chineseConvert = value;
     _contentSettingsGeneration += 1;
-    unawaited(_prefsRepository.saveChineseConvert(value));
+    _persist(
+      'chineseConvert',
+      () => _prefsRepository.saveChineseConvert(value),
+      onSaved: (p) => p.copyWith(chineseConvert: value),
+      restore: (p) {
+        if (chineseConvert == p.chineseConvert) return;
+        chineseConvert = p.chineseConvert;
+        _contentSettingsGeneration += 1;
+      },
+    );
     notifyListeners();
   }
 
   void setClickAction(int zone, int action) {
     if (zone < 0 || zone >= clickActions.length) return;
-    clickActions[zone] = action;
-    unawaited(_prefsRepository.saveClickActions(clickActions));
-    notifyListeners();
+    _setClickActions(List<int>.from(clickActions)..[zone] = action);
   }
 
   void resetClickActions() {
-    clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
-    unawaited(_prefsRepository.saveClickActions(clickActions));
+    _setClickActions(ReaderV2PrefsSnapshot.defaults().clickActions);
+  }
+
+  void _setClickActions(List<int> next) {
+    clickActions = next;
+    _persist(
+      'clickActions',
+      () => _prefsRepository.saveClickActions(next),
+      onSaved: (p) => p.copyWith(clickActions: next),
+      restore: (p) => clickActions = List<int>.from(p.clickActions),
+    );
+    notifyListeners();
+  }
+
+  void setPagePadding({double? horizontal, double? top, double? bottom}) {
+    var changed = false;
+    if (horizontal != null) {
+      final value = _normalizePagePadding(horizontal);
+      if (paddingHorizontal != value) {
+        paddingHorizontal = value;
+        changed = true;
+        _persist(
+          'paddingHorizontal',
+          () => _prefsRepository.savePaddingHorizontal(value),
+          onSaved: (p) => p.copyWith(paddingHorizontal: value),
+          restore: (p) => paddingHorizontal = p.paddingHorizontal,
+        );
+      }
+    }
+    if (top != null) {
+      final value = _normalizePagePadding(top);
+      if (paddingTop != value) {
+        paddingTop = value;
+        changed = true;
+        _persist(
+          'paddingTop',
+          () => _prefsRepository.savePaddingTop(value),
+          onSaved: (p) => p.copyWith(paddingTop: value),
+          restore: (p) => paddingTop = p.paddingTop,
+        );
+      }
+    }
+    if (bottom != null) {
+      final value = _normalizePagePadding(bottom);
+      if (paddingBottom != value) {
+        paddingBottom = value;
+        changed = true;
+        _persist(
+          'paddingBottom',
+          () => _prefsRepository.savePaddingBottom(value),
+          onSaved: (p) => p.copyWith(paddingBottom: value),
+          restore: (p) => paddingBottom = p.paddingBottom,
+        );
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// 將邊距、狀態列與頁首／頁尾恢復為預設值。
+  void resetPageLayout() {
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    setPagePadding(
+      horizontal: defaults.paddingHorizontal,
+      top: defaults.paddingTop,
+      bottom: defaults.paddingBottom,
+    );
+    setHideStatusBar(defaults.hideStatusBar);
+    setHeaderInfo(defaults.headerInfo);
+    setFooterInfo(defaults.footerInfo);
+  }
+
+  bool get isPageLayoutDefault {
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    return paddingHorizontal == defaults.paddingHorizontal &&
+        paddingTop == defaults.paddingTop &&
+        paddingBottom == defaults.paddingBottom &&
+        hideStatusBar == defaults.hideStatusBar &&
+        headerInfo == defaults.headerInfo &&
+        footerInfo == defaults.footerInfo;
+  }
+
+  void setHideStatusBar(bool value) {
+    if (hideStatusBar == value) return;
+    hideStatusBar = value;
+    _persist(
+      'hideStatusBar',
+      () => _prefsRepository.saveHideStatusBar(value),
+      onSaved: (p) => p.copyWith(hideStatusBar: value),
+      restore: (p) => hideStatusBar = p.hideStatusBar,
+    );
+    notifyListeners();
+  }
+
+  void setHeaderInfo(ReaderV2InfoSlots value) {
+    if (headerInfo == value) return;
+    headerInfo = value;
+    _persist(
+      'headerInfo',
+      () => _prefsRepository.saveHeaderInfo(value),
+      onSaved: (p) => p.copyWith(headerInfo: value),
+      restore: (p) => headerInfo = p.headerInfo,
+    );
+    notifyListeners();
+  }
+
+  void setFooterInfo(ReaderV2InfoSlots value) {
+    if (footerInfo == value) return;
+    footerInfo = value;
+    _persist(
+      'footerInfo',
+      () => _prefsRepository.saveFooterInfo(value),
+      onSaved: (p) => p.copyWith(footerInfo: value),
+      restore: (p) => footerInfo = p.footerInfo,
+    );
     notifyListeners();
   }
 
@@ -279,6 +526,11 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int _normalizeThemeIndex(int index) {
     if (AppTheme.readingThemes.isEmpty) return index;
     return index.clamp(0, AppTheme.readingThemes.length - 1).toInt();
+  }
+
+  double _normalizePagePadding(double value) {
+    if (!value.isFinite) return 0.0;
+    return value.clamp(minPagePadding, maxPagePadding).toDouble();
   }
 
   double _normalizeAutoPageSpeed(double value) {

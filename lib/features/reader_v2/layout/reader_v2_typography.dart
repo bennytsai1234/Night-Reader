@@ -4,6 +4,18 @@ const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
   FontFeature.enable('fwid'),
 ];
 
+/// 正文與資訊列的文字語系。
+///
+/// Android 的 Noto Sans CJK 是一個字型集合，同一個碼位依語系選用
+/// 簡中／繁中／日文字形；未指定語系時回退鏈取第一個（簡中）字形，
+/// 「，。：；！？」因此擠在字格左下角、「」緊貼一側。指定繁中（臺灣）
+/// 後使用置中的全形標點與置中的上下引號，符合臺灣出版排版慣例。
+const Locale kReaderV2TextLocale = Locale.fromSubtags(
+  languageCode: 'zh',
+  scriptCode: 'Hant',
+  countryCode: 'TW',
+);
+
 // 末行補償演算法版本也要進入 metrics fingerprint，避免沿用舊 Paragraph
 // 幾何；開關本身則由 StyleFingerprint.lastLineSpacingCompensation 區分。
 // physicalwidth-v1：contentWidth 只代表 viewport 扣除使用者 padding 後的
@@ -14,5 +26,12 @@ const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
 // 真實 shaping advance 決定；SkParagraph 不再擁有 soft-wrap policy。
 // systemfont-v1：使用平台字型 fallback；字形幾何可能改變，舊 metrics
 // 不可沿用。
+// locale-zh-hant-tw-v1：正文以繁中（臺灣）語系選字形，標點字形改變，
+// 舊 metrics 不可沿用。
+// chapter-gap-v1：章末 block 高度含 [kReaderV2ChapterGapLines] 空行，
+// 舊的章末高度不可沿用。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1';
+    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v1';
+
+/// 章末與下一章標題之間，在一般段距之外額外保留的行數。
+const double kReaderV2ChapterGapLines = 2.0;

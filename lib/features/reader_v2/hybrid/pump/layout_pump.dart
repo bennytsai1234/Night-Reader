@@ -743,6 +743,7 @@ final class LayoutPump implements HybridLayoutPump {
           ? ui.FontWeight.bold
           : ui.FontWeight.normal,
       fontFeatures: kReaderV2CjkFontFeatures,
+      locale: kReaderV2TextLocale,
     );
   }
 }

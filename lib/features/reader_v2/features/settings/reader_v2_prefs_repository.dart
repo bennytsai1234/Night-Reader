@@ -1,6 +1,7 @@
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2PrefsSnapshot {
@@ -19,6 +20,18 @@ class ReaderV2PrefsSnapshot {
   final bool showAddToShelfAlert;
   final List<int> clickActions;
 
+  /// 正文左右邊距（px）。
+  final double paddingHorizontal;
+
+  /// 正文與頁首、頁尾之間額外保留的空白（px）。
+  final double paddingTop;
+  final double paddingBottom;
+
+  /// 閱讀時隱藏系統狀態列（時間、訊號、電量）。
+  final bool hideStatusBar;
+  final ReaderV2InfoSlots headerInfo;
+  final ReaderV2InfoSlots footerInfo;
+
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
     required this.lineHeight,
@@ -34,6 +47,12 @@ class ReaderV2PrefsSnapshot {
     required this.lastLineSpacingCompensation,
     required this.showAddToShelfAlert,
     required this.clickActions,
+    required this.paddingHorizontal,
+    required this.paddingTop,
+    required this.paddingBottom,
+    required this.hideStatusBar,
+    required this.headerInfo,
+    required this.footerInfo,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -52,6 +71,18 @@ class ReaderV2PrefsSnapshot {
       lastLineSpacingCompensation: AppConfig.readerLastLineSpacingCompensation,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
+      paddingHorizontal: 16.0,
+      paddingTop: 0.0,
+      paddingBottom: 0.0,
+      hideStatusBar: false,
+      headerInfo: const ReaderV2InfoSlots(
+        left: ReaderV2InfoItem.time,
+        right: ReaderV2InfoItem.none,
+      ),
+      footerInfo: const ReaderV2InfoSlots(
+        left: ReaderV2InfoItem.chapterTitle,
+        right: ReaderV2InfoItem.bookProgress,
+      ),
     );
   }
 
@@ -70,6 +101,12 @@ class ReaderV2PrefsSnapshot {
     bool? lastLineSpacingCompensation,
     bool? showAddToShelfAlert,
     List<int>? clickActions,
+    double? paddingHorizontal,
+    double? paddingTop,
+    double? paddingBottom,
+    bool? hideStatusBar,
+    ReaderV2InfoSlots? headerInfo,
+    ReaderV2InfoSlots? footerInfo,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -87,6 +124,12 @@ class ReaderV2PrefsSnapshot {
           lastLineSpacingCompensation ?? this.lastLineSpacingCompensation,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
+      paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
+      paddingTop: paddingTop ?? this.paddingTop,
+      paddingBottom: paddingBottom ?? this.paddingBottom,
+      hideStatusBar: hideStatusBar ?? this.hideStatusBar,
+      headerInfo: headerInfo ?? this.headerInfo,
+      footerInfo: footerInfo ?? this.footerInfo,
     );
   }
 }
@@ -98,6 +141,10 @@ class ReaderV2PrefsRepository {
   /// 所有讀寫端（設定 sheet、全域設定頁、AutoPageController）共用此常數。
   static const double minAutoPageSpeed = 0.02;
   static const double maxAutoPageSpeed = 0.45;
+
+  /// 版面邊距的合法範圍（px）。
+  static const double minPagePadding = 0.0;
+  static const double maxPagePadding = 64.0;
 
   static ReaderV2PrefsSnapshot? _latestSnapshot;
 
@@ -146,6 +193,26 @@ class ReaderV2PrefsRepository {
       clickActions: _parseClickActions(
         prefs.getString(PreferKey.readerClickActions),
       ),
+      paddingHorizontal: _normalizePagePadding(
+        prefs.getDouble(PreferKey.readerPaddingHorizontal),
+        defaults.paddingHorizontal,
+      ),
+      paddingTop: _normalizePagePadding(
+        prefs.getDouble(PreferKey.readerPaddingTop),
+        defaults.paddingTop,
+      ),
+      paddingBottom: _normalizePagePadding(
+        prefs.getDouble(PreferKey.readerPaddingBottom),
+        defaults.paddingBottom,
+      ),
+      hideStatusBar:
+          prefs.getBool(PreferKey.readerHideStatusBar) ?? defaults.hideStatusBar,
+      headerInfo:
+          ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerHeaderInfo)) ??
+          defaults.headerInfo,
+      footerInfo:
+          ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerFooterInfo)) ??
+          defaults.footerInfo,
     );
     _syncAppConfig(snapshot);
     _latestSnapshot = snapshot;
@@ -213,6 +280,30 @@ class ReaderV2PrefsRepository {
     return _setString(PreferKey.readerClickActions, normalized.join(','));
   }
 
+  Future<void> savePaddingHorizontal(double value) {
+    return _setDouble(PreferKey.readerPaddingHorizontal, value);
+  }
+
+  Future<void> savePaddingTop(double value) {
+    return _setDouble(PreferKey.readerPaddingTop, value);
+  }
+
+  Future<void> savePaddingBottom(double value) {
+    return _setDouble(PreferKey.readerPaddingBottom, value);
+  }
+
+  Future<void> saveHideStatusBar(bool value) {
+    return _setBool(PreferKey.readerHideStatusBar, value);
+  }
+
+  Future<void> saveHeaderInfo(ReaderV2InfoSlots value) {
+    return _setString(PreferKey.readerHeaderInfo, value.encode());
+  }
+
+  Future<void> saveFooterInfo(ReaderV2InfoSlots value) {
+    return _setString(PreferKey.readerFooterInfo, value.encode());
+  }
+
   List<int> parseClickActions(String? stored) {
     return _parseClickActions(stored);
   }
@@ -223,22 +314,26 @@ class ReaderV2PrefsRepository {
 
   Future<void> _setDouble(String key, double value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(key, value);
+    _ensureSaved(key, await prefs.setDouble(key, value));
   }
 
   Future<void> _setInt(String key, int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(key, value);
+    _ensureSaved(key, await prefs.setInt(key, value));
   }
 
   Future<void> _setBool(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    _ensureSaved(key, await prefs.setBool(key, value));
   }
 
   Future<void> _setString(String key, String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
+    _ensureSaved(key, await prefs.setString(key, value));
+  }
+
+  void _ensureSaved(String key, bool saved) {
+    if (!saved) throw StateError('SharedPreferences rejected $key');
   }
 
   void _syncAppConfig(ReaderV2PrefsSnapshot snapshot) {
@@ -261,6 +356,11 @@ class ReaderV2PrefsRepository {
       return ReaderV2TapAction.defaultGrid();
     }
     return List<int>.from(actions);
+  }
+
+  double _normalizePagePadding(double? value, double fallback) {
+    if (value == null || !value.isFinite) return fallback;
+    return value.clamp(minPagePadding, maxPagePadding).toDouble();
   }
 
   double _normalizeAutoPageSpeed(double? value) {

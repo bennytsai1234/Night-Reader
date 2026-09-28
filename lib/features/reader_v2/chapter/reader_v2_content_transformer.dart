@@ -367,7 +367,9 @@ bool _isCjkContextRune(int? rune) {
 /// 全章奇數個就整章放棄，命中率極低）。奇數個引號的行原樣保留；
 /// 逐對再做 CJK 脈絡判定，純英文行（`"Hello," he said.`）不動。
 String _normalizePairedQuotes(String input) {
+  // 全形直引號 `＂`（U+FF02）與 `"` 同樣沒有方向，併入同一套配對。
   return input
+      .replaceAll('\uFF02', '"')
       .split('\n')
       .map(
         (line) => _convertAlternatingQuotesLine(
@@ -389,7 +391,9 @@ String _normalizePairedQuotes(String input) {
 /// （`他讀了 'test' 這個字`）收尾側會被當撇號而破對——字尾撇號遠比
 /// 中文行內夾英文引語常見，取誤傷較小的一側。
 String _normalizePairedSingleQuotes(String input) {
+  // 全形直單引號 `＇`（U+FF07）同理併入 `'` 的配對。
   return input
+      .replaceAll('\uFF07', "'")
       .split('\n')
       .map(
         (line) => _convertAlternatingQuotesLine(

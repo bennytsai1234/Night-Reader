@@ -1,13 +1,85 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+
+/// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
+///
+/// 頁首佔用狀態列（或隱藏狀態列後剩下的鏡頭挖孔區）；有資訊時，
+/// 狀態列顯示中會在其下方多一條資訊列，隱藏時則直接把資訊放進該區。
+/// 使用者的上／下邊距只加在正文與頁首、頁尾之間，不影響資訊列本身。
+@immutable
+final class ReaderV2PageChromeLayout {
+  const ReaderV2PageChromeLayout._({
+    required this.headerExtent,
+    required this.headerRowTop,
+    required this.footerExtent,
+    required this.contentTop,
+    required this.contentBottom,
+    required this.showHeaderInfo,
+    required this.showFooterInfo,
+  });
+
+  factory ReaderV2PageChromeLayout.resolve({
+    required EdgeInsets mediaPadding,
+    required bool hideStatusBar,
+    required bool showHeaderInfo,
+    required bool showFooterInfo,
+    required double paddingTop,
+    required double paddingBottom,
+  }) {
+    final top = mediaPadding.top;
+    final double headerExtent;
+    final double headerRowTop;
+    if (!showHeaderInfo) {
+      headerExtent = top;
+      headerRowTop = top;
+    } else if (hideStatusBar) {
+      headerExtent = top > kReaderInfoRowHeight
+          ? top
+          : kReaderInfoRowHeight;
+      headerRowTop = 0;
+    } else {
+      headerExtent = top + kReaderInfoRowHeight;
+      headerRowTop = top;
+    }
+    final footerExtent = showFooterInfo
+        ? mediaPadding.bottom + kReaderPermanentInfoReservedHeight
+        : mediaPadding.bottom;
+    return ReaderV2PageChromeLayout._(
+      headerExtent: headerExtent,
+      headerRowTop: headerRowTop,
+      footerExtent: footerExtent,
+      contentTop: headerExtent + paddingTop,
+      contentBottom: footerExtent + paddingBottom,
+      showHeaderInfo: showHeaderInfo,
+      showFooterInfo: showFooterInfo,
+    );
+  }
+
+  final double headerExtent;
+
+  /// 頁首資訊列在頁首區內的起點；狀態列顯示時位於狀態列下方。
+  final double headerRowTop;
+  final double footerExtent;
+  final double contentTop;
+  final double contentBottom;
+  final bool showHeaderInfo;
+  final bool showFooterInfo;
+}
 
 class ReaderV2PageShell extends StatelessWidget {
   const ReaderV2PageShell({
@@ -27,11 +99,14 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.chapterTitle,
     required this.chapterUrl,
     required this.originName,
-    required this.displayPageLabel,
-    required this.displayChapterPercentLabel,
     this.progressListenable,
     required this.navigation,
     required this.isAutoPaging,
+    required this.hideStatusBar,
+    required this.headerInfo,
+    required this.footerInfo,
+    required this.paddingTop,
+    required this.paddingBottom,
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onExitIntent,
@@ -70,11 +145,14 @@ class ReaderV2PageShell extends StatelessWidget {
   final String chapterTitle;
   final String chapterUrl;
   final String originName;
-  final String displayPageLabel;
-  final String displayChapterPercentLabel;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
+  final bool hideStatusBar;
+  final ReaderV2InfoSlots headerInfo;
+  final ReaderV2InfoSlots footerInfo;
+  final double paddingTop;
+  final double paddingBottom;
   final IconData dayNightIcon;
   final String dayNightTooltip;
   final VoidCallback onExitIntent;
@@ -99,9 +177,18 @@ class ReaderV2PageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topSystemExtent = _topSystemExtent(context);
-    final permanentInfoExtent =
-        showReadTitleAddition ? _permanentInfoExtent(context) : 0.0;
+    final mediaPadding = MediaQuery.paddingOf(context);
+    final layout = ReaderV2PageChromeLayout.resolve(
+      mediaPadding: mediaPadding,
+      hideStatusBar: hideStatusBar,
+      showHeaderInfo: showReadTitleAddition && !headerInfo.isEmpty,
+      showFooterInfo: showReadTitleAddition && !footerInfo.isEmpty,
+      paddingTop: paddingTop,
+      paddingBottom: paddingBottom,
+    );
+    final infoVisible = hasVisibleContent && !isLoading;
+    // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
+    final autoPageInFooter = layout.showFooterInfo;
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -115,28 +202,45 @@ class ReaderV2PageShell extends StatelessWidget {
           child: Stack(
             children: [
               Positioned.fill(
-                top: topSystemExtent,
-                bottom: permanentInfoExtent,
+                top: layout.contentTop,
+                bottom: layout.contentBottom,
                 child: content,
               ),
-              if (topSystemExtent > 0)
+              if (layout.headerExtent > 0)
                 Positioned(
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: topSystemExtent,
+                  height: layout.headerExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTapDown: (_) => onShowControls(),
-                    child: _TopSystemInfoBar(shell: this),
+                    child: ColoredBox(
+                      color: backgroundColor,
+                      child: layout.showHeaderInfo && infoVisible
+                          ? Padding(
+                              padding: EdgeInsets.only(
+                                top: layout.headerRowTop,
+                              ),
+                              child: Center(
+                                child: _InfoRow(
+                                  shell: this,
+                                  slots: headerInfo,
+                                  showAutoPage:
+                                      isAutoPaging && !autoPageInFooter,
+                                ),
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
-              if (_shouldShowPermanentInfo())
+              if (layout.showFooterInfo && infoVisible)
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  height: permanentInfoExtent,
+                  height: layout.footerExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTapDown: (_) => onShowControls(),
@@ -193,30 +297,17 @@ class ReaderV2PageShell extends StatelessWidget {
       ),
     );
   }
-
-  bool _shouldShowPermanentInfo() {
-    return hasVisibleContent && !isLoading && showReadTitleAddition;
-  }
-
-  double _permanentInfoExtent(BuildContext context) {
-    return MediaQuery.paddingOf(context).bottom +
-        kReaderPermanentInfoReservedHeight;
-  }
-
-  double _topSystemExtent(BuildContext context) {
-    return MediaQuery.paddingOf(context).top;
-  }
 }
 
-class _TopSystemInfoBar extends StatelessWidget {
-  const _TopSystemInfoBar({required this.shell});
-
-  final ReaderV2PageShell shell;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(color: shell.backgroundColor);
-  }
+/// 資訊列的配色：跟隨正文區自訂色，未自訂時以正文文字色降低不透明度。
+({Color info, Color accent, Color? border}) _infoColors(ReaderV2PageShell shell) {
+  final dark = shell.backgroundColor.computeLuminance() < 0.5;
+  final custom = ThemeSettingsProvider.resolveReaderAreaColors(
+    dark: dark,
+    menu: false,
+  );
+  final info = custom?.secondaryText ?? shell.textColor.withValues(alpha: 0.68);
+  return (info: info, accent: custom?.accent ?? info, border: custom?.border);
 }
 
 class _PermanentInfoBar extends StatelessWidget {
@@ -226,35 +317,8 @@ class _PermanentInfoBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progressListenable = shell.progressListenable;
-    if (progressListenable == null) {
-      return _buildBar(context, null);
-    }
-    return ValueListenableBuilder<HybridProgressSnapshot?>(
-      valueListenable: progressListenable,
-      builder: (context, progress, _) => _buildBar(context, progress),
-    );
-  }
-
-  Widget _buildBar(BuildContext context, HybridProgressSnapshot? progress) {
-    final chapterLabel = progress?.chapterLabel ?? shell.displayPageLabel;
-    final percentLabel =
-        progress?.percentLabel ?? shell.displayChapterPercentLabel;
-    final statusLabel = [
-      shell.book.name,
-      chapterLabel,
-      percentLabel,
-      if (shell.isAutoPaging) '自動翻頁中',
-    ].join('，');
-    final dark = shell.backgroundColor.computeLuminance() < 0.5;
-    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-      dark: dark,
-      menu: false,
-    );
-    final infoColor =
-        custom?.secondaryText ?? shell.textColor.withValues(alpha: 0.68);
-    final accentColor = custom?.accent ?? infoColor;
-    final borderColor = custom?.border;
+    final colors = _infoColors(shell);
+    final borderColor = colors.border;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -265,64 +329,114 @@ class _PermanentInfoBar extends StatelessWidget {
             shell.backgroundColor.withValues(alpha: 0.88),
           ],
         ),
-        border:
-            borderColor == null
-                ? null
-                : Border(
-                  top: BorderSide(
-                    color: borderColor.withValues(alpha: 0.45),
-                  ),
-                ),
+        border: borderColor == null
+            ? null
+            : Border(
+                top: BorderSide(color: borderColor.withValues(alpha: 0.45)),
+              ),
       ),
-      child: Semantics(
-        container: true,
-        label: statusLabel,
-        child: ExcludeSemantics(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              kReaderPermanentInfoTopPadding,
-              16,
-              MediaQuery.of(context).padding.bottom +
-                  kReaderPermanentInfoBottomSpacing,
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: kReaderPermanentInfoTopPadding,
+          bottom:
+              MediaQuery.paddingOf(context).bottom +
+              kReaderPermanentInfoBottomSpacing,
+        ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: _InfoRow(
+            shell: shell,
+            slots: shell.footerInfo,
+            showAutoPage: shell.isAutoPaging,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 一條資訊列：左欄可省略、右欄靠右；兩欄都放不下時各自以刪節號收尾。
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.shell,
+    required this.slots,
+    required this.showAutoPage,
+  });
+
+  final ReaderV2PageShell shell;
+  final ReaderV2InfoSlots slots;
+  final bool showAutoPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final progressListenable = shell.progressListenable;
+    if (progressListenable == null) return _buildRow(context, null);
+    return ValueListenableBuilder<HybridProgressSnapshot?>(
+      valueListenable: progressListenable,
+      builder: (context, progress, _) => _buildRow(context, progress),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
+    final colors = _infoColors(shell);
+    final left = _itemWidget(slots.left, progress, TextAlign.left);
+    final right = _itemWidget(slots.right, progress, TextAlign.right);
+    final semantics = [
+      if (showAutoPage) '自動翻頁中',
+      ?_itemSemantics(slots.left, progress),
+      ?_itemSemantics(slots.right, progress),
+    ].join('，');
+    return Semantics(
+      container: true,
+      label: semantics,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DefaultTextStyle(
+            style: AppTextStyles.uiXs.copyWith(
+              color: colors.info,
+              fontWeight: FontWeight.w400,
+              locale: kReaderV2TextLocale,
             ),
-            child: DefaultTextStyle(
-              style: TextStyle(color: infoColor, fontSize: 11),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            child: SizedBox(
+              height: kReaderInfoRowHeight,
               child: Row(
                 children: [
+                  if (showAutoPage) ...[
+                    Icon(
+                      Icons.auto_stories_outlined,
+                      size: 13,
+                      color: colors.accent,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                  ],
+                  // 左欄通常放較長的書名／章節名，佔剩餘空間並先被刪節；
+                  // 右欄放短的進度或時間，最多佔一半寬度，盡量完整顯示。
                   Expanded(
-                    child: Row(
-                      children: [
-                        if (shell.isAutoPaging) ...[
-                          Icon(
-                            Icons.auto_stories_outlined,
-                            size: 13,
-                            color: accentColor,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: left ?? const SizedBox.shrink(),
+                            ),
                           ),
-                          const SizedBox(width: 4),
-                          const Text('自動翻頁中'),
-                          const SizedBox(width: 8),
+                          if (left != null && right != null)
+                            const SizedBox(width: AppSpacing.md),
+                          if (right != null)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth / 2,
+                              ),
+                              child: right,
+                            ),
                         ],
-                        Expanded(
-                          child: Text(
-                            shell.book.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      chapterLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(percentLabel, maxLines: 1, textAlign: TextAlign.right),
                 ],
               ),
             ),
@@ -330,6 +444,90 @@ class _PermanentInfoBar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget? _itemWidget(
+    ReaderV2InfoItem item,
+    HybridProgressSnapshot? progress,
+    TextAlign align,
+  ) {
+    if (item == ReaderV2InfoItem.none) return null;
+    if (item == ReaderV2InfoItem.time) return _ReaderClock(textAlign: align);
+    return Text(_itemText(item, progress) ?? '', textAlign: align);
+  }
+
+  String? _itemSemantics(ReaderV2InfoItem item, HybridProgressSnapshot? progress) {
+    if (item == ReaderV2InfoItem.time) {
+      return '時間 ${DateFormat('HH:mm').format(DateTime.now())}';
+    }
+    return _itemText(item, progress);
+  }
+
+  String? _itemText(ReaderV2InfoItem item, HybridProgressSnapshot? progress) {
+    final navigation = shell.navigation;
+    return switch (item) {
+      ReaderV2InfoItem.none || ReaderV2InfoItem.time => null,
+      ReaderV2InfoItem.bookName => shell.book.name,
+      ReaderV2InfoItem.chapterTitle => shell.chapterTitle,
+      ReaderV2InfoItem.chapterIndex =>
+        progress?.chapterIndexLabel ??
+            (navigation.chapterCount > 0
+                ? '${navigation.currentIndex + 1}/${navigation.chapterCount}'
+                : '…'),
+      ReaderV2InfoItem.chapterProgress =>
+        progress?.chapterProgressLabel ?? '本章 …',
+      ReaderV2InfoItem.bookProgress => progress?.bookPercentLabel ?? '…%',
+    };
+  }
+}
+
+/// 頁首／頁尾的時鐘；只在分鐘變化時重建。
+class _ReaderClock extends StatefulWidget {
+  const _ReaderClock({required this.textAlign});
+
+  final TextAlign textAlign;
+
+  @override
+  State<_ReaderClock> createState() => _ReaderClockState();
+}
+
+class _ReaderClockState extends State<_ReaderClock> {
+  static final DateFormat _format = DateFormat('HH:mm');
+  Timer? _timer;
+  late DateTime _now;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _scheduleTick();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleTick() {
+    final now = DateTime.now();
+    final nextMinute = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute + 1,
+    );
+    _timer = Timer(nextMinute.difference(now), () {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _scheduleTick();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(_format.format(_now), textAlign: widget.textAlign);
   }
 }
 

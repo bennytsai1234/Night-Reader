@@ -39,7 +39,7 @@ class TtsSettingsPage extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
               children: [
-                const SettingsSectionTitle(''),
+                const SettingsSectionTitle('朗讀參數'),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
@@ -51,34 +51,38 @@ class TtsSettingsPage extends StatelessWidget {
                         value: tts.rate,
                         min: TTSService.minRate,
                         max: TTSService.maxRate,
-                        step: 0.1,
+                        step: TTSService.rateStep,
                         fractionDigits: 1,
-                        onChanged: (value) => unawaited(tts.setRate(value)),
+                        unit: 'x',
+                        onChanged: (value) =>
+                            _reportSaveFailure(context, tts.setRate(value)),
                       ),
                       NumberStepperRow(
                         label: '音調',
                         value: tts.pitch,
                         min: TTSService.minPitch,
                         max: TTSService.maxPitch,
-                        step: 0.1,
+                        step: TTSService.pitchStep,
                         fractionDigits: 1,
-                        onChanged: (value) => unawaited(tts.setPitch(value)),
+                        onChanged: (value) =>
+                            _reportSaveFailure(context, tts.setPitch(value)),
                       ),
                       NumberStepperRow(
                         label: '音量',
                         value: tts.volume,
                         min: TTSService.minVolume,
                         max: TTSService.maxVolume,
-                        step: 0.05,
+                        step: TTSService.volumeStep,
                         displayScale: 100,
                         unit: '%',
-                        onChanged: (value) => unawaited(tts.setVolume(value)),
+                        onChanged: (value) =>
+                            _reportSaveFailure(context, tts.setVolume(value)),
                       ),
                     ],
                   ),
                 ),
                 const Divider(),
-                const SettingsSectionTitle(''),
+                const SettingsSectionTitle('系統語音'),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.md,
@@ -178,4 +182,16 @@ class TtsSettingsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 參數保存失敗時 TTSService 已把數值還原；這裡只負責告知使用者。
+void _reportSaveFailure(BuildContext context, Future<void> save) {
+  unawaited(
+    save.catchError((Object _) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')),
+      );
+    }),
+  );
 }

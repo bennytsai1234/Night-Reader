@@ -224,15 +224,22 @@ class ReaderV2TtsController extends ChangeNotifier
 
   @override
   Future<void> setRate(double value) async {
-    // 語速的保存與範圍由 TTSService 負責。
-    await _tts.setRate(value);
-    notifyListeners();
+    // 語速的保存、範圍與保存失敗時的還原由 TTSService 負責；
+    // 失敗時也要通知面板顯示還原後的值。
+    try {
+      await _tts.setRate(value);
+    } finally {
+      notifyListeners();
+    }
   }
 
   @override
   Future<void> setPitch(double value) async {
-    await _tts.setPitch(value);
-    notifyListeners();
+    try {
+      await _tts.setPitch(value);
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<void> setLanguage(String value) async {

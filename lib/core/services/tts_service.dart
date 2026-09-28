@@ -68,13 +68,29 @@ class TTSService extends ChangeNotifier {
 
   TTSService._internal();
 
-  /// 朗讀參數的合法範圍；閱讀器朗讀面板與「朗讀與語音」設定頁共用。
-  static const double minRate = 0.5;
-  static const double maxRate = 1.5;
+  /// 朗讀參數的合法範圍與步進；閱讀器朗讀面板與「朗讀與語音」設定頁共用。
+  ///
+  /// - 語速：以使用者感受的倍速表示，1.0 = 正常速度。flutter_tts 為了
+  ///   跨平台一致，把 iOS AVSpeechUtterance 的「0.5 = 正常」當作共同刻度，
+  ///   Android 端再 ×2 換成引擎倍速（third_party/flutter_tts
+  ///   FlutterTtsPlugin.kt）。這個換算只屬於外掛介面，由 [_engineRate]
+  ///   在送出前處理；外掛上限 1.5 對應 3.0 倍速。
+  /// - 音調：外掛只接受 0.5～2.0，超出範圍的值會被忽略。
+  /// - 音量：0～1。
+  static const double minRate = 0.2;
+  static const double maxRate = 3.0;
+  static const double rateStep = 0.1;
   static const double minPitch = 0.5;
-  static const double maxPitch = 1.5;
+  static const double maxPitch = 2.0;
+  static const double pitchStep = 0.1;
   static const double minVolume = 0.0;
   static const double maxVolume = 1.0;
+  static const double volumeStep = 0.05;
+
+  /// flutter_tts 的語速刻度：0.5 = 正常速度。
+  static const double _flutterTtsNormalRate = 0.5;
+
+  double get _engineRate => _rate * _flutterTtsNormalRate;
 
   static double _clampParam(
     double value,
@@ -88,14 +104,19 @@ class TTSService extends ChangeNotifier {
 
   /// 從偏好設定還原朗讀參數。
   ///
-  /// 語速與音調以閱讀器朗讀面板的鍵為準；舊版設定頁鍵
-  /// （`ttsSpeechRate`／`speech_pitch`）只在新鍵不存在時作為遷移來源。
+  /// 語速存於 `readerTtsSpeedMultiplier`（使用者倍速）。舊版鍵
+  /// （`reader_tts_rate`／`ttsSpeechRate`）存的是 flutter_tts 刻度，
+  /// 只在新鍵不存在時換算遷移，實際朗讀速度不變。音調以閱讀器面板的鍵
+  /// 為準，`speech_pitch` 為遷移來源。
   Future<void> _loadSavedSpeechParams() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final rate =
+      final legacyRate =
           prefs.getDouble(PreferKey.readerTtsRate) ??
           prefs.getDouble(PreferKey.ttsSpeechRate);
+      final rate =
+          prefs.getDouble(PreferKey.readerTtsSpeedMultiplier) ??
+          (legacyRate == null ? null : legacyRate / _flutterTtsNormalRate);
       final pitch =
           prefs.getDouble(PreferKey.readerTtsPitch) ??
           prefs.getDouble(PreferKey.speechPitch);
@@ -105,6 +126,10 @@ class TTSService extends ChangeNotifier {
       if (volume != null) {
         _volume = _clampParam(volume, minVolume, maxVolume, 1.0);
       }
+      _persistedParams
+        ..[PreferKey.readerTtsSpeedMultiplier] = _rate
+        ..[PreferKey.readerTtsPitch] = _pitch
+        ..[PreferKey.speechVolume] = _volume;
     } catch (e) {
       AppLog.e('TTSService: load speech params failed: $e', error: e);
     }
@@ -226,7 +251,7 @@ class TTSService extends ChangeNotifier {
         : (_languages.isNotEmpty ? _languages.first.toString() : 'zh-CN');
 
     await _flutterTts.setLanguage(_language!);
-    await _flutterTts.setSpeechRate(_rate);
+    await _flutterTts.setSpeechRate(_engineRate);
     await _flutterTts.setPitch(_pitch);
     await _flutterTts.setVolume(_volume);
     await _loadSystemVoiceOptions();
@@ -387,32 +412,78 @@ class TTSService extends ChangeNotifier {
     await init();
     _pitch = _clampParam(pitch, minPitch, maxPitch, _pitch);
     notifyListeners();
-    await _saveDouble(PreferKey.readerTtsPitch, _pitch);
-    if (!_isInitialized) return;
-    await _flutterTts.setPitch(_pitch);
+    await _applyPitchToEngine();
+    await _persistParam(PreferKey.readerTtsPitch, _pitch, (value) async {
+      _pitch = value;
+      await _applyPitchToEngine();
+    });
   }
 
   Future<void> setRate(double rate) async {
     await init();
     _rate = _clampParam(rate, minRate, maxRate, _rate);
     notifyListeners();
-    await _saveDouble(PreferKey.readerTtsRate, _rate);
-    if (!_isInitialized) return;
-    await _flutterTts.setSpeechRate(_rate);
+    await _applyRateToEngine();
+    await _persistParam(PreferKey.readerTtsSpeedMultiplier, _rate, (
+      value,
+    ) async {
+      _rate = value;
+      await _applyRateToEngine();
+    });
   }
 
   Future<void> setVolume(double volume) async {
     await init();
     _volume = _clampParam(volume, minVolume, maxVolume, _volume);
     notifyListeners();
-    await _saveDouble(PreferKey.speechVolume, _volume);
-    if (!_isInitialized) return;
-    await _flutterTts.setVolume(_volume);
+    await _applyVolumeToEngine();
+    await _persistParam(PreferKey.speechVolume, _volume, (value) async {
+      _volume = value;
+      await _applyVolumeToEngine();
+    });
   }
 
-  Future<void> _saveDouble(String key, double value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(key, value);
+  Future<void> _applyPitchToEngine() async {
+    if (_isInitialized) await _flutterTts.setPitch(_pitch);
+  }
+
+  Future<void> _applyRateToEngine() async {
+    if (_isInitialized) await _flutterTts.setSpeechRate(_engineRate);
+  }
+
+  Future<void> _applyVolumeToEngine() async {
+    if (_isInitialized) await _flutterTts.setVolume(_volume);
+  }
+
+  /// 最後一次確定落地（載入或保存成功）的朗讀參數。
+  final Map<String, double> _persistedParams = <String, double>{};
+  final Map<String, int> _saveGenerations = <String, int>{};
+
+  /// 保存朗讀參數。失敗時把記憶體與引擎的值還原為最後一次成功保存的值，
+  /// 畫面不會停在一個重開後就消失的設定上；錯誤再往上拋給呼叫端提示。
+  ///
+  /// 連續步進時只有最新一次寫入的失敗會觸發還原，
+  /// 較早的失敗不得把較新的值蓋回去。
+  Future<void> _persistParam(
+    String key,
+    double value,
+    Future<void> Function(double persisted) restore,
+  ) async {
+    final generation = (_saveGenerations[key] ?? 0) + 1;
+    _saveGenerations[key] = generation;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = await prefs.setDouble(key, value);
+      if (!saved) throw StateError('SharedPreferences rejected $key');
+      _persistedParams[key] = value;
+    } catch (e, stack) {
+      AppLog.e('TTSService: save $key failed: $e', error: e, stackTrace: stack);
+      if (_saveGenerations[key] == generation) {
+        await restore(_persistedParams[key] ?? 1.0);
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
 
   Future<void> setEngine(String? engine) async {
@@ -600,7 +671,7 @@ class TTSService extends ChangeNotifier {
     if (language != null && language.isNotEmpty) {
       await _flutterTts.setLanguage(language);
     }
-    await _flutterTts.setSpeechRate(_rate);
+    await _flutterTts.setSpeechRate(_engineRate);
     await _flutterTts.setPitch(_pitch);
     await _flutterTts.setVolume(_volume);
   }

@@ -190,10 +190,20 @@ class PreferKey {
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
   static const String readerLastLineSpacingCompensation =
       'reader_last_line_spacing_compensation';
+  /// 舊版語速（flutter_tts 刻度，0.5 = 正常）；僅作遷移來源。
   static const String readerTtsRate = 'reader_tts_rate';
+
+  /// 語速倍率（1.0 = 正常速度）。
+  static const String readerTtsSpeedMultiplier = 'reader_tts_speed_multiplier';
   static const String readerTtsPitch = 'reader_tts_pitch';
   static const String readerTtsLanguage = 'reader_tts_language';
   static const String readerClickActions = 'reader_click_actions';
+  static const String readerPaddingHorizontal = 'reader_padding_horizontal';
+  static const String readerPaddingTop = 'reader_padding_top';
+  static const String readerPaddingBottom = 'reader_padding_bottom';
+  static const String readerHideStatusBar = 'reader_hide_status_bar';
+  static const String readerHeaderInfo = 'reader_header_info';
+  static const String readerFooterInfo = 'reader_footer_info';
 
   // Explore settings
   static const String exploreLastSource = 'explore_last_source';

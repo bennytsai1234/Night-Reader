@@ -68,6 +68,7 @@ class _ReaderInterfaceSheet extends StatelessWidget {
           settings: settings,
           collapsible: true,
           moreChildren: [
+            ReaderV2PageLayoutSection(settings: settings),
             SheetSection(
               title: '選單樣式',
               trailing: Text('選單與工具列配色', style: hintStyle),

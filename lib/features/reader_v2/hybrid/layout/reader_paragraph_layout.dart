@@ -220,6 +220,7 @@ final class ReaderParagraphLayout {
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
       fontFeatures: kReaderV2CjkFontFeatures,
+      locale: kReaderV2TextLocale,
     );
   }
 }

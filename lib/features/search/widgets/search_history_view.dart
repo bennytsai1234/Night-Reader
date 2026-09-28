@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../search_provider.dart';
 
@@ -88,9 +89,8 @@ class SearchHistoryView extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     '開始搜尋你想看的書吧',
-                    style: TextStyle(
+                    style: AppTextStyles.bodyBase.copyWith(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      fontSize: 15,
                     ),
                   ),
                 ],

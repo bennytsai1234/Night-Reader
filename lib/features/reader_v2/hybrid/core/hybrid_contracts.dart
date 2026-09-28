@@ -85,6 +85,17 @@ final class HybridProgressSnapshot {
 
   String get percentLabel => '全書 ${bookPercent.toStringAsFixed(1)}%';
 
+  /// 資訊列單欄用的精簡標籤。
+  String get chapterIndexLabel {
+    if (chapterCount <= 0) return '0/0';
+    final safeChapterIndex = chapterIndex.clamp(0, chapterCount - 1);
+    return '${safeChapterIndex + 1}/$chapterCount';
+  }
+
+  String get chapterProgressLabel => '本章 $chapterSegment/10';
+
+  String get bookPercentLabel => '${bookPercent.toStringAsFixed(1)}%';
+
   /// 目前章節已完成的十分段數；章節開始為 0/10，章節結束為 10/10。
   int get chapterSegment {
     if (chapterPercent >= 100) return 10;

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -358,6 +359,263 @@ class _LabeledRow extends StatelessWidget {
           child,
         ],
       ),
+    );
+  }
+}
+
+/// 版面：正文邊距、系統狀態列與頁首／頁尾資訊列。
+class ReaderV2PageLayoutSection extends StatefulWidget {
+  const ReaderV2PageLayoutSection({super.key, required this.settings});
+
+  final ReaderV2SettingsController settings;
+
+  @override
+  State<ReaderV2PageLayoutSection> createState() =>
+      _ReaderV2PageLayoutSectionState();
+}
+
+class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
+  // 邊距變更會觸發正文重新排版；連按或長按步進時合併為一次提交。
+  static const _commitDelay = Duration(milliseconds: 120);
+  static const _paddingStep = 2.0;
+
+  Timer? _commitTimer;
+  double? _pendingHorizontal;
+  double? _pendingTop;
+  double? _pendingBottom;
+
+  bool get _hasPending =>
+      _pendingHorizontal != null || _pendingTop != null || _pendingBottom != null;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.settings.addListener(_onSettingsChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.settings.removeListener(_onSettingsChanged);
+    _commitTimer?.cancel();
+    _commit();
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _schedule({double? horizontal, double? top, double? bottom}) {
+    setState(() {
+      _pendingHorizontal = horizontal ?? _pendingHorizontal;
+      _pendingTop = top ?? _pendingTop;
+      _pendingBottom = bottom ?? _pendingBottom;
+    });
+    _commitTimer?.cancel();
+    _commitTimer = Timer(_commitDelay, _commit);
+  }
+
+  void _commit() {
+    _commitTimer = null;
+    if (!_hasPending) return;
+    final horizontal = _pendingHorizontal;
+    final top = _pendingTop;
+    final bottom = _pendingBottom;
+    _pendingHorizontal = null;
+    _pendingTop = null;
+    _pendingBottom = null;
+    widget.settings.setPagePadding(
+      horizontal: horizontal,
+      top: top,
+      bottom: bottom,
+    );
+  }
+
+  void _reset() {
+    // 丟棄尚未提交的步進，避免延遲提交把預設值覆蓋回去。
+    _commitTimer?.cancel();
+    _commitTimer = null;
+    _pendingHorizontal = null;
+    _pendingTop = null;
+    _pendingBottom = null;
+    widget.settings.resetPageLayout();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = widget.settings;
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SheetSection(
+          title: '版面',
+          trailing: TextButton(
+            onPressed: settings.isPageLayoutDefault && !_hasPending
+                ? null
+                : _reset,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              textStyle: AppTextStyles.uiSm,
+            ),
+            child: const Text('恢復預設'),
+          ),
+        ),
+        NumberStepperRow(
+          label: '左右邊距',
+          value: _pendingHorizontal ?? settings.paddingHorizontal,
+          min: ReaderV2SettingsController.minPagePadding,
+          max: ReaderV2SettingsController.maxPagePadding,
+          step: _paddingStep,
+          unit: ' px',
+          onChanged: (value) => _schedule(horizontal: value),
+        ),
+        NumberStepperRow(
+          label: '上邊距',
+          value: _pendingTop ?? settings.paddingTop,
+          min: ReaderV2SettingsController.minPagePadding,
+          max: ReaderV2SettingsController.maxPagePadding,
+          step: _paddingStep,
+          unit: ' px',
+          onChanged: (value) => _schedule(top: value),
+        ),
+        NumberStepperRow(
+          label: '下邊距',
+          value: _pendingBottom ?? settings.paddingBottom,
+          min: ReaderV2SettingsController.minPagePadding,
+          max: ReaderV2SettingsController.maxPagePadding,
+          step: _paddingStep,
+          unit: ' px',
+          onChanged: (value) => _schedule(bottom: value),
+        ),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            '隱藏系統狀態列',
+            style: AppTextStyles.uiMd.copyWith(color: colorScheme.onSurface),
+          ),
+          subtitle: Text(
+            '收起時間、訊號與電量；鏡頭所在的那一行可改放頁首資訊',
+            style: AppTextStyles.bodyXs.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          value: settings.hideStatusBar,
+          onChanged: settings.setHideStatusBar,
+        ),
+        _InfoSlotsEditor(
+          title: '頁首',
+          slots: settings.headerInfo,
+          onChanged: settings.setHeaderInfo,
+        ),
+        _InfoSlotsEditor(
+          title: '頁尾',
+          slots: settings.footerInfo,
+          onChanged: settings.setFooterInfo,
+        ),
+      ],
+    );
+  }
+}
+
+/// 一條資訊列左右兩欄的內容選擇；兩欄都選「不顯示」即關閉該列。
+class _InfoSlotsEditor extends StatelessWidget {
+  const _InfoSlotsEditor({
+    required this.title,
+    required this.slots,
+    required this.onChanged,
+  });
+
+  final String title;
+  final ReaderV2InfoSlots slots;
+  final ValueChanged<ReaderV2InfoSlots> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InfoItemPickerRow(
+          label: '$title左側',
+          value: slots.left,
+          onChanged: (item) => onChanged(slots.copyWith(left: item)),
+        ),
+        _InfoItemPickerRow(
+          label: '$title右側',
+          value: slots.right,
+          onChanged: (item) => onChanged(slots.copyWith(right: item)),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoItemPickerRow extends StatelessWidget {
+  const _InfoItemPickerRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final ReaderV2InfoItem value;
+  final ValueChanged<ReaderV2InfoItem> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: AppRadius.cardMd,
+      onTap: () => _showPicker(context),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.uiMd.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ),
+            Text(
+              value.label,
+              style: AppTextStyles.uiSm.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPicker(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    AppBottomSheet.show(
+      context: context,
+      title: label,
+      icon: Icons.view_agenda_outlined,
+      children: ReaderV2InfoItem.values.map((item) {
+        final selected = item == value;
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(item.label, style: AppTextStyles.uiMd),
+          trailing: selected
+              ? Icon(Icons.check_circle, color: colorScheme.primary)
+              : null,
+          onTap: () {
+            onChanged(item);
+            Navigator.pop(context);
+          },
+        );
+      }).toList(),
     );
   }
 }

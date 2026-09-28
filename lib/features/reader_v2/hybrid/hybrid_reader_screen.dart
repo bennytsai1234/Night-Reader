@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
@@ -1309,15 +1311,24 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   double _trailingSpacingFor(ChapterBlocks blocks, ChapterBlock block) {
     final style = widget.runtime.state.layoutSpec.style;
     final nextIndex = block.blockIndex + 1;
-    if (nextIndex < blocks.blocks.length) {
+    final isChapterEnd = nextIndex >= blocks.blocks.length;
+    if (!isChapterEnd) {
       final next = blocks.blocks[nextIndex];
       if (next.isContinuation &&
           next.sourceParagraphIndex == block.sourceParagraphIndex) {
         return 0.0;
       }
     }
-    if (block.isTitle) return style.paragraphSpacing * 8;
-    return style.fontSize * style.effectiveLineHeight * style.paragraphSpacing;
+    final lineExtent = style.fontSize * style.effectiveLineHeight;
+    final spacing = block.isTitle
+        ? style.paragraphSpacing * 8
+        : lineExtent * style.paragraphSpacing;
+    // 章末與下一章標題之間多留空行，讓章節交界和一般段落分隔有明顯區別。
+    // 空白屬於章末 block 的量測高度，捲動、定位與進度都沿用同一份幾何。
+    if (isChapterEnd) {
+      return spacing + lineExtent * kReaderV2ChapterGapLines;
+    }
+    return spacing;
   }
 
   ReaderV2Location? _captureAndReport({required bool notify}) {
@@ -1879,7 +1890,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             const SizedBox(height: 10),
             Text(
               message,
-              style: TextStyle(color: widget.textColor, fontSize: 14),
+              style: AppTextStyles.bodyBase.copyWith(color: widget.textColor),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1900,9 +1911,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           const SizedBox(height: 12),
           Text(
             message,
-            style: TextStyle(
+            style: AppTextStyles.bodySm.copyWith(
               color: widget.textColor.withValues(alpha: 0.72),
-              fontSize: 13,
             ),
           ),
         ],

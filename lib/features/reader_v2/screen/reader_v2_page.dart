@@ -66,6 +66,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   String? _visibleNoticeMessage;
   bool _rebuildQueued = false;
   bool _libraryDownloadQueued = false;
+  StreamSubscription<String>? _settingsSaveFailures;
+
+  /// 目前已套用到系統的狀態列可見性；null 表示尚未套用。
+  bool? _appliedHideStatusBar;
 
   @override
   void initState() {
@@ -86,11 +90,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       host: _host,
       showNotice: _showNotice,
     );
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
+    _applySystemUiMode();
   }
 
   @override
   void dispose() {
+    unawaited(_settingsSaveFailures?.cancel());
+    SystemChrome.setSystemUIChangeCallback(null);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _coordinator.dispose();
     _progress.dispose();
@@ -98,7 +105,35 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     super.dispose();
   }
 
+  /// 閱讀頁是狀態列可見性的唯一 owner：進入時依設定套用、離開時還原
+  /// edge-to-edge。隱藏時保留導覽列，只收起狀態列。
+  void _applySystemUiMode() {
+    final hide = _host.settings.hideStatusBar;
+    if (_appliedHideStatusBar == hide) return;
+    _appliedHideStatusBar = hide;
+    if (hide) {
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: const [SystemUiOverlay.bottom],
+      );
+      // 使用者從頂端下滑叫出狀態列後，稍候再收回，維持閱讀時隱藏。
+      SystemChrome.setSystemUIChangeCallback((systemOverlaysAreVisible) async {
+        if (!systemOverlaysAreVisible) return;
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (!mounted || _appliedHideStatusBar != true) return;
+        await SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: const [SystemUiOverlay.bottom],
+        );
+      });
+    } else {
+      SystemChrome.setSystemUIChangeCallback(null);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
   void _handleControllerChanged() {
+    _applySystemUiMode();
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _maybeQueueLibraryDownload();
@@ -190,11 +225,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         chapterTitle: _chapterTitleAt(chapterIndex),
         chapterUrl: _chapterUrlAt(chapterIndex),
         originName: widget.book.originName,
-        displayPageLabel: _displayChapterLabel(runtime),
-        displayChapterPercentLabel: _displayChapterPercentLabel(runtime),
         progressListenable: _progress,
         navigation: navigation,
         isAutoPaging: _host.autoPage?.isRunning ?? false,
+        hideStatusBar: settings.hideStatusBar,
+        headerInfo: settings.headerInfo,
+        footerInfo: settings.footerInfo,
+        paddingTop: settings.paddingTop,
+        paddingBottom: settings.paddingBottom,
         dayNightIcon: settings.dayNightToggleIcon,
         dayNightTooltip: settings.dayNightToggleTooltip,
         onExitIntent: _handleExitIntent,
@@ -550,16 +588,4 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return widget.initialChapters[index].url;
   }
 
-  String _displayChapterLabel(ReaderV2Runtime? runtime) {
-    final snapshot = _progress.value;
-    if (snapshot != null) return snapshot.chapterLabel;
-    if (runtime == null || runtime.chapterCount <= 0) {
-      return '第 ... 章 · 本章 ...';
-    }
-    return '第 ${_currentChapterIndex(runtime) + 1}/${runtime.chapterCount} 章 · 本章 ...';
-  }
-
-  String _displayChapterPercentLabel(ReaderV2Runtime? runtime) {
-    return _progress.value?.percentLabel ?? '全書 ...%';
-  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import '../../book_detail_provider.dart';
 
@@ -82,7 +83,7 @@ class CoverGridItem extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
-            style: const TextStyle(fontSize: 10),
+            style: AppTextStyles.micro,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

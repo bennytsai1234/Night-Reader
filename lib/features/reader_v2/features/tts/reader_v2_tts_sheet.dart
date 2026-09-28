@@ -53,26 +53,37 @@ class ReaderV2TtsPanel extends StatelessWidget {
               value: tts.rate,
               min: TTSService.minRate,
               max: TTSService.maxRate,
-              step: 0.1,
+              step: TTSService.rateStep,
               fractionDigits: 1,
-              onChanged: (value) {
-                unawaited(tts.setRate(value));
-              },
+              unit: 'x',
+              onChanged: (value) =>
+                  _reportSaveFailure(context, tts.setRate(value)),
             ),
             NumberStepperRow(
               label: '音調',
               value: tts.pitch,
               min: TTSService.minPitch,
               max: TTSService.maxPitch,
-              step: 0.1,
+              step: TTSService.pitchStep,
               fractionDigits: 1,
-              onChanged: (value) {
-                unawaited(tts.setPitch(value));
-              },
+              onChanged: (value) =>
+                  _reportSaveFailure(context, tts.setPitch(value)),
             ),
           ],
         );
       },
     );
   }
+}
+
+/// 參數保存失敗時 TTSService 已把數值還原；這裡只負責告知使用者。
+void _reportSaveFailure(BuildContext context, Future<void> save) {
+  unawaited(
+    save.catchError((Object _) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')),
+      );
+    }),
+  );
 }
