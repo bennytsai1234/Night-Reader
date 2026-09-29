@@ -70,6 +70,23 @@ void main() {
       expect(machine.state.hasStableWorld, isTrue);
     });
 
+    test('viewport spec updates without advancing layout generation', () {
+      final machine = ReaderV2StateMachine(_initialState());
+      final generation = machine.state.layoutGeneration;
+      final resized = _layoutSpec(
+        viewportSize: const Size(360, 600),
+      );
+
+      expect(machine.updateViewportSpec(resized), isTrue);
+      expect(machine.state.layoutGeneration, generation);
+      expect(machine.state.layoutSpec.viewportSize.height, 600);
+      expect(machine.updateViewportSpec(resized), isFalse);
+      expect(
+        () => machine.updateViewportSpec(_layoutSpec(fontSize: 22)),
+        throwsStateError,
+      );
+    });
+
     test('content generation publishes independently from layout generation', () {
       final machine = ReaderV2StateMachine(_initialState());
       final layoutGeneration = machine.state.layoutGeneration;
@@ -339,9 +356,12 @@ ReaderV2State _initialState({
   );
 }
 
-ReaderV2LayoutSpec _layoutSpec({double fontSize = 18}) {
+ReaderV2LayoutSpec _layoutSpec({
+  double fontSize = 18,
+  Size viewportSize = const Size(360, 640),
+}) {
   return ReaderV2LayoutSpec.fromViewport(
-    viewportSize: const Size(360, 640),
+    viewportSize: viewportSize,
     style: ReaderV2LayoutStyle(
       fontSize: fontSize,
       lineHeight: 1.6,

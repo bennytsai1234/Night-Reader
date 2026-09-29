@@ -31,9 +31,12 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  ReaderV2LayoutSpec specWithFontSize(double fontSize) {
+  ReaderV2LayoutSpec specWithFontSize(
+    double fontSize, {
+    Size viewportSize = const Size(220, 180),
+  }) {
     return ReaderV2LayoutSpec.fromViewport(
-      viewportSize: const Size(220, 180),
+      viewportSize: viewportSize,
       style: ReaderV2LayoutStyle(
         fontSize: fontSize,
         lineHeight: 1.5,
@@ -119,6 +122,38 @@ void main() {
     expect(runtime.state.layoutSpec.layoutSignature, specWithFontSize(22).layoutSignature);
     expect(restores.last, target);
     expect(runtime.pendingLocation, isNull);
+  });
+
+  test('viewport height updates geometry without a layout generation', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    addTearDown(runtime.dispose);
+    var restores = 0;
+    runtime.registerViewportRestore(Object(), (_) async {
+      restores += 1;
+      return true;
+    });
+    await runtime.openBook();
+
+    final generation = runtime.state.layoutGeneration;
+    final restoresBeforeResize = restores;
+    final resized = specWithFontSize(
+      18,
+      viewportSize: const Size(220, 160),
+    );
+    expect(
+      resized.layoutSignature,
+      runtime.state.layoutSpec.layoutSignature,
+    );
+
+    await runtime.applyPresentation(spec: resized);
+
+    expect(runtime.state.layoutGeneration, generation);
+    expect(runtime.state.layoutSpec.viewportSize.height, 160);
+    expect(
+      runtime.state.layoutSpec.presentationSignature,
+      resized.presentationSignature,
+    );
+    expect(restores, restoresBeforeResize);
   });
 
   test(

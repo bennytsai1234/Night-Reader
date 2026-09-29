@@ -89,24 +89,18 @@ final class LayoutEpoch {
 
 final class StyleFingerprint {
   const StyleFingerprint({
-    required this.viewportWidth,
-    required this.viewportHeight,
     required this.contentWidth,
-    required this.contentHeight,
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
     required this.paragraphSpacing,
-    required this.paddingTop,
-    required this.paddingBottom,
-    required this.paddingLeft,
-    required this.paddingRight,
     required this.textIndent,
     required this.bold,
     required this.justify,
     required this.textScaleFactor,
     required this.fontFamilySignature,
     required this.platformFontSignature,
+    this.cellWidth,
     this.typographyFeatureSignature = kReaderV2CjkTypographyFeatureSignature,
     this.titleFontSize = 0,
   });
@@ -120,18 +114,12 @@ final class StyleFingerprint {
   }) {
     final style = spec.style;
     return StyleFingerprint(
-      viewportWidth: spec.viewportSize.width,
-      viewportHeight: spec.viewportSize.height,
       contentWidth: spec.textLayoutFrame.width,
-      contentHeight: spec.contentHeight,
+      cellWidth: spec.cellWidth,
       fontSize: style.fontSize,
       lineHeight: style.lineHeight,
       letterSpacing: style.letterSpacing,
       paragraphSpacing: style.paragraphSpacing,
-      paddingTop: style.paddingTop,
-      paddingBottom: style.paddingBottom,
-      paddingLeft: spec.textPaddingLeft,
-      paddingRight: spec.textPaddingRight,
       textIndent: style.textIndent,
       bold: style.bold,
       justify: justify,
@@ -142,18 +130,16 @@ final class StyleFingerprint {
     );
   }
 
-  final double viewportWidth;
-  final double viewportHeight;
+  /// Only inputs that can change paragraph measurement belong here.
+  ///
+  /// Viewport height, top/bottom insets and paint offsets are intentionally
+  /// excluded so transient system chrome cannot poison the measurement cache.
   final double contentWidth;
-  final double contentHeight;
+  final double? cellWidth;
   final double fontSize;
   final double lineHeight;
   final double letterSpacing;
   final double paragraphSpacing;
-  final double paddingTop;
-  final double paddingBottom;
-  final double paddingLeft;
-  final double paddingRight;
   final int textIndent;
   final bool bold;
   final bool justify;
@@ -166,18 +152,12 @@ final class StyleFingerprint {
   final double titleFontSize;
 
   int get stableHash => Object.hash(
-    viewportWidth,
-    viewportHeight,
     contentWidth,
-    contentHeight,
+    cellWidth,
     fontSize,
     lineHeight,
     letterSpacing,
     paragraphSpacing,
-    paddingTop,
-    paddingBottom,
-    paddingLeft,
-    paddingRight,
     textIndent,
     bold,
     justify,
@@ -188,19 +168,13 @@ final class StyleFingerprint {
     titleFontSize,
   );
 
-  String get stableKey => jsonEncode(<Object>[
-    viewportWidth,
-    viewportHeight,
+  String get stableKey => jsonEncode(<Object?>[
     contentWidth,
-    contentHeight,
+    cellWidth,
     fontSize,
     lineHeight,
     letterSpacing,
     paragraphSpacing,
-    paddingTop,
-    paddingBottom,
-    paddingLeft,
-    paddingRight,
     textIndent,
     bold,
     justify,
@@ -214,18 +188,12 @@ final class StyleFingerprint {
   @override
   bool operator ==(Object other) {
     return other is StyleFingerprint &&
-        other.viewportWidth == viewportWidth &&
-        other.viewportHeight == viewportHeight &&
         other.contentWidth == contentWidth &&
-        other.contentHeight == contentHeight &&
+        other.cellWidth == cellWidth &&
         other.fontSize == fontSize &&
         other.lineHeight == lineHeight &&
         other.letterSpacing == letterSpacing &&
         other.paragraphSpacing == paragraphSpacing &&
-        other.paddingTop == paddingTop &&
-        other.paddingBottom == paddingBottom &&
-        other.paddingLeft == paddingLeft &&
-        other.paddingRight == paddingRight &&
         other.textIndent == textIndent &&
         other.bold == bold &&
         other.justify == justify &&

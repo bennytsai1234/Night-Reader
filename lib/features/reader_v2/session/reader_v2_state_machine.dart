@@ -71,6 +71,19 @@ class ReaderV2StateMachine {
     state = state.copyWith(committedLocation: location);
   }
 
+  bool updateViewportSpec(ReaderV2LayoutSpec spec) {
+    if (spec.layoutSignature != state.layoutSpec.layoutSignature) {
+      throw StateError(
+        'Viewport updates cannot change text layout identity.',
+      );
+    }
+    if (spec.presentationSignature == state.layoutSpec.presentationSignature) {
+      return false;
+    }
+    state = state.copyWith(layoutSpec: spec);
+    return true;
+  }
+
   bool isCurrent(ReaderV2OperationToken token) {
     final current = _currentOperation;
     return current != null &&
@@ -92,7 +105,17 @@ class ReaderV2StateMachine {
 
   bool commitLayoutForOperation(ReaderV2OperationToken token) {
     if (!isCurrent(token)) return false;
-    if (token.layoutGeneration == state.layoutGeneration) return true;
+    if (token.layoutGeneration == state.layoutGeneration) {
+      final spec = token.layoutSpec;
+      if (spec == null) return true;
+      if (spec.layoutSignature != state.layoutSpec.layoutSignature) {
+        throw StateError(
+          'Same-generation presentation cannot change text layout identity.',
+        );
+      }
+      state = state.copyWith(layoutSpec: spec);
+      return true;
+    }
     if (token.layoutGeneration != state.layoutGeneration + 1) {
       throw StateError(
         'Layout generation must advance exactly once for the current operation.',

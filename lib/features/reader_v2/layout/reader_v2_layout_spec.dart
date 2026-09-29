@@ -132,14 +132,19 @@ class ReaderV2LayoutSpec {
   }) : textLayoutFrame = ReaderV2TextLayoutFrame.centered(
          contentWidth: contentWidth,
          cellWidth: cellWidth,
-       ),
-       layoutSignature = _buildSignature(
-         viewportSize: viewportSize,
-         contentWidth: contentWidth,
-         contentHeight: contentHeight,
-         style: style,
-         cellWidth: cellWidth,
-       );
+       ) {
+    layoutSignature = _buildLayoutSignature(
+      contentWidth: contentWidth,
+      style: style,
+      cellWidth: cellWidth,
+    );
+    viewportSignature = _buildViewportSignature(
+      viewportSize: viewportSize,
+      contentHeight: contentHeight,
+      style: style,
+    );
+    presentationSignature = Object.hash(layoutSignature, viewportSignature);
+  }
 
   final Size viewportSize;
   final double contentWidth;
@@ -162,7 +167,22 @@ class ReaderV2LayoutSpec {
   double get textPaddingRight =>
       style.paddingRight + textLayoutFrame.rightInset;
 
+  /// Identity of paragraph measurement and line breaking.
+  ///
+  /// Viewport height and vertical chrome/insets are deliberately excluded.
+  /// They change how much of the already-laid-out document is visible, not
+  /// how text wraps. A change here is the only kind that may advance the
+  /// Runtime layout generation and rebuild the Hybrid measurement epoch.
   final int layoutSignature;
+
+  /// Identity of the physical viewport/chrome geometry.
+  ///
+  /// This may change when status/navigation bars or vertical padding change.
+  /// Runtime keeps the latest value without invalidating paragraph layout.
+  final int viewportSignature;
+
+  /// Detects either text-layout or viewport-geometry changes.
+  final int presentationSignature;
 
   /// Shared anchor offset calculation — the vertical position in the viewport
   /// used as the reference point for location capture and restore.
@@ -218,31 +238,39 @@ class ReaderV2LayoutSpec {
     );
   }
 
-  static int _buildSignature({
-    required Size viewportSize,
+  static int _buildLayoutSignature({
     required double contentWidth,
-    required double contentHeight,
     required ReaderV2LayoutStyle style,
     required double? cellWidth,
   }) {
     return Object.hash(
-      viewportSize.width,
-      viewportSize.height,
       contentWidth,
-      contentHeight,
       cellWidth,
       style.fontSize,
       style.lineHeight,
       style.letterSpacing,
       style.paragraphSpacing,
-      style.paddingTop,
-      style.paddingBottom,
-      style.paddingLeft,
-      style.paddingRight,
       style.textIndent,
       style.bold,
       style.titleFontSize,
       kReaderV2CjkTypographyFeatureSignature,
     );
   }
+
+  static int _buildViewportSignature({
+    required Size viewportSize,
+    required double contentHeight,
+    required ReaderV2LayoutStyle style,
+  }) {
+    return Object.hash(
+      viewportSize.width,
+      viewportSize.height,
+      contentHeight,
+      style.paddingTop,
+      style.paddingBottom,
+      style.paddingLeft,
+      style.paddingRight,
+    );
+  }
+}
 }

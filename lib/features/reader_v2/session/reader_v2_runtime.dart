@@ -172,8 +172,19 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
-    final stagedSpec = stateMachine.currentOperation?.layoutSpec ?? state.layoutSpec;
-    if (stagedSpec.layoutSignature == spec.layoutSignature) return;
+    final operation = stateMachine.currentOperation;
+    final stagedSpec = operation?.layoutSpec ?? state.layoutSpec;
+    if (stagedSpec.presentationSignature == spec.presentationSignature) return;
+
+    final sameTextLayout =
+        stagedSpec.layoutSignature == spec.layoutSignature;
+    if (sameTextLayout && operation?.layoutSpec == null) {
+      if (stateMachine.updateViewportSpec(spec)) {
+        notifyListeners();
+      }
+      return;
+    }
+
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
@@ -181,7 +192,9 @@ class ReaderV2Runtime extends ChangeNotifier {
     final token = stateMachine.beginPresentation(
       spec: spec,
       location: location,
-      layoutGeneration: state.layoutGeneration + 1,
+      layoutGeneration: sameTextLayout
+          ? operation!.layoutGeneration
+          : state.layoutGeneration + 1,
     );
     notifyListeners();
     try {
@@ -447,8 +460,12 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (!isCurrentOperationToken(token)) return false;
 
       final previousLayoutGeneration = state.layoutGeneration;
+      final previousPresentationSignature =
+          state.layoutSpec.presentationSignature;
       if (!stateMachine.commitLayoutForOperation(token)) return false;
-      if (state.layoutGeneration != previousLayoutGeneration) {
+      if (state.layoutGeneration != previousLayoutGeneration ||
+          state.layoutSpec.presentationSignature !=
+              previousPresentationSignature) {
         notifyListeners();
       }
 

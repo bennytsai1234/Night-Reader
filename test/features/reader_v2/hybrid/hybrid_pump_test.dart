@@ -608,18 +608,11 @@ void main() {
     );
   
     StyleFingerprint fingerprint() => StyleFingerprint(
-      viewportWidth: 320,
-      viewportHeight: 640,
       contentWidth: contentWidth,
-      contentHeight: 600,
       fontSize: fontSize,
       lineHeight: 1.5,
       letterSpacing: 0,
       paragraphSpacing: 1,
-      paddingTop: 8,
-      paddingBottom: 8,
-      paddingLeft: 16,
-      paddingRight: 16,
       textIndent: 0,
       bold: false,
       justify: false,

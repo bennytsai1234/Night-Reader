@@ -67,7 +67,7 @@ class ReaderV2ControllerHost {
   ReaderV2AutoPageController? autoPage;
 
   Size? _lastViewportSize;
-  int? _lastLayoutSignature;
+  int? _lastPresentationSignature;
   int _lastContentSettingsGeneration = 0;
   ReaderV2LayoutSpec? _pendingPresentationSpec;
   bool _presentationCallbackQueued = false;
@@ -119,7 +119,7 @@ class ReaderV2ControllerHost {
     runtime = nextRuntime;
     tts = nextTts;
     autoPage = nextAutoPage;
-    _lastLayoutSignature = spec.layoutSignature;
+    _lastPresentationSignature = spec.presentationSignature;
     unawaited(nextTts.loadSettings());
     _openRuntimeAfterFirstFrame(nextRuntime);
     return nextRuntime;
@@ -132,9 +132,9 @@ class ReaderV2ControllerHost {
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
-    final needsLayout = _lastLayoutSignature != spec.layoutSignature;
-    if (needsLayout) {
-      _lastLayoutSignature = spec.layoutSignature;
+    final needsPresentation = _lastPresentationSignature != spec.presentationSignature;
+    if (needsPresentation) {
+      _lastPresentationSignature = spec.presentationSignature;
       _pendingPresentationSpec = spec;
       _presentationRevision += 1;
       _queuePresentationDispatch(runtime);
@@ -150,9 +150,9 @@ class ReaderV2ControllerHost {
 
   /// Wait for one quiet frame before dispatching the latest presentation.
   ///
-  /// Rotation and inset animations can produce a new layout signature every
-  /// frame. Keeping the request pending until a frame arrives without a new
-  /// signature coalesces that stream while still guaranteeing that the final
+  /// Rotation and inset animations can produce a new presentation signature
+  /// every frame. Keeping the request pending until a frame arrives without a
+  /// new signature coalesces that stream while still guaranteeing that the final
   /// size is dispatched. The extra frame is scheduler-based rather than a
   /// fixed wall-clock debounce, so it does not depend on device speed.
   void _queuePresentationDispatch(ReaderV2Runtime runtime) {
