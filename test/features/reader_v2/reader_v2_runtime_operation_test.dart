@@ -124,6 +124,28 @@ void main() {
     expect(runtime.pendingLocation, isNull);
   });
 
+  test('progress flush can catch persistence up without notifying Reader UI', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    await runtime.openBook();
+
+    const captured = ReaderV2Location(
+      chapterIndex: 0,
+      charOffset: 2,
+      visualOffsetPx: 12,
+    );
+    runtime.registerVisibleLocationCapture(Object(), () => captured);
+    var notifications = 0;
+    runtime.addListener(() => notifications += 1);
+
+    await runtime.flushProgress();
+
+    expect(runtime.state.visibleLocation, captured);
+    expect(runtime.state.committedLocation, captured);
+    expect(notifications, 0);
+  });
+
   test('viewport height updates geometry without a layout generation', () async {
     final runtime = makeRuntime([chapter(0)]);
     addTearDown(runtime.dispose);

@@ -322,8 +322,10 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   void commitProgressLocation(ReaderV2Location location) {
     if (disposed) return;
+    // committedLocation is persistence bookkeeping, not rendered Reader state.
+    // visibleLocation already owns viewport notifications, so a background
+    // flush must not rebuild the Reader merely because persistence caught up.
     stateMachine.commitLocation(location);
-    notifyListeners();
   }
 
   void notifySessionChanged() {
