@@ -132,19 +132,29 @@ class ReaderV2LayoutSpec {
   }) : textLayoutFrame = ReaderV2TextLayoutFrame.centered(
          contentWidth: contentWidth,
          cellWidth: cellWidth,
-       ) {
-    layoutSignature = _buildLayoutSignature(
-      contentWidth: contentWidth,
-      style: style,
-      cellWidth: cellWidth,
-    );
-    viewportSignature = _buildViewportSignature(
-      viewportSize: viewportSize,
-      contentHeight: contentHeight,
-      style: style,
-    );
-    presentationSignature = Object.hash(layoutSignature, viewportSignature);
-  }
+       ),
+       layoutSignature = _buildLayoutSignature(
+         contentWidth: contentWidth,
+         style: style,
+         cellWidth: cellWidth,
+       ),
+       viewportSignature = _buildViewportSignature(
+         viewportSize: viewportSize,
+         contentHeight: contentHeight,
+         style: style,
+       ),
+       presentationSignature = Object.hash(
+         _buildLayoutSignature(
+           contentWidth: contentWidth,
+           style: style,
+           cellWidth: cellWidth,
+         ),
+         _buildViewportSignature(
+           viewportSize: viewportSize,
+           contentHeight: contentHeight,
+           style: style,
+         ),
+       );
 
   final Size viewportSize;
   final double contentWidth;
@@ -243,8 +253,12 @@ class ReaderV2LayoutSpec {
     required ReaderV2LayoutStyle style,
     required double? cellWidth,
   }) {
+    final paragraphWidth = ReaderV2TextLayoutFrame.centered(
+      contentWidth: contentWidth,
+      cellWidth: cellWidth,
+    ).width;
     return Object.hash(
-      contentWidth,
+      paragraphWidth,
       cellWidth,
       style.fontSize,
       style.lineHeight,
