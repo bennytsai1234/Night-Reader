@@ -1704,18 +1704,11 @@ ui.Paragraph _paragraph(String text) {
 
 StyleFingerprint _fingerprint({double width = 320}) {
   return StyleFingerprint(
-    viewportWidth: width,
-    viewportHeight: 640,
     contentWidth: width - 32,
-    contentHeight: 600,
     fontSize: 18,
     lineHeight: 1.5,
     letterSpacing: 0,
     paragraphSpacing: 1,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 16,
-    paddingRight: 16,
     textIndent: 2,
     bold: false,
     justify: true,
