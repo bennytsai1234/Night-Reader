@@ -224,156 +224,87 @@ class ReaderV2PrefsRepository {
   }
 
   Future<void> saveFontSize(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerFontSize, value),
-      (snapshot) => snapshot.copyWith(fontSize: value),
-    );
+    return _setDouble(PreferKey.readerFontSize, value);
   }
 
   Future<void> saveTitleFontSize(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerTitleFontSize, value),
-      (snapshot) => snapshot.copyWith(titleFontSize: value),
-    );
+    return _setDouble(PreferKey.readerTitleFontSize, value);
   }
 
   Future<void> saveLineHeight(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerLineHeight, value),
-      (snapshot) => snapshot.copyWith(lineHeight: value),
-    );
+    return _setDouble(PreferKey.readerLineHeight, value);
   }
 
   Future<void> saveParagraphSpacing(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerParagraphSpacing, value),
-      (snapshot) => snapshot.copyWith(paragraphSpacing: value),
-    );
+    return _setDouble(PreferKey.readerParagraphSpacing, value);
   }
 
   Future<void> saveLetterSpacing(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerLetterSpacing, value),
-      (snapshot) => snapshot.copyWith(letterSpacing: value),
-    );
+    return _setDouble(PreferKey.readerLetterSpacing, value);
   }
 
   Future<void> saveTextIndent(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerTextIndent, value),
-      (snapshot) => snapshot.copyWith(textIndent: value),
-    );
+    return _setInt(PreferKey.readerTextIndent, value);
   }
 
   Future<void> saveThemeIndex(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerThemeIndex, value),
-      (snapshot) => snapshot.copyWith(themeIndex: value),
-    );
+    return _setInt(PreferKey.readerThemeIndex, value);
   }
 
   Future<void> saveDayThemeIndex(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerDayThemeIndex, value),
-      (snapshot) => snapshot.copyWith(lastDayThemeIndex: value),
-    );
+    return _setInt(PreferKey.readerDayThemeIndex, value);
   }
 
   Future<void> saveNightThemeIndex(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerNightThemeIndex, value),
-      (snapshot) => snapshot.copyWith(lastNightThemeIndex: value),
-    );
+    return _setInt(PreferKey.readerNightThemeIndex, value);
   }
 
   Future<void> saveMenuThemeIndex(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerMenuThemeIndex, value),
-      (snapshot) => snapshot.copyWith(menuThemeIndex: value),
-    );
+    return _setInt(PreferKey.readerMenuThemeIndex, value);
   }
 
   Future<void> saveAutoPageSpeed(double value) {
-    final normalized = _normalizeAutoPageSpeed(value);
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerAutoPageSpeed, normalized),
-      (snapshot) => snapshot.copyWith(autoPageSpeed: normalized),
+    return _setDouble(
+      PreferKey.readerAutoPageSpeed,
+      _normalizeAutoPageSpeed(value),
     );
   }
 
   Future<void> saveChineseConvert(int value) {
-    return _saveAndCache(
-      () => _setInt(PreferKey.readerChineseConvert, value),
-      (snapshot) => snapshot.copyWith(chineseConvert: value),
-    );
+    return _setInt(PreferKey.readerChineseConvert, value);
   }
 
   Future<void> saveShowAddToShelfAlert(bool value) {
-    return _saveAndCache(
-      () => _setBool(PreferKey.showAddToShelfAlert, value),
-      (snapshot) => snapshot.copyWith(showAddToShelfAlert: value),
-    );
+    return _setBool(PreferKey.showAddToShelfAlert, value);
   }
 
   Future<void> saveClickActions(List<int> actions) {
     final normalized = _normalizeClickActions(actions);
-    return _saveAndCache(
-      () => _setString(PreferKey.readerClickActions, normalized.join(',')),
-      (snapshot) => snapshot.copyWith(clickActions: normalized),
-    );
+    return _setString(PreferKey.readerClickActions, normalized.join(','));
   }
 
   Future<void> savePaddingHorizontal(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingHorizontal, value),
-      (snapshot) => snapshot.copyWith(paddingHorizontal: value),
-    );
+    return _setDouble(PreferKey.readerPaddingHorizontal, value);
   }
 
   Future<void> savePaddingTop(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingTop, value),
-      (snapshot) => snapshot.copyWith(paddingTop: value),
-    );
+    return _setDouble(PreferKey.readerPaddingTop, value);
   }
 
   Future<void> savePaddingBottom(double value) {
-    return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingBottom, value),
-      (snapshot) => snapshot.copyWith(paddingBottom: value),
-    );
+    return _setDouble(PreferKey.readerPaddingBottom, value);
   }
 
   Future<void> saveHideStatusBar(bool value) {
-    return _saveAndCache(
-      () => _setBool(PreferKey.readerHideStatusBar, value),
-      (snapshot) => snapshot.copyWith(hideStatusBar: value),
-    );
+    return _setBool(PreferKey.readerHideStatusBar, value);
   }
 
   Future<void> saveHeaderInfo(ReaderV2InfoSlots value) {
-    return _saveAndCache(
-      () => _setString(PreferKey.readerHeaderInfo, value.encode()),
-      (snapshot) => snapshot.copyWith(headerInfo: value),
-    );
+    return _setString(PreferKey.readerHeaderInfo, value.encode());
   }
 
   Future<void> saveFooterInfo(ReaderV2InfoSlots value) {
-    return _saveAndCache(
-      () => _setString(PreferKey.readerFooterInfo, value.encode()),
-      (snapshot) => snapshot.copyWith(footerInfo: value),
-    );
-  }
-
-  Future<void> _saveAndCache(
-    Future<void> Function() persist,
-    ReaderV2PrefsSnapshot Function(ReaderV2PrefsSnapshot snapshot) update,
-  ) async {
-    await persist();
-    final latest = _latestSnapshot;
-    if (latest != null) {
-      _latestSnapshot = update(latest);
-    }
+    return _setString(PreferKey.readerFooterInfo, value.encode());
   }
 
   List<int> parseClickActions(String? stored) {

@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:night_reader/features/reader_v2/hybrid/lifecycle_flush_gate.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -86,8 +85,7 @@ bool isHybridPageMoveComplete({
   return atBookBoundary;
 }
 
-class _HybridReaderScreenState extends State<HybridReaderScreen>
-    with WidgetsBindingObserver {
+class _HybridReaderScreenState extends State<HybridReaderScreen> {
   static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
@@ -129,7 +127,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
-  final LifecycleFlushGate _lifecycleFlushGate = LifecycleFlushGate();
 
   @override
   void initState() {
@@ -148,7 +145,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
     _registerRuntime();
     _attachController();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _restoreAttachedRuntime();
@@ -202,7 +198,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void dispose() {
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
-    WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _chapterEventsSub?.cancel();
     _pumpEventsSub?.cancel();
@@ -974,18 +969,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       rethrow;
     }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_lifecycleFlushGate.shouldFlush(state)) return;
-    unawaited(widget.runtime.flushProgress());
-    unawaited(
-      _writeDiskMetrics(
-        _measurementStore.snapshot(_namespace),
-        bookUrl: widget.bookUrl,
-      ),
-    );
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {

@@ -72,45 +72,6 @@ void main() {
     });
   });
 
-  test('loading an identical snapshot does not notify the reader again', () async {
-    const repository = ReaderV2PrefsRepository();
-    await repository.load();
-    final settings = ReaderV2SettingsController(prefsRepository: repository);
-    var notifications = 0;
-    settings.addListener(() => notifications += 1);
-
-    await settings.loadSettings();
-
-    expect(notifications, 0);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(PreferKey.readerFontSize, 24);
-    await settings.loadSettings();
-
-    expect(settings.fontSize, 24);
-    expect(notifications, 1);
-    settings.dispose();
-  });
-
-  test('successful saves keep the cached snapshot coherent for the next reader', () async {
-    const repository = ReaderV2PrefsRepository();
-    await repository.load();
-
-    await repository.saveFontSize(26);
-    await repository.savePaddingHorizontal(30);
-    await repository.saveLineHeight(1.8);
-
-    expect(ReaderV2PrefsRepository.cachedSnapshot.fontSize, 26);
-    expect(ReaderV2PrefsRepository.cachedSnapshot.paddingHorizontal, 30);
-    expect(ReaderV2PrefsRepository.cachedSnapshot.lineHeight, 1.8);
-
-    final nextReader = ReaderV2SettingsController();
-    expect(nextReader.fontSize, 26);
-    expect(nextReader.paddingHorizontal, 30);
-    expect(nextReader.lineHeight, 1.8);
-    nextReader.dispose();
-  });
-
   test('reloading a changed Chinese conversion re-converts content', () async {
     final reader = ReaderV2SettingsController();
     await reader.loadSettings();

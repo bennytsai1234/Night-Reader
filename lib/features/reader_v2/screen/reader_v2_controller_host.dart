@@ -43,9 +43,10 @@ class ReaderV2ControllerHost {
     );
     _lastContentSettingsGeneration = settings.contentSettingsGeneration;
     unawaited(settings.loadSettings());
-    // 自動翻頁只在畫面可見時有意義：螢幕關閉或切到其他 App 時，
-    // Timer 仍會在背景捲動正文，使用者回來時位置已被推後數頁。
-    _lifecycleListener = AppLifecycleListener(onHide: () => autoPage?.stop());
+    // Reader session visibility belongs to the host, not the viewport.
+    // Leaving the visible app stops viewport motion and persists the latest
+    // captured location through the Runtime owner.
+    _lifecycleListener = AppLifecycleListener(onHide: _handleAppHidden);
   }
 
   late final AppLifecycleListener _lifecycleListener;
@@ -85,6 +86,14 @@ class ReaderV2ControllerHost {
   void _onSettingsChanged() {
     autoPage?.refreshConfiguration();
     _onChanged();
+  }
+
+  void _handleAppHidden() {
+    autoPage?.stop();
+    final activeRuntime = runtime;
+    if (activeRuntime != null) {
+      unawaited(activeRuntime.flushProgress());
+    }
   }
 
   ReaderV2Runtime ensureRuntime(Size size, ReaderV2Style style) {
