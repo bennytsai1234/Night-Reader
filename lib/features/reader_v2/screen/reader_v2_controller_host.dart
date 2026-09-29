@@ -24,8 +24,10 @@ class ReaderV2ControllerHost {
     required this.initialChapters,
     required this.openTarget,
     required VoidCallback onChanged,
+    required VoidCallback onProgressPersisted,
     required bool Function() isMounted,
   }) : _onChanged = onChanged,
+       _onProgressPersisted = onProgressPersisted,
        _isMounted = isMounted {
     settings.addListener(_onSettingsChanged);
     menu.addListener(_onControllerChanged);
@@ -52,6 +54,7 @@ class ReaderV2ControllerHost {
   final List<BookChapter> initialChapters;
   final ReaderV2OpenTarget? openTarget;
   final VoidCallback _onChanged;
+  final VoidCallback _onProgressPersisted;
   final bool Function() _isMounted;
 
   final ReaderV2SettingsController settings = ReaderV2SettingsController();
@@ -95,7 +98,7 @@ class ReaderV2ControllerHost {
       book: book,
       repository: repository,
       bookDao: dependencies.bookDao,
-      onProgressPersisted: _onChanged,
+      onProgressPersisted: _onProgressPersisted,
     );
     final initialLocation = _initialLocationFor(spec);
     final nextRuntime = ReaderV2Runtime(
@@ -132,7 +135,8 @@ class ReaderV2ControllerHost {
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
-    final needsPresentation = _lastPresentationSignature != spec.presentationSignature;
+    final needsPresentation =
+        _lastPresentationSignature != spec.presentationSignature;
     if (needsPresentation) {
       _lastPresentationSignature = spec.presentationSignature;
       _pendingPresentationSpec = spec;
@@ -152,8 +156,8 @@ class ReaderV2ControllerHost {
   ///
   /// Rotation and inset animations can produce a new presentation signature
   /// every frame. Keeping the request pending until a frame arrives without a
-  /// new signature coalesces that stream while still guaranteeing that the final
-  /// size is dispatched. The extra frame is scheduler-based rather than a
+  /// new signature coalesces that stream while still guaranteeing that the
+  /// final size is dispatched. The extra frame is scheduler-based rather than a
   /// fixed wall-clock debounce, so it does not depend on device speed.
   void _queuePresentationDispatch(ReaderV2Runtime runtime) {
     if (_presentationCallbackQueued || _presentationInFlight) return;
