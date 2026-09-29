@@ -157,12 +157,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   void _registerRuntime() {
     widget.runtime.addListener(_onRuntimeChanged);
+    widget.runtime.addViewportGeometryListener(_onViewportGeometryChanged);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
 
   void _unregisterRuntime(ReaderV2Runtime runtime) {
     runtime.removeListener(_onRuntimeChanged);
+    runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
   }
@@ -989,6 +991,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
     if (!mounted || timings.isEmpty) return;
     _governor.recordFrameTimings(timings);
+  }
+
+  void _onViewportGeometryChanged() {
+    if (!mounted) return;
+    _reconcileVisibleWindow();
+    _scheduleRebuild();
   }
 
   void _onRuntimeChanged() {

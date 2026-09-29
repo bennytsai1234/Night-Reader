@@ -67,6 +67,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   final ReaderV2ProgressController progressController;
   final ReaderV2Location _initialLocation;
   final ReaderV2StateMachine stateMachine;
+  final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
   late final ReaderV2ViewportBridge viewportBridge;
 
@@ -79,6 +80,14 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
+
+  void addViewportGeometryListener(VoidCallback listener) {
+    _viewportGeometryNotifier.addListener(listener);
+  }
+
+  void removeViewportGeometryListener(VoidCallback listener) {
+    _viewportGeometryNotifier.removeListener(listener);
+  }
 
   BookChapter? chapterAt(int index) => repository.chapterAt(index);
   String titleFor(int index) => repository.titleFor(index);
@@ -180,7 +189,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         stagedSpec.layoutSignature == spec.layoutSignature;
     if (sameTextLayout) {
       if (stateMachine.updateViewportSpec(spec)) {
-        notifyListeners();
+        _viewportGeometryNotifier.notifyListeners();
       }
       return;
     }
@@ -533,6 +542,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   void dispose() {
     disposed = true;
     progressController.dispose();
+    _viewportGeometryNotifier.dispose();
     super.dispose();
   }
 }

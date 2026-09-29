@@ -147,7 +147,7 @@ void main() {
     expect(notifications, 0);
   });
 
-  test('viewport height updates geometry without a layout generation', () async {
+  test('viewport height updates only the viewport listener', () async {
     final runtime = makeRuntime([chapter(0)]);
     addTearDown(runtime.dispose);
     var restores = 0;
@@ -156,6 +156,11 @@ void main() {
       return true;
     });
     await runtime.openBook();
+
+    var semanticNotifications = 0;
+    var viewportNotifications = 0;
+    runtime.addListener(() => semanticNotifications += 1);
+    runtime.addViewportGeometryListener(() => viewportNotifications += 1);
 
     final generation = runtime.state.layoutGeneration;
     final restoresBeforeResize = restores;
@@ -177,6 +182,8 @@ void main() {
       resized.presentationSignature,
     );
     expect(restores, restoresBeforeResize);
+    expect(semanticNotifications, 0);
+    expect(viewportNotifications, 1);
   });
 
   test('viewport change does not replace an in-flight jump operation', () async {
