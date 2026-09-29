@@ -1433,6 +1433,50 @@ void main() {
         );
       });
   
+      test('same metrics file serializes writes and keeps the latest snapshot', () async {
+        final temp = await Directory.systemTemp.createTemp(
+          'night_reader_metrics_serial_',
+        );
+        addTearDown(() async {
+          if (await temp.exists()) await temp.delete(recursive: true);
+        });
+        final firstCache = MetricsDiskCache(baseDirectory: temp);
+        final secondCache = MetricsDiskCache(baseDirectory: temp);
+        final fp = _fingerprint(width: 360);
+        const firstKey = BlockKey(chapterIndex: 0, blockIndex: 0);
+        const secondKey = BlockKey(chapterIndex: 0, blockIndex: 1);
+        const identity = <int, String>{0: 'same-layout'};
+        final first = <BlockKey, BlockMetrics>{
+          firstKey: const BlockMetrics(height: 40, lineCount: 2),
+        };
+        final second = <BlockKey, BlockMetrics>{
+          secondKey: const BlockMetrics(height: 88, lineCount: 4),
+        };
+
+        final writeFirst = firstCache.write(
+          bookUrl: 'book://serialized',
+          fingerprint: fp,
+          metrics: first,
+          chapterLayoutIdentities: identity,
+        );
+        final writeSecond = secondCache.write(
+          bookUrl: 'book://serialized',
+          fingerprint: fp,
+          metrics: second,
+          chapterLayoutIdentities: identity,
+        );
+        await Future.wait([writeFirst, writeSecond]);
+
+        expect(
+          await firstCache.read(
+            bookUrl: 'book://serialized',
+            fingerprint: fp,
+            chapterLayoutIdentities: identity,
+          ),
+          second,
+        );
+      });
+
       test('round-trips versioned binary metrics', () async {
         final temp = await Directory.systemTemp.createTemp(
           'night_reader_metrics_',
