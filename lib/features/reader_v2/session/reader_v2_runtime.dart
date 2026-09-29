@@ -181,7 +181,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
-    final operation = stateMachine.currentOperation;
     final stagedSpec = stateMachine.effectiveLayoutSpec;
     if (stagedSpec.presentationSignature == spec.presentationSignature) return;
 
