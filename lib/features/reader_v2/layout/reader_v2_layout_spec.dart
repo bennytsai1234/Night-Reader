@@ -287,4 +287,3 @@ class ReaderV2LayoutSpec {
     );
   }
 }
-}
