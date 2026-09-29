@@ -72,6 +72,25 @@ void main() {
     });
   });
 
+  test('successful saves keep the cached snapshot coherent for the next reader', () async {
+    const repository = ReaderV2PrefsRepository();
+    await repository.load();
+
+    await repository.saveFontSize(26);
+    await repository.savePaddingHorizontal(30);
+    await repository.saveLineHeight(1.8);
+
+    expect(ReaderV2PrefsRepository.cachedSnapshot.fontSize, 26);
+    expect(ReaderV2PrefsRepository.cachedSnapshot.paddingHorizontal, 30);
+    expect(ReaderV2PrefsRepository.cachedSnapshot.lineHeight, 1.8);
+
+    final nextReader = ReaderV2SettingsController();
+    expect(nextReader.fontSize, 26);
+    expect(nextReader.paddingHorizontal, 30);
+    expect(nextReader.lineHeight, 1.8);
+    nextReader.dispose();
+  });
+
   test('reloading a changed Chinese conversion re-converts content', () async {
     final reader = ReaderV2SettingsController();
     await reader.loadSettings();

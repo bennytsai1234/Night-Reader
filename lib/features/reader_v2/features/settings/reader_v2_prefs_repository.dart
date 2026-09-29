@@ -224,87 +224,165 @@ class ReaderV2PrefsRepository {
   }
 
   Future<void> saveFontSize(double value) {
-    return _setDouble(PreferKey.readerFontSize, value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerFontSize, value),
+      (snapshot) => snapshot.copyWith(fontSize: value),
+    );
   }
 
   Future<void> saveTitleFontSize(double value) {
-    return _setDouble(PreferKey.readerTitleFontSize, value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerTitleFontSize, value),
+      (snapshot) => snapshot.copyWith(titleFontSize: value),
+    );
   }
 
   Future<void> saveLineHeight(double value) {
-    return _setDouble(PreferKey.readerLineHeight, value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerLineHeight, value),
+      (snapshot) => snapshot.copyWith(lineHeight: value),
+    );
   }
 
   Future<void> saveParagraphSpacing(double value) {
-    return _setDouble(PreferKey.readerParagraphSpacing, value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerParagraphSpacing, value),
+      (snapshot) => snapshot.copyWith(paragraphSpacing: value),
+    );
   }
 
   Future<void> saveLetterSpacing(double value) {
-    return _setDouble(PreferKey.readerLetterSpacing, value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerLetterSpacing, value),
+      (snapshot) => snapshot.copyWith(letterSpacing: value),
+    );
   }
 
   Future<void> saveTextIndent(int value) {
-    return _setInt(PreferKey.readerTextIndent, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerTextIndent, value),
+      (snapshot) => snapshot.copyWith(textIndent: value),
+    );
   }
 
   Future<void> saveThemeIndex(int value) {
-    return _setInt(PreferKey.readerThemeIndex, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerThemeIndex, value),
+      (snapshot) => snapshot.copyWith(themeIndex: value),
+    );
   }
 
   Future<void> saveDayThemeIndex(int value) {
-    return _setInt(PreferKey.readerDayThemeIndex, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerDayThemeIndex, value),
+      (snapshot) => snapshot.copyWith(lastDayThemeIndex: value),
+    );
   }
 
   Future<void> saveNightThemeIndex(int value) {
-    return _setInt(PreferKey.readerNightThemeIndex, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerNightThemeIndex, value),
+      (snapshot) => snapshot.copyWith(lastNightThemeIndex: value),
+    );
   }
 
   Future<void> saveMenuThemeIndex(int value) {
-    return _setInt(PreferKey.readerMenuThemeIndex, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerMenuThemeIndex, value),
+      (snapshot) => snapshot.copyWith(menuThemeIndex: value),
+    );
   }
 
   Future<void> saveAutoPageSpeed(double value) {
-    return _setDouble(
-      PreferKey.readerAutoPageSpeed,
-      _normalizeAutoPageSpeed(value),
+    final normalized = _normalizeAutoPageSpeed(value);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerAutoPageSpeed, normalized),
+      (snapshot) => snapshot.copyWith(autoPageSpeed: normalized),
     );
   }
 
   Future<void> saveChineseConvert(int value) {
-    return _setInt(PreferKey.readerChineseConvert, value);
+    return _saveAndCache(
+      () => _setInt(PreferKey.readerChineseConvert, value),
+      (snapshot) => snapshot.copyWith(chineseConvert: value),
+    );
   }
 
   Future<void> saveShowAddToShelfAlert(bool value) {
-    return _setBool(PreferKey.showAddToShelfAlert, value);
+    return _saveAndCache(
+      () => _setBool(PreferKey.showAddToShelfAlert, value),
+      (snapshot) => snapshot.copyWith(showAddToShelfAlert: value),
+    );
   }
 
   Future<void> saveClickActions(List<int> actions) {
     final normalized = _normalizeClickActions(actions);
-    return _setString(PreferKey.readerClickActions, normalized.join(','));
+    return _saveAndCache(
+      () => _setString(PreferKey.readerClickActions, normalized.join(',')),
+      (snapshot) => snapshot.copyWith(clickActions: normalized),
+    );
   }
 
   Future<void> savePaddingHorizontal(double value) {
-    return _setDouble(PreferKey.readerPaddingHorizontal, value);
+    final normalized = _normalizePagePadding(
+      value,
+      cachedSnapshot.paddingHorizontal,
+    );
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerPaddingHorizontal, normalized),
+      (snapshot) => snapshot.copyWith(paddingHorizontal: normalized),
+    );
   }
 
   Future<void> savePaddingTop(double value) {
-    return _setDouble(PreferKey.readerPaddingTop, value);
+    final normalized = _normalizePagePadding(value, cachedSnapshot.paddingTop);
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerPaddingTop, normalized),
+      (snapshot) => snapshot.copyWith(paddingTop: normalized),
+    );
   }
 
   Future<void> savePaddingBottom(double value) {
-    return _setDouble(PreferKey.readerPaddingBottom, value);
+    final normalized = _normalizePagePadding(
+      value,
+      cachedSnapshot.paddingBottom,
+    );
+    return _saveAndCache(
+      () => _setDouble(PreferKey.readerPaddingBottom, normalized),
+      (snapshot) => snapshot.copyWith(paddingBottom: normalized),
+    );
   }
 
   Future<void> saveHideStatusBar(bool value) {
-    return _setBool(PreferKey.readerHideStatusBar, value);
+    return _saveAndCache(
+      () => _setBool(PreferKey.readerHideStatusBar, value),
+      (snapshot) => snapshot.copyWith(hideStatusBar: value),
+    );
   }
 
   Future<void> saveHeaderInfo(ReaderV2InfoSlots value) {
-    return _setString(PreferKey.readerHeaderInfo, value.encode());
+    return _saveAndCache(
+      () => _setString(PreferKey.readerHeaderInfo, value.encode()),
+      (snapshot) => snapshot.copyWith(headerInfo: value),
+    );
   }
 
   Future<void> saveFooterInfo(ReaderV2InfoSlots value) {
-    return _setString(PreferKey.readerFooterInfo, value.encode());
+    return _saveAndCache(
+      () => _setString(PreferKey.readerFooterInfo, value.encode()),
+      (snapshot) => snapshot.copyWith(footerInfo: value),
+    );
+  }
+
+  Future<void> _saveAndCache(
+    Future<void> Function() persist,
+    ReaderV2PrefsSnapshot Function(ReaderV2PrefsSnapshot snapshot) update,
+  ) async {
+    await persist();
+    final latest = _latestSnapshot;
+    if (latest != null) {
+      _latestSnapshot = update(latest);
+    }
   }
 
   List<int> parseClickActions(String? stored) {
