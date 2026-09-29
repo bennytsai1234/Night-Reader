@@ -108,7 +108,7 @@ void main() {
       expect(machine.currentOperation!.targetLocation, target);
       expect(machine.currentOperation!.layoutGeneration, 1);
       expect(
-        machine.currentOperation!.layoutSpec!.presentationSignature,
+        machine.stagedLayoutSpec!.presentationSignature,
         resized.presentationSignature,
       );
       expect(machine.state.layoutGeneration, 0);
@@ -147,7 +147,7 @@ void main() {
 
       expect(machine.isCurrent(presentation), isFalse);
       expect(jump.layoutGeneration, 1);
-      expect(jump.layoutSpec?.layoutSignature, spec.layoutSignature);
+      expect(machine.stagedLayoutSpec?.layoutSignature, spec.layoutSignature);
       expect(jump.targetLocation, target);
       expect(machine.commitLayoutForOperation(jump), isTrue);
       expect(machine.state.layoutGeneration, 1);

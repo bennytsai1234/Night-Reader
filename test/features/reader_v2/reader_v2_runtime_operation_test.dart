@@ -215,7 +215,7 @@ void main() {
     expect(runtime.stateMachine.currentOperation!.kind, ReaderV2OperationKind.jump);
     expect(runtime.pendingLocation, target);
     expect(
-      runtime.stateMachine.currentOperation!.layoutSpec!.presentationSignature,
+      runtime.stateMachine.stagedLayoutSpec!.presentationSignature,
       resized.presentationSignature,
     );
     expect(restores, restoresBeforeResize);
