@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -63,6 +64,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool get showReadTitleAddition => true;
 
   Future<void> loadSettings() async {
+    final before = _stateSignature();
     final snapshot = await _prefsRepository.load();
     _persisted = snapshot;
     // 別處（例如「閱讀偏好」頁）改了繁簡轉換時，重新載入也必須讓正文重轉。
@@ -72,8 +74,33 @@ class ReaderV2SettingsController extends ChangeNotifier {
     _initFromCache(snapshot);
     ChineseDisplay.mode.value = chineseConvert;
     _normalizeDayNightThemeIndexes();
-    notifyListeners();
+    if (!listEquals(before, _stateSignature())) {
+      notifyListeners();
+    }
   }
+
+  List<Object?> _stateSignature() => <Object?>[
+    fontSize,
+    titleFontSize,
+    lineHeight,
+    paragraphSpacing,
+    letterSpacing,
+    textIndent,
+    paddingHorizontal,
+    paddingTop,
+    paddingBottom,
+    hideStatusBar,
+    headerInfo,
+    footerInfo,
+    themeIndex,
+    lastDayThemeIndex,
+    lastNightThemeIndex,
+    menuThemeIndex,
+    chineseConvert,
+    autoPageSpeed,
+    showAddToShelfAlert,
+    ...clickActions,
+  ];
 
   void _initFromCache(ReaderV2PrefsSnapshot snapshot) {
     fontSize = snapshot.fontSize;
