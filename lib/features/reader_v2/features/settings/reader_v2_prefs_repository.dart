@@ -324,32 +324,23 @@ class ReaderV2PrefsRepository {
   }
 
   Future<void> savePaddingHorizontal(double value) {
-    final normalized = _normalizePagePadding(
-      value,
-      cachedSnapshot.paddingHorizontal,
-    );
     return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingHorizontal, normalized),
-      (snapshot) => snapshot.copyWith(paddingHorizontal: normalized),
+      () => _setDouble(PreferKey.readerPaddingHorizontal, value),
+      (snapshot) => snapshot.copyWith(paddingHorizontal: value),
     );
   }
 
   Future<void> savePaddingTop(double value) {
-    final normalized = _normalizePagePadding(value, cachedSnapshot.paddingTop);
     return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingTop, normalized),
-      (snapshot) => snapshot.copyWith(paddingTop: normalized),
+      () => _setDouble(PreferKey.readerPaddingTop, value),
+      (snapshot) => snapshot.copyWith(paddingTop: value),
     );
   }
 
   Future<void> savePaddingBottom(double value) {
-    final normalized = _normalizePagePadding(
-      value,
-      cachedSnapshot.paddingBottom,
-    );
     return _saveAndCache(
-      () => _setDouble(PreferKey.readerPaddingBottom, normalized),
-      (snapshot) => snapshot.copyWith(paddingBottom: normalized),
+      () => _setDouble(PreferKey.readerPaddingBottom, value),
+      (snapshot) => snapshot.copyWith(paddingBottom: value),
     );
   }
 
