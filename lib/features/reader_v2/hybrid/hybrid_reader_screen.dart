@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/hybrid/lifecycle_flush_gate.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -128,6 +129,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
+  final LifecycleFlushGate _lifecycleFlushGate = LifecycleFlushGate();
 
   @override
   void initState() {
@@ -974,17 +976,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
-      unawaited(widget.runtime.flushProgress());
-      unawaited(
-        _writeDiskMetrics(
-          _measurementStore.snapshot(_namespace),
-          bookUrl: widget.bookUrl,
-        ),
-      );
-    }
+    if (!_lifecycleFlushGate.shouldFlush(state)) return;
+    unawaited(widget.runtime.flushProgress());
+    unawaited(
+      _writeDiskMetrics(
+        _measurementStore.snapshot(_namespace),
+        bookUrl: widget.bookUrl,
+      ),
+    );
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
