@@ -87,6 +87,39 @@ void main() {
       );
     });
 
+    test('viewport update preserves an active operation and its semantic intent', () {
+      final machine = ReaderV2StateMachine(_initialState());
+      final staged = _layoutSpec(fontSize: 22);
+      machine.beginPresentation(
+        spec: staged,
+        layoutGeneration: 1,
+      );
+      const target = ReaderV2Location(chapterIndex: 3, charOffset: 42);
+      final jump = machine.beginJump(location: target);
+      final resized = _layoutSpec(
+        fontSize: 22,
+        viewportSize: const Size(360, 600),
+      );
+
+      expect(machine.updateViewportSpec(resized), isTrue);
+      expect(machine.currentOperation, same(jump));
+      expect(machine.currentOperation!.kind, ReaderV2OperationKind.jump);
+      expect(machine.currentOperation!.targetLocation, target);
+      expect(machine.currentOperation!.layoutGeneration, 1);
+      expect(
+        machine.currentOperation!.layoutSpec!.presentationSignature,
+        resized.presentationSignature,
+      );
+      expect(machine.state.layoutGeneration, 0);
+
+      expect(machine.commitLayoutForOperation(jump), isTrue);
+      expect(machine.state.layoutGeneration, 1);
+      expect(
+        machine.state.layoutSpec.presentationSignature,
+        resized.presentationSignature,
+      );
+    });
+
     test('content generation publishes independently from layout generation', () {
       final machine = ReaderV2StateMachine(_initialState());
       final layoutGeneration = machine.state.layoutGeneration;

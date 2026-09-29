@@ -156,6 +156,41 @@ void main() {
     expect(restores, restoresBeforeResize);
   });
 
+  test('viewport change does not replace an in-flight jump operation', () async {
+    final runtime = makeRuntime(List.generate(4, chapter));
+    addTearDown(runtime.dispose);
+    var restores = 0;
+    runtime.registerViewportRestore(Object(), (_) async {
+      restores += 1;
+      return true;
+    });
+    await runtime.openBook();
+
+    final staged = specWithFontSize(22);
+    runtime.stateMachine.beginPresentation(
+      spec: staged,
+      layoutGeneration: runtime.state.layoutGeneration + 1,
+    );
+    const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+    final jump = runtime.beginJumpOperation(location: target);
+    final restoresBeforeResize = restores;
+    final resized = specWithFontSize(
+      22,
+      viewportSize: const Size(220, 160),
+    );
+
+    await runtime.applyPresentation(spec: resized);
+
+    expect(runtime.stateMachine.currentOperation, same(jump));
+    expect(runtime.stateMachine.currentOperation!.kind, ReaderV2OperationKind.jump);
+    expect(runtime.pendingLocation, target);
+    expect(
+      runtime.stateMachine.currentOperation!.layoutSpec!.presentationSignature,
+      resized.presentationSignature,
+    );
+    expect(restores, restoresBeforeResize);
+  });
+
   test(
     'content generation change re-resolves the same active operation token',
     () async {

@@ -178,7 +178,7 @@ class ReaderV2Runtime extends ChangeNotifier {
 
     final sameTextLayout =
         stagedSpec.layoutSignature == spec.layoutSignature;
-    if (sameTextLayout && operation?.layoutSpec == null) {
+    if (sameTextLayout) {
       if (stateMachine.updateViewportSpec(spec)) {
         notifyListeners();
       }
@@ -192,9 +192,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     final token = stateMachine.beginPresentation(
       spec: spec,
       location: location,
-      layoutGeneration: sameTextLayout
-          ? operation!.layoutGeneration
-          : state.layoutGeneration + 1,
+      layoutGeneration: state.layoutGeneration + 1,
     );
     notifyListeners();
     try {

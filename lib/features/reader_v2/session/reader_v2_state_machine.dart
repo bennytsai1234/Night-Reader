@@ -72,15 +72,25 @@ class ReaderV2StateMachine {
   }
 
   bool updateViewportSpec(ReaderV2LayoutSpec spec) {
-    if (spec.layoutSignature != state.layoutSpec.layoutSignature) {
+    final operation = _currentOperation;
+    final stagedSpec = operation?.layoutSpec;
+    final ownerSpec = stagedSpec ?? state.layoutSpec;
+    if (spec.layoutSignature != ownerSpec.layoutSignature) {
       throw StateError(
         'Viewport updates cannot change text layout identity.',
       );
     }
-    if (spec.presentationSignature == state.layoutSpec.presentationSignature) {
+    if (spec.presentationSignature == ownerSpec.presentationSignature) {
       return false;
     }
-    state = state.copyWith(layoutSpec: spec);
+
+    if (stagedSpec != null) {
+      operation!.layoutSpec = spec;
+    }
+    if (operation == null ||
+        operation.layoutGeneration == state.layoutGeneration) {
+      state = state.copyWith(layoutSpec: spec);
+    }
     return true;
   }
 
