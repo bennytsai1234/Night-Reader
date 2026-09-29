@@ -24,8 +24,10 @@ class ReaderV2ControllerHost {
     required this.initialChapters,
     required this.openTarget,
     required VoidCallback onChanged,
+    required VoidCallback onProgressPersisted,
     required bool Function() isMounted,
   }) : _onChanged = onChanged,
+       _onProgressPersisted = onProgressPersisted,
        _isMounted = isMounted {
     settings.addListener(_onSettingsChanged);
     menu.addListener(_onControllerChanged);
@@ -41,9 +43,10 @@ class ReaderV2ControllerHost {
     );
     _lastContentSettingsGeneration = settings.contentSettingsGeneration;
     unawaited(settings.loadSettings());
-    // 自動翻頁只在畫面可見時有意義：螢幕關閉或切到其他 App 時，
-    // Timer 仍會在背景捲動正文，使用者回來時位置已被推後數頁。
-    _lifecycleListener = AppLifecycleListener(onHide: () => autoPage?.stop());
+    // Reader session visibility belongs to the host, not the viewport.
+    // Leaving the visible app stops viewport motion and persists the latest
+    // captured location through the Runtime owner.
+    _lifecycleListener = AppLifecycleListener(onHide: _handleAppHidden);
   }
 
   late final AppLifecycleListener _lifecycleListener;
@@ -52,6 +55,7 @@ class ReaderV2ControllerHost {
   final List<BookChapter> initialChapters;
   final ReaderV2OpenTarget? openTarget;
   final VoidCallback _onChanged;
+  final VoidCallback _onProgressPersisted;
   final bool Function() _isMounted;
 
   final ReaderV2SettingsController settings = ReaderV2SettingsController();
@@ -67,7 +71,7 @@ class ReaderV2ControllerHost {
   ReaderV2AutoPageController? autoPage;
 
   Size? _lastViewportSize;
-  int? _lastLayoutSignature;
+  int? _lastPresentationSignature;
   int _lastContentSettingsGeneration = 0;
   ReaderV2LayoutSpec? _pendingPresentationSpec;
   bool _presentationCallbackQueued = false;
@@ -84,6 +88,14 @@ class ReaderV2ControllerHost {
     _onChanged();
   }
 
+  void _handleAppHidden() {
+    autoPage?.stop();
+    final activeRuntime = runtime;
+    if (activeRuntime != null) {
+      unawaited(activeRuntime.flushProgress());
+    }
+  }
+
   ReaderV2Runtime ensureRuntime(Size size, ReaderV2Style style) {
     _lastViewportSize = size;
     final existing = runtime;
@@ -95,7 +107,7 @@ class ReaderV2ControllerHost {
       book: book,
       repository: repository,
       bookDao: dependencies.bookDao,
-      onProgressPersisted: _onChanged,
+      onProgressPersisted: _onProgressPersisted,
     );
     final initialLocation = _initialLocationFor(spec);
     final nextRuntime = ReaderV2Runtime(
@@ -119,7 +131,7 @@ class ReaderV2ControllerHost {
     runtime = nextRuntime;
     tts = nextTts;
     autoPage = nextAutoPage;
-    _lastLayoutSignature = spec.layoutSignature;
+    _lastPresentationSignature = spec.presentationSignature;
     unawaited(nextTts.loadSettings());
     _openRuntimeAfterFirstFrame(nextRuntime);
     return nextRuntime;
@@ -132,9 +144,10 @@ class ReaderV2ControllerHost {
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
-    final needsLayout = _lastLayoutSignature != spec.layoutSignature;
-    if (needsLayout) {
-      _lastLayoutSignature = spec.layoutSignature;
+    final needsPresentation =
+        _lastPresentationSignature != spec.presentationSignature;
+    if (needsPresentation) {
+      _lastPresentationSignature = spec.presentationSignature;
       _pendingPresentationSpec = spec;
       _presentationRevision += 1;
       _queuePresentationDispatch(runtime);
@@ -150,10 +163,10 @@ class ReaderV2ControllerHost {
 
   /// Wait for one quiet frame before dispatching the latest presentation.
   ///
-  /// Rotation and inset animations can produce a new layout signature every
-  /// frame. Keeping the request pending until a frame arrives without a new
-  /// signature coalesces that stream while still guaranteeing that the final
-  /// size is dispatched. The extra frame is scheduler-based rather than a
+  /// Rotation and inset animations can produce a new presentation signature
+  /// every frame. Keeping the request pending until a frame arrives without a
+  /// new signature coalesces that stream while still guaranteeing that the
+  /// final size is dispatched. The extra frame is scheduler-based rather than a
   /// fixed wall-clock debounce, so it does not depend on device speed.
   void _queuePresentationDispatch(ReaderV2Runtime runtime) {
     if (_presentationCallbackQueued || _presentationInFlight) return;

@@ -10,9 +10,13 @@ class ReaderV2StateMachine {
   ReaderV2State state;
   int _nextOperationId = 0;
   ReaderV2OperationToken? _currentOperation;
+  ReaderV2LayoutSpec? _stagedLayoutSpec;
 
   ReaderV2OperationToken? get currentOperation => _currentOperation;
   ReaderV2Location? get pendingLocation => _currentOperation?.targetLocation;
+  ReaderV2LayoutSpec? get stagedLayoutSpec => _stagedLayoutSpec;
+  ReaderV2LayoutSpec get effectiveLayoutSpec =>
+      _stagedLayoutSpec ?? state.layoutSpec;
 
   ReaderV2OperationToken beginOpen({ReaderV2Location? location}) {
     if (state.lifecycle == ReaderV2Lifecycle.unavailable) {
@@ -71,6 +75,28 @@ class ReaderV2StateMachine {
     state = state.copyWith(committedLocation: location);
   }
 
+  bool updateViewportSpec(ReaderV2LayoutSpec spec) {
+    final operation = _currentOperation;
+    final ownerSpec = effectiveLayoutSpec;
+    if (spec.layoutSignature != ownerSpec.layoutSignature) {
+      throw StateError(
+        'Viewport updates cannot change text layout identity.',
+      );
+    }
+    if (spec.presentationSignature == ownerSpec.presentationSignature) {
+      return false;
+    }
+
+    if (_stagedLayoutSpec != null) {
+      _stagedLayoutSpec = spec;
+    }
+    if (operation == null ||
+        operation.layoutGeneration == state.layoutGeneration) {
+      state = state.copyWith(layoutSpec: spec);
+    }
+    return true;
+  }
+
   bool isCurrent(ReaderV2OperationToken token) {
     final current = _currentOperation;
     return current != null &&
@@ -92,14 +118,29 @@ class ReaderV2StateMachine {
 
   bool commitLayoutForOperation(ReaderV2OperationToken token) {
     if (!isCurrent(token)) return false;
-    if (token.layoutGeneration == state.layoutGeneration) return true;
+    final stagedSpec = _stagedLayoutSpec;
+    if (token.layoutGeneration == state.layoutGeneration) {
+      if (stagedSpec == null) return true;
+      if (stagedSpec.layoutSignature != state.layoutSpec.layoutSignature) {
+        throw StateError(
+          'Same-generation presentation cannot change text layout identity.',
+        );
+      }
+      state = state.copyWith(layoutSpec: stagedSpec);
+      return true;
+    }
     if (token.layoutGeneration != state.layoutGeneration + 1) {
       throw StateError(
         'Layout generation must advance exactly once for the current operation.',
       );
     }
+    if (stagedSpec == null) {
+      throw StateError(
+        'A layout generation cannot advance without a staged layout spec.',
+      );
+    }
     state = state.copyWith(
-      layoutSpec: token.layoutSpec,
+      layoutSpec: stagedSpec,
       layoutGeneration: token.layoutGeneration,
     );
     return true;
@@ -111,6 +152,7 @@ class ReaderV2StateMachine {
   }) {
     if (!isCurrent(token)) return false;
     _currentOperation = null;
+    _stagedLayoutSpec = null;
     state = state.copyWith(
       lifecycle: ReaderV2Lifecycle.ready,
       visibleLocation: visibleLocation,
@@ -122,6 +164,7 @@ class ReaderV2StateMachine {
   bool abandonOperation(ReaderV2OperationToken token) {
     if (!isCurrent(token)) return false;
     _currentOperation = null;
+    _stagedLayoutSpec = null;
     return true;
   }
 
@@ -133,6 +176,7 @@ class ReaderV2StateMachine {
       );
     }
     _currentOperation = null;
+    _stagedLayoutSpec = null;
     state = state.copyWith(
       lifecycle: ReaderV2Lifecycle.unavailable,
       unavailableMessage: error.toString(),
@@ -147,6 +191,7 @@ class ReaderV2StateMachine {
     ReaderV2LayoutSpec? layoutSpec,
   }) {
     final previous = _currentOperation;
+    final previousStagedSpec = _stagedLayoutSpec;
     final inheritedGeneration =
         previous != null && previous.layoutGeneration > state.layoutGeneration
         ? previous.layoutGeneration
@@ -163,7 +208,7 @@ class ReaderV2StateMachine {
         previous != null &&
         previous.layoutGeneration > state.layoutGeneration &&
         generation == previous.layoutGeneration) {
-      stagedSpec = previous.layoutSpec;
+      stagedSpec = previousStagedSpec;
     }
     final token = ReaderV2OperationToken(
       targetLocation:
@@ -171,9 +216,9 @@ class ReaderV2StateMachine {
       id: ++_nextOperationId,
       kind: kind,
       layoutGeneration: generation,
-      layoutSpec: stagedSpec,
     );
     _currentOperation = token;
+    _stagedLayoutSpec = stagedSpec;
     return token;
   }
 }

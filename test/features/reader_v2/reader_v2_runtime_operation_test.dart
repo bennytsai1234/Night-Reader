@@ -10,6 +10,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
@@ -31,9 +32,12 @@ class _FakeSourceDao extends Fake implements BookSourceDao {}
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  ReaderV2LayoutSpec specWithFontSize(double fontSize) {
+  ReaderV2LayoutSpec specWithFontSize(
+    double fontSize, {
+    Size viewportSize = const Size(220, 180),
+  }) {
     return ReaderV2LayoutSpec.fromViewport(
-      viewportSize: const Size(220, 180),
+      viewportSize: viewportSize,
       style: ReaderV2LayoutStyle(
         fontSize: fontSize,
         lineHeight: 1.5,
@@ -119,6 +123,102 @@ void main() {
     expect(runtime.state.layoutSpec.layoutSignature, specWithFontSize(22).layoutSignature);
     expect(restores.last, target);
     expect(runtime.pendingLocation, isNull);
+  });
+
+  test('progress flush can catch persistence up without notifying Reader UI', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    await runtime.openBook();
+
+    const captured = ReaderV2Location(
+      chapterIndex: 0,
+      charOffset: 2,
+      visualOffsetPx: 12,
+    );
+    runtime.registerVisibleLocationCapture(Object(), () => captured);
+    var notifications = 0;
+    runtime.addListener(() => notifications += 1);
+
+    await runtime.flushProgress();
+
+    expect(runtime.state.visibleLocation, captured);
+    expect(runtime.state.committedLocation, captured);
+    expect(notifications, 0);
+  });
+
+  test('viewport height updates only the viewport listener', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    addTearDown(runtime.dispose);
+    var restores = 0;
+    runtime.registerViewportRestore(Object(), (_) async {
+      restores += 1;
+      return true;
+    });
+    await runtime.openBook();
+
+    var semanticNotifications = 0;
+    var viewportNotifications = 0;
+    runtime.addListener(() => semanticNotifications += 1);
+    runtime.addViewportGeometryListener(() => viewportNotifications += 1);
+
+    final generation = runtime.state.layoutGeneration;
+    final restoresBeforeResize = restores;
+    final resized = specWithFontSize(
+      18,
+      viewportSize: const Size(220, 160),
+    );
+    expect(
+      resized.layoutSignature,
+      runtime.state.layoutSpec.layoutSignature,
+    );
+
+    await runtime.applyPresentation(spec: resized);
+
+    expect(runtime.state.layoutGeneration, generation);
+    expect(runtime.state.layoutSpec.viewportSize.height, 160);
+    expect(
+      runtime.state.layoutSpec.presentationSignature,
+      resized.presentationSignature,
+    );
+    expect(restores, restoresBeforeResize);
+    expect(semanticNotifications, 0);
+    expect(viewportNotifications, 1);
+  });
+
+  test('viewport change does not replace an in-flight jump operation', () async {
+    final runtime = makeRuntime(List.generate(4, chapter));
+    addTearDown(runtime.dispose);
+    var restores = 0;
+    runtime.registerViewportRestore(Object(), (_) async {
+      restores += 1;
+      return true;
+    });
+    await runtime.openBook();
+
+    final staged = specWithFontSize(22);
+    runtime.stateMachine.beginPresentation(
+      spec: staged,
+      layoutGeneration: runtime.state.layoutGeneration + 1,
+    );
+    const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+    final jump = runtime.beginJumpOperation(location: target);
+    final restoresBeforeResize = restores;
+    final resized = specWithFontSize(
+      22,
+      viewportSize: const Size(220, 160),
+    );
+
+    await runtime.applyPresentation(spec: resized);
+
+    expect(runtime.stateMachine.currentOperation, same(jump));
+    expect(runtime.stateMachine.currentOperation!.kind, ReaderV2OperationKind.jump);
+    expect(runtime.pendingLocation, target);
+    expect(
+      runtime.stateMachine.stagedLayoutSpec!.presentationSignature,
+      resized.presentationSignature,
+    );
+    expect(restores, restoresBeforeResize);
   });
 
   test(

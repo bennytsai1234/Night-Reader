@@ -8,6 +8,7 @@ import 'dart:ui' show Size;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state_machine.dart';
 
@@ -70,6 +71,56 @@ void main() {
       expect(machine.state.hasStableWorld, isTrue);
     });
 
+    test('viewport spec updates without advancing layout generation', () {
+      final machine = ReaderV2StateMachine(_initialState());
+      final generation = machine.state.layoutGeneration;
+      final resized = _layoutSpec(
+        viewportSize: const Size(360, 600),
+      );
+
+      expect(machine.updateViewportSpec(resized), isTrue);
+      expect(machine.state.layoutGeneration, generation);
+      expect(machine.state.layoutSpec.viewportSize.height, 600);
+      expect(machine.updateViewportSpec(resized), isFalse);
+      expect(
+        () => machine.updateViewportSpec(_layoutSpec(fontSize: 22)),
+        throwsStateError,
+      );
+    });
+
+    test('viewport update preserves an active operation and its semantic intent', () {
+      final machine = ReaderV2StateMachine(_initialState());
+      final staged = _layoutSpec(fontSize: 22);
+      machine.beginPresentation(
+        spec: staged,
+        layoutGeneration: 1,
+      );
+      const target = ReaderV2Location(chapterIndex: 3, charOffset: 42);
+      final jump = machine.beginJump(location: target);
+      final resized = _layoutSpec(
+        fontSize: 22,
+        viewportSize: const Size(360, 600),
+      );
+
+      expect(machine.updateViewportSpec(resized), isTrue);
+      expect(machine.currentOperation, same(jump));
+      expect(machine.currentOperation!.kind, ReaderV2OperationKind.jump);
+      expect(machine.currentOperation!.targetLocation, target);
+      expect(machine.currentOperation!.layoutGeneration, 1);
+      expect(
+        machine.stagedLayoutSpec!.presentationSignature,
+        resized.presentationSignature,
+      );
+      expect(machine.state.layoutGeneration, 0);
+
+      expect(machine.commitLayoutForOperation(jump), isTrue);
+      expect(machine.state.layoutGeneration, 1);
+      expect(
+        machine.state.layoutSpec.presentationSignature,
+        resized.presentationSignature,
+      );
+    });
+
     test('content generation publishes independently from layout generation', () {
       final machine = ReaderV2StateMachine(_initialState());
       final layoutGeneration = machine.state.layoutGeneration;
@@ -96,7 +147,7 @@ void main() {
 
       expect(machine.isCurrent(presentation), isFalse);
       expect(jump.layoutGeneration, 1);
-      expect(jump.layoutSpec?.layoutSignature, spec.layoutSignature);
+      expect(machine.stagedLayoutSpec?.layoutSignature, spec.layoutSignature);
       expect(jump.targetLocation, target);
       expect(machine.commitLayoutForOperation(jump), isTrue);
       expect(machine.state.layoutGeneration, 1);
@@ -339,9 +390,12 @@ ReaderV2State _initialState({
   );
 }
 
-ReaderV2LayoutSpec _layoutSpec({double fontSize = 18}) {
+ReaderV2LayoutSpec _layoutSpec({
+  double fontSize = 18,
+  Size viewportSize = const Size(360, 640),
+}) {
   return ReaderV2LayoutSpec.fromViewport(
-    viewportSize: const Size(360, 640),
+    viewportSize: viewportSize,
     style: ReaderV2LayoutStyle(
       fontSize: fontSize,
       lineHeight: 1.6,

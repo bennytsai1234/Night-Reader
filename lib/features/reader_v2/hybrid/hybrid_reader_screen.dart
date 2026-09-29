@@ -85,8 +85,7 @@ bool isHybridPageMoveComplete({
   return atBookBoundary;
 }
 
-class _HybridReaderScreenState extends State<HybridReaderScreen>
-    with WidgetsBindingObserver {
+class _HybridReaderScreenState extends State<HybridReaderScreen> {
   static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
@@ -146,7 +145,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
     _registerRuntime();
     _attachController();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _restoreAttachedRuntime();
@@ -155,12 +153,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   void _registerRuntime() {
     widget.runtime.addListener(_onRuntimeChanged);
+    widget.runtime.addViewportGeometryListener(_onViewportGeometryChanged);
     widget.runtime.registerVisibleLocationCapture(this, _captureForBridge);
     widget.runtime.registerViewportRestore(this, _restoreToLocation);
   }
 
   void _unregisterRuntime(ReaderV2Runtime runtime) {
     runtime.removeListener(_onRuntimeChanged);
+    runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
   }
@@ -198,7 +198,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void dispose() {
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
-    WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _chapterEventsSub?.cancel();
     _pumpEventsSub?.cancel();
@@ -972,24 +971,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
-      unawaited(widget.runtime.flushProgress());
-      unawaited(
-        _writeDiskMetrics(
-          _measurementStore.snapshot(_namespace),
-          bookUrl: widget.bookUrl,
-        ),
-      );
-    }
-  }
-
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
     if (!mounted || timings.isEmpty) return;
     _governor.recordFrameTimings(timings);
+  }
+
+  void _onViewportGeometryChanged() {
+    if (!mounted) return;
+    _reconcileVisibleWindow();
+    _scheduleRebuild();
   }
 
   void _onRuntimeChanged() {

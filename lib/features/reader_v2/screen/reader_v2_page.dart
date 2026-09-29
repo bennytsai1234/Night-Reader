@@ -85,6 +85,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       initialChapters: widget.initialChapters,
       openTarget: widget.openTarget,
       onChanged: _handleControllerChanged,
+      onProgressPersisted: _handleProgressPersisted,
       isMounted: () => mounted,
     );
     _coordinator = ReaderV2PageCoordinator(
@@ -139,6 +140,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _coordinator.maybeFollowTtsHighlight();
     _maybeQueueLibraryDownload();
     _scheduleRebuild();
+  }
+
+  void _handleProgressPersisted() {
+    _maybeQueueLibraryDownload();
   }
 
   void _maybeQueueLibraryDownload() {

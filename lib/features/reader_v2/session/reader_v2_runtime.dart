@@ -67,6 +67,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   final ReaderV2ProgressController progressController;
   final ReaderV2Location _initialLocation;
   final ReaderV2StateMachine stateMachine;
+  final ChangeNotifier _viewportGeometryNotifier = ChangeNotifier();
 
   late final ReaderV2ViewportBridge viewportBridge;
 
@@ -79,6 +80,14 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
+
+  void addViewportGeometryListener(VoidCallback listener) {
+    _viewportGeometryNotifier.addListener(listener);
+  }
+
+  void removeViewportGeometryListener(VoidCallback listener) {
+    _viewportGeometryNotifier.removeListener(listener);
+  }
 
   BookChapter? chapterAt(int index) => repository.chapterAt(index);
   String titleFor(int index) => repository.titleFor(index);
@@ -172,8 +181,18 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   Future<void> applyPresentation({required ReaderV2LayoutSpec spec}) async {
-    final stagedSpec = stateMachine.currentOperation?.layoutSpec ?? state.layoutSpec;
-    if (stagedSpec.layoutSignature == spec.layoutSignature) return;
+    final stagedSpec = stateMachine.effectiveLayoutSpec;
+    if (stagedSpec.presentationSignature == spec.presentationSignature) return;
+
+    final sameTextLayout =
+        stagedSpec.layoutSignature == spec.layoutSignature;
+    if (sameTextLayout) {
+      if (stateMachine.updateViewportSpec(spec)) {
+        _viewportGeometryNotifier.notifyListeners();
+      }
+      return;
+    }
+
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
@@ -311,8 +330,10 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   void commitProgressLocation(ReaderV2Location location) {
     if (disposed) return;
+    // committedLocation is persistence bookkeeping, not rendered Reader state.
+    // visibleLocation already owns viewport notifications, so a background
+    // flush must not rebuild the Reader merely because persistence caught up.
     stateMachine.commitLocation(location);
-    notifyListeners();
   }
 
   void notifySessionChanged() {
@@ -447,8 +468,12 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (!isCurrentOperationToken(token)) return false;
 
       final previousLayoutGeneration = state.layoutGeneration;
+      final previousPresentationSignature =
+          state.layoutSpec.presentationSignature;
       if (!stateMachine.commitLayoutForOperation(token)) return false;
-      if (state.layoutGeneration != previousLayoutGeneration) {
+      if (state.layoutGeneration != previousLayoutGeneration ||
+          state.layoutSpec.presentationSignature !=
+              previousPresentationSignature) {
         notifyListeners();
       }
 
@@ -516,6 +541,7 @@ class ReaderV2Runtime extends ChangeNotifier {
   void dispose() {
     disposed = true;
     progressController.dispose();
+    _viewportGeometryNotifier.dispose();
     super.dispose();
   }
 }

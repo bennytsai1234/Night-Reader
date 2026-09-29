@@ -11,6 +11,11 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 final class MetricsDiskCache {
   MetricsDiskCache({required this.baseDirectory});
 
+  /// All cache instances share one write tail per physical file. A Reader can
+  /// be disposed while its replacement is already alive, so instance-local
+  /// serialization is not sufficient to protect the same metrics path.
+  static final Map<String, Future<void>> _writeTails = <String, Future<void>>{};
+
   // v4 binds each block metric to content AND segmentation, not text alone.
   static const int _version = 4;
   static const int _headerMagic = 0x4E52484D; // NRHM
@@ -25,7 +30,6 @@ final class MetricsDiskCache {
     Map<int, String> chapterLayoutIdentities = const <int, String>{},
   }) async {
     final file = _fileFor(bookUrl: bookUrl, fingerprint: fingerprint);
-    await file.parent.create(recursive: true);
     final bytes = BytesBuilder(copy: false);
     final header = ByteData(12)
       ..setUint32(0, _headerMagic, Endian.big)
@@ -52,7 +56,28 @@ final class MetricsDiskCache {
             .bytes,
       );
     }
-    await file.writeAsBytes(bytes.takeBytes(), flush: true);
+    final payload = bytes.takeBytes();
+    final path = file.path;
+    final previous = _writeTails[path];
+    final ready = previous == null
+        ? Future<void>.value()
+        : previous.then<void>(
+            (_) {},
+            onError: (Object _, StackTrace __) {},
+          );
+    late final Future<void> current;
+    current = ready.then((_) async {
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(payload, flush: true);
+    });
+    _writeTails[path] = current;
+    try {
+      await current;
+    } finally {
+      if (identical(_writeTails[path], current)) {
+        _writeTails.remove(path);
+      }
+    }
     return metrics.length;
   }
 
