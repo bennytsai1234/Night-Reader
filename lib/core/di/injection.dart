@@ -101,11 +101,21 @@ Future<void> configureDependencies() async {
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
   // Reader settings also have a synchronous snapshot cache. Prime it before
-  // runApp so the first Reader world is built from the persisted typography
-  // and paddings instead of defaults followed by a second-frame reflow.
-  await const ReaderV2PrefsRepository().load();
+  // runApp so the first Reader world is built from persisted typography and
+  // paddings instead of defaults followed by a second-frame reflow. Reader
+  // preferences are not startup-critical: corrupted legacy values must not
+  // prevent the bookshelf from opening.
+  try {
+    await const ReaderV2PrefsRepository().load();
+  } catch (error, stackTrace) {
+    AppLog.e(
+      'Reader preferences preload failed; continuing with fallback values: $error',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 
-  // 5. 初始化啟動所需服務.
+  // 5. 初始化啟動所需服務。
   // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
   // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
   await Future.wait([CrashHandler.init(), getIt<NetworkService>().init()]);
