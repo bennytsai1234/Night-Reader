@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 
 import '../services/network_service.dart';
 import '../database/app_database.dart';
@@ -99,8 +100,12 @@ Future<void> configureDependencies() async {
   // 預先載入 SharedPreferences，讓 SettingsProvider / BookshelfProvider 建構時同步讀取，消除第一幀閃爍
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
+  // Reader settings also have a synchronous snapshot cache. Prime it before
+  // runApp so the first Reader world is built from the persisted typography
+  // and paddings instead of defaults followed by a second-frame reflow.
+  await const ReaderV2PrefsRepository().load();
 
-  // 5. 初始化啟動所需服務。
+  // 5. 初始化啟動所需服務.
   // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
   // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
   await Future.wait([CrashHandler.init(), getIt<NetworkService>().init()]);
