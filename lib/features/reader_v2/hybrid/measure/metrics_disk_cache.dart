@@ -30,7 +30,6 @@ final class MetricsDiskCache {
     Map<int, String> chapterLayoutIdentities = const <int, String>{},
   }) async {
     final file = _fileFor(bookUrl: bookUrl, fingerprint: fingerprint);
-    await file.parent.create(recursive: true);
     final bytes = BytesBuilder(copy: false);
     final header = ByteData(12)
       ..setUint32(0, _headerMagic, Endian.big)
@@ -68,6 +67,7 @@ final class MetricsDiskCache {
           );
     late final Future<void> current;
     current = ready.then((_) async {
+      await file.parent.create(recursive: true);
       await file.writeAsBytes(payload, flush: true);
     });
     _writeTails[path] = current;
