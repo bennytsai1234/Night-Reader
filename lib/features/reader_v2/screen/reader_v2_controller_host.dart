@@ -41,7 +41,7 @@ class ReaderV2ControllerHost {
       chapterDao: dependencies.chapterDao,
       contentDao: dependencies.readerChapterContentDao,
     );
-    _lastContentSettingsGeneration = settings.contentSettingsGeneration;
+    _appliedContentSettingsGeneration = settings.contentSettingsGeneration;
     unawaited(settings.loadSettings());
     // Reader session visibility belongs to the host, not the viewport.
     // Leaving the visible app stops viewport motion and persists the latest
@@ -71,11 +71,24 @@ class ReaderV2ControllerHost {
   ReaderV2AutoPageController? autoPage;
 
   Size? _lastViewportSize;
-  int? _lastPresentationSignature;
-  int _lastContentSettingsGeneration = 0;
+  int _appliedContentSettingsGeneration = 0;
+  int? _contentSettingsInFlightGeneration;
+  ({
+    int settingsGeneration,
+    int chapterIndex,
+    int contentGeneration,
+  })?
+  _lastFailedContentSettingsAttempt;
+  bool _contentSettingsCallbackQueued = false;
   ReaderV2LayoutSpec? _pendingPresentationSpec;
+  ReaderV2LayoutSpec? _presentationInFlightSpec;
+  ({
+    int presentationSignature,
+    int chapterIndex,
+    int contentGeneration,
+  })?
+  _lastFailedPresentationAttempt;
   bool _presentationCallbackQueued = false;
-  bool _presentationInFlight = false;
   int _presentationRevision = 0;
   bool _opening = false;
 
@@ -131,7 +144,6 @@ class ReaderV2ControllerHost {
     runtime = nextRuntime;
     tts = nextTts;
     autoPage = nextAutoPage;
-    _lastPresentationSignature = spec.presentationSignature;
     unawaited(nextTts.loadSettings());
     _openRuntimeAfterFirstFrame(nextRuntime);
     return nextRuntime;
@@ -144,21 +156,124 @@ class ReaderV2ControllerHost {
   ) {
     _lastViewportSize = size;
     final spec = specFromStyle(size, style);
-    final needsPresentation =
-        _lastPresentationSignature != spec.presentationSignature;
-    if (needsPresentation) {
-      _lastPresentationSignature = spec.presentationSignature;
-      _pendingPresentationSpec = spec;
-      _presentationRevision += 1;
-      _queuePresentationDispatch(runtime);
+    final committedSignature = runtime.state.layoutSpec.presentationSignature;
+    if (committedSignature == spec.presentationSignature) {
+      if (_pendingPresentationSpec?.presentationSignature ==
+          spec.presentationSignature) {
+        _pendingPresentationSpec = null;
+      }
+      if (_lastFailedPresentationAttempt?.presentationSignature ==
+          spec.presentationSignature) {
+        _lastFailedPresentationAttempt = null;
+      }
+    } else {
+      final attempt = _presentationAttempt(runtime, spec);
+      final alreadyPending =
+          _pendingPresentationSpec?.presentationSignature ==
+          spec.presentationSignature;
+      final alreadyInFlight =
+          _presentationInFlightSpec?.presentationSignature ==
+          spec.presentationSignature;
+      final failedForSameWorld = _lastFailedPresentationAttempt == attempt;
+      if (!alreadyPending && !alreadyInFlight && !failedForSameWorld) {
+        _pendingPresentationSpec = spec;
+        _presentationRevision += 1;
+        _queuePresentationDispatch(runtime);
+      }
     }
-    if (_lastContentSettingsGeneration != settings.contentSettingsGeneration) {
-      _lastContentSettingsGeneration = settings.contentSettingsGeneration;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_isMounted()) return;
-        unawaited(runtime.reloadContentPreservingLocation());
-      });
+    _reconcileContentSettings(runtime);
+  }
+
+  void _reconcileContentSettings(ReaderV2Runtime runtime) {
+    final desiredGeneration = settings.contentSettingsGeneration;
+    if (_appliedContentSettingsGeneration == desiredGeneration) {
+      if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
+          desiredGeneration) {
+        _lastFailedContentSettingsAttempt = null;
+      }
+      return;
     }
+    if (_contentSettingsInFlightGeneration != null) return;
+
+    final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
+    if (_lastFailedContentSettingsAttempt == attempt) return;
+    _queueContentSettingsDispatch(runtime);
+  }
+
+  void _queueContentSettingsDispatch(ReaderV2Runtime runtime) {
+    if (_contentSettingsCallbackQueued ||
+        _contentSettingsInFlightGeneration != null) {
+      return;
+    }
+    _contentSettingsCallbackQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _contentSettingsCallbackQueued = false;
+      if (!_isMounted()) return;
+
+      final desiredGeneration = settings.contentSettingsGeneration;
+      if (_appliedContentSettingsGeneration == desiredGeneration) return;
+      final attempt = _contentSettingsAttempt(runtime, desiredGeneration);
+      if (_lastFailedContentSettingsAttempt == attempt) return;
+
+      _contentSettingsInFlightGeneration = desiredGeneration;
+      unawaited(
+        _applyContentSettings(
+          runtime,
+          desiredGeneration: desiredGeneration,
+          attempt: attempt,
+        ),
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _applyContentSettings(
+    ReaderV2Runtime runtime, {
+    required int desiredGeneration,
+    required ({
+      int settingsGeneration,
+      int chapterIndex,
+      int contentGeneration,
+    })
+    attempt,
+  }) async {
+    try {
+      final applied = await runtime.reloadContentPreservingLocation();
+      if (applied &&
+          settings.contentSettingsGeneration == desiredGeneration) {
+        _appliedContentSettingsGeneration = desiredGeneration;
+        if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
+            desiredGeneration) {
+          _lastFailedContentSettingsAttempt = null;
+        }
+      } else if (!applied) {
+        _lastFailedContentSettingsAttempt = attempt;
+      }
+    } finally {
+      if (_contentSettingsInFlightGeneration == desiredGeneration) {
+        _contentSettingsInFlightGeneration = null;
+      }
+    }
+
+    if (!_isMounted()) return;
+    _reconcileContentSettings(runtime);
+  }
+
+  ({
+    int settingsGeneration,
+    int chapterIndex,
+    int contentGeneration,
+  })
+  _contentSettingsAttempt(
+    ReaderV2Runtime runtime,
+    int settingsGeneration,
+  ) {
+    final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
+    return (
+      settingsGeneration: settingsGeneration,
+      chapterIndex: target.chapterIndex,
+      contentGeneration: runtime.state.contentGeneration,
+    );
   }
 
   /// Wait for one quiet frame before dispatching the latest presentation.
@@ -169,7 +284,9 @@ class ReaderV2ControllerHost {
   /// final size is dispatched. The extra frame is scheduler-based rather than a
   /// fixed wall-clock debounce, so it does not depend on device speed.
   void _queuePresentationDispatch(ReaderV2Runtime runtime) {
-    if (_presentationCallbackQueued || _presentationInFlight) return;
+    if (_presentationCallbackQueued || _presentationInFlightSpec != null) {
+      return;
+    }
     _presentationCallbackQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_isMounted()) {
@@ -202,10 +319,22 @@ class ReaderV2ControllerHost {
       _pendingPresentationSpec = null;
       if (pendingSpec == null) return;
 
-      _presentationInFlight = true;
+      final attempt = _presentationAttempt(runtime, pendingSpec);
+      _presentationInFlightSpec = pendingSpec;
       unawaited(
         runtime.applyPresentation(spec: pendingSpec).whenComplete(() {
-          _presentationInFlight = false;
+          _presentationInFlightSpec = null;
+          final committed =
+              runtime.state.layoutSpec.presentationSignature ==
+              pendingSpec.presentationSignature;
+          if (committed) {
+            if (_lastFailedPresentationAttempt?.presentationSignature ==
+                pendingSpec.presentationSignature) {
+              _lastFailedPresentationAttempt = null;
+            }
+          } else {
+            _lastFailedPresentationAttempt = attempt;
+          }
           if (!_isMounted()) {
             _pendingPresentationSpec = null;
             return;
@@ -217,6 +346,23 @@ class ReaderV2ControllerHost {
       );
     });
     WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  ({
+    int presentationSignature,
+    int chapterIndex,
+    int contentGeneration,
+  })
+  _presentationAttempt(
+    ReaderV2Runtime runtime,
+    ReaderV2LayoutSpec spec,
+  ) {
+    final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
+    return (
+      presentationSignature: spec.presentationSignature,
+      chapterIndex: target.chapterIndex,
+      contentGeneration: runtime.state.contentGeneration,
+    );
   }
 
   ReaderV2Location _initialLocationFor(ReaderV2LayoutSpec spec) {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
@@ -9,11 +10,14 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -63,6 +67,7 @@ void main() {
   ReaderV2Runtime makeRuntime(
     List<BookChapter> chapters, {
     ReaderV2TestContentLoader? contentLoader,
+    ReaderV2LayoutSpec? initialLayoutSpec,
   }) {
     final book = Book(
       bookUrl: 'http://book.test',
@@ -88,7 +93,7 @@ void main() {
         repository: repository,
         bookDao: bookDao,
       ),
-      initialLayoutSpec: specWithFontSize(18),
+      initialLayoutSpec: initialLayoutSpec ?? specWithFontSize(18),
       initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     );
   }
@@ -311,7 +316,7 @@ void main() {
       final contentBefore = runtime.state.contentGeneration;
       raw = '第二版正文，內容已改變。';
 
-      await runtime.reloadContentPreservingLocation();
+      expect(await runtime.reloadContentPreservingLocation(), isTrue);
 
       expect(runtime.state.layoutGeneration, layoutBefore);
       expect(runtime.state.contentGeneration, contentBefore + 1);
@@ -345,7 +350,7 @@ void main() {
     expect(before, isNotNull);
     failRefresh = true;
 
-    await runtime.reloadContentPreservingLocation();
+    expect(await runtime.reloadContentPreservingLocation(), isFalse);
 
     expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.hasStableWorld, isTrue);
@@ -497,4 +502,341 @@ void main() {
     expect(runtime.pendingLocation, isNull);
     expect(restores, isNotEmpty);
   });
+
+  test(
+    'overlapping reload failure cannot hide a later semantic identity change',
+    () async {
+      var loadCount = 0;
+      final firstReload = Completer<String?>();
+      final secondReload = Completer<String?>();
+      final runtime = makeRuntime(
+        [chapter(0)],
+        contentLoader: (_, __) {
+          loadCount += 1;
+          switch (loadCount) {
+            case 1:
+              return Future<String?>.value('第一版正文。');
+            case 2:
+              return firstReload.future;
+            case 3:
+              return secondReload.future;
+            default:
+              return Future<String?>.value('第三版正文。');
+          }
+        },
+      );
+      addTearDown(runtime.dispose);
+      final repository = runtime.repository;
+
+      final committed = await repository.loadContent(0);
+      final generationBefore = repository.contentGeneration;
+
+      final refresh1 = repository.reloadContent(0);
+      await pumpEventQueue();
+      expect(loadCount, 2);
+
+      final refresh2 = repository.reloadContent(0);
+      await pumpEventQueue();
+      expect(
+        loadCount,
+        2,
+        reason: '第二個 destructive reload 必須等第一個 transaction 結束。',
+      );
+
+      firstReload.complete('第二版正文。');
+      final firstCommitted = await refresh1;
+      await pumpEventQueue();
+      expect(loadCount, 3);
+
+      secondReload.completeError(
+        const ReaderV2ContentUnavailableException('第二次重新載入失敗'),
+      );
+      await expectLater(
+        refresh2,
+        throwsA(isA<ReaderV2ContentUnavailableException>()),
+      );
+
+      final afterFailure = repository.cachedContent(0);
+      expect(afterFailure?.contentHash, firstCommitted.contentHash);
+      expect(firstCommitted.contentHash, isNot(committed.contentHash));
+      expect(
+        repository.contentGeneration,
+        greaterThan(generationBefore),
+        reason:
+            '後繼 reload 失敗時必須保留前一個已提交 semantic identity；'
+            'transaction 不得 rollback 到另一個 reload 的半成品快照。',
+      );
+    },
+  );
+
+  testWidgets(
+    'host reconciles desired presentation after an in-flight request is abandoned',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final getIt = GetIt.instance;
+      await getIt.reset();
+      getIt.registerSingleton<BookDao>(_FakeBookDao());
+      getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
+      getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
+
+      final book = Book(
+        bookUrl: 'http://host.test',
+        name: 'Host 測試書',
+        author: '作者',
+        origin: 'local',
+        originName: '本地',
+      );
+      final host = ReaderV2ControllerHost(
+        book: book,
+        initialChapters: [chapter(0), chapter(1)],
+        openTarget: null,
+        onChanged: () {},
+        onProgressPersisted: () {},
+        isMounted: () => true,
+      );
+      addTearDown(() async {
+        host.dispose();
+        await getIt.reset();
+      });
+
+      const size = Size(220, 180);
+      const initialStyle = ReaderV2Style(
+        fontSize: 18,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 0.8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+        textIndent: 2,
+      );
+      final desiredStyle = initialStyle.copyWith(fontSize: 22);
+      final initialSpec = host.specFromStyle(size, initialStyle);
+      final desiredSignature = host
+          .specFromStyle(size, desiredStyle)
+          .presentationSignature;
+      final targetContent = Completer<String?>();
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        initialLayoutSpec: initialSpec,
+        contentLoader: (index, chapter) =>
+            index == 1 ? targetContent.future : Future.value(chapter.content),
+      );
+      addTearDown(runtime.dispose);
+
+      final initialSignature = runtime.state.layoutSpec.presentationSignature;
+      expect(desiredSignature, isNot(initialSignature));
+
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
+      expect(runtime.state.hasStableWorld, isTrue);
+
+      // Prime Host bookkeeping with the presentation already committed.
+      host.syncRuntimeConfiguration(runtime, size, initialStyle);
+      await tester.pump();
+      await tester.pump();
+
+      final jump = runtime.jumpToChapter(1);
+      expect(
+        runtime.stateMachine.currentOperation?.kind,
+        ReaderV2OperationKind.jump,
+      );
+
+      host.syncRuntimeConfiguration(runtime, size, desiredStyle);
+      for (
+        var frame = 0;
+        frame < 6 &&
+            runtime.stateMachine.currentOperation?.kind !=
+                ReaderV2OperationKind.presentation;
+        frame++
+      ) {
+        await tester.pump();
+      }
+
+      expect(
+        runtime.stateMachine.currentOperation?.kind,
+        ReaderV2OperationKind.presentation,
+        reason: 'presentation 必須接手 jump 的 pending target 才算有效重現。',
+      );
+      expect(runtime.pendingLocation?.chapterIndex, 1);
+      expect(
+        runtime.stateMachine.stagedLayoutSpec?.presentationSignature,
+        desiredSignature,
+      );
+      expect(runtime.state.layoutSpec.presentationSignature, initialSignature);
+
+      targetContent.completeError(
+        const ReaderV2ContentUnavailableException('目標章節暫時無法取得'),
+      );
+      await jump;
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+
+      expect(runtime.stateMachine.currentOperation, isNull);
+      expect(runtime.stateMachine.stagedLayoutSpec, isNull);
+      expect(runtime.state.layoutSpec.presentationSignature, initialSignature);
+      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+
+      host.syncRuntimeConfiguration(runtime, size, desiredStyle);
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+
+      expect(
+        runtime.state.layoutSpec.presentationSignature,
+        desiredSignature,
+        reason:
+            'presentation 在 commit 前因 inherited target 載入失敗時，'
+            'Host 仍必須知道 desired presentation 尚未提交。',
+      );
+    },
+  );
+
+  testWidgets(
+    'host retries unapplied content settings after the Reader world changes',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final getIt = GetIt.instance;
+      await getIt.reset();
+      getIt.registerSingleton<BookDao>(_FakeBookDao());
+      getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
+      getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
+
+      final book = Book(
+        bookUrl: 'http://content-settings.test',
+        name: '正文設定測試書',
+        author: '作者',
+        origin: 'local',
+        originName: '本地',
+      );
+      final host = ReaderV2ControllerHost(
+        book: book,
+        initialChapters: [chapter(0), chapter(1)],
+        openTarget: null,
+        onChanged: () {},
+        onProgressPersisted: () {},
+        isMounted: () => true,
+      );
+      addTearDown(() async {
+        host.dispose();
+        await getIt.reset();
+      });
+
+      await host.settings.loadSettings();
+
+      const size = Size(220, 180);
+      const style = ReaderV2Style(
+        fontSize: 18,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 0.8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+        textIndent: 2,
+      );
+      final initialSpec = host.specFromStyle(size, style);
+
+      final loads = <int, int>{};
+      var failNextReload = false;
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        initialLayoutSpec: initialSpec,
+        contentLoader: (index, chapter) async {
+          loads[index] = (loads[index] ?? 0) + 1;
+          if (failNextReload) {
+            failNextReload = false;
+            throw const ReaderV2ContentUnavailableException(
+              '正文設定重新載入失敗',
+            );
+          }
+          return chapter.content;
+        },
+      );
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
+
+      Widget buildHarness() {
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(
+            builder: (_) {
+              host.syncRuntimeConfiguration(runtime, size, style);
+              return const SizedBox.expand();
+            },
+          ),
+        );
+      }
+
+      await tester.pumpWidget(buildHarness());
+      for (var frame = 0; frame < 8; frame++) {
+        await tester.pump();
+        if (runtime.stateMachine.currentOperation == null) break;
+      }
+      final chapter0Baseline = loads[0] ?? 0;
+      final generationBefore = host.settings.contentSettingsGeneration;
+
+      final nextChineseConvert = host.settings.chineseConvert == 1 ? 0 : 1;
+      host.settings.setChineseConvert(nextChineseConvert);
+      expect(
+        host.settings.contentSettingsGeneration,
+        greaterThan(generationBefore),
+      );
+
+      failNextReload = true;
+      await tester.pumpWidget(buildHarness());
+      for (var frame = 0;
+          frame < 12 &&
+              ((loads[0] ?? 0) < chapter0Baseline + 1 ||
+                  runtime.stateMachine.currentOperation != null);
+          frame++) {
+        await tester.pump();
+      }
+
+      expect(loads[0], chapter0Baseline + 1);
+      expect(runtime.stateMachine.currentOperation, isNull);
+      expect(runtime.takeUserNotice(), '正文設定重新載入失敗');
+
+      // Failure must not create a rebuild/retry loop in the same Reader world.
+      await tester.pumpWidget(buildHarness());
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+      expect(loads[0], chapter0Baseline + 1);
+
+      // The desired setting is still unapplied. Moving to a different Reader
+      // world must make it eligible for reconciliation again.
+      await runtime.jumpToChapter(1);
+      expect(loads[1], 1);
+
+      await tester.pumpWidget(buildHarness());
+      for (var frame = 0;
+          frame < 12 &&
+              ((loads[1] ?? 0) < 2 ||
+                  runtime.stateMachine.currentOperation != null);
+          frame++) {
+        await tester.pump();
+      }
+
+      expect(
+        loads[1],
+        2,
+        reason:
+            '失敗的正文設定 request 不能被永久視為 applied；'
+            'Reader world 改變後必須能重新收斂。',
+      );
+
+      // Once the same desired generation was applied successfully, rebuilds
+      // must stay quiet.
+      await tester.pumpWidget(buildHarness());
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+      expect(loads[1], 2);
+    },
+  );
 }

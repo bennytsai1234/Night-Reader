@@ -212,7 +212,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<void> reloadContentPreservingLocation() async {
+  Future<bool> reloadContentPreservingLocation() async {
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
@@ -226,10 +226,12 @@ class ReaderV2Runtime extends ChangeNotifier {
         previousContent: previousContent,
         token: token,
       );
-      if (!isCurrentOperationToken(token)) return;
+      if (!isCurrentOperationToken(token)) return true;
       await _positionViewport(location: remappedLocation, token: token);
+      return true;
     } on ReaderV2ContentUnavailableException catch (error) {
       _finishContentUnavailable(token, error);
+      return false;
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
