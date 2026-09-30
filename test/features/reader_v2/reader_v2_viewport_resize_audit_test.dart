@@ -1,3 +1,4 @@
+// Audit-only regression probe: no production behavior is changed here.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
