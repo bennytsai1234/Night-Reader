@@ -6,7 +6,7 @@ import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/local_book_service.dart';
 
 final File _journeyToTheWest = File(
-  '${Directory.current.path}${Platform.pathSeparator}samples${Platform.pathSeparator}西游记.txt',
+  '${Directory.current.path}${Platform.pathSeparator}test${Platform.pathSeparator}fixtures${Platform.pathSeparator}西游记.txt',
 );
 
 void main() {
@@ -14,7 +14,7 @@ void main() {
     expect(
       _journeyToTheWest.existsSync(),
       isTrue,
-      reason: '整合測試需要 samples/西游记.txt fixture。',
+      reason: '整合測試需要 test/fixtures/西游记.txt fixture。',
     );
   });
 
