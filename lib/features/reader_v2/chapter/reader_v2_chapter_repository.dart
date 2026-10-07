@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -89,6 +91,10 @@ class ReaderV2ChapterRepository {
   final Map<int, String> _materializedContentIdentities = <int, String>{};
   List<ReplaceRule>? _enabledRules;
   Future<List<ReplaceRule>>? _enabledRulesInFlight;
+  // reloadContent owns destructive semantic-cache refreshes. Keep one
+  // repository transaction active at a time so a successor can only
+  // snapshot a fully committed or fully rolled-back world.
+  Future<void> _reloadTail = Future<void>.value();
 
   List<BookChapter> get chapters => List<BookChapter>.unmodifiable(_chapters);
   int get chapterCount => _chapters.length;
@@ -192,7 +198,19 @@ class ReaderV2ChapterRepository {
   /// async work cannot become current later. [contentGeneration] advances after
   /// a successful explicit refresh, or when a reacquired materialized chapter
   /// proves that its committed identity changed outside this repository.
-  Future<ReaderV2Content> reloadContent(int chapterIndex) async {
+  Future<ReaderV2Content> reloadContent(int chapterIndex) {
+    final result = Completer<ReaderV2Content>();
+    _reloadTail = _reloadTail.then((_) async {
+      try {
+        result.complete(await _reloadContentTransaction(chapterIndex));
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+    return result.future;
+  }
+
+  Future<ReaderV2Content> _reloadContentTransaction(int chapterIndex) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
