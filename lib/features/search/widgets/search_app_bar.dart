@@ -1,154 +1,123 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/features/explore/widgets/glass_capsule.dart';
 import '../search_provider.dart';
+import 'search_field.dart';
+import 'sheet_header.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)
 ///
-/// 功能：
-/// - 搜尋輸入框
-/// - 搜尋範圍顯示按鈕（點擊觸發 onScopePressed）
-/// - 開始/停止搜尋按鈕
-/// - 精準搜尋切換（PopupMenu）
+/// Telegram 式搜尋頁首：上排是圓角搜尋框與「取消」，下排是玻璃膠囊：
+/// - 搜尋範圍（點擊觸發 onScopePressed）
+/// - 精準搜尋切換
+/// - 開始／停止搜尋
 class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final TextEditingController controller;
   final SearchProvider provider;
-  final Function(String) onSearch;
+  final ValueChanged<String> onSearch;
   final VoidCallback? onScopePressed;
-  final VoidCallback? onScopeMenuSelected;
+  final VoidCallback onCancel;
+  final bool autofocus;
 
   const SearchAppBar({
     super.key,
     required this.controller,
     required this.provider,
     required this.onSearch,
+    required this.onCancel,
     this.onScopePressed,
-    this.onScopeMenuSelected,
+    this.autofocus = false,
   });
+
+  static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
+
+  @override
+  Size get preferredSize => const GlassNavHeader(
+    bottomHeight: _bottomHeight,
+  ).preferredSize;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final scopeDisplay =
-        provider.scopeLoaded ? provider.searchScope.display : '載入中...';
-    final inputBackground = theme.colorScheme.surfaceContainerHighest;
-    final inputForeground = theme.colorScheme.onSurface;
-    final inputHint = theme.colorScheme.onSurfaceVariant;
+        provider.scopeLoaded ? provider.searchScope.display : '載入中…';
 
-    return AppBar(
-      titleSpacing: 0,
-      title: Row(
-        children: [
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: inputBackground,
-                borderRadius: AppRadius.cardMd,
-              ),
-              child: TextField(
+    return GlassNavHeader(
+      automaticallyImplyLeading: false,
+      titleWidget: Padding(
+        // NavigationToolbar 兩側已有 middleSpacing，補到與分組卡片對齊。
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppGrouped.margin - AppSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SearchField(
                 controller: controller,
-                decoration: InputDecoration(
-                  hintText: '搜尋書名或作者',
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(color: inputHint),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                ),
-                style: TextStyle(color: inputForeground),
-                textInputAction: TextInputAction.search,
+                hintText: '搜尋書名或作者',
+                autofocus: autofocus,
                 onSubmitted: onSearch,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: AppSpacing.md),
+            PlainTextAction(label: '取消', onPressed: onCancel),
+          ],
+        ),
       ),
-      actions: [
-        Tooltip(
-          message: '選擇搜尋範圍：$scopeDisplay',
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minWidth: 48,
-              minHeight: 48,
-              maxWidth: 104,
-            ),
-            child: InkWell(
-              onTap: onScopePressed,
-              borderRadius: AppRadius.cardXs,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        scopeDisplay,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.labelSm.copyWith(
-                          color:
-                              provider.searchScope.isAll
-                                  ? theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.7,
-                                  )
-                                  : theme.colorScheme.onSurface,
-                          fontWeight:
-                              provider.searchScope.isAll
-                                  ? FontWeight.normal
-                                  : FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ],
-                ),
+      bottomHeight: _bottomHeight,
+      bottom: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          0,
+          AppGrouped.margin,
+          AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Flexible(
+              child: GlassCapsule(
+                label: scopeDisplay,
+                icon: Icons.layers_outlined,
+                trailingIcon: Icons.expand_more_rounded,
+                selected: !provider.searchScope.isAll,
+                tooltip: '選擇搜尋範圍：$scopeDisplay',
+                onTap: onScopePressed,
               ),
             ),
-          ),
+            const SizedBox(width: AppSpacing.sm),
+            GlassCapsule(
+              label: '精準搜尋',
+              icon:
+                  provider.precisionSearch
+                      ? Icons.check_rounded
+                      : Icons.text_fields_rounded,
+              selected: provider.precisionSearch,
+              tooltip: '精準搜尋（完全匹配）',
+              onTap: provider.togglePrecisionSearch,
+            ),
+            const Spacer(),
+            const SizedBox(width: AppSpacing.sm),
+            GlassCapsule(
+              label: provider.isSearching ? '停止' : '搜尋',
+              icon:
+                  provider.isSearching
+                      ? Icons.stop_rounded
+                      : Icons.search_rounded,
+              foregroundColor: provider.isSearching ? scheme.error : null,
+              tooltip: provider.isSearching ? '停止搜尋' : '搜尋',
+              onTap: () {
+                if (provider.isSearching) {
+                  provider.stopSearch();
+                } else {
+                  onSearch(controller.text);
+                }
+              },
+            ),
+          ],
         ),
-        IconButton(
-          tooltip: provider.isSearching ? '停止搜尋' : '搜尋',
-          icon: Icon(
-            provider.isSearching ? Icons.stop_circle_outlined : Icons.search,
-            color:
-                provider.isSearching
-                    ? Theme.of(context).colorScheme.error
-                    : null,
-          ),
-          onPressed: () {
-            if (provider.isSearching) {
-              provider.stopSearch();
-            } else {
-              onSearch(controller.text);
-            }
-          },
-        ),
-        PopupMenuButton<String>(
-          tooltip: '搜尋設定',
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) {
-            if (value == 'precision') {
-              provider.togglePrecisionSearch();
-            }
-          },
-          itemBuilder:
-              (context) => [
-                CheckedPopupMenuItem<String>(
-                  value: 'precision',
-                  checked: provider.precisionSearch,
-                  child: const Text('精準搜尋（完全匹配）'),
-                ),
-              ],
-        ),
-      ],
+      ),
     );
   }
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }

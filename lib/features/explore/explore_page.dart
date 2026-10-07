@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/features/search/widgets/grouped_slice.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
+import 'widgets/folder_tabs.dart';
+import 'widgets/glass_capsule.dart';
 import 'widgets/legado_explore_kind_flow.dart';
-
-const String _allGroupsMenuValue = '__all_groups__';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -31,9 +38,14 @@ class _ExplorePageContent extends StatefulWidget {
   State<_ExplorePageContent> createState() => _ExplorePageContentState();
 }
 
+enum _SourceAction { edit, top, search, refresh, delete }
+
 class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
+
+  /// Scaffold 內容區的系統內距（含玻璃頁首與底部浮動分頁列）。
+  EdgeInsets _bodyPadding = EdgeInsets.zero;
 
   @override
   void dispose() {
@@ -44,108 +56,77 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExploreProvider>();
-    final theme = Theme.of(context);
+    final showTabs =
+        !provider.isLoadingSources &&
+        provider.sourceLoadError == null &&
+        provider.groups.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('發現'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: '搜尋書籍',
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SearchPage()),
-                ),
-          ),
-          if (!provider.isLoadingSources &&
-              provider.sourceLoadError == null &&
-              provider.groups.isNotEmpty)
-            PopupMenuButton<String>(
-              icon: Icon(
-                Icons.tune_rounded,
-                color:
-                    provider.selectedGroup == null
-                        ? null
-                        : theme.colorScheme.primary,
-              ),
-              tooltip: '按分組篩選',
-              onSelected:
-                  (value) => provider.setGroupFilter(
-                    value == _allGroupsMenuValue ? null : value,
+      extendBodyBehindAppBar: true,
+      backgroundColor: AppChrome.of(context).groupedBackground,
+      appBar: GlassNavHeader(
+        title: '發現',
+        backgroundColor: AppChrome.of(context).groupedBackground,
+        bottom:
+            showTabs
+                ? Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppGrouped.margin,
+                    0,
+                    AppGrouped.margin,
+                    AppSpacing.sm,
                   ),
-              itemBuilder: (ctx) {
-                final items = <PopupMenuEntry<String>>[
-                  PopupMenuItem<String>(
-                    value: _allGroupsMenuValue,
-                    child: _buildCheckedMenuRow(
-                      theme,
-                      checked: provider.selectedGroup == null,
-                      text: '全部',
-                    ),
+                  child: FolderTabs<String?>(
+                    tabs: [
+                      const FolderTab<String?>(null, '全部'),
+                      for (final group in provider.groups)
+                        FolderTab<String?>(group, group),
+                    ],
+                    selected: provider.selectedGroup,
+                    // 分組篩選以資料夾分頁切換；provider 對同一分組是切換語意，
+                    // 分頁只在選到不同分頁時回報，因此不會誤觸取消。
+                    onChanged: provider.setGroupFilter,
                   ),
-                ];
-                items.addAll(
-                  provider.groups.map((group) {
-                    return PopupMenuItem<String>(
-                      value: group,
-                      child: _buildCheckedMenuRow(
-                        theme,
-                        checked: provider.selectedGroup == group,
-                        text: group,
-                      ),
-                    );
-                  }),
-                );
-                return items;
-              },
-            ),
-        ],
+                )
+                : null,
+        bottomHeight: showTabs ? FolderTabs.height + AppSpacing.sm : 0,
       ),
-      body: _buildSourceList(provider, theme),
+      // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
+      body: Builder(
+        builder: (bodyContext) {
+          _bodyPadding = MediaQuery.paddingOf(bodyContext);
+          return _buildSourceList(provider);
+        },
+      ),
     );
   }
 
-  Widget _buildCheckedMenuRow(
-    ThemeData theme, {
-    required bool checked,
-    required String text,
-  }) {
-    return Row(
-      children: [
-        Icon(
-          checked ? Icons.check : Icons.circle_outlined,
-          size: AppSpacing.xl,
-          color: checked ? theme.colorScheme.primary : null,
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Text(
-          text,
-          style: TextStyle(
-            height: 1.2,
-            color: checked ? theme.colorScheme.primary : null,
-          ),
-        ),
-      ],
+  /// 狀態頁讓出頁首與底部浮動分頁列。
+  Widget _padState(Widget child) {
+    final padding = _bodyPadding;
+    return Padding(
+      padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
+      child: child,
     );
   }
 
-  Widget _buildSourceList(ExploreProvider provider, ThemeData theme) {
+  Widget _buildSourceList(ExploreProvider provider) {
     if (provider.isLoadingSources) {
-      return const Center(child: CircularProgressIndicator());
+      return _padState(const Center(child: CircularProgressIndicator()));
     }
 
     if (provider.sourceLoadError != null) {
-      return AppStateView(
-        icon: Icons.error_outline,
-        title: '發現書源載入失敗',
-        description: provider.sourceLoadError!,
-        tone: AppStateTone.error,
-        primaryAction: AppStateAction(
-          label: '重試',
-          icon: Icons.refresh,
-          onPressed: provider.refresh,
+      return _padState(
+        AppStateView(
+          icon: Icons.error_outline,
+          title: '發現書源載入失敗',
+          description: provider.sourceLoadError!,
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: provider.refresh,
+          ),
         ),
       );
     }
@@ -153,64 +134,72 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     if (provider.isEmpty &&
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
-      return AppStateView(
-        icon: Icons.travel_explore_outlined,
-        title: '目前沒有可用的發現書源',
-        description: '到書源管理啟用支援發現功能的書源。',
-        primaryAction: AppStateAction(
-          label: '管理書源',
-          icon: Icons.source_outlined,
-          onPressed:
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SourceManagerPage()),
-              ),
-        ),
-        secondaryAction: AppStateAction(
-          label: '重新整理',
-          icon: Icons.refresh,
-          onPressed: provider.refresh,
+      return _padState(
+        AppStateView(
+          icon: Icons.travel_explore_outlined,
+          title: '目前沒有可用的發現書源',
+          description: '到書源管理啟用支援發現功能的書源。',
+          primaryAction: AppStateAction(
+            label: '管理書源',
+            icon: Icons.source_outlined,
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+                ),
+          ),
+          secondaryAction: AppStateAction(
+            label: '重新整理',
+            icon: Icons.refresh,
+            onPressed: provider.refresh,
+          ),
         ),
       );
     }
 
     if (provider.isEmpty) {
-      return AppStateView(
-        icon: Icons.search_off,
-        title: '找不到符合條件的書源',
-        description: '清除搜尋或分組條件後再試一次。',
-        primaryAction: AppStateAction(
-          label: '清除條件',
-          icon: Icons.clear,
-          onPressed: () {
-            if (provider.selectedGroup != null) {
-              provider.setGroupFilter(null);
-            } else {
-              provider.setSearchQuery('');
-            }
-          },
-        ),
-        secondaryAction: AppStateAction(
-          label: '重新整理',
-          icon: Icons.refresh,
-          onPressed: provider.refresh,
+      return _padState(
+        AppStateView(
+          icon: Icons.search_off,
+          title: '找不到符合條件的書源',
+          description: '清除搜尋或分組條件後再試一次。',
+          primaryAction: AppStateAction(
+            label: '清除條件',
+            icon: Icons.clear,
+            onPressed: () {
+              if (provider.selectedGroup != null) {
+                provider.setGroupFilter(null);
+              } else {
+                provider.setSearchQuery('');
+              }
+            },
+          ),
+          secondaryAction: AppStateAction(
+            label: '重新整理',
+            icon: Icons.refresh,
+            onPressed: provider.refresh,
+          ),
         ),
       );
     }
 
+    final padding = _bodyPadding;
+    final count = provider.sources.length;
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(
-        0,
-        AppSpacing.xs,
-        0,
-        AppSpacing.md,
+      padding: EdgeInsets.only(
+        top: padding.top + AppSpacing.sm,
+        bottom: padding.bottom + AppSpacing.xl,
       ),
-      itemCount: provider.sources.length,
+      itemCount: count,
       itemBuilder: (context, index) {
         final source = provider.sources[index];
         final isExpanded = provider.expandedIndex == index;
-        return _buildSourceItem(provider, source, index, isExpanded, theme);
+        return GroupedSliceItem(
+          index: index,
+          count: count,
+          child: _buildSourceItem(provider, source, index, isExpanded),
+        );
       },
     );
   }
@@ -220,35 +209,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     BookSource source,
     int index,
     bool isExpanded,
-    ThemeData theme,
   ) {
-    final titleBackground = theme.colorScheme.primary.withValues(alpha: 0.06);
-    final titleForeground = theme.colorScheme.onSurface;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        0,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onLongPressStart:
-                (details) => _showSourceMenu(
-                  context,
-                  provider,
-                  source,
-                  details.globalPosition,
-                ),
-            child: Material(
-              color: titleBackground,
-              borderRadius: AppRadius.cardMd,
-              child: InkWell(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Builder(
+          builder:
+              (rowContext) => InkWell(
                 key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-                borderRadius: AppRadius.cardMd,
                 onTap: () {
                   provider.toggleExpand(index);
                   if (!isExpanded) {
@@ -257,175 +226,81 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                     });
                   }
                 },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.md,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          source.bookSourceName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            height: 1.3,
-                            color: titleForeground,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      if (isExpanded && provider.isLoadingKinds)
-                        SizedBox(
-                          width: AppSpacing.xl,
-                          height: AppSpacing.xl,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      if (isExpanded && provider.isLoadingKinds)
-                        const SizedBox(width: AppSpacing.sm),
-                      Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_down
-                            : Icons.chevron_right,
-                        size: AppSpacing.xl,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ],
-                  ),
+                onLongPress:
+                    () => _showSourceMenu(rowContext, provider, source),
+                child: _SourceRow(
+                  name: source.bookSourceName,
+                  expanded: isExpanded,
+                  loading: isExpanded && provider.isLoadingKinds,
                 ),
               ),
-            ),
-          ),
-          if (isExpanded && !provider.isLoadingKinds)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xs,
-                AppSpacing.xs,
-                AppSpacing.xs,
-                0,
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: AppRadius.cardMd,
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(
-                      alpha: 0.8,
+        ),
+        AnimatedSize(
+          duration: AppMotion.menu,
+          curve: AppMotion.menuCurve,
+          alignment: Alignment.topCenter,
+          child:
+              isExpanded && !provider.isLoadingKinds
+                  ? Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppGrouped.rowPadding,
+                      0,
+                      AppGrouped.rowPadding,
+                      AppSpacing.lg,
                     ),
-                  ),
-                ),
-                child:
-                    provider.expandedKinds.isEmpty
-                        ? Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                            vertical: AppSpacing.md,
-                          ),
-                          child: Text(
-                            '暫無分類',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              height: 1.4,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                        : _buildKindTags(provider, source, theme),
-              ),
-            ),
-        ],
-      ),
+                    child:
+                        provider.expandedKinds.isEmpty
+                            ? Text(
+                              '暫無分類',
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: AppChrome.of(context).sectionText,
+                              ),
+                            )
+                            : _buildKindTags(provider, source),
+                  )
+                  : const SizedBox(width: double.infinity),
+        ),
+      ],
     );
   }
 
-  Widget _buildKindTags(
-    ExploreProvider provider,
-    BookSource source,
-    ThemeData theme,
-  ) {
+  Widget _buildKindTags(ExploreProvider provider, BookSource source) {
     final kinds = provider.expandedKinds;
+    final chrome = AppChrome.of(context);
+    final error = Theme.of(context).colorScheme.error;
 
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      child: LegadoExploreKindFlow(
-        styles: kinds.map((kind) => kind.effectiveStyle).toList(),
-        children:
-            kinds.map((kind) {
-              final isError = kind.title.startsWith('ERROR:');
-              final hasUrl = kind.url != null && kind.url!.isNotEmpty;
-              final background =
+    return LegadoExploreKindFlow(
+      styles: kinds.map((kind) => kind.effectiveStyle).toList(),
+      children:
+          kinds.map((kind) {
+            final isError = kind.title.startsWith('ERROR:');
+            final hasUrl = kind.url != null && kind.url!.isNotEmpty;
+            return GlassCapsule(
+              label: isError ? '分類載入失敗' : kind.title,
+              maxLines: 2,
+              blur: false,
+              tint: chrome.groupedBackground,
+              foregroundColor: isError ? error : null,
+              onTap:
                   isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.06)
-                      : theme.colorScheme.primary.withValues(alpha: 0.05);
-              final borderColor =
-                  isError
-                      ? theme.colorScheme.error.withValues(alpha: 0.18)
-                      : theme.colorScheme.outlineVariant;
-              final textColor =
-                  isError
-                      ? theme.colorScheme.error
-                      : theme.colorScheme.onSurface;
-
-              return Material(
-                color: background,
-                borderRadius: AppRadius.cardMd,
-                child: InkWell(
-                  borderRadius: AppRadius.cardMd,
-                  onTap:
-                      isError
-                          ? () => _showKindError(context, kind)
-                          : hasUrl
-                          ? () => _navigateToExploreShow(source, kind)
-                          : null,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: AppSpacing.xxxl),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.xs,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: AppRadius.cardMd,
-                        border: Border.all(color: borderColor),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        isError ? '分類載入失敗' : kind.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          height: 1.2,
-                          color: textColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-      ),
+                      ? () => _showKindError(context, kind)
+                      : hasUrl
+                      ? () => _navigateToExploreShow(source, kind)
+                      : null,
+            );
+          }).toList(),
     );
   }
 
   void _showKindError(BuildContext context, ExploreKind kind) {
-    showDialog<void>(
+    showAppAlert<void>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('分類載入錯誤'),
-            content: SelectableText(kind.url ?? kind.title),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('關閉'),
-              ),
-            ],
-          ),
+      title: '分類載入錯誤',
+      content: SelectableText(
+        kind.url ?? kind.title,
+        style: AppTextStyles.bodySm,
+      ),
+      actions: const [AppAlertAction(label: '關閉', value: null, isDefault: true)],
     );
   }
 
@@ -444,117 +319,192 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   }
 
   Future<void> _showSourceMenu(
-    BuildContext context,
+    BuildContext rowContext,
     ExploreProvider provider,
     BookSource source,
-    Offset globalPosition,
   ) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final menuPosition = RelativeRect.fromRect(
-      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1),
-      Offset.zero & overlay.size,
-    );
-
-    final action = await showMenu<String>(
-      context: context,
-      position: menuPosition,
-      items: [
-        const PopupMenuItem<String>(value: 'edit', child: Text('編輯')),
-        const PopupMenuItem<String>(value: 'top', child: Text('置頂')),
-        const PopupMenuItem<String>(value: 'search', child: Text('搜尋')),
-        const PopupMenuItem<String>(value: 'refresh', child: Text('重新整理分類')),
-        const PopupMenuItem<String>(value: 'delete', child: Text('刪除')),
+    final action = await showContextPreviewMenu<_SourceAction>(
+      context: rowContext,
+      sourceRect: globalRectOf(rowContext),
+      previewRadius: AppGrouped.cardRadius,
+      preview: Material(
+        color: AppChrome.of(rowContext).groupedSurface,
+        child: _SourceRow(
+          name: source.bookSourceName,
+          expanded: false,
+          loading: false,
+        ),
+      ),
+      entries: const [
+        GlassMenuItem(
+          value: _SourceAction.edit,
+          label: '編輯',
+          icon: Icons.edit_outlined,
+        ),
+        GlassMenuItem(
+          value: _SourceAction.top,
+          label: '置頂',
+          icon: Icons.vertical_align_top_rounded,
+        ),
+        GlassMenuItem(
+          value: _SourceAction.search,
+          label: '搜尋',
+          icon: Icons.search_rounded,
+        ),
+        GlassMenuItem(
+          value: _SourceAction.refresh,
+          label: '重新整理分類',
+          icon: Icons.refresh_rounded,
+        ),
+        GlassMenuDivider(),
+        GlassMenuItem(
+          value: _SourceAction.delete,
+          label: '刪除',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
+        ),
       ],
     );
 
-    if (!context.mounted || action == null) return;
+    if (!mounted || action == null) return;
 
     try {
       switch (action) {
-        case 'edit':
+        case _SourceAction.edit:
           final full = await provider.getFullSource(source.bookSourceUrl);
-          if (full != null && context.mounted) {
+          if (full != null && mounted) {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
             );
           }
           return;
-        case 'top':
+        case _SourceAction.top:
           await provider.topSource(source);
           return;
-        case 'search':
+        case _SourceAction.search:
           final full = await provider.getFullSource(source.bookSourceUrl);
-          if (full == null || !context.mounted) return;
+          if (full == null || !mounted) return;
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
           );
           return;
-        case 'refresh':
+        case _SourceAction.refresh:
           await provider.refreshKindsCache(source);
           return;
-        case 'delete':
-          _confirmDelete(context, provider, source);
+        case _SourceAction.delete:
+          await _confirmDelete(provider, source);
           return;
       }
     } catch (error) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
     }
   }
 
-  void _confirmDelete(
-    BuildContext context,
-    ExploreProvider provider,
-    BookSource source,
-  ) {
-    showDialog<void>(
+  Future<void> _confirmDelete(ExploreProvider provider, BookSource source) async {
+    final confirmed = await showAppConfirm(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('確認'),
-            content: Text('確定刪除「${source.bookSourceName}」嗎？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  try {
-                    await provider.deleteSource(source);
-                  } catch (error) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('刪除書源失敗：$error')),
-                    );
-                  }
-                },
-                child: Text(
-                  '刪除',
-                  style: TextStyle(
-                    height: 1.2,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
+      title: '刪除書源',
+      message: '確定刪除「${source.bookSourceName}」嗎？',
+      confirmLabel: '刪除',
+      destructive: true,
     );
+    if (!confirmed) return;
+    try {
+      await provider.deleteSource(source);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+    }
   }
 
   Future<void> _ensureSourceVisible(String sourceUrl) async {
     final itemContext = _itemKeys[sourceUrl]?.currentContext;
     if (itemContext == null || !_scrollController.hasClients) return;
-    await Scrollable.ensureVisible(
-      itemContext,
-      duration: const Duration(milliseconds: 220),
-      alignment: 0.0,
+    final target = itemContext.findRenderObject();
+    if (target == null) return;
+    final viewport = RenderAbstractViewport.maybeOf(target);
+    if (viewport == null) return;
+    // 展開的書源捲到玻璃頁首與資料夾分頁下方，而不是被頁首蓋住。
+    final headerExtent = _bodyPadding.top;
+    final position = _scrollController.position;
+    final offset = (viewport.getOffsetToReveal(target, 0).offset -
+            headerExtent)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    await _scrollController.animateTo(
+      offset,
+      duration: AppMotion.fade,
       curve: Curves.easeOutCubic,
+    );
+  }
+}
+
+/// 書源列：名稱、載入中指示與展開箭頭。
+class _SourceRow extends StatelessWidget {
+  const _SourceRow({
+    required this.name,
+    required this.expanded,
+    required this.loading,
+  });
+
+  final String name;
+  final bool expanded;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AppGrouped.rowMinHeight),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppGrouped.rowPadding,
+          vertical: AppSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.bodyBase.copyWith(
+                  height: 1.3,
+                  color: scheme.onSurface,
+                  fontWeight: expanded ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            if (loading) ...[
+              SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            AnimatedRotation(
+              turns: expanded ? 0.25 : 0,
+              duration: AppMotion.menu,
+              curve: AppMotion.menuCurve,
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 22,
+                color: chrome.sectionText.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

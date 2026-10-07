@@ -1,196 +1,243 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
-import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../book_detail_provider.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
+/// Telegram 個人資料頁式的書籍頁首：置中封面、書名與作者，下方一排圓角
+/// 玻璃動作按鈕（圖示在上、小字在下）。
+///
+/// 頁面往上捲時這一區捲進玻璃頁首底下，由頁首標題接手顯示書名
+/// （見 [collapseOffset]）。
 class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
-  final Function(BuildContext, String, String) showPhotoView;
-  final VoidCallback onEdit;
-  final Function(BuildContext, Book) showSourceOptions;
-  final void Function(BuildContext, Book, ReaderV2OpenTarget, List<BookChapter>)
-  navigateToReader;
-  final Function(BuildContext, BookDetailProvider) showChangeSource;
-  final Future<void> Function(BuildContext, BookDetailProvider) toggleBookshelf;
+  final void Function(BuildContext context, String url, String heroTag)
+  showPhotoView;
+  final VoidCallback onRead;
+  final VoidCallback onToggleBookshelf;
+
+  /// 本機書沒有換源，傳 null 隱藏按鈕。
+  final VoidCallback? onChangeSource;
+  final VoidCallback onShowToc;
 
   const BookInfoHeader({
     super.key,
     required this.book,
     required this.provider,
     required this.showPhotoView,
-    required this.onEdit,
-    required this.showSourceOptions,
-    required this.navigateToReader,
-    required this.showChangeSource,
-    required this.toggleBookshelf,
+    required this.onRead,
+    required this.onToggleBookshelf,
+    required this.onChangeSource,
+    required this.onShowToc,
   });
+
+  static const double coverWidth = 108;
+  static const double coverHeight = 152;
+  static const double _topGap = AppSpacing.sm;
+
+  /// 書名第一行捲進頁首底下時的捲動位移；超過後頁首標題淡入。
+  static const double collapseOffset =
+      _topGap + coverHeight + AppSpacing.lg + 24;
 
   @override
   Widget build(BuildContext context) {
     final coverUrl = book.getDisplayCover();
-    final actionButtonStyle = ButtonStyle(
-      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(44)),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-      ),
-      textStyle: WidgetStatePropertyAll(
-        Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onLongPress: () {
-              if (coverUrl != null && coverUrl.isNotEmpty) {
-                showPhotoView(
-                  context,
-                  coverUrl,
-                  BookCoverWidget.heroTag(book.bookUrl),
-                );
-              }
-            },
-            child: Hero(
-              tag: BookCoverWidget.heroTag(book.bookUrl),
-              child: BookCoverWidget(
-                coverUrl: coverUrl,
-                bookName: context.zh(book.name),
-                author: context.zh(book.author),
-                width: 100,
-                height: 140,
-                borderRadius: AppRadius.cardXs,
-              ),
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    final author = context.zh(book.author).trim();
+
+    return Column(
+      children: [
+        const SizedBox(height: _topGap),
+        GestureDetector(
+          onLongPress: () {
+            if (coverUrl != null && coverUrl.isNotEmpty) {
+              showPhotoView(
+                context,
+                coverUrl,
+                BookCoverWidget.heroTag(book.bookUrl),
+              );
+            }
+          },
+          child: Hero(
+            tag: BookCoverWidget.heroTag(book.bookUrl),
+            child: BookCoverWidget(
+              coverUrl: coverUrl,
+              bookName: context.zh(book.name),
+              author: author,
+              width: coverWidth,
+              height: coverHeight,
+              borderRadius: AppRadius.cardXs,
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(context.zh(book.name), style: AppTextStyles.titleMd),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      tooltip: '編輯書籍資訊',
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text('作者：${context.zh(book.author)}', style: AppTextStyles.bodyMd),
-                const SizedBox(height: AppSpacing.xs),
-                if (book.isLocal)
-                  Text('來源：${book.originName}', style: AppTextStyles.bodySm)
-                else
-                  GestureDetector(
-                    onTap: () => showSourceOptions(context, book),
-                    child: Text(
-                      '來源：${book.originName}',
-                      style: AppTextStyles.bodySm.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: AppSpacing.sm),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: _SourceStatusChip(provider: provider),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => navigateToReader(
-                      context,
-                      book,
-                      ReaderV2OpenTarget.resume(book),
-                      provider.allChapters,
-                    ),
-                    style: actionButtonStyle,
-                    icon: const Icon(Icons.menu_book_rounded, size: 18),
-                    label: Text(
-                      book.hasStartedReading ? '繼續閱讀' : '開始閱讀',
-                    ),
-                  ),
-                ),
-                if (!provider.isInBookshelf) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => toggleBookshelf(context, provider),
-                      style: actionButtonStyle,
-                      icon: const Icon(Icons.library_add, size: 18),
-                      label: const Text('加入書架'),
-                    ),
-                  ),
-                ],
-                if (!book.isLocal)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () => showChangeSource(context, provider),
-                      child: const Text('換源', style: AppTextStyles.labelSm),
-                    ),
-                  ),
-              ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+          child: Text(
+            context.zh(book.name),
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.titleXl.copyWith(color: scheme.onSurface),
+          ),
+        ),
+        if (author.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+            child: Text(
+              author,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyBase.copyWith(color: chrome.sectionText),
             ),
           ),
         ],
-      ),
+        const SizedBox(height: AppSpacing.xl),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+          child: Row(
+            children: [
+              for (final (i, button) in [
+                _ActionButton(
+                  icon: Icons.menu_book_rounded,
+                  label: book.hasStartedReading ? '繼續閱讀' : '開始閱讀',
+                  onTap: onRead,
+                ),
+                _ActionButton(
+                  icon:
+                      provider.isInBookshelf
+                          ? Icons.library_add_check_rounded
+                          : Icons.library_add_outlined,
+                  label: provider.isInBookshelf ? '已在書架' : '加入書架',
+                  tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
+                  onTap: onToggleBookshelf,
+                ),
+                if (onChangeSource != null)
+                  _ActionButton(
+                    icon: Icons.swap_horiz_rounded,
+                    label: '換源',
+                    onTap: onChangeSource!,
+                  ),
+                _ActionButton(
+                  icon: Icons.format_list_bulleted_rounded,
+                  label: '目錄',
+                  onTap: onShowToc,
+                ),
+              ].indexed) ...[
+                if (i > 0) const SizedBox(width: AppSpacing.sm),
+                Expanded(child: button),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SourceStatusChip extends StatelessWidget {
-  const _SourceStatusChip({required this.provider});
+/// 頁首動作按鈕：圓角玻璃塊，圖示在上、小字在下（Telegram 個人頁按鈕）。
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  static const double _height = 58;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    Widget button = Semantics(
+      button: true,
+      label: tooltip ?? label,
+      excludeSemantics: true,
+      child: PressScale(
+        scale: 0.95,
+        onTap: onTap,
+        child: SizedBox(
+          height: _height,
+          child: GlassSurface(
+            borderRadius: AppRadius.cardMd,
+            shadow: false,
+            blur: false,
+            tint: AppChrome.of(context).groupedSurface,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 22, color: color),
+                const SizedBox(height: 3),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs,
+                  ),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.uiXs.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (tooltip != null && tooltip != label) {
+      button = Tooltip(message: tooltip!, child: button);
+    }
+    return button;
+  }
+}
+
+/// 書源狀態小標籤（正常／異常），放在「來源」列右側。
+class SourceStatusChip extends StatelessWidget {
+  const SourceStatusChip({super.key, required this.provider});
 
   final BookDetailProvider provider;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final healthy = provider.sourceStatusIsHealthy;
-    final color = healthy ? context.success : context.warning;
-    final foreground = healthy ? context.success : context.warning;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color =
+        healthy
+            ? (dark ? AppPalette.mossDark : AppPalette.moss)
+            : (dark ? AppPalette.teaDark : AppPalette.tea);
     return Tooltip(
       message: provider.sourceStatusDescription,
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
-          vertical: AppSpacing.xs,
+          vertical: 2,
         ),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
+          color: color.withValues(alpha: 0.12),
           borderRadius: AppRadius.pillShape,
-          border: Border.all(color: color.withValues(alpha: 0.35)),
         ),
         child: Text(
           provider.sourceStatusLabel,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: foreground,
-            fontWeight: FontWeight.w700,
+          style: AppTextStyles.labelXs.copyWith(
+            height: 1.3,
+            color: color,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

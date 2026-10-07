@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/features/explore/widgets/folder_tabs.dart';
+import 'package:night_reader/features/search/widgets/search_field.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
+/// 換源面板的篩選列：書源分組以資料夾分頁切換，下方是結果內篩選框。
 class BookDetailChangeSourceFilterBar extends StatelessWidget {
   const BookDetailChangeSourceFilterBar({
     super.key,
@@ -15,59 +17,29 @@ class BookDetailChangeSourceFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (provider.groups.length > 1)
-          SizedBox(
-            height: 40,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              itemCount: provider.groups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (ctx, index) {
-                final group = provider.groups[index];
-                final isSelected = provider.selectedGroup == group;
-                final scheme = Theme.of(context).colorScheme;
-                return FilterChip(
-                  label: Text(
-                    group,
-                    style: AppTextStyles.labelSm.copyWith(
-                      color: isSelected ? scheme.onPrimary : null,
-                    ),
-                  ),
-                  selected: isSelected,
-                  onSelected: (val) => provider.updateSelectedGroup(group),
-                  selectedColor: scheme.primary,
-                  showCheckmark: false,
-                  padding: EdgeInsets.zero,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                );
-              },
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (provider.groups.length > 1) ...[
+            FolderTabs<String>(
+              tabs: [
+                for (final group in provider.groups) FolderTab(group, group),
+              ],
+              selected: provider.selectedGroup,
+              onChanged: provider.updateSelectedGroup,
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.xs,
-          ),
-          child: TextField(
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          SearchField(
             controller: filterController,
-            decoration: InputDecoration(
-              hintText: '搜尋結果內篩選...',
-              prefixIcon: const Icon(Icons.search, size: 18),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.sm,
-              ),
-              border: OutlineInputBorder(borderRadius: AppRadius.cardMd),
-            ),
+            hintText: '搜尋結果內篩選',
+            textInputAction: TextInputAction.done,
             onChanged: provider.applyFilter,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

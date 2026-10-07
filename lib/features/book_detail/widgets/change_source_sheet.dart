@@ -6,8 +6,13 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_item.dart';
+import 'package:night_reader/features/search/widgets/grouped_slice.dart';
+import 'package:night_reader/features/search/widgets/sheet_header.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 換源面板選源後的處理結果（成功/失敗 + 提示訊息）。
 typedef ChangeSourceOutcome = ({bool success, String message});
@@ -85,46 +90,46 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
             .where((result) => result.name == widget.originalBook.name)
             .toList();
 
+    final chrome = AppChrome.of(context);
+    final count = sources.length;
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
       decoration: BoxDecoration(
-        color: Theme.of(context).canvasColor,
+        color: chrome.groupedBackground,
         borderRadius: AppRadius.topSheetLg,
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(provider),
-          const Divider(height: 1),
           BookDetailChangeSourceFilterBar(
             provider: provider,
             filterController: _filterController,
           ),
-          if (provider.isSearching || _isSwitchingSource)
-            const LinearProgressIndicator(minHeight: 2),
+          SizedBox(
+            height: 2,
+            child:
+                provider.isSearching || _isSwitchingSource
+                    ? const LinearProgressIndicator(minHeight: 2)
+                    : null,
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              AppSpacing.xs,
+              AppGrouped.margin + AppGrouped.rowPadding,
+              AppSpacing.sm,
+              AppGrouped.margin + AppGrouped.rowPadding,
+              AppSpacing.sm,
             ),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: GroupedSectionHeader(
                     _isSwitchingSource ? '正在切換來源…' : provider.status,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
                   ),
                 ),
-                if (sources.isNotEmpty)
-                  Text(
-                    '共 ${sources.length} 個來源',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+                if (count > 0) GroupedSectionHeader('共 $count 個來源'),
               ],
             ),
           ),
@@ -133,20 +138,36 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               ignoring: _isSwitchingSource,
               child:
                   sources.isEmpty && !provider.isSearching
-                      ? const Center(child: Text('未找到其他來源'))
-                      : ListView.separated(
-                        itemCount: sources.length,
-                        separatorBuilder: (ctx, i) => const Divider(height: 1),
+                      ? Center(
+                        child: Text(
+                          '未找到其他來源',
+                          style: AppTextStyles.bodyBase.copyWith(
+                            color: chrome.sectionText,
+                          ),
+                        ),
+                      )
+                      : ListView.builder(
+                        padding: EdgeInsets.only(
+                          bottom:
+                              MediaQuery.paddingOf(context).bottom +
+                              AppSpacing.xl,
+                        ),
+                        itemCount: count,
                         itemBuilder: (ctx, i) {
                           final result = sources[i];
-                          return BookDetailChangeSourceItem(
-                            searchBook: result,
-                            isCurrent:
-                                result.origin == widget.originalBook.origin,
-                            onTap:
-                                result.origin == widget.originalBook.origin
-                                    ? null
-                                    : () => _handleSelect(context, result),
+                          final isCurrent =
+                              result.origin == widget.originalBook.origin;
+                          return GroupedSliceItem(
+                            index: i,
+                            count: count,
+                            child: BookDetailChangeSourceItem(
+                              searchBook: result,
+                              isCurrent: isCurrent,
+                              onTap:
+                                  isCurrent
+                                      ? null
+                                      : () => _handleSelect(context, result),
+                            ),
                           );
                         },
                       ),
@@ -183,43 +204,36 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   }
 
   Widget _buildHeader(BookDetailChangeSourceProvider provider) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md,
+    final primary = Theme.of(context).colorScheme.primary;
+    return SheetHeader(
+      title: '更換來源',
+      leading: GlassIconButton(
+        icon:
+            provider.checkAuthor
+                ? Icons.person_rounded
+                : Icons.person_off_outlined,
+        iconSize: 20,
+        color: provider.checkAuthor ? primary : null,
+        tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
+        onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '更換來源',
-              style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.bold),
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              provider.checkAuthor ? Icons.person : Icons.person_off,
-              size: 20,
-            ),
-            onPressed:
-                _isSwitchingSource ? null : provider.toggleCheckAuthor,
-            tooltip: '校驗作者',
-          ),
-          if (provider.isSearching)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh, size: 20),
-              onPressed:
-                  _isSwitchingSource ? null : provider.startSearch,
-              tooltip: '重新搜尋',
-            ),
-        ],
-      ),
+      trailing:
+          provider.isSearching
+              ? const SizedBox.square(
+                dimension: AppGlass.buttonSize,
+                child: Center(
+                  child: SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+              : GlassIconButton(
+                icon: Icons.refresh_rounded,
+                iconSize: 20,
+                tooltip: '重新搜尋',
+                onPressed: _isSwitchingSource ? null : provider.startSearch,
+              ),
     );
   }
 }

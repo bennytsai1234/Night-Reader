@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/features/search/widgets/grouped_slice.dart';
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 
@@ -46,18 +49,28 @@ class _ExploreShowContent extends StatelessWidget {
     final provider = context.watch<ExploreShowProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: Text(exploreName)),
-      body: _buildBody(context, provider),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(title: exploreName),
+      // 從 Scaffold 內取內距，top 才包含延伸到下方的頁首高度。
+      body: Builder(
+        builder: (bodyContext) => _buildBody(bodyContext, provider),
+      ),
     );
   }
 
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
+    final padding = MediaQuery.paddingOf(context);
+    Widget padState(Widget child) => Padding(
+      padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
+      child: child,
+    );
+
     if (provider.isLoading && provider.books.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return padState(const Center(child: CircularProgressIndicator()));
     }
 
     if (provider.errorMessage != null && provider.books.isEmpty) {
-      return AppStateView(
+      return padState(AppStateView(
         icon: Icons.error_outline,
         title: '分類載入失敗',
         description: provider.errorMessage,
@@ -73,11 +86,11 @@ class _ExploreShowContent extends StatelessWidget {
           onPressed:
               () => _showErrorDialog(context, provider.errorMessage ?? ''),
         ),
-      );
+      ));
     }
 
     if (provider.isEmpty) {
-      return AppStateView(
+      return padState(AppStateView(
         icon: Icons.inbox_outlined,
         title: '這個分類目前沒有內容',
         description: '書源可能尚未提供資料，也可以稍後再試。',
@@ -86,13 +99,21 @@ class _ExploreShowContent extends StatelessWidget {
           icon: Icons.refresh,
           onPressed: provider.refresh,
         ),
-      );
+      ));
     }
 
     return RefreshIndicator(
+      edgeOffset: padding.top,
       onRefresh: () => provider.refresh(),
-      child: ListView.builder(
+      child: ListView.separated(
+        padding: EdgeInsets.only(
+          top: padding.top,
+          bottom: padding.bottom + AppSpacing.xl,
+        ),
         itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
+        separatorBuilder:
+            (_, __) =>
+                const InsetSeparator(indent: ExploreBookItem.textIndent),
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
             if (provider.errorMessage == null) {
@@ -137,22 +158,11 @@ class _ExploreShowContent extends StatelessWidget {
   }
 
   void _showErrorDialog(BuildContext context, String message) {
-    showDialog<void>(
+    showAppAlert<void>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('錯誤原因'),
-            content: SelectableText(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('關閉'),
-              ),
-            ],
-          ),
+      title: '錯誤原因',
+      content: SelectableText(message, style: AppTextStyles.bodySm),
+      actions: const [AppAlertAction(label: '關閉', value: null, isDefault: true)],
     );
   }
 }

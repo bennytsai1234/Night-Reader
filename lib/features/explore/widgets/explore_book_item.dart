@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../../book_detail/book_detail_page.dart';
@@ -8,7 +10,8 @@ import 'package:night_reader/core/services/chinese_display.dart';
 /// ExploreBookItem - 探索結果書籍項目
 /// (對標 Android ExploreShowAdapter + item_search 佈局)
 ///
-/// 列表式展示：封面、書名、作者、最新章節、簡介、分類標籤。
+/// Telegram 清單列樣式：左側封面，右側書名、作者與分類、最新章節、簡介；
+/// 按下整列高亮，列間分隔線從文字起點開始（[textIndent]）。
 class ExploreBookItem extends StatelessWidget {
   final SearchBook book;
   final bool isInBookshelf;
@@ -21,16 +24,32 @@ class ExploreBookItem extends StatelessWidget {
     this.sourceName,
   });
 
+  static const double coverWidth = 52;
+  static const double coverHeight = 70;
+
+  /// 文字起點；平鋪清單的分隔線從這裡開始。
+  static const double textIndent =
+      AppGrouped.margin + coverWidth + AppSpacing.lg;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final secondary = AppChrome.of(context).sectionText;
+    final kinds = _kinds(context);
+    final meta = [
+      if (book.author != null && book.author!.isNotEmpty)
+        context.zh(book.author!),
+      ...kinds,
+    ].join(' · ');
 
     return InkWell(
       onTap: () => _navigateToDetail(context),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.md,
+        padding: const EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          AppSpacing.md,
+          AppGrouped.margin,
+          AppSpacing.md,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,22 +58,24 @@ class ExploreBookItem extends StatelessWidget {
               coverUrl: book.coverUrl,
               bookName: context.zh(book.name),
               author: context.zh(book.author ?? ''),
-              width: 56,
-              height: 75,
+              width: coverWidth,
+              height: coverHeight,
               borderRadius: AppRadius.cardXs,
             ),
-            const SizedBox(width: AppSpacing.md),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
                           context.zh(book.name),
-                          style: theme.textTheme.titleSmall?.copyWith(
+                          style: AppTextStyles.bodyBase.copyWith(
                             height: 1.3,
+                            color: scheme.onSurface,
                             fontWeight: FontWeight.w600,
                           ),
                           maxLines: 2,
@@ -63,69 +84,47 @@ class ExploreBookItem extends StatelessWidget {
                       ),
                       if (isInBookshelf) ...[
                         const SizedBox(width: AppSpacing.sm),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            borderRadius: AppRadius.pillShape,
-                          ),
-                          child: Text(
-                            '書架',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              height: 1.2,
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                        const InfoBadge(),
                       ],
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  if (book.author != null && book.author!.isNotEmpty)
+                  if (meta.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      '作者：${context.zh(book.author!)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.4,
-                        color: theme.colorScheme.onSurfaceVariant,
+                      meta,
+                      style: AppTextStyles.bodySm.copyWith(
+                        height: 1.35,
+                        color: secondary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ],
                   if (book.latestChapterTitle != null &&
                       book.latestChapterTitle!.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
+                    const SizedBox(height: 2),
                     Text(
                       '最新：${context.zh(book.latestChapterTitle!)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.4,
-                        color: theme.colorScheme.onSurfaceVariant,
+                      style: AppTextStyles.bodySm.copyWith(
+                        height: 1.35,
+                        color: secondary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                   if (book.intro != null && book.intro!.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
+                    const SizedBox(height: 2),
                     Text(
-                      context.zh(book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim()),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        height: 1.45,
-                        color: theme.colorScheme.onSurfaceVariant,
+                      context.zh(
+                        book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                      ),
+                      style: AppTextStyles.bodySm.copyWith(
+                        height: 1.4,
+                        color: secondary.withValues(alpha: 0.85),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (book.kind != null && book.kind!.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
-                    Wrap(
-                      spacing: AppSpacing.xs,
-                      runSpacing: AppSpacing.xs,
-                      children: _buildKindTags(context, theme),
                     ),
                   ],
                 ],
@@ -137,37 +136,15 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildKindTags(BuildContext context, ThemeData theme) {
-    final kinds =
-        context
-            .zh(book.kind!)
-            .split(RegExp(r'[,，]'))
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .take(3)
-            .toList();
-
-    return kinds.map((kind) {
-      return Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm,
-          vertical: AppSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.28),
-          ),
-          borderRadius: AppRadius.cardXs,
-        ),
-        child: Text(
-          kind,
-          style: theme.textTheme.labelSmall?.copyWith(
-            height: 1.2,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }).toList();
+  List<String> _kinds(BuildContext context) {
+    if (book.kind == null || book.kind!.isEmpty) return const [];
+    return context
+        .zh(book.kind!)
+        .split(RegExp(r'[,，]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .take(3)
+        .toList();
   }
 
   void _navigateToDetail(BuildContext context) {
@@ -181,6 +158,33 @@ class ExploreBookItem extends StatelessWidget {
                 sources: [book.originName ?? sourceName ?? '發現'],
               ),
             ),
+      ),
+    );
+  }
+}
+
+/// 書名旁的小徽章（「書架」、書源數）；搜尋結果與發現清單共用。
+class InfoBadge extends StatelessWidget {
+  const InfoBadge({super.key, this.label = '書架'});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: AppRadius.pillShape,
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.labelXs.copyWith(
+          height: 1.3,
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

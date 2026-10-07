@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:night_reader/core/services/app_permission_service.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'change_cover_provider.dart';
 import 'book_detail_provider.dart';
@@ -75,35 +77,39 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: chrome.groupedBackground,
         borderRadius: AppRadius.topSheetXl,
       ),
-      child: Column(
-        children: [
-          _buildHandle(),
-          CoverHeader(bookName: widget.bookName, author: widget.author),
-          Expanded(child: _buildCoverGrid()),
-          CoverManualInput(
-            urlController: _urlController,
-            onPickImage: _pickImage,
-          ),
-        ],
+      child: SafeArea(
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHandle(chrome),
+            CoverHeader(bookName: widget.bookName, author: widget.author),
+            Expanded(child: _buildCoverGrid()),
+            CoverManualInput(
+              urlController: _urlController,
+              onPickImage: _pickImage,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHandle() => Center(
+  Widget _buildHandle(AppChrome chrome) => Center(
     child: Container(
-      margin: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      width: 40,
-      height: 4,
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      width: 36,
+      height: 5,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        borderRadius: BorderRadius.circular(2),
+        color: chrome.sectionText.withValues(alpha: 0.35),
+        borderRadius: AppRadius.pillShape,
       ),
     ),
   );
@@ -115,10 +121,22 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
           return const Center(child: CircularProgressIndicator());
         }
         if (provider.covers.isEmpty && !provider.isSearching) {
-          return const Center(child: Text('未找到相關封面'));
+          return Center(
+            child: Text(
+              '未找到相關封面',
+              style: AppTextStyles.bodyBase.copyWith(
+                color: AppChrome.of(context).sectionText,
+              ),
+            ),
+          );
         }
         return GridView.builder(
-          padding: const EdgeInsets.only(top: AppSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.lg,
+            AppGrouped.margin,
+            AppSpacing.sm,
+          ),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             childAspectRatio: 0.65,

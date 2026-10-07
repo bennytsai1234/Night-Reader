@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import '../search_provider.dart';
 import '../../book_detail/book_detail_page.dart';
+import '../../explore/widgets/explore_book_item.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
 class SearchResultItem extends StatefulWidget {
@@ -29,193 +31,18 @@ class _SearchResultItemState extends State<SearchResultItem> {
   Widget build(BuildContext context) {
     final book = widget.result.book;
     final sourceCount = widget.result.sources.length;
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final secondary = AppChrome.of(context).sectionText;
     final metadata = formatSearchResultMetadata(
       author: context.zh(book.author),
       kind: context.zh(book.kind ?? ''),
       wordCount: book.wordCount,
     );
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      leading: BookCoverWidget(
-        coverUrl: book.coverUrl,
-        bookName: context.zh(book.name),
-        author: context.zh(book.author),
-        width: 45,
-        height: 60,
-        borderRadius: AppRadius.cardXs,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              context.zh(book.name),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall?.copyWith(
-                height: 1.3,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (widget.isInBookshelf) ...[
-            Container(
-              margin: const EdgeInsets.only(left: AppSpacing.sm),
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: AppRadius.pillShape,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.library_add_check,
-                    size: 12,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    '書架',
-                    style: AppTextStyles.labelXs.copyWith(
-                      height: 1.2,
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (sourceCount > 1)
-            Container(
-              margin: const EdgeInsets.only(left: AppSpacing.sm),
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: AppRadius.pillShape,
-              ),
-              child: Text(
-                '$sourceCount 個書源',
-                style: AppTextStyles.labelXs.copyWith(
-                  height: 1.2,
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            metadata,
-            style: AppTextStyles.bodySm.copyWith(height: 1.35),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.bodySm.copyWith(
-              height: 1.35,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          GestureDetector(
-            onTap:
-                sourceCount > 1
-                    ? () => setState(() => _sourcesExpanded = !_sourcesExpanded)
-                    : null,
-            child:
-                _sourcesExpanded
-                    ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              '來源（$sourceCount）：',
-                              style: AppTextStyles.labelSm.copyWith(
-                                height: 1.35,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            Icon(
-                              Icons.expand_less,
-                              size: 16,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Wrap(
-                          spacing: AppSpacing.xs,
-                          runSpacing: AppSpacing.xs,
-                          children:
-                              widget.result.sources
-                                  .map(
-                                    (source) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.sm,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.onSurfaceVariant
-                                            .withValues(alpha: 0.12),
-                                        borderRadius: AppRadius.cardXs,
-                                      ),
-                                      child: Text(
-                                        source,
-                                        style: AppTextStyles.labelXs.copyWith(
-                                          height: 1.25,
-                                          color:
-                                              theme.colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                        ),
-                      ],
-                    )
-                    : Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '來源：${widget.result.sources.join('、')}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.labelSm.copyWith(
-                              height: 1.35,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        if (sourceCount > 1)
-                          Icon(
-                            Icons.expand_more,
-                            size: 16,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                      ],
-                    ),
-          ),
-        ],
-      ),
+    final secondaryStyle = AppTextStyles.bodySm.copyWith(
+      height: 1.35,
+      color: secondary,
+    );
+    return InkWell(
       onTap: () {
         context.read<SearchProvider>().stopSearch();
         Navigator.push(
@@ -225,6 +52,144 @@ class _SearchResultItemState extends State<SearchResultItem> {
           ),
         );
       },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          AppSpacing.md,
+          AppGrouped.margin,
+          AppSpacing.md,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            BookCoverWidget(
+              coverUrl: book.coverUrl,
+              bookName: context.zh(book.name),
+              author: context.zh(book.author),
+              width: ExploreBookItem.coverWidth,
+              height: ExploreBookItem.coverHeight,
+              borderRadius: AppRadius.cardXs,
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          context.zh(book.name),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodyBase.copyWith(
+                            height: 1.3,
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (widget.isInBookshelf) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        const InfoBadge(),
+                      ],
+                      if (sourceCount > 1) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        InfoBadge(label: '$sourceCount 個書源'),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    metadata,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: secondaryStyle,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: secondaryStyle,
+                  ),
+                  const SizedBox(height: 2),
+                  _buildSources(context, sourceCount, secondary),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSources(BuildContext context, int sourceCount, Color color) {
+    final style = AppTextStyles.labelSm.copyWith(height: 1.35, color: color);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap:
+          sourceCount > 1
+              ? () => setState(() => _sourcesExpanded = !_sourcesExpanded)
+              : null,
+      child: AnimatedSize(
+        duration: AppMotion.menu,
+        curve: AppMotion.menuCurve,
+        alignment: Alignment.topLeft,
+        child:
+            _sourcesExpanded
+                ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('來源（$sourceCount）', style: style),
+                        Icon(Icons.expand_less_rounded, size: 16, color: color),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        for (final source in widget.result.sources)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: AppRadius.pillShape,
+                            ),
+                            child: Text(
+                              source,
+                              style: AppTextStyles.labelXs.copyWith(
+                                height: 1.25,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                )
+                : Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '來源：${widget.result.sources.join('、')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: style,
+                      ),
+                    ),
+                    if (sourceCount > 1)
+                      Icon(Icons.expand_more_rounded, size: 16, color: color),
+                  ],
+                ),
+      ),
     );
   }
 }

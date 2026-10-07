@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import '../models/search_scope.dart';
+import 'grouped_slice.dart';
+import 'search_field.dart';
+import 'sheet_header.dart';
 
 /// SearchScopeSheet - 搜尋範圍選擇底部彈窗
 /// (對標 Legado SearchScopeDialog)
 ///
 /// 功能：
-/// - 分組模式（Checkbox 多選）
-/// - 書源模式（Radio 單選）
+/// - 分組模式（打勾列多選）
+/// - 書源模式（打勾列單選）
 /// - 書源模式支援搜尋篩選
 /// - 「全部書源」快捷按鈕
 class SearchScopeSheet extends StatefulWidget {
@@ -37,6 +43,7 @@ class SearchScopeSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: AppChrome.of(context).groupedBackground,
       builder:
           (_) => SearchScopeSheet(
             currentScope: currentScope,
@@ -50,9 +57,11 @@ class SearchScopeSheet extends StatefulWidget {
   State<SearchScopeSheet> createState() => _SearchScopeSheetState();
 }
 
-class _SearchScopeSheetState extends State<SearchScopeSheet>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+/// 範圍面板的兩種選法。
+enum _ScopeMode { groups, source }
+
+class _SearchScopeSheetState extends State<SearchScopeSheet> {
+  late _ScopeMode _mode;
   final Set<String> _selectedGroups = {};
   BookSource? _selectedSource;
   List<BookSource> _allSources = [];
@@ -64,11 +73,8 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.currentScope.isSource ? 1 : 0,
-    );
+    _mode =
+        widget.currentScope.isSource ? _ScopeMode.source : _ScopeMode.groups;
     if (!widget.currentScope.isAll && !widget.currentScope.isSource) {
       _selectedGroups.addAll(widget.currentScope.displayNames);
     }
@@ -127,15 +133,12 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,
@@ -143,59 +146,47 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
       expand: false,
       builder: (context, scrollController) {
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            SheetHeader(
+              title: '搜尋範圍',
+              leading: PlainTextAction(
+                label: '全部書源',
+                onPressed: () {
+                  widget.onScopeChanged(SearchScope());
+                  Navigator.pop(context);
+                },
+              ),
+              trailing: PlainTextAction(
+                label: '確定',
+                emphasized: true,
+                onPressed: _onConfirm,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
+                AppGrouped.margin,
+                AppSpacing.xs,
+                AppGrouped.margin,
                 AppSpacing.sm,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '搜尋範圍',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Wrap(
-                      spacing: AppSpacing.md,
-                      runSpacing: AppSpacing.sm,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            widget.onScopeChanged(SearchScope());
-                            Navigator.pop(context);
-                          },
-                          child: const Text('全部書源'),
-                        ),
-                        FilledButton(
-                          onPressed: _onConfirm,
-                          child: const Text('確定'),
-                        ),
-                      ],
-                    ),
-                  ),
+              child: GlassSegmented<_ScopeMode>(
+                segments: const [
+                  GlassSegment(_ScopeMode.groups, '分組'),
+                  GlassSegment(_ScopeMode.source, '書源'),
                 ],
+                selected: _mode,
+                onChanged: (mode) => setState(() => _mode = mode),
               ),
             ),
-            TabBar(
-              controller: _tabController,
-              tabs: const [Tab(text: '分組'), Tab(text: '書源')],
-            ),
+            // 兩種清單共用面板的捲動控制器，不做交叉淡入，避免同時掛上兩個清單。
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildGroupTab(scrollController),
-                  _buildSourceTab(scrollController),
-                ],
+              child: KeyedSubtree(
+                key: ValueKey(_mode),
+                child:
+                    _mode == _ScopeMode.groups
+                        ? _buildGroupTab(scrollController)
+                        : _buildSourceTab(scrollController),
               ),
             ),
           ],
@@ -204,36 +195,63 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
     );
   }
 
+  Widget _emptyHint(String text) {
+    return Center(
+      child: Text(
+        text,
+        style: AppTextStyles.bodyBase.copyWith(
+          color: AppChrome.of(context).sectionText,
+        ),
+      ),
+    );
+  }
+
+  EdgeInsets _listPadding() => EdgeInsets.only(
+    top: AppSpacing.sm,
+    bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.xl,
+  );
+
   Widget _buildGroupTab(ScrollController scrollController) {
     if (widget.groups.isEmpty) {
-      return Center(
-        child: Text(
-          '暫無分組',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
+      return _emptyHint('暫無分組');
     }
 
+    final primary = Theme.of(context).colorScheme.primary;
+    final count = widget.groups.length;
     return ListView.builder(
       controller: scrollController,
-      itemCount: widget.groups.length,
+      padding: _listPadding(),
+      itemCount: count,
       itemBuilder: (context, index) {
         final group = widget.groups[index];
         final isSelected = _selectedGroups.contains(group);
-        return CheckboxListTile(
-          title: Text(group),
-          value: isSelected,
-          onChanged: (checked) {
-            setState(() {
-              if (checked == true) {
-                _selectedGroups.add(group);
-              } else {
-                _selectedGroups.remove(group);
-              }
-            });
-          },
+        // 分組可複選：打勾表示納入，不套用互斥語意的 GroupedCheckRow。
+        return GroupedSliceItem(
+          index: index,
+          count: count,
+          child: Semantics(
+            checked: isSelected,
+            child: GroupedRow(
+              title: group,
+              showChevron: false,
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedGroups.remove(group);
+                  } else {
+                    _selectedGroups.add(group);
+                  }
+                });
+              },
+              trailing: SizedBox(
+                width: 22,
+                child:
+                    isSelected
+                        ? Icon(Icons.check_rounded, size: 22, color: primary)
+                        : null,
+              ),
+            ),
+          ),
         );
       },
     );
@@ -248,97 +266,64 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('書源載入失敗'),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton.icon(
-              onPressed: _loadSources,
-              icon: const Icon(Icons.refresh),
-              label: const Text('重試'),
+            Text(
+              '書源載入失敗',
+              style: AppTextStyles.bodyBase.copyWith(
+                color: AppChrome.of(context).sectionText,
+              ),
             ),
+            const SizedBox(height: AppSpacing.sm),
+            PlainTextAction(label: '重試', onPressed: _loadSources),
           ],
         ),
       );
     }
 
+    final count = _filteredSources.length;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md,
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.xs,
+            AppGrouped.margin,
+            AppSpacing.xs,
           ),
-          child: TextField(
+          child: SearchField(
             controller: _searchController,
-            decoration: InputDecoration(
-              hintText: '搜尋書源',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              isDense: true,
-              border: const OutlineInputBorder(
-                borderRadius: AppRadius.cardMd,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.md,
-              ),
-            ),
+            hintText: '搜尋書源',
+            textInputAction: TextInputAction.done,
             onChanged: _filterSources,
           ),
         ),
         Expanded(
           child:
-              _filteredSources.isEmpty
-                  ? Center(
-                    child: Text(
-                      _allSources.isEmpty
-                          ? '目前沒有可搜尋的書源'
-                          : '找不到符合條件的書源',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+              count == 0
+                  ? _emptyHint(
+                    _allSources.isEmpty ? '目前沒有可搜尋的書源' : '找不到符合條件的書源',
                   )
-                  : RadioGroup<String>(
-                    groupValue: _selectedSource?.bookSourceUrl,
-                    onChanged: (String? value) {
-                      if (value != null) {
-                        setState(() {
-                          _selectedSource = _filteredSources.firstWhere(
-                            (s) => s.bookSourceUrl == value,
-                          );
-                        });
-                      }
+                  : ListView.builder(
+                    controller: scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: _listPadding(),
+                    itemCount: count,
+                    itemBuilder: (context, index) {
+                      final source = _filteredSources[index];
+                      return GroupedSliceItem(
+                        index: index,
+                        count: count,
+                        child: GroupedCheckRow(
+                          title: source.bookSourceName,
+                          subtitle: source.bookSourceUrl,
+                          selected:
+                              _selectedSource?.bookSourceUrl ==
+                              source.bookSourceUrl,
+                          onTap: () => setState(() => _selectedSource = source),
+                        ),
+                      );
                     },
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: _filteredSources.length,
-                      itemBuilder: (context, index) {
-                        final source = _filteredSources[index];
-                        return ListTile(
-                          leading: Radio<String>(value: source.bookSourceUrl),
-                          title: Text(
-                            source.bookSourceName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            source.bookSourceUrl,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.labelXs.copyWith(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          onTap: () {
-                            setState(() {
-                              _selectedSource = source;
-                            });
-                          },
-                        );
-                      },
-                    ),
                   ),
         ),
       ],
@@ -347,7 +332,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
 
   void _onConfirm() {
     final SearchScope newScope;
-    if (_tabController.index == 0) {
+    if (_mode == _ScopeMode.groups) {
       newScope =
           _selectedGroups.isEmpty
               ? SearchScope()

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import '../../book_detail_provider.dart';
 
 class CoverGridItem extends StatelessWidget {
@@ -14,7 +16,9 @@ class CoverGridItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDefault = result.book.bookUrl == 'use_default_cover';
-    return GestureDetector(
+    final chrome = AppChrome.of(context);
+    return PressScale(
+      scale: 0.95,
       onTap: () async {
         final outcome = await context.read<BookDetailProvider>().updateCover(
           isDefault ? '' : (result.book.coverUrl ?? ''),
@@ -53,10 +57,7 @@ class CoverGridItem extends StatelessWidget {
                         fit: BoxFit.cover,
                         placeholder:
                             (context, url) => Container(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                              color: chrome.groupedSurface,
                               child: const Center(
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
@@ -65,10 +66,7 @@ class CoverGridItem extends StatelessWidget {
                             ),
                         errorWidget:
                             (context, url, error) => Container(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerHighest,
+                              color: chrome.groupedSurface,
                               child: Icon(
                                 Icons.broken_image,
                                 color:
@@ -83,7 +81,7 @@ class CoverGridItem extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             isDefault ? '恢復預設' : (result.book.originName ?? '未知來源'),
-            style: AppTextStyles.micro,
+            style: AppTextStyles.labelXs.copyWith(color: chrome.sectionText),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
