@@ -1660,7 +1660,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       sourceStart - groupStart,
       sourceEnd - groupStart,
     );
-    final boxes = entry.paragraph.getBoxesForRange(local.start, local.end);
+    final boxes = _boxesPerLine(
+      entry.paragraph,
+      entry.paragraph.getBoxesForRange(local.start, local.end),
+    );
     if (boxes.isEmpty) return boxes;
     return <ui.TextBox>[
       for (final box in boxes)
@@ -1672,6 +1675,63 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
           box.direction,
         ),
     ];
+  }
+
+  /// 每條視覺行併成一個框，垂直方向夾在該行的行格內。
+  ///
+  /// Paragraph 回傳的 glyph box 高度是字型自身的 ascent + descent
+  /// （Noto Sans CJK 約 1.45 em），不隨行高倍率縮放：行高設得比這小時，
+  /// 相鄰兩行的框會疊進對方；同一行裡不同字型的 run（中文、拉丁字、
+  /// 數字）高度也各不相同。以行格為界，上下兩行的框恰好相接。
+  List<ui.TextBox> _boxesPerLine(
+    ui.Paragraph paragraph,
+    List<ui.TextBox> boxes,
+  ) {
+    if (boxes.isEmpty) return boxes;
+    final lines = <int, ui.TextBox>{};
+    for (final box in boxes) {
+      final glyph = paragraph.getClosestGlyphInfoForOffset(
+        Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2),
+      );
+      final lineNumber = glyph == null
+          ? null
+          : paragraph.getLineNumberAt(glyph.graphemeClusterCodeUnitRange.start);
+      if (lineNumber == null) continue;
+      final existing = lines[lineNumber];
+      lines[lineNumber] = existing == null
+          ? box
+          : ui.TextBox.fromLTRBD(
+              math.min(existing.left, box.left),
+              math.min(existing.top, box.top),
+              math.max(existing.right, box.right),
+              math.max(existing.bottom, box.bottom),
+              box.direction,
+            );
+    }
+    final result = <ui.TextBox>[];
+    for (final MapEntry(key: lineNumber, value: box) in lines.entries) {
+      final line = paragraph.getLineMetricsAt(lineNumber);
+      if (line == null) {
+        result.add(box);
+        continue;
+      }
+      final slotTop = line.baseline - line.ascent;
+      var slotBottom = slotTop + line.height;
+      final next = paragraph.getLineMetricsAt(lineNumber + 1);
+      if (next != null) {
+        slotBottom = math.min(slotBottom, next.baseline - next.ascent);
+      }
+      result.add(
+        ui.TextBox.fromLTRBD(
+          box.left,
+          math.max(box.top, slotTop),
+          box.right,
+          math.min(box.bottom, slotBottom),
+          box.direction,
+        ),
+      );
+    }
+    return result;
   }
 
   Rect? _worldRectForRange(ChapterBlocks blocks, int start, int end) {
@@ -1892,30 +1952,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       if (top == null) continue;
       final boxes = _blockLocalBoxesForRange(blocks, block, range);
       if (boxes == null || boxes.isEmpty) continue;
-      // 同一條視覺行可能回傳多個 run 的 box，合併成一個框。
-      final lines = <double, ui.TextBox>{};
       for (final box in boxes) {
-        final key = box.top.roundToDouble();
-        final existing = lines[key];
-        lines[key] = existing == null
-            ? box
-            : ui.TextBox.fromLTRBD(
-                math.min(existing.left, box.left),
-                math.min(existing.top, box.top),
-                math.max(existing.right, box.right),
-                math.max(existing.bottom, box.bottom),
-                box.direction,
-              );
-      }
-      for (final box in lines.values) {
-        result.add(
-          HybridLineBox(
-            left: paintLeft + box.left,
-            top: top + box.top - offset,
-            right: paintLeft + box.right,
-            bottom: top + box.bottom - offset,
-          ),
+        final lineBox = HybridLineBox(
+          left: paintLeft + box.left,
+          top: top + box.top - offset,
+          right: paintLeft + box.right,
+          bottom: top + box.bottom - offset,
         );
+        // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
+        // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
+        // 一行；併成一個框，避免半透明色在接縫處疊深。
+        final previous = result.isEmpty ? null : result.last;
+        if (previous != null &&
+            math.min(previous.bottom, lineBox.bottom) -
+                    math.max(previous.top, lineBox.top) >
+                0.5) {
+          result[result.length - 1] = HybridLineBox(
+            left: math.min(previous.left, lineBox.left),
+            top: math.min(previous.top, lineBox.top),
+            right: math.max(previous.right, lineBox.right),
+            bottom: math.max(previous.bottom, lineBox.bottom),
+          );
+        } else {
+          result.add(lineBox);
+        }
       }
     }
     return result;
