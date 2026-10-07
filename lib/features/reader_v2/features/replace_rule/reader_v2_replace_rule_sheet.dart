@@ -8,9 +8,11 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({
@@ -126,121 +128,125 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       title: '替換規則',
       icon: Icons.rule_rounded,
       children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          secondary: const Icon(Icons.auto_fix_high_rounded),
-          title: const Text('本書套用替換規則'),
-          subtitle: Text(_updatingToggle ? '正在套用設定…' : '切換後會重載目前閱讀位置內容'),
-          value: _useReplaceRule,
-          onChanged: _updatingToggle ? null : _setUseReplaceRule,
-        ),
-        FutureBuilder<List<ReplaceRule>>(
-          future: _enabledRulesFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.fact_check_rounded),
-                title: Text('啟用狀態'),
-                subtitle: Text('正在讀取本書可套用規則'),
-                trailing: SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              );
-            }
-            if (snapshot.hasError) {
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  Icons.error_outline,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                title: const Text('規則讀取失敗'),
-                subtitle: const Text('無法取得本書目前可套用的規則'),
-                trailing: TextButton(
-                  onPressed: () => setState(_reloadEnabledRules),
-                  child: const Text('重試'),
-                ),
-              );
-            }
-            final rules = snapshot.data ?? const <ReplaceRule>[];
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.fact_check_rounded),
-              title: const Text('啟用狀態'),
-              subtitle: Text('本書可套用 ${rules.length} 條規則'),
-              trailing:
-                  rules.isEmpty
-                      ? null
-                      : Text(
-                        '${rules.length}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-            );
-          },
-        ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.add_circle_outline_rounded),
-          title: const Text('新增規則'),
-          subtitle: const Text('直接建立一條新的替換規則'),
-          onTap: () async {
-            await ReaderV2ReplaceRuleEditorSheet.show(
-              context,
-              onSave: (rule) async {
-                final nextOrder = (await widget.replaceDao.getAll()).length;
-                rule.order = nextOrder;
-                await widget.replaceDao.upsert(rule);
-              },
-            );
-            if (!mounted) return;
-            setState(_reloadEnabledRules);
-            await widget.onReload();
-          },
-        ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.settings_rounded),
-          title: const Text('管理規則'),
-          subtitle: const Text('新增、編輯、啟用或刪除規則'),
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ReaderV2ReplaceRulePage(),
-              ),
-            );
-            if (!mounted) return;
-            setState(_reloadEnabledRules);
-            await widget.onReload();
-          },
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          '即時測試',
-          style: AppTextStyles.uiSm.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        TextField(
-          controller: _testController,
-          minLines: 3,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: '輸入一段文本，測試本書正文實際套用規則',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
+        GroupedSection(
+          margin: EdgeInsets.zero,
+          topGap: 0,
+          separatorIndent: AppGrouped.separatorIndentWithIcon,
           children: [
-            FilledButton(
-              onPressed: _testing ? null : _runTest,
-              child: Text(_testing ? '測試中…' : '執行測試'),
+            GroupedSwitchRow(
+              leading: const GroupedIconTile(Icons.auto_fix_high_rounded),
+              title: '本書套用替換規則',
+              subtitle: _updatingToggle ? '正在套用設定…' : '切換後會重載目前閱讀位置內容',
+              value: _useReplaceRule,
+              onChanged: _updatingToggle ? null : _setUseReplaceRule,
             ),
-            const SizedBox(width: AppSpacing.sm),
-            TextButton(
-              onPressed:
+            FutureBuilder<List<ReplaceRule>>(
+              future: _enabledRulesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const GroupedRow(
+                    leading: GroupedIconTile(
+                      Icons.fact_check_rounded,
+                      tint: AppTint.moss,
+                    ),
+                    title: '啟用狀態',
+                    subtitle: '正在讀取本書可套用規則',
+                    trailing: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return GroupedRow(
+                    leading: const GroupedIconTile(
+                      Icons.error_outline_rounded,
+                      tint: AppTint.rust,
+                    ),
+                    title: '規則讀取失敗',
+                    subtitle: '無法取得本書目前可套用的規則',
+                    value: '重試',
+                    showChevron: false,
+                    onTap: () => setState(_reloadEnabledRules),
+                  );
+                }
+                final rules = snapshot.data ?? const <ReplaceRule>[];
+                return GroupedRow(
+                  leading: const GroupedIconTile(
+                    Icons.fact_check_rounded,
+                    tint: AppTint.moss,
+                  ),
+                  title: '啟用狀態',
+                  subtitle: '本書可套用 ${rules.length} 條規則',
+                  value: rules.isEmpty ? null : '${rules.length}',
+                );
+              },
+            ),
+            GroupedRow(
+              leading: const GroupedIconTile(
+                Icons.add_rounded,
+                tint: AppTint.azurite,
+              ),
+              title: '新增規則',
+              subtitle: '直接建立一條新的替換規則',
+              onTap: () async {
+                await ReaderV2ReplaceRuleEditorSheet.show(
+                  context,
+                  onSave: (rule) async {
+                    final nextOrder = (await widget.replaceDao.getAll()).length;
+                    rule.order = nextOrder;
+                    await widget.replaceDao.upsert(rule);
+                  },
+                );
+                if (!mounted) return;
+                setState(_reloadEnabledRules);
+                await widget.onReload();
+              },
+            ),
+            GroupedRow(
+              leading: const GroupedIconTile(
+                Icons.settings_rounded,
+                tint: AppTint.ink,
+              ),
+              title: '管理規則',
+              subtitle: '新增、編輯、啟用或刪除規則',
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ReaderV2ReplaceRulePage(),
+                  ),
+                );
+                if (!mounted) return;
+                setState(_reloadEnabledRules);
+                await widget.onReload();
+              },
+            ),
+          ],
+        ),
+        GroupedSection(
+          margin: EdgeInsets.zero,
+          header: '即時測試',
+          children: [
+            GroupedTextFieldRow(
+              controller: _testController,
+              minLines: 3,
+              maxLines: 5,
+              hintText: '輸入一段文本，測試本書正文實際套用規則',
+            ),
+            GroupedRow(
+              title: _testing ? '測試中…' : '執行測試',
+              accent: true,
+              showChevron: false,
+              enabled: !_testing,
+              onTap: _testing ? null : _runTest,
+            ),
+            GroupedRow(
+              title: '重載目前內容',
+              accent: true,
+              showChevron: false,
+              enabled: !_updatingToggle,
+              onTap:
                   _updatingToggle
                       ? null
                       : () async {
@@ -255,19 +261,26 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                           );
                         }
                       },
-              child: const Text('重載目前內容'),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: AppRadius.cardMd,
-          ),
-          child: Text(_testResult.isEmpty ? '測試結果會顯示在這裡' : _testResult),
+        GroupedSection(
+          margin: EdgeInsets.zero,
+          topGap: AppSpacing.lg,
+          header: '測試結果',
+          children: [
+            GroupedContent(
+              child: Text(
+                _testResult.isEmpty ? '測試結果會顯示在這裡' : _testResult,
+                style: AppTextStyles.bodySm.copyWith(
+                  color:
+                      _testResult.isEmpty
+                          ? AppChrome.of(context).sectionText
+                          : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

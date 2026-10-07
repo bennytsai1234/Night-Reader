@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:provider/provider.dart';
@@ -13,14 +14,21 @@ import 'source_group_manage_page.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
 import 'widgets/source_batch_toolbar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
+
+/// 頁首搜尋框高度。
+const double _kSearchFieldHeight = 36;
 
 class SourceManagerPage extends StatelessWidget {
   const SourceManagerPage({super.key});
@@ -46,10 +54,29 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   final _searchController = TextEditingController();
   bool _isImporting = false;
 
+  /// Telegram 式編輯模式：左側勾選圈、底部批次工具列。有選取時也視為
+  /// 編輯模式，避免選取狀態沒有出口。
+  bool _editMode = false;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  bool _isEditing(SourceManagerProvider p) =>
+      _editMode || p.selectedUrls.isNotEmpty;
+
+  void _enterEditMode(SourceManagerProvider p, {String? selectUrl}) {
+    setState(() => _editMode = true);
+    if (selectUrl != null && !p.selectedUrls.contains(selectUrl)) {
+      p.toggleSelect(selectUrl);
+    }
+  }
+
+  void _exitEditMode(SourceManagerProvider p) {
+    setState(() => _editMode = false);
+    p.clearSelection();
   }
 
   @override
@@ -58,115 +85,28 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     return Consumer<SourceManagerProvider>(
       builder: (context, provider, child) {
         final mutationEnabled = !_isImporting && !provider.isMutationBusy;
+        final editing = _isEditing(provider) && provider.totalSourceCount > 0;
         return PopScope<void>(
-          canPop: provider.selectedUrls.isEmpty,
+          canPop: !editing,
           onPopInvokedWithResult: (didPop, _) {
-            if (didPop || provider.selectedUrls.isEmpty) return;
-            provider.clearSelection();
+            if (didPop || !editing) return;
+            _exitEditMode(provider);
           },
           child: Scaffold(
-            appBar: AppBar(
-              title: const Text('書源管理'),
-              actions: [
-                SourceManagerMenus.buildSortMenu(context, provider),
-                SourceManagerMenus.buildGroupMenu(
-                  context,
-                  provider,
-                  onManageGroups: () => _openGroupManagePage(nav, provider),
-                ),
-                SourceManagerMenus.buildMoreMenu(
-                  context,
-                  provider,
-                  onImportUrl: () => _showImportDialog(context, true),
-                  onImportFile: () => _importFromFile(context),
-                  onImportClipboard: () => _importFromClipboard(context),
-                  onManageGroups: () => _openGroupManagePage(nav, provider),
-                  onNewSource: () => _openNewEditor(provider),
-                  onCheckAllSources:
-                      () => SourceManagerDialogs.showCheckConfigDialog(
-                        context,
-                        provider,
-                        checkAll: true,
-                      ),
-                  onClearInvalid:
-                      (p) =>
-                          SourceManagerDialogs.confirmClearInvalid(context, p),
-                  onDeleteNonNovel:
-                      (p) => SourceManagerDialogs.confirmDeleteNonNovel(
-                        context,
-                        p,
-                      ),
-                  importEnabled: !_isImporting,
-                  mutationEnabled: mutationEnabled,
-                ),
-              ],
+            extendBodyBehindAppBar: true,
+            extendBody: true,
+            appBar: _buildHeader(
+              context,
+              nav,
+              provider,
+              editing: editing,
+              mutationEnabled: mutationEnabled,
             ),
-            body: Column(
-              children: [
-                if (provider.checkService.isChecking ||
-                    provider.hasLastCheckReport)
-                  SourceCheckStatusBar(
-                    provider: provider,
-                    onTap: () {
-                      if (provider.checkService.isChecking) {
-                        SourceManagerDialogs.showCheckLog(context, provider);
-                      } else if (provider.lastCheckReport.affectedCount > 0) {
-                        provider.setFilterGroup(abnormalSourceGroupTag);
-                      }
-                    },
-                  ),
-                if (_isImporting)
-                  const LinearProgressIndicator(semanticsLabel: '正在處理書源匯入'),
-                if (provider.loadErrorMessage != null &&
-                    provider.totalSourceCount > 0)
-                  MaterialBanner(
-                    content: Text(provider.loadErrorMessage!),
-                    actions: [
-                      TextButton(
-                        onPressed: provider.loadSources,
-                        child: const Text('重試'),
-                      ),
-                    ],
-                  ),
-                if (provider.totalSourceCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      AppSpacing.sm,
-                      AppSpacing.md,
-                      0,
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: '搜尋書源名稱、網址',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon:
-                            _searchController.text.isNotEmpty
-                                ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    provider.setSearchQuery('');
-                                  },
-                                )
-                                : null,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.sm,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: AppRadius.cardSm,
-                        ),
-                      ),
-                      onChanged: provider.setSearchQuery,
-                    ),
-                  ),
-                Expanded(child: _buildMainContent(provider)),
-              ],
+            body: Builder(
+              builder: (bodyContext) => _buildMainContent(bodyContext, provider),
             ),
             bottomNavigationBar:
-                provider.totalSourceCount > 0
+                editing
                     ? SelectActionBar(
                       provider: provider,
                       externallyBusy: _isImporting,
@@ -251,6 +191,144 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     );
   }
 
+  GlassNavHeader _buildHeader(
+    BuildContext context,
+    NavigatorState nav,
+    SourceManagerProvider provider, {
+    required bool editing,
+    required bool mutationEnabled,
+  }) {
+    final showSearch = provider.totalSourceCount > 0;
+    final showStatus =
+        provider.checkService.isChecking || provider.hasLastCheckReport;
+    final bottomChildren = <Widget>[
+      if (showSearch)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.xs,
+            AppGrouped.margin,
+            AppSpacing.xs,
+          ),
+          child: _SourceSearchField(
+            controller: _searchController,
+            onChanged: (value) {
+              provider.setSearchQuery(value);
+              setState(() {});
+            },
+            onClear: () {
+              _searchController.clear();
+              provider.setSearchQuery('');
+              setState(() {});
+            },
+          ),
+        ),
+      if (showStatus)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.xs,
+            AppGrouped.margin,
+            AppSpacing.xs,
+          ),
+          child: SourceCheckStatusBar(
+            provider: provider,
+            onTap: () {
+              if (provider.checkService.isChecking) {
+                SourceManagerDialogs.showCheckLog(context, provider);
+              } else if (provider.lastCheckReport.affectedCount > 0) {
+                provider.setFilterGroup(abnormalSourceGroupTag);
+              }
+            },
+          ),
+        ),
+      if (_isImporting)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+          child: ClipRRect(
+            borderRadius: AppRadius.pillShape,
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              semanticsLabel: '正在處理書源匯入',
+            ),
+          ),
+        ),
+    ];
+    final double bottomHeight =
+        (showSearch ? _kSearchFieldHeight + AppSpacing.xs * 2 : 0.0) +
+        (showStatus ? SourceCheckStatusBar.height + AppSpacing.xs * 2 : 0.0) +
+        (_isImporting ? 2.0 : 0.0);
+    final bottom =
+        bottomChildren.isEmpty
+            ? null
+            : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: bottomChildren,
+            );
+
+    if (editing) {
+      final visibleUrls = provider.sources.map((s) => s.bookSourceUrl);
+      final allSelected =
+          visibleUrls.isNotEmpty &&
+          visibleUrls.every(provider.selectedUrls.contains);
+      final busy = provider.isMutationBusy || _isImporting;
+      final count = provider.selectedUrls.length;
+      return GlassNavHeader(
+        title: count == 0 ? '選取書源' : '已選 $count 項',
+        leading: GlassTextButton(
+          label: allSelected ? '取消全選' : '全選',
+          onPressed:
+              provider.sources.isNotEmpty && !busy ? provider.selectAll : null,
+        ),
+        actions: [
+          GlassTextButton(
+            label: '完成',
+            emphasized: true,
+            onPressed: () => _exitEditMode(provider),
+          ),
+        ],
+        bottom: bottom,
+        bottomHeight: bottomHeight,
+      );
+    }
+
+    return GlassNavHeader(
+      title: '書源管理',
+      actions: [
+        SourceManagerMenus.buildSortMenu(context, provider),
+        SourceManagerMenus.buildGroupMenu(
+          context,
+          provider,
+          onManageGroups: () => _openGroupManagePage(nav, provider),
+        ),
+        SourceManagerMenus.buildMoreMenu(
+          context,
+          provider,
+          onSelect: () => _enterEditMode(provider),
+          onImportUrl: () => _showImportDialog(context, true),
+          onImportFile: () => _importFromFile(context),
+          onImportClipboard: () => _importFromClipboard(context),
+          onManageGroups: () => _openGroupManagePage(nav, provider),
+          onNewSource: () => _openNewEditor(provider),
+          onCheckAllSources:
+              () => SourceManagerDialogs.showCheckConfigDialog(
+                context,
+                provider,
+                checkAll: true,
+              ),
+          onClearInvalid:
+              (p) => SourceManagerDialogs.confirmClearInvalid(context, p),
+          onDeleteNonNovel:
+              (p) => SourceManagerDialogs.confirmDeleteNonNovel(context, p),
+          importEnabled: !_isImporting,
+          mutationEnabled: mutationEnabled,
+        ),
+      ],
+      bottom: bottom,
+      bottomHeight: bottomHeight,
+    );
+  }
+
   Future<void> _openGroupManagePage(
     NavigatorState nav,
     SourceManagerProvider provider,
@@ -266,53 +344,68 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     );
   }
 
-  Widget _buildMainContent(SourceManagerProvider p) {
-    if (p.isLoading) return const Center(child: CircularProgressIndicator());
+  Widget _buildMainContent(BuildContext context, SourceManagerProvider p) {
+    final padding = MediaQuery.paddingOf(context);
+    final chrome = AppChrome.of(context);
+    Widget stateView(Widget child) => Padding(
+      padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
+      child: child,
+    );
+
+    if (p.isLoading) {
+      return stateView(const Center(child: CircularProgressIndicator()));
+    }
     if (p.loadErrorMessage != null && p.totalSourceCount == 0) {
-      return AppStateView(
-        icon: Icons.error_outline,
-        title: '書源載入失敗',
-        description: p.loadErrorMessage,
-        tone: AppStateTone.error,
-        primaryAction: AppStateAction(
-          label: '重試',
-          icon: Icons.refresh,
-          onPressed: p.loadSources,
+      return stateView(
+        AppStateView(
+          icon: Icons.error_outline,
+          title: '書源載入失敗',
+          description: p.loadErrorMessage,
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: p.loadSources,
+          ),
         ),
       );
     }
     final list = p.sources;
     if (list.isEmpty) {
       if (p.totalSourceCount == 0) {
-        return AppStateView(
-          icon: Icons.source_outlined,
-          title: '尚未加入書源',
-          description: '匯入書源後，即可搜尋與探索內容。',
-          primaryAction: AppStateAction(
-            label: '從網址匯入',
-            icon: Icons.link,
-            onPressed:
-                _isImporting ? null : () => _showImportDialog(context, true),
-          ),
-          secondaryAction: AppStateAction(
-            label: '從檔案匯入',
-            icon: Icons.file_open_outlined,
-            onPressed: _isImporting ? null : () => _importFromFile(context),
+        return stateView(
+          AppStateView(
+            icon: Icons.source_outlined,
+            title: '尚未加入書源',
+            description: '匯入書源後，即可搜尋與探索內容。',
+            primaryAction: AppStateAction(
+              label: '從網址匯入',
+              icon: Icons.link,
+              onPressed:
+                  _isImporting ? null : () => _showImportDialog(context, true),
+            ),
+            secondaryAction: AppStateAction(
+              label: '從檔案匯入',
+              icon: Icons.file_open_outlined,
+              onPressed: _isImporting ? null : () => _importFromFile(context),
+            ),
           ),
         );
       }
-      return AppStateView(
-        icon: Icons.search_off,
-        title: '找不到符合條件的書源',
-        description: '清除搜尋與篩選條件後再試一次。',
-        primaryAction: AppStateAction(
-          label: '清除搜尋與篩選',
-          icon: Icons.clear,
-          onPressed: () {
-            _searchController.clear();
-            p.setSearchQuery('');
-            p.setFilterGroup('全部');
-          },
+      return stateView(
+        AppStateView(
+          icon: Icons.search_off,
+          title: '找不到符合條件的書源',
+          description: '清除搜尋與篩選條件後再試一次。',
+          primaryAction: AppStateAction(
+            label: '清除搜尋與篩選',
+            icon: Icons.clear,
+            onPressed: () {
+              _searchController.clear();
+              p.setSearchQuery('');
+              p.setFilterGroup('全部');
+            },
+          ),
         ),
       );
     }
@@ -323,236 +416,271 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 .map((source) => p.getSourceHost(source.bookSourceUrl))
                 .toList(growable: false)
             : const <String>[];
+    bool startsHostGroup(int i) =>
+        groupByHost && (i == 0 || hostLabels[i - 1] != hostLabels[i]);
 
     final canReorder = p.canReorder && !_isImporting;
+    final editing = _isEditing(p);
 
-    if (canReorder) {
-      return ReorderableListView.builder(
-        itemCount: list.length,
-        onReorderItem:
-            (oldIndex, newIndex) => _runAction(
-              () => p.reorderSource(oldIndex, newIndex),
-              errorPrefix: '調整書源排序失敗',
-            ),
-        itemBuilder:
-            (ctx, i) => _buildItem(
-              p,
-              list[i],
-              index: i,
-              showHostHeader: false,
-              hostLabel: '',
-            ),
-      );
-    } else {
-      return ListView.separated(
-        itemCount: list.length,
-        separatorBuilder: (ctx, i) => const Divider(height: 1),
-        itemBuilder: (ctx, i) {
-          final showHostHeader =
-              groupByHost && (i == 0 || hostLabels[i - 1] != hostLabels[i]);
-          return _buildItem(
-            p,
-            list[i],
-            index: i,
-            showHostHeader: showHostHeader,
-            hostLabel: groupByHost ? hostLabels[i] : '',
-          );
-        },
+    Widget itemAt(int i) {
+      final isLastInGroup = i == list.length - 1 || startsHostGroup(i + 1);
+      return _buildItem(
+        p,
+        list[i],
+        index: i,
+        editing: editing,
+        showHostHeader: !canReorder && startsHostGroup(i),
+        hostLabel: groupByHost ? hostLabels[i] : '',
+        showSeparator: !isLastInGroup,
       );
     }
+
+    return ColoredBox(
+      color: chrome.groupedBackground,
+      child: SwipeActionsGroup(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(padding: EdgeInsets.only(top: padding.top)),
+            if (p.loadErrorMessage != null && p.totalSourceCount > 0)
+              SliverToBoxAdapter(
+                child: GroupedSection(
+                  topGap: AppSpacing.sm,
+                  children: [
+                    GroupedRow(
+                      title: p.loadErrorMessage!,
+                      destructive: true,
+                      showChevron: false,
+                      trailing: Text(
+                        '重試',
+                        style: AppTextStyles.bodyBase.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      onTap: p.loadSources,
+                    ),
+                  ],
+                ),
+              ),
+            SliverPadding(
+              padding: EdgeInsets.only(
+                top: groupByHost ? 0 : AppSpacing.sm,
+                bottom: padding.bottom + AppSpacing.xxl,
+              ),
+              sliver:
+                  canReorder
+                      ? SliverReorderableList(
+                        itemCount: list.length,
+                        onReorderItem:
+                            (oldIndex, newIndex) => _runAction(
+                              () => p.reorderSource(oldIndex, newIndex),
+                              errorPrefix: '調整書源排序失敗',
+                            ),
+                        proxyDecorator:
+                            (child, _, _) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: chrome.glassShadow,
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: child,
+                            ),
+                        itemBuilder: (ctx, i) => itemAt(i),
+                      )
+                      : SliverList.builder(
+                        itemCount: list.length,
+                        itemBuilder: (ctx, i) => itemAt(i),
+                      ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildItem(
     SourceManagerProvider p,
     BookSourcePart s, {
-    int? index,
+    required int index,
+    required bool editing,
     required bool showHostHeader,
     required String hostLabel,
+    required bool showSeparator,
   }) {
     return SourceItemTile(
       key: ValueKey(s.bookSourceUrl),
       source: s,
       provider: p,
       index: index,
+      editing: editing,
       showHostHeader: showHostHeader,
       hostLabel: hostLabel,
+      showSeparator: showSeparator,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       mutationEnabled: !_isImporting && !p.isMutationBusy,
       onTap: () async {
-        if (p.selectedUrls.isNotEmpty) {
+        if (_isEditing(p)) {
           p.toggleSelect(s.bookSourceUrl);
           return;
         }
         await _openEditor(p, s.bookSourceUrl);
       },
-      onLongPress: () {
-        p.toggleSelect(s.bookSourceUrl);
-      },
-      onEdit: () async {
-        await _openEditor(p, s.bookSourceUrl);
-      },
-      onShowMenu: () {
-        _showSourceMenu(context, p, s);
-      },
+      onLongPress: (rect, preview) => _showSourceMenu(p, s, rect, preview),
+      onEdit: () => _openEditor(p, s.bookSourceUrl),
+      onMoveToTop:
+          () => _runAction(
+            () => p.moveToTop(s.bookSourceUrl),
+            errorPrefix: '移動書源失敗',
+          ),
+      onDelete: () => _confirmDeleteSource(p, s),
       onEnabledChanged:
-          (v) => _runAction(() => p.toggleEnabled(s), errorPrefix: '更新書源狀態失敗'),
+          (_) =>
+              _runAction(() => p.toggleEnabled(s), errorPrefix: '更新書源狀態失敗'),
     );
   }
 
-  void _showSourceMenu(
-    BuildContext context,
+  /// 長按書源：列浮起預覽，旁邊列出單一書源的動作。
+  Future<void> _showSourceMenu(
     SourceManagerProvider p,
     BookSourcePart s,
-  ) {
+    Rect sourceRect,
+    Widget preview,
+  ) async {
     final nav = Navigator.of(context);
-    AppBottomSheet.show(
+    final action = await showContextPreviewMenu<String>(
       context: context,
-      title: s.bookSourceName,
-      icon: Icons.source_rounded,
-      children: [
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: const Icon(Icons.search),
-          title: const Text('在此書源中搜尋', style: AppTextStyles.bodySm),
-          onTap: () async {
-            Navigator.pop(context);
-            final full = await p.getFullSource(s.bookSourceUrl);
-            if (full != null && context.mounted) {
-              nav.push(
-                MaterialPageRoute(
-                  builder: (_) => SearchPage(initialSource: full),
-                ),
-              );
-            }
-          },
+      sourceRect: sourceRect,
+      preview: preview,
+      previewRadius: AppRadius.cardLg,
+      entries: [
+        const GlassMenuItem(
+          value: 'search',
+          label: '在此書源中搜尋',
+          icon: Icons.search_rounded,
         ),
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: const Icon(Icons.edit_outlined),
-          title: const Text('編輯書源', style: AppTextStyles.bodySm),
-          onTap: () async {
-            Navigator.pop(context);
-            await _openEditor(p, s.bookSourceUrl);
-          },
+        const GlassMenuItem(
+          value: 'edit',
+          label: '編輯書源',
+          icon: Icons.edit_outlined,
         ),
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: const Icon(Icons.bug_report_outlined),
-          title: const Text('調試書源', style: AppTextStyles.bodySm),
-          onTap: () async {
-            Navigator.pop(context);
-            final full = await p.getFullSource(s.bookSourceUrl);
-            if (full != null && context.mounted) {
-              SourceManagerDialogs.showDebugInput(context, full);
-            }
-          },
+        const GlassMenuItem(
+          value: 'debug',
+          label: '調試書源',
+          icon: Icons.bug_report_outlined,
         ),
         if (s.hasExploreUrl)
-          ListTile(
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-            leading: Icon(
-              s.enabledExplore
-                  ? Icons.explore_off_outlined
-                  : Icons.travel_explore,
-            ),
-            title: Text(
-              s.enabledExplore ? '停用發現' : '啟用發現',
-              style: AppTextStyles.bodySm,
-            ),
-            onTap: () async {
-              Navigator.pop(context);
-              await _runAction(
-                () => p.toggleEnabledExplore(s),
-                errorPrefix: '更新發現狀態失敗',
-              );
-            },
+          GlassMenuItem(
+            value: 'explore',
+            label: s.enabledExplore ? '停用發現' : '啟用發現',
+            icon:
+                s.enabledExplore
+                    ? Icons.explore_off_outlined
+                    : Icons.travel_explore,
           ),
-        const Divider(indent: 16, endIndent: 16),
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: const Icon(Icons.vertical_align_top_rounded),
-          title: const Text('移至最頂', style: AppTextStyles.bodySm),
-          onTap: () async {
-            Navigator.pop(context);
-            await _runAction(
-              () => p.moveToTop(s.bookSourceUrl),
-              errorPrefix: '移動書源失敗',
-            );
-          },
+        const GlassMenuDivider(),
+        const GlassMenuItem(
+          value: 'top',
+          label: '移至最頂',
+          icon: Icons.vertical_align_top_rounded,
         ),
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: const Icon(Icons.vertical_align_bottom_rounded),
-          title: const Text('移至最底', style: AppTextStyles.bodySm),
-          onTap: () async {
-            Navigator.pop(context);
-            await _runAction(
-              () => p.moveToBottom(s.bookSourceUrl),
-              errorPrefix: '移動書源失敗',
-            );
-          },
+        const GlassMenuItem(
+          value: 'bottom',
+          label: '移至最底',
+          icon: Icons.vertical_align_bottom_rounded,
         ),
-        const Divider(indent: 16, endIndent: 16),
-        ListTile(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.cardMd),
-          leading: Icon(
-            Icons.delete_sweep_outlined,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          title: Text(
-            '刪除書源',
-            style: AppTextStyles.bodySm.copyWith(
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          onTap: () async {
-            Navigator.pop(context);
-            await _runAction(() => p.deleteSource(s), errorPrefix: '刪除書源失敗');
-          },
+        const GlassMenuItem(
+          value: 'select',
+          label: '選取',
+          icon: Icons.check_circle_outline_rounded,
+        ),
+        const GlassMenuDivider(),
+        const GlassMenuItem(
+          value: 'delete',
+          label: '刪除書源',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
         ),
       ],
     );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'search':
+        final full = await p.getFullSource(s.bookSourceUrl);
+        if (full != null && mounted) {
+          nav.push(
+            MaterialPageRoute(builder: (_) => SearchPage(initialSource: full)),
+          );
+        }
+      case 'edit':
+        await _openEditor(p, s.bookSourceUrl);
+      case 'debug':
+        final full = await p.getFullSource(s.bookSourceUrl);
+        if (full != null && mounted) {
+          SourceManagerDialogs.showDebugInput(context, full);
+        }
+      case 'explore':
+        await _runAction(
+          () => p.toggleEnabledExplore(s),
+          errorPrefix: '更新發現狀態失敗',
+        );
+      case 'top':
+        await _runAction(
+          () => p.moveToTop(s.bookSourceUrl),
+          errorPrefix: '移動書源失敗',
+        );
+      case 'bottom':
+        await _runAction(
+          () => p.moveToBottom(s.bookSourceUrl),
+          errorPrefix: '移動書源失敗',
+        );
+      case 'select':
+        _enterEditMode(p, selectUrl: s.bookSourceUrl);
+      case 'delete':
+        await _confirmDeleteSource(p, s);
+    }
   }
 
-  void _confirmDeleteSelected(BuildContext context, SourceManagerProvider p) {
+  Future<void> _confirmDeleteSource(
+    SourceManagerProvider p,
+    BookSourcePart s,
+  ) async {
+    final confirmed = await showAppConfirm(
+      context: context,
+      title: '刪除書源',
+      message: '確定要刪除「${s.bookSourceName}」嗎？',
+      confirmLabel: '刪除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _runAction(() => p.deleteSource(s), errorPrefix: '刪除書源失敗');
+  }
+
+  Future<void> _confirmDeleteSelected(
+    BuildContext context,
+    SourceManagerProvider p,
+  ) async {
     final count = p.selectedUrls.length;
     if (count == 0) return;
-    showDialog(
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showAppConfirm(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('確認刪除'),
-            content: Text('確定要刪除選中的 $count 個書源嗎？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    await p.deleteSelected();
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('已刪除 $count 個書源')),
-                    );
-                  } catch (error) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('刪除書源失敗：$error')),
-                    );
-                  }
-                },
-                child: Text(
-                  '確定刪除',
-                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                ),
-              ),
-            ],
-          ),
+      title: '確認刪除',
+      message: '確定要刪除選中的 $count 個書源嗎？',
+      confirmLabel: '確定刪除',
+      destructive: true,
     );
+    if (!confirmed) return;
+    try {
+      await p.deleteSelected();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('已刪除 $count 個書源')));
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+    }
   }
 
   Future<void> _showSelectionGroupDialog(
@@ -564,91 +692,130 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final pageContext = context;
     String? inputError;
     try {
-      await showDialog<void>(
+      await showStatefulAppAlert<void>(
         context: context,
-        builder:
-            (ctx) => StatefulBuilder(
-              builder:
-                  (context, setDialogState) => AlertDialog(
-                    title: Text(remove ? '移出分組' : '加入分組'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: ctrl,
-                          decoration: InputDecoration(
-                            hintText: '分組名稱',
-                            errorText: inputError,
-                          ),
-                          onChanged: (_) {
-                            if (inputError != null) {
-                              setDialogState(() => inputError = null);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 150,
-                          width: double.maxFinite,
-                          child: ListView.builder(
-                            itemCount: p.allGroups.length,
-                            itemBuilder: (ctx2, i) {
-                              final g = p.allGroups[i];
-                              return ListTile(
-                                title: Text(g),
-                                dense: true,
-                                onTap: () {
-                                  ctrl.value = TextEditingValue(
-                                    text: g,
-                                    selection: TextSelection.collapsed(
-                                      offset: g.length,
-                                    ),
-                                  );
-                                  setDialogState(() => inputError = null);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+        builder: (dialogContext, setDialogState) {
+          final chrome = AppChrome.of(dialogContext);
+          final scheme = Theme.of(dialogContext).colorScheme;
+          return AppAlert<bool>(
+            title: remove ? '移出分組' : '加入分組',
+            onAction: (confirmed) async {
+              if (!confirmed) {
+                Navigator.pop(dialogContext);
+                return;
+              }
+              final text = ctrl.text.trim();
+              if (text.isEmpty) {
+                setDialogState(() => inputError = '請輸入或選擇分組名稱');
+                return;
+              }
+              final selected = p.selectedUrls;
+              Navigator.pop(dialogContext);
+              try {
+                if (remove) {
+                  await p.selectionRemoveFromGroups(selected, text);
+                } else {
+                  await p.selectionAddToGroups(selected, text);
+                }
+              } catch (error) {
+                if (pageContext.mounted) {
+                  ScaffoldMessenger.of(pageContext).showSnackBar(
+                    SnackBar(
+                      content: Text('${remove ? '移出' : '加入'}分組失敗：$error'),
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('取消'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          final text = ctrl.text.trim();
-                          if (text.isEmpty) {
-                            setDialogState(() => inputError = '請輸入或選擇分組名稱');
-                            return;
-                          }
-                          final selected = p.selectedUrls;
-                          Navigator.pop(ctx);
-                          try {
-                            if (remove) {
-                              await p.selectionRemoveFromGroups(selected, text);
-                            } else {
-                              await p.selectionAddToGroups(selected, text);
-                            }
-                          } catch (error) {
-                            if (pageContext.mounted) {
-                              ScaffoldMessenger.of(pageContext).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    '${remove ? '移出' : '加入'}分組失敗：$error',
+                  );
+                }
+              }
+            },
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AlertTextField(
+                  controller: ctrl,
+                  hintText: '分組名稱',
+                  errorText: inputError,
+                  onChanged: (_) {
+                    if (inputError != null) {
+                      setDialogState(() => inputError = null);
+                    }
+                  },
+                ),
+                if (p.allGroups.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Container(
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: chrome.groupedBackground,
+                      borderRadius: AppRadius.cardMd,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: p.allGroups.length,
+                      separatorBuilder:
+                          (_, _) => Padding(
+                            padding: const EdgeInsets.only(
+                              left: AppSpacing.md,
+                            ),
+                            child: Container(
+                              height: AppGlass.hairline,
+                              color: chrome.separator,
+                            ),
+                          ),
+                      itemBuilder: (_, i) {
+                        final g = p.allGroups[i];
+                        final picked = ctrl.text.trim() == g;
+                        return InkWell(
+                          onTap: () {
+                            ctrl.value = TextEditingValue(
+                              text: g,
+                              selection: TextSelection.collapsed(
+                                offset: g.length,
+                              ),
+                            );
+                            setDialogState(() => inputError = null);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.md,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    g,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.bodyBase.copyWith(
+                                      height: 1.3,
+                                      color: scheme.onSurface,
+                                    ),
                                   ),
                                 ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('確定'),
-                      ),
-                    ],
+                                if (picked)
+                                  Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                    color: scheme.primary,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
+                ],
+              ],
             ),
+            actions: const [
+              AppAlertAction(label: '取消', value: false),
+              AppAlertAction(label: '確定', value: true, isDefault: true),
+            ],
+          );
+        },
       );
     } finally {
       ctrl.dispose();
@@ -699,59 +866,50 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     final ctrl = TextEditingController();
     String? inputError;
     try {
-      await showDialog<void>(
+      await showStatefulAppAlert<void>(
         context: context,
         builder:
-            (ctx) => StatefulBuilder(
-              builder:
-                  (context, setDialogState) => AlertDialog(
-                    title: Text(isUrl ? '網路匯入' : '文本匯入'),
-                    content: TextField(
-                      controller: ctrl,
-                      decoration: InputDecoration(
-                        hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
-                        errorText: inputError,
-                      ),
-                      maxLines: 5,
-                      onChanged: (_) {
-                        if (inputError != null) {
-                          setDialogState(() => inputError = null);
-                        }
-                      },
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('取消'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          final p = pageContext.read<SourceManagerProvider>();
-                          final input = ctrl.text.trim();
-                          if (input.isEmpty) {
-                            setDialogState(
-                              () =>
-                                  inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON',
-                            );
-                            return;
-                          }
-                          Navigator.pop(ctx);
-                          await _runImportFlow(() async {
-                            if (isUrl) {
-                              final jsonText = await p.fetchImportTextFromUrl(
-                                input,
-                              );
-                              if (!pageContext.mounted) return;
-                              await _importWithPreview(pageContext, jsonText);
-                            } else if (pageContext.mounted) {
-                              await _importWithPreview(pageContext, input);
-                            }
-                          }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
-                        },
-                        child: const Text('匯入'),
-                      ),
-                    ],
-                  ),
+            (dialogContext, setDialogState) => AppAlert<bool>(
+              title: isUrl ? '網路匯入' : '文本匯入',
+              onAction: (confirmed) async {
+                if (!confirmed) {
+                  Navigator.pop(dialogContext);
+                  return;
+                }
+                final p = pageContext.read<SourceManagerProvider>();
+                final input = ctrl.text.trim();
+                if (input.isEmpty) {
+                  setDialogState(
+                    () => inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON',
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                await _runImportFlow(() async {
+                  if (isUrl) {
+                    final jsonText = await p.fetchImportTextFromUrl(input);
+                    if (!pageContext.mounted) return;
+                    await _importWithPreview(pageContext, jsonText);
+                  } else if (pageContext.mounted) {
+                    await _importWithPreview(pageContext, input);
+                  }
+                }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
+              },
+              content: AlertTextField(
+                controller: ctrl,
+                hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
+                errorText: inputError,
+                maxLines: 5,
+                onChanged: (_) {
+                  if (inputError != null) {
+                    setDialogState(() => inputError = null);
+                  }
+                },
+              ),
+              actions: const [
+                AppAlertAction(label: '取消', value: false),
+                AppAlertAction(label: '匯入', value: true, isDefault: true),
+              ],
             ),
       );
     } finally {
@@ -832,5 +990,80 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         context,
       ).showSnackBar(SnackBar(content: Text('$errorPrefix：$error')));
     }
+  }
+}
+
+/// 頁首下方的玻璃搜尋框（Telegram 搜尋列）。
+class _SourceSearchField extends StatelessWidget {
+  const _SourceSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: _kSearchFieldHeight,
+      child: GlassSurface(
+        borderRadius: AppRadius.pillShape,
+        shadow: false,
+        child: Row(
+          children: [
+            const SizedBox(width: AppSpacing.md),
+            Icon(Icons.search_rounded, size: 18, color: chrome.sectionText),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                onChanged: onChanged,
+                textInputAction: TextInputAction.search,
+                style: AppTextStyles.bodyBase.copyWith(
+                  height: 1.2,
+                  color: scheme.onSurface,
+                ),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  hintText: '搜尋書源名稱、網址',
+                  hintStyle: AppTextStyles.bodyBase.copyWith(
+                    height: 1.2,
+                    color: chrome.sectionText.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+            ),
+            if (controller.text.isNotEmpty)
+              Semantics(
+                button: true,
+                label: '清除搜尋',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClear,
+                  child: SizedBox.square(
+                    dimension: _kSearchFieldHeight,
+                    child: Icon(
+                      Icons.cancel_rounded,
+                      size: 18,
+                      color: chrome.sectionText,
+                    ),
+                  ),
+                ),
+              )
+            else
+              const SizedBox(width: AppSpacing.md),
+          ],
+        ),
+      ),
+    );
   }
 }

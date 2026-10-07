@@ -8,6 +8,15 @@ import 'views/source_edit_book_info.dart';
 import 'views/source_edit_toc.dart';
 import 'views/source_edit_content.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
+
+/// 編輯器分頁標籤，順序對應 [TabBarView] 的子頁。
+const List<String> _tabLabels = ['基礎', '搜尋', '發現', '詳情', '目錄', '正文'];
+
+/// 頁首分段控制佔用的高度（36 軌道加上下內距）。
+const double _kTabsHeight = 36 + AppSpacing.xs * 2;
 
 class SourceEditorPage extends StatefulWidget {
   final BookSource? source;
@@ -35,7 +44,7 @@ class _SourceEditorPageState extends State<SourceEditorPage>
             : BookSource.fromJson(
               Map<String, dynamic>.from(widget.source!.toJson()),
             );
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: _tabLabels.length, vsync: this);
     _initControllers();
   }
 
@@ -281,38 +290,44 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.source == null ? '新建書源' : '編輯書源'),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: widget.source == null ? '新建書源' : '編輯書源',
         actions: [
-          IconButton(
+          GlassIconButton(
             tooltip: '除錯書源',
-            icon: const Icon(Icons.bug_report),
+            icon: Icons.bug_report_outlined,
             onPressed: _isSaving ? null : _openDebug,
           ),
-          IconButton(
-            tooltip: '儲存書源',
-            onPressed: _isSaving ? null : _save,
-            icon:
-                _isSaving
-                    ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                    : const Icon(Icons.check),
+          Semantics(
+            label: '儲存書源',
+            child: GlassTextButton(
+              label: _isSaving ? '儲存中…' : '儲存',
+              emphasized: true,
+              onPressed: _isSaving ? null : _save,
+            ),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: '基礎'),
-            Tab(text: '搜尋'),
-            Tab(text: '發現'),
-            Tab(text: '詳情'),
-            Tab(text: '目錄'),
-            Tab(text: '正文'),
-          ],
+        bottomHeight: _kTabsHeight,
+        bottom: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.xs,
+            AppGrouped.margin,
+            AppSpacing.xs,
+          ),
+          child: AnimatedBuilder(
+            animation: _tabController,
+            builder:
+                (context, _) => GlassSegmented<int>(
+                  segments: [
+                    for (var i = 0; i < _tabLabels.length; i++)
+                      GlassSegment(i, _tabLabels[i]),
+                  ],
+                  selected: _tabController.index,
+                  onChanged: _tabController.animateTo,
+                ),
+          ),
         ),
       ),
       body: TabBarView(

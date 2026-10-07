@@ -3,8 +3,9 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_form.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_options.dart';
 import 'package:night_reader/features/replace_rule/widgets/replace_edit_test_panel.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleEditorSheet({
@@ -149,46 +150,43 @@ class _ReaderV2ReplaceRuleEditorSheetState
     return AppBottomSheet(
       title: widget.rule == null ? '新增規則' : '編輯規則',
       icon: Icons.rule_rounded,
-      trailing: TextButton(
+      trailing: GlassTextButton(
+        label: _saving ? '儲存中…' : '儲存',
+        emphasized: true,
         onPressed: _saving ? null : _save,
-        child: Text(_saving ? '儲存中…' : '儲存'),
       ),
       children: [
         Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ReplaceEditForm(
+                margin: EdgeInsets.zero,
                 nameCtrl: _nameCtrl,
                 groupCtrl: _groupCtrl,
                 timeoutCtrl: _timeoutCtrl,
                 patternCtrl: _patternCtrl,
                 replacementCtrl: _replacementCtrl,
               ),
-              const SizedBox(height: AppSpacing.lg),
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: AppSpacing.md),
-                title: const Text('進階範圍設定'),
+              GroupedSection(
+                margin: EdgeInsets.zero,
+                header: '進階範圍設定',
                 children: [
-                  TextFormField(
+                  ReplaceFormRow(
                     controller: _scopeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '作用範圍 (書名/書源URL)',
-                      border: OutlineInputBorder(),
-                    ),
+                    label: '作用範圍',
+                    hintText: '書名/書源URL',
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  TextFormField(
+                  ReplaceFormRow(
                     controller: _excludeScopeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: '排除範圍 (書名/書源URL)',
-                      border: OutlineInputBorder(),
-                    ),
+                    label: '排除範圍',
+                    hintText: '書名/書源URL',
                   ),
                 ],
               ),
               ReplaceEditOptions(
+                margin: EdgeInsets.zero,
                 isEnabled: _isEnabled,
                 isRegex: _isRegex,
                 scopeTitle: _scopeTitle,
@@ -202,8 +200,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
                 onContentChanged:
                     (value) => setState(() => _scopeContent = value),
               ),
-              const SizedBox(height: AppSpacing.lg),
               ReplaceEditTestPanel(
+                margin: EdgeInsets.zero,
                 testInputCtrl: _testInputCtrl,
                 testResult: _testResult,
               ),

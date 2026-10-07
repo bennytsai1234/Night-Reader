@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 /// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {
@@ -19,20 +25,20 @@ class DownloadManagerPage extends StatelessWidget {
     final hasCompletedTasks = tasks.any((task) => task.isCompleted);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('背景下載佇列'),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: '背景下載佇列',
         actions: [
-          IconButton(
-            icon: Icon(
-              service.isPaused
-                  ? Icons.play_circle_outline
-                  : Icons.pause_circle_outline,
-            ),
+          GlassIconButton(
+            icon:
+                service.isPaused
+                    ? Icons.play_arrow_rounded
+                    : Icons.pause_rounded,
             tooltip: service.isPaused ? '恢復全部' : '暫停全部',
             onPressed: hasActiveTasks ? service.togglePause : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined),
+          GlassIconButton(
+            icon: Icons.delete_sweep_outlined,
             tooltip: '清除已完成',
             onPressed:
                 hasCompletedTasks
@@ -48,41 +54,35 @@ class DownloadManagerPage extends StatelessWidget {
       ),
       body:
           tasks.isEmpty
-              ? const AppStateView(
-                icon: Icons.download_done_rounded,
-                title: '暫無背景下載任務',
-                description: '從書籍詳情加入下載後，進度會顯示在這裡。',
+              ? Padding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top,
+                ),
+                child: const AppStateView(
+                  icon: Icons.download_done_rounded,
+                  title: '暫無背景下載任務',
+                  description: '從書籍詳情加入下載後，進度會顯示在這裡。',
+                ),
               )
-              : Column(
-                children: [
-                  _buildQueueSummary(context, service, tasks),
-                  Expanded(
-                    child: ListTileTheme(
-                      data: const ListTileThemeData(
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                        ),
-                      ),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.only(
-                          bottom: AppSpacing.xxl,
-                        ),
-                        itemCount: tasks.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final task = tasks[index];
-                          return _buildTaskTile(
+              : SwipeActionsGroup(
+                child: GroupedListView(
+                  children: [
+                    _buildQueueSummary(context, service, tasks),
+                    GroupedSection(
+                      header: '任務',
+                      children: [
+                        for (var index = 0; index < tasks.length; index++)
+                          _buildTaskTile(
                             context,
                             service,
-                            task,
+                            tasks[index],
                             index,
                             tasks.length,
-                          );
-                        },
-                      ),
+                          ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
     );
   }
@@ -102,55 +102,48 @@ class DownloadManagerPage extends StatelessWidget {
           task.lastUpdateTime > latest ? task.lastUpdateTime : latest,
     );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Material(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: AppRadius.cardLg,
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return GroupedSection(
+      topGap: AppSpacing.sm,
+      footer:
+          service.isBookshelfRefreshing
+              ? '書架正在檢查更新，下載會等檢查完成後繼續'
+              : '最近任務更新：${_formatTimestamp(latestUpdate)}',
+      children: [
+        GroupedContent(
+          child: Row(
             children: [
-              Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: [
-                  _summaryChip(context, '等待', '$waiting'),
-                  _summaryChip(context, '下載中', '$running'),
-                  _summaryChip(context, '暫停', '$paused'),
-                  _summaryChip(context, '失敗', '$failed'),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                service.isBookshelfRefreshing
-                    ? '書架正在檢查更新，下載會等檢查完成後繼續'
-                    : '最近任務更新：${_formatTimestamp(latestUpdate)}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  height: 1.4,
-                ),
-              ),
+              _summaryStat(context, '等待', waiting),
+              _summaryStat(context, '下載中', running),
+              _summaryStat(context, '暫停', paused),
+              _summaryStat(context, '失敗', failed),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _summaryChip(BuildContext context, String label, String value) {
-    return Chip(
-      visualDensity: VisualDensity.compact,
-      label: Text('$label $value'),
-      side: BorderSide(color: Theme.of(context).dividerColor),
+  Widget _summaryStat(BuildContext context, String label, int value) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Semantics(
+        label: '$label $value',
+        excludeSemantics: true,
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style: AppTextStyles.titleMd.copyWith(color: scheme.onSurface),
+            ),
+            Text(
+              label,
+              style: AppTextStyles.uiXs.copyWith(
+                color: AppChrome.of(context).sectionText,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -161,6 +154,8 @@ class DownloadManagerPage extends StatelessWidget {
     int index,
     int taskCount,
   ) {
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final rawProgress =
         task.totalCount <= 0 ? 0.0 : task.successCount / task.totalCount;
     final progress =
@@ -172,129 +167,182 @@ class DownloadManagerPage extends StatelessWidget {
     final canRetry = task.isFailed || task.errorCount > 0;
     final failureSummary = task.failureSummary;
 
-    return ListTile(
-      title: Text(
-        task.bookName,
-        style: AppTextStyles.bodyBase.copyWith(
-          height: 1.35,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: AppSpacing.xs),
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor:
-                Theme.of(context).colorScheme.surfaceContainerHighest,
-            minHeight: 4,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  _statusText(task),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.labelSm.copyWith(
-                    height: 1.3,
-                    color: _statusColor(context, task),
-                  ),
+    Widget? control;
+    if (canRetry) {
+      control = _TaskControlButton(
+        icon: Icons.refresh_rounded,
+        tooltip: '重試',
+        onPressed: () => service.retryTask(task.bookUrl),
+      );
+    } else if (!task.isCompleted) {
+      control = _TaskControlButton(
+        icon: task.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+        tooltip: task.isPaused ? '繼續' : '暫停',
+        onPressed:
+            () =>
+                task.isPaused
+                    ? service.resumeTask(task.bookUrl)
+                    : service.pauseTask(task.bookUrl),
+      );
+    }
+
+    final row = Builder(
+      builder:
+          (rowContext) => InkWell(
+            onTap:
+                () => _showTaskMenu(
+                  rowContext,
+                  service,
+                  task,
+                  index,
+                  taskCount,
                 ),
-              ),
-              if (task.isDownloading) ...[
-                const SizedBox(width: AppSpacing.md),
-                Text(
-                  '正在下載…',
-                  style: AppTextStyles.labelSm.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+            onLongPress:
+                () => _showTaskMenu(
+                  rowContext,
+                  service,
+                  task,
+                  index,
+                  taskCount,
                 ),
-              ],
-            ],
-          ),
-          if (failureSummary != null) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              failureSummary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.labelSm.copyWith(
-                height: 1.3,
-                color: Theme.of(context).colorScheme.error,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppGrouped.rowPadding,
+                vertical: AppSpacing.md,
               ),
-            ),
-          ],
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (canRetry)
-            IconButton(
-              icon: const Icon(Icons.refresh, size: 20),
-              tooltip: '重試',
-              onPressed: () => service.retryTask(task.bookUrl),
-            )
-          else if (!task.isCompleted)
-            IconButton(
-              icon: Icon(
-                task.isPaused ? Icons.play_arrow : Icons.pause,
-                size: 20,
-              ),
-              tooltip: task.isPaused ? '繼續' : '暫停',
-              onPressed:
-                  () =>
-                      task.isPaused
-                          ? service.resumeTask(task.bookUrl)
-                          : service.pauseTask(task.bookUrl),
-            ),
-          PopupMenuButton<String>(
-            tooltip: '更多操作',
-            onSelected:
-                (value) =>
-                    _handleTaskMenu(context, service, task, index, value),
-            itemBuilder:
-                (context) => [
-                  PopupMenuItem(
-                    value: 'up',
-                    enabled: index > 0,
-                    child: const ListTile(
-                      leading: Icon(Icons.arrow_upward),
-                      title: Text('上移'),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          task.bookName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodyBase.copyWith(
+                            height: 1.3,
+                            fontWeight: FontWeight.w500,
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        ClipRRect(
+                          borderRadius: AppRadius.pillShape,
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: chrome.separator,
+                            minHeight: 4,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _statusText(task),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.bodySm.copyWith(
+                                  height: 1.3,
+                                  color: _statusColor(context, task),
+                                ),
+                              ),
+                            ),
+                            if (task.isDownloading) ...[
+                              const SizedBox(width: AppSpacing.md),
+                              Text(
+                                '正在下載…',
+                                style: AppTextStyles.bodySm.copyWith(
+                                  height: 1.3,
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (failureSummary != null) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            failureSummary,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodySm.copyWith(
+                              height: 1.3,
+                              color: context.danger,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'down',
-                    enabled: index < taskCount - 1,
-                    child: const ListTile(
-                      leading: Icon(Icons.arrow_downward),
-                      title: Text('下移'),
-                    ),
-                  ),
-                  if (failureSummary != null)
-                    const PopupMenuItem(
-                      value: 'details',
-                      child: ListTile(
-                        leading: Icon(Icons.info_outline),
-                        title: Text('查看失敗原因'),
-                      ),
-                    ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: ListTile(
-                      leading: Icon(Icons.close),
-                      title: Text('刪除任務'),
-                    ),
-                  ),
+                  if (control != null) ...[
+                    const SizedBox(width: AppSpacing.md),
+                    control,
+                  ],
                 ],
+              ),
+            ),
           ),
-        ],
-      ),
     );
+
+    return SwipeActions(
+      key: ValueKey(task.bookUrl),
+      trailing: [
+        SwipeAction(
+          label: '刪除',
+          icon: Icons.delete_outline_rounded,
+          color: context.danger,
+          destructive: true,
+          onPressed: () => service.removeTask(task.bookUrl),
+        ),
+      ],
+      child: Material(color: chrome.groupedSurface, child: row),
+    );
+  }
+
+  Future<void> _showTaskMenu(
+    BuildContext rowContext,
+    DownloadService service,
+    DownloadTask task,
+    int index,
+    int taskCount,
+  ) async {
+    final value = await showGlassMenu<String>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        GlassMenuItem(
+          value: 'up',
+          label: '上移',
+          icon: Icons.arrow_upward_rounded,
+          enabled: index > 0,
+        ),
+        GlassMenuItem(
+          value: 'down',
+          label: '下移',
+          icon: Icons.arrow_downward_rounded,
+          enabled: index < taskCount - 1,
+        ),
+        if (task.failureSummary != null)
+          const GlassMenuItem(
+            value: 'details',
+            label: '查看失敗原因',
+            icon: Icons.info_outline_rounded,
+          ),
+        const GlassMenuDivider(),
+        const GlassMenuItem(
+          value: 'delete',
+          label: '刪除任務',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
+        ),
+      ],
+    );
+    if (value == null || !rowContext.mounted) return;
+    _handleTaskMenu(rowContext, service, task, index, value);
   }
 
   void _handleTaskMenu(
@@ -321,46 +369,50 @@ class DownloadManagerPage extends StatelessWidget {
   }
 
   void _showFailureDetails(BuildContext context, DownloadTask task) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('下載失敗原因'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow('書籍', task.bookName),
-                _detailRow('失敗類型', task.lastErrorReason ?? '下載失敗'),
-                if (task.lastErrorChapterIndex != null)
-                  _detailRow('章節', '第 ${task.lastErrorChapterIndex! + 1} 章'),
-                _detailRow('失敗章節數', '${task.errorCount}'),
-                _detailRow('原因', task.lastErrorMessage ?? '未記錄詳細原因'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('關閉'),
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    Widget detailRow(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 76,
+              child: Text(
+                label,
+                style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
               ),
-            ],
-          ),
-    );
-  }
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: AppTextStyles.bodySm.copyWith(color: scheme.onSurface),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
+    showAppAlert<void>(
+      context: context,
+      title: '下載失敗原因',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 76, child: Text(label)),
-          Expanded(child: Text(value)),
+          detailRow('書籍', task.bookName),
+          detailRow('失敗類型', task.lastErrorReason ?? '下載失敗'),
+          if (task.lastErrorChapterIndex != null)
+            detailRow('章節', '第 ${task.lastErrorChapterIndex! + 1} 章'),
+          detailRow('失敗章節數', '${task.errorCount}'),
+          detailRow('原因', task.lastErrorMessage ?? '未記錄詳細原因'),
         ],
       ),
+      actions: const [
+        AppAlertAction(label: '關閉', value: null, isDefault: true),
+      ],
     );
   }
 
@@ -382,11 +434,11 @@ class DownloadManagerPage extends StatelessWidget {
 
   Color _statusColor(BuildContext context, DownloadTask task) {
     if (task.isFailed || task.errorCount > 0) {
-      return Theme.of(context).colorScheme.error;
+      return context.danger;
     }
     if (task.isPaused) return context.warning;
     if (task.isCompleted) return context.success;
-    return Theme.of(context).colorScheme.onSurfaceVariant;
+    return AppChrome.of(context).sectionText;
   }
 
   String _formatTimestamp(int timestamp) {
@@ -395,5 +447,43 @@ class DownloadManagerPage extends StatelessWidget {
     String two(int value) => value.toString().padLeft(2, '0');
     return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
         '${two(dt.hour)}:${two(dt.minute)}';
+  }
+}
+
+/// 任務列右側的圓形控制鈕（暫停、繼續、重試）。
+class _TaskControlButton extends StatelessWidget {
+  const _TaskControlButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: PressScale(
+          onTap: onPressed,
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: scheme.primary.withValues(alpha: 0.12),
+            ),
+            child: Icon(icon, size: 20, color: scheme.primary),
+          ),
+        ),
+      ),
+    );
   }
 }

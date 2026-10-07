@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
+/// 書源規則輸入列（Telegram ItemListMultilineInputItem 的紙墨版）：放在
+/// [GroupedSection] 內，上方小字標籤與小幫手按鈕，下方等寬字輸入框。
 class RuleTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -21,38 +24,51 @@ class RuleTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(
-                  label,
-                  style: AppTextStyles.bodySm.copyWith(
-                    fontWeight: FontWeight.bold,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text(
+                    label,
+                    style: AppTextStyles.uiSm.copyWith(
+                      color: chrome.sectionText,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
               ),
               _buildHelperButton(context),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          TextFormField(
+          TextField(
             controller: controller,
             maxLines: maxLines,
-            style: AppTextStyles.bodySm.copyWith(fontFamily: 'monospace'),
+            style: AppTextStyles.bodySm.copyWith(
+              fontFamily: 'monospace',
+              color: scheme.onSurface,
+            ),
             decoration: InputDecoration(
               hintText: hint,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.md,
+              hintStyle: AppTextStyles.bodySm.copyWith(
+                color: chrome.sectionText.withValues(alpha: 0.7),
               ),
-              border: const OutlineInputBorder(
-                borderRadius: AppRadius.cardMd,
+              isDense: true,
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.only(
+                right: AppGrouped.rowPadding,
+                bottom: AppSpacing.md,
               ),
             ),
           ),
@@ -68,21 +84,27 @@ class RuleTextField extends StatelessWidget {
       button: true,
       onTap: () => _showHelperMenu(context),
       child: ExcludeSemantics(
-        child: IconButton(
-          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-          tooltip: semanticsLabel,
-          icon: Icon(
-            Icons.help_outline,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
+        child: Tooltip(
+          message: semanticsLabel,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _showHelperMenu(context),
+            child: SizedBox(
+              width: AppGrouped.rowMinHeight,
+              height: 36,
+              child: Icon(
+                Icons.help_outline_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
           ),
-          onPressed: () => _showHelperMenu(context),
         ),
       ),
     );
   }
 
-  void _showHelperMenu(BuildContext context) {
+  Future<void> _showHelperMenu(BuildContext context) async {
     final List<Map<String, String>> helpers =
         isUrl
             ? [
@@ -105,58 +127,31 @@ class RuleTextField extends StatelessWidget {
               {'label': '取連結屬性 @href', 'value': '@href'},
             ];
 
-    AppBottomSheet.showCustom(
+    final value = await showAppActionSheet<String>(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Text(
-                    '$label - 規則小幫手',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Divider(height: 1),
-                ...helpers.map(
-                  (h) => ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                    ),
-                    title: Text(h['label']!),
-                    subtitle: Text(h['value']!),
-                    onTap: () {
-                      final text = controller.text;
-                      final selection = controller.selection;
-                      final hasValidSelection =
-                          selection.isValid &&
-                          selection.start >= 0 &&
-                          selection.end <= text.length;
-                      final start =
-                          hasValidSelection ? selection.start : text.length;
-                      final end =
-                          hasValidSelection ? selection.end : text.length;
-                      final value = h['value']!;
-                      final newText = text.replaceRange(start, end, value);
-                      controller.value = TextEditingValue(
-                        text: newText,
-                        selection: TextSelection.collapsed(
-                          offset: start + value.length,
-                        ),
-                      );
-                      Navigator.pop(ctx);
-                    },
-                  ),
-                ),
-              ],
-            ),
+      title: '$label - 規則小幫手',
+      actions: [
+        for (final h in helpers)
+          AppSheetAction(
+            label: h['label']!,
+            subtitle: h['value'],
+            value: h['value']!,
           ),
-        );
-      },
+      ],
+    );
+    if (value == null) return;
+    final text = controller.text;
+    final selection = controller.selection;
+    final hasValidSelection =
+        selection.isValid &&
+        selection.start >= 0 &&
+        selection.end <= text.length;
+    final start = hasValidSelection ? selection.start : text.length;
+    final end = hasValidSelection ? selection.end : text.length;
+    final newText = text.replaceRange(start, end, value);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + value.length),
     );
   }
 }

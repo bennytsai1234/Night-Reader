@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+/// 替換規則的開關選項：啟用、正則、作用於標題、作用於正文。
 class ReplaceEditOptions extends StatelessWidget {
   final bool isEnabled;
   final bool isRegex;
@@ -10,6 +11,9 @@ class ReplaceEditOptions extends StatelessWidget {
   final Function(bool) onRegexChanged;
   final Function(bool) onTitleChanged;
   final Function(bool) onContentChanged;
+
+  /// 分組卡片外距；放在已有左右內距的面板內時傳 [EdgeInsets.zero]。
+  final EdgeInsetsGeometry? margin;
 
   const ReplaceEditOptions({
     super.key,
@@ -21,28 +25,36 @@ class ReplaceEditOptions extends StatelessWidget {
     required this.onRegexChanged,
     required this.onTitleChanged,
     required this.onContentChanged,
+    this.margin,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 0,
+    return GroupedSection(
+      margin: margin,
+      header: '選項',
       children: [
-        _buildChip('已啟用', isEnabled, onEnabledChanged),
-        _buildChip('正則', isRegex, onRegexChanged),
-        _buildChip('標題', scopeTitle, onTitleChanged),
-        _buildChip('正文', scopeContent, onContentChanged),
+        GroupedSwitchRow(
+          title: '啟用規則',
+          value: isEnabled,
+          onChanged: onEnabledChanged,
+        ),
+        GroupedSwitchRow(
+          title: '使用正則',
+          value: isRegex,
+          onChanged: onRegexChanged,
+        ),
+        GroupedSwitchRow(
+          title: '作用於標題',
+          value: scopeTitle,
+          onChanged: onTitleChanged,
+        ),
+        GroupedSwitchRow(
+          title: '作用於正文',
+          value: scopeContent,
+          onChanged: onContentChanged,
+        ),
       ],
-    );
-  }
-
-  Widget _buildChip(String label, bool value, Function(bool) onChanged) {
-    return FilterChip(
-      label: Text(label, style: AppTextStyles.labelSm),
-      selected: value,
-      onSelected: onChanged,
-      visualDensity: VisualDensity.compact,
     );
   }
 }

@@ -1,79 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+/// 規則調試：輸入測試文字，即時顯示替換結果。
 class ReplaceEditTestPanel extends StatelessWidget {
   final TextEditingController testInputCtrl;
   final String testResult;
+
+  /// 分組卡片外距；放在已有左右內距的面板內時傳 [EdgeInsets.zero]。
+  final EdgeInsetsGeometry? margin;
 
   const ReplaceEditTestPanel({
     super.key,
     required this.testInputCtrl,
     required this.testResult,
+    this.margin,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
-        borderRadius: AppRadius.cardSm,
-        border: Border.all(
-          color: Theme.of(
-            context,
-          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.bug_report, size: 18, color: context.warning),
-              const SizedBox(width: AppSpacing.sm),
-              const Text('規則調試', style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: testInputCtrl,
-            decoration: const InputDecoration(
-              labelText: '測試文字',
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GroupedSection(
+          margin: margin,
+          header: '規則調試',
+          children: [
+            GroupedTextFieldRow(
+              controller: testInputCtrl,
               hintText: '請輸入要測試的內容',
-              isDense: true,
-            ),
-            maxLines: 3,
-            style: AppTextStyles.bodyXs,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            '替換結果:',
-            style: AppTextStyles.labelSm.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-              borderRadius: AppRadius.cardXs,
-            ),
-            child: Text(
-              testResult.isEmpty ? '(無結果)' : testResult,
-              style: AppTextStyles.bodyXs.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontFamily: 'monospace',
+              maxLines: 3,
+              style: AppTextStyles.bodySm.copyWith(
+                height: 1.3,
+                color: scheme.onSurface,
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        GroupedSection(
+          margin: margin,
+          topGap: AppSpacing.lg,
+          header: '替換結果',
+          children: [
+            GroupedContent(
+              child: Text(
+                testResult.isEmpty ? '(無結果)' : testResult,
+                style: AppTextStyles.bodySm.copyWith(
+                  color: chrome.sectionText,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

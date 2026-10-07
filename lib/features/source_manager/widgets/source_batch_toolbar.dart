@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import '../source_manager_provider.dart';
 
-/// 底部選取操作列 — 對標 legado SelectActionBar
-/// 始終顯示於書源管理頁底部，提供全選/反選/刪除及溢出選單。
+/// 編輯模式底部的浮動玻璃工具列 — 對標 legado SelectActionBar。
+/// 提供反選、刪除與其餘批次操作選單；全選放在導航頁首。
 class SelectActionBar extends StatelessWidget {
   final SourceManagerProvider provider;
 
@@ -43,9 +47,17 @@ class SelectActionBar extends StatelessWidget {
     this.externallyBusy = false,
   });
 
+  /// 工具列本體高度（不含系統區與上下間距）。
+  static const double height = AppGlass.buttonSize + AppSpacing.sm * 2;
+
+  /// 清單底部需要讓出的高度（不含系統區）。
+  static const double occupiedHeight =
+      height + AppGlass.tabBarBottomGap + AppSpacing.md;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
     final selectCount = provider.selectedUrls.length;
     final allCount = provider.sources.length;
     final visibleSelectedCount =
@@ -58,177 +70,207 @@ class SelectActionBar extends StatelessWidget {
     final hasSelection = selectCount > 0;
     final isBusy = provider.isMutationBusy || externallyBusy;
     final actionsEnabled = hasSelection && !isBusy;
-    final allSelected = visibleSelectedCount == allCount && allCount > 0;
     final selectionLabel =
         allCount == 0 && hasSelection
             ? '已選 $selectCount 個（目前篩選無項目）'
-            : '${allSelected ? '取消全選' : '全選'} '
-                '($visibleSelectedCount/$allCount)'
+            : '$visibleSelectedCount/$allCount'
                 '${hiddenSelectedCount > 0 ? '，另選 $hiddenSelectedCount 個' : ''}';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -1),
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: AppGlass.tabBarBottomGap),
+      child: Center(
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: AppGlass.tabBarMaxWidth,
           ),
-        ],
-      ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: allCount > 0 && !isBusy ? provider.selectAll : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: 10,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+            child: SizedBox(
+              height: height,
+              child: GlassSurface(
+                borderRadius: AppRadius.pillShape,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                  child: Row(
+                    children: [
+                      _BarTextButton(
+                        label: '反選',
+                        color: scheme.onSurface,
+                        onTap:
+                            allCount > 0 && !isBusy
+                                ? provider.revertSelection
+                                : null,
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            allSelected
-                                ? Icons.check_box
-                                : Icons.check_box_outline_blank,
-                            size: 22,
-                            color:
-                                allSelected ? theme.colorScheme.primary : null,
+                      Expanded(
+                        child: Text(
+                          selectionLabel,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.uiSm.copyWith(
+                            color: chrome.sectionText,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              selectionLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.bodyXs.copyWith(
-                                color: theme.textTheme.bodyMedium?.color,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      _BarTextButton(
+                        label: '刪除',
+                        color: context.danger,
+                        onTap: actionsEnabled ? onDelete : null,
+                      ),
+                      if (actionsEnabled)
+                        GlassMenuButton<String>(
+                          tooltip: '更多批次操作',
+                          entriesBuilder: (_) => _entries,
+                          onSelected: _onMenuSelected,
+                          child: _moreIcon(scheme.onSurface),
+                        )
+                      else
+                        Tooltip(
+                          message: isBusy ? '操作進行中' : '更多批次操作',
+                          child: _moreIcon(
+                            scheme.onSurface.withValues(alpha: 0.38),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-
-                // 反選
-                TextButton(
-                  onPressed:
-                      allCount > 0 && !isBusy
-                          ? () => provider.revertSelection()
-                          : null,
-                  child: const Text('反選', style: AppTextStyles.bodyXs),
-                ),
-              ],
-            ),
-          ),
-
-          // 刪除 (主操作)
-          TextButton(
-            onPressed: actionsEnabled ? onDelete : null,
-            child: Text(
-              '刪除',
-              style: AppTextStyles.bodyXs.copyWith(
-                color:
-                    actionsEnabled
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
-
-          // 溢出選單
-          PopupMenuButton<String>(
-            icon: Icon(
-              Icons.more_vert,
-              color: actionsEnabled ? null : theme.colorScheme.onSurfaceVariant,
-            ),
-            tooltip: isBusy ? '操作進行中' : '更多批次操作',
-            enabled: actionsEnabled,
-            onSelected: _onMenuSelected,
-            itemBuilder:
-                (context) => [
-                  _menuItem('enable', Icons.toggle_on_outlined, '啟用選中'),
-                  _menuItem('disable', Icons.toggle_off_outlined, '禁用選中'),
-                  const PopupMenuDivider(),
-                  _menuItem('add_group', Icons.playlist_add, '加入分組'),
-                  _menuItem('remove_group', Icons.playlist_remove, '移出分組'),
-                  _menuItem('enable_explore', Icons.travel_explore, '啟用發現'),
-                  _menuItem(
-                    'disable_explore',
-                    Icons.explore_off_outlined,
-                    '禁用發現',
-                  ),
-                  const PopupMenuDivider(),
-                  _menuItem('select_interval', Icons.select_all, '連續選取'),
-                  _menuItem('top', Icons.vertical_align_top, '置頂'),
-                  _menuItem('bottom', Icons.vertical_align_bottom, '置底'),
-                  const PopupMenuDivider(),
-                  _menuItem('export', Icons.file_download_outlined, '匯出選中'),
-                  _menuItem('share', Icons.share_outlined, '分享選中'),
-                  const PopupMenuDivider(),
-                  _menuItem('check', Icons.playlist_add_check, '校驗選中'),
-                ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String text) {
-    return PopupMenuItem(
-      value: value,
-      child: Row(
-        children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(text)],
-      ),
+  Widget _moreIcon(Color color) {
+    return SizedBox.square(
+      dimension: AppGlass.buttonSize,
+      child: Icon(Icons.more_horiz_rounded, size: 22, color: color),
     );
   }
+
+  static const List<GlassMenuEntry<String>> _entries = [
+    GlassMenuItem(
+      value: 'enable',
+      icon: Icons.toggle_on_outlined,
+      label: '啟用選中',
+    ),
+    GlassMenuItem(
+      value: 'disable',
+      icon: Icons.toggle_off_outlined,
+      label: '禁用選中',
+    ),
+    GlassMenuDivider(),
+    GlassMenuItem(value: 'add_group', icon: Icons.playlist_add, label: '加入分組'),
+    GlassMenuItem(
+      value: 'remove_group',
+      icon: Icons.playlist_remove,
+      label: '移出分組',
+    ),
+    GlassMenuItem(
+      value: 'enable_explore',
+      icon: Icons.travel_explore,
+      label: '啟用發現',
+    ),
+    GlassMenuItem(
+      value: 'disable_explore',
+      icon: Icons.explore_off_outlined,
+      label: '禁用發現',
+    ),
+    GlassMenuDivider(),
+    GlassMenuItem(
+      value: 'select_interval',
+      icon: Icons.select_all,
+      label: '連續選取',
+    ),
+    GlassMenuItem(value: 'top', icon: Icons.vertical_align_top, label: '置頂'),
+    GlassMenuItem(
+      value: 'bottom',
+      icon: Icons.vertical_align_bottom,
+      label: '置底',
+    ),
+    GlassMenuDivider(),
+    GlassMenuItem(
+      value: 'export',
+      icon: Icons.file_download_outlined,
+      label: '匯出選中',
+    ),
+    GlassMenuItem(value: 'share', icon: Icons.share_outlined, label: '分享選中'),
+    GlassMenuDivider(),
+    GlassMenuItem(
+      value: 'check',
+      icon: Icons.playlist_add_check,
+      label: '校驗選中',
+    ),
+  ];
 
   void _onMenuSelected(String value) {
     switch (value) {
       case 'enable':
         onEnable();
-        break;
       case 'disable':
         onDisable();
-        break;
       case 'add_group':
         onAddGroup();
-        break;
       case 'remove_group':
         onRemoveGroup();
-        break;
       case 'enable_explore':
         onEnableExplore();
-        break;
       case 'disable_explore':
         onDisableExplore();
-        break;
       case 'select_interval':
         onSelectInterval();
-        break;
       case 'top':
         onMoveToTop();
-        break;
       case 'bottom':
         onMoveToBottom();
-        break;
       case 'export':
         onExport();
-        break;
       case 'share':
         onShare();
-        break;
       case 'check':
         onCheckSource();
-        break;
     }
+  }
+}
+
+class _BarTextButton extends StatelessWidget {
+  const _BarTextButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: PressScale(
+        onTap: onTap,
+        child: SizedBox(
+          height: AppGlass.buttonSize,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: AppTextStyles.uiMd.copyWith(
+                  color: color.withValues(alpha: enabled ? 1 : 0.38),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

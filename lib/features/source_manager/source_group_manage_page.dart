@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'source_manager_provider.dart';
+import 'widgets/source_manager_dialogs.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
   const SourceGroupManagePage({super.key});
@@ -10,13 +18,14 @@ class SourceGroupManagePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('書源分組管理'),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: '書源分組管理',
         actions: [
           Consumer<SourceManagerProvider>(
             builder:
-                (context, provider, _) => IconButton(
-                  icon: const Icon(Icons.add),
+                (context, provider, _) => GlassIconButton(
+                  icon: Icons.add_rounded,
                   tooltip: '新增分組',
                   onPressed:
                       provider.isMutationBusy
@@ -32,65 +41,137 @@ class SourceGroupManagePage extends StatelessWidget {
           final mutationEnabled = !provider.isMutationBusy;
 
           if (groups.isEmpty) {
-            return AppStateView(
-              icon: Icons.folder_outlined,
-              title: '尚未建立自訂分組',
-              description: '建立分組後，可依分組管理、篩選與分享書源。',
-              primaryAction: AppStateAction(
-                label: '新增分組',
-                icon: Icons.add,
-                onPressed:
-                    mutationEnabled ? () => _showEditDialog(context) : null,
+            return Padding(
+              padding: EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top,
+              ),
+              child: AppStateView(
+                icon: Icons.folder_outlined,
+                title: '尚未建立自訂分組',
+                description: '建立分組後，可依分組管理、篩選與分享書源。',
+                primaryAction: AppStateAction(
+                  label: '新增分組',
+                  icon: Icons.add,
+                  onPressed:
+                      mutationEnabled ? () => _showEditDialog(context) : null,
+                ),
               ),
             );
           }
 
-          return ListView.separated(
-            itemCount: groups.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final group = groups[index];
-              return ListTile(
-                title: Text(group),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+          final chrome = AppChrome.of(context);
+          return SwipeActionsGroup(
+            child: GroupedListView(
+              children: [
+                GroupedSection(
+                  topGap: AppSpacing.sm,
+                  separatorIndent: AppGrouped.separatorIndentWithIcon,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined, size: 20),
-                      tooltip: '分享此分組書源',
-                      onPressed:
-                          mutationEnabled
-                              ? () => _shareGroup(context, provider, group)
-                              : null,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      tooltip: '重新命名分組',
-                      onPressed:
-                          mutationEnabled
-                              ? () => _showEditDialog(context, oldName: group)
-                              : null,
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: Theme.of(context).colorScheme.error,
-                        size: 20,
+                    for (final group in groups)
+                      SwipeActions(
+                        key: ValueKey(group),
+                        enabled: mutationEnabled,
+                        leading: [
+                          SwipeAction(
+                            label: '分享',
+                            icon: Icons.share_outlined,
+                            color: AppTint.azurite.color,
+                            onPressed:
+                                () => _shareGroup(context, provider, group),
+                          ),
+                        ],
+                        trailing: [
+                          SwipeAction(
+                            label: '重新命名',
+                            icon: Icons.edit_outlined,
+                            color: AppTint.tea.color,
+                            onPressed:
+                                () => _showEditDialog(context, oldName: group),
+                          ),
+                          SwipeAction(
+                            label: '刪除',
+                            icon: Icons.delete_outline_rounded,
+                            color: context.danger,
+                            destructive: true,
+                            onPressed:
+                                () => _confirmDelete(context, provider, group),
+                          ),
+                        ],
+                        child: ColoredBox(
+                          color: chrome.groupedSurface,
+                          child: Builder(
+                            builder:
+                                (rowContext) => GroupedRow(
+                                  title: group,
+                                  leading: const GroupedIconTile(
+                                    Icons.folder_rounded,
+                                    tint: AppTint.gold,
+                                  ),
+                                  enabled: mutationEnabled,
+                                  showChevron: false,
+                                  onTap:
+                                      () => _showGroupMenu(
+                                        rowContext,
+                                        provider,
+                                        group,
+                                      ),
+                                  onLongPress:
+                                      () => _showGroupMenu(
+                                        rowContext,
+                                        provider,
+                                        group,
+                                      ),
+                                ),
+                          ),
+                        ),
                       ),
-                      tooltip: '刪除分組',
-                      onPressed:
-                          mutationEnabled
-                              ? () => _confirmDelete(context, provider, group)
-                              : null,
-                    ),
                   ],
                 ),
-              );
-            },
+              ],
+            ),
           );
         },
       ),
     );
+  }
+
+  Future<void> _showGroupMenu(
+    BuildContext rowContext,
+    SourceManagerProvider provider,
+    String group,
+  ) async {
+    final action = await showGlassMenu<String>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: const [
+        GlassMenuItem(
+          value: 'share',
+          label: '分享此分組書源',
+          icon: Icons.share_outlined,
+        ),
+        GlassMenuItem(
+          value: 'rename',
+          label: '重新命名分組',
+          icon: Icons.edit_outlined,
+        ),
+        GlassMenuDivider(),
+        GlassMenuItem(
+          value: 'delete',
+          label: '刪除分組',
+          icon: Icons.delete_outline_rounded,
+          destructive: true,
+        ),
+      ],
+    );
+    if (action == null || !rowContext.mounted) return;
+    switch (action) {
+      case 'share':
+        _shareGroup(rowContext, provider, group);
+      case 'rename':
+        await _showEditDialog(rowContext, oldName: group);
+      case 'delete':
+        await _confirmDelete(rowContext, provider, group);
+    }
   }
 
   void _shareGroup(
@@ -124,60 +205,51 @@ class SourceGroupManagePage extends StatelessWidget {
     final pageContext = context;
     String? inputError;
     try {
-      await showDialog<void>(
+      await showStatefulAppAlert<void>(
         context: context,
         builder:
-            (dialogContext) => StatefulBuilder(
-              builder:
-                  (context, setDialogState) => AlertDialog(
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: AppRadius.cardXl,
-                    ),
-                    title: Text(oldName == null ? '新增分組' : '重新命名分組'),
-                    content: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: '輸入分組名稱',
-                        errorText: inputError,
-                      ),
-                      onChanged: (_) {
-                        if (inputError != null) {
-                          setDialogState(() => inputError = null);
-                        }
-                      },
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('取消'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          final name = controller.text.trim();
-                          if (name.isEmpty) {
-                            setDialogState(() => inputError = '請輸入分組名稱');
-                            return;
-                          }
-                          Navigator.pop(dialogContext);
-                          try {
-                            if (oldName == null) {
-                              await provider.addGroup(name);
-                            } else {
-                              await provider.renameGroup(oldName, name);
-                            }
-                          } catch (error) {
-                            if (pageContext.mounted) {
-                              ScaffoldMessenger.of(pageContext).showSnackBar(
-                                SnackBar(content: Text('儲存分組失敗：$error')),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('確定'),
-                      ),
-                    ],
-                  ),
+            (dialogContext, setDialogState) => AppAlert<bool>(
+              title: oldName == null ? '新增分組' : '重新命名分組',
+              onAction: (confirmed) async {
+                if (!confirmed) {
+                  Navigator.pop(dialogContext);
+                  return;
+                }
+                final name = controller.text.trim();
+                if (name.isEmpty) {
+                  setDialogState(() => inputError = '請輸入分組名稱');
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                try {
+                  if (oldName == null) {
+                    await provider.addGroup(name);
+                  } else {
+                    await provider.renameGroup(oldName, name);
+                  }
+                } catch (error) {
+                  if (pageContext.mounted) {
+                    ScaffoldMessenger.of(pageContext).showSnackBar(
+                      SnackBar(content: Text('儲存分組失敗：$error')),
+                    );
+                  }
+                }
+              },
+              content: AlertTextField(
+                controller: controller,
+                autofocus: true,
+                hintText: '輸入分組名稱',
+                errorText: inputError,
+                onChanged: (_) {
+                  if (inputError != null) {
+                    setDialogState(() => inputError = null);
+                  }
+                },
+              ),
+              actions: const [
+                AppAlertAction(label: '取消', value: false),
+                AppAlertAction(label: '確定', value: true, isDefault: true),
+              ],
             ),
       );
     } finally {
@@ -185,46 +257,27 @@ class SourceGroupManagePage extends StatelessWidget {
     }
   }
 
-  void _confirmDelete(
+  Future<void> _confirmDelete(
     BuildContext context,
     SourceManagerProvider provider,
     String name,
-  ) {
-    final pageContext = context;
-    showDialog(
+  ) async {
+    final confirmed = await showAppConfirm(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('刪除分組'),
-            content: Text('確定要刪除分組 "$name" 嗎？\n這不會刪除書源，只會移除該分組標籤。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  try {
-                    await provider.deleteGroup(name);
-                  } catch (error) {
-                    if (pageContext.mounted) {
-                      ScaffoldMessenger.of(
-                        pageContext,
-                      ).showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
-                    }
-                  }
-                },
-                child: Text(
-                  '刪除',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            ],
-          ),
+      title: '刪除分組',
+      message: '確定要刪除分組 "$name" 嗎？\n這不會刪除書源，只會移除該分組標籤。',
+      confirmLabel: '刪除',
+      destructive: true,
     );
+    if (!confirmed) return;
+    try {
+      await provider.deleteGroup(name);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
+      }
+    }
   }
 }
