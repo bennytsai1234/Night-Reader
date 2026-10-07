@@ -69,7 +69,12 @@ class BookCoverWidget extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _buildCover(context),
+                // 網格以 double.infinity 撐滿格子，解碼尺寸要用實際版面大小。
+                LayoutBuilder(
+                  builder:
+                      (context, constraints) =>
+                          _buildCover(context, constraints),
+                ),
                 // Book Spine and tactile lighting overlay
                 Positioned.fill(
                   child: IgnorePointer(
@@ -116,7 +121,7 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildCover(BuildContext context) {
+  Widget _buildCover(BuildContext context, BoxConstraints constraints) {
     final source = coverUrl?.trim();
     if (source == null || source.isEmpty) {
       return _buildTextCover();
@@ -127,8 +132,14 @@ class BookCoverWidget extends StatelessWidget {
     }
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final cacheWidth = (width * devicePixelRatio).ceil();
-    final cacheHeight = (height * devicePixelRatio).ceil();
+    int? decodeSize(double extent, double fallback) {
+      final value = extent.isFinite ? extent : fallback;
+      if (!value.isFinite || value <= 0) return null;
+      return (value * devicePixelRatio).ceil();
+    }
+
+    final cacheWidth = decodeSize(width, constraints.maxWidth);
+    final cacheHeight = decodeSize(height, constraints.maxHeight);
 
     if (source.startsWith('memory://')) {
       return FutureBuilder<Uint8List?>(
@@ -193,16 +204,10 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
+  /// 載入中只鋪一層安靜的紙色，不在每張縮圖上轉圈。
   Widget _buildPlaceholder(BuildContext context) {
-    return Container(
+    return ColoredBox(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: const Center(
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
     );
   }
 
