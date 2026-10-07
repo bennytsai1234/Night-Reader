@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -14,6 +13,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -22,34 +22,40 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 ///
 /// 頁首佔用狀態列（或隱藏狀態列後剩下的鏡頭挖孔區）；有資訊時，
 /// 狀態列顯示中會在其下方多一條資訊列，隱藏時則直接把資訊放進該區。
-/// 使用者的上／下邊距只加在正文與頁首、頁尾之間，不影響資訊列本身。
+/// 上邊距是正文與頁首之間的距離；下邊距是正文與頁尾資訊列（沒有頁尾時
+/// 為畫面底部的系統內距）之間的距離。
 ///
-/// 隱藏狀態列時，頁首只依鏡頭挖孔的實際位置決定，不看狀態列當下的
-/// 內距：從後台回到前台時系統會先把狀態列叫回來、再由 App 收起，
-/// 這段期間的內距變動不得推動正文。
+/// 隱藏狀態列時，頁首只依 topCutoutExtent（鏡頭挖孔與曲面邊緣佔掉的
+/// 高度）決定，不看狀態列當下的內距：從後台回到前台時系統會先把狀態列
+/// 叫回來、再由 App 收起，這段期間的內距變動不得推動正文。
 @immutable
 final class ReaderV2PageChromeLayout {
   const ReaderV2PageChromeLayout._({
     required this.headerExtent,
     required this.headerRowTop,
     required this.footerExtent,
+    required this.footerRowBottom,
     required this.contentTop,
     required this.contentBottom,
     required this.showHeaderInfo,
     required this.showFooterInfo,
   });
 
+  /// [topCutoutExtent] 為 null 表示尚未取得挖孔高度，暫以系統內距代替。
+  /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統
+  /// 底部內距。
   factory ReaderV2PageChromeLayout.resolve({
     required EdgeInsets mediaPadding,
-    List<DisplayFeature> displayFeatures = const <DisplayFeature>[],
+    double? topCutoutExtent,
     required bool hideStatusBar,
     required bool showHeaderInfo,
     required bool showFooterInfo,
     required double paddingTop,
     required double paddingBottom,
+    double? footerOffset,
   }) {
     final top = hideStatusBar
-        ? _topCutoutExtent(displayFeatures)
+        ? topCutoutExtent ?? mediaPadding.top
         : mediaPadding.top;
     final double headerExtent;
     final double headerRowTop;
@@ -65,13 +71,16 @@ final class ReaderV2PageChromeLayout {
       headerExtent = top + kReaderInfoRowHeight;
       headerRowTop = top;
     }
+    final footerRowBottom =
+        footerOffset ?? mediaPadding.bottom + kReaderFooterAutoSpacing;
     final footerExtent = showFooterInfo
-        ? mediaPadding.bottom + kReaderPermanentInfoReservedHeight
+        ? footerRowBottom + kReaderFooterRowHeight
         : mediaPadding.bottom;
     return ReaderV2PageChromeLayout._(
       headerExtent: headerExtent,
       headerRowTop: headerRowTop,
       footerExtent: footerExtent,
+      footerRowBottom: footerRowBottom,
       contentTop: headerExtent + paddingTop,
       contentBottom: footerExtent + paddingBottom,
       showHeaderInfo: showHeaderInfo,
@@ -79,23 +88,14 @@ final class ReaderV2PageChromeLayout {
     );
   }
 
-  /// 貼齊畫面上緣的鏡頭挖孔所佔的高度；沒有挖孔時為 0。
-  static double _topCutoutExtent(List<DisplayFeature> features) {
-    var extent = 0.0;
-    for (final feature in features) {
-      if (feature.type != DisplayFeatureType.cutout) continue;
-      final bounds = feature.bounds;
-      if (bounds.top > 0 || bounds.bottom <= extent) continue;
-      extent = bounds.bottom;
-    }
-    return extent;
-  }
-
   final double headerExtent;
 
   /// 頁首資訊列在頁首區內的起點；狀態列顯示時位於狀態列下方。
   final double headerRowTop;
   final double footerExtent;
+
+  /// 頁尾資訊列底部到畫面底部的距離。
+  final double footerRowBottom;
   final double contentTop;
   final double contentBottom;
   final bool showHeaderInfo;
@@ -128,6 +128,8 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.footerInfo,
     required this.paddingTop,
     required this.paddingBottom,
+    this.footerOffset,
+    this.topCutoutExtent,
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onExitIntent,
@@ -174,6 +176,12 @@ class ReaderV2PageShell extends StatelessWidget {
   final ReaderV2InfoSlots footerInfo;
   final double paddingTop;
   final double paddingBottom;
+
+  /// 頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統底部內距。
+  final double? footerOffset;
+
+  /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；null 表示尚未取得。
+  final double? topCutoutExtent;
   final IconData dayNightIcon;
   final String dayNightTooltip;
   final VoidCallback onExitIntent;
@@ -201,12 +209,13 @@ class ReaderV2PageShell extends StatelessWidget {
     final mediaPadding = MediaQuery.paddingOf(context);
     final layout = ReaderV2PageChromeLayout.resolve(
       mediaPadding: mediaPadding,
-      displayFeatures: MediaQuery.displayFeaturesOf(context),
+      topCutoutExtent: topCutoutExtent,
       hideStatusBar: hideStatusBar,
       showHeaderInfo: showReadTitleAddition && !headerInfo.isEmpty,
       showFooterInfo: showReadTitleAddition && !footerInfo.isEmpty,
       paddingTop: paddingTop,
       paddingBottom: paddingBottom,
+      footerOffset: footerOffset,
     );
     final infoVisible = hasVisibleContent && !isLoading;
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
@@ -266,7 +275,10 @@ class ReaderV2PageShell extends StatelessWidget {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTapDown: (_) => onShowControls(),
-                    child: _PermanentInfoBar(shell: this),
+                    child: _PermanentInfoBar(
+                      shell: this,
+                      rowBottom: layout.footerRowBottom,
+                    ),
                   ),
                 ),
               if (controlsVisible)
@@ -333,9 +345,12 @@ class ReaderV2PageShell extends StatelessWidget {
 }
 
 class _PermanentInfoBar extends StatelessWidget {
-  const _PermanentInfoBar({required this.shell});
+  const _PermanentInfoBar({required this.shell, required this.rowBottom});
 
   final ReaderV2PageShell shell;
+
+  /// 資訊列底部到畫面底部的距離。
+  final double rowBottom;
 
   @override
   Widget build(BuildContext context) {
@@ -358,18 +373,14 @@ class _PermanentInfoBar extends StatelessWidget {
               ),
       ),
       child: Padding(
-        padding: EdgeInsets.only(
-          top: kReaderPermanentInfoTopPadding,
-          bottom:
-              MediaQuery.paddingOf(context).bottom +
-              kReaderPermanentInfoBottomSpacing,
-        ),
+        padding: EdgeInsets.only(bottom: rowBottom),
         child: Align(
           alignment: Alignment.topCenter,
           child: _InfoRow(
             shell: shell,
             slots: shell.footerInfo,
             showAutoPage: shell.isAutoPaging,
+            rowHeight: kReaderFooterRowHeight,
           ),
         ),
       ),
@@ -383,11 +394,13 @@ class _InfoRow extends StatelessWidget {
     required this.shell,
     required this.slots,
     required this.showAutoPage,
+    this.rowHeight = kReaderInfoRowHeight,
   });
 
   final ReaderV2PageShell shell;
   final ReaderV2InfoSlots slots;
   final bool showAutoPage;
+  final double rowHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -423,7 +436,7 @@ class _InfoRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             child: SizedBox(
-              height: kReaderInfoRowHeight,
+              height: rowHeight,
               child: Row(
                 children: [
                   if (showAutoPage) ...[
@@ -476,6 +489,13 @@ class _InfoRow extends StatelessWidget {
   ) {
     if (item == ReaderV2InfoItem.none) return null;
     if (item == ReaderV2InfoItem.time) return _ReaderClock(textAlign: align);
+    if (item == ReaderV2InfoItem.battery ||
+        item == ReaderV2InfoItem.batteryWithIcon) {
+      return _ReaderBattery(
+        showIcon: item == ReaderV2InfoItem.batteryWithIcon,
+        iconColor: _infoColors(shell).info,
+      );
+    }
     return Text(_itemText(context, item, progress) ?? '', textAlign: align);
   }
 
@@ -487,6 +507,11 @@ class _InfoRow extends StatelessWidget {
     if (item == ReaderV2InfoItem.time) {
       return '時間 ${DateFormat('HH:mm').format(DateTime.now())}';
     }
+    if (item == ReaderV2InfoItem.battery ||
+        item == ReaderV2InfoItem.batteryWithIcon) {
+      final battery = ReaderV2DeviceChannel.latestBattery;
+      return battery == null ? null : '電量 ${battery.percent}%';
+    }
     return _itemText(context, item, progress);
   }
 
@@ -497,7 +522,10 @@ class _InfoRow extends StatelessWidget {
   ) {
     final navigation = shell.navigation;
     return switch (item) {
-      ReaderV2InfoItem.none || ReaderV2InfoItem.time => null,
+      ReaderV2InfoItem.none ||
+      ReaderV2InfoItem.time ||
+      ReaderV2InfoItem.battery ||
+      ReaderV2InfoItem.batteryWithIcon => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
       ReaderV2InfoItem.chapterTitle => shell.chapterTitle,
       ReaderV2InfoItem.chapterIndex =>
@@ -509,6 +537,69 @@ class _InfoRow extends StatelessWidget {
         progress?.chapterProgressLabel ?? '本章 …',
       ReaderV2InfoItem.bookProgress => progress?.bookPercentLabel ?? '…%',
     };
+  }
+}
+
+/// 頁首／頁尾的電量；只在系統回報電量變化時重建。
+class _ReaderBattery extends StatefulWidget {
+  const _ReaderBattery({required this.showIcon, required this.iconColor});
+
+  final bool showIcon;
+  final Color iconColor;
+
+  @override
+  State<_ReaderBattery> createState() => _ReaderBatteryState();
+}
+
+class _ReaderBatteryState extends State<_ReaderBattery> {
+  StreamSubscription<ReaderV2Battery>? _subscription;
+  ReaderV2Battery? _battery = ReaderV2DeviceChannel.latestBattery;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = ReaderV2DeviceChannel.battery.listen(
+      (battery) {
+        if (mounted) setState(() => _battery = battery);
+      },
+      // 非 Android 平台沒有原生端；維持佔位顯示，不影響閱讀。
+      onError: (Object _) {},
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_subscription?.cancel());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final battery = _battery;
+    final text = Text(battery == null ? '…%' : '${battery.percent}%');
+    if (!widget.showIcon) return text;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(_iconFor(battery), size: 13, color: widget.iconColor),
+        const SizedBox(width: 2),
+        Flexible(child: text),
+      ],
+    );
+  }
+
+  static IconData _iconFor(ReaderV2Battery? battery) {
+    if (battery == null) return Icons.battery_unknown_outlined;
+    if (battery.charging) return Icons.battery_charging_full;
+    final percent = battery.percent;
+    if (percent >= 95) return Icons.battery_full;
+    if (percent >= 80) return Icons.battery_6_bar;
+    if (percent >= 65) return Icons.battery_5_bar;
+    if (percent >= 50) return Icons.battery_4_bar;
+    if (percent >= 35) return Icons.battery_3_bar;
+    if (percent >= 20) return Icons.battery_2_bar;
+    if (percent >= 8) return Icons.battery_1_bar;
+    return Icons.battery_0_bar;
   }
 }
 

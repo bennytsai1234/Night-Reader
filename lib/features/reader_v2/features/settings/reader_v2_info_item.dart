@@ -8,7 +8,9 @@ enum ReaderV2InfoItem {
   chapterTitle(3, '章節名稱'),
   chapterIndex(4, '章節序號'),
   chapterProgress(5, '本章進度'),
-  bookProgress(6, '全書進度');
+  bookProgress(6, '全書進度'),
+  battery(7, '電量'),
+  batteryWithIcon(8, '電量（含圖示）');
 
   const ReaderV2InfoItem(this.code, this.label);
 

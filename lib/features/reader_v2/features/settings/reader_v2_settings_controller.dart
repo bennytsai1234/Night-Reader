@@ -40,7 +40,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int textIndent = 2;
   double paddingHorizontal = 16.0;
   double paddingTop = 0.0;
-  double paddingBottom = 0.0;
+  double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
+  double? footerOffset;
   bool hideStatusBar = false;
   ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
   ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
@@ -99,6 +100,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     paddingHorizontal = snapshot.paddingHorizontal;
     paddingTop = snapshot.paddingTop;
     paddingBottom = snapshot.paddingBottom;
+    footerOffset = snapshot.footerOffset;
     hideStatusBar = snapshot.hideStatusBar;
     headerInfo = snapshot.headerInfo;
     footerInfo = snapshot.footerInfo;
@@ -465,7 +467,21 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將邊距、狀態列與頁首／頁尾恢復為預設值。
+  /// 頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統底部內距。
+  void setFooterOffset(double? value) {
+    final normalized = value == null ? null : _normalizePagePadding(value);
+    if (footerOffset == normalized) return;
+    footerOffset = normalized;
+    _persist(
+      'footerOffset',
+      () => _prefsRepository.saveFooterOffset(normalized),
+      onSaved: (p) => p.copyWith(footerOffset: () => normalized),
+      restore: (p) => footerOffset = p.footerOffset,
+    );
+    notifyListeners();
+  }
+
+  /// 將邊距、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
   void resetPageLayout() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setPagePadding(
@@ -473,6 +489,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       top: defaults.paddingTop,
       bottom: defaults.paddingBottom,
     );
+    setFooterOffset(defaults.footerOffset);
     setHideStatusBar(defaults.hideStatusBar);
     setHeaderInfo(defaults.headerInfo);
     setFooterInfo(defaults.footerInfo);
@@ -483,6 +500,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     return paddingHorizontal == defaults.paddingHorizontal &&
         paddingTop == defaults.paddingTop &&
         paddingBottom == defaults.paddingBottom &&
+        footerOffset == defaults.footerOffset &&
         hideStatusBar == defaults.hideStatusBar &&
         headerInfo == defaults.headerInfo &&
         footerInfo == defaults.footerInfo;

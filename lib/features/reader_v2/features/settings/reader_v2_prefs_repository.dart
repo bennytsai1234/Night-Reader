@@ -28,9 +28,14 @@ class ReaderV2PrefsSnapshot {
   /// 正文左右邊距（px）。
   final double paddingHorizontal;
 
-  /// 正文與頁首、頁尾之間額外保留的空白（px）。
+  /// 正文與頁首之間的距離（px）；隱藏狀態列時從鏡頭挖孔下緣算起。
   final double paddingTop;
+
+  /// 正文與頁尾資訊列之間的距離（px）；沒有頁尾時與畫面底部之間。
   final double paddingBottom;
+
+  /// 頁尾資訊列底部到畫面底部的距離（px）；null 表示跟隨系統底部內距。
+  final double? footerOffset;
 
   /// 閱讀時隱藏系統狀態列（時間、訊號、電量）。
   final bool hideStatusBar;
@@ -56,6 +61,7 @@ class ReaderV2PrefsSnapshot {
     required this.paddingHorizontal,
     required this.paddingTop,
     required this.paddingBottom,
+    this.footerOffset,
     required this.hideStatusBar,
     required this.headerInfo,
     required this.footerInfo,
@@ -80,7 +86,8 @@ class ReaderV2PrefsSnapshot {
       clickActions: ReaderV2TapAction.defaultGrid(),
       paddingHorizontal: 16.0,
       paddingTop: 0.0,
-      paddingBottom: 0.0,
+      // 等同舊版頁尾上方固定的 12px 加上資訊列文字上方的空白。
+      paddingBottom: 16.0,
       hideStatusBar: false,
       // 頁首預設關閉：狀態列顯示時多一條頁首只會重複系統時鐘；
       // 隱藏狀態列後由使用者決定鏡頭那一行放什麼。
@@ -114,6 +121,7 @@ class ReaderV2PrefsSnapshot {
     double? paddingHorizontal,
     double? paddingTop,
     double? paddingBottom,
+    double? Function()? footerOffset,
     bool? hideStatusBar,
     ReaderV2InfoSlots? headerInfo,
     ReaderV2InfoSlots? footerInfo,
@@ -137,6 +145,7 @@ class ReaderV2PrefsSnapshot {
       paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
       paddingTop: paddingTop ?? this.paddingTop,
       paddingBottom: paddingBottom ?? this.paddingBottom,
+      footerOffset: footerOffset == null ? this.footerOffset : footerOffset(),
       hideStatusBar: hideStatusBar ?? this.hideStatusBar,
       headerInfo: headerInfo ?? this.headerInfo,
       footerInfo: footerInfo ?? this.footerInfo,
@@ -224,6 +233,9 @@ class ReaderV2PrefsRepository {
       paddingBottom: _normalizePagePadding(
         prefs.getDouble(PreferKey.readerPaddingBottom),
         defaults.paddingBottom,
+      ),
+      footerOffset: _normalizeOptionalPagePadding(
+        prefs.getDouble(PreferKey.readerFooterOffset),
       ),
       hideStatusBar:
           prefs.getBool(PreferKey.readerHideStatusBar) ?? defaults.hideStatusBar,
@@ -314,6 +326,16 @@ class ReaderV2PrefsRepository {
     return _setDouble(PreferKey.readerPaddingBottom, value);
   }
 
+  /// null 表示恢復跟隨系統底部內距。
+  Future<void> saveFooterOffset(double? value) async {
+    if (value != null) return _setDouble(PreferKey.readerFooterOffset, value);
+    final prefs = await SharedPreferences.getInstance();
+    _ensureSaved(
+      PreferKey.readerFooterOffset,
+      await prefs.remove(PreferKey.readerFooterOffset),
+    );
+  }
+
   Future<void> saveHideStatusBar(bool value) {
     return _setBool(PreferKey.readerHideStatusBar, value);
   }
@@ -377,6 +399,11 @@ class ReaderV2PrefsRepository {
 
   double _normalizePagePadding(double? value, double fallback) {
     if (value == null || !value.isFinite) return fallback;
+    return value.clamp(minPagePadding, maxPagePadding).toDouble();
+  }
+
+  double? _normalizeOptionalPagePadding(double? value) {
+    if (value == null || !value.isFinite) return null;
     return value.clamp(minPagePadding, maxPagePadding).toDouble();
   }
 

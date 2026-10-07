@@ -5,6 +5,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_acti
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -553,6 +554,22 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 onChanged: (value) => _schedule(bottom: value),
               ),
             ),
+            if (!settings.footerInfo.isEmpty)
+              _stepperRow(
+                NumberStepperRow(
+                  label: '頁尾位置',
+                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。
+                  value:
+                      settings.footerOffset ??
+                      MediaQuery.paddingOf(context).bottom +
+                          kReaderFooterAutoSpacing,
+                  min: ReaderV2SettingsController.minPagePadding,
+                  max: ReaderV2SettingsController.maxPagePadding,
+                  step: _paddingStep,
+                  unit: ' px',
+                  onChanged: settings.setFooterOffset,
+                ),
+              ),
           ],
         ),
         GroupedSection(
