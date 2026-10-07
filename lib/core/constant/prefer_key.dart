@@ -180,6 +180,7 @@ class PreferKey {
   static const String readerTitleFontSize = 'reader_title_font_size';
   static const String readerLineHeight = 'reader_line_height';
   static const String readerParagraphSpacing = 'reader_paragraph_spacing';
+  static const String readerChapterSpacing = 'reader_chapter_spacing';
   static const String readerLetterSpacing = 'reader_letter_spacing';
   static const String readerTextIndent = 'reader_text_indent';
   static const String readerThemeIndex = 'reader_theme_index';
@@ -200,6 +201,7 @@ class PreferKey {
   static const String readerPaddingHorizontal = 'reader_padding_horizontal';
   static const String readerPaddingTop = 'reader_padding_top';
   static const String readerPaddingBottom = 'reader_padding_bottom';
+  static const String readerFooterOffset = 'reader_footer_offset';
   static const String readerHideStatusBar = 'reader_hide_status_bar';
   static const String readerHeaderInfo = 'reader_header_info';
   static const String readerFooterInfo = 'reader_footer_info';

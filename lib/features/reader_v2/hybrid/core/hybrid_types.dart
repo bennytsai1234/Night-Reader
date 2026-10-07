@@ -94,6 +94,7 @@ final class StyleFingerprint {
     required this.lineHeight,
     required this.letterSpacing,
     required this.paragraphSpacing,
+    this.chapterSpacing = 1.0,
     required this.textIndent,
     required this.bold,
     required this.justify,
@@ -120,6 +121,7 @@ final class StyleFingerprint {
       lineHeight: style.lineHeight,
       letterSpacing: style.letterSpacing,
       paragraphSpacing: style.paragraphSpacing,
+      chapterSpacing: style.chapterSpacing,
       textIndent: style.textIndent,
       bold: style.bold,
       justify: justify,
@@ -140,6 +142,9 @@ final class StyleFingerprint {
   final double lineHeight;
   final double letterSpacing;
   final double paragraphSpacing;
+
+  /// 章末 block 的量測高度含章節間距，必須進入快取鍵。
+  final double chapterSpacing;
   final int textIndent;
   final bool bold;
   final bool justify;
@@ -158,6 +163,7 @@ final class StyleFingerprint {
     lineHeight,
     letterSpacing,
     paragraphSpacing,
+    chapterSpacing,
     textIndent,
     bold,
     justify,
@@ -175,6 +181,7 @@ final class StyleFingerprint {
     lineHeight,
     letterSpacing,
     paragraphSpacing,
+    chapterSpacing,
     textIndent,
     bold,
     justify,
@@ -194,6 +201,7 @@ final class StyleFingerprint {
         other.lineHeight == lineHeight &&
         other.letterSpacing == letterSpacing &&
         other.paragraphSpacing == paragraphSpacing &&
+        other.chapterSpacing == chapterSpacing &&
         other.textIndent == textIndent &&
         other.bold == bold &&
         other.justify == justify &&

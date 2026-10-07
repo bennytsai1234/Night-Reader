@@ -5,6 +5,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_acti
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -82,11 +83,13 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   bool _lineHeightDirty = false;
   bool _letterSpacingDirty = false;
   bool _paragraphSpacingDirty = false;
+  bool _chapterSpacingDirty = false;
   late double _fontSize;
   late double _titleFontSize;
   late double _lineHeight;
   late double _letterSpacing;
   late double _paragraphSpacing;
+  late double _chapterSpacing;
   bool _expanded = false;
 
   @override
@@ -98,6 +101,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     _lineHeight = settings.lineHeight;
     _letterSpacing = settings.letterSpacing;
     _paragraphSpacing = settings.paragraphSpacing;
+    _chapterSpacing = settings.chapterSpacing;
     settings.addListener(_syncTypographyFromSettings);
   }
 
@@ -113,7 +117,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       _titleFontSizeDirty ||
       _lineHeightDirty ||
       _letterSpacingDirty ||
-      _paragraphSpacingDirty;
+      _paragraphSpacingDirty ||
+      _chapterSpacingDirty;
 
   bool get _isDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
@@ -122,6 +127,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
         _lineHeight == defaults.lineHeight &&
         _letterSpacing == defaults.letterSpacing &&
         _paragraphSpacing == defaults.paragraphSpacing &&
+        _chapterSpacing == defaults.chapterSpacing &&
         widget.settings.textIndent == defaults.textIndent;
   }
 
@@ -137,6 +143,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       if (!_paragraphSpacingDirty) {
         _paragraphSpacing = settings.paragraphSpacing;
       }
+      if (!_chapterSpacingDirty) _chapterSpacing = settings.chapterSpacing;
     });
   }
 
@@ -159,6 +166,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     final lineHeight = _lineHeightDirty ? _lineHeight : null;
     final letterSpacing = _letterSpacingDirty ? _letterSpacing : null;
     final paragraphSpacing = _paragraphSpacingDirty ? _paragraphSpacing : null;
+    final chapterSpacing = _chapterSpacingDirty ? _chapterSpacing : null;
     _clearDirty();
     widget.settings.setTypography(
       fontSize: fontSize,
@@ -166,6 +174,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       lineHeight: lineHeight,
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
+      chapterSpacing: chapterSpacing,
     );
   }
 
@@ -175,6 +184,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     _lineHeightDirty = false;
     _letterSpacingDirty = false;
     _paragraphSpacingDirty = false;
+    _chapterSpacingDirty = false;
   }
 
   void _reset() {
@@ -261,6 +271,22 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           onChanged: (value) {
             setState(() => _paragraphSpacing = value);
             _paragraphSpacingDirty = true;
+            _scheduleTypographyCommit();
+          },
+        ),
+      ),
+      _stepperRow(
+        NumberStepperRow(
+          label: '章節間距',
+          value: _chapterSpacing,
+          min: ReaderV2SettingsController.minChapterSpacing,
+          max: ReaderV2SettingsController.maxChapterSpacing,
+          step: 0.5,
+          fractionDigits: 1,
+          unit: '行',
+          onChanged: (value) {
+            setState(() => _chapterSpacing = value);
+            _chapterSpacingDirty = true;
             _scheduleTypographyCommit();
           },
         ),
@@ -528,6 +554,22 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 onChanged: (value) => _schedule(bottom: value),
               ),
             ),
+            if (!settings.footerInfo.isEmpty)
+              _stepperRow(
+                NumberStepperRow(
+                  label: '頁尾位置',
+                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。
+                  value:
+                      settings.footerOffset ??
+                      MediaQuery.paddingOf(context).bottom +
+                          kReaderFooterAutoSpacing,
+                  min: ReaderV2SettingsController.minPagePadding,
+                  max: ReaderV2SettingsController.maxPagePadding,
+                  step: _paddingStep,
+                  unit: ' px',
+                  onChanged: settings.setFooterOffset,
+                ),
+              ),
           ],
         ),
         GroupedSection(

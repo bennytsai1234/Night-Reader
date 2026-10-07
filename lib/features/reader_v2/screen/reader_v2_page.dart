@@ -24,6 +24,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
+import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -50,6 +51,7 @@ class ReaderV2Page extends StatefulWidget {
 }
 
 class _ReaderV2PageState extends State<ReaderV2Page>
+    with WidgetsBindingObserver
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
@@ -73,6 +75,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 目前已套用到系統的狀態列可見性；null 表示尚未套用。
   bool? _appliedHideStatusBar;
 
+  /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；隱藏狀態列時頁首只依它決定。
+  double? _topCutoutExtent;
+
   @override
   void initState() {
     super.initState();
@@ -95,10 +100,26 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
     _applySystemUiMode();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refreshTopCutoutExtent());
+  }
+
+  @override
+  void didChangeMetrics() {
+    // 旋轉或折疊會改變挖孔位置；狀態列顯示與否不影響查到的值。
+    unawaited(_refreshTopCutoutExtent());
+  }
+
+  Future<void> _refreshTopCutoutExtent() async {
+    final extent = await ReaderV2DeviceChannel.topCutoutExtent();
+    // 取不到時保留上一次的值，避免頁首在暫態中跳回系統內距。
+    if (!mounted || extent == null || extent == _topCutoutExtent) return;
+    setState(() => _topCutoutExtent = extent);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_settingsSaveFailures?.cancel());
     SystemChrome.setSystemUIChangeCallback(null);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -242,6 +263,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         footerInfo: settings.footerInfo,
         paddingTop: settings.paddingTop,
         paddingBottom: settings.paddingBottom,
+        footerOffset: settings.footerOffset,
+        topCutoutExtent: _topCutoutExtent,
         dayNightIcon: settings.dayNightToggleIcon,
         dayNightTooltip: settings.dayNightToggleTooltip,
         onExitIntent: _handleExitIntent,

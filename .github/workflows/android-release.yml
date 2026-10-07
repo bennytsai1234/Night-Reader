@@ -187,7 +187,11 @@ jobs:
             test/core/services/source_switch_service_test.dart \
             test/features/reader_v2/reader_v2_state_machine_test.dart \
             test/features/reader_v2/reader_v2_runtime_operation_test.dart \
-            test/features/reader_v2/hybrid/hybrid_pump_test.dart
+            test/features/reader_v2/hybrid/hybrid_pump_test.dart \
+            test/features/reader_v2/reader_v2_chapter_gap_test.dart \
+            test/features/reader_v2/reader_v2_page_chrome_layout_test.dart \
+            test/features/reader_v2/reader_v2_settings_persistence_test.dart \
+            test/features/reader_v2/reader_v2_settings_sections_test.dart
       - name: Decode Android release keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
