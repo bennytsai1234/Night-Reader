@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
@@ -28,9 +29,8 @@ class ReaderV2TtsPanel extends StatelessWidget {
     return ListenableBuilder(
       listenable: tts,
       builder: (context, _) {
-        return AppBottomSheet(
+        return ReaderV2SheetScaffold(
           title: '朗讀',
-          icon: Icons.record_voice_over,
           children: [
             ListTile(
               contentPadding: EdgeInsets.zero,

@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class ReaderV2ChaptersDrawer extends StatefulWidget {
   const ReaderV2ChaptersDrawer({
@@ -10,6 +15,8 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     required this.currentChapterIndex,
     required this.titleFor,
     required this.onChapterTap,
+    required this.menuBackgroundColor,
+    required this.menuTextColor,
     this.listenable,
   });
 
@@ -17,6 +24,10 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   final int currentChapterIndex;
   final String Function(int index) titleFor;
   final Future<bool> Function(int index) onChapterTap;
+
+  /// 目錄屬於閱讀選單區域，配色跟隨選單主題而非 App 主題。
+  final Color menuBackgroundColor;
+  final Color menuTextColor;
   final Listenable? listenable;
 
   @override
@@ -97,21 +108,48 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     };
   }
 
-  Widget _buildChapterTile(int index) {
+  /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
+  /// 目前章節以主色加粗並在右側打勾，列間以髮絲線分隔。
+  Widget _buildChapterTile(BuildContext context, int index) {
+    final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
     final isCurrentChapter = widget.currentChapterIndex == index;
     final isPending = _pendingChapterIndex == index;
-    return ListTile(
-      title: Text(
-        chapterTitle,
-        style: TextStyle(
-          color:
-              isCurrentChapter ? Theme.of(context).colorScheme.primary : null,
-          fontWeight: isCurrentChapter ? FontWeight.bold : null,
+    final Widget? trailing = isPending
+        ? _buildPendingIndicator(chapterTitle)
+        : isCurrentChapter
+        ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
+        : null;
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: GroupedRow(
+              title: chapterTitle,
+              titleWidget: Text(
+                chapterTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.bodyBase.copyWith(
+                  height: 1.3,
+                  color: isCurrentChapter ? scheme.primary : scheme.onSurface,
+                  fontWeight: isCurrentChapter
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+              ),
+              trailing: trailing,
+              showChevron: false,
+              onTap: _chapterTapHandler(index),
+            ),
+          ),
         ),
-      ),
-      trailing: isPending ? _buildPendingIndicator(chapterTitle) : null,
-      onTap: _chapterTapHandler(index),
+        Container(
+          height: AppGlass.hairline,
+          margin: const EdgeInsets.only(left: AppGrouped.rowPadding),
+          color: AppChrome.of(context).separator,
+        ),
+      ],
     );
   }
 
@@ -143,23 +181,73 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    return Drawer(
-      child: Column(
-        children: [
-          AppBar(
-            title: const Text('目錄'),
-            automaticallyImplyLeading: false,
-            elevation: 0,
+    final menuStyle = ReaderV2MenuStyle.resolve(
+      context: context,
+      backgroundColor: widget.menuBackgroundColor,
+      textColor: widget.menuTextColor,
+    );
+    final theme = menuStyle.toSheetTheme(Theme.of(context));
+    // 此處的 context 仍在 App 主題下，衍生色直接取選單主題上的擴充。
+    final chrome = theme.extension<AppChrome>()!;
+    return Theme(
+      data: theme,
+      child: Drawer(
+        backgroundColor: theme.colorScheme.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.horizontal(
+            right: Radius.circular(AppRadius.xl),
           ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: widget.chapters.length,
-              itemExtent: _tileExtent,
-              itemBuilder: (context, index) => _buildChapterTile(index),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppGrouped.margin,
+                  AppSpacing.lg,
+                  AppGrouped.margin,
+                  AppSpacing.md,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        '目錄',
+                        style: AppTextStyles.titleLg.copyWith(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      '共 ${widget.chapters.length} 章',
+                      style: AppTextStyles.uiSm.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
+            Container(height: AppGlass.hairline, color: chrome.separator),
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.paddingOf(context).bottom,
+                ),
+                itemCount: widget.chapters.length,
+                itemExtent: _tileExtent,
+                itemBuilder: _buildChapterTile,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

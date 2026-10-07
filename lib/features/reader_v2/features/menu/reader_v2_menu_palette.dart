@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class ReaderV2MenuStyle {
   final Color background;
@@ -55,8 +57,19 @@ class ReaderV2MenuStyle {
     );
   }
 
+  /// 浮動玻璃選單（上下膠囊、圓形按鈕）的色調：選單底色套上玻璃材質的
+  /// 不透明度，背後的正文經模糊後只透出色塊。
+  Color get glassTint {
+    final dark = background.computeLuminance() < 0.5;
+    return background.withValues(
+      alpha: dark ? AppGlass.tintAlphaDark : AppGlass.tintAlphaLight,
+    );
+  }
+
   /// 閱讀器內設定面板（排版、進階、朗讀）使用的主題：
   /// 以選單配色覆寫 App 主題，讓面板與上下選單屬於同一個視覺區域。
+  /// 玻璃與分組元件的衍生色（[AppChrome]）也改由選單配色推導，
+  /// 不沿用 App 主題掛載的擴充。
   ThemeData toSheetTheme(ThemeData base) {
     final surface = background.withValues(alpha: 1);
     final dark = surface.computeLuminance() < 0.5;
@@ -103,6 +116,20 @@ class ReaderV2MenuStyle {
         modalBackgroundColor: surface,
       ),
       dialogTheme: base.dialogTheme.copyWith(backgroundColor: elevated),
+      extensions: [
+        for (final extension in base.extensions.values)
+          if (extension is! AppChrome) extension,
+        AppChrome.derive(
+          brightness: dark ? Brightness.dark : Brightness.light,
+          primary: accent,
+          background: surface,
+          surface: surface,
+          bar: surface,
+          textPrimary: foreground,
+          textSecondary: mutedForeground,
+          border: outline,
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
 typedef ReaderV2ExitPrompt = Future<bool?> Function(
   BuildContext context,
@@ -73,23 +74,15 @@ class ReaderV2PageExitCoordinator {
     BuildContext context,
     Book book,
   ) {
-    return showDialog<bool>(
+    return showAppAlert<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('加入書架？'),
-        content: Text('《${book.name}》尚未加入書架，是否在退出前加入書架以保留目前閱讀進度？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('直接退出'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('加入書架'),
-          ),
-        ],
-      ),
+      title: '加入書架？',
+      message: '《${book.name}》尚未加入書架，是否在退出前加入書架以保留目前閱讀進度？',
+      actions: const [
+        AppAlertAction(label: '直接退出', value: false),
+        AppAlertAction(label: '加入書架', value: true, isDefault: true),
+      ],
     );
   }
 }

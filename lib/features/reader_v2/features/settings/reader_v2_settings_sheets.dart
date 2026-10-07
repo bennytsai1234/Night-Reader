@@ -48,9 +48,8 @@ class _ReaderInterfaceSheet extends StatelessWidget {
     final hintStyle = AppTextStyles.uiXs.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
-    return AppBottomSheet(
+    return ReaderV2SheetScaffold(
       title: '外觀與排版',
-      icon: Icons.format_paint_outlined,
       maxHeightFactor: 0.6,
       children: [
         SheetSection(
@@ -155,9 +154,8 @@ class _ReaderAdvancedSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final changeSource = onChangeSource;
     final colorScheme = Theme.of(context).colorScheme;
-    return AppBottomSheet(
+    return ReaderV2SheetScaffold(
       title: '進階設定',
-      icon: Icons.tune_rounded,
       children: [
         if (changeSource != null) ...[
           const SheetSection(title: '書源'),

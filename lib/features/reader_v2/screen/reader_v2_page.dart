@@ -27,6 +27,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
@@ -217,6 +218,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           titleFor: _chapterTitleAt,
           listenable: runtime,
           onChapterTap: _jumpToChapterFromDrawer,
+          menuBackgroundColor: menuTheme.backgroundColor,
+          menuTextColor: menuTheme.textColor,
         ),
         backgroundColor: theme.backgroundColor,
         textColor: theme.textColor,
@@ -242,7 +245,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         dayNightIcon: settings.dayNightToggleIcon,
         dayNightTooltip: settings.dayNightToggleTooltip,
         onExitIntent: _handleExitIntent,
-        onMore: _showMore,
+        onMore: () => unawaited(_showMore()),
         onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
         onTts: _showTts,
         onInterface: () =>
@@ -419,29 +422,29 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  void _showMore() {
-    AppBottomSheet.show(
+  Future<void> _showMore() async {
+    final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
-      title: '更多操作',
-      icon: Icons.more_horiz_rounded,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.settings_suggest_rounded),
-          title: const Text('全域系統設定'),
-          subtitle: const Text('備份、還原與解析引擎配置'),
-          onTap: () async {
-            Navigator.pop(context);
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsPage()),
-            );
-            // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
-            // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
-            if (mounted) unawaited(_host.settings.loadSettings());
-          },
+      actions: const [
+        AppSheetAction(
+          label: '全域系統設定',
+          subtitle: '備份、還原與解析引擎配置',
+          icon: Icons.settings_suggest_rounded,
+          value: _ReaderMoreAction.globalSettings,
         ),
       ],
     );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _ReaderMoreAction.globalSettings:
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SettingsPage()),
+        );
+        // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
+        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
+        if (mounted) unawaited(_host.settings.loadSettings());
+    }
   }
 
   void _showTts() {
@@ -606,3 +609,5 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
 }
+
+enum _ReaderMoreAction { globalSettings }

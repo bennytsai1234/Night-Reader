@@ -1,8 +1,12 @@
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+
 import 'reader_v2_menu_palette.dart';
 
+/// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
+/// 開啟「標題附加資訊」時下方再浮一張章節資訊卡。
 class ReaderV2TopMenu extends StatelessWidget {
   const ReaderV2TopMenu({
     super.key,
@@ -36,6 +40,7 @@ class ReaderV2TopMenu extends StatelessWidget {
       backgroundColor: menuBackgroundColor,
       textColor: menuTextColor,
     );
+    final topInset = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: 0,
       left: 0,
@@ -43,37 +48,29 @@ class ReaderV2TopMenu extends StatelessWidget {
       child: IgnorePointer(
         ignoring: !controlsVisible,
         child: AnimatedSlide(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          offset: controlsVisible ? Offset.zero : const Offset(0, -1.15),
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: menuStyle.background.withValues(alpha: 0.94),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: menuStyle.outline.withValues(alpha: 0.4),
-                      width: 0.5,
-                    ),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: menuStyle.scrim.withValues(alpha: 0.16),
-                      blurRadius: 20,
-                      offset: const Offset(0, 6),
-                    ),
+          duration: AppMotion.menu,
+          curve: AppMotion.menuCurve,
+          // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
+          offset: controlsVisible ? Offset.zero : const Offset(0, -1.3),
+          // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+          child: Theme(
+            data: menuStyle.toSheetTheme(Theme.of(context)),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppGrouped.margin,
+                topInset + AppSpacing.xs,
+                AppGrouped.margin,
+                0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildAppBar(menuStyle),
+                  if (showReadTitleAddition) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    _buildAdditionInfo(menuStyle),
                   ],
-                ),
-                padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildAppBar(menuStyle),
-                    if (showReadTitleAddition) _buildAdditionInfo(menuStyle),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
@@ -83,24 +80,49 @@ class ReaderV2TopMenu extends StatelessWidget {
   }
 
   Widget _buildAppBar(ReaderV2MenuStyle menuStyle) {
+    final tint = menuStyle.glassTint;
     return Row(
       children: [
-        IconButton(
-          icon: Icon(Icons.arrow_back, color: menuStyle.foreground),
+        GlassIconButton(
+          icon: Icons.arrow_back_ios_new_rounded,
+          iconSize: 20,
+          tooltip: '返回',
+          tint: tint,
+          color: menuStyle.foreground,
           onPressed: onBack,
         ),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
-          child: Text(
-            bookName,
-            style: AppTextStyles.titleSm.copyWith(
-              fontWeight: FontWeight.w600,
-              color: menuStyle.foreground,
+          child: SizedBox(
+            height: AppGlass.buttonSize,
+            child: GlassSurface(
+              borderRadius: AppRadius.pillShape,
+              tint: tint,
+              shadow: false,
+              grouped: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Center(
+                  child: Text(
+                    bookName,
+                    style: AppTextStyles.titleSm.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: menuStyle.foreground,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
-        IconButton(
-          icon: Icon(Icons.more_vert, color: menuStyle.foreground),
+        const SizedBox(width: AppSpacing.sm),
+        GlassIconButton(
+          icon: Icons.more_horiz_rounded,
+          tooltip: '更多',
+          tint: tint,
+          color: menuStyle.foreground,
           onPressed: onMore,
         ),
       ],
@@ -108,51 +130,61 @@ class ReaderV2TopMenu extends StatelessWidget {
   }
 
   Widget _buildAdditionInfo(ReaderV2MenuStyle menuStyle) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  chapterTitle,
-                  style: AppTextStyles.labelSm.copyWith(
-                    color: menuStyle.mutedForeground,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (chapterUrl.isNotEmpty)
+    return GlassSurface(
+      borderRadius: AppRadius.cardXl,
+      tint: menuStyle.glassTint,
+      grouped: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    chapterUrl,
-                    style: AppTextStyles.micro.copyWith(
-                      color: menuStyle.mutedForeground,
+                    chapterTitle,
+                    style: AppTextStyles.labelSm.copyWith(
+                      color: menuStyle.foreground,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: menuStyle.accentMuted,
-              border: Border.all(color: menuStyle.accent),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              originName,
-              style: AppTextStyles.micro.copyWith(
-                color: menuStyle.foreground,
-                fontWeight: FontWeight.w600,
+                  if (chapterUrl.isNotEmpty)
+                    Text(
+                      chapterUrl,
+                      style: AppTextStyles.micro.copyWith(
+                        color: menuStyle.mutedForeground,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs / 2,
+              ),
+              decoration: BoxDecoration(
+                color: menuStyle.accentMuted,
+                borderRadius: AppRadius.pillShape,
+              ),
+              child: Text(
+                originName,
+                style: AppTextStyles.micro.copyWith(
+                  color: menuStyle.foreground,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
