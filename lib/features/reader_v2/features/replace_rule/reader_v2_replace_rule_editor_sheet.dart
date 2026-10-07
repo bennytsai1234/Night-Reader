@@ -173,12 +173,12 @@ class _ReaderV2ReplaceRuleEditorSheetState
                 margin: EdgeInsets.zero,
                 header: '進階範圍設定',
                 children: [
-                  ReplaceFormRow(
+                  GroupedTextFieldRow(
                     controller: _scopeCtrl,
                     label: '作用範圍',
                     hintText: '書名/書源URL',
                   ),
-                  ReplaceFormRow(
+                  GroupedTextFieldRow(
                     controller: _excludeScopeCtrl,
                     label: '排除範圍',
                     hintText: '書名/書源URL',

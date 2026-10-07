@@ -6,13 +6,12 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_filter_bar.dart';
 import 'package:night_reader/features/book_detail/widgets/book_detail_change_source_item.dart';
-import 'package:night_reader/features/search/widgets/grouped_slice.dart';
-import 'package:night_reader/features/search/widgets/sheet_header.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 換源面板選源後的處理結果（成功/失敗 + 提示訊息）。
 typedef ChangeSourceOutcome = ({bool success, String message});

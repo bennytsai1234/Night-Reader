@@ -19,6 +19,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
@@ -26,9 +27,6 @@ import 'widgets/source_batch_toolbar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
-
-/// 頁首搜尋框高度。
-const double _kSearchFieldHeight = 36;
 
 class SourceManagerPage extends StatelessWidget {
   const SourceManagerPage({super.key});
@@ -210,17 +208,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             AppGrouped.margin,
             AppSpacing.xs,
           ),
-          child: _SourceSearchField(
+          child: SearchField(
             controller: _searchController,
-            onChanged: (value) {
-              provider.setSearchQuery(value);
-              setState(() {});
-            },
-            onClear: () {
-              _searchController.clear();
-              provider.setSearchQuery('');
-              setState(() {});
-            },
+            hintText: '搜尋書源名稱、網址',
+            glass: true,
+            onChanged: provider.setSearchQuery,
           ),
         ),
       if (showStatus)
@@ -255,7 +247,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
     ];
     final double bottomHeight =
-        (showSearch ? _kSearchFieldHeight + AppSpacing.xs * 2 : 0.0) +
+        (showSearch ? SearchField.height + AppSpacing.xs * 2 : 0.0) +
         (showStatus ? SourceCheckStatusBar.height + AppSpacing.xs * 2 : 0.0) +
         (_isImporting ? 2.0 : 0.0);
     final bottom =
@@ -688,138 +680,135 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     SourceManagerProvider p, {
     required bool remove,
   }) async {
-    final ctrl = TextEditingController();
     final pageContext = context;
     String? inputError;
-    try {
-      await showStatefulAppAlert<void>(
-        context: context,
-        builder: (dialogContext, setDialogState) {
-          final chrome = AppChrome.of(dialogContext);
-          final scheme = Theme.of(dialogContext).colorScheme;
-          return AppAlert<bool>(
-            title: remove ? '移出分組' : '加入分組',
-            onAction: (confirmed) async {
-              if (!confirmed) {
-                Navigator.pop(dialogContext);
-                return;
-              }
-              final text = ctrl.text.trim();
-              if (text.isEmpty) {
-                setDialogState(() => inputError = '請輸入或選擇分組名稱');
-                return;
-              }
-              final selected = p.selectedUrls;
+    await showStatefulAppAlert<void>(
+      context: context,
+      fieldTexts: const [''],
+      builder: (dialogContext, setDialogState, fields) {
+        final ctrl = fields.single;
+        final chrome = AppChrome.of(dialogContext);
+        final scheme = Theme.of(dialogContext).colorScheme;
+        return AppAlert<bool>(
+          title: remove ? '移出分組' : '加入分組',
+          onAction: (confirmed) async {
+            if (!confirmed) {
               Navigator.pop(dialogContext);
-              try {
-                if (remove) {
-                  await p.selectionRemoveFromGroups(selected, text);
-                } else {
-                  await p.selectionAddToGroups(selected, text);
-                }
-              } catch (error) {
-                if (pageContext.mounted) {
-                  ScaffoldMessenger.of(pageContext).showSnackBar(
-                    SnackBar(
-                      content: Text('${remove ? '移出' : '加入'}分組失敗：$error'),
-                    ),
-                  );
-                }
+              return;
+            }
+            final text = ctrl.text.trim();
+            if (text.isEmpty) {
+              setDialogState(() => inputError = '請輸入或選擇分組名稱');
+              return;
+            }
+            final selected = p.selectedUrls;
+            Navigator.pop(dialogContext);
+            try {
+              if (remove) {
+                await p.selectionRemoveFromGroups(selected, text);
+              } else {
+                await p.selectionAddToGroups(selected, text);
               }
-            },
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AlertTextField(
-                  controller: ctrl,
-                  hintText: '分組名稱',
-                  errorText: inputError,
-                  onChanged: (_) {
-                    if (inputError != null) {
-                      setDialogState(() => inputError = null);
-                    }
-                  },
-                ),
-                if (p.allGroups.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Container(
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: chrome.groupedBackground,
-                      borderRadius: AppRadius.cardMd,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: p.allGroups.length,
-                      separatorBuilder:
-                          (_, _) => Padding(
-                            padding: const EdgeInsets.only(
-                              left: AppSpacing.md,
-                            ),
-                            child: Container(
-                              height: AppGlass.hairline,
-                              color: chrome.separator,
-                            ),
+            } catch (error) {
+              if (pageContext.mounted) {
+                ScaffoldMessenger.of(pageContext).showSnackBar(
+                  SnackBar(
+                    content: Text('${remove ? '移出' : '加入'}分組失敗：$error'),
+                  ),
+                );
+              }
+            }
+          },
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AlertTextField(
+                controller: ctrl,
+                hintText: '分組名稱',
+                errorText: inputError,
+                onChanged: (_) {
+                  if (inputError != null) {
+                    setDialogState(() => inputError = null);
+                  }
+                },
+              ),
+              if (p.allGroups.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: chrome.groupedBackground,
+                    borderRadius: AppRadius.cardMd,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: p.allGroups.length,
+                    separatorBuilder:
+                        (_, _) => Padding(
+                          padding: const EdgeInsets.only(
+                            left: AppSpacing.md,
                           ),
-                      itemBuilder: (_, i) {
-                        final g = p.allGroups[i];
-                        final picked = ctrl.text.trim() == g;
-                        return InkWell(
-                          onTap: () {
-                            ctrl.value = TextEditingValue(
-                              text: g,
-                              selection: TextSelection.collapsed(
-                                offset: g.length,
-                              ),
-                            );
-                            setDialogState(() => inputError = null);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.md,
-                              vertical: AppSpacing.md,
+                          child: Container(
+                            height: AppGlass.hairline,
+                            color: chrome.separator,
+                          ),
+                        ),
+                    itemBuilder: (_, i) {
+                      final g = p.allGroups[i];
+                      final picked = ctrl.text.trim() == g;
+                      return InkWell(
+                        onTap: () {
+                          ctrl.value = TextEditingValue(
+                            text: g,
+                            selection: TextSelection.collapsed(
+                              offset: g.length,
                             ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    g,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.bodyBase.copyWith(
-                                      height: 1.3,
-                                      color: scheme.onSurface,
-                                    ),
+                          );
+                          setDialogState(() => inputError = null);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.md,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  g,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.bodyBase.copyWith(
+                                    height: 1.3,
+                                    color: scheme.onSurface,
                                   ),
                                 ),
-                                if (picked)
-                                  Icon(
-                                    Icons.check_rounded,
-                                    size: 18,
-                                    color: scheme.primary,
-                                  ),
-                              ],
-                            ),
+                              ),
+                              if (picked)
+                                Icon(
+                                  Icons.check_rounded,
+                                  size: 18,
+                                  color: scheme.primary,
+                                ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                ],
+                ),
               ],
-            ),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '確定', value: true, isDefault: true),
             ],
-          );
-        },
-      );
-    } finally {
-      ctrl.dispose();
-    }
+          ),
+          actions: const [
+            AppAlertAction(label: '取消', value: false),
+            AppAlertAction(label: '確定', value: true, isDefault: true),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _importWithPreview(BuildContext context, String jsonStr) async {
@@ -863,58 +852,54 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Future<void> _showImportDialog(BuildContext context, bool isUrl) async {
     final pageContext = context;
-    final ctrl = TextEditingController();
     String? inputError;
-    try {
-      await showStatefulAppAlert<void>(
-        context: context,
-        builder:
-            (dialogContext, setDialogState) => AppAlert<bool>(
-              title: isUrl ? '網路匯入' : '文本匯入',
-              onAction: (confirmed) async {
-                if (!confirmed) {
-                  Navigator.pop(dialogContext);
-                  return;
-                }
-                final p = pageContext.read<SourceManagerProvider>();
-                final input = ctrl.text.trim();
-                if (input.isEmpty) {
-                  setDialogState(
-                    () => inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON',
-                  );
-                  return;
-                }
+    await showStatefulAppAlert<void>(
+      context: context,
+      fieldTexts: const [''],
+      builder:
+          (dialogContext, setDialogState, fields) => AppAlert<bool>(
+            title: isUrl ? '網路匯入' : '文本匯入',
+            onAction: (confirmed) async {
+              if (!confirmed) {
                 Navigator.pop(dialogContext);
-                await _runImportFlow(() async {
-                  if (isUrl) {
-                    final jsonText = await p.fetchImportTextFromUrl(input);
-                    if (!pageContext.mounted) return;
-                    await _importWithPreview(pageContext, jsonText);
-                  } else if (pageContext.mounted) {
-                    await _importWithPreview(pageContext, input);
-                  }
-                }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
+                return;
+              }
+              final p = pageContext.read<SourceManagerProvider>();
+              final input = fields.single.text.trim();
+              if (input.isEmpty) {
+                setDialogState(
+                  () => inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON',
+                );
+                return;
+              }
+              Navigator.pop(dialogContext);
+              await _runImportFlow(() async {
+                if (isUrl) {
+                  final jsonText = await p.fetchImportTextFromUrl(input);
+                  if (!pageContext.mounted) return;
+                  await _importWithPreview(pageContext, jsonText);
+                } else if (pageContext.mounted) {
+                  await _importWithPreview(pageContext, input);
+                }
+              }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
+            },
+            content: AlertTextField(
+              controller: fields.single,
+              hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
+              errorText: inputError,
+              maxLines: 5,
+              onChanged: (_) {
+                if (inputError != null) {
+                  setDialogState(() => inputError = null);
+                }
               },
-              content: AlertTextField(
-                controller: ctrl,
-                hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
-                errorText: inputError,
-                maxLines: 5,
-                onChanged: (_) {
-                  if (inputError != null) {
-                    setDialogState(() => inputError = null);
-                  }
-                },
-              ),
-              actions: const [
-                AppAlertAction(label: '取消', value: false),
-                AppAlertAction(label: '匯入', value: true, isDefault: true),
-              ],
             ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
+            actions: const [
+              AppAlertAction(label: '取消', value: false),
+              AppAlertAction(label: '匯入', value: true, isDefault: true),
+            ],
+          ),
+    );
   }
 
   Future<void> _importFromFile(BuildContext context) async {
@@ -990,80 +975,5 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         context,
       ).showSnackBar(SnackBar(content: Text('$errorPrefix：$error')));
     }
-  }
-}
-
-/// 頁首下方的玻璃搜尋框（Telegram 搜尋列）。
-class _SourceSearchField extends StatelessWidget {
-  const _SourceSearchField({
-    required this.controller,
-    required this.onChanged,
-    required this.onClear,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final chrome = AppChrome.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: _kSearchFieldHeight,
-      child: GlassSurface(
-        borderRadius: AppRadius.pillShape,
-        shadow: false,
-        child: Row(
-          children: [
-            const SizedBox(width: AppSpacing.md),
-            Icon(Icons.search_rounded, size: 18, color: chrome.sectionText),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                textInputAction: TextInputAction.search,
-                style: AppTextStyles.bodyBase.copyWith(
-                  height: 1.2,
-                  color: scheme.onSurface,
-                ),
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  hintText: '搜尋書源名稱、網址',
-                  hintStyle: AppTextStyles.bodyBase.copyWith(
-                    height: 1.2,
-                    color: chrome.sectionText.withValues(alpha: 0.8),
-                  ),
-                ),
-              ),
-            ),
-            if (controller.text.isNotEmpty)
-              Semantics(
-                button: true,
-                label: '清除搜尋',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onClear,
-                  child: SizedBox.square(
-                    dimension: _kSearchFieldHeight,
-                    child: Icon(
-                      Icons.cancel_rounded,
-                      size: 18,
-                      color: chrome.sectionText,
-                    ),
-                  ),
-                ),
-              )
-            else
-              const SizedBox(width: AppSpacing.md),
-          ],
-        ),
-      ),
-    );
   }
 }

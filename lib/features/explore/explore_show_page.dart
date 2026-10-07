@@ -5,7 +5,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/features/search/widgets/grouped_slice.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 

@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'swipe_actions.dart';
 
 /// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方說明文字。
 ///
-/// 列與列之間自動插入髮絲分隔線；有任一 [GroupedRow] 帶列首圖示時，
-/// 分隔線從文字起點開始。分組本身帶上方間距，連續排列即可。
+/// 列與列之間自動插入髮絲分隔線；有任一列（[GroupedRowLike]，可包在
+/// [SwipeActions]、[KeyedSubtree] 或單子元件的外框內）帶列首圖示時，分隔線
+/// 從文字起點開始。分組本身帶上方間距，連續排列即可。
 class GroupedSection extends StatelessWidget {
   const GroupedSection({
     super.key,
@@ -32,7 +34,7 @@ class GroupedSection extends StatelessWidget {
   final Widget? footerWidget;
   final List<Widget> children;
 
-  /// 覆寫分隔線左縮排。
+  /// 覆寫分隔線左縮排（列首不是 [GroupedIconTile] 寬度時使用）。
   final double? separatorIndent;
 
   /// 覆寫卡片外距；預設左右 [AppGrouped.margin]。
@@ -46,19 +48,12 @@ class GroupedSection extends StatelessWidget {
     final chrome = AppChrome.of(context);
     final indent =
         separatorIndent ??
-        (children.any((c) => c is GroupedRow && c.leading != null)
+        (children.any(_hasLeading)
             ? AppGrouped.separatorIndentWithIcon
             : AppGrouped.rowPadding);
     final rows = <Widget>[];
     for (var i = 0; i < children.length; i++) {
-      if (i > 0) {
-        rows.add(
-          Padding(
-            padding: EdgeInsetsDirectional.only(start: indent),
-            child: Container(height: AppGlass.hairline, color: chrome.separator),
-          ),
-        );
-      }
+      if (i > 0) rows.add(InsetSeparator(indent: indent));
       rows.add(children[i]);
     }
     final effectiveMargin =
@@ -127,6 +122,90 @@ class GroupedSection extends StatelessWidget {
     );
   }
 }
+
+/// 惰性清單中的一列分組卡片切片。
+///
+/// [GroupedSection] 一次建出所有列；書源、章節這類可能上百列的清單改由
+/// builder 逐列建立，每列自己畫出卡片的對應段落：第一列帶上圓角、最後一列
+/// 帶下圓角，其餘列上方畫髮絲分隔線，連起來與 [GroupedSection] 的卡片一致。
+class GroupedSliceItem extends StatelessWidget {
+  const GroupedSliceItem({
+    super.key,
+    required this.index,
+    required this.count,
+    required this.child,
+    this.separatorIndent = AppGrouped.rowPadding,
+  });
+
+  final int index;
+  final int count;
+  final Widget child;
+  final double separatorIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final first = index == 0;
+    final last = index == count - 1;
+    const corner = Radius.circular(AppGrouped.radius);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+      child: ClipRRect(
+        borderRadius: BorderRadius.vertical(
+          top: first ? corner : Radius.zero,
+          bottom: last ? corner : Radius.zero,
+        ),
+        child: Material(
+          color: chrome.groupedSurface,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!first) InsetSeparator(indent: separatorIndent),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 從 [indent] 起畫的髮絲分隔線；分組卡片與平鋪清單（搜尋結果、發現書籍）
+/// 的列間共用。
+class InsetSeparator extends StatelessWidget {
+  const InsetSeparator({super.key, required this.indent});
+
+  final double indent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsetsDirectional.only(start: indent),
+      child: Container(
+        height: AppGlass.hairline,
+        color: AppChrome.of(context).separator,
+      ),
+    );
+  }
+}
+
+/// 分組卡片內的一列；[GroupedSection] 依 [hasLeading] 決定分隔線縮排。
+/// 包裝 [GroupedRow] 的元件（開關列、勾選列、頁面私有的列）實作此介面。
+abstract interface class GroupedRowLike {
+  /// 是否帶列首圖示。
+  bool get hasLeading;
+}
+
+/// 穿過常見外框（滑動動作、key、單子元件）找出列本身，判斷是否帶列首圖示。
+bool _hasLeading(Widget widget) => switch (widget) {
+  GroupedRowLike row => row.hasLeading,
+  SwipeActions(:final child) => _hasLeading(child),
+  KeyedSubtree(:final child) => _hasLeading(child),
+  ProxyWidget(:final child) => _hasLeading(child),
+  SingleChildRenderObjectWidget(:final child?) => _hasLeading(child),
+  _ => false,
+};
 
 /// 組標題文字；也可單獨用在非卡片內容（例如格狀選項）上方。
 class GroupedSectionHeader extends StatelessWidget {
@@ -208,7 +287,7 @@ class GroupedIconTile extends StatelessWidget {
 
 /// 分組清單的一列：列首（圖示方塊或任意 widget）、標題、副標、右側數值、
 /// 右側控件與箭頭。按下時整列高亮，不畫水波紋。
-class GroupedRow extends StatelessWidget {
+class GroupedRow extends StatelessWidget implements GroupedRowLike {
   const GroupedRow({
     super.key,
     required this.title,
@@ -253,6 +332,9 @@ class GroupedRow extends StatelessWidget {
   final bool accent;
   final bool enabled;
   final int maxSubtitleLines;
+
+  @override
+  bool get hasLeading => leading != null;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +466,7 @@ class GroupedSwitch extends StatelessWidget {
 }
 
 /// 帶開關的列；點整列也會切換。
-class GroupedSwitchRow extends StatelessWidget {
+class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
   const GroupedSwitchRow({
     super.key,
     required this.title,
@@ -401,6 +483,9 @@ class GroupedSwitchRow extends StatelessWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
   final bool enabled;
+
+  @override
+  bool get hasLeading => leading != null;
 
   @override
   Widget build(BuildContext context) {
@@ -423,7 +508,7 @@ class GroupedSwitchRow extends StatelessWidget {
 }
 
 /// 單選清單的一列：選中時右側打勾（取代 Radio）。
-class GroupedCheckRow extends StatelessWidget {
+class GroupedCheckRow extends StatelessWidget implements GroupedRowLike {
   const GroupedCheckRow({
     super.key,
     required this.title,
@@ -440,6 +525,9 @@ class GroupedCheckRow extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final bool enabled;
+
+  @override
+  bool get hasLeading => leading != null;
 
   @override
   Widget build(BuildContext context) {
@@ -507,10 +595,23 @@ class GroupedTextFieldRow extends StatelessWidget {
     this.focusNode,
     this.textInputAction,
     this.onSubmitted,
+    this.labelWidth = 96,
+    this.validator,
+    this.errorText,
   });
 
   /// 左側固定標籤；為 null 時輸入框佔滿整列。
   final String? label;
+
+  /// 標籤欄寬度。
+  final double labelWidth;
+
+  /// 放在 [Form] 內時的驗證；提供時改用 [TextFormField]，錯誤文字顯示在
+  /// 輸入框下方。
+  final FormFieldValidator<String>? validator;
+
+  /// 外部指定的錯誤文字（不經 [Form] 驗證時使用）。
+  final String? errorText;
   final TextEditingController? controller;
   final String? hintText;
   final ValueChanged<String>? onChanged;
@@ -529,39 +630,62 @@ class GroupedTextFieldRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final field = TextField(
-      controller: controller,
-      focusNode: focusNode,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      maxLines: obscureText ? 1 : maxLines,
-      minLines: minLines,
-      autofocus: autofocus,
-      obscureText: obscureText,
-      style:
-          style ??
-          AppTextStyles.bodyBase.copyWith(height: 1.3, color: scheme.onSurface),
-      decoration: InputDecoration(
-        isDense: true,
-        filled: false,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        hintText: hintText,
-        hintStyle: AppTextStyles.bodyBase.copyWith(
-          height: 1.3,
-          color: chrome.sectionText.withValues(alpha: 0.7),
-        ),
-        suffixIcon: suffix,
-        suffixIconConstraints: const BoxConstraints(
-          minWidth: AppGrouped.rowMinHeight,
-          minHeight: AppGrouped.rowMinHeight,
-        ),
+    final decoration = InputDecoration(
+      isDense: true,
+      filled: false,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      errorText: errorText,
+      contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      hintText: hintText,
+      hintStyle: AppTextStyles.bodyBase.copyWith(
+        height: 1.3,
+        color: chrome.sectionText.withValues(alpha: 0.7),
+      ),
+      suffixIcon: suffix,
+      suffixIconConstraints: const BoxConstraints(
+        minWidth: AppGrouped.rowMinHeight,
+        minHeight: AppGrouped.rowMinHeight,
       ),
     );
+    final effectiveStyle =
+        style ??
+        AppTextStyles.bodyBase.copyWith(height: 1.3, color: scheme.onSurface);
+    final effectiveMaxLines = obscureText ? 1 : maxLines;
+    final field =
+        validator == null
+            ? TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              keyboardType: keyboardType,
+              textInputAction: textInputAction,
+              maxLines: effectiveMaxLines,
+              minLines: minLines,
+              autofocus: autofocus,
+              obscureText: obscureText,
+              style: effectiveStyle,
+              decoration: decoration,
+            )
+            : TextFormField(
+              controller: controller,
+              focusNode: focusNode,
+              validator: validator,
+              onChanged: onChanged,
+              onFieldSubmitted: onSubmitted,
+              keyboardType: keyboardType,
+              textInputAction: textInputAction,
+              maxLines: effectiveMaxLines,
+              minLines: minLines,
+              autofocus: autofocus,
+              obscureText: obscureText,
+              style: effectiveStyle,
+              decoration: decoration,
+            );
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: AppGrouped.rowMinHeight),
       child: Padding(
@@ -575,7 +699,7 @@ class GroupedTextFieldRow extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpacing.md),
                       child: SizedBox(
-                        width: 96,
+                        width: labelWidth,
                         child: Text(
                           label!,
                           style: AppTextStyles.bodyBase.copyWith(

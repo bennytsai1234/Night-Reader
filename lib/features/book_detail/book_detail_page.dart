@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
-import 'package:night_reader/features/search/widgets/grouped_slice.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
@@ -24,7 +24,6 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
@@ -278,46 +277,40 @@ class _BookDetailPageState extends State<BookDetailPage> {
         ),
       ),
       actions: [
-        if (actionsEnabled)
-          GlassMenuButton<_MenuAction>(
-            onSelected: (v) => _handleMenuSelection(context, provider, v),
-            entriesBuilder:
-                (ctx) => [
-                  if (!provider.book.isLocal)
-                    const GlassMenuItem(
-                      value: _MenuAction.checkUpdate,
-                      label: '檢查更新',
-                      icon: Icons.update_rounded,
-                    ),
-                  if (!provider.book.isLocal)
-                    const GlassMenuItem(
-                      value: _MenuAction.download,
-                      label: '預下載章節',
-                      icon: Icons.download_rounded,
-                    ),
+        GlassMenuButton<_MenuAction>(
+          enabled: actionsEnabled,
+          onSelected: (v) => _handleMenuSelection(context, provider, v),
+          entriesBuilder:
+              (ctx) => [
+                if (!provider.book.isLocal)
                   const GlassMenuItem(
-                    value: _MenuAction.changeCover,
-                    label: '換封面',
-                    icon: Icons.image_outlined,
+                    value: _MenuAction.checkUpdate,
+                    label: '檢查更新',
+                    icon: Icons.update_rounded,
                   ),
+                if (!provider.book.isLocal)
                   const GlassMenuItem(
-                    value: _MenuAction.export,
-                    label: '匯出全書',
-                    icon: Icons.ios_share_rounded,
+                    value: _MenuAction.download,
+                    label: '預下載章節',
+                    icon: Icons.download_rounded,
                   ),
-                  const GlassMenuItem(
-                    value: _MenuAction.edit,
-                    label: '編輯資訊',
-                    icon: Icons.edit_outlined,
-                  ),
-                ],
-          )
-        else
-          const GlassIconButton(
-            icon: Icons.more_horiz_rounded,
-            tooltip: '更多',
-            onPressed: null,
-          ),
+                const GlassMenuItem(
+                  value: _MenuAction.changeCover,
+                  label: '換封面',
+                  icon: Icons.image_outlined,
+                ),
+                const GlassMenuItem(
+                  value: _MenuAction.export,
+                  label: '匯出全書',
+                  icon: Icons.ios_share_rounded,
+                ),
+                const GlassMenuItem(
+                  value: _MenuAction.edit,
+                  label: '編輯資訊',
+                  icon: Icons.edit_outlined,
+                ),
+              ],
+        ),
       ],
     );
   }
@@ -531,14 +524,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final children = <Widget>[];
     for (var i = 0; i < rows.length; i++) {
       if (i > 0) {
-        children.add(
-          Padding(
-            padding: const EdgeInsetsDirectional.only(
-              start: AppGrouped.rowPadding,
-            ),
-            child: Container(height: AppGlass.hairline, color: chrome.separator),
-          ),
-        );
+        children.add(const InsetSeparator(indent: AppGrouped.rowPadding));
       }
       children.add(rows[i]);
     }
@@ -555,25 +541,24 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BuildContext context,
     BookDetailProvider provider,
   ) {
-    final start = TextEditingController(
-      text: '${provider.book.chapterIndex + 1}',
-    );
-    final end = TextEditingController(text: '${provider.totalChapterCount}');
-    showDialog<void>(
+    showStatefulAppAlert<void>(
       context: context,
-      barrierColor: AppChrome.of(context).barrier,
+      fieldTexts: [
+        '${provider.book.chapterIndex + 1}',
+        '${provider.totalChapterCount}',
+      ],
       builder:
-          (ctx) => AppAlert<bool>(
+          (ctx, _, fields) => AppAlert<bool>(
             title: '指定下載範圍',
             content: _fieldCard(ctx, [
               GroupedTextFieldRow(
                 label: '起始章節',
-                controller: start,
+                controller: fields[0],
                 keyboardType: TextInputType.number,
               ),
               GroupedTextFieldRow(
                 label: '結束章節',
-                controller: end,
+                controller: fields[1],
                 keyboardType: TextInputType.number,
               ),
             ]),
@@ -586,8 +571,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 Navigator.pop(ctx);
                 return;
               }
-              final startValue = int.tryParse(start.text.trim());
-              final endValue = int.tryParse(end.text.trim());
+              final startValue = int.tryParse(fields[0].text.trim());
+              final endValue = int.tryParse(fields[1].text.trim());
               if (startValue == null ||
                   endValue == null ||
                   startValue <= 0 ||
@@ -604,10 +589,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               );
             },
           ),
-    ).whenComplete(() {
-      start.dispose();
-      end.dispose();
-    });
+    );
   }
 
   void _locateCurrentChapter(
@@ -756,131 +738,122 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BuildContext context,
     BookDetailProvider p,
   ) async {
-    final query = TextEditingController(text: p.tocSearchQuery);
-    await showAppAlert<void>(
+    await showStatefulAppAlert<void>(
       context: context,
-      title: '搜尋目錄',
-      content: _fieldCard(context, [
-        GroupedTextFieldRow(
-          controller: query,
-          hintText: '章節名稱',
-          autofocus: true,
-          onChanged: p.setSearchQuery,
-        ),
-      ]),
-      actions: const [
-        AppAlertAction(label: '關閉', value: null, isDefault: true),
-      ],
+      fieldTexts: [p.tocSearchQuery],
+      builder:
+          (ctx, _, fields) => AppAlert<void>(
+            title: '搜尋目錄',
+            content: _fieldCard(ctx, [
+              GroupedTextFieldRow(
+                controller: fields.single,
+                hintText: '章節名稱',
+                autofocus: true,
+                onChanged: p.setSearchQuery,
+              ),
+            ]),
+            actions: const [
+              AppAlertAction(label: '關閉', value: null, isDefault: true),
+            ],
+          ),
     );
-    query.dispose();
   }
 
   void _showEditBookInfoDialog(BuildContext context, BookDetailProvider p) {
-    final n = TextEditingController(text: p.book.name),
-        a = TextEditingController(text: p.book.author),
-        i = TextEditingController(text: p.book.intro),
-        c = TextEditingController(text: p.book.coverUrl),
-        k = TextEditingController(text: p.book.kind ?? ''),
-        tag = TextEditingController(text: p.book.customTag ?? ''),
-        sourceName = TextEditingController(text: p.book.originName),
-        toc = TextEditingController(text: p.book.tocUrl);
     var saving = false;
     String? errorMessage;
-    showDialog<void>(
+    showStatefulAppAlert<void>(
       context: context,
       barrierDismissible: false,
-      barrierColor: AppChrome.of(context).barrier,
-      builder:
-          (ctx) => StatefulBuilder(
-            builder: (context, setDialogState) {
-              GroupedTextFieldRow field(
-                String label,
-                TextEditingController controller, {
-                int maxLines = 1,
-              }) => GroupedTextFieldRow(
-                label: label,
-                controller: controller,
-                maxLines: maxLines,
-                minLines: 1,
+      fieldTexts: [
+        p.book.name,
+        p.book.author,
+        p.book.intro ?? '',
+        p.book.coverUrl ?? '',
+        p.book.kind ?? '',
+        p.book.customTag ?? '',
+        p.book.originName,
+        p.book.tocUrl,
+      ],
+      builder: (ctx, setDialogState, fields) {
+        final [n, a, i, c, k, tag, sourceName, toc] = fields;
+        GroupedTextFieldRow field(
+          String label,
+          TextEditingController controller, {
+          int maxLines = 1,
+        }) => GroupedTextFieldRow(
+          label: label,
+          controller: controller,
+          maxLines: maxLines,
+          minLines: 1,
+        );
+        return IgnorePointer(
+          ignoring: saving,
+          child: AppAlert<bool>(
+            title: '編輯',
+            message: errorMessage,
+            content: _fieldCard(ctx, [
+              field('書名', n),
+              field('作者', a),
+              field('封面', c),
+              field('分類', k),
+              field('自訂標籤', tag),
+              field('來源名稱', sourceName),
+              field('目錄 URL', toc),
+              field('簡介', i, maxLines: 3),
+            ]),
+            actions: [
+              AppAlertAction(
+                label: '取消',
+                value: false,
+                enabled: !saving,
+              ),
+              AppAlertAction(
+                label: saving ? '儲存中…' : '儲存',
+                value: true,
+                isDefault: true,
+                enabled: !saving,
+              ),
+            ],
+            onAction: (save) async {
+              if (!save) {
+                Navigator.pop(ctx);
+                return;
+              }
+              setDialogState(() {
+                saving = true;
+                errorMessage = null;
+              });
+              final result = await p.updateBookInfo(
+                n.text,
+                a.text,
+                i.text,
+                c.text,
+                kind: k.text,
+                customTag: tag.text,
+                originName: sourceName.text,
+                tocUrl: toc.text,
               );
-              return IgnorePointer(
-                ignoring: saving,
-                child: AppAlert<bool>(
-                  title: '編輯',
-                  message: errorMessage,
-                  content: _fieldCard(context, [
-                    field('書名', n),
-                    field('作者', a),
-                    field('封面', c),
-                    field('分類', k),
-                    field('自訂標籤', tag),
-                    field('來源名稱', sourceName),
-                    field('目錄 URL', toc),
-                    field('簡介', i, maxLines: 3),
-                  ]),
-                  actions: [
-                    AppAlertAction(
-                      label: '取消',
-                      value: false,
-                      enabled: !saving,
-                    ),
-                    AppAlertAction(
-                      label: saving ? '儲存中…' : '儲存',
-                      value: true,
-                      isDefault: true,
-                      enabled: !saving,
-                    ),
-                  ],
-                  onAction: (save) async {
-                    if (!save) {
-                      Navigator.pop(ctx);
-                      return;
-                    }
-                    setDialogState(() {
-                      saving = true;
-                      errorMessage = null;
-                    });
-                    final result = await p.updateBookInfo(
-                      n.text,
-                      a.text,
-                      i.text,
-                      c.text,
-                      kind: k.text,
-                      customTag: tag.text,
-                      originName: sourceName.text,
-                      tocUrl: toc.text,
-                    );
-                    if (!ctx.mounted) return;
-                    if (result.success) {
-                      Navigator.pop(ctx);
-                      return;
-                    }
-                    setDialogState(() {
-                      saving = false;
-                      errorMessage = result.message;
-                    });
-                  },
-                ),
-              );
+              if (!ctx.mounted) return;
+              if (result.success) {
+                Navigator.pop(ctx);
+                return;
+              }
+              setDialogState(() {
+                saving = false;
+                errorMessage = result.message;
+              });
             },
           ),
-    ).whenComplete(() {
-      n.dispose();
-      a.dispose();
-      i.dispose();
-      c.dispose();
-      k.dispose();
-      tag.dispose();
-      sourceName.dispose();
-      toc.dispose();
-    });
+        );
+      },
+    );
   }
 
   void _showChangeCoverSheet(BuildContext context, BookDetailProvider p) =>
       AppBottomSheet.showCustom(
         context: context,
         isScrollControlled: true,
-        backgroundColor: AppChrome.of(context).groupedBackground,
         builder:
             (ctx) => ChangeNotifierProvider.value(
               value: p,

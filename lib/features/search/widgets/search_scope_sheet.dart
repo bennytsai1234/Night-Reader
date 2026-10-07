@@ -9,9 +9,8 @@ import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import '../models/search_scope.dart';
-import 'grouped_slice.dart';
-import 'search_field.dart';
-import 'sheet_header.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 /// SearchScopeSheet - 搜尋範圍選擇底部彈窗
 /// (對標 Legado SearchScopeDialog)
@@ -43,7 +42,6 @@ class SearchScopeSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: AppChrome.of(context).groupedBackground,
       builder:
           (_) => SearchScopeSheet(
             currentScope: currentScope,

@@ -6,7 +6,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import '../search_provider.dart';
-import 'sheet_header.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 /// SearchHistoryView - 搜尋歷史顯示元件
 /// (對標 Legado SearchActivity 的輸入輔助區域 + HistoryKeyAdapter)

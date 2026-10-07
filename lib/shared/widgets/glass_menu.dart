@@ -100,6 +100,7 @@ class GlassMenuButton<T> extends StatelessWidget {
     this.icon = Icons.more_horiz_rounded,
     this.tooltip = '更多',
     this.child,
+    this.enabled = true,
   });
 
   final List<GlassMenuEntry<T>> Function(BuildContext context) entriesBuilder;
@@ -109,6 +110,9 @@ class GlassMenuButton<T> extends StatelessWidget {
 
   /// 覆寫按鈕外觀；為 null 時使用 [GlassIconButton]。
   final Widget? child;
+
+  /// 停用時按鈕變淡、點擊不開選單。
+  final bool enabled;
 
   Future<void> _open(BuildContext context) async {
     final value = await showGlassMenu<T>(
@@ -123,21 +127,20 @@ class GlassMenuButton<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (buttonContext) {
+        final onTap = enabled ? () => _open(buttonContext) : null;
         if (child != null) {
           return Semantics(
             button: true,
+            enabled: enabled,
             label: tooltip,
             child: PressScale(
-              onTap: () => _open(buttonContext),
-              child: child!,
+              onTap: onTap,
+              // 停用透明度同 [GlassIconButton]。
+              child: enabled ? child! : Opacity(opacity: 0.38, child: child!),
             ),
           );
         }
-        return GlassIconButton(
-          icon: icon,
-          tooltip: tooltip,
-          onPressed: () => _open(buttonContext),
-        );
+        return GlassIconButton(icon: icon, tooltip: tooltip, onPressed: onTap);
       },
     );
   }

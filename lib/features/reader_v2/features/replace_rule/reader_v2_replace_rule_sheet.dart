@@ -131,7 +131,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
         GroupedSection(
           margin: EdgeInsets.zero,
           topGap: 0,
-          separatorIndent: AppGrouped.separatorIndentWithIcon,
           children: [
             GroupedSwitchRow(
               leading: const GroupedIconTile(Icons.auto_fix_high_rounded),

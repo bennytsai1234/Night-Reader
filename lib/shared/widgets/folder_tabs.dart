@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
+import '../theme/app_chrome.dart';
+import '../theme/app_text_styles.dart';
+import '../theme/app_tokens.dart';
+import 'glass.dart';
 
 /// [FolderTabs] 的單一分頁。
 @immutable

@@ -16,15 +16,13 @@ import 'models/search_scope.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
-import 'package:night_reader/features/explore/widgets/glass_capsule.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
-import 'widgets/grouped_slice.dart';
 import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
-import 'widgets/sheet_header.dart';
 
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)
@@ -456,7 +454,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: AppChrome.of(context).groupedBackground,
       builder: (sheetContext) => Provider.value(
         value: searchProvider,
         child: Consumer<SearchProvider>(
@@ -532,134 +529,137 @@ class _SearchPageContentState extends State<_SearchPageContent> {
 
   void _showResultFilterSheet(BuildContext context) {
     final provider = context.read<SearchProvider>();
-    final authorController = TextEditingController(text: provider.authorFilter);
-    final kindController = TextEditingController(text: provider.kindFilter);
 
     AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: AppChrome.of(context).groupedBackground,
-      builder: (sheetContext) => Provider.value(
-        value: provider,
-        child: Consumer<SearchProvider>(
-          builder: (context, p, _) {
-            final sources = p.availableSourceFilters;
-            final primary = Theme.of(context).colorScheme.primary;
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-                ),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+      // 輸入框控制器由面板擁有，退場動畫結束後才釋放。
+      builder: (sheetContext) => TextControllersScope(
+        initialTexts: [provider.authorFilter, provider.kindFilter],
+        builder: (_, fields) => Provider.value(
+          value: provider,
+          child: Consumer<SearchProvider>(
+            builder: (context, p, _) {
+              final [authorController, kindController] = fields;
+              final sources = p.availableSourceFilters;
+              final primary = Theme.of(context).colorScheme.primary;
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SheetHeader(
-                        title: '篩選搜尋結果',
-                        trailing: PlainTextAction(
-                          label: '清除',
-                          onPressed: () {
-                            authorController.clear();
-                            kindController.clear();
-                            p.clearResultFilters();
-                          },
-                        ),
-                      ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              GroupedSection(
-                                topGap: AppSpacing.sm,
-                                children: [
-                                  GroupedSwitchRow(
-                                    title: '只看已加入書架',
-                                    value: p.onlyInBookshelf,
-                                    onChanged: p.setOnlyInBookshelf,
-                                  ),
-                                  GroupedSwitchRow(
-                                    title: '只看有封面',
-                                    value: p.onlyWithCover,
-                                    onChanged: p.setOnlyWithCover,
-                                  ),
-                                ],
-                              ),
-                              GroupedSection(
-                                header: '內容',
-                                children: [
-                                  GroupedTextFieldRow(
-                                    label: '作者包含',
-                                    controller: authorController,
-                                    hintText: '不限',
-                                    onChanged: p.setAuthorFilter,
-                                  ),
-                                  GroupedTextFieldRow(
-                                    label: '分類包含',
-                                    controller: kindController,
-                                    hintText: '不限',
-                                    onChanged: p.setKindFilter,
-                                  ),
-                                ],
-                              ),
-                              if (sources.isEmpty)
-                                const GroupedSection(
-                                  header: '書源',
-                                  children: [GroupedRow(title: '目前沒有可篩選的書源')],
-                                )
-                              else
-                                GroupedSection(
-                                  header: '書源',
-                                  footer: '可複選；不選表示不限書源。',
-                                  children: [
-                                    for (final source in sources)
-                                      Semantics(
-                                        checked: p.sourceFilters.contains(
-                                          source,
-                                        ),
-                                        child: GroupedRow(
-                                          title: source,
-                                          showChevron: false,
-                                          onTap: () =>
-                                              p.toggleSourceFilter(source),
-                                          trailing: SizedBox(
-                                            width: 22,
-                                            child:
-                                                p.sourceFilters.contains(source)
-                                                ? Icon(
-                                                    Icons.check_rounded,
-                                                    size: 22,
-                                                    color: primary,
-                                                  )
-                                                : null,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                            ],
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SheetHeader(
+                          title: '篩選搜尋結果',
+                          trailing: PlainTextAction(
+                            label: '清除',
+                            onPressed: () {
+                              authorController.clear();
+                              kindController.clear();
+                              p.clearResultFilters();
+                            },
                           ),
                         ),
-                      ),
-                    ],
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.xl,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GroupedSection(
+                                  topGap: AppSpacing.sm,
+                                  children: [
+                                    GroupedSwitchRow(
+                                      title: '只看已加入書架',
+                                      value: p.onlyInBookshelf,
+                                      onChanged: p.setOnlyInBookshelf,
+                                    ),
+                                    GroupedSwitchRow(
+                                      title: '只看有封面',
+                                      value: p.onlyWithCover,
+                                      onChanged: p.setOnlyWithCover,
+                                    ),
+                                  ],
+                                ),
+                                GroupedSection(
+                                  header: '內容',
+                                  children: [
+                                    GroupedTextFieldRow(
+                                      label: '作者包含',
+                                      controller: authorController,
+                                      hintText: '不限',
+                                      onChanged: p.setAuthorFilter,
+                                    ),
+                                    GroupedTextFieldRow(
+                                      label: '分類包含',
+                                      controller: kindController,
+                                      hintText: '不限',
+                                      onChanged: p.setKindFilter,
+                                    ),
+                                  ],
+                                ),
+                                if (sources.isEmpty)
+                                  const GroupedSection(
+                                    header: '書源',
+                                    children: [GroupedRow(title: '目前沒有可篩選的書源')],
+                                  )
+                                else
+                                  GroupedSection(
+                                    header: '書源',
+                                    footer: '可複選；不選表示不限書源。',
+                                    children: [
+                                      for (final source in sources)
+                                        Semantics(
+                                          checked: p.sourceFilters.contains(
+                                            source,
+                                          ),
+                                          child: GroupedRow(
+                                            title: source,
+                                            showChevron: false,
+                                            onTap: () =>
+                                                p.toggleSourceFilter(source),
+                                            trailing: SizedBox(
+                                              width: 22,
+                                              child:
+                                                  p.sourceFilters.contains(
+                                                    source,
+                                                  )
+                                                  ? Icon(
+                                                      Icons.check_rounded,
+                                                      size: 22,
+                                                      color: primary,
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
-    ).whenComplete(() {
-      authorController.dispose();
-      kindController.dispose();
-    });
+    );
   }
 
   void _showTextDialog(

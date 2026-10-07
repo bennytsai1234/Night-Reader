@@ -50,10 +50,6 @@ class SelectActionBar extends StatelessWidget {
   /// 工具列本體高度（不含系統區與上下間距）。
   static const double height = AppGlass.buttonSize + AppSpacing.sm * 2;
 
-  /// 清單底部需要讓出的高度（不含系統區）。
-  static const double occupiedHeight =
-      height + AppGlass.tabBarBottomGap + AppSpacing.md;
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -79,75 +75,49 @@ class SelectActionBar extends StatelessWidget {
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: AppGlass.tabBarBottomGap),
-      child: Center(
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: AppGlass.tabBarMaxWidth,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
-            child: SizedBox(
-              height: height,
-              child: GlassSurface(
-                borderRadius: AppRadius.pillShape,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      _BarTextButton(
-                        label: '反選',
-                        color: scheme.onSurface,
-                        onTap:
-                            allCount > 0 && !isBusy
-                                ? provider.revertSelection
-                                : null,
-                      ),
-                      Expanded(
-                        child: Text(
-                          selectionLabel,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.uiSm.copyWith(
-                            color: chrome.sectionText,
-                          ),
-                        ),
-                      ),
-                      _BarTextButton(
-                        label: '刪除',
-                        color: context.danger,
-                        onTap: actionsEnabled ? onDelete : null,
-                      ),
-                      if (actionsEnabled)
-                        GlassMenuButton<String>(
-                          tooltip: '更多批次操作',
-                          entriesBuilder: (_) => _entries,
-                          onSelected: _onMenuSelected,
-                          child: _moreIcon(scheme.onSurface),
-                        )
-                      else
-                        Tooltip(
-                          message: isBusy ? '操作進行中' : '更多批次操作',
-                          child: _moreIcon(
-                            scheme.onSurface.withValues(alpha: 0.38),
-                          ),
-                        ),
-                    ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+        child: FloatingGlassToolbar(
+          height: height,
+          child: Row(
+            children: [
+              _BarTextButton(
+                label: '反選',
+                color: scheme.onSurface,
+                onTap: allCount > 0 && !isBusy ? provider.revertSelection : null,
+              ),
+              Expanded(
+                child: Text(
+                  selectionLabel,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.uiSm.copyWith(color: chrome.sectionText),
+                ),
+              ),
+              _BarTextButton(
+                label: '刪除',
+                color: context.danger,
+                onTap: actionsEnabled ? onDelete : null,
+              ),
+              GlassMenuButton<String>(
+                enabled: actionsEnabled,
+                tooltip: isBusy ? '操作進行中' : '更多批次操作',
+                entriesBuilder: (_) => _entries,
+                onSelected: _onMenuSelected,
+                child: SizedBox.square(
+                  dimension: AppGlass.buttonSize,
+                  child: Icon(
+                    Icons.more_horiz_rounded,
+                    size: 22,
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _moreIcon(Color color) {
-    return SizedBox.square(
-      dimension: AppGlass.buttonSize,
-      child: Icon(Icons.more_horiz_rounded, size: 22, color: color),
     );
   }
 

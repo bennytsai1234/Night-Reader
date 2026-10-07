@@ -179,7 +179,52 @@ class AppBottomSheet extends StatelessWidget {
   }
 }
 
-/// 底部面板內的區塊標題，字階與色彩同分組清單的組標題。
+/// 分組樣式底部面板的標題列：置中標題、兩側放文字或圓形玻璃按鈕。
+class SheetHeader extends StatelessWidget {
+  const SheetHeader({
+    super.key,
+    required this.title,
+    this.leading,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget? leading;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppGrouped.margin,
+        AppSpacing.sm,
+        AppGrouped.margin,
+        AppSpacing.xs,
+      ),
+      child: SizedBox(
+        height: AppGlass.buttonSize,
+        child: NavigationToolbar(
+          middleSpacing: AppSpacing.md,
+          leading: leading,
+          trailing: trailing,
+          middle: Semantics(
+            header: true,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.titleMd.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 閱讀器面板內的區塊標題，字階與色彩同分組清單的組標題。
 class SheetSection extends StatelessWidget {
   final String title;
   final Widget? trailing;

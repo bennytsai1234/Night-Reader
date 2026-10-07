@@ -239,6 +239,203 @@ class GlassTextButton extends StatelessWidget {
   }
 }
 
+/// 頁首或面板上的純文字動作（Telegram 的「取消」「清除」）。
+class PlainTextAction extends StatelessWidget {
+  const PlainTextAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.emphasized = false,
+    this.destructive = false,
+    this.small = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool emphasized;
+  final bool destructive;
+
+  /// 組標題旁的小字動作。
+  final bool small;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = onPressed != null;
+    final base =
+        destructive
+            ? (Theme.of(context).brightness == Brightness.dark
+                ? AppPalette.rustDark
+                : AppPalette.rust)
+            : scheme.primary;
+    final style = (small ? AppTextStyles.uiSm : AppTextStyles.bodyBase)
+        .copyWith(
+          height: 1.2,
+          color: base.withValues(alpha: enabled ? 1 : 0.4),
+          fontWeight: emphasized ? FontWeight.w600 : FontWeight.w400,
+        );
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: PressScale(
+        scale: 0.95,
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: small ? 28 : AppGlass.buttonSize,
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: small ? 0 : AppSpacing.xs,
+            ),
+            child: Center(
+              widthFactor: 1,
+              child: Text(label, style: style),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 小型玻璃膠囊（分類標籤、搜尋範圍等可點的小選項）。
+///
+/// 放在卡片等不透明底上時傳 `blur: false`，省下背景取樣。
+class GlassCapsule extends StatelessWidget {
+  const GlassCapsule({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.icon,
+    this.trailingIcon,
+    this.selected = false,
+    this.foregroundColor,
+    this.blur = true,
+    this.tint,
+    this.maxLines = 1,
+    this.tooltip,
+  });
+
+  static const double height = 34.0;
+
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final IconData? trailingIcon;
+
+  /// 開啟中的選項：主色字與淡主色底。
+  final bool selected;
+
+  /// 覆寫文字與圖示顏色（例如錯誤項目）。
+  final Color? foregroundColor;
+  final bool blur;
+
+  /// 覆寫未選取時的底色（例如放在卡片上時改用分組底色，與卡片區隔）。
+  final Color? tint;
+  final int maxLines;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = onTap != null;
+    final color = (foregroundColor ??
+            (selected ? scheme.primary : scheme.onSurface))
+        .withValues(alpha: enabled ? 1 : 0.45);
+    final style = AppTextStyles.uiSm.copyWith(
+      color: color,
+      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+    );
+
+    Widget capsule = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: height),
+      child: GlassSurface(
+        borderRadius: AppRadius.pillShape,
+        shadow: false,
+        blur: blur,
+        tint:
+            selected
+                ? Color.alphaBlend(
+                  scheme.primary.withValues(alpha: 0.12),
+                  scheme.surface.withValues(alpha: 0.9),
+                )
+                : tint,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md + 2,
+            vertical: AppSpacing.xs + 2,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 15, color: color),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: maxLines,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: style,
+                ),
+              ),
+              if (trailingIcon != null) ...[
+                const SizedBox(width: 2),
+                Icon(trailingIcon, size: 16, color: color),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    capsule = Semantics(
+      button: enabled,
+      selected: selected,
+      label: tooltip,
+      child: PressScale(scale: 0.95, onTap: onTap, child: capsule),
+    );
+    if (tooltip == null) return capsule;
+    return Tooltip(message: tooltip!, child: capsule);
+  }
+}
+
+/// 浮在清單底部的膠囊玻璃工具列（編輯模式的批次動作列）；置中、最寬同
+/// 浮動分頁列。左右外距與底部安全區由呼叫端決定。
+class FloatingGlassToolbar extends StatelessWidget {
+  const FloatingGlassToolbar({
+    super.key,
+    required this.child,
+    this.height = AppGlass.tabItemHeight,
+  });
+
+  final Widget child;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppGlass.tabBarMaxWidth),
+        child: SizedBox(
+          height: height,
+          child: GlassSurface(
+            borderRadius: AppRadius.pillShape,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 內容捲到浮動列底下時的邊緣漸隱。
 class EdgeFade extends StatelessWidget {
   const EdgeFade({

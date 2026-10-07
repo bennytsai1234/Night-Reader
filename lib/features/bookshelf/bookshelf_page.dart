@@ -85,30 +85,23 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   left: AppGrouped.margin,
                   right: AppGrouped.margin,
                   bottom: insets.bottom + AppSpacing.sm,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: AppGlass.tabBarMaxWidth,
-                      ),
-                      child: AnimatedSwitcher(
-                        duration: AppMotion.menu,
-                        switchInCurve: AppMotion.menuCurve,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.4),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        ),
-                        child: _isMultiSelect
-                            ? _buildEditToolbar(provider)
-                            : const SizedBox.shrink(),
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.menu,
+                    switchInCurve: AppMotion.menuCurve,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.4),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
                       ),
                     ),
+                    child: _isMultiSelect
+                        ? _buildEditToolbar(provider)
+                        : const SizedBox.shrink(),
                   ),
                 ),
               ],
@@ -335,29 +328,35 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BuildContext context,
     BookshelfProvider provider,
   ) async {
-    final controller = TextEditingController();
-    final confirmed = await showAppAlert<bool>(
+    // 確認時把網址作為結果帶回；輸入框控制器由提示框擁有。
+    final url = await showStatefulAppAlert<String>(
       context: context,
-      title: '從網址匯入書架',
-      content: Builder(
-        builder: (dialogContext) => TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
-          onSubmitted: (_) => Navigator.of(dialogContext).pop(true),
-        ),
-      ),
-      actions: const [
-        AppAlertAction(label: '取消', value: false),
-        AppAlertAction(label: '匯入', value: true, isDefault: true),
-      ],
+      fieldTexts: const [''],
+      builder: (dialogContext, _, fields) {
+        void submit() => Navigator.of(dialogContext).pop(fields.single.text);
+        return AppAlert<bool>(
+          title: '從網址匯入書架',
+          content: TextField(
+            controller: fields.single,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
+            onSubmitted: (_) => submit(),
+          ),
+          actions: const [
+            AppAlertAction(label: '取消', value: false),
+            AppAlertAction(label: '匯入', value: true, isDefault: true),
+          ],
+          onAction: (confirmed) =>
+              confirmed ? submit() : Navigator.of(dialogContext).pop(),
+        );
+      },
     );
-    final url = controller.text.trim();
-    if (confirmed != true || url.isEmpty || !context.mounted) return;
+    final trimmed = url?.trim() ?? '';
+    if (trimmed.isEmpty || !context.mounted) return;
     try {
-      await provider.importBookshelfFromUrl(url);
+      await provider.importBookshelfFromUrl(trimmed);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('書架網址匯入完成')));

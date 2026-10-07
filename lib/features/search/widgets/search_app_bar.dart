@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/features/explore/widgets/glass_capsule.dart';
 import '../search_provider.dart';
-import 'search_field.dart';
-import 'sheet_header.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄
 /// (對標 Legado SearchActivity 的 TitleBar + SearchView)

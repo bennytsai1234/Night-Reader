@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
@@ -35,19 +36,63 @@ Future<T?> showAppAlert<T>({
   required List<AppAlertAction<T>> actions,
   bool barrierDismissible = true,
 }) {
+  return _showAlertRoute<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    builder:
+        (context) => AppAlert<T>(
+          title: title,
+          message: message,
+          content: content,
+          actions: actions,
+        ),
+  );
+}
+
+/// 需要自己管理狀態（輸入框、勾選）的置中提示框；外觀與動畫同
+/// [showAppAlert]，內容由 [builder] 在 [StatefulBuilder] 內建立。
+///
+/// 輸入框的控制器由提示框擁有：[fieldTexts] 每一項建立一個控制器，依序傳給
+/// [builder]，提示框退場動畫結束、卸載時才釋放。呼叫端不要自行建立並在
+/// `await` 之後釋放控制器——Future 在退場動畫開始時就完成，動畫期間輸入框
+/// 仍在使用控制器。需要輸入值時在按鈕回呼中讀取，或作為結果 pop 回來。
+Future<T?> showStatefulAppAlert<T>({
+  required BuildContext context,
+  required Widget Function(
+    BuildContext context,
+    StateSetter setState,
+    List<TextEditingController> fields,
+  )
+  builder,
+  List<String> fieldTexts = const [],
+  bool barrierDismissible = true,
+}) {
+  return _showAlertRoute<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    builder:
+        (context) => TextControllersScope(
+          initialTexts: fieldTexts,
+          builder:
+              (context, fields) => StatefulBuilder(
+                builder: (context, setState) => builder(context, setState, fields),
+              ),
+        ),
+  );
+}
+
+Future<T?> _showAlertRoute<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  required bool barrierDismissible,
+}) {
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: '關閉',
     barrierColor: AppChrome.of(context).barrier,
     transitionDuration: AppMotion.menu,
-    pageBuilder:
-        (context, _, _) => AppAlert<T>(
-          title: title,
-          message: message,
-          content: content,
-          actions: actions,
-        ),
+    pageBuilder: (context, _, _) => builder(context),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(
         parent: animation,
@@ -63,6 +108,47 @@ Future<T?> showAppAlert<T>({
       );
     },
   );
+}
+
+/// 擁有一組輸入框控制器：隨此元件建立，在它卸載時才釋放。
+///
+/// 對話框與底部面板的 Future 在退場動畫開始時就完成，若在那之後釋放控制器，
+/// 退場動畫中的輸入框會使用到已釋放的控制器。把控制器交給路由內的這個元件
+/// 擁有即可；[showStatefulAppAlert] 已內建，底部面板可直接包在 builder 外層。
+class TextControllersScope extends StatefulWidget {
+  const TextControllersScope({
+    super.key,
+    required this.initialTexts,
+    required this.builder,
+  });
+
+  /// 每一項建立一個控制器，作為初始文字。
+  final List<String> initialTexts;
+  final Widget Function(
+    BuildContext context,
+    List<TextEditingController> controllers,
+  )
+  builder;
+
+  @override
+  State<TextControllersScope> createState() => _TextControllersScopeState();
+}
+
+class _TextControllersScopeState extends State<TextControllersScope> {
+  late final List<TextEditingController> _controllers = [
+    for (final text in widget.initialTexts) TextEditingController(text: text),
+  ];
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controllers);
 }
 
 /// 確認類提示框；按下確認回傳 true，取消或點外面回傳 false。
@@ -93,8 +179,8 @@ Future<bool> showAppConfirm({
   return result ?? false;
 }
 
-/// 提示框本體；需要自行管理狀態（例如輸入框）的對話框可直接在
-/// `showGeneralDialog`／`showDialog` 的 builder 裡使用。
+/// 提示框本體；需要自行管理狀態（例如輸入框）的對話框用
+/// [showStatefulAppAlert] 開啟，在其 builder 裡使用。
 class AppAlert<T> extends StatelessWidget {
   const AppAlert({
     super.key,
@@ -264,6 +350,147 @@ class AppAlert<T> extends StatelessWidget {
                   buttons,
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 提示框內的輸入框：分組底色的圓角欄位，沒有外框線。
+class AlertTextField extends StatelessWidget {
+  const AlertTextField({
+    super.key,
+    required this.controller,
+    this.hintText,
+    this.labelText,
+    this.errorText,
+    this.onChanged,
+    this.autofocus = false,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.inputFormatters,
+  });
+
+  final TextEditingController controller;
+  final String? hintText;
+  final String? labelText;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+  final int maxLines;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    const border = OutlineInputBorder(
+      borderRadius: AppRadius.cardMd,
+      borderSide: BorderSide.none,
+    );
+    return TextField(
+      controller: controller,
+      autofocus: autofocus,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      onChanged: onChanged,
+      style: AppTextStyles.bodyBase.copyWith(
+        height: 1.3,
+        color: scheme.onSurface,
+      ),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: chrome.groupedBackground,
+        hintText: hintText,
+        labelText: labelText,
+        errorText: errorText,
+        hintStyle: AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: chrome.sectionText.withValues(alpha: 0.7),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border,
+        errorBorder: border,
+        focusedErrorBorder: border,
+      ),
+    );
+  }
+}
+
+/// 提示框內的多選列：標題、說明與右側勾選圈。
+class AlertCheckRow extends StatelessWidget {
+  const AlertCheckRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    final enabled = onChanged != null;
+    return Semantics(
+      checked: value,
+      enabled: enabled,
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!value) : null,
+        borderRadius: AppRadius.cardSm,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: AppTextStyles.bodyBase.copyWith(
+                          height: 1.3,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          style: AppTextStyles.bodySm.copyWith(
+                            height: 1.3,
+                            color: chrome.sectionText,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Icon(
+                  value
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 22,
+                  color: value ? scheme.primary : chrome.sectionText,
+                ),
+              ],
             ),
           ),
         ),

@@ -10,7 +10,6 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'source_manager_provider.dart';
-import 'widgets/source_manager_dialogs.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
   const SourceGroupManagePage({super.key});
@@ -59,13 +58,11 @@ class SourceGroupManagePage extends StatelessWidget {
             );
           }
 
-          final chrome = AppChrome.of(context);
           return SwipeActionsGroup(
             child: GroupedListView(
               children: [
                 GroupedSection(
                   topGap: AppSpacing.sm,
-                  separatorIndent: AppGrouped.separatorIndentWithIcon,
                   children: [
                     for (final group in groups)
                       SwipeActions(
@@ -97,32 +94,12 @@ class SourceGroupManagePage extends StatelessWidget {
                                 () => _confirmDelete(context, provider, group),
                           ),
                         ],
-                        child: ColoredBox(
-                          color: chrome.groupedSurface,
-                          child: Builder(
-                            builder:
-                                (rowContext) => GroupedRow(
-                                  title: group,
-                                  leading: const GroupedIconTile(
-                                    Icons.folder_rounded,
-                                    tint: AppTint.gold,
-                                  ),
-                                  enabled: mutationEnabled,
-                                  showChevron: false,
-                                  onTap:
-                                      () => _showGroupMenu(
-                                        rowContext,
-                                        provider,
-                                        group,
-                                      ),
-                                  onLongPress:
-                                      () => _showGroupMenu(
-                                        rowContext,
-                                        provider,
-                                        group,
-                                      ),
-                                ),
-                          ),
+                        child: _GroupRow(
+                          group: group,
+                          enabled: mutationEnabled,
+                          onMenu:
+                              (rowContext) =>
+                                  _showGroupMenu(rowContext, provider, group),
                         ),
                       ),
                   ],
@@ -200,61 +177,57 @@ class SourceGroupManagePage extends StatelessWidget {
   }
 
   Future<void> _showEditDialog(BuildContext context, {String? oldName}) async {
-    final controller = TextEditingController(text: oldName);
     final provider = context.read<SourceManagerProvider>();
     final pageContext = context;
     String? inputError;
-    try {
-      await showStatefulAppAlert<void>(
-        context: context,
-        builder:
-            (dialogContext, setDialogState) => AppAlert<bool>(
-              title: oldName == null ? '新增分組' : '重新命名分組',
-              onAction: (confirmed) async {
-                if (!confirmed) {
-                  Navigator.pop(dialogContext);
-                  return;
-                }
-                final name = controller.text.trim();
-                if (name.isEmpty) {
-                  setDialogState(() => inputError = '請輸入分組名稱');
-                  return;
-                }
+    await showStatefulAppAlert<void>(
+      context: context,
+      fieldTexts: [oldName ?? ''],
+      builder:
+          (dialogContext, setDialogState, fields) => AppAlert<bool>(
+            title: oldName == null ? '新增分組' : '重新命名分組',
+            onAction: (confirmed) async {
+              if (!confirmed) {
                 Navigator.pop(dialogContext);
-                try {
-                  if (oldName == null) {
-                    await provider.addGroup(name);
-                  } else {
-                    await provider.renameGroup(oldName, name);
-                  }
-                } catch (error) {
-                  if (pageContext.mounted) {
-                    ScaffoldMessenger.of(pageContext).showSnackBar(
-                      SnackBar(content: Text('儲存分組失敗：$error')),
-                    );
-                  }
+                return;
+              }
+              final name = fields.single.text.trim();
+              if (name.isEmpty) {
+                setDialogState(() => inputError = '請輸入分組名稱');
+                return;
+              }
+              Navigator.pop(dialogContext);
+              try {
+                if (oldName == null) {
+                  await provider.addGroup(name);
+                } else {
+                  await provider.renameGroup(oldName, name);
+                }
+              } catch (error) {
+                if (pageContext.mounted) {
+                  ScaffoldMessenger.of(pageContext).showSnackBar(
+                    SnackBar(content: Text('儲存分組失敗：$error')),
+                  );
+                }
+              }
+            },
+            content: AlertTextField(
+              controller: fields.single,
+              autofocus: true,
+              hintText: '輸入分組名稱',
+              errorText: inputError,
+              onChanged: (_) {
+                if (inputError != null) {
+                  setDialogState(() => inputError = null);
                 }
               },
-              content: AlertTextField(
-                controller: controller,
-                autofocus: true,
-                hintText: '輸入分組名稱',
-                errorText: inputError,
-                onChanged: (_) {
-                  if (inputError != null) {
-                    setDialogState(() => inputError = null);
-                  }
-                },
-              ),
-              actions: const [
-                AppAlertAction(label: '取消', value: false),
-                AppAlertAction(label: '確定', value: true, isDefault: true),
-              ],
             ),
-      );
-    } finally {
-      controller.dispose();
-    }
+            actions: const [
+              AppAlertAction(label: '取消', value: false),
+              AppAlertAction(label: '確定', value: true, isDefault: true),
+            ],
+          ),
+    );
   }
 
   Future<void> _confirmDelete(
@@ -279,5 +252,39 @@ class SourceGroupManagePage extends StatelessWidget {
         ).showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
       }
     }
+  }
+}
+
+/// 分組列：不透明底讓滑動動作藏在列下方；選單錨點取列本身的範圍。
+class _GroupRow extends StatelessWidget implements GroupedRowLike {
+  const _GroupRow({
+    required this.group,
+    required this.enabled,
+    required this.onMenu,
+  });
+
+  final String group;
+  final bool enabled;
+  final ValueChanged<BuildContext> onMenu;
+
+  @override
+  bool get hasLeading => true;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppChrome.of(context).groupedSurface,
+      child: GroupedRow(
+        title: group,
+        leading: const GroupedIconTile(
+          Icons.folder_rounded,
+          tint: AppTint.gold,
+        ),
+        enabled: enabled,
+        showChevron: false,
+        onTap: () => onMenu(context),
+        onLongPress: () => onMenu(context),
+      ),
+    );
   }
 }

@@ -12,14 +12,13 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:night_reader/features/search/widgets/grouped_slice.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
-import 'widgets/folder_tabs.dart';
-import 'widgets/glass_capsule.dart';
+import 'package:night_reader/shared/widgets/folder_tabs.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
 class ExplorePage extends StatelessWidget {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/book_detail/source/book_detail_change_source_provider.dart';
-import 'package:night_reader/features/explore/widgets/folder_tabs.dart';
-import 'package:night_reader/features/search/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/folder_tabs.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 換源面板的篩選列：書源分組以資料夾分頁切換，下方是結果內篩選框。

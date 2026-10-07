@@ -130,20 +130,6 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
       shadowColor:
           brightness == Brightness.light ? const Color(0x0A241C10) : null,
     ),
-    dialogTheme: DialogThemeData(
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
-      backgroundColor: colors.surface,
-      titleTextStyle: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: colors.textPrimary,
-      ),
-    ),
-    popupMenuTheme: PopupMenuThemeData(
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
-      elevation: brightness == Brightness.light ? 3 : 8,
-      color: colors.surface,
-    ),
     bottomSheetTheme: BottomSheetThemeData(
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),

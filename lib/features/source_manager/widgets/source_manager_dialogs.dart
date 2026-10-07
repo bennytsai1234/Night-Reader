@@ -10,178 +10,6 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import '../source_debug_page.dart';
 import '../source_manager_provider.dart';
 
-/// 需要自己管理狀態（輸入框、勾選）的置中提示框；外觀與動畫同
-/// [showAppAlert]，內容由 [builder] 在 [StatefulBuilder] 內建立。
-Future<T?> showStatefulAppAlert<T>({
-  required BuildContext context,
-  required Widget Function(BuildContext context, StateSetter setState) builder,
-  bool barrierDismissible = true,
-}) {
-  return showGeneralDialog<T>(
-    context: context,
-    barrierDismissible: barrierDismissible,
-    barrierLabel: '關閉',
-    barrierColor: AppChrome.of(context).barrier,
-    transitionDuration: AppMotion.menu,
-    pageBuilder: (context, _, _) => StatefulBuilder(builder: builder),
-    transitionBuilder: (context, animation, _, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: AppMotion.springCurve,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 1.08, end: 1).animate(curved),
-          child: child,
-        ),
-      );
-    },
-  );
-}
-
-/// 提示框內的輸入框：分組底色的圓角欄位，沒有外框線。
-class AlertTextField extends StatelessWidget {
-  const AlertTextField({
-    super.key,
-    required this.controller,
-    this.hintText,
-    this.labelText,
-    this.errorText,
-    this.onChanged,
-    this.autofocus = false,
-    this.maxLines = 1,
-    this.keyboardType,
-    this.inputFormatters,
-  });
-
-  final TextEditingController controller;
-  final String? hintText;
-  final String? labelText;
-  final String? errorText;
-  final ValueChanged<String>? onChanged;
-  final bool autofocus;
-  final int maxLines;
-  final TextInputType? keyboardType;
-  final List<TextInputFormatter>? inputFormatters;
-
-  @override
-  Widget build(BuildContext context) {
-    final chrome = AppChrome.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    const border = OutlineInputBorder(
-      borderRadius: AppRadius.cardMd,
-      borderSide: BorderSide.none,
-    );
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      style: AppTextStyles.bodyBase.copyWith(
-        height: 1.3,
-        color: scheme.onSurface,
-      ),
-      decoration: InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: chrome.groupedBackground,
-        hintText: hintText,
-        labelText: labelText,
-        errorText: errorText,
-        hintStyle: AppTextStyles.bodyBase.copyWith(
-          height: 1.3,
-          color: chrome.sectionText.withValues(alpha: 0.7),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.md,
-        ),
-        border: border,
-        enabledBorder: border,
-        focusedBorder: border,
-        errorBorder: border,
-        focusedErrorBorder: border,
-      ),
-    );
-  }
-}
-
-/// 提示框內的多選列：標題、說明與右側勾選圈。
-class AlertCheckRow extends StatelessWidget {
-  const AlertCheckRow({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String? subtitle;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
-    final enabled = onChanged != null;
-    return Semantics(
-      checked: value,
-      enabled: enabled,
-      child: InkWell(
-        onTap: enabled ? () => onChanged!(!value) : null,
-        borderRadius: AppRadius.cardSm,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      if (subtitle != null)
-                        Text(
-                          subtitle!,
-                          style: AppTextStyles.bodySm.copyWith(
-                            height: 1.3,
-                            color: chrome.sectionText,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Icon(
-                  value
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 22,
-                  color: value ? scheme.primary : chrome.sectionText,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class SourceManagerDialogs {
   static void showCheckLog(
     BuildContext context,
@@ -190,7 +18,7 @@ class SourceManagerDialogs {
     showStatefulAppAlert<void>(
       context: context,
       builder:
-          (context, _) => AnimatedBuilder(
+          (context, _, _) => AnimatedBuilder(
             animation: provider.checkService,
             builder: (context, _) {
               final logs = provider.checkService.logs;
@@ -300,10 +128,6 @@ class SourceManagerDialogs {
     }
 
     final initial = provider.checkConfig.normalized();
-    final keywordController = TextEditingController(text: initial.keyword);
-    final timeoutController = TextEditingController(
-      text: initial.timeoutSeconds.toString(),
-    );
 
     var checkSearch = initial.checkSearch;
     var checkDiscovery = initial.checkDiscovery;
@@ -313,7 +137,12 @@ class SourceManagerDialogs {
     String? timeoutError;
     final pageContext = context;
 
-    Future<void> start(BuildContext dialogContext, StateSetter setState) async {
+    Future<void> start(
+      BuildContext dialogContext,
+      StateSetter setState,
+      TextEditingController keywordController,
+      TextEditingController timeoutController,
+    ) async {
       final timeoutSeconds = int.tryParse(timeoutController.text);
       if (timeoutSeconds == null || timeoutSeconds < 1) {
         setState(() => timeoutError = '超時秒數至少要 1 秒');
@@ -347,145 +176,147 @@ class SourceManagerDialogs {
       }
     }
 
-    try {
-      await showStatefulAppAlert<void>(
-        context: context,
-        builder: (dialogContext, setState) {
-          final chrome = AppChrome.of(dialogContext);
-          return AppAlert<bool>(
-            title:
-                checkAll
-                    ? '校驗所有書源（全部 $targetCount 項）'
-                    : '校驗選中書源 ($targetCount)',
-            onAction: (confirmed) {
-              if (confirmed) {
-                start(dialogContext, setState);
-              } else {
-                Navigator.pop(dialogContext);
-              }
-            },
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AlertTextField(
-                  controller: keywordController,
-                  labelText: '預設關鍵字',
-                  hintText: '未設置書源校驗關鍵字時使用',
+    await showStatefulAppAlert<void>(
+      context: context,
+      fieldTexts: [initial.keyword, initial.timeoutSeconds.toString()],
+      builder: (dialogContext, setState, fields) {
+        final [keywordController, timeoutController] = fields;
+        final chrome = AppChrome.of(dialogContext);
+        return AppAlert<bool>(
+          title:
+              checkAll
+                  ? '校驗所有書源（全部 $targetCount 項）'
+                  : '校驗選中書源 ($targetCount)',
+          onAction: (confirmed) {
+            if (confirmed) {
+              start(
+                dialogContext,
+                setState,
+                keywordController,
+                timeoutController,
+              );
+            } else {
+              Navigator.pop(dialogContext);
+            }
+          },
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AlertTextField(
+                controller: keywordController,
+                labelText: '預設關鍵字',
+                hintText: '未設置書源校驗關鍵字時使用',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AlertTextField(
+                controller: timeoutController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                labelText: '單步超時（秒）',
+                hintText: '至少 1 秒',
+                errorText: timeoutError,
+                onChanged: (_) => setState(() => timeoutError = null),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AlertCheckRow(
+                value: checkSearch,
+                title: '校驗搜尋',
+                subtitle: '檢查 searchUrl 與搜尋結果',
+                onChanged: (value) {
+                  setState(() {
+                    checkSearch = value;
+                    if (!checkSearch && !checkDiscovery) {
+                      checkDiscovery = true;
+                    }
+                  });
+                },
+              ),
+              AlertCheckRow(
+                value: checkDiscovery,
+                title: '校驗發現',
+                subtitle: '依 exploreUrl 解析並檢查發現入口',
+                onChanged: (value) {
+                  setState(() {
+                    checkDiscovery = value;
+                    if (!checkSearch && !checkDiscovery) {
+                      checkSearch = true;
+                    }
+                  });
+                },
+              ),
+              AlertCheckRow(
+                value: checkInfo,
+                title: '校驗詳情',
+                subtitle: '拉取書籍詳情頁',
+                onChanged: (value) {
+                  setState(() {
+                    checkInfo = value;
+                    if (!checkInfo) {
+                      checkCategory = false;
+                      checkContent = false;
+                    }
+                  });
+                },
+              ),
+              AlertCheckRow(
+                value: checkCategory,
+                title: '校驗目錄',
+                subtitle: '拉取章節列表',
+                onChanged:
+                    checkInfo
+                        ? (value) {
+                          setState(() {
+                            checkCategory = value;
+                            if (!checkCategory) {
+                              checkContent = false;
+                            }
+                          });
+                        }
+                        : null,
+              ),
+              AlertCheckRow(
+                value: checkContent,
+                title: '校驗正文',
+                subtitle: '拉取首個可閱讀章節正文',
+                onChanged:
+                    checkInfo && checkCategory
+                        ? (value) => setState(() => checkContent = value)
+                        : null,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: chrome.groupedBackground,
+                  borderRadius: AppRadius.cardMd,
                 ),
-                const SizedBox(height: AppSpacing.md),
-                AlertTextField(
-                  controller: timeoutController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  labelText: '單步超時（秒）',
-                  hintText: '至少 1 秒',
-                  errorText: timeoutError,
-                  onChanged: (_) => setState(() => timeoutError = null),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                AlertCheckRow(
-                  value: checkSearch,
-                  title: '校驗搜尋',
-                  subtitle: '檢查 searchUrl 與搜尋結果',
-                  onChanged: (value) {
-                    setState(() {
-                      checkSearch = value;
-                      if (!checkSearch && !checkDiscovery) {
-                        checkDiscovery = true;
-                      }
-                    });
-                  },
-                ),
-                AlertCheckRow(
-                  value: checkDiscovery,
-                  title: '校驗發現',
-                  subtitle: '依 exploreUrl 解析並檢查發現入口',
-                  onChanged: (value) {
-                    setState(() {
-                      checkDiscovery = value;
-                      if (!checkSearch && !checkDiscovery) {
-                        checkSearch = true;
-                      }
-                    });
-                  },
-                ),
-                AlertCheckRow(
-                  value: checkInfo,
-                  title: '校驗詳情',
-                  subtitle: '拉取書籍詳情頁',
-                  onChanged: (value) {
-                    setState(() {
-                      checkInfo = value;
-                      if (!checkInfo) {
-                        checkCategory = false;
-                        checkContent = false;
-                      }
-                    });
-                  },
-                ),
-                AlertCheckRow(
-                  value: checkCategory,
-                  title: '校驗目錄',
-                  subtitle: '拉取章節列表',
-                  onChanged:
-                      checkInfo
-                          ? (value) {
-                            setState(() {
-                              checkCategory = value;
-                              if (!checkCategory) {
-                                checkContent = false;
-                              }
-                            });
-                          }
-                          : null,
-                ),
-                AlertCheckRow(
-                  value: checkContent,
-                  title: '校驗正文',
-                  subtitle: '拉取首個可閱讀章節正文',
-                  onChanged:
-                      checkInfo && checkCategory
-                          ? (value) => setState(() => checkContent = value)
-                          : null,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: chrome.groupedBackground,
-                    borderRadius: AppRadius.cardMd,
+                child: Text(
+                  SourceCheckConfig(
+                    keyword: keywordController.text,
+                    timeoutSeconds:
+                        int.tryParse(timeoutController.text) ??
+                        initial.timeoutSeconds,
+                    checkSearch: checkSearch,
+                    checkDiscovery: checkDiscovery,
+                    checkInfo: checkInfo,
+                    checkCategory: checkCategory,
+                    checkContent: checkContent,
+                  ).normalized().summary,
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: chrome.sectionText,
                   ),
-                  child: Text(
-                    SourceCheckConfig(
-                      keyword: keywordController.text,
-                      timeoutSeconds:
-                          int.tryParse(timeoutController.text) ??
-                          initial.timeoutSeconds,
-                      checkSearch: checkSearch,
-                      checkDiscovery: checkDiscovery,
-                      checkInfo: checkInfo,
-                      checkCategory: checkCategory,
-                      checkContent: checkContent,
-                    ).normalized().summary,
-                    style: AppTextStyles.bodySm.copyWith(
-                      color: chrome.sectionText,
-                    ),
-                  ),
                 ),
-              ],
-            ),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '開始校驗', value: true, isDefault: true),
+              ),
             ],
-          );
-        },
-      );
-    } finally {
-      keywordController.dispose();
-      timeoutController.dispose();
-    }
+          ),
+          actions: const [
+            AppAlertAction(label: '取消', value: false),
+            AppAlertAction(label: '開始校驗', value: true, isDefault: true),
+          ],
+        );
+      },
+    );
   }
 
   static Future<void> confirmClearInvalid(
@@ -548,54 +379,50 @@ class SourceManagerDialogs {
     BuildContext context,
     BookSource source,
   ) async {
-    final ctrl = TextEditingController(text: '我的世界');
     String? inputError;
     final pageContext = context;
-    try {
-      await showStatefulAppAlert<void>(
-        context: context,
-        builder:
-            (dialogContext, setDialogState) => AppAlert<bool>(
-              title: '輸入調試關鍵字',
-              onAction: (confirmed) {
-                if (!confirmed) {
-                  Navigator.pop(dialogContext);
-                  return;
-                }
-                final debugKey = ctrl.text.trim();
-                if (debugKey.isEmpty) {
-                  setDialogState(() => inputError = '請輸入調試關鍵字或 URL');
-                  return;
-                }
+    await showStatefulAppAlert<void>(
+      context: context,
+      fieldTexts: const ['我的世界'],
+      builder:
+          (dialogContext, setDialogState, fields) => AppAlert<bool>(
+            title: '輸入調試關鍵字',
+            onAction: (confirmed) {
+              if (!confirmed) {
                 Navigator.pop(dialogContext);
-                Navigator.push(
-                  pageContext,
-                  MaterialPageRoute(
-                    builder:
-                        (c) =>
-                            SourceDebugPage(source: source, debugKey: debugKey),
-                  ),
-                );
+                return;
+              }
+              final debugKey = fields.single.text.trim();
+              if (debugKey.isEmpty) {
+                setDialogState(() => inputError = '請輸入調試關鍵字或 URL');
+                return;
+              }
+              Navigator.pop(dialogContext);
+              Navigator.push(
+                pageContext,
+                MaterialPageRoute(
+                  builder:
+                      (c) =>
+                          SourceDebugPage(source: source, debugKey: debugKey),
+                ),
+              );
+            },
+            content: AlertTextField(
+              controller: fields.single,
+              autofocus: true,
+              hintText: '搜尋詞或 URL',
+              errorText: inputError,
+              onChanged: (_) {
+                if (inputError != null) {
+                  setDialogState(() => inputError = null);
+                }
               },
-              content: AlertTextField(
-                controller: ctrl,
-                autofocus: true,
-                hintText: '搜尋詞或 URL',
-                errorText: inputError,
-                onChanged: (_) {
-                  if (inputError != null) {
-                    setDialogState(() => inputError = null);
-                  }
-                },
-              ),
-              actions: const [
-                AppAlertAction(label: '取消', value: false),
-                AppAlertAction(label: '開始調試', value: true, isDefault: true),
-              ],
             ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
+            actions: const [
+              AppAlertAction(label: '取消', value: false),
+              AppAlertAction(label: '開始調試', value: true, isDefault: true),
+            ],
+          ),
+    );
   }
 }

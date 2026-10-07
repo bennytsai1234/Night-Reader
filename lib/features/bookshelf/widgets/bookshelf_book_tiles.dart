@@ -466,19 +466,13 @@ class BookshelfEditToolbar extends StatelessWidget {
       ],
     );
 
-    return SizedBox(
+    return FloatingGlassToolbar(
       height: height,
-      child: GlassSurface(
-        borderRadius: AppRadius.pillShape,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-          child: AnimatedSwitcher(
-            duration: AppMotion.fade,
-            switchInCurve: AppMotion.fadeCurve,
-            switchOutCurve: AppMotion.fadeCurve,
-            child: busy ? progress : buttons,
-          ),
-        ),
+      child: AnimatedSwitcher(
+        duration: AppMotion.fade,
+        switchInCurve: AppMotion.fadeCurve,
+        switchOutCurve: AppMotion.fadeCurve,
+        child: busy ? progress : buttons,
       ),
     );
   }

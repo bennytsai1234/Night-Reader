@@ -6,8 +6,6 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
-import 'source_manager_dialogs.dart';
-
 class ImportPreviewResult {
   final List<BookSource> newSources;
   final List<BookSource> updatedSources;
@@ -40,7 +38,7 @@ Future<List<BookSource>?> showImportPreviewDialog(
   var importUpdated = true;
   return showStatefulAppAlert<List<BookSource>>(
     context: context,
-    builder: (dialogContext, setState) {
+    builder: (dialogContext, setState, _) {
       final p = preview;
       final chrome = AppChrome.of(dialogContext);
       final scheme = Theme.of(dialogContext).colorScheme;
