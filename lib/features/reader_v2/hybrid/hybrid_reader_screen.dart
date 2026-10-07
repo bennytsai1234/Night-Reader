@@ -46,6 +46,7 @@ class HybridReaderScreen extends StatefulWidget {
     required this.backgroundColor,
     required this.textColor,
     required this.style,
+    this.viewportTop = 0,
     this.onContentTapUp,
     this.viewportController,
     this.ttsHighlight,
@@ -60,6 +61,10 @@ class HybridReaderScreen extends StatefulWidget {
   final Color backgroundColor;
   final Color textColor;
   final ReaderV2Style style;
+
+  /// 閱讀區上緣在畫面中的位置。系統列內距改變（例如回到前台）時它會
+  /// 移動；畫面依此反向修正捲動位置，讓文字留在原本的畫面位置。
+  final double viewportTop;
   final GestureTapUpCallback? onContentTapUp;
   final ReaderV2ViewportController? viewportController;
   final ReaderV2TtsHighlight? ttsHighlight;
@@ -192,6 +197,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       _attachController();
     }
     if (oldWidget.textColor != widget.textColor) _reconcileVisibleWindow();
+    _holdContentOnScreen(widget.viewportTop - oldWidget.viewportTop);
+  }
+
+  /// 閱讀區上緣在畫面中移動 [topShift] 而排版不變時，同幅度修正捲動位置，
+  /// 讓文字留在畫面原位，只有上下邊緣露出或收起。
+  ///
+  /// 在 build 階段以 correctPixels 修正、不發出捲動通知；同一 frame 的
+  /// layout 會以修正後的位置繪製，不會先閃一格位移。執行中的定位作業擁有
+  /// 捲動位置，不介入。
+  void _holdContentOnScreen(double topShift) {
+    if (topShift == 0 || !_initialRestoreCompleted) return;
+    if (widget.runtime.pendingLocation != null) return;
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    position.correctPixels(position.pixels + topShift);
   }
 
   @override

@@ -87,7 +87,7 @@ class ReaderV2PageShell extends StatelessWidget {
     super.key,
     required this.book,
     required this.scaffoldKey,
-    required this.content,
+    required this.contentBuilder,
     required this.drawer,
     required this.backgroundColor,
     required this.textColor,
@@ -133,7 +133,9 @@ class ReaderV2PageShell extends StatelessWidget {
 
   final Book book;
   final GlobalKey<ScaffoldState> scaffoldKey;
-  final Widget content;
+  /// 以閱讀區上緣在畫面中的位置建立正文；系統列內距變動時，正文用它
+  /// 維持文字在畫面上的位置。
+  final Widget Function(double contentTop) contentBuilder;
   final ReaderV2ChaptersDrawer drawer;
   final Color backgroundColor;
   final Color textColor;
@@ -205,7 +207,7 @@ class ReaderV2PageShell extends StatelessWidget {
               Positioned.fill(
                 top: layout.contentTop,
                 bottom: layout.contentBottom,
-                child: content,
+                child: contentBuilder(layout.contentTop),
               ),
               if (layout.headerExtent > 0)
                 Positioned(
