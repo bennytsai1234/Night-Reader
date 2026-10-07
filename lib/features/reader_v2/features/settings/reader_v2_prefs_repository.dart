@@ -1,5 +1,6 @@
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,6 +35,10 @@ class ReaderV2PrefsSnapshot {
   final ReaderV2InfoSlots headerInfo;
   final ReaderV2InfoSlots footerInfo;
 
+  /// 朗讀高亮與選字反白的顏色，以及朗讀高亮的深淺。
+  final ReaderV2HighlightColor highlightColor;
+  final double highlightStrength;
+
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
     required this.titleFontSize,
@@ -55,6 +60,8 @@ class ReaderV2PrefsSnapshot {
     required this.hideStatusBar,
     required this.headerInfo,
     required this.footerInfo,
+    required this.highlightColor,
+    required this.highlightStrength,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -87,6 +94,8 @@ class ReaderV2PrefsSnapshot {
         left: ReaderV2InfoItem.chapterTitle,
         right: ReaderV2InfoItem.bookProgress,
       ),
+      highlightColor: ReaderV2HighlightColor.theme,
+      highlightStrength: ReaderV2HighlightStrength.defaultValue,
     );
   }
 
@@ -111,6 +120,8 @@ class ReaderV2PrefsSnapshot {
     bool? hideStatusBar,
     ReaderV2InfoSlots? headerInfo,
     ReaderV2InfoSlots? footerInfo,
+    ReaderV2HighlightColor? highlightColor,
+    double? highlightStrength,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -133,6 +144,8 @@ class ReaderV2PrefsSnapshot {
       hideStatusBar: hideStatusBar ?? this.hideStatusBar,
       headerInfo: headerInfo ?? this.headerInfo,
       footerInfo: footerInfo ?? this.footerInfo,
+      highlightColor: highlightColor ?? this.highlightColor,
+      highlightStrength: highlightStrength ?? this.highlightStrength,
     );
   }
 }
@@ -218,6 +231,12 @@ class ReaderV2PrefsRepository {
       footerInfo:
           ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerFooterInfo)) ??
           defaults.footerInfo,
+      highlightColor: ReaderV2HighlightColor.parse(
+        prefs.getString(PreferKey.readerHighlightColor),
+      ),
+      highlightStrength: ReaderV2HighlightStrength.normalize(
+        prefs.getDouble(PreferKey.readerHighlightStrength),
+      ),
     );
     _latestSnapshot = snapshot;
     return snapshot;
@@ -305,6 +324,17 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveFooterInfo(ReaderV2InfoSlots value) {
     return _setString(PreferKey.readerFooterInfo, value.encode());
+  }
+
+  Future<void> saveHighlightColor(ReaderV2HighlightColor value) {
+    return _setString(PreferKey.readerHighlightColor, value.name);
+  }
+
+  Future<void> saveHighlightStrength(double value) {
+    return _setDouble(
+      PreferKey.readerHighlightStrength,
+      ReaderV2HighlightStrength.normalize(value),
+    );
   }
 
   List<int> parseClickActions(String? stored) {

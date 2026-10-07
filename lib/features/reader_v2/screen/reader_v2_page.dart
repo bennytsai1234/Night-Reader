@@ -308,6 +308,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
+              highlightColor: _host.settings.resolvedHighlightColor,
+              highlightStrength: _host.settings.highlightStrength,
               onContentTapUp: _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
@@ -457,7 +459,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     ReaderV2MenuSheet.show<void>(
       context,
       settings: _host.settings,
-      builder: (_) => ReaderV2TtsPanel(tts: tts),
+      builder: (_) => ReaderV2TtsPanel(tts: tts, settings: _host.settings),
     );
   }
 

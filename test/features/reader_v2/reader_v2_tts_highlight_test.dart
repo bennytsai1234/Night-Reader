@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
 
-/// 朗讀高亮的契約：句段邊界不切開收引號，頭尾不漏字。
+/// 朗讀高亮的契約：一句一段、句段邊界不切開收引號，頭尾不漏字。
 void main() {
   const segmenter = ReaderV2TtsSegmenter();
 
@@ -43,5 +43,20 @@ void main() {
       if (text[i].trim().isEmpty) continue;
       expect(covered[i], isTrue, reason: '第 $i 個字「${text[i]}」沒有被任何句段涵蓋');
     }
+  });
+
+  test('短句不併句：每句、每個段落各自成段', () {
+    const text = '「好。」\n「走吧！」他說。天黑了。';
+    final segments = segmenter.segment(
+      text: text,
+      chapterIndex: 0,
+      startOffset: 0,
+    );
+    expect(segments.map((segment) => segment.text), <String>[
+      '「好。」',
+      '「走吧！」',
+      '他說。',
+      '天黑了。',
+    ]);
   });
 }

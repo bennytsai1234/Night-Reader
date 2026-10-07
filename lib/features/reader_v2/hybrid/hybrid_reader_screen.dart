@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dar
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -53,6 +54,8 @@ class HybridReaderScreen extends StatefulWidget {
     this.viewportController,
     this.ttsHighlight,
     this.textSelectionEnabled = false,
+    this.highlightColor = const Color(0xFFFFC857),
+    this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
@@ -71,6 +74,11 @@ class HybridReaderScreen extends StatefulWidget {
   /// 長按選字。朗讀、自動翻頁與閱讀選單開著時由上層關閉；關閉時清掉
   /// 既有選取。
   final bool textSelectionEnabled;
+
+  /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
+  /// 反白固定深淺以保持可辨識。
+  final Color highlightColor;
+  final double highlightStrength;
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
   final String? bookUrl;
   final HybridTextPreprocessor preprocessor;
@@ -2198,7 +2206,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
                       highlight.sentenceStart,
                       highlight.sentenceEnd,
                     ),
-                    textColor: widget.textColor,
+                    color: widget.highlightColor.withValues(
+                      alpha: widget.highlightStrength,
+                    ),
                   ),
                 ),
               ),
@@ -2213,7 +2223,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
             repaint: controller,
             boxesFor: _selectionBoxes,
             caretAt: _selectionCaretAt,
-            highlightColor: readerHighlightColor(widget.textColor),
+            highlightColor: widget.highlightColor,
             child: ReaderV2PointerTapLayer(
               onTapUp: widget.onContentTapUp == null
                   ? null

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
@@ -47,6 +48,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double autoPageSpeed = ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
   bool showAddToShelfAlert = true;
   List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
+  ReaderV2HighlightColor highlightColor =
+      ReaderV2PrefsSnapshot.defaults().highlightColor;
+  double highlightStrength = ReaderV2PrefsSnapshot.defaults().highlightStrength;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
@@ -96,6 +100,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
     hideStatusBar = snapshot.hideStatusBar;
     headerInfo = snapshot.headerInfo;
     footerInfo = snapshot.footerInfo;
+    highlightColor = snapshot.highlightColor;
+    highlightStrength = snapshot.highlightStrength;
   }
 
   @override
@@ -318,6 +324,35 @@ class ReaderV2SettingsController extends ChangeNotifier {
     );
     notifyListeners();
   }
+
+  void setHighlightColor(ReaderV2HighlightColor value) {
+    if (highlightColor == value) return;
+    highlightColor = value;
+    _persist(
+      'highlightColor',
+      () => _prefsRepository.saveHighlightColor(value),
+      onSaved: (p) => p.copyWith(highlightColor: value),
+      restore: (p) => highlightColor = p.highlightColor,
+    );
+    notifyListeners();
+  }
+
+  void setHighlightStrength(double value) {
+    final normalized = ReaderV2HighlightStrength.normalize(value);
+    if ((highlightStrength - normalized).abs() < 0.001) return;
+    highlightStrength = normalized;
+    _persist(
+      'highlightStrength',
+      () => _prefsRepository.saveHighlightStrength(normalized),
+      onSaved: (p) => p.copyWith(highlightStrength: normalized),
+      restore: (p) => highlightStrength = p.highlightStrength,
+    );
+    notifyListeners();
+  }
+
+  /// 目前閱讀主題下實際的高亮色。
+  Color get resolvedHighlightColor =>
+      highlightColor.resolve(currentTheme.textColor);
 
   void setTheme(int value) {
     final next = _normalizeThemeIndex(value);

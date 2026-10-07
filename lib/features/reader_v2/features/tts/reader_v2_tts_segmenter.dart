@@ -19,7 +19,7 @@ final class ReaderV2TtsSegment {
 final class ReaderV2TtsSegmenter {
   const ReaderV2TtsSegmenter();
 
-  static const int minSegmentLength = 24;
+  /// 每句各自成段，短句不併到下一句：高亮與朗讀單位都對齊一句。
   static const int maxSegmentLength = 220;
 
   List<ReaderV2TtsSegment> segment({
@@ -67,8 +67,6 @@ final class ReaderV2TtsSegmenter {
         .clamp(start + 1, chapterEnd)
         .toInt();
     for (var index = start; index < preferredLimit; index += 1) {
-      final length = index - start + 1;
-      if (length < minSegmentLength && index + 1 < chapterEnd) continue;
       final codeUnit = text.codeUnitAt(index);
       if (_isSegmentBoundary(codeUnit)) {
         // 「走吧。」的句號之後還有收引號：收引號屬於這一句，不能留到

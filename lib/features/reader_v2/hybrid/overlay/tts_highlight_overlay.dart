@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
-import 'package:night_reader/features/settings/theme_settings_provider.dart';
 
-/// 朗讀高亮：目前朗讀的句段淡淡地鋪底。
+/// 朗讀高亮：目前朗讀的句段鋪底。
 ///
 /// 左右貼著句段的頭尾字，不是整行色帶；上下以行格為界。
 final class HybridTtsHighlightOverlay extends StatelessWidget {
   const HybridTtsHighlightOverlay({
     super.key,
     required this.sentence,
-    required this.textColor,
+    required this.color,
   });
 
   final List<HybridLineBox> sentence;
-  final Color textColor;
+
+  /// 鋪底色，已含使用者設定的深淺（不透明度）。
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +23,7 @@ final class HybridTtsHighlightOverlay extends StatelessWidget {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: HybridTtsHighlightPainter(
-            sentence: sentence,
-            highlightColor: readerHighlightColor(textColor),
-          ),
+          painter: HybridTtsHighlightPainter(sentence: sentence, color: color),
           size: Size.infinite,
         ),
       ),
@@ -33,26 +31,15 @@ final class HybridTtsHighlightOverlay extends StatelessWidget {
   }
 }
 
-/// 閱讀區的強調色（朗讀高亮、選字）；依正文色判斷日夜，讀使用者自訂色。
-Color readerHighlightColor(Color textColor) {
-  final darkReader = textColor.computeLuminance() > 0.5;
-  final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-    dark: darkReader,
-    menu: false,
-  );
-  return custom?.highlight ?? const Color(0xFFFFC857);
-}
-
 final class HybridTtsHighlightPainter extends CustomPainter {
   const HybridTtsHighlightPainter({
     required this.sentence,
-    required this.highlightColor,
+    required this.color,
   });
 
   final List<HybridLineBox> sentence;
-  final Color highlightColor;
+  final Color color;
 
-  static const double _sentenceAlpha = 0.16;
   static const Radius _radius = Radius.circular(4);
 
   /// 框略為外擴，讓色塊包住字形而不是切齊字緣。
@@ -61,8 +48,7 @@ final class HybridTtsHighlightPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sentencePaint = Paint()
-      ..color = highlightColor.withValues(alpha: _sentenceAlpha);
+    final sentencePaint = Paint()..color = color;
     for (final box in sentence) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(rectOf(box), _radius),
@@ -74,7 +60,7 @@ final class HybridTtsHighlightPainter extends CustomPainter {
   @override
   bool shouldRepaint(HybridTtsHighlightPainter oldDelegate) {
     return !_sameBoxes(oldDelegate.sentence, sentence) ||
-        oldDelegate.highlightColor != highlightColor;
+        oldDelegate.color != color;
   }
 
   static bool _sameBoxes(List<HybridLineBox> a, List<HybridLineBox> b) {
