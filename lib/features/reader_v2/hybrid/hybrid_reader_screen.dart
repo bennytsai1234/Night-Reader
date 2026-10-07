@@ -2192,25 +2192,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
               Positioned.fill(
                 child: ListenableBuilder(
                   listenable: controller,
-                  builder: (context, _) {
-                    final wordStart = highlight.wordStart;
-                    final wordEnd = highlight.wordEnd;
-                    return HybridTtsHighlightOverlay(
-                      sentence: _lineBoxes(
-                        highlight.chapterIndex,
-                        highlight.sentenceStart,
-                        highlight.sentenceEnd,
-                      ),
-                      word: highlight.hasWord
-                          ? _lineBoxes(
-                              highlight.chapterIndex,
-                              wordStart!,
-                              wordEnd!,
-                            )
-                          : const <HybridLineBox>[],
-                      textColor: widget.textColor,
-                    );
-                  },
+                  builder: (context, _) => HybridTtsHighlightOverlay(
+                    sentence: _lineBoxes(
+                      highlight.chapterIndex,
+                      highlight.sentenceStart,
+                      highlight.sentenceEnd,
+                    ),
+                    textColor: widget.textColor,
+                  ),
                 ),
               ),
           ],

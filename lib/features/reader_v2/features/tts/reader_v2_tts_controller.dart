@@ -16,8 +16,6 @@ abstract class ReaderV2TtsEngine extends ChangeNotifier {
   double get pitch;
   String? get language;
   String get currentSpokenText;
-  int get currentWordStart;
-  int get currentWordEnd;
   Stream<String> get events;
 
   Future<void> speak(String text);
@@ -51,12 +49,6 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
 
   @override
   String get currentSpokenText => _service.currentSpokenText;
-
-  @override
-  int get currentWordStart => _service.currentWordStart;
-
-  @override
-  int get currentWordEnd => _service.currentWordEnd;
 
   @override
   Stream<String> get events => _service.audioEvents;
@@ -124,29 +116,14 @@ class ReaderV2TtsController extends ChangeNotifier
   String? get language => _tts.language;
   ReaderV2Location? get speechStartLocation => _speechStartLocation;
 
-  /// 目前句段一定高亮；引擎回報字詞進度時，另外標出正在朗讀的字詞。
-  /// 引擎的 offset 相對於本句段文字，這裡換成章節座標。
+  /// 高亮目前朗讀的整個句段。
   ReaderV2TtsHighlight? get currentHighlight {
     final segment = _currentSegment;
     if (segment == null) return null;
-    final segmentLength = segment.text.length;
-    final wordStart = _tts.currentWordStart;
-    if (wordStart < 0 || segmentLength <= 0 || wordStart >= segmentLength) {
-      return ReaderV2TtsHighlight(
-        chapterIndex: segment.chapterIndex,
-        sentenceStart: segment.startCharOffset,
-        sentenceEnd: segment.endCharOffset,
-      );
-    }
-    final wordEnd = _tts.currentWordEnd
-        .clamp(wordStart + 1, segmentLength)
-        .toInt();
     return ReaderV2TtsHighlight(
       chapterIndex: segment.chapterIndex,
       sentenceStart: segment.startCharOffset,
       sentenceEnd: segment.endCharOffset,
-      wordStart: segment.startCharOffset + wordStart,
-      wordEnd: segment.startCharOffset + wordEnd,
     );
   }
 
