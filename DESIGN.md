@@ -60,7 +60,7 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 
 結構與幾何取自 Telegram iOS，色彩、字階與材質維持紙墨。新頁面與改版一律組合這些元件，不再直接使用 `AppBar`、`ListTile`、`PopupMenuButton`、`SegmentedButton`、`AlertDialog`。
 
-- **材質**：`GlassSurface` 是「霧面紙」——紙／墨色調約 84% 不透明、模糊 12、0.5 髮絲亮邊與漫射陰影；模糊被降級時仍像紙面。頁面內的玻璃以 `BackdropFilter.grouped` 共用 App 根部 `BackdropGroup` 的取樣；疊在其他玻璃上的選單、提示框設 `grouped: false`。
+- **材質**：`GlassSurface` 為紙／墨色調加 0.5 髮絲亮邊與漫射陰影，強度由使用者在「外觀與主題 → 玻璃效果」選擇（`GlassStrength`）：實色（不模糊）、霧面（預設，約 84% 不透明、模糊 12）、通透（約 68%、模糊 20）、玻璃（約 50%、模糊 28）；App 介面與閱讀選單共用同一設定。頁面內的玻璃以 `BackdropFilter.grouped` 共用 App 根部 `BackdropGroup` 的取樣；疊在其他玻璃上的選單、提示框設 `grouped: false`。
 - **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。
 - **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`，純文字動作用 `PlainTextAction`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方說明文字）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關為 iOS 樣式、開啟色為主色。

@@ -6,7 +6,11 @@ import 'app_text_styles.dart';
 import 'app_tokens.dart';
 import 'theme_customization.dart';
 
-ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
+ThemeData buildAppTheme(
+  AppUiThemeColors colors,
+  Brightness brightness, {
+  GlassStrength glassStrength = GlassStrength.frosted,
+}) {
   final primaryContainer = Color.alphaBlend(
     colors.primary.withValues(
       alpha: brightness == Brightness.light ? 0.14 : 0.24,
@@ -66,6 +70,7 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
     textPrimary: colors.textPrimary,
     textSecondary: colors.textSecondary,
     border: colors.border,
+    glassStrength: glassStrength,
   );
 
   return ThemeData(

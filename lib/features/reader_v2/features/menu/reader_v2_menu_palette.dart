@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class ReaderV2MenuStyle {
   final Color background;
@@ -57,12 +56,12 @@ class ReaderV2MenuStyle {
     );
   }
 
-  /// 浮動玻璃選單（上下膠囊、圓形按鈕）的色調：選單底色套上玻璃材質的
-  /// 不透明度，背後的正文經模糊後只透出色塊。
-  Color get glassTint {
+  /// 浮動玻璃選單（上下膠囊、圓形按鈕）的色調：選單底色套上使用者所選
+  /// 玻璃強度的不透明度，背後的正文經模糊後只透出色塊。
+  Color glassTintOf(BuildContext context) {
     final dark = background.computeLuminance() < 0.5;
     return background.withValues(
-      alpha: dark ? AppGlass.tintAlphaDark : AppGlass.tintAlphaLight,
+      alpha: AppChrome.of(context).glassStrength.opacity(dark: dark),
     );
   }
 
@@ -129,6 +128,9 @@ class ReaderV2MenuStyle {
           textPrimary: foreground,
           textSecondary: mutedForeground,
           border: outline,
+          glassStrength:
+              base.extension<AppChrome>()?.glassStrength ??
+              GlassStrength.frosted,
         ),
       ],
     );

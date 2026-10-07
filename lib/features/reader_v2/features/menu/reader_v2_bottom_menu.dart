@@ -116,11 +116,11 @@ class ReaderV2BottomMenu extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildFloatingButtons(menuStyle),
+                  _buildFloatingButtons(context, menuStyle),
                   const SizedBox(height: AppSpacing.md),
                   GlassSurface(
                     borderRadius: AppRadius.cardXl,
-                    tint: menuStyle.glassTint,
+                    tint: menuStyle.glassTintOf(context),
                     grouped: false,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
@@ -149,8 +149,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   }
 
   /// 膠囊上方的圓形玻璃按鈕（自動翻頁、替換規則、日夜切換）。
-  Widget _buildFloatingButtons(ReaderV2MenuStyle menuStyle) {
-    final tint = menuStyle.glassTint;
+  Widget _buildFloatingButtons(BuildContext context, ReaderV2MenuStyle menuStyle) {
+    final tint = menuStyle.glassTintOf(context);
     final actions = <Widget>[
       if (showAutoPage)
         GlassIconButton(

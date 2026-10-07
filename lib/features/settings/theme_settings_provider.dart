@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_theme.dart';
 import 'package:night_reader/shared/theme/theme_customization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +23,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
     menuDarkCustom = _prefs.getBool(_kMenuDarkCustom) ?? false;
     readerMode = AreaThemeMode.fromStorage(_prefs.getString(_kReaderMode));
     menuMode = AreaThemeMode.fromStorage(_prefs.getString(_kMenuMode));
+    glassStrength = GlassStrength.fromStorage(_prefs.getString(_kGlass));
     _activeInstance = this;
   }
 
@@ -41,6 +43,7 @@ class ThemeSettingsProvider extends ChangeNotifier {
   static const _kMenuNightIndex = 'theme_menu_night_builtin_index';
   static const _kReaderMode = 'theme_reader_mode_v1';
   static const _kMenuMode = 'theme_menu_mode_v1';
+  static const _kGlass = 'theme_glass_strength_v1';
 
   static ThemeSettingsProvider? _activeInstance;
   final SharedPreferences _prefs;
@@ -59,6 +62,16 @@ class ThemeSettingsProvider extends ChangeNotifier {
   late bool menuDarkCustom;
   late AreaThemeMode readerMode;
   late AreaThemeMode menuMode;
+
+  /// 浮動列、選單等玻璃材質的強度；App 介面與閱讀選單共用。
+  late GlassStrength glassStrength;
+
+  void setGlassStrength(GlassStrength value) {
+    if (glassStrength == value) return;
+    glassStrength = value;
+    _prefs.setString(_kGlass, value.name);
+    notifyListeners();
+  }
 
   AppUiThemeColors get effectiveAppLight =>
       appLightCustom ? appLight : AppUiThemeColors.lightDefault;

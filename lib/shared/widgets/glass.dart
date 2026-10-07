@@ -48,11 +48,9 @@ class GlassSurface extends StatelessWidget {
       border: Border.all(color: chrome.glassBorder, width: AppGlass.hairline),
     );
     Widget content = DecoratedBox(decoration: decoration, child: child);
-    if (blur) {
-      final filter = ImageFilter.blur(
-        sigmaX: AppGlass.blurSigma,
-        sigmaY: AppGlass.blurSigma,
-      );
+    final sigma = chrome.glassStrength.blur;
+    if (blur && sigma > 0) {
+      final filter = ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
       content =
           grouped
               ? BackdropFilter.grouped(filter: filter, child: content)

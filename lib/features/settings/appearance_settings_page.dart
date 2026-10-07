@@ -88,6 +88,25 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
                   ),
               ],
             ),
+          if (_area == ThemeArea.app)
+            GroupedSection(
+              header: '玻璃效果',
+              footer:
+                  '浮動分頁列、頁首按鈕、選單與閱讀器選單的材質。越往右越透明、模糊越強，'
+                  '也越吃效能；選「實色」則完全不做背景模糊。',
+              children: [
+                GroupedContent(
+                  child: GlassSegmented<GlassStrength>(
+                    segments: [
+                      for (final strength in GlassStrength.values)
+                        GlassSegment(strength, strength.label),
+                    ],
+                    selected: settings.glassStrength,
+                    onChanged: settings.setGlassStrength,
+                  ),
+                ),
+              ],
+            ),
           GroupedSection(
             header: '編輯方案',
             footer: '關閉自訂配色時使用內建預設；自訂值仍會保留。',

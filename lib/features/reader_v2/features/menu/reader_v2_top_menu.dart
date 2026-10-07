@@ -65,10 +65,10 @@ class ReaderV2TopMenu extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildAppBar(menuStyle),
+                  _buildAppBar(context, menuStyle),
                   if (showReadTitleAddition) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    _buildAdditionInfo(menuStyle),
+                    _buildAdditionInfo(context, menuStyle),
                   ],
                 ],
               ),
@@ -79,8 +79,8 @@ class ReaderV2TopMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAppBar(ReaderV2MenuStyle menuStyle) {
-    final tint = menuStyle.glassTint;
+  Widget _buildAppBar(BuildContext context, ReaderV2MenuStyle menuStyle) {
+    final tint = menuStyle.glassTintOf(context);
     return Row(
       children: [
         GlassIconButton(
@@ -129,10 +129,10 @@ class ReaderV2TopMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAdditionInfo(ReaderV2MenuStyle menuStyle) {
+  Widget _buildAdditionInfo(BuildContext context, ReaderV2MenuStyle menuStyle) {
     return GlassSurface(
       borderRadius: AppRadius.cardXl,
-      tint: menuStyle.glassTint,
+      tint: menuStyle.glassTintOf(context),
       grouped: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(

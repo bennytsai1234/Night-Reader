@@ -23,6 +23,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required this.toastBackground,
     required this.toastForeground,
     required this.toastAction,
+    this.glassStrength = GlassStrength.frosted,
   });
 
   /// 分組清單頁面底色。
@@ -60,6 +61,9 @@ class AppChrome extends ThemeExtension<AppChrome> {
   final Color toastForeground;
   final Color toastAction;
 
+  /// 使用者選擇的玻璃強度；[glassTint] 已套用它的不透明度。
+  final GlassStrength glassStrength;
+
   factory AppChrome.derive({
     required Brightness brightness,
     required Color primary,
@@ -69,17 +73,17 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required Color textPrimary,
     required Color textSecondary,
     required Color border,
+    GlassStrength glassStrength = GlassStrength.frosted,
   }) {
     final isLight = brightness == Brightness.light;
     return AppChrome(
+      glassStrength: glassStrength,
       groupedBackground: background,
       groupedSurface: surface,
       separator: border.withValues(alpha: isLight ? 0.75 : 0.9),
       sectionText: textSecondary,
       pressedHighlight: textPrimary.withValues(alpha: isLight ? 0.06 : 0.08),
-      glassTint: bar.withValues(
-        alpha: isLight ? AppGlass.tintAlphaLight : AppGlass.tintAlphaDark,
-      ),
+      glassTint: bar.withValues(alpha: glassStrength.opacity(dark: !isLight)),
       glassBorder:
           isLight
               ? AppPalette.paper50.withValues(alpha: 0.7)
@@ -134,6 +138,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
     Color? toastBackground,
     Color? toastForeground,
     Color? toastAction,
+    GlassStrength? glassStrength,
   }) {
     return AppChrome(
       groupedBackground: groupedBackground ?? this.groupedBackground,
@@ -149,6 +154,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
       toastBackground: toastBackground ?? this.toastBackground,
       toastForeground: toastForeground ?? this.toastForeground,
       toastAction: toastAction ?? this.toastAction,
+      glassStrength: glassStrength ?? this.glassStrength,
     );
   }
 
@@ -171,11 +177,47 @@ class AppChrome extends ThemeExtension<AppChrome> {
       toastBackground: Color.lerp(toastBackground, other.toastBackground, t)!,
       toastForeground: Color.lerp(toastForeground, other.toastForeground, t)!,
       toastAction: Color.lerp(toastAction, other.toastAction, t)!,
+      glassStrength: t < 0.5 ? glassStrength : other.glassStrength,
     );
   }
 }
 
 /// 列首上色圖示方塊的顏料色；淺深色模式都用飽和的原色，圖示一律紙白。
+/// 玻璃材質強度（外觀設定中由使用者選擇）：模糊越強、色調越透明，
+/// 背後內容透出越多，繪製成本也越高。
+enum GlassStrength {
+  /// 實色：不模糊，色調完全不透明。
+  solid('實色', blur: 0, lightOpacity: 1, darkOpacity: 1),
+
+  /// 霧面紙：預設。
+  frosted('霧面', blur: 12, lightOpacity: 0.84, darkOpacity: 0.82),
+
+  /// 通透：較明顯的模糊與透色。
+  clear('通透', blur: 20, lightOpacity: 0.68, darkOpacity: 0.62),
+
+  /// 玻璃：接近 Telegram iOS 的高透明液態玻璃。
+  glass('玻璃', blur: 28, lightOpacity: 0.5, darkOpacity: 0.44);
+
+  const GlassStrength(
+    this.label, {
+    required this.blur,
+    required this.lightOpacity,
+    required this.darkOpacity,
+  });
+
+  final String label;
+
+  /// 背景模糊的 sigma；0 表示不做背景模糊。
+  final double blur;
+  final double lightOpacity;
+  final double darkOpacity;
+
+  double opacity({required bool dark}) => dark ? darkOpacity : lightOpacity;
+
+  static GlassStrength fromStorage(String? value) => GlassStrength.values
+      .firstWhere((s) => s.name == value, orElse: () => GlassStrength.frosted);
+}
+
 enum AppTint {
   cinnabar(AppPalette.cinnabar),
   azurite(AppPalette.azurite),

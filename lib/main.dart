@@ -266,10 +266,12 @@ class ReaderApp extends StatelessWidget {
           theme: buildAppTheme(
             themeSettings.effectiveAppLight,
             Brightness.light,
+            glassStrength: themeSettings.glassStrength,
           ),
           darkTheme: buildAppTheme(
             themeSettings.effectiveAppDark,
             Brightness.dark,
+            glassStrength: themeSettings.glassStrength,
           ),
           themeMode: settings.themeMode,
           locale: settings.locale,

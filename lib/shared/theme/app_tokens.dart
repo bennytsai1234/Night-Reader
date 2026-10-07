@@ -130,10 +130,7 @@ class AppGlass {
   static const double headerToolbarHeight = 52.0;
   static const double headerFadeHeight = 14.0;
 
-  /// 霧面紙：較不透明、輕度模糊。
-  static const double blurSigma = 12.0;
-  static const double tintAlphaLight = 0.84;
-  static const double tintAlphaDark = 0.82;
+  /// 模糊與色調透明度由使用者選擇的 `GlassStrength`（app_chrome.dart）決定。
   static const double hairline = 0.5;
 
   /// 情境選單寬度與列高。
