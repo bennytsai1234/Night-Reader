@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+/// Telegram 式底部面板：分組底色、拖曳把手、置中標題與右側圓形關閉鈕，
+/// 下方為可捲動內容。
 class AppBottomSheet extends StatelessWidget {
   final String title;
+
+  /// 舊版標題旁的圖示；新版面板只顯示置中標題，保留參數讓既有呼叫端相容。
   final IconData? icon;
   final List<Widget> children;
+
+  /// 關閉鈕左側的附加動作。
   final Widget? trailing;
   final bool showDragHandle;
 
@@ -22,8 +31,14 @@ class AppBottomSheet extends StatelessWidget {
     this.maxHeightFactor = 0.9,
   });
 
+  static const double _handleWidth = 36;
+  static const double _handleHeight = 5;
+  static const double _closeSize = 32;
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
     final maxHeight = MediaQuery.sizeOf(context).height * maxHeightFactor;
     return SafeArea(
       top: false,
@@ -31,89 +46,76 @@ class AppBottomSheet extends StatelessWidget {
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag handle & header — 固定不捲動
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (showDragHandle)
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.only(
-                          top: AppSpacing.md,
-                          bottom: AppSpacing.xl,
-                        ),
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).dividerColor.withValues(alpha: 0.5),
-                          borderRadius: AppRadius.pillShape,
-                        ),
-                      ),
+            // 把手與標題列固定不捲動。
+            if (showDragHandle)
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: AppSpacing.sm),
+                  width: _handleWidth,
+                  height: _handleHeight,
+                  decoration: BoxDecoration(
+                    color: chrome.sectionText.withValues(alpha: 0.35),
+                    borderRadius: AppRadius.pillShape,
+                  ),
+                ),
+              ),
+            SizedBox(
+              height: AppGlass.headerToolbarHeight,
+              child: NavigationToolbar(
+                centerMiddle: true,
+                middleSpacing: AppSpacing.md,
+                // 左側放一塊與關閉鈕等寬的空白，讓沒有 trailing 時標題也真正置中。
+                leading: const SizedBox(
+                  width: AppGrouped.margin + AppGlass.buttonSize,
+                ),
+                middle: Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.titleSm.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
                     ),
-                  Row(
+                  ),
+                ),
+                trailing: Padding(
+                  padding: const EdgeInsets.only(right: AppGrouped.margin),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (icon != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(AppSpacing.sm),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primaryContainer
-                                .withValues(alpha: 0.3),
-                            borderRadius: AppRadius.cardMd,
-                          ),
-                          child: Icon(
-                            icon,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                      ],
-                      Expanded(
-                        child: Semantics(
-                          header: true,
-                          child: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleMd.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
                       if (trailing != null) ...[
-                        const SizedBox(width: AppSpacing.sm),
                         trailing!,
+                        const SizedBox(width: AppSpacing.sm),
                       ],
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
+                      GlassIconButton(
+                        icon: Icons.close_rounded,
                         tooltip: '關閉',
-                        icon: const Icon(Icons.keyboard_arrow_down, size: 28),
+                        size: _closeSize,
+                        iconSize: 18,
+                        color: chrome.sectionText,
+                        onPressed: () => Navigator.maybePop(context),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
             ),
 
             // 可捲動的內容區域
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppGrouped.margin,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [...children, const SizedBox(height: 24)],
+                  children: [...children, const SizedBox(height: AppSpacing.xxl)],
                 ),
               ),
             ),
@@ -144,7 +146,10 @@ class AppBottomSheet extends StatelessWidget {
     );
   }
 
-  /// 顯示需要自訂內容與狀態管理的底部工作表，同時統一外層形狀與裁切。
+  /// 顯示需要自訂內容與狀態管理的底部工作表，同時統一外層底色、形狀與裁切。
+  ///
+  /// 未指定 [backgroundColor] 時使用分組清單底色，讓面板內的分組卡片浮在
+  /// 底色之上。
   static Future<T?> showCustom<T>({
     required BuildContext context,
     required WidgetBuilder builder,
@@ -159,20 +164,22 @@ class AppBottomSheet extends StatelessWidget {
     return showModalBottomSheet<T>(
       context: context,
       builder: builder,
-      barrierColor: barrierColor,
+      barrierColor: barrierColor ?? AppChrome.of(context).barrier,
       isScrollControlled: isScrollControlled,
       useSafeArea: useSafeArea,
       showDragHandle: showDragHandle,
-      backgroundColor: backgroundColor,
+      backgroundColor:
+          backgroundColor ?? AppChrome.of(context).groupedBackground,
+      elevation: 0,
       shape:
           shape ??
-          const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
+          const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),
       clipBehavior: clipBehavior ?? Clip.antiAlias,
     );
   }
 }
 
-/// 底部選單專用的區塊標題
+/// 底部面板內的區塊標題，字階與色彩同分組清單的組標題。
 class SheetSection extends StatelessWidget {
   final String title;
   final Widget? trailing;
@@ -181,20 +188,11 @@ class SheetSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(top: AppSpacing.xl, bottom: AppSpacing.sm),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            title,
-            style: AppTextStyles.bodyXs.copyWith(
-              fontWeight: FontWeight.w700,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const Spacer(),
+          Expanded(child: GroupedSectionHeader(title)),
           if (trailing != null) trailing!,
         ],
       ),

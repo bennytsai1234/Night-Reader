@@ -123,7 +123,8 @@ class ReaderV2MenuStyle {
           brightness: dark ? Brightness.dark : Brightness.light,
           primary: accent,
           background: surface,
-          surface: surface,
+          // 分組卡片用浮層色，才能與面板底色區隔。
+          surface: elevated,
           bar: surface,
           textPrimary: foreground,
           textSecondary: mutedForeground,

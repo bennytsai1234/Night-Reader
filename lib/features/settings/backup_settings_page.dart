@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:night_reader/shared/widgets/settings_section_title.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
 import 'package:night_reader/core/services/restore_service.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BackupSettingsPage extends StatefulWidget {
@@ -22,40 +24,41 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('備份與還原')),
-      body: ListTileTheme(
-        data: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        ),
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-          children: [
-            const SettingsSectionTitle('本地備份與還原'),
-            ListTile(
-              title: const Text('建立備份'),
-              subtitle: Text(
-                '建立 ZIP 備份後，選擇儲存或分享位置',
-                style: AppTextStyles.bodySm.copyWith(height: 1.4),
+      extendBodyBehindAppBar: true,
+      appBar: const GlassNavHeader(title: '備份與還原'),
+      body: GroupedListView(
+        children: [
+          GroupedSection(
+            header: '本地備份與還原',
+            footer:
+                '建立備份會產生 ZIP 檔，再選擇儲存或分享位置；還原時選擇 ZIP 備份檔並匯入書架、書源與設定。',
+            children: [
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.backup_outlined,
+                  tint: AppTint.tea,
+                ),
+                title: '建立備份',
+                enabled: !_isProcessing,
+                onTap: _isProcessing ? null : _handleManualBackup,
               ),
-              leading: const Icon(Icons.backup_outlined),
-              onTap: _isProcessing ? null : _handleManualBackup,
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.restore_rounded,
+                  tint: AppTint.tea,
+                ),
+                title: '從備份檔還原',
+                enabled: !_isProcessing,
+                onTap: _isProcessing ? null : _handleManualRestore,
+              ),
+            ],
+          ),
+          if (_isProcessing)
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.xl),
+              child: Center(child: CircularProgressIndicator()),
             ),
-            ListTile(
-              title: const Text('從備份檔還原'),
-              subtitle: Text(
-                '選擇 ZIP 備份檔並匯入書架、書源與設定',
-                style: AppTextStyles.bodySm.copyWith(height: 1.4),
-              ),
-              leading: const Icon(Icons.restore),
-              onTap: _isProcessing ? null : _handleManualRestore,
-            ),
-            if (_isProcessing)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -90,29 +93,13 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
 
     if (path == null) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppConfirm(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
-            title: const Text('還原這份備份？'),
-            content: Text(
-              '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
-              style: AppTextStyles.bodyBase.copyWith(height: 1.5),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('開始還原'),
-              ),
-            ],
-          ),
+      title: '還原這份備份？',
+      message: '備份中的書架、書源與設定會匯入目前資料；相同項目會以備份內容更新。',
+      confirmLabel: '開始還原',
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     final file = File(path);
     setState(() => _isProcessing = true);

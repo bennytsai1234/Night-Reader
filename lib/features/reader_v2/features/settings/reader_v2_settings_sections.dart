@@ -7,11 +7,47 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_pref
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
 // 閱讀設定區塊：閱讀器內面板與「閱讀偏好」設定頁共用同一組元件，
 // 皆透過 ReaderV2SettingsController 讀寫，確保兩處行為與資料一致。
+//
+// 區塊以分組卡片呈現且不自帶左右外距：設定頁與閱讀器面板各自提供水平內距，
+// 同一組卡片在兩處都對齊所在容器的內容邊界。
+
+/// 分組卡片不自帶左右外距，由所在容器決定。
+const EdgeInsets _sectionMargin = EdgeInsets.zero;
+
+/// 數值步進列放進卡片時只補列的左右內距；高度由步進列本身決定（約 44）。
+Widget _stepperRow(Widget stepper) => GroupedContent(
+  padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
+  child: stepper,
+);
+
+/// 組標題右側的「恢復預設」。
+class _ResetButton extends StatelessWidget {
+  const _ResetButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+        minimumSize: Size.zero,
+        textStyle: AppTextStyles.uiSm,
+      ),
+      child: const Text('恢復預設'),
+    );
+  }
+}
 
 /// 排版區塊：字號、行高為常用項；字距、段距、縮排與進階排版為次要項。
 ///
@@ -153,54 +189,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
-    final secondary = <Widget>[
-      NumberStepperRow(
-        label: '字距',
-        value: _letterSpacing,
-        min: 0.0,
-        max: 4.0,
-        step: 0.1,
-        fractionDigits: 1,
-        onChanged: (value) {
-          setState(() => _letterSpacing = value);
-          _letterSpacingDirty = true;
-          _scheduleTypographyCommit();
-        },
-      ),
-      NumberStepperRow(
-        label: '段距',
-        value: _paragraphSpacing,
-        min: 0.0,
-        max: 3.0,
-        step: 0.1,
-        fractionDigits: 1,
-        onChanged: (value) {
-          setState(() => _paragraphSpacing = value);
-          _paragraphSpacingDirty = true;
-          _scheduleTypographyCommit();
-        },
-      ),
-      _TextIndentSelector(
-        value: settings.textIndent,
-        onChanged: settings.setTextIndent,
-      ),
-      ...widget.moreChildren,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SheetSection(
-          title: '排版',
-          trailing: TextButton(
-            onPressed: _isDefault ? null : _reset,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              textStyle: AppTextStyles.uiSm,
-            ),
-            child: const Text('恢復預設'),
-          ),
-        ),
+    final primary = <Widget>[
+      _stepperRow(
         NumberStepperRow(
           label: '字號',
           value: _fontSize,
@@ -213,6 +203,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
             _scheduleTypographyCommit();
           },
         ),
+      ),
+      _stepperRow(
         NumberStepperRow(
           label: '標題字號',
           value: _titleFontSize,
@@ -225,6 +217,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
             _scheduleTypographyCommit();
           },
         ),
+      ),
+      _stepperRow(
         NumberStepperRow(
           label: '行高',
           value: _lineHeight,
@@ -238,31 +232,78 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
             _scheduleTypographyCommit();
           },
         ),
-        if (!widget.collapsible)
-          ...secondary
-        else ...[
-          _ExpandToggle(
-            label: '更多排版',
-            expanded: _expanded,
-            onTap: () => setState(() => _expanded = !_expanded),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: secondary,
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
-        ],
+      ),
+    ];
+    final secondary = <Widget>[
+      _stepperRow(
+        NumberStepperRow(
+          label: '字距',
+          value: _letterSpacing,
+          min: 0.0,
+          max: 4.0,
+          step: 0.1,
+          fractionDigits: 1,
+          onChanged: (value) {
+            setState(() => _letterSpacing = value);
+            _letterSpacingDirty = true;
+            _scheduleTypographyCommit();
+          },
+        ),
+      ),
+      _stepperRow(
+        NumberStepperRow(
+          label: '段距',
+          value: _paragraphSpacing,
+          min: 0.0,
+          max: 3.0,
+          step: 0.1,
+          fractionDigits: 1,
+          onChanged: (value) {
+            setState(() => _paragraphSpacing = value);
+            _paragraphSpacingDirty = true;
+            _scheduleTypographyCommit();
+          },
+        ),
+      ),
+      _TextIndentSelector(
+        value: settings.textIndent,
+        onChanged: settings.setTextIndent,
+      ),
+    ];
+    final showSecondary = !widget.collapsible || _expanded;
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GroupedSection(
+          margin: _sectionMargin,
+          header: '排版',
+          headerTrailing: _ResetButton(onPressed: _isDefault ? null : _reset),
+          children: [
+            ...primary,
+            if (showSecondary) ...secondary,
+            if (widget.collapsible)
+              _ExpandToggle(
+                label: '更多排版',
+                expanded: _expanded,
+                onTap: () => setState(() => _expanded = !_expanded),
+              ),
+          ],
+        ),
+        if (showSecondary) ...widget.moreChildren,
       ],
+    );
+    if (!widget.collapsible) return content;
+    return AnimatedSize(
+      duration: AppMotion.menu,
+      curve: AppMotion.menuCurve,
+      alignment: Alignment.topCenter,
+      child: content,
     );
   }
 }
 
+/// 卡片底部的展開／收合列。
 class _ExpandToggle extends StatelessWidget {
   const _ExpandToggle({
     required this.label,
@@ -276,34 +317,22 @@ class _ExpandToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Semantics(
       button: true,
       expanded: expanded,
-      child: InkWell(
+      child: GroupedRow(
+        title: label,
+        accent: true,
+        showChevron: false,
         onTap: onTap,
-        borderRadius: AppRadius.cardMd,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppTextStyles.uiSm.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              AnimatedRotation(
-                turns: expanded ? 0.5 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  Icons.expand_more_rounded,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+        trailing: AnimatedRotation(
+          turns: expanded ? 0.5 : 0,
+          duration: AppMotion.menu,
+          curve: AppMotion.menuCurve,
+          child: Icon(
+            Icons.expand_more_rounded,
+            size: 22,
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
       ),
@@ -323,24 +352,20 @@ class _TextIndentSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return _LabeledRow(
       label: '首行縮排',
-      child: SegmentedButton<int>(
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      // 舊版或外部寫入的非選項值仍需顯示，GlassSegmented 此時不選取任何分段。
+      child: GlassSegmented<int>(
+        expand: false,
         segments: [
-          for (final option in _options)
-            ButtonSegment(value: option, label: Text('$option 字')),
+          for (final option in _options) GlassSegment(option, '$option 字'),
         ],
-        // 舊版或外部寫入的非選項值仍需顯示，不選取任何分段。
-        selected: _options.contains(value) ? {value} : const {},
-        emptySelectionAllowed: !_options.contains(value),
-        onSelectionChanged: (selection) {
-          if (selection.isNotEmpty) onChanged(selection.first);
-        },
+        selected: value,
+        onChanged: onChanged,
       ),
     );
   }
 }
 
+/// 卡片內「左側標籤、右側控件」的一列。
 class _LabeledRow extends StatelessWidget {
   const _LabeledRow({required this.label, required this.child});
 
@@ -349,20 +374,30 @@ class _LabeledRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.uiMd.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
+    return GroupedContent(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppGrouped.rowPadding,
+        vertical: AppSpacing.xs,
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minHeight: AppGrouped.rowMinHeight - AppSpacing.xs * 2,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.bodyBase.copyWith(
+                  height: 1.3,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
             ),
-          ),
-          child,
-        ],
+            const SizedBox(width: AppSpacing.md),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -449,110 +484,103 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
-    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SheetSection(
-          title: '版面',
-          trailing: TextButton(
-            onPressed: settings.isPageLayoutDefault && !_hasPending
-                ? null
-                : _reset,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              textStyle: AppTextStyles.uiSm,
+        GroupedSection(
+          margin: _sectionMargin,
+          header: '版面',
+          headerTrailing: _ResetButton(
+            onPressed:
+                settings.isPageLayoutDefault && !_hasPending ? null : _reset,
+          ),
+          children: [
+            _stepperRow(
+              NumberStepperRow(
+                label: '左右邊距',
+                value: _pendingHorizontal ?? settings.paddingHorizontal,
+                min: ReaderV2SettingsController.minPagePadding,
+                max: ReaderV2SettingsController.maxPagePadding,
+                step: _paddingStep,
+                unit: ' px',
+                onChanged: (value) => _schedule(horizontal: value),
+              ),
             ),
-            child: const Text('恢復預設'),
-          ),
-        ),
-        NumberStepperRow(
-          label: '左右邊距',
-          value: _pendingHorizontal ?? settings.paddingHorizontal,
-          min: ReaderV2SettingsController.minPagePadding,
-          max: ReaderV2SettingsController.maxPagePadding,
-          step: _paddingStep,
-          unit: ' px',
-          onChanged: (value) => _schedule(horizontal: value),
-        ),
-        NumberStepperRow(
-          label: '上邊距',
-          value: _pendingTop ?? settings.paddingTop,
-          min: ReaderV2SettingsController.minPagePadding,
-          max: ReaderV2SettingsController.maxPagePadding,
-          step: _paddingStep,
-          unit: ' px',
-          onChanged: (value) => _schedule(top: value),
-        ),
-        NumberStepperRow(
-          label: '下邊距',
-          value: _pendingBottom ?? settings.paddingBottom,
-          min: ReaderV2SettingsController.minPagePadding,
-          max: ReaderV2SettingsController.maxPagePadding,
-          step: _paddingStep,
-          unit: ' px',
-          onChanged: (value) => _schedule(bottom: value),
-        ),
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            '隱藏系統狀態列',
-            style: AppTextStyles.uiMd.copyWith(color: colorScheme.onSurface),
-          ),
-          subtitle: Text(
-            '收起時間、訊號與電量；鏡頭所在的那一行可改放頁首資訊',
-            style: AppTextStyles.bodyXs.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            _stepperRow(
+              NumberStepperRow(
+                label: '上邊距',
+                value: _pendingTop ?? settings.paddingTop,
+                min: ReaderV2SettingsController.minPagePadding,
+                max: ReaderV2SettingsController.maxPagePadding,
+                step: _paddingStep,
+                unit: ' px',
+                onChanged: (value) => _schedule(top: value),
+              ),
             ),
-          ),
-          value: settings.hideStatusBar,
-          onChanged: settings.setHideStatusBar,
+            _stepperRow(
+              NumberStepperRow(
+                label: '下邊距',
+                value: _pendingBottom ?? settings.paddingBottom,
+                min: ReaderV2SettingsController.minPagePadding,
+                max: ReaderV2SettingsController.maxPagePadding,
+                step: _paddingStep,
+                unit: ' px',
+                onChanged: (value) => _schedule(bottom: value),
+              ),
+            ),
+          ],
         ),
-        _InfoSlotsEditor(
-          title: '頁首',
-          slots: settings.headerInfo,
-          onChanged: settings.setHeaderInfo,
+        GroupedSection(
+          margin: _sectionMargin,
+          footer: '收起時間、訊號與電量；鏡頭所在的那一行可改放頁首資訊。',
+          children: [
+            GroupedSwitchRow(
+              title: '隱藏系統狀態列',
+              value: settings.hideStatusBar,
+              onChanged: settings.setHideStatusBar,
+            ),
+          ],
         ),
-        _InfoSlotsEditor(
-          title: '頁尾',
-          slots: settings.footerInfo,
-          onChanged: settings.setFooterInfo,
+        GroupedSection(
+          margin: _sectionMargin,
+          header: '頁首與頁尾',
+          footer: '左右兩欄都選「不顯示」即關閉該列。',
+          children: [
+            ..._infoSlotRows(
+              title: '頁首',
+              slots: settings.headerInfo,
+              onChanged: settings.setHeaderInfo,
+            ),
+            ..._infoSlotRows(
+              title: '頁尾',
+              slots: settings.footerInfo,
+              onChanged: settings.setFooterInfo,
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-/// 一條資訊列左右兩欄的內容選擇；兩欄都選「不顯示」即關閉該列。
-class _InfoSlotsEditor extends StatelessWidget {
-  const _InfoSlotsEditor({
-    required this.title,
-    required this.slots,
-    required this.onChanged,
-  });
-
-  final String title;
-  final ReaderV2InfoSlots slots;
-  final ValueChanged<ReaderV2InfoSlots> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _InfoItemPickerRow(
-          label: '$title左側',
-          value: slots.left,
-          onChanged: (item) => onChanged(slots.copyWith(left: item)),
-        ),
-        _InfoItemPickerRow(
-          label: '$title右側',
-          value: slots.right,
-          onChanged: (item) => onChanged(slots.copyWith(right: item)),
-        ),
-      ],
-    );
-  }
+/// 一條資訊列左右兩欄的內容選擇。
+List<Widget> _infoSlotRows({
+  required String title,
+  required ReaderV2InfoSlots slots,
+  required ValueChanged<ReaderV2InfoSlots> onChanged,
+}) {
+  return [
+    _InfoItemPickerRow(
+      label: '$title左側',
+      value: slots.left,
+      onChanged: (item) => onChanged(slots.copyWith(left: item)),
+    ),
+    _InfoItemPickerRow(
+      label: '$title右側',
+      value: slots.right,
+      onChanged: (item) => onChanged(slots.copyWith(right: item)),
+    ),
+  ];
 }
 
 class _InfoItemPickerRow extends StatelessWidget {
@@ -568,60 +596,27 @@ class _InfoItemPickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: AppRadius.cardMd,
+    return GroupedRow(
+      title: label,
+      value: value.label,
       onTap: () => _showPicker(context),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.uiMd.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-              ),
-            ),
-            Text(
-              value.label,
-              style: AppTextStyles.uiSm.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  void _showPicker(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    AppBottomSheet.show(
+  Future<void> _showPicker(BuildContext context) async {
+    final picked = await showAppActionSheet<ReaderV2InfoItem>(
       context: context,
       title: label,
-      icon: Icons.view_agenda_outlined,
-      children: ReaderV2InfoItem.values.map((item) {
-        final selected = item == value;
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(item.label, style: AppTextStyles.uiMd),
-          trailing: selected
-              ? Icon(Icons.check_circle, color: colorScheme.primary)
-              : null,
-          onTap: () {
-            onChanged(item);
-            Navigator.pop(context);
-          },
-        );
-      }).toList(),
+      actions: [
+        for (final item in ReaderV2InfoItem.values)
+          AppSheetAction(
+            label: item.label,
+            value: item,
+            selected: item == value,
+          ),
+      ],
     );
+    if (picked != null) onChanged(picked);
   }
 }
 
@@ -635,19 +630,21 @@ class ReaderV2AutoPageSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: settings,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      builder: (context, _) => GroupedSection(
+        margin: _sectionMargin,
+        header: '自動翻頁',
         children: [
-          const SheetSection(title: '自動翻頁'),
-          NumberStepperRow(
-            label: '速度',
-            value: settings.autoPageSpeed,
-            min: ReaderV2SettingsController.minAutoPageSpeed,
-            max: ReaderV2SettingsController.maxAutoPageSpeed,
-            step: 0.01,
-            displayScale: 100,
-            unit: '%',
-            onChanged: settings.setAutoPageSpeed,
+          _stepperRow(
+            NumberStepperRow(
+              label: '速度',
+              value: settings.autoPageSpeed,
+              min: ReaderV2SettingsController.minAutoPageSpeed,
+              max: ReaderV2SettingsController.maxAutoPageSpeed,
+              step: 0.01,
+              displayScale: 100,
+              unit: '%',
+              onChanged: settings.setAutoPageSpeed,
+            ),
           ),
         ],
       ),
@@ -665,23 +662,20 @@ class ReaderV2ChineseConvertSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: settings,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      builder: (context, _) => GroupedSection(
+        margin: _sectionMargin,
+        header: '繁簡轉換',
         children: [
-          const SheetSection(title: '繁簡轉換'),
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 0, label: Text('不轉換')),
-              ButtonSegment(value: 1, label: Text('簡轉繁')),
-              ButtonSegment(value: 2, label: Text('繁轉簡')),
-            ],
-            selected: {settings.chineseConvert},
-            onSelectionChanged: (selection) {
-              if (selection.isNotEmpty) {
-                settings.setChineseConvert(selection.first);
-              }
-            },
+          GroupedContent(
+            child: GlassSegmented<int>(
+              segments: const [
+                GlassSegment(0, '不轉換'),
+                GlassSegment(1, '簡轉繁'),
+                GlassSegment(2, '繁轉簡'),
+              ],
+              selected: settings.chineseConvert,
+              onChanged: settings.setChineseConvert,
+            ),
           ),
         ],
       ),
@@ -709,79 +703,78 @@ class ReaderV2ClickActionSection extends StatelessWidget {
       listenable: settings,
       builder: (context, _) {
         final colorScheme = Theme.of(context).colorScheme;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return GroupedSection(
+          margin: _sectionMargin,
+          header: '點擊區域',
+          headerTrailing: _ResetButton(
+            onPressed: _isDefault ? null : settings.resetClickActions,
+          ),
+          footer: '對應閱讀畫面的九宮格，點一格即可更換功能。',
           children: [
-            SheetSection(
-              title: '點擊區域',
-              trailing: TextButton(
-                onPressed: _isDefault ? null : settings.resetClickActions,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  textStyle: AppTextStyles.uiSm,
+            GroupedContent(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: GridView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 1.6,
+                  crossAxisSpacing: AppSpacing.sm,
+                  mainAxisSpacing: AppSpacing.sm,
                 ),
-                child: const Text('恢復預設'),
-              ),
-            ),
-            Text(
-              '對應閱讀畫面的九宮格，點一格即可更換功能。',
-              style: AppTextStyles.bodySm.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1.6,
-                crossAxisSpacing: AppSpacing.sm,
-                mainAxisSpacing: AppSpacing.sm,
-              ),
-              itemCount: 9,
-              itemBuilder: (context, index) {
-                final label = ReaderV2TapAction.fromCode(
-                  settings.clickActions[index],
-                ).label;
-                final isCenter = index == 4;
-                return Material(
-                  color: isCenter
-                      ? colorScheme.primaryContainer
-                      : colorScheme.surfaceContainer,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: AppRadius.cardMd,
-                    side: BorderSide(
-                      color: isCenter
-                          ? colorScheme.primary
-                          : colorScheme.outlineVariant,
+                itemCount: 9,
+                itemBuilder: (context, index) {
+                  final label = ReaderV2TapAction.fromCode(
+                    settings.clickActions[index],
+                  ).label;
+                  final isCenter = index == 4;
+                  return Material(
+                    // 格子用淡墨底與卡片區隔；中央格（預設喚起選單）以主色標示。
+                    color: isCenter
+                        ? colorScheme.primary.withValues(alpha: 0.12)
+                        : colorScheme.onSurface.withValues(alpha: 0.05),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.cardMd,
+                      side: isCenter
+                          ? BorderSide(
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.6,
+                              ),
+                              width: AppGlass.hairline * 2,
+                            )
+                          : BorderSide.none,
                     ),
-                  ),
-                  child: InkWell(
-                    borderRadius: AppRadius.cardMd,
-                    onTap: () => _showActionPicker(context, index),
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.xs,
-                        ),
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.uiSm.copyWith(
-                            color: colorScheme.onSurface,
-                            fontWeight: isCenter
-                                ? FontWeight.w600
-                                : FontWeight.w500,
+                    child: InkWell(
+                      customBorder: const RoundedRectangleBorder(
+                        borderRadius: AppRadius.cardMd,
+                      ),
+                      onTap: () => _showActionPicker(context, index),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.xs,
+                          ),
+                          child: Text(
+                            label,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.uiSm.copyWith(
+                              color: isCenter
+                                  ? colorScheme.primary
+                                  : colorScheme.onSurface,
+                              fontWeight: isCenter
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ],
         );
@@ -789,26 +782,20 @@ class ReaderV2ClickActionSection extends StatelessWidget {
     );
   }
 
-  void _showActionPicker(BuildContext context, int gridIndex) {
-    final colorScheme = Theme.of(context).colorScheme;
-    AppBottomSheet.show(
+  Future<void> _showActionPicker(BuildContext context, int gridIndex) async {
+    final current = settings.clickActions[gridIndex];
+    final picked = await showAppActionSheet<ReaderV2TapAction>(
       context: context,
       title: '選擇點擊功能',
-      icon: Icons.ads_click,
-      children: ReaderV2TapAction.values.map((action) {
-        final selected = settings.clickActions[gridIndex] == action.code;
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(action.label, style: AppTextStyles.uiMd),
-          trailing: selected
-              ? Icon(Icons.check_circle, color: colorScheme.primary)
-              : null,
-          onTap: () {
-            settings.setClickAction(gridIndex, action.code);
-            Navigator.pop(context);
-          },
-        );
-      }).toList(),
+      actions: [
+        for (final action in ReaderV2TapAction.values)
+          AppSheetAction(
+            label: action.label,
+            value: action,
+            selected: current == action.code,
+          ),
+      ],
     );
+    if (picked != null) settings.setClickAction(gridIndex, picked.code);
   }
 }

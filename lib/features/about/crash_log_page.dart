@@ -4,7 +4,10 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class CrashLogPage extends StatefulWidget {
   const CrashLogPage({
@@ -68,16 +71,18 @@ class _CrashLogPageState extends State<CrashLogPage> {
         _status == _CrashLogStatus.loaded && _hasLogs && !_isClearing;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('崩潰日誌'),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: '崩潰日誌',
         actions: [
-          IconButton(
-            icon: const Icon(Icons.copy_rounded),
+          GlassIconButton(
+            icon: Icons.copy_rounded,
+            iconSize: 20,
             tooltip: '複製日誌',
             onPressed: canUseLogs ? _copyLogs : null,
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_forever_outlined),
+          GlassIconButton(
+            icon: Icons.delete_outline_rounded,
             tooltip: '清除日誌',
             onPressed: canUseLogs ? _confirmClearLogs : null,
           ),
@@ -117,15 +122,24 @@ class _CrashLogPageState extends State<CrashLogPage> {
             description: '發生崩潰時，日誌會記錄在這裡供你複製回報。',
           );
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: SelectableText(
-            _logs,
-            style: AppTextStyles.labelSm.copyWith(
-              height: 1.45,
-              fontFamily: 'monospace',
+        return GroupedListView(
+          children: [
+            GroupedSection(
+              topGap: AppSpacing.md,
+              children: [
+                GroupedContent(
+                  child: SelectableText(
+                    _logs,
+                    style: AppTextStyles.labelSm.copyWith(
+                      height: 1.45,
+                      fontFamily: 'monospace',
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
+          ],
         );
     }
   }
@@ -152,28 +166,14 @@ class _CrashLogPageState extends State<CrashLogPage> {
   }
 
   Future<void> _confirmClearLogs() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppConfirm(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('清除崩潰日誌？'),
-            content: const Text('清除後無法復原。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('清除'),
-              ),
-            ],
-          ),
+      title: '清除崩潰日誌？',
+      message: '清除後無法復原。',
+      confirmLabel: '清除',
+      destructive: true,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _isClearing = true);
     try {

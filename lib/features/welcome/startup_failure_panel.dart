@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+/// 啟動失敗時的說明卡片：上方錯誤摘要，下方為分組動作列。
 class StartupFailurePanel extends StatelessWidget {
   const StartupFailurePanel({
     super.key,
@@ -19,103 +24,79 @@ class StartupFailurePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: colorScheme.errorContainer.withValues(alpha: 0.88),
-        borderRadius: AppRadius.cardLg,
-        border: Border.all(color: colorScheme.error.withValues(alpha: 0.24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return GroupedSection(
+      margin: EdgeInsets.zero,
+      topGap: 0,
+      children: [
+        GroupedContent(
+          padding: const EdgeInsets.all(AppGrouped.rowPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onErrorContainer,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            message,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onErrorContainer,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Wrap(
-            spacing: AppSpacing.md,
-            runSpacing: AppSpacing.md,
-            children: [
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('重試'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showDetails(context),
-                icon: const Icon(Icons.article_outlined),
-                label: const Text('詳情'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _copyDetails(context),
-                icon: const Icon(Icons.copy_outlined),
-                label: const Text('複製'),
-              ),
-              TextButton.icon(
-                onPressed:
-                    () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const CrashLogPage()),
+              Row(
+                children: [
+                  Icon(Icons.error_outline_rounded, color: scheme.error),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTextStyles.titleMd.copyWith(
+                        color: scheme.onSurface,
+                      ),
                     ),
-                icon: const Icon(Icons.report_problem_outlined),
-                label: const Text('崩潰日誌'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                message,
+                style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        GroupedRow(
+          title: '重試',
+          accent: true,
+          showChevron: false,
+          onTap: onRetry,
+        ),
+        GroupedRow(title: '錯誤詳情', onTap: () => _showDetails(context)),
+        GroupedRow(
+          title: '複製錯誤詳情',
+          showChevron: false,
+          onTap: () => _copyDetails(context),
+        ),
+        GroupedRow(
+          title: '崩潰日誌',
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CrashLogPage()),
+              ),
+        ),
+      ],
     );
   }
 
   void _showDetails(BuildContext context) {
-    showDialog<void>(
+    showAppAlert<void>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('錯誤詳情'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  details,
-                  style: const TextStyle(fontFamily: 'monospace'),
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('關閉'),
-              ),
-            ],
-          ),
+      title: '錯誤詳情',
+      content: SelectableText(
+        details,
+        style: AppTextStyles.labelSm.copyWith(
+          height: 1.45,
+          fontFamily: 'monospace',
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      actions: const [
+        AppAlertAction(label: '關閉', value: null, isDefault: true),
+      ],
     );
   }
 

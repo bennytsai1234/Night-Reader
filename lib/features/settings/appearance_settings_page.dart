@@ -4,6 +4,11 @@ import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/theme_customization.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:provider/provider.dart';
 
 class AppearanceSettingsPage extends StatefulWidget {
@@ -22,118 +27,129 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     final settings = context.watch<ThemeSettingsProvider>();
     final appSettings = context.watch<SettingsProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('外觀與主題')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md,
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.xxl,
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: '外觀與主題',
+        bottomHeight: _areaBarHeight,
+        bottom: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+          child: Center(
+            child: GlassSegmented<ThemeArea>(
+              segments: const [
+                GlassSegment(ThemeArea.app, '全域'),
+                GlassSegment(ThemeArea.reader, '閱讀'),
+                GlassSegment(ThemeArea.menu, '選單'),
+              ],
+              selected: _area,
+              onChanged: (value) => setState(() => _area = value),
+            ),
+          ),
         ),
+      ),
+      body: GroupedListView(
         children: [
-          SegmentedButton<ThemeArea>(
-            segments: const [
-              ButtonSegment(value: ThemeArea.app, label: Text('全域')),
-              ButtonSegment(value: ThemeArea.reader, label: Text('閱讀')),
-              ButtonSegment(value: ThemeArea.menu, label: Text('選單')),
-            ],
-            selected: {_area},
-            onSelectionChanged: (value) => setState(() => _area = value.first),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          if (_area == ThemeArea.app) ...[
-            const Text('App 顯示模式', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: AppSpacing.md),
-            SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.system, label: Text('跟隨系統')),
-                ButtonSegment(value: ThemeMode.light, label: Text('淺色方案')),
-                ButtonSegment(value: ThemeMode.dark, label: Text('深色方案')),
-              ],
-              selected: {appSettings.themeMode},
-              onSelectionChanged: (value) => appSettings.setThemeMode(value.first),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              '跟隨系統時，手機為淺色就套用淺色方案，手機為深色就套用深色方案。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-          ] else ...[
-            Text(
-              _area == ThemeArea.reader ? '閱讀方案切換' : '閱讀選單方案切換',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SegmentedButton<AreaThemeMode>(
-              segments: const [
-                ButtonSegment(
-                  value: AreaThemeMode.followSystem,
-                  label: Text('跟隨系統'),
-                ),
-                ButtonSegment(
-                  value: AreaThemeMode.light,
-                  label: Text('淺色方案'),
-                ),
-                ButtonSegment(
-                  value: AreaThemeMode.dark,
-                  label: Text('深色方案'),
-                ),
-              ],
-              selected: {
-                _area == ThemeArea.reader ? settings.readerMode : settings.menuMode,
-              },
-              onSelectionChanged: (value) =>
-                  settings.setAreaMode(_area, value.first),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              '淺色與深色各使用自己的配色方案；跟隨系統只負責依手機目前模式選擇要套用哪一套。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-          ],
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: false,
-                icon: Icon(Icons.light_mode_outlined),
-                label: Text('編輯淺色方案'),
-              ),
-              ButtonSegment(
-                value: true,
-                icon: Icon(Icons.dark_mode_outlined),
-                label: Text('編輯深色方案'),
-              ),
-            ],
-            selected: {_dark},
-            onSelectionChanged: (value) => setState(() => _dark = value.first),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          _Preview(area: _area, dark: _dark, settings: settings),
-          const SizedBox(height: AppSpacing.xl),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('使用自訂配色'),
-            subtitle: const Text('關閉時使用內建預設；自訂值仍會保留'),
-            value: _useCustom(settings),
-            onChanged: (value) => settings.setUseCustom(_area, _dark, value),
-          ),
-          const Divider(height: AppSpacing.xxl),
           if (_area == ThemeArea.app)
-            ..._buildAppEditors(settings)
+            GroupedSection(
+              topGap: AppSpacing.lg,
+              header: 'App 顯示模式',
+              footer: '跟隨系統時，手機為淺色就套用淺色方案，手機為深色就套用深色方案。',
+              children: [
+                for (final (mode, label) in const [
+                  (ThemeMode.system, '跟隨系統'),
+                  (ThemeMode.light, '淺色方案'),
+                  (ThemeMode.dark, '深色方案'),
+                ])
+                  GroupedCheckRow(
+                    title: label,
+                    selected: appSettings.themeMode == mode,
+                    onTap: () => appSettings.setThemeMode(mode),
+                  ),
+              ],
+            )
           else
-            ..._buildAreaEditors(settings),
-          const SizedBox(height: AppSpacing.lg),
-          OutlinedButton.icon(
-            onPressed: () => settings.reset(_area, _dark),
-            icon: const Icon(Icons.restart_alt),
-            label: Text(_dark ? '恢復深色方案預設值' : '恢復淺色方案預設值'),
+            GroupedSection(
+              topGap: AppSpacing.lg,
+              header: _area == ThemeArea.reader ? '閱讀方案切換' : '閱讀選單方案切換',
+              footer: '淺色與深色各使用自己的配色方案；跟隨系統只負責依手機目前模式選擇要套用哪一套。',
+              children: [
+                for (final (mode, label) in const [
+                  (AreaThemeMode.followSystem, '跟隨系統'),
+                  (AreaThemeMode.light, '淺色方案'),
+                  (AreaThemeMode.dark, '深色方案'),
+                ])
+                  GroupedCheckRow(
+                    title: label,
+                    selected:
+                        (_area == ThemeArea.reader
+                            ? settings.readerMode
+                            : settings.menuMode) ==
+                        mode,
+                    onTap: () => settings.setAreaMode(_area, mode),
+                  ),
+              ],
+            ),
+          GroupedSection(
+            header: '編輯方案',
+            footer: '關閉自訂配色時使用內建預設；自訂值仍會保留。',
+            children: [
+              GroupedContent(
+                child: GlassSegmented<bool>(
+                  segments: const [
+                    GlassSegment(
+                      false,
+                      '淺色方案',
+                      icon: Icons.light_mode_outlined,
+                    ),
+                    GlassSegment(
+                      true,
+                      '深色方案',
+                      icon: Icons.dark_mode_outlined,
+                    ),
+                  ],
+                  selected: _dark,
+                  onChanged: (value) => setState(() => _dark = value),
+                ),
+              ),
+              GroupedContent(
+                padding: const EdgeInsets.fromLTRB(
+                  AppGrouped.rowPadding,
+                  0,
+                  AppGrouped.rowPadding,
+                  AppGrouped.rowPadding,
+                ),
+                child: _Preview(area: _area, dark: _dark, settings: settings),
+              ),
+              GroupedSwitchRow(
+                title: '使用自訂配色',
+                value: _useCustom(settings),
+                onChanged: (value) => settings.setUseCustom(_area, _dark, value),
+              ),
+            ],
+          ),
+          GroupedSection(
+            header: _dark ? '深色方案配色' : '淺色方案配色',
+            children:
+                _area == ThemeArea.app
+                    ? _buildAppEditors(settings)
+                    : _buildAreaEditors(settings),
+          ),
+          GroupedSection(
+            children: [
+              GroupedRow(
+                title: _dark ? '恢復深色方案預設值' : '恢復淺色方案預設值',
+                accent: true,
+                showChevron: false,
+                onTap: () => settings.reset(_area, _dark),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+
+  /// 頁首下方分段控制列的高度（控制本身 36，上下留白）。
+  static const double _areaBarHeight = 36 + AppSpacing.md;
 
   bool _useCustom(ThemeSettingsProvider settings) {
     return switch ((_area, _dark)) {
@@ -323,22 +339,22 @@ class _ColorTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hex = color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase();
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(label),
-      subtitle: Text('#${hex.substring(2)}'),
+    return GroupedRow(
+      title: label,
+      value: '#${hex.substring(2)}',
       trailing: Container(
-        width: 36,
-        height: 36,
+        width: 28,
+        height: 28,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          border: Border.all(color: AppChrome.of(context).separator),
         ),
       ),
       onTap: () async {
         final value = await showDialog<Color>(
           context: context,
+          barrierColor: AppChrome.of(context).barrier,
           builder: (_) => _ColorEditorDialog(initial: color),
         );
         if (value != null) onChanged(value);
@@ -414,11 +430,14 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final color = _hsl.toColor();
-    return AlertDialog(
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardXl),
-      title: const Text('調整顏色'),
-      content: SingleChildScrollView(
-        child: Column(
+    return AppAlert<bool>(
+      title: '調整顏色',
+      onAction: (apply) => apply ? _submit() : Navigator.pop(context),
+      actions: const [
+        AppAlertAction(label: '取消', value: false),
+        AppAlertAction(label: '套用', value: true, isDefault: true),
+      ],
+      content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -459,18 +478,6 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
             ),
           ],
         ),
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.sm,
-        AppSpacing.xl,
-        AppSpacing.xl,
-      ),
-      actionsOverflowButtonSpacing: AppSpacing.md,
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        FilledButton(onPressed: _submit, child: const Text('套用')),
-      ],
     );
   }
 
@@ -483,7 +490,7 @@ class _ColorEditorDialogState extends State<_ColorEditorDialog> {
   ) {
     return Row(
       children: [
-        SizedBox(width: 58, child: Text(label)),
+        SizedBox(width: 52, child: Text(label, style: AppTextStyles.uiSm)),
         Expanded(
           child: Slider(
             value: value.clamp(min, max).toDouble(),

@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/update_ignore_store.dart';
 import 'package:night_reader/core/services/update_service.dart';
 import 'package:night_reader/features/about/update_dialog.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 
 /// 自動 / 手動 更新檢查的入口。集中處理「呼叫 service → 看忽略 → 顯示 Dialog → 寫忽略」。
 class UpdateCheckRunner {
@@ -49,6 +50,7 @@ class UpdateCheckRunner {
     final result = await showDialog<UpdateDialogResult>(
       context: context,
       barrierDismissible: false,
+      barrierColor: AppChrome.of(context).barrier,
       builder: (_) => UpdateDialog(info: info),
     );
     if (result == UpdateDialogResult.ignored) {

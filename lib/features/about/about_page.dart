@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
@@ -37,99 +41,118 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('關於')),
-      body: ListTileTheme(
-        data: const ListTileThemeData(
-          contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-        ),
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-          children: [
-            const SizedBox(height: AppSpacing.xxxl),
-            _buildAppLogo(context),
-            const SizedBox(height: AppSpacing.xxl),
-
-            _buildCategoryHeader(context, '開源與法律'),
-            _buildListTile(
-              context,
-              icon: Icons.code_rounded,
-              title: 'GitHub 開源位址',
-              subtitle: 'github.com/bennytsai1234/Night-Reader',
-              onTap:
-                  () => launchExternalUrlWithFeedback(
-                    context,
-                    'https://github.com/bennytsai1234/Night-Reader',
-                  ),
-            ),
-            _buildListTile(
-              context,
-              icon: Icons.description_outlined,
-              title: '開源許可證',
-              subtitle: '查看第三方庫協議',
-              onTap:
-                  () => showLicensePage(
-                    context: context,
-                    applicationName: '夜讀',
-                    applicationVersion: '$_version ($_buildNumber)',
-                  ),
-            ),
-            _buildListTile(
-              context,
-              icon: Icons.gavel_outlined,
-              title: '免責聲明',
-              onTap: () => _showDisclaimer(context),
-            ),
-
-            _buildCategoryHeader(context, '系統工具'),
-            _buildListTile(
-              context,
-              icon: Icons.system_update_alt_outlined,
-              title: '檢查更新',
-              subtitle: _checkingUpdate ? '檢查中…' : '目前版本 v$_version',
-              onTap: _checkUpdate,
-            ),
-            _buildListTile(
-              context,
-              icon: Icons.report_problem_outlined,
-              title: '崩潰日誌',
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CrashLogPage()),
-                  ),
-            ),
-
-            const SizedBox(height: AppSpacing.xxxl),
-            _buildFooter(context),
-          ],
-        ),
+      extendBodyBehindAppBar: true,
+      appBar: const GlassNavHeader(title: '關於'),
+      body: GroupedListView(
+        children: [
+          _buildAppLogo(context),
+          GroupedSection(
+            header: '開源與法律',
+            children: [
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.code_rounded,
+                  tint: AppTint.ink,
+                ),
+                title: 'GitHub 開源位址',
+                subtitle: 'github.com/bennytsai1234/Night-Reader',
+                onTap:
+                    () => launchExternalUrlWithFeedback(
+                      context,
+                      'https://github.com/bennytsai1234/Night-Reader',
+                    ),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.description_outlined,
+                  tint: AppTint.azurite,
+                ),
+                title: '開源許可證',
+                onTap:
+                    () => showLicensePage(
+                      context: context,
+                      applicationName: '夜讀',
+                      applicationVersion: '$_version ($_buildNumber)',
+                    ),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.gavel_outlined,
+                  tint: AppTint.gold,
+                ),
+                title: '免責聲明',
+                onTap: () => _showDisclaimer(context),
+              ),
+            ],
+          ),
+          GroupedSection(
+            header: '系統工具',
+            footer: '本專案為開源學習作品，不提供任何內容服務。所有數據由使用者自行導入。',
+            children: [
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.system_update_alt_rounded,
+                  tint: AppTint.moss,
+                ),
+                title: '檢查更新',
+                value: _checkingUpdate ? '檢查中…' : 'v$_version',
+                trailing:
+                    _checkingUpdate
+                        ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : null,
+                showChevron: !_checkingUpdate,
+                onTap: _checkUpdate,
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.report_problem_outlined,
+                  tint: AppTint.rust,
+                ),
+                title: '崩潰日誌',
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CrashLogPage()),
+                    ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildAppLogo(BuildContext context) {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
       child: Column(
         children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: const BoxDecoration(borderRadius: AppRadius.cardXl),
-            clipBehavior: Clip.antiAlias,
+          ClipRRect(
+            borderRadius: AppRadius.cardXl,
             child: Image.asset(
               'assets/ui/app_icon.webp',
+              width: 80,
+              height: 80,
               fit: BoxFit.cover,
               semanticLabel: '夜讀應用程式圖示',
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          const Text('夜讀', style: AppTextStyles.titleMd),
+          Text(
+            '夜讀',
+            style: AppTextStyles.titleLg.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'v$_version',
             style: AppTextStyles.bodySm.copyWith(
               height: 1.4,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: AppChrome.of(context).sectionText,
             ),
           ),
         ],
@@ -137,96 +160,22 @@ class _AboutPageState extends State<AboutPage> {
     );
   }
 
-  Widget _buildCategoryHeader(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.lg,
-        AppSpacing.md,
-        AppSpacing.sm,
-      ),
-      child: Text(
-        title,
-        style: AppTextStyles.bodySm.copyWith(
-          height: 1.3,
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListTile(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-        size: 22,
-      ),
-      title: Text(
-        title,
-        style: AppTextStyles.bodyBase.copyWith(height: 1.35),
-      ),
-      subtitle:
-          subtitle != null
-              ? Text(
-                subtitle,
-                style: AppTextStyles.bodySm.copyWith(height: 1.4),
-              )
-              : null,
-      trailing: Icon(
-        Icons.chevron_right,
-        size: 18,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildFooter(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-      child: Text(
-        '本專案為開源學習作品，不提供任何內容服務。所有數據由使用者自行導入。',
-        textAlign: TextAlign.center,
+  void _showDisclaimer(BuildContext context) {
+    showAppAlert<void>(
+      context: context,
+      title: '免責聲明',
+      content: Text(
+        '1. 本軟體僅作為開源閱讀工具使用，不提供任何書籍、書源或訂閱內容。\n\n'
+        '2. 使用者應遵守當地法律法規，並對所導入的內容承擔全部法律責任。\n\n'
+        '3. 對於使用本軟體產生的任何版權爭議、數據損失，開發者概不負責。',
         style: AppTextStyles.bodySm.copyWith(
           height: 1.55,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
-    );
-  }
-
-  void _showDisclaimer(BuildContext context) {
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('免責聲明'),
-            content: SingleChildScrollView(
-              child: Text(
-                '1. 本軟體僅作為開源閱讀工具使用，不提供任何書籍、書源或訂閱內容。\n\n'
-                '2. 使用者應遵守當地法律法規，並對所導入的內容承擔全部法律責任。\n\n'
-                '3. 對於使用本軟體產生的任何版權爭議、數據損失，開發者概不負責。',
-                style: AppTextStyles.bodyBase.copyWith(height: 1.55),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('我已閱讀並知曉'),
-              ),
-            ],
-          ),
+      actions: const [
+        AppAlertAction(label: '我已閱讀並知曉', value: null, isDefault: true),
+      ],
     );
   }
 

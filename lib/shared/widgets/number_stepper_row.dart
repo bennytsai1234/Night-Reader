@@ -3,8 +3,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///
@@ -13,6 +15,9 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 ///
 /// 所有輸出值都會對齊 `min + n * step` 的格點並限制在 `[min, max]` 內，
 /// 呼叫端不會收到拖動條那種任意小數。
+///
+/// 本身不帶左右內距、高度約為分組清單單行列（44）；放進分組卡片時以
+/// `GroupedContent` 提供列內距。
 class NumberStepperRow extends StatefulWidget {
   const NumberStepperRow({
     super.key,
@@ -138,6 +143,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
   Future<void> _editValue() async {
     final result = await showDialog<double>(
       context: context,
+      barrierColor: AppChrome.of(context).barrier,
       builder: (_) => _NumberInputDialog(
         label: widget.label,
         initialText: _format(_value),
@@ -176,7 +182,8 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
               child: ExcludeSemantics(
                 child: Text(
                   widget.label,
-                  style: AppTextStyles.uiMd.copyWith(
+                  style: AppTextStyles.bodyBase.copyWith(
+                    height: 1.3,
                     color: colorScheme.onSurface,
                   ),
                 ),
@@ -234,16 +241,33 @@ class _StepButton extends StatelessWidget {
       // 不使用 IconButton.tooltip：Tooltip 自帶長按手勢，會與連續調整競爭。
       child: Semantics(
         label: tooltip,
-        child: IconButton.outlined(
+        child: IconButton(
           onPressed: enabled ? onTap : null,
-          iconSize: 20,
-          visualDensity: VisualDensity.compact,
+          iconSize: 18,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(
+            width: _kStepperControlHeight,
+            height: _kStepperControlHeight,
+          ),
+          style: IconButton.styleFrom(
+            backgroundColor: _controlFill(context),
+            disabledBackgroundColor: _controlFill(context),
+            foregroundColor: Theme.of(context).colorScheme.onSurface,
+            shape: const CircleBorder(),
+          ),
           icon: Icon(icon),
         ),
       ),
     );
   }
 }
+
+/// 步進鈕與數值鈕的高度；加上列的上下內距約等於分組清單單行列高。
+const double _kStepperControlHeight = 36;
+
+/// 步進控件的淡墨底：同時適用 App 分組卡片與閱讀器選單主題的面板。
+Color _controlFill(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07);
 
 class _ValueButton extends StatelessWidget {
   const _ValueButton({required this.text, required this.onTap});
@@ -255,15 +279,18 @@ class _ValueButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       child: Material(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: AppRadius.cardMd,
+        color: _controlFill(context),
+        borderRadius: AppRadius.pillShape,
         child: InkWell(
           onTap: onTap,
-          borderRadius: AppRadius.cardMd,
+          borderRadius: AppRadius.pillShape,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 64, minHeight: 40),
+            constraints: const BoxConstraints(
+              minWidth: 64,
+              minHeight: _kStepperControlHeight,
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Center(
@@ -346,8 +373,14 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
   @override
   Widget build(BuildContext context) {
     final allowDecimal = widget.fractionDigits > 0;
-    return AlertDialog(
-      title: Text(widget.label),
+    return AppAlert<bool>(
+      title: widget.label,
+      message: '範圍 $_rangeText',
+      onAction: (confirmed) => confirmed ? _submit() : Navigator.pop(context),
+      actions: const [
+        AppAlertAction(label: '取消', value: false),
+        AppAlertAction(label: '確定', value: true, isDefault: true),
+      ],
       content: TextField(
         controller: _controller,
         autofocus: true,
@@ -362,20 +395,13 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
           if (_errorText != null) setState(() => _errorText = null);
         },
         onSubmitted: (_) => _submit(),
+        textAlign: TextAlign.center,
         decoration: InputDecoration(
-          helperText: '範圍 $_rangeText',
+          isDense: true,
           errorText: _errorText,
           suffixText: widget.unit.isEmpty ? null : widget.unit,
-          border: const OutlineInputBorder(),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('確定')),
-      ],
     );
   }
 }

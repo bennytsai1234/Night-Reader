@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,7 +11,10 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
+
+/// 外部匯入對話框可選的匯入方式。
+enum _ImportKind { bookSource, bookshelf, replaceRule }
 
 /// AssociationHandlerService 的對話框與 UI 邏輯擴展
 mixin AssociationDialogHelper on AssociationBase {
@@ -21,94 +25,111 @@ mixin AssociationDialogHelper on AssociationBase {
     bool isFile = false,
     String? jsonData,
   }) {
-    final displaySource = isFile ? src.split(RegExp(r'[/\\]')).last : src;
-    showDialog(
-      context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('外部匯入'),
-            content: Text(
-              '偵測到外部內容：\n$displaySource\n\n'
-              '${_typeDescription(type)}',
-            ),
-            actionsPadding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              AppSpacing.sm,
-              AppSpacing.xl,
-              AppSpacing.xl,
-            ),
-            actionsOverflowButtonSpacing: AppSpacing.md,
-            actions: [
-              if (type == 'bookSource' || type == 'auto')
-                _btn(context, dialogContext, '匯入書源', () async {
-                  final count =
-                      isFile
-                          ? await SourceImportService().importFromJson(jsonData!)
-                          : await SourceImportService().importFromUrl(src);
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源'),
-                    ),
-                  );
-                }),
-              if (type == 'book' || type == 'auto')
-                _btn(context, dialogContext, '匯入書架', () async {
-                  if (isFile) {
-                    final result = await BookshelfExchangeService().importFromFile(
-                      File(src),
-                    );
-                    if (!context.mounted) return;
-                    await context.read<BookshelfProvider>().loadBooks();
-                    if (!context.mounted) return;
-                    final total =
-                        result.books +
-                        result.chapters +
-                        result.sources +
-                        result.contents;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          total > 0
-                              ? '已匯入 ${result.books} 本書、${result.chapters} 個章節'
-                              : '未找到可匯入的書架資料',
-                        ),
-                      ),
-                    );
-                  } else {
-                    await context.read<BookshelfProvider>().importBookshelfFromUrl(
-                      src,
-                    );
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('書架匯入完成')));
-                  }
-                }),
-              if (type == 'replaceRule' || type == 'auto')
-                _btn(context, dialogContext, '匯入替換規則', () async {
-                  final text =
-                      isFile
-                          ? jsonData!
-                          : await SourceImportService().fetchImportTextFromUrl(src);
-                  final count = await _importReplaceRules(text);
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則'),
-                    ),
-                  );
-                }),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-            ],
-          ),
+    unawaited(
+      _runImportDialog(context, type, src, isFile: isFile, jsonData: jsonData),
     );
+  }
+
+  Future<void> _runImportDialog(
+    BuildContext context,
+    String type,
+    String src, {
+    required bool isFile,
+    String? jsonData,
+  }) async {
+    final displaySource = isFile ? src.split(RegExp(r'[/\\]')).last : src;
+    final isAuto = type == 'auto';
+    final kind = await showAppAlert<_ImportKind?>(
+      context: context,
+      title: '外部匯入',
+      message: '偵測到外部內容：\n$displaySource\n\n${_typeDescription(type)}',
+      actions: [
+        if (type == 'bookSource' || isAuto)
+          const AppAlertAction(
+            label: '匯入書源',
+            value: _ImportKind.bookSource,
+            isDefault: true,
+          ),
+        if (type == 'book' || isAuto)
+          AppAlertAction(
+            label: '匯入書架',
+            value: _ImportKind.bookshelf,
+            isDefault: !isAuto,
+          ),
+        if (type == 'replaceRule' || isAuto)
+          AppAlertAction(
+            label: '匯入替換規則',
+            value: _ImportKind.replaceRule,
+            isDefault: !isAuto,
+          ),
+        const AppAlertAction(label: '取消', value: null),
+      ],
+    );
+    if (kind == null || !context.mounted) return;
+
+    final label = switch (kind) {
+      _ImportKind.bookSource => '匯入書源',
+      _ImportKind.bookshelf => '匯入書架',
+      _ImportKind.replaceRule => '匯入替換規則',
+    };
+    try {
+      switch (kind) {
+        case _ImportKind.bookSource:
+          final count =
+              isFile
+                  ? await SourceImportService().importFromJson(jsonData!)
+                  : await SourceImportService().importFromUrl(src);
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源'),
+            ),
+          );
+        case _ImportKind.bookshelf:
+          if (isFile) {
+            final result = await BookshelfExchangeService().importFromFile(
+              File(src),
+            );
+            if (!context.mounted) return;
+            await context.read<BookshelfProvider>().loadBooks();
+            if (!context.mounted) return;
+            final total =
+                result.books + result.chapters + result.sources + result.contents;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  total > 0
+                      ? '已匯入 ${result.books} 本書、${result.chapters} 個章節'
+                      : '未找到可匯入的書架資料',
+                ),
+              ),
+            );
+          } else {
+            await context.read<BookshelfProvider>().importBookshelfFromUrl(src);
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('書架匯入完成')));
+          }
+        case _ImportKind.replaceRule:
+          final text =
+              isFile
+                  ? jsonData!
+                  : await SourceImportService().fetchImportTextFromUrl(src);
+          final count = await _importReplaceRules(text);
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(count > 0 ? '成功匯入 $count 個替換規則' : '未匯入有效替換規則'),
+            ),
+          );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$label失敗：$error')));
+    }
   }
 
   Future<int> _importReplaceRules(String text) async {
@@ -128,24 +149,14 @@ mixin AssociationDialogHelper on AssociationBase {
   }
 
   void showForceImportDialog(BuildContext context, String path) {
-    showDialog(
+    showAppAlert<void>(
       context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.cardXl,
-            ),
-            title: const Text('無法辨識檔案'),
-            content: Text(
-              '「${path.split(RegExp(r'[/\\]')).last}」不是可辨識的 Night Reader 匯入格式。',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('關閉'),
-              ),
-            ],
-          ),
+      title: '無法辨識檔案',
+      message:
+          '「${path.split(RegExp(r'[/\\]')).last}」不是可辨識的 Night Reader 匯入格式。',
+      actions: const [
+        AppAlertAction(label: '關閉', value: null, isDefault: true),
+      ],
     );
   }
 
@@ -158,25 +169,5 @@ mixin AssociationDialogHelper on AssociationBase {
       _ => '無法自動判斷類型，請選擇要使用的匯入方式',
     };
   }
-
-  Widget _btn(
-    BuildContext pageContext,
-    BuildContext dialogContext,
-    String label,
-    Future<void> Function() action,
-  ) => TextButton(
-    onPressed: () async {
-      Navigator.pop(dialogContext);
-      try {
-        await action();
-      } catch (error) {
-        if (!pageContext.mounted) return;
-        ScaffoldMessenger.of(
-          pageContext,
-        ).showSnackBar(SnackBar(content: Text('$label失敗：$error')));
-      }
-    },
-    child: Text(label),
-  );
 }
 // AI_PORT: GAP-INTENT-01 extracted from AssociationHandlerService

@@ -3,9 +3,9 @@ import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/features/search/search_page.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 class ReadingStatsPage extends StatefulWidget {
   const ReadingStatsPage({super.key});
@@ -28,7 +28,8 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('閱讀統計')),
+      extendBodyBehindAppBar: true,
+      appBar: const GlassNavHeader(title: '閱讀統計'),
       body: FutureBuilder<List<ReadRecord>>(
         future: _records,
         builder: (context, snapshot) {
@@ -63,38 +64,29 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
             );
           }
 
-          return ListTileTheme(
-            data: const ListTileThemeData(
-              contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            ),
-            child: ListView.separated(
-              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-              itemCount: records.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final record = records[index];
-                return ListTile(
-                  leading: const Icon(Icons.menu_book_outlined),
-                  title: Text(
-                    record.bookName,
-                    style: AppTextStyles.bodyBase.copyWith(height: 1.35),
-                  ),
-                  subtitle: Text(
-                    '累積閱讀 ${_formatDuration(record.readTime)}',
-                    style: AppTextStyles.bodySm.copyWith(height: 1.4),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SearchPage(initialQuery: record.bookName),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+          return GroupedListView(
+            children: [
+              GroupedSection(
+                header: '累積閱讀時間',
+                footer: '點一本書即可搜尋該書。',
+                children: [
+                  for (final record in records)
+                    GroupedRow(
+                      title: record.bookName,
+                      value: _formatDuration(record.readTime),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) => SearchPage(initialQuery: record.bookName),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ],
           );
         },
       ),
