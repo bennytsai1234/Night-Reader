@@ -1,5 +1,7 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
+import 'app_chrome.dart';
 import 'app_text_styles.dart';
 import 'app_tokens.dart';
 import 'theme_customization.dart';
@@ -55,11 +57,53 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
     displayColor: colors.textPrimary,
   );
 
+  final chrome = AppChrome.derive(
+    brightness: brightness,
+    primary: colors.primary,
+    background: colors.background,
+    surface: colors.surface,
+    bar: colors.navigation,
+    textPrimary: colors.textPrimary,
+    textSecondary: colors.textSecondary,
+    border: colors.border,
+  );
+
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
+    extensions: [chrome],
+    // 點擊回饋採 Telegram 式整列高亮，不畫水波紋。
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: chrome.pressedHighlight,
+    hoverColor: Colors.transparent,
+    // 換頁採 iOS 平移並支援邊緣右滑返回；開書的 [BookOpenRoute] 自帶轉場，
+    // 不受影響，閱讀器內的橫向手勢因此不會觸發返回。
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      elevation: 0,
+      backgroundColor: chrome.toastBackground,
+      actionTextColor: chrome.toastAction,
+      closeIconColor: chrome.toastForeground,
+      contentTextStyle: AppTextStyles.uiMd.copyWith(
+        color: chrome.toastForeground,
+        fontWeight: FontWeight.w400,
+      ),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
+      insetPadding: const EdgeInsets.fromLTRB(
+        AppGrouped.margin,
+        AppSpacing.sm,
+        AppGrouped.margin,
+        AppSpacing.md,
+      ),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: colors.appBar,
       foregroundColor: colors.textPrimary,
@@ -105,31 +149,6 @@ ThemeData buildAppTheme(AppUiThemeColors colors, Brightness brightness) {
       shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetXl),
       backgroundColor: colors.surface,
       modalBackgroundColor: colors.surface,
-    ),
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: colors.navigation,
-      indicatorColor: colors.primary.withValues(alpha: 0.15),
-      iconTheme: WidgetStateProperty.resolveWith(
-        (states) => IconThemeData(
-          color:
-              states.contains(WidgetState.selected)
-                  ? colors.primary
-                  : colors.textSecondary,
-        ),
-      ),
-      labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => TextStyle(
-          fontSize: 12,
-          fontWeight:
-              states.contains(WidgetState.selected)
-                  ? FontWeight.w600
-                  : FontWeight.w400,
-          color:
-              states.contains(WidgetState.selected)
-                  ? colors.primary
-                  : colors.textSecondary,
-        ),
-      ),
     ),
     dividerTheme: DividerThemeData(
       thickness: 1,

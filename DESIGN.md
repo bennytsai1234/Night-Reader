@@ -1,6 +1,6 @@
 # 夜讀 Night Reader — 設計系統
 
-夜讀採用 Material 3，視覺基線為「紙墨相生」：淺色介面以溫潤暖白宣紙承載文字，深色介面以低刺激夜墨降低長時間閱讀疲勞。設計哲學恪守「介面服務於內容，克制而不喧賓奪主」，追求如精裝紙本書冊般的雅緻、秩序與呼吸感。
+夜讀以 Material 3 為底，介面結構與互動取法 Telegram iOS（浮動玻璃列、分組清單、情境選單），視覺基線為「紙墨相生」：淺色介面以溫潤暖白宣紙承載文字，深色介面以低刺激夜墨降低長時間閱讀疲勞。設計哲學恪守「介面服務於內容，克制而不喧賓奪主」，追求如精裝紙本書冊般的雅緻、秩序與呼吸感。
 
 App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區域；正文與選單另有各自的模式選擇。
 
@@ -10,6 +10,8 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 - `lib/shared/theme/app_text_styles.dart`：標題、正文與 UI 字階。
 - `lib/shared/theme/theme_customization.dart`：App 與閱讀區可序列化的顏色模型。
 - `lib/shared/theme/custom_app_theme.dart`：App 顏色映射至 Material `ThemeData` 的唯一入口。
+- `lib/shared/theme/app_chrome.dart`：分組清單與玻璃元件的衍生色（`AppChrome.of(context)`），全由既有語意色推導，不新增序列化欄位。
+- `lib/shared/widgets/`：紙墨玻璃元件庫，見下方「紙墨玻璃元件」。
 - `lib/shared/theme/app_theme.dart`：內建閱讀主題與閱讀排版設定。
 - `lib/features/settings/theme_settings_provider.dart`：App、正文與選單三區的淺色／深色模式及使用者自訂值。
 
@@ -54,6 +56,18 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
   - 卡片與輸入框：`AppRadius.cardMd`（10dp）至 `cardLg`（14dp）。
   - 對話框與底部浮層：`AppRadius.cardXl` / `topSheetXl`（20dp），營造現代手持裝置的柔和握持感。
 
+## 紙墨玻璃元件
+
+結構與幾何取自 Telegram iOS，色彩、字階與材質維持紙墨。新頁面與改版一律組合這些元件，不再直接使用 `AppBar`、`ListTile`、`PopupMenuButton`、`SegmentedButton`、`AlertDialog`。
+
+- **材質**：`GlassSurface` 是「霧面紙」——紙／墨色調約 84% 不透明、模糊 12、0.5 髮絲亮邊與漫射陰影；模糊被降級時仍像紙面。頁面內的玻璃以 `BackdropFilter.grouped` 共用 App 根部 `BackdropGroup` 的取樣；疊在其他玻璃上的選單、提示框設 `grouped: false`。
+- **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。
+- **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。
+- **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方說明文字）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關為 iOS 樣式、開啟色為主色。
+- **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排）；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
+- **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`SwipeActions` 提供清單列左右滑出動作。
+- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。
+
 ## 元件質感與動態反饋
 
 1. **導航與頂部標題列**：零 Elevation 設計，不使用粗黑分割線，僅依賴背景與表面色階的細膩色差區隔層級。
@@ -65,7 +79,7 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
    - 閱讀器面板與「閱讀偏好」設定頁共用 `reader_v2_settings_sections.dart` 的區塊，新增閱讀設定時只在該處實作一次。
 3. **書籍卡片與清單**：
    - 書名保持最多 2 行，次要狀態（進度、章節更新）採用靜態次要墨色。
-   - 點擊回饋使用極淡水波紋（Ripple Alpha <= 0.08），避免深色大範圍跳閃。
+   - 點擊回饋為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；玻璃按鈕按下時微縮回彈。
 4. **數值設定**：
    - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。
    - 每個設定宣告明確的 `min`／`max`／`step`，輸出值對齊步進格點，不產生拖動條式的任意小數。

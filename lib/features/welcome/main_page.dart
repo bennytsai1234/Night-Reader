@@ -9,15 +9,17 @@ import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
+import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
 const List<MainDestination> _defaultDestinations = [
   MainDestination(
-    icon: Icons.book_outlined,
-    selectedIcon: Icons.book,
+    icon: Icons.auto_stories_outlined,
+    selectedIcon: Icons.auto_stories,
     label: '書架',
     page: BookshelfPage(),
   ),
@@ -65,8 +67,8 @@ class _MainPageState extends State<MainPage> {
   );
 
   static const _exitBackInterval = Duration(seconds: 2);
-  static const _tabAnimationDuration = Duration(milliseconds: 250);
-  static const _tabAnimationCurve = Curves.easeInOut;
+  static const _tabAnimationDuration = AppMotion.spring;
+  static const _tabAnimationCurve = AppMotion.springCurve;
 
   late final List<MainDestination> _destinations =
       widget.destinations ?? _defaultDestinations;
@@ -177,9 +179,26 @@ class _MainPageState extends State<MainPage> {
               ),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: (index) {
+        extendBody: true,
+        bottomNavigationBar: FloatingTabBar(
+          controller: _pageController,
+          currentIndex: _currentIndex,
+          items: [
+            for (final destination in _destinations)
+              FloatingTabItem(
+                icon: destination.icon,
+                selectedIcon: destination.selectedIcon,
+                label: destination.label,
+              ),
+          ],
+          onSearch:
+              widget.destinations == null
+                  ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SearchPage()),
+                  )
+                  : null,
+          onTap: (index) {
             if (_currentIndex == index) {
               if (DateTime.now().difference(_lastTapTime).inMilliseconds <
                   300) {
@@ -194,16 +213,6 @@ class _MainPageState extends State<MainPage> {
               curve: _tabAnimationCurve,
             );
           },
-          destinations:
-              _destinations
-                  .map(
-                    (destination) => NavigationDestination(
-                      icon: Icon(destination.icon),
-                      selectedIcon: Icon(destination.selectedIcon),
-                      label: destination.label,
-                    ),
-                  )
-                  .toList(),
         ),
       ),
     );

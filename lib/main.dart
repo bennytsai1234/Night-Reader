@@ -273,8 +273,10 @@ class ReaderApp extends StatelessWidget {
           ),
           themeMode: settings.themeMode,
           locale: settings.locale,
-          builder: (context, child) =>
-              ChineseDisplayScope(child: child ?? const SizedBox.shrink()),
+          // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
+          builder: (context, child) => BackdropGroup(
+            child: ChineseDisplayScope(child: child ?? const SizedBox.shrink()),
+          ),
           home: const _AssociationLifecycleHost(child: MainPage()),
         );
       },

@@ -1,0 +1,191 @@
+import 'package:flutter/material.dart';
+
+import 'app_tokens.dart';
+
+/// 分組清單與玻璃元件使用的衍生色。
+///
+/// 全部由 App 主題的既有語意色推導，不新增可序列化欄位；閱讀器面板等
+/// 自帶 [ThemeData] 的區域沒有這個擴充時，[AppChrome.of] 會從該主題的
+/// [ColorScheme] 即時推導，讓同一組元件在選單主題下也能使用。
+@immutable
+class AppChrome extends ThemeExtension<AppChrome> {
+  const AppChrome({
+    required this.groupedBackground,
+    required this.groupedSurface,
+    required this.separator,
+    required this.sectionText,
+    required this.pressedHighlight,
+    required this.glassTint,
+    required this.glassBorder,
+    required this.glassShadow,
+    required this.selectionLens,
+    required this.barrier,
+    required this.toastBackground,
+    required this.toastForeground,
+    required this.toastAction,
+  });
+
+  /// 分組清單頁面底色。
+  final Color groupedBackground;
+
+  /// 分組卡片底色。
+  final Color groupedSurface;
+
+  /// 列與列之間的髮絲分隔線。
+  final Color separator;
+
+  /// 組標題與說明文字。
+  final Color sectionText;
+
+  /// 按下時整列的高亮底色（取代水波紋）。
+  final Color pressedHighlight;
+
+  /// 玻璃材質的紙／墨色調（已含透明度）。
+  final Color glassTint;
+
+  /// 玻璃邊緣的髮絲亮邊。
+  final Color glassBorder;
+
+  /// 浮動玻璃元件的漫射陰影。
+  final Color glassShadow;
+
+  /// 分頁列的選取膠囊。
+  final Color selectionLens;
+
+  /// 情境選單與提示框背後的暗化遮罩。
+  final Color barrier;
+
+  /// 提示訊息（toast）。
+  final Color toastBackground;
+  final Color toastForeground;
+  final Color toastAction;
+
+  factory AppChrome.derive({
+    required Brightness brightness,
+    required Color primary,
+    required Color background,
+    required Color surface,
+    required Color bar,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color border,
+  }) {
+    final isLight = brightness == Brightness.light;
+    return AppChrome(
+      groupedBackground: background,
+      groupedSurface: surface,
+      separator: border.withValues(alpha: isLight ? 0.75 : 0.9),
+      sectionText: textSecondary,
+      pressedHighlight: textPrimary.withValues(alpha: isLight ? 0.06 : 0.08),
+      glassTint: bar.withValues(
+        alpha: isLight ? AppGlass.tintAlphaLight : AppGlass.tintAlphaDark,
+      ),
+      glassBorder:
+          isLight
+              ? AppPalette.paper50.withValues(alpha: 0.7)
+              : AppPalette.ink50.withValues(alpha: 0.08),
+      glassShadow:
+          isLight ? const Color(0x1A241C10) : const Color(0x59000000),
+      selectionLens: Color.alphaBlend(
+        primary.withValues(alpha: isLight ? 0.12 : 0.18),
+        surface.withValues(alpha: 0.6),
+      ),
+      barrier:
+          isLight ? const Color(0x2E241C10) : const Color(0x66000000),
+      toastBackground:
+          isLight
+              ? AppPalette.ink600.withValues(alpha: 0.94)
+              : AppPalette.ink400.withValues(alpha: 0.96),
+      toastForeground: AppPalette.ink50,
+      toastAction: isLight ? AppPalette.cinnabarDark : primary,
+    );
+  }
+
+  /// 讀取目前主題的衍生色；主題沒有掛擴充時依 [ColorScheme] 推導。
+  static AppChrome of(BuildContext context) {
+    final theme = Theme.of(context);
+    final ext = theme.extension<AppChrome>();
+    if (ext != null) return ext;
+    final scheme = theme.colorScheme;
+    return AppChrome.derive(
+      brightness: theme.brightness,
+      primary: scheme.primary,
+      background: theme.scaffoldBackgroundColor,
+      surface: scheme.surface,
+      bar: scheme.surface,
+      textPrimary: scheme.onSurface,
+      textSecondary: scheme.onSurfaceVariant,
+      border: scheme.outline,
+    );
+  }
+
+  @override
+  AppChrome copyWith({
+    Color? groupedBackground,
+    Color? groupedSurface,
+    Color? separator,
+    Color? sectionText,
+    Color? pressedHighlight,
+    Color? glassTint,
+    Color? glassBorder,
+    Color? glassShadow,
+    Color? selectionLens,
+    Color? barrier,
+    Color? toastBackground,
+    Color? toastForeground,
+    Color? toastAction,
+  }) {
+    return AppChrome(
+      groupedBackground: groupedBackground ?? this.groupedBackground,
+      groupedSurface: groupedSurface ?? this.groupedSurface,
+      separator: separator ?? this.separator,
+      sectionText: sectionText ?? this.sectionText,
+      pressedHighlight: pressedHighlight ?? this.pressedHighlight,
+      glassTint: glassTint ?? this.glassTint,
+      glassBorder: glassBorder ?? this.glassBorder,
+      glassShadow: glassShadow ?? this.glassShadow,
+      selectionLens: selectionLens ?? this.selectionLens,
+      barrier: barrier ?? this.barrier,
+      toastBackground: toastBackground ?? this.toastBackground,
+      toastForeground: toastForeground ?? this.toastForeground,
+      toastAction: toastAction ?? this.toastAction,
+    );
+  }
+
+  @override
+  AppChrome lerp(ThemeExtension<AppChrome>? other, double t) {
+    if (other is! AppChrome) return this;
+    return AppChrome(
+      groupedBackground:
+          Color.lerp(groupedBackground, other.groupedBackground, t)!,
+      groupedSurface: Color.lerp(groupedSurface, other.groupedSurface, t)!,
+      separator: Color.lerp(separator, other.separator, t)!,
+      sectionText: Color.lerp(sectionText, other.sectionText, t)!,
+      pressedHighlight:
+          Color.lerp(pressedHighlight, other.pressedHighlight, t)!,
+      glassTint: Color.lerp(glassTint, other.glassTint, t)!,
+      glassBorder: Color.lerp(glassBorder, other.glassBorder, t)!,
+      glassShadow: Color.lerp(glassShadow, other.glassShadow, t)!,
+      selectionLens: Color.lerp(selectionLens, other.selectionLens, t)!,
+      barrier: Color.lerp(barrier, other.barrier, t)!,
+      toastBackground: Color.lerp(toastBackground, other.toastBackground, t)!,
+      toastForeground: Color.lerp(toastForeground, other.toastForeground, t)!,
+      toastAction: Color.lerp(toastAction, other.toastAction, t)!,
+    );
+  }
+}
+
+/// 列首上色圖示方塊的顏料色；淺深色模式都用飽和的原色，圖示一律紙白。
+enum AppTint {
+  cinnabar(AppPalette.cinnabar),
+  azurite(AppPalette.azurite),
+  moss(AppPalette.moss),
+  tea(AppPalette.tea),
+  gold(AppPalette.gold),
+  aubergine(AppPalette.aubergine),
+  rust(AppPalette.rust),
+  ink(AppPalette.ink300);
+
+  const AppTint(this.color);
+  final Color color;
+}
