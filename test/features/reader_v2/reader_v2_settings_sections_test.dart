@@ -23,6 +23,7 @@ void main() {
         lineHeight: 2.4,
         letterSpacing: 1.5,
         paragraphSpacing: 2.0,
+        chapterSpacing: 3.5,
       );
       settings.setTextIndent(4);
 
@@ -34,10 +35,15 @@ void main() {
       expect(settings.lineHeight, defaults.lineHeight);
       expect(settings.letterSpacing, defaults.letterSpacing);
       expect(settings.paragraphSpacing, defaults.paragraphSpacing);
+      expect(settings.chapterSpacing, defaults.chapterSpacing);
       expect(settings.textIndent, defaults.textIndent);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getDouble(PreferKey.readerFontSize), defaults.fontSize);
       expect(prefs.getInt(PreferKey.readerTextIndent), defaults.textIndent);
+      expect(
+        prefs.getDouble(PreferKey.readerChapterSpacing),
+        defaults.chapterSpacing,
+      );
     });
 
     test('resetClickActions restores default grid', () async {

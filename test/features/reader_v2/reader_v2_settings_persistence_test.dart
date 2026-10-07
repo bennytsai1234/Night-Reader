@@ -102,6 +102,14 @@ void main() {
     settings.dispose();
   });
 
+  test('stored chapter spacing is clamped to the readable range', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      PreferKey.readerChapterSpacing: 99.0,
+    });
+    final snapshot = await const ReaderV2PrefsRepository().load();
+    expect(snapshot.chapterSpacing, ReaderV2PrefsRepository.maxChapterSpacing);
+  });
+
   test('malformed stored info slots fall back safely', () {
     expect(ReaderV2InfoSlots.decode('garbage'), isNull);
     expect(

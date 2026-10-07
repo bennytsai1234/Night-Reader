@@ -211,7 +211,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       child: ReaderV2PageShell(
         book: widget.book,
         scaffoldKey: _scaffoldKey,
-        contentBuilder: (contentTop) => _buildContent(context, contentTop),
+        content: _buildContent(context),
         drawer: ReaderV2ChaptersDrawer(
           chapters: runtime?.chapters ?? widget.initialChapters,
           currentChapterIndex: chapterIndex,
@@ -278,7 +278,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  Widget _buildContent(BuildContext context, double contentTop) {
+  Widget _buildContent(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -302,7 +302,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               backgroundColor: theme.backgroundColor,
               textColor: theme.textColor,
               style: style,
-              viewportTop: contentTop,
               viewportController: _host.viewportController,
               ttsHighlight: _host.tts?.currentHighlight,
               onContentTapUp: _handleContentTap,

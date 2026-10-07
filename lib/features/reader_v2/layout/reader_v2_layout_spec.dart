@@ -1,14 +1,12 @@
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 
 import 'reader_v2_typography.dart';
 
 /// 一段正文（或標題）之後的留白高度，計入該 block 的量測高度。
 ///
-/// 章末至少留 [kReaderV2ChapterGapLines] 行，讓章節交界有一行空白區隔。
-/// 空白屬於章末 block 自己的高度，捲動、定位與進度都沿用同一份幾何，
-/// 不需要另外的特例。
+/// 章末改留 [ReaderV2LayoutStyle.chapterSpacing] 行（使用者設定的章節間距），
+/// 與段距分開計算、不疊加。空白屬於章末 block 自己的高度，捲動、定位與
+/// 進度都沿用同一份幾何，不需要另外的特例。
 double readerV2BlockTrailingSpacing(
   ReaderV2LayoutStyle style, {
   required bool isTitle,
@@ -19,7 +17,7 @@ double readerV2BlockTrailingSpacing(
       ? style.paragraphSpacing * 8
       : lineExtent * style.paragraphSpacing;
   if (!isChapterEnd) return spacing;
-  return math.max(spacing, lineExtent * kReaderV2ChapterGapLines);
+  return lineExtent * style.chapterSpacing;
 }
 
 class ReaderV2LayoutStyle {
@@ -32,6 +30,7 @@ class ReaderV2LayoutStyle {
     required this.lineHeight,
     required this.letterSpacing,
     required this.paragraphSpacing,
+    this.chapterSpacing = 1.0,
     required this.paddingTop,
     required this.paddingBottom,
     required this.paddingLeft,
@@ -45,6 +44,9 @@ class ReaderV2LayoutStyle {
   final double lineHeight;
   final double letterSpacing;
   final double paragraphSpacing;
+
+  /// 章末與下一章標題之間的空白（行），計入章末 block 的量測高度。
+  final double chapterSpacing;
   final double paddingTop;
   final double paddingBottom;
   final double paddingLeft;
@@ -229,6 +231,7 @@ class ReaderV2LayoutSpec {
             lineHeight: normalizedLineHeight,
             letterSpacing: style.letterSpacing,
             paragraphSpacing: style.paragraphSpacing,
+            chapterSpacing: style.chapterSpacing,
             paddingTop: style.paddingTop,
             paddingBottom: style.paddingBottom,
             paddingLeft: style.paddingLeft,
@@ -266,6 +269,7 @@ class ReaderV2LayoutSpec {
       style.lineHeight,
       style.letterSpacing,
       style.paragraphSpacing,
+      style.chapterSpacing,
       style.textIndent,
       style.bold,
       style.titleFontSize,

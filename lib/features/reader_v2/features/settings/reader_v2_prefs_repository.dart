@@ -11,6 +11,9 @@ class ReaderV2PrefsSnapshot {
   final double titleFontSize;
   final double lineHeight;
   final double paragraphSpacing;
+
+  /// 章末與下一章標題之間的空白（行）。
+  final double chapterSpacing;
   final double letterSpacing;
   final int textIndent;
   final int themeIndex;
@@ -39,6 +42,7 @@ class ReaderV2PrefsSnapshot {
     required this.titleFontSize,
     required this.lineHeight,
     required this.paragraphSpacing,
+    required this.chapterSpacing,
     required this.letterSpacing,
     required this.textIndent,
     required this.themeIndex,
@@ -63,6 +67,7 @@ class ReaderV2PrefsSnapshot {
       titleFontSize: 18.0 + kReaderV2DefaultTitleSizeDelta,
       lineHeight: 1.5,
       paragraphSpacing: 1.0,
+      chapterSpacing: 1.0,
       letterSpacing: 0.0,
       textIndent: 2,
       themeIndex: 0,
@@ -95,6 +100,7 @@ class ReaderV2PrefsSnapshot {
     double? titleFontSize,
     double? lineHeight,
     double? paragraphSpacing,
+    double? chapterSpacing,
     double? letterSpacing,
     int? textIndent,
     int? themeIndex,
@@ -117,6 +123,7 @@ class ReaderV2PrefsSnapshot {
       titleFontSize: titleFontSize ?? this.titleFontSize,
       lineHeight: lineHeight ?? this.lineHeight,
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      chapterSpacing: chapterSpacing ?? this.chapterSpacing,
       letterSpacing: letterSpacing ?? this.letterSpacing,
       textIndent: textIndent ?? this.textIndent,
       themeIndex: themeIndex ?? this.themeIndex,
@@ -149,6 +156,10 @@ class ReaderV2PrefsRepository {
   static const double minPagePadding = 0.0;
   static const double maxPagePadding = 64.0;
 
+  /// 章節間距的合法範圍（行）。
+  static const double minChapterSpacing = 0.0;
+  static const double maxChapterSpacing = 5.0;
+
   static ReaderV2PrefsSnapshot? _latestSnapshot;
 
   static ReaderV2PrefsSnapshot get cachedSnapshot =>
@@ -171,6 +182,10 @@ class ReaderV2PrefsRepository {
       paragraphSpacing:
           prefs.getDouble(PreferKey.readerParagraphSpacing) ??
           defaults.paragraphSpacing,
+      chapterSpacing: _normalizeChapterSpacing(
+        prefs.getDouble(PreferKey.readerChapterSpacing),
+        defaults.chapterSpacing,
+      ),
       letterSpacing:
           prefs.getDouble(PreferKey.readerLetterSpacing) ??
           defaults.letterSpacing,
@@ -237,6 +252,10 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveParagraphSpacing(double value) {
     return _setDouble(PreferKey.readerParagraphSpacing, value);
+  }
+
+  Future<void> saveChapterSpacing(double value) {
+    return _setDouble(PreferKey.readerChapterSpacing, value);
   }
 
   Future<void> saveLetterSpacing(double value) {
@@ -359,6 +378,11 @@ class ReaderV2PrefsRepository {
   double _normalizePagePadding(double? value, double fallback) {
     if (value == null || !value.isFinite) return fallback;
     return value.clamp(minPagePadding, maxPagePadding).toDouble();
+  }
+
+  double _normalizeChapterSpacing(double? value, double fallback) {
+    if (value == null || !value.isFinite) return fallback;
+    return value.clamp(minChapterSpacing, maxChapterSpacing).toDouble();
   }
 
   double _normalizeAutoPageSpeed(double? value) {

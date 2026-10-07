@@ -253,6 +253,7 @@ class ReaderV2ControllerHost {
         lineHeight: style.lineHeight,
         letterSpacing: style.letterSpacing,
         paragraphSpacing: style.paragraphSpacing,
+        chapterSpacing: style.chapterSpacing,
         paddingTop: style.paddingTop,
         paddingBottom: style.paddingBottom,
         paddingLeft: style.paddingLeft,

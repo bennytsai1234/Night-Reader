@@ -180,6 +180,7 @@ class PreferKey {
   static const String readerTitleFontSize = 'reader_title_font_size';
   static const String readerLineHeight = 'reader_line_height';
   static const String readerParagraphSpacing = 'reader_paragraph_spacing';
+  static const String readerChapterSpacing = 'reader_chapter_spacing';
   static const String readerLetterSpacing = 'reader_letter_spacing';
   static const String readerTextIndent = 'reader_text_indent';
   static const String readerThemeIndex = 'reader_theme_index';

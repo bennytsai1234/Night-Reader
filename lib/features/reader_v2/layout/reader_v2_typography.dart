@@ -28,15 +28,10 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
 // 不可沿用。
 // locale-zh-hant-tw-v1：正文以繁中（臺灣）語系選字形，標點字形改變，
 // 舊 metrics 不可沿用。
-// chapter-gap-v1：章末 block 高度含 [kReaderV2ChapterGapLines] 空行，
-// 舊的章末高度不可沿用。
-// chapter-gap-v2：章末留白改為至少 [kReaderV2ChapterGapLines] 行，
-// 不再疊加在段距之上。
+// chapter-gap-v1：章末 block 高度含固定的章末空行，舊的章末高度不可沿用。
+// chapter-gap-v2：章末留白改為使用者設定的章節間距，不再疊加在段距之上。
 const String kReaderV2CjkTypographyFeatureSignature =
     'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2';
 
 /// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
 const double kReaderV2DefaultTitleSizeDelta = 4.0;
-
-/// 章末與下一章標題之間至少保留的行數；段距較大時沿用段距。
-const double kReaderV2ChapterGapLines = 1.0;

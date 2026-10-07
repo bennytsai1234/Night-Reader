@@ -24,6 +24,10 @@ class ReaderV2SettingsController extends ChangeNotifier {
   static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
   static const double minPagePadding = ReaderV2PrefsRepository.minPagePadding;
   static const double maxPagePadding = ReaderV2PrefsRepository.maxPagePadding;
+  static const double minChapterSpacing =
+      ReaderV2PrefsRepository.minChapterSpacing;
+  static const double maxChapterSpacing =
+      ReaderV2PrefsRepository.maxChapterSpacing;
 
   final ReaderV2PrefsRepository _prefsRepository;
 
@@ -31,6 +35,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double titleFontSize = 18.0 + kReaderV2DefaultTitleSizeDelta;
   double lineHeight = 1.5;
   double paragraphSpacing = 1.0;
+  double chapterSpacing = 1.0;
   double letterSpacing = 0.0;
   int textIndent = 2;
   double paddingHorizontal = 16.0;
@@ -80,6 +85,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     titleFontSize = snapshot.titleFontSize;
     lineHeight = ReaderV2Style.normalizeLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
+    chapterSpacing = snapshot.chapterSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
     themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
@@ -151,6 +157,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       lineHeight: ReaderV2Style.normalizeLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
+      chapterSpacing: chapterSpacing,
       paddingTop: top,
       paddingBottom: bottom,
       paddingLeft: paddingHorizontal,
@@ -214,6 +221,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     double? titleFontSize,
     double? lineHeight,
     double? paragraphSpacing,
+    double? chapterSpacing,
     double? letterSpacing,
   }) {
     var changed = false;
@@ -267,6 +275,18 @@ class ReaderV2SettingsController extends ChangeNotifier {
         restore: (p) => this.paragraphSpacing = p.paragraphSpacing,
       );
     }
+    if (chapterSpacing != null) {
+      if (this.chapterSpacing != chapterSpacing) {
+        this.chapterSpacing = chapterSpacing;
+        changed = true;
+      }
+      _persist(
+        'chapterSpacing',
+        () => _prefsRepository.saveChapterSpacing(chapterSpacing),
+        onSaved: (p) => p.copyWith(chapterSpacing: chapterSpacing),
+        restore: (p) => this.chapterSpacing = p.chapterSpacing,
+      );
+    }
     if (letterSpacing != null) {
       if (this.letterSpacing != letterSpacing) {
         this.letterSpacing = letterSpacing;
@@ -282,7 +302,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 將字號、行高、字距、段距與首行縮排恢復為預設值。
+  /// 將字號、行高、字距、段距、章節間距與首行縮排恢復為預設值。
   void resetTypography() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setTypography(
@@ -290,6 +310,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       titleFontSize: defaults.titleFontSize,
       lineHeight: defaults.lineHeight,
       paragraphSpacing: defaults.paragraphSpacing,
+      chapterSpacing: defaults.chapterSpacing,
       letterSpacing: defaults.letterSpacing,
     );
     if (textIndent != defaults.textIndent) setTextIndent(defaults.textIndent);

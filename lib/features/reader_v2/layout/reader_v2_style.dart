@@ -10,6 +10,7 @@ class ReaderV2Style {
     required this.lineHeight,
     required this.letterSpacing,
     required this.paragraphSpacing,
+    this.chapterSpacing = 1.0,
     required this.paddingTop,
     required this.paddingBottom,
     required this.paddingLeft,
@@ -23,6 +24,9 @@ class ReaderV2Style {
   final double lineHeight;
   final double letterSpacing;
   final double paragraphSpacing;
+
+  /// 章末與下一章標題之間的空白（行）。
+  final double chapterSpacing;
   final double paddingTop;
   final double paddingBottom;
   final double paddingLeft;
@@ -45,6 +49,7 @@ class ReaderV2Style {
     double? lineHeight,
     double? letterSpacing,
     double? paragraphSpacing,
+    double? chapterSpacing,
     double? paddingTop,
     double? paddingBottom,
     double? paddingLeft,
@@ -58,6 +63,7 @@ class ReaderV2Style {
       lineHeight: lineHeight ?? this.lineHeight,
       letterSpacing: letterSpacing ?? this.letterSpacing,
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      chapterSpacing: chapterSpacing ?? this.chapterSpacing,
       paddingTop: paddingTop ?? this.paddingTop,
       paddingBottom: paddingBottom ?? this.paddingBottom,
       paddingLeft: paddingLeft ?? this.paddingLeft,
@@ -75,6 +81,7 @@ class ReaderV2Style {
         other.lineHeight == lineHeight &&
         other.letterSpacing == letterSpacing &&
         other.paragraphSpacing == paragraphSpacing &&
+        other.chapterSpacing == chapterSpacing &&
         other.paddingTop == paddingTop &&
         other.paddingBottom == paddingBottom &&
         other.paddingLeft == paddingLeft &&
@@ -90,6 +97,7 @@ class ReaderV2Style {
     lineHeight,
     letterSpacing,
     paragraphSpacing,
+    chapterSpacing,
     paddingTop,
     paddingBottom,
     paddingLeft,

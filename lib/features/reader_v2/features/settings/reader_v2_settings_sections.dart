@@ -82,11 +82,13 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   bool _lineHeightDirty = false;
   bool _letterSpacingDirty = false;
   bool _paragraphSpacingDirty = false;
+  bool _chapterSpacingDirty = false;
   late double _fontSize;
   late double _titleFontSize;
   late double _lineHeight;
   late double _letterSpacing;
   late double _paragraphSpacing;
+  late double _chapterSpacing;
   bool _expanded = false;
 
   @override
@@ -98,6 +100,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     _lineHeight = settings.lineHeight;
     _letterSpacing = settings.letterSpacing;
     _paragraphSpacing = settings.paragraphSpacing;
+    _chapterSpacing = settings.chapterSpacing;
     settings.addListener(_syncTypographyFromSettings);
   }
 
@@ -113,7 +116,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       _titleFontSizeDirty ||
       _lineHeightDirty ||
       _letterSpacingDirty ||
-      _paragraphSpacingDirty;
+      _paragraphSpacingDirty ||
+      _chapterSpacingDirty;
 
   bool get _isDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
@@ -122,6 +126,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
         _lineHeight == defaults.lineHeight &&
         _letterSpacing == defaults.letterSpacing &&
         _paragraphSpacing == defaults.paragraphSpacing &&
+        _chapterSpacing == defaults.chapterSpacing &&
         widget.settings.textIndent == defaults.textIndent;
   }
 
@@ -137,6 +142,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       if (!_paragraphSpacingDirty) {
         _paragraphSpacing = settings.paragraphSpacing;
       }
+      if (!_chapterSpacingDirty) _chapterSpacing = settings.chapterSpacing;
     });
   }
 
@@ -159,6 +165,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     final lineHeight = _lineHeightDirty ? _lineHeight : null;
     final letterSpacing = _letterSpacingDirty ? _letterSpacing : null;
     final paragraphSpacing = _paragraphSpacingDirty ? _paragraphSpacing : null;
+    final chapterSpacing = _chapterSpacingDirty ? _chapterSpacing : null;
     _clearDirty();
     widget.settings.setTypography(
       fontSize: fontSize,
@@ -166,6 +173,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
       lineHeight: lineHeight,
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
+      chapterSpacing: chapterSpacing,
     );
   }
 
@@ -175,6 +183,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
     _lineHeightDirty = false;
     _letterSpacingDirty = false;
     _paragraphSpacingDirty = false;
+    _chapterSpacingDirty = false;
   }
 
   void _reset() {
@@ -261,6 +270,22 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           onChanged: (value) {
             setState(() => _paragraphSpacing = value);
             _paragraphSpacingDirty = true;
+            _scheduleTypographyCommit();
+          },
+        ),
+      ),
+      _stepperRow(
+        NumberStepperRow(
+          label: '章節間距',
+          value: _chapterSpacing,
+          min: ReaderV2SettingsController.minChapterSpacing,
+          max: ReaderV2SettingsController.maxChapterSpacing,
+          step: 0.5,
+          fractionDigits: 1,
+          unit: '行',
+          onChanged: (value) {
+            setState(() => _chapterSpacing = value);
+            _chapterSpacingDirty = true;
             _scheduleTypographyCommit();
           },
         ),

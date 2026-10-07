@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -22,6 +23,10 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 /// 頁首佔用狀態列（或隱藏狀態列後剩下的鏡頭挖孔區）；有資訊時，
 /// 狀態列顯示中會在其下方多一條資訊列，隱藏時則直接把資訊放進該區。
 /// 使用者的上／下邊距只加在正文與頁首、頁尾之間，不影響資訊列本身。
+///
+/// 隱藏狀態列時，頁首只依鏡頭挖孔的實際位置決定，不看狀態列當下的
+/// 內距：從後台回到前台時系統會先把狀態列叫回來、再由 App 收起，
+/// 這段期間的內距變動不得推動正文。
 @immutable
 final class ReaderV2PageChromeLayout {
   const ReaderV2PageChromeLayout._({
@@ -36,13 +41,16 @@ final class ReaderV2PageChromeLayout {
 
   factory ReaderV2PageChromeLayout.resolve({
     required EdgeInsets mediaPadding,
+    List<DisplayFeature> displayFeatures = const <DisplayFeature>[],
     required bool hideStatusBar,
     required bool showHeaderInfo,
     required bool showFooterInfo,
     required double paddingTop,
     required double paddingBottom,
   }) {
-    final top = mediaPadding.top;
+    final top = hideStatusBar
+        ? _topCutoutExtent(displayFeatures)
+        : mediaPadding.top;
     final double headerExtent;
     final double headerRowTop;
     if (!showHeaderInfo) {
@@ -71,6 +79,18 @@ final class ReaderV2PageChromeLayout {
     );
   }
 
+  /// 貼齊畫面上緣的鏡頭挖孔所佔的高度；沒有挖孔時為 0。
+  static double _topCutoutExtent(List<DisplayFeature> features) {
+    var extent = 0.0;
+    for (final feature in features) {
+      if (feature.type != DisplayFeatureType.cutout) continue;
+      final bounds = feature.bounds;
+      if (bounds.top > 0 || bounds.bottom <= extent) continue;
+      extent = bounds.bottom;
+    }
+    return extent;
+  }
+
   final double headerExtent;
 
   /// 頁首資訊列在頁首區內的起點；狀態列顯示時位於狀態列下方。
@@ -87,7 +107,7 @@ class ReaderV2PageShell extends StatelessWidget {
     super.key,
     required this.book,
     required this.scaffoldKey,
-    required this.contentBuilder,
+    required this.content,
     required this.drawer,
     required this.backgroundColor,
     required this.textColor,
@@ -133,9 +153,7 @@ class ReaderV2PageShell extends StatelessWidget {
 
   final Book book;
   final GlobalKey<ScaffoldState> scaffoldKey;
-  /// 以閱讀區上緣在畫面中的位置建立正文；系統列內距變動時，正文用它
-  /// 維持文字在畫面上的位置。
-  final Widget Function(double contentTop) contentBuilder;
+  final Widget content;
   final ReaderV2ChaptersDrawer drawer;
   final Color backgroundColor;
   final Color textColor;
@@ -183,6 +201,7 @@ class ReaderV2PageShell extends StatelessWidget {
     final mediaPadding = MediaQuery.paddingOf(context);
     final layout = ReaderV2PageChromeLayout.resolve(
       mediaPadding: mediaPadding,
+      displayFeatures: MediaQuery.displayFeaturesOf(context),
       hideStatusBar: hideStatusBar,
       showHeaderInfo: showReadTitleAddition && !headerInfo.isEmpty,
       showFooterInfo: showReadTitleAddition && !footerInfo.isEmpty,
@@ -207,7 +226,7 @@ class ReaderV2PageShell extends StatelessWidget {
               Positioned.fill(
                 top: layout.contentTop,
                 bottom: layout.contentBottom,
-                child: contentBuilder(layout.contentTop),
+                child: content,
               ),
               if (layout.headerExtent > 0)
                 Positioned(
