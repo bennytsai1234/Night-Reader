@@ -161,8 +161,8 @@ class ReaderV2PageCoordinator {
   }
 
   void maybeFollowTtsHighlight() {
-    // 視窗只在換句時跟隨；句內逐字前進不觸發捲動。
-    _ttsFollower.update(_host.tts?.currentHighlight?.sentence);
+    // 視窗只在換句時跟隨。
+    _ttsFollower.update(_host.tts?.currentHighlight);
   }
 
   void openReplaceRule(BuildContext context) {

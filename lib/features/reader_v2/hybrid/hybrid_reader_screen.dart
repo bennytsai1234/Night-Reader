@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dar
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -27,6 +28,8 @@ import 'core/hybrid_types.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'measure/metrics_disk_cache.dart';
+import 'overlay/selection_service.dart';
+import 'overlay/text_selection_overlay.dart';
 import 'overlay/tts_highlight_overlay.dart';
 import 'paragraph/paragraph_cache.dart';
 import 'progress/hybrid_progress.dart';
@@ -34,6 +37,7 @@ import 'pump/budget_governor.dart';
 import 'pump/layout_pump.dart';
 import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
+import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
@@ -49,6 +53,9 @@ class HybridReaderScreen extends StatefulWidget {
     this.onContentTapUp,
     this.viewportController,
     this.ttsHighlight,
+    this.textSelectionEnabled = false,
+    this.highlightColor = const Color(0xFFFFC857),
+    this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
@@ -63,6 +70,15 @@ class HybridReaderScreen extends StatefulWidget {
   final GestureTapUpCallback? onContentTapUp;
   final ReaderV2ViewportController? viewportController;
   final ReaderV2TtsHighlight? ttsHighlight;
+
+  /// 長按選字。朗讀、自動翻頁與閱讀選單開著時由上層關閉；關閉時清掉
+  /// 既有選取。
+  final bool textSelectionEnabled;
+
+  /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
+  /// 反白固定深淺以保持可辨識。
+  final Color highlightColor;
+  final double highlightStrength;
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
   final String? bookUrl;
   final HybridTextPreprocessor preprocessor;
@@ -127,6 +143,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
+  final SelectionService _selection = SelectionService();
+  final WordSegmenter _wordSegmenter = const WordSegmenter();
+
+  /// 每次長按或取消都換號；選詞要等原生斷詞回來，期間若已取消或又長按
+  /// 別處，舊結果作廢。
+  int _selectionRequest = 0;
 
   @override
   void initState() {
@@ -192,6 +214,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       _attachController();
     }
     if (oldWidget.textColor != widget.textColor) _reconcileVisibleWindow();
+    if (oldWidget.runtime != widget.runtime || !widget.textSelectionEnabled) {
+      _clearSelection();
+    }
   }
 
   @override
@@ -213,6 +238,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     _pump.dispose();
     _paragraphCache.dispose();
     _scrollController?.dispose();
+    _selection.dispose();
     super.dispose();
   }
 
@@ -828,6 +854,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         notification.dragDetails != null) {
       _dragging = true;
       _sawUserScroll = true;
+      _clearSelection();
       _runtimeLocationRevision += 1;
       _pump.onScrollStateChanged(PumpState.dragging);
     } else if (notification is ScrollUpdateNotification) {
@@ -1628,14 +1655,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     if (entry == null) return null;
     final group = blocks.groupContaining(block.key);
     if (group.isEmpty) return null;
-    final indent = _indentCharsFor(group.first);
     final groupStart = group.first.charRange.start;
-    final localStart =
-        math.max(range.start, block.charRange.start) - groupStart + indent;
-    final localEnd =
-        math.min(range.end, block.charRange.end) - groupStart + indent;
-    if (localEnd <= localStart) return const <ui.TextBox>[];
-    final boxes = entry.paragraph.getBoxesForRange(localStart, localEnd);
+    final sourceStart = math.max(range.start, block.charRange.start);
+    final sourceEnd = math.min(range.end, block.charRange.end);
+    if (sourceEnd <= sourceStart) return const <ui.TextBox>[];
+    // Paragraph 內除了縮排 placeholder，還有排版插入的換行；兩者都要
+    // 經 ParagraphTextMap 換算，否則框會在每個插入換行之後偏一個字。
+    final local = ParagraphTextMap.forBlocks(
+      group,
+      indentLength: _indentCharsFor(group.first),
+    ).paragraphRangeForSourceRange(
+      sourceStart - groupStart,
+      sourceEnd - groupStart,
+    );
+    final boxes = _boxesPerLine(
+      entry.paragraph,
+      entry.paragraph.getBoxesForRange(local.start, local.end),
+    );
     if (boxes.isEmpty) return boxes;
     return <ui.TextBox>[
       for (final box in boxes)
@@ -1647,6 +1683,63 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
           box.direction,
         ),
     ];
+  }
+
+  /// 每條視覺行併成一個框，垂直方向夾在該行的行格內。
+  ///
+  /// Paragraph 回傳的 glyph box 高度是字型自身的 ascent + descent
+  /// （Noto Sans CJK 約 1.45 em），不隨行高倍率縮放：行高設得比這小時，
+  /// 相鄰兩行的框會疊進對方；同一行裡不同字型的 run（中文、拉丁字、
+  /// 數字）高度也各不相同。以行格為界，上下兩行的框恰好相接。
+  List<ui.TextBox> _boxesPerLine(
+    ui.Paragraph paragraph,
+    List<ui.TextBox> boxes,
+  ) {
+    if (boxes.isEmpty) return boxes;
+    final lines = <int, ui.TextBox>{};
+    for (final box in boxes) {
+      final glyph = paragraph.getClosestGlyphInfoForOffset(
+        Offset((box.left + box.right) / 2, (box.top + box.bottom) / 2),
+      );
+      final lineNumber = glyph == null
+          ? null
+          : paragraph.getLineNumberAt(glyph.graphemeClusterCodeUnitRange.start);
+      if (lineNumber == null) continue;
+      final existing = lines[lineNumber];
+      lines[lineNumber] = existing == null
+          ? box
+          : ui.TextBox.fromLTRBD(
+              math.min(existing.left, box.left),
+              math.min(existing.top, box.top),
+              math.max(existing.right, box.right),
+              math.max(existing.bottom, box.bottom),
+              box.direction,
+            );
+    }
+    final result = <ui.TextBox>[];
+    for (final MapEntry(key: lineNumber, value: box) in lines.entries) {
+      final line = paragraph.getLineMetricsAt(lineNumber);
+      if (line == null) {
+        result.add(box);
+        continue;
+      }
+      final slotTop = line.baseline - line.ascent;
+      var slotBottom = slotTop + line.height;
+      final next = paragraph.getLineMetricsAt(lineNumber + 1);
+      if (next != null) {
+        slotBottom = math.min(slotBottom, next.baseline - next.ascent);
+      }
+      result.add(
+        ui.TextBox.fromLTRBD(
+          box.left,
+          math.max(box.top, slotTop),
+          box.right,
+          math.min(box.bottom, slotBottom),
+          box.direction,
+        ),
+      );
+    }
+    return result;
   }
 
   Rect? _worldRectForRange(ChapterBlocks blocks, int start, int end) {
@@ -1679,11 +1772,168 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     return Rect.fromLTRB(0, top, 0, bottom);
   }
 
+  bool _isSelectionCurrent(ReaderTextSelection selection) =>
+      selection.epoch == _epoch &&
+      identical(_blocks[selection.chapterIndex], selection.blocks);
+
+  /// viewport 座標 [point] 在 [hit] 所屬 group Paragraph 上的位置；同時
+  /// 回傳 Paragraph 內座標與 offset 換算表。
+  ({
+    ui.Paragraph paragraph,
+    Offset local,
+    ParagraphTextMap textMap,
+    int groupStart,
+  })?
+  _paragraphPointAt(ChapterBlocks blocks, DocumentOffsetHit hit, double x) {
+    final entry = _paragraphCache.acquireEntry(hit.key, _epoch);
+    if (entry == null) return null;
+    final group = blocks.groupContaining(hit.key);
+    if (group.isEmpty) return null;
+    return (
+      paragraph: entry.paragraph,
+      local: Offset(
+        x - widget.runtime.state.layoutSpec.textPaddingLeft,
+        hit.offsetInBlock + entry.localTop,
+      ),
+      textMap: ParagraphTextMap.forBlocks(
+        group,
+        indentLength: _indentCharsFor(group.first),
+      ),
+      groupStart: group.first.charRange.start,
+    );
+  }
+
+  /// 長按點到的字：只接受真的落在字形上的點，縮排、段距、行尾空白與
+  /// 標題都不算。回傳章內 offset 與它所屬的來源段落。
+  ({ChapterBlocks blocks, HybridTextRange paragraph, int offset})? _glyphAt(
+    Offset point,
+  ) {
+    final scrollOffset = _effectiveScrollOffset();
+    if (scrollOffset == null) return null;
+    final hit = _documentIndex.hitTest(scrollOffset + point.dy);
+    if (hit == null) return null;
+    final blocks = _blocks[hit.key.chapterIndex];
+    if (blocks == null) return null;
+    final paragraphRange = blocks.sourceParagraphRange(hit.key);
+    if (paragraphRange == null) return null;
+    final at = _paragraphPointAt(blocks, hit, point.dx);
+    if (at == null) return null;
+    final position = at.paragraph.getPositionForOffset(at.local);
+    final candidate = position.affinity == TextAffinity.downstream
+        ? position.offset
+        : position.offset - 1;
+    if (candidate < at.textMap.indentLength ||
+        candidate >= at.textMap.paragraphLength) {
+      return null;
+    }
+    final onGlyph = at.paragraph
+        .getBoxesForRange(candidate, candidate + 1)
+        .any((box) => box.toRect().inflate(4).contains(at.local));
+    // 插入的換行沒有字形框，在這裡一併排除。
+    if (!onGlyph) return null;
+    final offset =
+        at.groupStart + at.textMap.sourceOffsetForParagraphOffset(candidate);
+    if (!paragraphRange.containsOffset(offset)) return null;
+    return (blocks: blocks, paragraph: paragraphRange, offset: offset);
+  }
+
+  /// 拖把手時 [point] 在選取段落內最近的游標位置；點超出段落上下緣時
+  /// 夾回段落內，所以不會換到別段。
+  int? _selectionCaretAt(ReaderTextSelection selection, Offset point) {
+    if (!_isSelectionCurrent(selection)) return null;
+    final scrollOffset = _effectiveScrollOffset();
+    if (scrollOffset == null) return null;
+    final blocks = selection.blocks;
+    final first = blocks.blockForCharOffset(selection.paragraph.start);
+    final last = blocks.blockForCharOffset(selection.paragraph.end - 1);
+    final top = _documentIndex.topOf(first.key);
+    final lastTop = _documentIndex.topOf(last.key);
+    final lastHeight = _documentIndex.metricsFor(last.key)?.height;
+    if (top == null || lastTop == null || lastHeight == null) return null;
+    final bottom = math.max(top, lastTop + lastHeight - 0.5);
+    final worldY = (scrollOffset + point.dy).clamp(top, bottom).toDouble();
+    final hit = _documentIndex.hitTest(worldY);
+    if (hit == null) return null;
+    final at = _paragraphPointAt(blocks, hit, point.dx);
+    if (at == null) return null;
+    final position = at.paragraph.getPositionForOffset(at.local);
+    return at.groupStart +
+        at.textMap.sourceOffsetForParagraphOffset(position.offset);
+  }
+
+  List<HybridLineBox> _selectionBoxes(ReaderTextSelection selection) {
+    if (!_isSelectionCurrent(selection)) {
+      // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_selection.selection, selection)) {
+          _clearSelection();
+        }
+      });
+      return const <HybridLineBox>[];
+    }
+    return _lineBoxes(
+      selection.chapterIndex,
+      selection.range.start,
+      selection.range.end,
+    );
+  }
+
+  Future<void> _handleLongPressStart(LongPressStartDetails details) async {
+    final request = ++_selectionRequest;
+    final hit = _glyphAt(details.localPosition);
+    if (hit == null) {
+      _selection.clear();
+      return;
+    }
+    unawaited(Feedback.forLongPress(context));
+    final epoch = _epoch;
+    final paragraphText = hit.blocks.displayText.substring(
+      hit.paragraph.start,
+      hit.paragraph.end,
+    );
+    final word = await _wordSegmenter.wordAt(
+      paragraphText,
+      hit.offset - hit.paragraph.start,
+    );
+    if (!mounted ||
+        request != _selectionRequest ||
+        !widget.textSelectionEnabled ||
+        epoch != _epoch ||
+        !identical(_blocks[hit.blocks.chapterIndex], hit.blocks)) {
+      return;
+    }
+    _selection.select(
+      ReaderTextSelection(
+        blocks: hit.blocks,
+        epoch: epoch,
+        paragraph: hit.paragraph,
+        range: HybridTextRange(
+          hit.paragraph.start + word.start,
+          hit.paragraph.start + word.end,
+        ),
+      ),
+    );
+  }
+
+  void _clearSelection() {
+    _selectionRequest += 1;
+    _selection.clear();
+  }
+
+  void _handleContentTapUp(TapUpDetails details) {
+    // 選取中點正文只取消選取，不觸發翻頁或叫出選單。
+    if (_selection.active) {
+      _clearSelection();
+      return;
+    }
+    widget.onContentTapUp?.call(details);
+  }
+
   /// [start, end) 在畫面上的字形範圍，每條視覺行一個框。
   ///
   /// 框的左右取自 Paragraph 的 glyph boxes，而不是整行寬：句段從行中間
   /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。
-  List<HybridLineBox> _ttsLineBoxes(int chapterIndex, int start, int end) {
+  List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
     final blocks = _blocks[chapterIndex];
     if (offset == null || blocks == null) return const <HybridLineBox>[];
@@ -1710,30 +1960,30 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       if (top == null) continue;
       final boxes = _blockLocalBoxesForRange(blocks, block, range);
       if (boxes == null || boxes.isEmpty) continue;
-      // 同一條視覺行可能回傳多個 run 的 box，合併成一個框。
-      final lines = <double, ui.TextBox>{};
       for (final box in boxes) {
-        final key = box.top.roundToDouble();
-        final existing = lines[key];
-        lines[key] = existing == null
-            ? box
-            : ui.TextBox.fromLTRBD(
-                math.min(existing.left, box.left),
-                math.min(existing.top, box.top),
-                math.max(existing.right, box.right),
-                math.max(existing.bottom, box.bottom),
-                box.direction,
-              );
-      }
-      for (final box in lines.values) {
-        result.add(
-          HybridLineBox(
-            left: paintLeft + box.left,
-            top: top + box.top - offset,
-            right: paintLeft + box.right,
-            bottom: top + box.bottom - offset,
-          ),
+        final lineBox = HybridLineBox(
+          left: paintLeft + box.left,
+          top: top + box.top - offset,
+          right: paintLeft + box.right,
+          bottom: top + box.bottom - offset,
         );
+        // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
+        // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
+        // 一行；併成一個框，避免半透明色在接縫處疊深。
+        final previous = result.isEmpty ? null : result.last;
+        if (previous != null &&
+            math.min(previous.bottom, lineBox.bottom) -
+                    math.max(previous.top, lineBox.top) >
+                0.5) {
+          result[result.length - 1] = HybridLineBox(
+            left: math.min(previous.left, lineBox.left),
+            top: math.min(previous.top, lineBox.top),
+            right: math.max(previous.right, lineBox.right),
+            bottom: math.max(previous.bottom, lineBox.bottom),
+          );
+        } else {
+          result.add(lineBox);
+        }
       }
     }
     return result;
@@ -1950,35 +2200,42 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
               Positioned.fill(
                 child: ListenableBuilder(
                   listenable: controller,
-                  builder: (context, _) {
-                    final wordStart = highlight.wordStart;
-                    final wordEnd = highlight.wordEnd;
-                    return HybridTtsHighlightOverlay(
-                      sentence: _ttsLineBoxes(
-                        highlight.chapterIndex,
-                        highlight.sentenceStart,
-                        highlight.sentenceEnd,
-                      ),
-                      word: highlight.hasWord
-                          ? _ttsLineBoxes(
-                              highlight.chapterIndex,
-                              wordStart!,
-                              wordEnd!,
-                            )
-                          : const <HybridLineBox>[],
-                      textColor: widget.textColor,
-                    );
-                  },
+                  builder: (context, _) => HybridTtsHighlightOverlay(
+                    sentence: _lineBoxes(
+                      highlight.chapterIndex,
+                      highlight.sentenceStart,
+                      highlight.sentenceEnd,
+                    ),
+                    color: widget.highlightColor.withValues(
+                      alpha: widget.highlightStrength,
+                    ),
+                  ),
                 ),
               ),
           ],
         );
+        // 長按與捲動在同一個手勢競技場：先拖動就是捲動，按住不動才選字。
+        // 選取層在點擊層之外，按把手與選單不會被當成點正文。
         return ColoredBox(
           color: widget.backgroundColor,
-          child: ReaderV2PointerTapLayer(
-            onTapUp: widget.onContentTapUp,
-            onPointerDownTapPolicy: _holdScrollOnPointerDown,
-            child: readerStack,
+          child: ReaderTextSelectionLayer(
+            selection: _selection,
+            repaint: controller,
+            boxesFor: _selectionBoxes,
+            caretAt: _selectionCaretAt,
+            highlightColor: widget.highlightColor,
+            child: ReaderV2PointerTapLayer(
+              onTapUp: widget.onContentTapUp == null
+                  ? null
+                  : _handleContentTapUp,
+              onPointerDownTapPolicy: _holdScrollOnPointerDown,
+              child: GestureDetector(
+                onLongPressStart: widget.textSelectionEnabled
+                    ? (details) => unawaited(_handleLongPressStart(details))
+                    : null,
+                child: readerStack,
+              ),
+            ),
           ),
         );
       },

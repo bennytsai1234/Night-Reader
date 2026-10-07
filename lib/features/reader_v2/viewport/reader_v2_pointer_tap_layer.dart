@@ -25,6 +25,7 @@ class ReaderV2PointerTapLayer extends StatefulWidget {
 class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
   int? _pointer;
   Offset? _downPosition;
+  Duration? _downTime;
   bool _dragged = false;
   bool _suppressTap = false;
 
@@ -40,6 +41,7 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
     }
     _pointer = event.pointer;
     _downPosition = event.position;
+    _downTime = event.timeStamp;
     _dragged = false;
     _suppressTap = widget.onPointerDownTapPolicy?.call(event) ?? false;
   }
@@ -56,7 +58,11 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
 
   void _handlePointerUp(PointerUpEvent event) {
     if (event.pointer != _pointer) return;
-    final shouldTap = !_dragged && !_suppressTap;
+    // 按住到長按門檻就是長按（選字），不是點擊。
+    final downTime = _downTime;
+    final held =
+        downTime != null && event.timeStamp - downTime >= kLongPressTimeout;
+    final shouldTap = !_dragged && !_suppressTap && !held;
     _resetTracking();
     if (!shouldTap) return;
     widget.onTapUp?.call(
@@ -77,6 +83,7 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
   void _resetTracking() {
     _pointer = null;
     _downPosition = null;
+    _downTime = null;
     _dragged = false;
     _suppressTap = false;
   }

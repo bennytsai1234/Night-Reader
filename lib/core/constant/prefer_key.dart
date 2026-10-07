@@ -197,6 +197,12 @@ class PreferKey {
   static const String readerTtsSpeedMultiplier = 'reader_tts_speed_multiplier';
   static const String readerTtsPitch = 'reader_tts_pitch';
   static const String readerTtsLanguage = 'reader_tts_language';
+
+  /// 朗讀高亮與選字反白的顏色（[ReaderV2HighlightColor.name]）。
+  static const String readerHighlightColor = 'reader_highlight_color';
+
+  /// 朗讀高亮的深淺（不透明度）。
+  static const String readerHighlightStrength = 'reader_highlight_strength';
   static const String readerClickActions = 'reader_click_actions';
   static const String readerPaddingHorizontal = 'reader_padding_horizontal';
   static const String readerPaddingTop = 'reader_padding_top';
