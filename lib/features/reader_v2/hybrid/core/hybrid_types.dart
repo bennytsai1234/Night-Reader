@@ -405,6 +405,30 @@ final class ChapterBlocks {
     return blocks.sublist(start, end + 1);
   }
 
+  /// [key] 所屬來源段落在章內的字元範圍；長段落即使被拆成多個 group 也
+  /// 回傳整段。標題不屬於任何來源段落，回傳 null。
+  HybridTextRange? sourceParagraphRange(BlockKey key) {
+    final index = blocks.indexWhere((block) => block.key == key);
+    if (index < 0) return null;
+    final block = blocks[index];
+    if (block.isTitle || block.sourceParagraphIndex < 0) return null;
+    final sourceParagraphIndex = block.sourceParagraphIndex;
+    var start = index;
+    while (start > 0 &&
+        blocks[start - 1].sourceParagraphIndex == sourceParagraphIndex) {
+      start -= 1;
+    }
+    var end = index;
+    while (end + 1 < blocks.length &&
+        blocks[end + 1].sourceParagraphIndex == sourceParagraphIndex) {
+      end += 1;
+    }
+    return HybridTextRange(
+      blocks[start].charRange.start,
+      blocks[end].charRange.end,
+    );
+  }
+
   List<List<ChapterBlock>> paragraphGroups() {
     final groups = <List<ChapterBlock>>[];
     var i = 0;
@@ -478,6 +502,17 @@ final class ParagraphTextMap {
       inserted += 1;
     }
     return indentLength + safe + inserted;
+  }
+
+  /// 來源範圍 [start, end) 在 Paragraph 內的範圍。插入的換行屬於它後面
+  /// 那個字；範圍恰好結束在換行處時，換行不包進來。
+  ({int start, int end}) paragraphRangeForSourceRange(int start, int end) {
+    final paragraphStart = paragraphOffsetForSourceOffset(start);
+    if (end <= start) return (start: paragraphStart, end: paragraphStart);
+    return (
+      start: paragraphStart,
+      end: paragraphOffsetForSourceOffset(end - 1) + 1,
+    );
   }
 
   int sourceOffsetForParagraphOffset(int paragraphOffset) {

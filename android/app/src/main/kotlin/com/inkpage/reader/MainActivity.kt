@@ -1,12 +1,50 @@
 package com.inkpage.reader
 
+import android.icu.text.BreakIterator
 import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestHighestRefreshRate()
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.inkpage.reader/word_segmenter",
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "wordAt") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val text = call.argument<String>("text")
+            val offset = call.argument<Int>("offset")
+            result.success(
+                if (text == null || offset == null) null else wordAt(text, offset),
+            )
+        }
+    }
+
+    // Flutter 引擎的 ICU 不含中文詞典，系統 ICU 有；長按選詞靠這裡斷詞。
+    // 標點與空白不算詞，回傳 null 讓 Dart 端只選單一字元。
+    private fun wordAt(text: String, offset: Int): List<Int>? {
+        if (offset < 0 || offset >= text.length) return null
+        val iterator = BreakIterator.getWordInstance(Locale.CHINESE)
+        iterator.setText(text)
+        val end = iterator.following(offset)
+        if (end == BreakIterator.DONE) return null
+        // ruleStatus 描述的是剛越過的這個邊界之前的那一段，也就是目標詞。
+        val status = iterator.ruleStatus
+        val start = iterator.previous()
+        if (start == BreakIterator.DONE) return null
+        if (status < BreakIterator.WORD_NONE_LIMIT) return null
+        return listOf(start, end)
     }
 
     // 多數 OEM 預設把未宣告偏好的 app 鎖在 60Hz；在不改變解析度的前提下

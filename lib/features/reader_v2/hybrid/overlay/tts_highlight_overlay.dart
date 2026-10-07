@@ -27,22 +27,23 @@ final class HybridTtsHighlightOverlay extends StatelessWidget {
           painter: HybridTtsHighlightPainter(
             sentence: sentence,
             word: word,
-            highlightColor: _highlightColor(),
+            highlightColor: readerHighlightColor(textColor),
           ),
           size: Size.infinite,
         ),
       ),
     );
   }
+}
 
-  Color _highlightColor() {
-    final darkReader = textColor.computeLuminance() > 0.5;
-    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-      dark: darkReader,
-      menu: false,
-    );
-    return custom?.highlight ?? const Color(0xFFFFC857);
-  }
+/// 閱讀區的強調色（朗讀高亮、選字）；依正文色判斷日夜，讀使用者自訂色。
+Color readerHighlightColor(Color textColor) {
+  final darkReader = textColor.computeLuminance() > 0.5;
+  final custom = ThemeSettingsProvider.resolveReaderAreaColors(
+    dark: darkReader,
+    menu: false,
+  );
+  return custom?.highlight ?? const Color(0xFFFFC857);
 }
 
 final class HybridTtsHighlightPainter extends CustomPainter {

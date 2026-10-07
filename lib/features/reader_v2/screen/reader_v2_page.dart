@@ -304,6 +304,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               style: style,
               viewportController: _host.viewportController,
               ttsHighlight: _host.tts?.currentHighlight,
+              textSelectionEnabled:
+                  !_host.menu.controlsVisible &&
+                  !(_host.autoPage?.isRunning ?? false) &&
+                  !(_host.tts?.isPlaying ?? false),
               onContentTapUp: _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,

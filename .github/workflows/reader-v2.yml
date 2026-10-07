@@ -55,6 +55,7 @@ jobs:
             test/features/reader_v2/reader_v2_state_machine_test.dart \
             test/features/reader_v2/reader_v2_runtime_operation_test.dart \
             test/features/reader_v2/hybrid/hybrid_pump_test.dart \
+            test/features/reader_v2/hybrid/reader_text_selection_test.dart \
             --reporter compact
       - name: Verify validation did not modify tracked source
         if: always()
