@@ -47,6 +47,15 @@ void main() {
             _contrast(palette.readerText, palette.readerBackground),
             greaterThanOrEqualTo(7),
           );
+          // 資訊列是紙張上的次要文字；主色上的勾勾與文字同為 AA。
+          expect(
+            _contrast(palette.readerInfo, palette.readerBackground),
+            greaterThanOrEqualTo(4.5),
+          );
+          expect(
+            _contrast(palette.onPrimary, palette.primary),
+            greaterThanOrEqualTo(4.5),
+          );
           for (final background in [palette.background, palette.surface]) {
             expect(
               _contrast(palette.text, background),
@@ -100,9 +109,11 @@ void main() {
         expect(palette, same(expected));
         expect(theme.scaffoldBackgroundColor, expected.background);
         expect(theme.colorScheme.primary, expected.primary);
+        expect(theme.colorScheme.onPrimary, expected.onPrimary);
         expect(menu.brightness, brightness);
         expect(menu.foreground, expected.text);
         expect(menu.accent, expected.primary);
+        expect(menu.onAccent, expected.onPrimary);
         expect(
           ReaderV2HighlightColor.theme.resolve(palette),
           expected.highlight,

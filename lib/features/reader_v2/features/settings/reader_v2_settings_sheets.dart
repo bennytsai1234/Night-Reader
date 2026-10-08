@@ -82,18 +82,28 @@ class _ReaderStyleSelector extends StatelessWidget {
     final themeSettings = context.watch<ThemeSettingsProvider>();
     final brightness = StylePalette.of(context).brightness;
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        for (final style in AppStyle.values)
-          _swatch(
-            style,
-            style.of(brightness),
-            selected: style == themeSettings.style,
-            scheme: scheme,
-            onTap: () => themeSettings.setStyle(style),
+    // 寬度夠時五個色票平均分散；窄視窗（分割畫面等）放不下時改為左右捲動。
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            spacing: AppSpacing.md,
+            children: [
+              for (final style in AppStyle.values)
+                _swatch(
+                  style,
+                  style.of(brightness),
+                  selected: style == themeSettings.style,
+                  scheme: scheme,
+                  onTap: () => themeSettings.setStyle(style),
+                ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 

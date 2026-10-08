@@ -212,7 +212,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             onChapterTap: _jumpToChapterFromDrawer,
           ),
           backgroundColor: palette.readerBackground,
-          textColor: palette.readerText,
+          infoColor: palette.readerInfo,
           controlsVisible: menu.controlsVisible,
           showReadTitleAddition: settings.showReadTitleAddition,
           hasVisibleContent: runtime != null && runtime.state.hasStableWorld,

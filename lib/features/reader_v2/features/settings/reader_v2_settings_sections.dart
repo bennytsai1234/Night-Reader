@@ -65,7 +65,7 @@ class ReaderV2TypographySection extends StatefulWidget {
   final ReaderV2SettingsController settings;
   final bool collapsible;
 
-  /// 附加在次要項之後的內容（例如閱讀器面板的選單樣式）。
+  /// 附加在次要項之後的內容（例如閱讀器面板的頁面佈局）。
   final List<Widget> moreChildren;
 
   @override

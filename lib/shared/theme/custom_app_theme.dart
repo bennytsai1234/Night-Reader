@@ -27,17 +27,13 @@ ThemeData buildAppTheme(
     ),
     colors.surface,
   );
-  final onPrimary =
-      colors.primary.computeLuminance() > 0.5
-          ? AppPalette.ink700
-          : AppPalette.paper50;
 
   final scheme = ColorScheme.fromSeed(
     seedColor: colors.primary,
     brightness: brightness,
   ).copyWith(
     primary: colors.primary,
-    onPrimary: onPrimary,
+    onPrimary: colors.onPrimary,
     primaryContainer: primaryContainer,
     onPrimaryContainer: colors.text,
     secondary: colors.secondary,

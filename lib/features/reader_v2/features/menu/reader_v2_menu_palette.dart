@@ -11,6 +11,7 @@ class ReaderV2MenuStyle {
   final Color mutedForeground;
   final Color outline;
   final Color accent;
+  final Color onAccent;
   final Color accentMuted;
   final Color scrim;
 
@@ -22,6 +23,7 @@ class ReaderV2MenuStyle {
     required this.mutedForeground,
     required this.outline,
     required this.accent,
+    required this.onAccent,
     required this.accentMuted,
     required this.scrim,
   });
@@ -41,6 +43,7 @@ class ReaderV2MenuStyle {
       mutedForeground: palette.textMuted,
       outline: palette.border,
       accent: palette.primary,
+      onAccent: palette.onPrimary,
       accentMuted: palette.primary.withValues(alpha: 0.18),
       scrim: Colors.black.withValues(alpha: 0.18),
     );
@@ -64,10 +67,6 @@ class ReaderV2MenuStyle {
     final surface = background.withValues(alpha: 1);
     final elevated = Color.alphaBlend(backgroundElevated, surface);
     final accentContainer = Color.alphaBlend(accentMuted, surface);
-    final onAccent =
-        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
-            ? Colors.white
-            : Colors.black;
     final strongOutline = Color.alphaBlend(
       foreground.withValues(alpha: 0.32),
       surface,

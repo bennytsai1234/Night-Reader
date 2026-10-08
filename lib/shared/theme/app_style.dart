@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'app_tokens.dart';
@@ -26,6 +28,7 @@ enum AppStyle {
       secondary: AppPalette.gold,
       readerBackground: AppPalette.paper100,
       readerText: Color(0xFF2A241C),
+      readerInfo: Color(0xFF6D675E),
       highlight: _amber,
     ),
     dark: StylePalette(
@@ -40,6 +43,7 @@ enum AppStyle {
       secondary: AppPalette.gold,
       readerBackground: Color(0xFF14110D),
       readerText: Color(0xFFCFC6B2),
+      readerInfo: Color(0xFF938C7D),
       highlight: _amber,
     ),
   ),
@@ -57,6 +61,7 @@ enum AppStyle {
       secondary: Color(0xFFA0844A),
       readerBackground: Color(0xFFE3EDCD),
       readerText: Color(0xFF2D4A32),
+      readerInfo: Color(0xFF576F56),
       highlight: _citron,
     ),
     dark: StylePalette(
@@ -71,6 +76,7 @@ enum AppStyle {
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF0F1D19),
       readerText: Color(0xFFB9D7C2),
+      readerInfo: Color(0xFF839B8C),
       highlight: _citron,
     ),
   ),
@@ -88,6 +94,7 @@ enum AppStyle {
       secondary: Color(0xFFB07D3A),
       readerBackground: Color(0xFFF1F4F7),
       readerText: Color(0xFF1E2833),
+      readerInfo: Color(0xFF626972),
       highlight: _sky,
     ),
     dark: StylePalette(
@@ -102,6 +109,7 @@ enum AppStyle {
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF0D1217),
       readerText: Color(0xFFB6C3CF),
+      readerInfo: Color(0xFF808A94),
       highlight: _sky,
     ),
   ),
@@ -119,6 +127,7 @@ enum AppStyle {
       secondary: AppPalette.gold,
       readerBackground: Color(0xFFDFD0B0),
       readerText: Color(0xFF3E2A1E),
+      readerInfo: Color(0xFF695745),
       highlight: _apricot,
     ),
     dark: StylePalette(
@@ -133,6 +142,7 @@ enum AppStyle {
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF18120B),
       readerText: Color(0xFFCDB892),
+      readerInfo: Color(0xFF938367),
       highlight: _apricot,
     ),
   ),
@@ -150,6 +160,7 @@ enum AppStyle {
       secondary: Color(0xFF8E8E93),
       readerBackground: Color(0xFFFFFFFF),
       readerText: Color(0xFF1A1A1A),
+      readerInfo: Color(0xFF636363),
       highlight: _amber,
     ),
     dark: StylePalette(
@@ -164,6 +175,7 @@ enum AppStyle {
       secondary: Color(0xFF8E8E93),
       readerBackground: Color(0xFF000000),
       readerText: Color(0xFFA3A3A3),
+      readerInfo: Color(0xFF757575),
       highlight: _amber,
     ),
   );
@@ -201,6 +213,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     required this.secondary,
     required this.readerBackground,
     required this.readerText,
+    required this.readerInfo,
     required this.highlight,
   });
 
@@ -228,8 +241,18 @@ class StylePalette extends ThemeExtension<StylePalette> {
   final Color readerBackground;
   final Color readerText;
 
+  /// 閱讀器頁首／頁尾資訊列的文字與圖示，對 [readerBackground] 至少 4.5:1。
+  final Color readerInfo;
+
   /// 朗讀高亮與選字反白選「跟隨主題」時的顏色（實際以設定的深淺疊上）。
   final Color highlight;
+
+  /// 疊在主色上的勾勾與文字：紙白、墨色中對主色對比較高的一個。
+  Color get onPrimary =>
+      _contrast(AppPalette.paper50, primary) >=
+          _contrast(AppPalette.ink700, primary)
+      ? AppPalette.paper50
+      : AppPalette.ink700;
 
   /// 目前主題的配色；主題沒有掛擴充時以預設風格補上。
   static StylePalette of(BuildContext context) {
@@ -251,6 +274,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     Color? secondary,
     Color? readerBackground,
     Color? readerText,
+    Color? readerInfo,
     Color? highlight,
   }) {
     return StylePalette(
@@ -265,6 +289,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
       secondary: secondary ?? this.secondary,
       readerBackground: readerBackground ?? this.readerBackground,
       readerText: readerText ?? this.readerText,
+      readerInfo: readerInfo ?? this.readerInfo,
       highlight: highlight ?? this.highlight,
     );
   }
@@ -276,4 +301,11 @@ class StylePalette extends ThemeExtension<StylePalette> {
     if (other is! StylePalette) return this;
     return t < 0.5 ? this : other;
   }
+}
+
+/// WCAG 2.x 對比度。
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
 }

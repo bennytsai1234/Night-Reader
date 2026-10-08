@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
+import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -140,14 +146,59 @@ void main() {
       mutedForeground: foreground.withValues(alpha: 0.68),
       outline: foreground.withValues(alpha: 0.12),
       accent: const Color(0xFFD67B6E),
+      onAccent: const Color(0xFF100D0A),
       accentMuted: const Color(0x2ED67B6E),
       scrim: const Color(0x2E000000),
     );
     final theme = style.toSheetTheme(ThemeData.light());
 
     expect(theme.colorScheme.brightness, Brightness.dark);
+    expect(theme.colorScheme.onPrimary, const Color(0xFF100D0A));
     expect(theme.colorScheme.onSurface, foreground);
     expect(theme.colorScheme.surface, const Color(0xFF141210));
     expect(theme.textTheme.bodyMedium?.color, foreground);
+  });
+
+  testWidgets('外觀與排版面板在窄視窗不溢位，五個風格都點得到', (tester) async {
+    // 面板左右各內縮 16，內容寬 248，放不下五個並排的色票。
+    tester.view.physicalSize = const Size(280, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+    addTearDown(GetIt.instance.reset);
+    final themeSettings = ThemeSettingsProvider();
+    final settings = ReaderV2SettingsController();
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: themeSettings,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () =>
+                    ReaderV2SettingsSheets.showInterfaceSettings(
+                      context,
+                      settings,
+                    ),
+                child: const Text('開啟'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+
+    final last = find.text(AppStyle.values.last.label);
+    await tester.ensureVisible(last);
+    await tester.pumpAndSettle();
+    await tester.tap(last);
+    await tester.pump();
+    expect(themeSettings.style, AppStyle.values.last);
   });
 }

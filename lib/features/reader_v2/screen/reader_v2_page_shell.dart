@@ -109,7 +109,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.content,
     required this.drawer,
     required this.backgroundColor,
-    required this.textColor,
+    required this.infoColor,
     required this.controlsVisible,
     required this.showReadTitleAddition,
     required this.hasVisibleContent,
@@ -155,7 +155,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final Widget content;
   final ReaderV2ChaptersDrawer drawer;
   final Color backgroundColor;
-  final Color textColor;
+
+  /// 頁首／頁尾資訊列的文字與圖示色。
+  final Color infoColor;
   final bool controlsVisible;
   final bool showReadTitleAddition;
   final bool hasVisibleContent;
@@ -324,10 +326,6 @@ class ReaderV2PageShell extends StatelessWidget {
   }
 }
 
-/// 資訊列的文字色：正文文字色降低不透明度。
-Color _infoColor(ReaderV2PageShell shell) =>
-    shell.textColor.withValues(alpha: 0.68);
-
 class _PermanentInfoBar extends StatelessWidget {
   const _PermanentInfoBar({required this.shell, required this.rowBottom});
 
@@ -390,7 +388,7 @@ class _InfoRow extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
-    final infoColor = _infoColor(shell);
+    final infoColor = shell.infoColor;
     final left = _itemWidget(context, slots.left, progress, TextAlign.left);
     final right = _itemWidget(context, slots.right, progress, TextAlign.right);
     final semantics = [
@@ -472,7 +470,7 @@ class _InfoRow extends StatelessWidget {
         item == ReaderV2InfoItem.batteryWithIcon) {
       return _ReaderBattery(
         showIcon: item == ReaderV2InfoItem.batteryWithIcon,
-        iconColor: _infoColor(shell),
+        iconColor: shell.infoColor,
       );
     }
     return Text(_itemText(context, item, progress) ?? '', textAlign: align);
