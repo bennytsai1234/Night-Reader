@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
-import 'package:night_reader/shared/theme/app_theme.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:provider/provider.dart';
 
 class ReaderV2SettingsSheets {
   const ReaderV2SettingsSheets._();
@@ -53,92 +56,95 @@ class _ReaderInterfaceSheet extends StatelessWidget {
       maxHeightFactor: 0.6,
       children: [
         SheetSection(
-          title: '閱讀主題',
-          trailing: Text('正文背景與文字', style: hintStyle),
+          title: '風格',
+          trailing: Text('月亮鈕切換深淺', style: hintStyle),
         ),
-        ListenableBuilder(
-          listenable: settings,
-          builder: (context, _) => _ReaderThemeSelector(
-            selectedIndex: settings.themeIndex,
-            onSelected: settings.setTheme,
-          ),
-        ),
+        const _ReaderStyleSelector(),
         ReaderV2TypographySection(
           settings: settings,
           collapsible: true,
-          moreChildren: [
-            ReaderV2PageLayoutSection(settings: settings),
-            SheetSection(
-              title: '選單樣式',
-              trailing: Text('選單與工具列配色', style: hintStyle),
-            ),
-            ListenableBuilder(
-              listenable: settings,
-              builder: (context, _) => _ReaderThemeSelector(
-                selectedIndex: settings.menuThemeIndex,
-                onSelected: settings.setMenuTheme,
-              ),
-            ),
-          ],
+          moreChildren: [ReaderV2PageLayoutSection(settings: settings)],
         ),
       ],
     );
   }
 }
 
-class _ReaderThemeSelector extends StatelessWidget {
-  const _ReaderThemeSelector({
-    required this.selectedIndex,
-    required this.onSelected,
-  });
+/// 風格選擇：與「外觀與主題」頁是同一個設定，換了整個 App 一起換。
+/// 色票顯示各風格在目前深淺下的正文紙張與文字。
+class _ReaderStyleSelector extends StatelessWidget {
+  const _ReaderStyleSelector();
 
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
+  static const double _swatchSize = 52;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 64,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        itemCount: AppTheme.readingThemes.length,
-        itemBuilder: (context, index) {
-          final theme = AppTheme.readingThemes[index];
-          final selected = selectedIndex == index;
-          return Semantics(
-            label: theme.name,
-            selected: selected,
-            button: true,
-            child: GestureDetector(
-              onTap: () => onSelected(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 52,
-                margin: const EdgeInsets.only(right: 14),
-                decoration: BoxDecoration(
-                  color: theme.backgroundColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outlineVariant,
-                    width: selected ? 3 : 1,
-                  ),
+    final themeSettings = context.watch<ThemeSettingsProvider>();
+    final brightness = StylePalette.of(context).brightness;
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (final style in AppStyle.values)
+          _swatch(
+            style,
+            style.of(brightness),
+            selected: style == themeSettings.style,
+            scheme: scheme,
+            onTap: () => themeSettings.setStyle(style),
+          ),
+      ],
+    );
+  }
+
+  Widget _swatch(
+    AppStyle style,
+    StylePalette palette, {
+    required bool selected,
+    required ColorScheme scheme,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      label: style.label,
+      selected: selected,
+      button: true,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: AppMotion.menu,
+              width: _swatchSize,
+              height: _swatchSize,
+              decoration: BoxDecoration(
+                color: palette.readerBackground,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? scheme.primary : scheme.outlineVariant,
+                  width: selected ? 3 : 1,
                 ),
-                child: Center(
-                  child: Text(
-                    'Aa',
-                    style: AppTextStyles.uiSm.copyWith(
-                      color: theme.textColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'Aa',
+                style: AppTextStyles.uiSm.copyWith(
+                  color: palette.readerText,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          );
-        },
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              style.label,
+              style: AppTextStyles.labelSm.copyWith(
+                color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

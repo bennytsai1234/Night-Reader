@@ -8,6 +8,7 @@ on:
       - 'lib/core/network/**'
       - 'lib/core/services/source_switch_*.dart'
       - 'lib/core/local_book/**'
+      - 'lib/shared/theme/**'
       - 'test/**'
       - '.github/workflows/reader-v2.yml'
       - 'pubspec.yaml'
@@ -60,6 +61,7 @@ jobs:
             test/features/reader_v2/reader_v2_settings_persistence_test.dart \
             test/features/reader_v2/reader_v2_settings_sections_test.dart \
             test/features/reader_v2/hybrid/reader_text_selection_test.dart \
+            test/shared/theme/app_style_test.dart \
             --reporter compact
       - name: Verify validation did not modify tracked source
         if: always()

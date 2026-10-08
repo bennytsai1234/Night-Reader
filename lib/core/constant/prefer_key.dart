@@ -5,6 +5,10 @@ class PreferKey {
   static const String language = 'language';
   static const String fontScale = 'fontScale';
   static const String themeMode = 'themeMode';
+  /// 外觀風格（[AppStyle.name]）。
+  static const String appStyle = 'app_style';
+  /// 玻璃材質強度（[GlassStrength.name]）。
+  static const String glassStrength = 'theme_glass_strength_v1';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';
@@ -159,20 +163,6 @@ class PreferKey {
   static const String disableMangaPageAnim = 'disableMangaPageAnim';
   static const String paddingDisplayCutouts = 'paddingDisplayCutouts';
 
-  static const String cPrimary = 'colorPrimary';
-  static const String cAccent = 'colorAccent';
-  static const String cBackground = 'colorBackground';
-  static const String cBBackground = 'colorBottomBackground';
-  static const String bgImage = 'backgroundImage';
-  static const String bgImageBlurring = 'backgroundImageBlurring';
-
-  static const String cNPrimary = 'colorPrimaryNight';
-  static const String cNAccent = 'colorAccentNight';
-  static const String cNBackground = 'colorBackgroundNight';
-  static const String cNBBackground = 'colorBottomBackgroundNight';
-  static const String bgImageN = 'backgroundImageNight';
-  static const String bgImageNBlurring = 'backgroundImageNightBlurring';
-
   static const String contentSelectSpeakMod = 'contentReadAloudMod';
 
   // Reader settings
@@ -183,10 +173,6 @@ class PreferKey {
   static const String readerChapterSpacing = 'reader_chapter_spacing';
   static const String readerLetterSpacing = 'reader_letter_spacing';
   static const String readerTextIndent = 'reader_text_indent';
-  static const String readerThemeIndex = 'reader_theme_index';
-  static const String readerDayThemeIndex = 'reader_day_theme_index';
-  static const String readerNightThemeIndex = 'reader_night_theme_index';
-  static const String readerMenuThemeIndex = 'reader_menu_theme_index';
   static const String readerPageTurnMode = 'reader_page_turn_mode';
   static const String readerAutoPageSpeed = 'reader_auto_page_speed';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';

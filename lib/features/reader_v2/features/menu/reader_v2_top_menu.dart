@@ -11,8 +11,6 @@ class ReaderV2TopMenu extends StatelessWidget {
   const ReaderV2TopMenu({
     super.key,
     required this.controlsVisible,
-    required this.menuBackgroundColor,
-    required this.menuTextColor,
     required this.bookName,
     required this.chapterTitle,
     required this.chapterUrl,
@@ -23,8 +21,6 @@ class ReaderV2TopMenu extends StatelessWidget {
   });
 
   final bool controlsVisible;
-  final Color menuBackgroundColor;
-  final Color menuTextColor;
   final String bookName;
   final String chapterTitle;
   final String chapterUrl;
@@ -35,11 +31,7 @@ class ReaderV2TopMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.resolve(
-      context: context,
-      backgroundColor: menuBackgroundColor,
-      textColor: menuTextColor,
-    );
+    final menuStyle = ReaderV2MenuStyle.of(context);
     final topInset = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: 0,

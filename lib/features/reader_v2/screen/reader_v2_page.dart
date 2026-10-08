@@ -27,12 +27,15 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_state.dart';
+import 'package:provider/provider.dart';
 
 class ReaderV2Page extends StatefulWidget {
   const ReaderV2Page({
@@ -203,9 +206,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final settings = _host.settings;
     final menu = _host.menu;
     final runtime = _host.runtime;
-    final theme = settings.currentTheme;
-    final menuTheme = settings.currentMenuTheme;
-    final isDarkBackground = theme.backgroundColor.computeLuminance() < 0.5;
+    final palette = StylePalette.of(context);
+    final isDarkBackground = palette.brightness == Brightness.dark;
     final chapterIndex = _currentChapterIndex(runtime);
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
@@ -239,13 +241,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           titleFor: _chapterTitleAt,
           listenable: runtime,
           onChapterTap: _jumpToChapterFromDrawer,
-          menuBackgroundColor: menuTheme.backgroundColor,
-          menuTextColor: menuTheme.textColor,
         ),
-        backgroundColor: theme.backgroundColor,
-        textColor: theme.textColor,
-        menuBackgroundColor: menuTheme.backgroundColor,
-        menuTextColor: menuTheme.textColor,
+        backgroundColor: palette.readerBackground,
+        textColor: palette.readerText,
         controlsVisible: menu.controlsVisible,
         showReadTitleAddition: settings.showReadTitleAddition,
         hasVisibleContent:
@@ -265,8 +263,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         paddingBottom: settings.paddingBottom,
         footerOffset: settings.footerOffset,
         topCutoutExtent: _topCutoutExtent,
-        dayNightIcon: settings.dayNightToggleIcon,
-        dayNightTooltip: settings.dayNightToggleTooltip,
+        dayNightIcon: isDarkBackground
+            ? Icons.light_mode_rounded
+            : Icons.dark_mode_rounded,
+        dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
         onExitIntent: _handleExitIntent,
         onMore: () => unawaited(_showMore()),
         onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
@@ -279,7 +279,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           onChangeSource: widget.book.isLocal ? null : _showChangeSource,
         ),
         onAutoPage: _coordinator.toggleAutoPage,
-        onToggleDayNight: settings.toggleDayNightTheme,
+        // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
+        onToggleDayNight: () => context.read<SettingsProvider>().setThemeMode(
+          isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+        ),
         onReplaceRule: () => _coordinator.openReplaceRule(context),
         onShowControls: menu.showControls,
         onDismissControls: menu.dismissControls,
@@ -316,14 +319,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final runtime = _host.ensureRuntime(size, style);
         _host.syncRuntimeConfiguration(runtime, size, style);
 
-        final theme = _host.settings.currentTheme;
+        final palette = StylePalette.of(context);
         return Stack(
           fit: StackFit.expand,
           children: [
             HybridReaderScreen(
               runtime: runtime,
-              backgroundColor: theme.backgroundColor,
-              textColor: theme.textColor,
+              backgroundColor: palette.readerBackground,
+              textColor: palette.readerText,
               style: style,
               viewportController: _host.viewportController,
               ttsHighlight: _host.tts?.currentHighlight,
@@ -331,7 +334,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
-              highlightColor: _host.settings.resolvedHighlightColor,
+              highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               onContentTapUp: _handleContentTap,
               progressListenable: _progress,

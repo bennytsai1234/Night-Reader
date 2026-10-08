@@ -133,6 +133,7 @@ void main() {
   test('menu sheet theme follows menu palette colors', () {
     const foreground = Color(0xFFE0DACC);
     final style = ReaderV2MenuStyle(
+      brightness: Brightness.dark,
       background: const Color(0xF5141210),
       backgroundElevated: const Color(0x14FFFFFF),
       foreground: foreground,

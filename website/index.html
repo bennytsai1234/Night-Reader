@@ -435,14 +435,14 @@
       padding: 12px;
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(217,171,110,0.06);
 
-      /* 閱讀主題變數（預設：夜間） */
-      --d-bg: #10141d;
-      --d-ink: #cfc8ba;
-      --d-sub: #6f7585;
-      --d-line: rgba(237, 232, 221, 0.08);
+      /* 閱讀配色變數，色值取自 App 的風格（預設：紙墨・深色） */
+      --d-bg: #14110d;
+      --d-ink: #cfc6b2;
+      --d-sub: #968f7d;
+      --d-line: rgba(207, 198, 178, 0.08);
     }
-    .phone.theme-paper { --d-bg: #ebe1cb; --d-ink: #41372a; --d-sub: #8d7e64; --d-line: rgba(65, 55, 42, 0.14); }
-    .phone.theme-pine { --d-bg: #131f1a; --d-ink: #c2cdc2; --d-sub: #5f7468; --d-line: rgba(194, 205, 194, 0.09); }
+    .phone.theme-tea { --d-bg: #dfd0b0; --d-ink: #3e2a1e; --d-sub: #6b5840; --d-line: rgba(62, 42, 30, 0.14); }
+    .phone.theme-bamboo { --d-bg: #0f1d19; --d-ink: #b9d7c2; --d-sub: #82937d; --d-line: rgba(185, 215, 194, 0.09); }
 
     .phone-screen {
       border-radius: 28px;
@@ -565,9 +565,9 @@
       color: var(--text-3);
       white-space: nowrap;
     }
-    .swatch.sw-night { background: linear-gradient(135deg, #10141d 50%, #1a2030 50%); }
-    .swatch.sw-paper { background: linear-gradient(135deg, #ebe1cb 50%, #d9cdb2 50%); }
-    .swatch.sw-pine  { background: linear-gradient(135deg, #131f1a 50%, #1d2f26 50%); }
+    .swatch.sw-paper  { background: linear-gradient(135deg, #14110d 50%, #2a271e 50%); }
+    .swatch.sw-tea    { background: linear-gradient(135deg, #dfd0b0 50%, #d2c2a2 50%); }
+    .swatch.sw-bamboo { background: linear-gradient(135deg, #0f1d19 50%, #1a231d 50%); }
     .ctrl-row.themes { margin-bottom: 40px; }
     .demo-note {
       font-size: 0.78rem;
@@ -1141,7 +1141,7 @@
 
           <div class="demo-controls reveal" style="--rd: 120ms">
             <p class="lead">這不是截圖，是排版。</p>
-            <p class="lead-sub">拖動滑桿、調整邊距與主題，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
+            <p class="lead-sub">拖動滑桿、調整邊距與風格，左邊的書頁即時重排 — 就像在 App 裡一樣。</p>
 
             <div class="ctrl-row">
               <label class="ctrl-label" for="fsRange">字號<output id="fsVal">17 px</output></label>
@@ -1156,11 +1156,11 @@
               <input type="range" id="padRange" min="0" max="40" step="2" value="22" />
             </div>
             <div class="ctrl-row themes">
-              <p class="ctrl-label" id="themeLabel">閱讀主題</p>
+              <p class="ctrl-label" id="themeLabel">風格</p>
               <div class="swatches" role="group" aria-labelledby="themeLabel" id="themeSwatches">
-                <button type="button" class="swatch sw-night active" data-theme="" aria-label="夜間主題"><span>夜間</span></button>
-                <button type="button" class="swatch sw-paper" data-theme="theme-paper" aria-label="羊皮主題"><span>羊皮</span></button>
-                <button type="button" class="swatch sw-pine" data-theme="theme-pine" aria-label="松煙主題"><span>松煙</span></button>
+                <button type="button" class="swatch sw-paper active" data-theme="" aria-label="紙墨深色"><span>紙墨</span></button>
+                <button type="button" class="swatch sw-tea" data-theme="theme-tea" aria-label="茶褐淺色"><span>茶褐</span></button>
+                <button type="button" class="swatch sw-bamboo" data-theme="theme-bamboo" aria-label="竹青深色"><span>竹青</span></button>
               </div>
             </div>
 
@@ -1277,8 +1277,8 @@
             <div class="cell-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c3.31 0 6-2.69 6-6 0-4.42-4.58-8-10-8z"/></svg>
             </div>
-            <h3>自訂主題外觀</h3>
-            <p>閱讀區、選單與 App 介面的淺色／深色與配色可分別設定，深夜讀書也不刺眼。</p>
+            <h3>五種外觀風格</h3>
+            <p>紙墨、竹青、石青、茶褐、素色，各有淺色與深色；App、正文與選單一次換好，深夜讀書也不刺眼。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 60ms">

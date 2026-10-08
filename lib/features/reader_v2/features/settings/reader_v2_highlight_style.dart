@@ -1,9 +1,9 @@
 import 'dart:ui';
 
-import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
 
-/// 朗讀高亮與選字反白共用的顏色。[theme] 沿用閱讀區配色裡的
-/// 「高亮／選中背景」（未自訂時為琥珀）；其餘是固定色票。
+/// 朗讀高亮與選字反白共用的顏色。[theme] 取目前風格的高亮色；
+/// 其餘是固定色票。
 enum ReaderV2HighlightColor {
   theme('跟隨主題', null),
   amber('琥珀', Color(0xFFFFC857)),
@@ -17,17 +17,7 @@ enum ReaderV2HighlightColor {
   final String label;
   final Color? _color;
 
-  /// 依正文色判斷日夜，解析出實際的顏色。
-  Color resolve(Color textColor) {
-    final fixed = _color;
-    if (fixed != null) return fixed;
-    final darkReader = textColor.computeLuminance() > 0.5;
-    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-      dark: darkReader,
-      menu: false,
-    );
-    return custom?.highlight ?? amber._color!;
-  }
+  Color resolve(StylePalette palette) => _color ?? palette.highlight;
 
   static ReaderV2HighlightColor parse(String? name) {
     for (final value in values) {

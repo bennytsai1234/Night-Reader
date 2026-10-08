@@ -11,7 +11,6 @@ import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'chinese_utils.dart';
-import 'package:night_reader/shared/theme/app_theme.dart';
 import 'package:night_reader/core/di/injection.dart';
 
 /// DefaultData - 預設資料初始化
@@ -19,33 +18,14 @@ import 'package:night_reader/core/di/injection.dart';
 class DefaultData {
   DefaultData._();
   static final _initLock = Lock();
-  static bool _essentialInitialized = false;
   static bool _deferredInitialized = false;
-
-  static Future<void> init() async {
-    await _initLock.synchronized(() async {
-      await _initEssential();
-      await _initDeferred();
-    });
-  }
-
-  static Future<void> initEssential() async {
-    await _initLock.synchronized(_initEssential);
-  }
 
   static Future<void> initDeferred() async {
     await _initLock.synchronized(_initDeferred);
   }
 
-  static Future<void> _initEssential() async {
-    if (_essentialInitialized) return;
-    await AppTheme.init();
-    _essentialInitialized = true;
-  }
-
   static Future<void> _initDeferred() async {
     if (_deferredInitialized) return;
-    await _initEssential();
 
     final prefs = await SharedPreferences.getInstance();
     // 原 Android versionCode 判斷

@@ -8,8 +8,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 /// 閱讀器內設定面板的唯一開啟入口。
 ///
-/// 面板配色跟隨閱讀選單主題（而非 App 主題），並在面板開啟期間
-/// 隨選單主題變更即時更新。
+/// 面板配色取閱讀選單配色（[ReaderV2MenuStyle]），面板開啟期間換風格或
+/// 深淺會即時更新；設定變動時整個面板重建，內容不必各自監聽。
 class ReaderV2MenuSheet {
   const ReaderV2MenuSheet._();
 
@@ -29,11 +29,8 @@ class ReaderV2MenuSheet {
       builder: (sheetContext) => ListenableBuilder(
         listenable: settings,
         builder: (context, _) {
-          final menuTheme = settings.currentMenuTheme;
-          final theme = ReaderV2MenuStyle.resolve(
-            context: context,
-            backgroundColor: menuTheme.backgroundColor,
-            textColor: menuTheme.textColor,
+          final theme = ReaderV2MenuStyle.of(
+            context,
           ).toSheetTheme(Theme.of(context));
           return Theme(
             data: theme,

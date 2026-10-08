@@ -2,34 +2,35 @@
 
 夜讀以 Material 3 為底，介面結構與互動取法 Telegram iOS（浮動玻璃列、分組清單、情境選單），視覺基線為「紙墨相生」：淺色介面以溫潤暖白宣紙承載文字，深色介面以低刺激夜墨降低長時間閱讀疲勞。設計哲學恪守「介面服務於內容，克制而不喧賓奪主」，追求如精裝紙本書冊般的雅緻、秩序與呼吸感。
 
-App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區域；正文與選單另有各自的模式選擇。
+外觀由「風格 × 深淺」決定：五種風格（紙墨、竹青、石青、茶褐、素色）各有一套淺色與深色配色，一次套到 App 介面、閱讀正文與閱讀選單；深淺（跟隨系統／淺色／深色）全 App 共用，閱讀器的月亮鈕切換的也是它。不提供個別調色。
 
 ## 實作入口
 
 - `lib/shared/theme/app_tokens.dart`：品牌色、紙／墨色階、間距與圓角 token。
 - `lib/shared/theme/app_text_styles.dart`：標題、正文與 UI 字階。
-- `lib/shared/theme/theme_customization.dart`：App 與閱讀區可序列化的顏色模型。
-- `lib/shared/theme/custom_app_theme.dart`：App 顏色映射至 Material `ThemeData` 的唯一入口。
-- `lib/shared/theme/app_chrome.dart`：分組清單與玻璃元件的衍生色（`AppChrome.of(context)`），全由既有語意色推導，不新增序列化欄位。
+- `lib/shared/theme/app_style.dart`：五種風格（`AppStyle`）與每個深淺的完整配色（`StylePalette`，掛在 `ThemeData` 上的擴充）。
+- `lib/shared/theme/custom_app_theme.dart`：風格映射至 Material `ThemeData` 的唯一入口。
+- `lib/shared/theme/app_chrome.dart`：分組清單與玻璃元件的衍生色（`AppChrome.of(context)`），全由風格配色推導，不新增序列化欄位。
 - `lib/shared/widgets/`：紙墨玻璃元件庫，見下方「紙墨玻璃元件」。
-- `lib/shared/theme/app_theme.dart`：內建閱讀主題與閱讀排版設定。
-- `lib/features/settings/theme_settings_provider.dart`：App、正文與選單三區的淺色／深色模式及使用者自訂值。
+- `lib/features/settings/theme_settings_provider.dart`：使用者選的風格與玻璃強度；深淺在 `SettingsProvider.themeMode`。
 
 ## 色彩與材質層次
 
 主色以「硃砂色」為精神識別，淺色為 `AppPalette.cinnabar`（`#7E2E2A`），深色為 `AppPalette.cinnabarDark`（`#D67B6E`）；「點金」`gold`（`#B6914A`）作為高雅強調。狀態色使用茶褐 `tea`（警示）、石青 `azurite`（資訊）、赭石 `rust`（危險）與苔綠 `moss`（成功）。
 
-| 用途 | 淺色預設 | 深色預設（夜墨） | 備註 |
+下表為預設風格「紙墨」；其他風格的色值見 `app_style.dart`。
+
+| 用途 | 淺色 | 深色（夜墨） | 備註 |
 |---|---|---|---|
 | App 背景 | `paper200` `#F4EFE3` | `ink600` `#1A1612` | 暖紙底色／微暖墨色，避免生硬純白與死黑 |
-| 表面／卡片 | `paper50` `#FFFBF2` | `ink500` `#2A271E` | 淺色具 0.5dp 微髮絲邊框，深色微浮層 |
+| 表面／卡片／閱讀選單 | `paper50` `#FFFBF2` | `ink500` `#2A271E` | 淺色具 0.5dp 微髮絲邊框，深色微浮層 |
 | App bar／導航 | `paper100` `#FAF5E9` | `ink500` `#2A271E` | 平整零陰影，依靠色階自然區隔邊界 |
 | 主要文字 | `ink700` `#100D0A` | `ink50` `#F4EDD7` | 高可讀性墨色，避免死黑（#000）的高反差刺眼感 |
-| 次要文字 | `ink300` `#5F5A4D` | `ink200` `#8A8473` | 克制輔助資訊，保持安靜不搶眼 |
-| 正文閱讀背景 | `紙白` `#FFFFFF` | `夜墨` `#161412`（可選極黑 `#000000`） | 預設微暖墨底防止 OLED 滾動拖影，極黑作為 AMOLED 選項 |
-| 正文閱讀文字 | `#1A1A1A` | `#D0CCC3` | 正文維持 1:12 以上溫和對比度 |
+| 次要文字 | `ink300` `#5F5A4D` | `#968F7D` | 克制輔助資訊，仍維持 4.5:1 |
+| 正文閱讀背景 | `paper100` `#FAF5E9` | `#14110D` | 暖白宣紙／微暖墨底；純白、純黑在「素色」 |
+| 正文閱讀文字 | `#2A241C` | `#CFC6B2` | 正文溫和但不低於 7:1 |
 
-一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文與選單必須透過 `ReaderAreaThemeColors` 或已解析的 `ReadingTheme` 取色。
+一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文、資訊列、高亮與閱讀選單一律經 `StylePalette.of(context)`（選單經 `ReaderV2MenuStyle.of`）取色，不自行判斷深淺。新增或調整風格時，每個深淺都要通過 `test/shared/theme/app_style_test.dart` 的對比度契約：正文與主要文字 7:1、次要文字 4.5:1、主色 3:1。
 
 ## 字體與書卷排版
 
@@ -38,7 +39,7 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 - **UI 資訊與標籤**：`uiXs`（11）、`uiSm`（13）、`uiMd`（15），字距維持微量緊湊，字重以 `FontWeight.w500` 提供清晰指示。
 - **極小輔助文字**：`micro`（10）僅用於徽章、書源標記與網址等輔助資訊。元件內不寫死 `fontSize`，一律取用 `AppTextStyles`。
 - **設定頁區塊標題**：統一使用 `GroupedSection` 的組標題（單獨使用時為 `GroupedSectionHeader`）；閱讀器面板內使用 `SheetSection`。
-- **正文閱讀排版**：獨立於 App UI，由 `ReadingTheme` 與 Reader V2 共同驅動。
+- **正文閱讀排版**：由 Reader V2 的排版設定驅動，配色取自目前風格。
   - 行高標準推薦 `1.6 ~ 1.7`，行寬建議容納 `38 ~ 44` 字。
   - 段距設為 `0.8 ~ 1.2` 行高，中文字符預設空兩格（`\u3000\u3000`），保留經典出版物的視覺節奏。
   - 正文與資訊列一律以 `kReaderV2TextLocale`（`zh-Hant-TW`）選字形：全形標點置中、引號採「」『』，符合臺灣排版慣例。
@@ -72,10 +73,10 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 
 1. **導航與頂部標題列**：零 Elevation 設計，不使用粗黑分割線，僅依賴背景與表面色階的細膩色差區隔層級。
 2. **閱讀器選單（Bottom & Top Menu）**：
-   - 上下選單為浮動玻璃膠囊（左右內縮 16、避開狀態列與手勢列），色調取自選單主題並套玻璃透明度（`ReaderV2MenuStyle.glassTint`）；功能鈕為圓形玻璃按鈕，章節進度條為細軌道加大圓鈕。
+   - 上下選單為浮動玻璃膠囊（左右內縮 16、避開狀態列與手勢列），色調取自選單配色並套玻璃透明度（`ReaderV2MenuStyle.glassTintOf`）；功能鈕為圓形玻璃按鈕，章節進度條為細軌道加大圓鈕。
    - 動態過渡採用 `Curves.easeOutCubic`（200ms），滑入平順流暢，無卡頓感。
-   - 閱讀器內的設定面板（外觀與排版、進階設定、朗讀）一律經由 `ReaderV2MenuSheet` 開啟，配色跟隨選單主題（`ReaderV2MenuStyle.toSheetTheme`），不使用 App 主題。
-   - 「外觀與排版」面板最高 60% 螢幕、不加暗色遮罩，常用項（主題、字號、行高）在第一層，其餘收在「更多排版」，調整時正文保持可見。
+   - 閱讀器內的設定面板（外觀與排版、進階設定、朗讀）一律經由 `ReaderV2MenuSheet` 開啟，配色取選單配色（`ReaderV2MenuStyle.toSheetTheme`：面板底為卡片色，分組卡片再亮一階）。
+   - 「外觀與排版」面板最高 60% 螢幕、不加暗色遮罩，常用項（風格、字號、行高）在第一層，其餘收在「更多排版」，調整時正文保持可見。
    - 閱讀器面板與「閱讀偏好」設定頁共用 `reader_v2_settings_sections.dart` 的區塊，新增閱讀設定時只在該處實作一次。
 3. **書籍卡片與清單**：
    - 書名保持最多 2 行，次要狀態（進度、章節更新）採用靜態次要墨色。
@@ -83,10 +84,10 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 4. **數值設定**：
    - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。
    - 每個設定宣告明確的 `min`／`max`／`step`，輸出值對齊步進格點，不產生拖動條式的任意小數。
-   - 拖動條只保留給「位置型」操作（章節進度）與連續色彩調整（顏色選擇器 RGB/HSV），不用於需要精確數值的設定。
+   - 拖動條只保留給「位置型」操作（章節進度），不用於需要精確數值的設定。
 5. **狀態視圖（Empty / Error State）**：
    - 採用柔和描邊圖示（Outline Icons）搭配暖灰文案，傳遞平靜、沉穩的空狀態氛圍。
 
 ## 變更檢查
 
-主題模型或 `buildAppTheme` 變更後執行 `flutter analyze`。Reader 排版若涉及幾何或文字邊界，執行 `test/features/reader_v2/hybrid/hybrid_pump_test.dart` 驗證契約；視覺與排版呈現由開發者人工確認，不要為視覺細節新增 production test hook。
+風格配色或 `buildAppTheme` 變更後執行 `flutter analyze` 與 `test/shared/theme/app_style_test.dart`。Reader 排版若涉及幾何或文字邊界，執行 `test/features/reader_v2/hybrid/hybrid_pump_test.dart` 驗證契約；視覺與排版呈現由開發者人工確認，不要為視覺細節新增 production test hook。
