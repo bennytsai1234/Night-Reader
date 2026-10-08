@@ -13,6 +13,7 @@ import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -72,9 +73,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   bool _libraryDownloadQueued = false;
   StreamSubscription<String>? _settingsSaveFailures;
 
-  /// 目前已套用到系統的狀態列可見性；null 表示尚未套用。
-  bool? _appliedHideStatusBar;
-
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；隱藏狀態列時頁首只依它決定。
   double? _topCutoutExtent;
 
@@ -99,7 +97,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       showNotice: _showNotice,
     );
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
-    _applySystemUiMode();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
   }
@@ -121,43 +118,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_settingsSaveFailures?.cancel());
-    SystemChrome.setSystemUIChangeCallback(null);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
     super.dispose();
   }
 
-  /// 閱讀頁是狀態列可見性的唯一 owner：進入時依設定套用、離開時還原
-  /// edge-to-edge。隱藏時保留導覽列，只收起狀態列。
-  void _applySystemUiMode() {
-    final hide = _host.settings.hideStatusBar;
-    if (_appliedHideStatusBar == hide) return;
-    _appliedHideStatusBar = hide;
-    if (hide) {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: const [SystemUiOverlay.bottom],
-      );
-      // 使用者從頂端下滑叫出狀態列後，稍候再收回，維持閱讀時隱藏。
-      SystemChrome.setSystemUIChangeCallback((systemOverlaysAreVisible) async {
-        if (!systemOverlaysAreVisible) return;
-        await Future<void>.delayed(const Duration(seconds: 3));
-        if (!mounted || _appliedHideStatusBar != true) return;
-        await SystemChrome.setEnabledSystemUIMode(
-          SystemUiMode.manual,
-          overlays: const [SystemUiOverlay.bottom],
-        );
-      });
-    } else {
-      SystemChrome.setSystemUIChangeCallback(null);
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    }
-  }
-
   void _handleControllerChanged() {
-    _applySystemUiMode();
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _maybeQueueLibraryDownload();
@@ -215,88 +182,89 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       titleFor: _chapterTitleAt,
     );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkBackground
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: isDarkBackground
-            ? Brightness.dark
-            : Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: isDarkBackground
-            ? Brightness.light
-            : Brightness.dark,
-      ),
-      child: ReaderV2PageShell(
-        book: widget.book,
-        scaffoldKey: _scaffoldKey,
-        content: _buildContent(context),
-        drawer: ReaderV2ChaptersDrawer(
-          chapters: runtime?.chapters ?? widget.initialChapters,
-          currentChapterIndex: chapterIndex,
-          titleFor: _chapterTitleAt,
-          listenable: runtime,
-          onChapterTap: _jumpToChapterFromDrawer,
+    return StatusBarHidden(
+      hidden: settings.hideStatusBar,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDarkBackground
+              ? Brightness.light
+              : Brightness.dark,
+          statusBarBrightness: isDarkBackground
+              ? Brightness.dark
+              : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: isDarkBackground
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+        child: ReaderV2PageShell(
+          book: widget.book,
+          scaffoldKey: _scaffoldKey,
+          content: _buildContent(context),
+          drawer: ReaderV2ChaptersDrawer(
+            chapters: runtime?.chapters ?? widget.initialChapters,
+            currentChapterIndex: chapterIndex,
+            titleFor: _chapterTitleAt,
+            listenable: runtime,
+            onChapterTap: _jumpToChapterFromDrawer,
+            menuBackgroundColor: menuTheme.backgroundColor,
+            menuTextColor: menuTheme.textColor,
+          ),
+          backgroundColor: theme.backgroundColor,
+          textColor: theme.textColor,
           menuBackgroundColor: menuTheme.backgroundColor,
           menuTextColor: menuTheme.textColor,
+          controlsVisible: menu.controlsVisible,
+          showReadTitleAddition: settings.showReadTitleAddition,
+          hasVisibleContent: runtime != null && runtime.state.hasStableWorld,
+          isLoading: runtime == null || !runtime.state.hasStableWorld,
+          chapterTitle: _chapterTitleAt(chapterIndex),
+          chapterUrl: _chapterUrlAt(chapterIndex),
+          originName: widget.book.originName,
+          progressListenable: _progress,
+          navigation: navigation,
+          isAutoPaging: _host.autoPage?.isRunning ?? false,
+          hideStatusBar: settings.hideStatusBar,
+          headerInfo: settings.headerInfo,
+          footerInfo: settings.footerInfo,
+          paddingTop: settings.paddingTop,
+          paddingBottom: settings.paddingBottom,
+          footerOffset: settings.footerOffset,
+          topCutoutExtent: _topCutoutExtent,
+          dayNightIcon: settings.dayNightToggleIcon,
+          dayNightTooltip: settings.dayNightToggleTooltip,
+          onExitIntent: _handleExitIntent,
+          onMore: () => unawaited(_showMore()),
+          onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+          onTts: _showTts,
+          onInterface: () =>
+              ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
+          onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
+            context,
+            settings,
+            onChangeSource: widget.book.isLocal ? null : _showChangeSource,
+          ),
+          onAutoPage: _coordinator.toggleAutoPage,
+          onToggleDayNight: settings.toggleDayNightTheme,
+          onReplaceRule: () => _coordinator.openReplaceRule(context),
+          onShowControls: menu.showControls,
+          onDismissControls: menu.dismissControls,
+          onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
+          onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
+          onScrubStart: menu.onScrubStart,
+          onScrubbing: (percent) {
+            menu.onScrubbing(percent);
+            _coordinator.previewChapterPercent(percent);
+          },
+          onScrubEnd: (percent) {
+            menu.onScrubEnd(percent);
+            unawaited(_coordinator.commitChapterPercent(percent));
+          },
+          showTts: true,
+          showAutoPage: true,
+          showReplaceRule: true,
         ),
-        backgroundColor: theme.backgroundColor,
-        textColor: theme.textColor,
-        menuBackgroundColor: menuTheme.backgroundColor,
-        menuTextColor: menuTheme.textColor,
-        controlsVisible: menu.controlsVisible,
-        showReadTitleAddition: settings.showReadTitleAddition,
-        hasVisibleContent:
-            runtime != null && runtime.state.hasStableWorld,
-        isLoading:
-            runtime == null || !runtime.state.hasStableWorld,
-        chapterTitle: _chapterTitleAt(chapterIndex),
-        chapterUrl: _chapterUrlAt(chapterIndex),
-        originName: widget.book.originName,
-        progressListenable: _progress,
-        navigation: navigation,
-        isAutoPaging: _host.autoPage?.isRunning ?? false,
-        hideStatusBar: settings.hideStatusBar,
-        headerInfo: settings.headerInfo,
-        footerInfo: settings.footerInfo,
-        paddingTop: settings.paddingTop,
-        paddingBottom: settings.paddingBottom,
-        footerOffset: settings.footerOffset,
-        topCutoutExtent: _topCutoutExtent,
-        dayNightIcon: settings.dayNightToggleIcon,
-        dayNightTooltip: settings.dayNightToggleTooltip,
-        onExitIntent: _handleExitIntent,
-        onMore: () => unawaited(_showMore()),
-        onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-        onTts: _showTts,
-        onInterface: () =>
-            ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
-        onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
-          context,
-          settings,
-          onChangeSource: widget.book.isLocal ? null : _showChangeSource,
-        ),
-        onAutoPage: _coordinator.toggleAutoPage,
-        onToggleDayNight: settings.toggleDayNightTheme,
-        onReplaceRule: () => _coordinator.openReplaceRule(context),
-        onShowControls: menu.showControls,
-        onDismissControls: menu.dismissControls,
-        onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
-        onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
-        onScrubStart: menu.onScrubStart,
-        onScrubbing: (percent) {
-          menu.onScrubbing(percent);
-          _coordinator.previewChapterPercent(percent);
-        },
-        onScrubEnd: (percent) {
-          menu.onScrubEnd(percent);
-          unawaited(_coordinator.commitChapterPercent(percent));
-        },
-        showTts: true,
-        showAutoPage: true,
-        showReplaceRule: true,
       ),
     );
   }

@@ -8,6 +8,7 @@ import android.icu.text.BreakIterator
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -26,6 +27,12 @@ class MainActivity : AudioServiceActivity() {
         MethodChannel(messenger, "night_reader/reader_device").setMethodCallHandler { call, result ->
             when (call.method) {
                 "topCutoutExtent" -> result.success(topCutoutExtent())
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(messenger, "night_reader/system_bars").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "statusBarExtent" -> result.success(statusBarExtent())
                 else -> result.notImplemented()
             }
         }
@@ -100,6 +107,27 @@ class MainActivity : AudioServiceActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             extentPx = maxOf(extentPx, cutout.waterfallInsets.top)
+        }
+        return extentPx / resources.displayMetrics.density.toDouble()
+    }
+
+    // 狀態列原本佔的上緣高度（邏輯像素），不論目前是否顯示。Flutter 在狀態列
+    // 隱藏時只回報挖孔高度，App 以這個值排版，狀態列收起或出現時頁面才不會
+    // 跳動。取法與 Flutter 顯示狀態列時的上緣內距一致：狀態列與挖孔、曲面
+    // 邊緣的安全距離取大者。取不到 insets 時回傳 null。
+    private fun statusBarExtent(): Double? {
+        val insets = window.decorView.rootWindowInsets ?: return null
+        var extentPx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            insets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top
+        } else {
+            @Suppress("DEPRECATION")
+            insets.stableInsetTop
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            insets.displayCutout?.let { extentPx = maxOf(extentPx, it.safeInsetTop) }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            insets.displayCutout?.let { extentPx = maxOf(extentPx, it.waterfallInsets.top) }
         }
         return extentPx / resources.displayMetrics.density.toDouble()
     }
