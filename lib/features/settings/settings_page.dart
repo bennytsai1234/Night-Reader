@@ -38,6 +38,7 @@ class SettingsPage extends StatelessWidget {
           const _ProfileHeader(),
           GroupedSection(
             header: '閱讀',
+            footer: '閱讀統計記錄每本書的累積閱讀時間；閱讀偏好包含排版、自動翻頁、繁簡轉換與點擊區域。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
