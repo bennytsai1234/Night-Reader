@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
 
+/// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
 class ReaderV2MenuStyle {
+  final Brightness brightness;
   final Color background;
   final Color backgroundElevated;
   final Color foreground;
@@ -13,6 +15,7 @@ class ReaderV2MenuStyle {
   final Color scrim;
 
   const ReaderV2MenuStyle({
+    required this.brightness,
     required this.background,
     required this.backgroundElevated,
     required this.foreground,
@@ -23,35 +26,22 @@ class ReaderV2MenuStyle {
     required this.scrim,
   });
 
-  factory ReaderV2MenuStyle.resolve({
-    required BuildContext context,
-    required Color backgroundColor,
-    required Color textColor,
-  }) {
-    final dark = backgroundColor.computeLuminance() < 0.5;
-    final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-      dark: dark,
-      menu: true,
-    );
-    final background = (custom?.background ?? backgroundColor).withValues(
-      alpha: 0.96,
-    );
-    final foreground = custom?.text ?? textColor;
-    final accent = custom?.accent ?? Theme.of(context).colorScheme.primary;
+  factory ReaderV2MenuStyle.of(BuildContext context) {
+    final palette = StylePalette.of(context);
+    final background = palette.surface.withValues(alpha: 0.96);
+    final foreground = palette.text;
     return ReaderV2MenuStyle(
+      brightness: palette.brightness,
       background: background,
-      backgroundElevated:
-          custom?.highlight ??
-          Color.alphaBlend(
-            foreground.withValues(alpha: 0.06),
-            background,
-          ),
+      backgroundElevated: Color.alphaBlend(
+        foreground.withValues(alpha: 0.06),
+        background,
+      ),
       foreground: foreground,
-      mutedForeground:
-          custom?.secondaryText ?? foreground.withValues(alpha: 0.68),
-      outline: custom?.border ?? foreground.withValues(alpha: 0.12),
-      accent: accent,
-      accentMuted: accent.withValues(alpha: 0.18),
+      mutedForeground: palette.textMuted,
+      outline: palette.border,
+      accent: palette.primary,
+      accentMuted: palette.primary.withValues(alpha: 0.18),
       scrim: Colors.black.withValues(alpha: 0.18),
     );
   }
@@ -59,9 +49,10 @@ class ReaderV2MenuStyle {
   /// 浮動玻璃選單（上下膠囊、圓形按鈕）的色調：選單底色套上使用者所選
   /// 玻璃強度的不透明度，背後的正文經模糊後只透出色塊。
   Color glassTintOf(BuildContext context) {
-    final dark = background.computeLuminance() < 0.5;
     return background.withValues(
-      alpha: AppChrome.of(context).glassStrength.opacity(dark: dark),
+      alpha: AppChrome.of(context).glassStrength.opacity(
+        dark: brightness == Brightness.dark,
+      ),
     );
   }
 
@@ -71,7 +62,6 @@ class ReaderV2MenuStyle {
   /// 不沿用 App 主題掛載的擴充。
   ThemeData toSheetTheme(ThemeData base) {
     final surface = background.withValues(alpha: 1);
-    final dark = surface.computeLuminance() < 0.5;
     final elevated = Color.alphaBlend(backgroundElevated, surface);
     final accentContainer = Color.alphaBlend(accentMuted, surface);
     final onAccent =
@@ -83,7 +73,7 @@ class ReaderV2MenuStyle {
       surface,
     );
     final colorScheme = base.colorScheme.copyWith(
-      brightness: dark ? Brightness.dark : Brightness.light,
+      brightness: brightness,
       primary: accent,
       onPrimary: onAccent,
       primaryContainer: accentContainer,
@@ -119,7 +109,7 @@ class ReaderV2MenuStyle {
         for (final extension in base.extensions.values)
           if (extension is! AppChrome) extension,
         AppChrome.derive(
-          brightness: dark ? Brightness.dark : Brightness.light,
+          brightness: brightness,
           primary: accent,
           background: surface,
           // 分組卡片用浮層色，才能與面板底色區隔。
@@ -128,6 +118,7 @@ class ReaderV2MenuStyle {
           textPrimary: foreground,
           textSecondary: mutedForeground,
           border: outline,
+          inversePrimary: base.colorScheme.inversePrimary,
           glassStrength:
               base.extension<AppChrome>()?.glassStrength ??
               GlassStrength.frosted,

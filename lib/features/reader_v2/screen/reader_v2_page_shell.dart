@@ -14,7 +14,6 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dar
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
-import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
@@ -111,8 +110,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.drawer,
     required this.backgroundColor,
     required this.textColor,
-    required this.menuBackgroundColor,
-    required this.menuTextColor,
     required this.controlsVisible,
     required this.showReadTitleAddition,
     required this.hasVisibleContent,
@@ -159,8 +156,6 @@ class ReaderV2PageShell extends StatelessWidget {
   final ReaderV2ChaptersDrawer drawer;
   final Color backgroundColor;
   final Color textColor;
-  final Color menuBackgroundColor;
-  final Color menuTextColor;
   final bool controlsVisible;
   final bool showReadTitleAddition;
   final bool hasVisibleContent;
@@ -289,8 +284,6 @@ class ReaderV2PageShell extends StatelessWidget {
                 ),
               ReaderV2TopMenu(
                 controlsVisible: controlsVisible,
-                menuBackgroundColor: menuBackgroundColor,
-                menuTextColor: menuTextColor,
                 bookName: context.zh(book.name),
                 chapterTitle: chapterTitle,
                 chapterUrl: chapterUrl,
@@ -301,8 +294,6 @@ class ReaderV2PageShell extends StatelessWidget {
               ),
               ReaderV2BottomMenu(
                 controlsVisible: controlsVisible,
-                menuBackgroundColor: menuBackgroundColor,
-                menuTextColor: menuTextColor,
                 navigation: navigation,
                 isAutoPaging: isAutoPaging,
                 dayNightIcon: dayNightIcon,
@@ -333,16 +324,9 @@ class ReaderV2PageShell extends StatelessWidget {
   }
 }
 
-/// 資訊列的配色：跟隨正文區自訂色，未自訂時以正文文字色降低不透明度。
-({Color info, Color accent, Color? border}) _infoColors(ReaderV2PageShell shell) {
-  final dark = shell.backgroundColor.computeLuminance() < 0.5;
-  final custom = ThemeSettingsProvider.resolveReaderAreaColors(
-    dark: dark,
-    menu: false,
-  );
-  final info = custom?.secondaryText ?? shell.textColor.withValues(alpha: 0.68);
-  return (info: info, accent: custom?.accent ?? info, border: custom?.border);
-}
+/// 資訊列的文字色：正文文字色降低不透明度。
+Color _infoColor(ReaderV2PageShell shell) =>
+    shell.textColor.withValues(alpha: 0.68);
 
 class _PermanentInfoBar extends StatelessWidget {
   const _PermanentInfoBar({required this.shell, required this.rowBottom});
@@ -354,8 +338,6 @@ class _PermanentInfoBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = _infoColors(shell);
-    final borderColor = colors.border;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -366,11 +348,6 @@ class _PermanentInfoBar extends StatelessWidget {
             shell.backgroundColor.withValues(alpha: 0.88),
           ],
         ),
-        border: borderColor == null
-            ? null
-            : Border(
-                top: BorderSide(color: borderColor.withValues(alpha: 0.45)),
-              ),
       ),
       child: Padding(
         padding: EdgeInsets.only(bottom: rowBottom),
@@ -413,7 +390,7 @@ class _InfoRow extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
-    final colors = _infoColors(shell);
+    final infoColor = _infoColor(shell);
     final left = _itemWidget(context, slots.left, progress, TextAlign.left);
     final right = _itemWidget(context, slots.right, progress, TextAlign.right);
     final semantics = [
@@ -429,7 +406,7 @@ class _InfoRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: DefaultTextStyle(
             style: AppTextStyles.uiXs.copyWith(
-              color: colors.info,
+              color: infoColor,
               fontWeight: FontWeight.w400,
               fontFamily: kReaderV2PunctFontFamily,
               fontFamilyFallback: kReaderV2FontFamilyFallback,
@@ -445,7 +422,7 @@ class _InfoRow extends StatelessWidget {
                     Icon(
                       Icons.auto_stories_outlined,
                       size: 13,
-                      color: colors.accent,
+                      color: infoColor,
                     ),
                     const SizedBox(width: AppSpacing.xs),
                   ],
@@ -495,7 +472,7 @@ class _InfoRow extends StatelessWidget {
         item == ReaderV2InfoItem.batteryWithIcon) {
       return _ReaderBattery(
         showIcon: item == ReaderV2InfoItem.batteryWithIcon,
-        iconColor: _infoColors(shell).info,
+        iconColor: _infoColor(shell),
       );
     }
     return Text(_itemText(context, item, progress) ?? '', textAlign: align);

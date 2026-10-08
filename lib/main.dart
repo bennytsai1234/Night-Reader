@@ -274,12 +274,12 @@ class ReaderApp extends StatelessWidget {
           navigatorObservers: [appRouteObserver, statusBarPolicy],
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
-            themeSettings.effectiveAppLight,
+            themeSettings.style,
             Brightness.light,
             glassStrength: themeSettings.glassStrength,
           ),
           darkTheme: buildAppTheme(
-            themeSettings.effectiveAppDark,
+            themeSettings.style,
             Brightness.dark,
             glassStrength: themeSettings.glassStrength,
           ),

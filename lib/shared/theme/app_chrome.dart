@@ -73,6 +73,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
     required Color textPrimary,
     required Color textSecondary,
     required Color border,
+    required Color inversePrimary,
     GlassStrength glassStrength = GlassStrength.frosted,
   }) {
     final isLight = brightness == Brightness.light;
@@ -86,22 +87,30 @@ class AppChrome extends ThemeExtension<AppChrome> {
       glassTint: bar.withValues(alpha: glassStrength.opacity(dark: !isLight)),
       glassBorder:
           isLight
-              ? AppPalette.paper50.withValues(alpha: 0.7)
-              : AppPalette.ink50.withValues(alpha: 0.08),
+              ? surface.withValues(alpha: 0.7)
+              : textPrimary.withValues(alpha: 0.08),
       glassShadow:
-          isLight ? const Color(0x1A241C10) : const Color(0x59000000),
+          isLight
+              ? textPrimary.withValues(alpha: 0.1)
+              : const Color(0x59000000),
       selectionLens: Color.alphaBlend(
         primary.withValues(alpha: isLight ? 0.12 : 0.18),
         surface.withValues(alpha: 0.6),
       ),
       barrier:
-          isLight ? const Color(0x2E241C10) : const Color(0x66000000),
+          isLight
+              ? textPrimary.withValues(alpha: 0.18)
+              : const Color(0x66000000),
+      // 淺色時是墨色底配紙色字；深色時是比卡片再亮一階的浮層。
       toastBackground:
           isLight
-              ? AppPalette.ink600.withValues(alpha: 0.94)
-              : AppPalette.ink400.withValues(alpha: 0.96),
-      toastForeground: AppPalette.ink50,
-      toastAction: isLight ? AppPalette.cinnabarDark : primary,
+              ? textPrimary.withValues(alpha: 0.94)
+              : Color.alphaBlend(
+                textPrimary.withValues(alpha: 0.1),
+                surface,
+              ).withValues(alpha: 0.96),
+      toastForeground: isLight ? background : textPrimary,
+      toastAction: isLight ? inversePrimary : primary,
     );
   }
 
@@ -120,6 +129,7 @@ class AppChrome extends ThemeExtension<AppChrome> {
       textPrimary: scheme.onSurface,
       textSecondary: scheme.onSurfaceVariant,
       border: scheme.outline,
+      inversePrimary: scheme.inversePrimary,
     );
   }
 

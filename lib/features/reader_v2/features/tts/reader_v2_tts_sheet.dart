@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -110,13 +111,17 @@ class _HighlightPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = settings.currentTheme;
-    final style = TextStyle(color: theme.textColor, fontSize: 17, height: 1.6);
+    final palette = StylePalette.of(context);
+    final style = TextStyle(
+      color: palette.readerText,
+      fontSize: 17,
+      height: 1.6,
+    );
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: theme.backgroundColor,
+        color: palette.readerBackground,
         borderRadius: AppRadius.cardMd,
       ),
       child: Text.rich(
@@ -128,7 +133,7 @@ class _HighlightPreview extends StatelessWidget {
               text: '他放下手中的書，望向窗外的月光。',
               style: TextStyle(
                 background: Paint()
-                  ..color = settings.resolvedHighlightColor.withValues(
+                  ..color = settings.highlightColor.resolve(palette).withValues(
                     alpha: settings.highlightStrength,
                   ),
               ),
@@ -151,7 +156,7 @@ class _HighlightColorRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textColor = settings.currentTheme.textColor;
+    final palette = StylePalette.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -170,7 +175,7 @@ class _HighlightColorRow extends StatelessWidget {
                     width: _swatchSize,
                     height: _swatchSize,
                     decoration: BoxDecoration(
-                      color: option.resolve(textColor),
+                      color: option.resolve(palette),
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: option == settings.highlightColor

@@ -17,10 +17,6 @@ class ReaderV2PrefsSnapshot {
   final double chapterSpacing;
   final double letterSpacing;
   final int textIndent;
-  final int themeIndex;
-  final int lastDayThemeIndex;
-  final int lastNightThemeIndex;
-  final int menuThemeIndex;
   final double autoPageSpeed;
   final int chineseConvert;
   final bool showAddToShelfAlert;
@@ -55,10 +51,6 @@ class ReaderV2PrefsSnapshot {
     required this.chapterSpacing,
     required this.letterSpacing,
     required this.textIndent,
-    required this.themeIndex,
-    required this.lastDayThemeIndex,
-    required this.lastNightThemeIndex,
-    required this.menuThemeIndex,
     required this.autoPageSpeed,
     required this.chineseConvert,
     required this.showAddToShelfAlert,
@@ -83,10 +75,6 @@ class ReaderV2PrefsSnapshot {
       chapterSpacing: 1.0,
       letterSpacing: 0.0,
       textIndent: 2,
-      themeIndex: 0,
-      lastDayThemeIndex: 0,
-      lastNightThemeIndex: 1,
-      menuThemeIndex: 0,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
       showAddToShelfAlert: true,
@@ -119,10 +107,6 @@ class ReaderV2PrefsSnapshot {
     double? chapterSpacing,
     double? letterSpacing,
     int? textIndent,
-    int? themeIndex,
-    int? lastDayThemeIndex,
-    int? lastNightThemeIndex,
-    int? menuThemeIndex,
     double? autoPageSpeed,
     int? chineseConvert,
     bool? showAddToShelfAlert,
@@ -145,10 +129,6 @@ class ReaderV2PrefsSnapshot {
       chapterSpacing: chapterSpacing ?? this.chapterSpacing,
       letterSpacing: letterSpacing ?? this.letterSpacing,
       textIndent: textIndent ?? this.textIndent,
-      themeIndex: themeIndex ?? this.themeIndex,
-      lastDayThemeIndex: lastDayThemeIndex ?? this.lastDayThemeIndex,
-      lastNightThemeIndex: lastNightThemeIndex ?? this.lastNightThemeIndex,
-      menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
       autoPageSpeed: autoPageSpeed ?? this.autoPageSpeed,
       chineseConvert: chineseConvert ?? this.chineseConvert,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
@@ -190,8 +170,6 @@ class ReaderV2PrefsRepository {
   Future<ReaderV2PrefsSnapshot> load() async {
     final prefs = await SharedPreferences.getInstance();
     final defaults = ReaderV2PrefsSnapshot.defaults();
-    final themeIndex =
-        prefs.getInt(PreferKey.readerThemeIndex) ?? defaults.themeIndex;
     final fontSize =
         prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize;
     final snapshot = ReaderV2PrefsSnapshot(
@@ -213,15 +191,6 @@ class ReaderV2PrefsRepository {
           defaults.letterSpacing,
       textIndent:
           prefs.getInt(PreferKey.readerTextIndent) ?? defaults.textIndent,
-      themeIndex: themeIndex,
-      lastDayThemeIndex:
-          prefs.getInt(PreferKey.readerDayThemeIndex) ??
-          defaults.lastDayThemeIndex,
-      lastNightThemeIndex:
-          prefs.getInt(PreferKey.readerNightThemeIndex) ??
-          defaults.lastNightThemeIndex,
-      menuThemeIndex:
-          prefs.getInt(PreferKey.readerMenuThemeIndex) ?? themeIndex,
       autoPageSpeed: _normalizeAutoPageSpeed(
         prefs.getDouble(PreferKey.readerAutoPageSpeed) ??
             prefs.getInt(PreferKey.autoReadSpeed)?.toDouble(),
@@ -295,22 +264,6 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveTextIndent(int value) {
     return _setInt(PreferKey.readerTextIndent, value);
-  }
-
-  Future<void> saveThemeIndex(int value) {
-    return _setInt(PreferKey.readerThemeIndex, value);
-  }
-
-  Future<void> saveDayThemeIndex(int value) {
-    return _setInt(PreferKey.readerDayThemeIndex, value);
-  }
-
-  Future<void> saveNightThemeIndex(int value) {
-    return _setInt(PreferKey.readerNightThemeIndex, value);
-  }
-
-  Future<void> saveMenuThemeIndex(int value) {
-    return _setInt(PreferKey.readerMenuThemeIndex, value);
   }
 
   Future<void> saveAutoPageSpeed(double value) {

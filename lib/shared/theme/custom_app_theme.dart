@@ -2,15 +2,19 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'app_chrome.dart';
+import 'app_style.dart';
 import 'app_text_styles.dart';
 import 'app_tokens.dart';
-import 'theme_customization.dart';
 
 ThemeData buildAppTheme(
-  AppUiThemeColors colors,
+  AppStyle style,
   Brightness brightness, {
   GlassStrength glassStrength = GlassStrength.frosted,
 }) {
+  final colors = style.of(brightness);
+  // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
+  final inversePrimary =
+      (brightness == Brightness.light ? style.dark : style.light).primary;
   final primaryContainer = Color.alphaBlend(
     colors.primary.withValues(
       alpha: brightness == Brightness.light ? 0.14 : 0.24,
@@ -35,15 +39,16 @@ ThemeData buildAppTheme(
     primary: colors.primary,
     onPrimary: onPrimary,
     primaryContainer: primaryContainer,
-    onPrimaryContainer: colors.textPrimary,
+    onPrimaryContainer: colors.text,
     secondary: colors.secondary,
     secondaryContainer: secondaryContainer,
-    onSecondaryContainer: colors.textPrimary,
+    onSecondaryContainer: colors.text,
     surface: colors.surface,
-    onSurface: colors.textPrimary,
-    onSurfaceVariant: colors.textSecondary,
+    onSurface: colors.text,
+    onSurfaceVariant: colors.textMuted,
     outline: colors.border,
     outlineVariant: colors.border.withValues(alpha: 0.72),
+    inversePrimary: inversePrimary,
   );
 
   final textTheme = ThemeData(brightness: brightness).textTheme.copyWith(
@@ -57,8 +62,8 @@ ThemeData buildAppTheme(
     labelMedium: AppTextStyles.labelSm,
     labelSmall: AppTextStyles.labelXs,
   ).apply(
-    bodyColor: colors.textPrimary,
-    displayColor: colors.textPrimary,
+    bodyColor: colors.text,
+    displayColor: colors.text,
   );
 
   final chrome = AppChrome.derive(
@@ -66,10 +71,11 @@ ThemeData buildAppTheme(
     primary: colors.primary,
     background: colors.background,
     surface: colors.surface,
-    bar: colors.navigation,
-    textPrimary: colors.textPrimary,
-    textSecondary: colors.textSecondary,
+    bar: colors.bar,
+    textPrimary: colors.text,
+    textSecondary: colors.textMuted,
     border: colors.border,
+    inversePrimary: inversePrimary,
     glassStrength: glassStrength,
   );
 
@@ -78,7 +84,7 @@ ThemeData buildAppTheme(
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
-    extensions: [chrome],
+    extensions: [chrome, colors],
     // 點擊回饋採 Telegram 式整列高亮，不畫水波紋。
     splashFactory: NoSplash.splashFactory,
     highlightColor: chrome.pressedHighlight,
@@ -110,14 +116,14 @@ ThemeData buildAppTheme(
       ),
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: colors.appBar,
-      foregroundColor: colors.textPrimary,
+      backgroundColor: colors.bar,
+      foregroundColor: colors.text,
       elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: colors.textPrimary,
+        color: colors.text,
       ),
     ),
     cardTheme: CardThemeData(

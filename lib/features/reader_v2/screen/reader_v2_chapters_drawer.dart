@@ -15,8 +15,6 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     required this.currentChapterIndex,
     required this.titleFor,
     required this.onChapterTap,
-    required this.menuBackgroundColor,
-    required this.menuTextColor,
     this.listenable,
   });
 
@@ -24,10 +22,6 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   final int currentChapterIndex;
   final String Function(int index) titleFor;
   final Future<bool> Function(int index) onChapterTap;
-
-  /// 目錄屬於閱讀選單區域，配色跟隨選單主題而非 App 主題。
-  final Color menuBackgroundColor;
-  final Color menuTextColor;
   final Listenable? listenable;
 
   @override
@@ -181,12 +175,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final menuStyle = ReaderV2MenuStyle.resolve(
-      context: context,
-      backgroundColor: widget.menuBackgroundColor,
-      textColor: widget.menuTextColor,
-    );
-    final theme = menuStyle.toSheetTheme(Theme.of(context));
+    // 目錄屬於閱讀選單區域，配色取選單配色。
+    final theme = ReaderV2MenuStyle.of(context).toSheetTheme(Theme.of(context));
     // 此處的 context 仍在 App 主題下，衍生色直接取選單主題上的擴充。
     final chrome = theme.extension<AppChrome>()!;
     return Theme(

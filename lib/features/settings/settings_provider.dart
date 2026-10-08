@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -45,19 +44,9 @@ class SettingsProvider extends SettingsProviderBase {
   int coverTimeout = 5000;
   String globalCoverRule = '';
 
-  // --- 主題色彩設定 ---
+  // --- 主題與顯示 ---
   bool transparentStatusBar = true;
   bool immNavigationBar = true;
-  Color dayPrimaryColor = Colors.brown;
-  Color dayAccentColor = Colors.red;
-  Color dayBackgroundColor = Colors.grey.shade100;
-  Color dayBottomBackgroundColor = Colors.grey.shade200;
-  Color nightPrimaryColor = Colors.blueGrey.shade600;
-  Color nightAccentColor = Colors.deepOrange.shade800;
-  Color nightBackgroundColor = Colors.grey.shade900;
-  Color nightBottomBackgroundColor = Colors.grey.shade800;
-  String dayBackgroundImage = '';
-  String nightBackgroundImage = '';
 
   // --- 閱讀設定 ---
   bool hideStatusBar = false;
@@ -146,32 +135,6 @@ class SettingsProvider extends SettingsProviderBase {
     transparentStatusBar =
         prefs.getBool(PreferKey.transparentStatusBar) ?? true;
     immNavigationBar = prefs.getBool(PreferKey.immNavigationBar) ?? true;
-    dayBackgroundImage = prefs.getString(PreferKey.bgImage) ?? '';
-    nightBackgroundImage = prefs.getString(PreferKey.bgImageN) ?? '';
-    dayPrimaryColor = Color(
-      prefs.getInt(PreferKey.cPrimary) ?? Colors.brown.toARGB32(),
-    );
-    dayAccentColor = Color(
-      prefs.getInt(PreferKey.cAccent) ?? Colors.red.toARGB32(),
-    );
-    dayBackgroundColor = Color(
-      prefs.getInt(PreferKey.cBackground) ?? Colors.grey.shade100.toARGB32(),
-    );
-    dayBottomBackgroundColor = Color(
-      prefs.getInt(PreferKey.cBBackground) ?? Colors.grey.shade200.toARGB32(),
-    );
-    nightPrimaryColor = Color(
-      prefs.getInt(PreferKey.cNPrimary) ?? Colors.blueGrey.shade600.toARGB32(),
-    );
-    nightAccentColor = Color(
-      prefs.getInt(PreferKey.cNAccent) ?? Colors.deepOrange.shade800.toARGB32(),
-    );
-    nightBackgroundColor = Color(
-      prefs.getInt(PreferKey.cNBackground) ?? Colors.grey.shade900.toARGB32(),
-    );
-    nightBottomBackgroundColor = Color(
-      prefs.getInt(PreferKey.cNBBackground) ?? Colors.grey.shade800.toARGB32(),
-    );
 
     // --- 閱讀設定 ---
     hideStatusBar = prefs.getBool(PreferKey.hideStatusBar) ?? false;
