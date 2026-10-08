@@ -12,7 +12,8 @@ flutter_native_splash:
 
   # Android 12+ 系統啟動畫面：純色底 + 置中靜態圖示（不做動畫；部分 ROM 會吃掉
   # AVD 動畫只畫靜態幀，故一律用靜態圖示求全機型一致）。圖示不是本套件生成，而是
-  # 手寫的 @drawable/splash_icon（drawable/ 亮色變體 + drawable-night/ 暗色變體）。
+  # 各密度的 @drawable/splash_icon PNG（drawable-mdpi～xxxhdpi，288dp 透明底，內容
+  # 收在中央 2/3 圓形安全區），亮暗主題共用同一張。
   # 注意：重跑 `dart run flutter_native_splash:create` 會覆寫 values-v31 與
   # values-night-v31 的 styles.xml，之後需手動把下面這行加回兩份 LaunchTheme：
   #   <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
