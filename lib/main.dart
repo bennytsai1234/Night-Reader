@@ -17,6 +17,7 @@ import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
+import 'shared/navigation/status_bar.dart';
 import 'features/association/association_handler_service.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
@@ -261,7 +262,7 @@ class ReaderApp extends StatelessWidget {
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
-          navigatorObservers: [appRouteObserver],
+          navigatorObservers: [appRouteObserver, statusBarPolicy],
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
             themeSettings.effectiveAppLight,
@@ -276,8 +277,12 @@ class ReaderApp extends StatelessWidget {
           themeMode: settings.themeMode,
           locale: settings.locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => BackdropGroup(
-            child: ChineseDisplayScope(child: child ?? const SizedBox.shrink()),
+          builder: (context, child) => StatusBarStableInset(
+            child: BackdropGroup(
+              child: ChineseDisplayScope(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            ),
           ),
           home: const _AssociationLifecycleHost(child: MainPage()),
         );
