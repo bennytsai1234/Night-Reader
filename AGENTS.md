@@ -43,11 +43,11 @@
 - 標準流程：
 
 ```bash
-# 更新 pubspec.yaml 的 version（例如 0.2.160+177）
+# 更新 pubspec.yaml 的 version（例如 0.3.1+178）
 flutter analyze
 flutter test
 git add pubspec.yaml
-git commit -m "release: bump version to 0.2.160+177"
+git commit -m "release: bump version to 0.3.1+178"
 git push origin main
 ```
 

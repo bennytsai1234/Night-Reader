@@ -631,10 +631,9 @@
     .tts-line span {
       border-radius: 4px;
       padding: 1px 0;
-      background: color-mix(in srgb, var(--lamp) 16%, transparent);
       transition: background var(--dur-fast) ease;
     }
-    .tts-line span.lit { background: color-mix(in srgb, var(--lamp) 42%, transparent); }
+    .tts-line span.lit { background: color-mix(in srgb, var(--lamp) 16%, transparent); }
     .tts-bar { display: flex; align-items: center; gap: 12px; }
     .tts-play {
       width: 30px; height: 30px;
@@ -1112,7 +1111,7 @@
         <div class="sec-head reveal">
           <p class="sec-vol">卷一</p>
           <h2>一字一句，都聽你的</h2>
-          <p class="sec-sub">自製排版引擎，字號、標題字號、行高、字距、段距、章節間距、縮排與四邊邊距皆可獨立調校；全形標點置中、引號統一為「」『』。下面這一頁是活的 — 動手調調看。</p>
+          <p class="sec-sub">自製排版引擎，字號、標題字號、行高、字距、段距、章節間距、縮排、左右與上下邊距皆可獨立調校；全形標點置中、引號統一為「」『』。下面這一頁是活的 — 動手調調看。</p>
         </div>
 
         <div class="demo-wrap">
@@ -1186,9 +1185,9 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
             </div>
             <h3>語音朗讀 TTS</h3>
-            <p>整句高亮跟讀（語音引擎支援時逐字加深）、斷點續讀、自動接章。語速、音調、音量與音色皆可調，並支援切換系統語音引擎 — 眼睛累了，就讓耳朵接手。</p>
+            <p>正在朗讀的那一句即時高亮，顏色與深淺可自選；斷點續讀、自動接章。語速、音調、音量與音色皆可調，並支援切換系統語音引擎 — 眼睛累了，就讓耳朵接手。</p>
             <div class="tts-stage" aria-hidden="true">
-              <p class="tts-line" id="ttsLine"><span>月光</span><span>如</span><span>流水</span><span>一般，</span><span>靜靜地</span><span>瀉在</span><span>這一片</span><span>葉子</span><span>和</span><span>花上。</span></p>
+              <p class="tts-line" id="ttsLine"><span>月光如流水一般，靜靜地瀉在這一片葉子和花上。</span><span>薄薄的青霧浮起在荷塘裡。</span><span>葉子和花彷彿在牛乳中洗過一樣；</span><span>又像籠著輕紗的夢。</span></p>
               <div class="tts-bar">
                 <span class="tts-play">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -1246,7 +1245,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             </div>
             <h3>書架與進度</h3>
-            <p>封面、閱讀進度與快取狀態一目了然；再開書時回到上次讀到的那一行。</p>
+            <p>封面與閱讀進度一目了然；再開書時回到上次讀到的那一行。</p>
           </div>
 
           <div class="cell reveal">
@@ -1286,7 +1285,7 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </div>
             <h3>替換規則</h3>
-            <p>全域與章內替換，淨化內文、修正錯字，還你一個乾淨版面。</p>
+            <p>全域或限定書籍、書源替換，可作用於標題與正文；淨化內文、修正錯字，還你一個乾淨版面。</p>
           </div>
 
           <div class="cell reveal" style="--rd: 120ms">
@@ -1319,7 +1318,7 @@
           <div class="step reveal">
             <div class="step-no">一</div>
             <h3>啟動管理</h3>
-            <p>開啟 App 後，首先進入「書源管理」頁面，準備配置您的書房。</p>
+            <p>開啟 App 後，首先進入「我的」→「書源管理」頁面，準備配置您的書房。</p>
           </div>
           <div class="step reveal" style="--rd: 80ms">
             <div class="step-no">二</div>
@@ -1396,7 +1395,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>是的，夜讀是純工具型的閱讀器，不內建、不提供也不儲存任何小說書籍。在初次安裝後，您需要前往「書源管理」頁面，自行匯入您信任且具備合法授權的書源才能開始搜尋和閱讀。</p>
+              <p>是的，夜讀是純工具型的閱讀器，不內建、不提供也不儲存任何小說書籍。在初次安裝後，您需要前往「我的」→「書源管理」頁面，自行匯入您信任且具備合法授權的書源才能開始搜尋和閱讀。</p>
             </div>
           </div>
 
@@ -1416,7 +1415,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="faq-content">
-              <p>目前不支援需要瀏覽器驗證碼、圖形驗證或複雜登入互動的書源。這類來源在背景校驗時會直接回報連線錯誤，建議您改為使用不需要互動驗證的開放式書源。</p>
+              <p>目前不支援需要瀏覽器驗證碼、圖形驗證或複雜登入互動的書源。這類來源在背景校驗時會被移到「已隔離」分組，或標上「需要登入」，建議您改為使用不需要互動驗證的開放式書源。</p>
             </div>
           </div>
 
@@ -1598,25 +1597,29 @@
         phone.className = 'phone' + (btn.dataset.theme ? ' ' + btn.dataset.theme : '');
       });
 
-      /* ---- TTS 高亮：整句淡底、正在朗讀的字詞加深（與 App 相同） ---- */
+      /* ---- TTS 高亮：只標出正在朗讀的那一句，深淺同 App 預設 ---- */
       (function ttsDemo() {
         var line = document.getElementById('ttsLine');
         if (!line) return;
-        var words = line.querySelectorAll('span');
+        var sentences = line.querySelectorAll('span');
         var idx = 0;
-        words[0].classList.add('lit');
+        sentences[0].classList.add('lit');
         if (reduced || !('IntersectionObserver' in window)) return;
         var timer = null;
+        // 每句停留時間依字數，約為 1.2x 語速朗讀一句的長度。
+        function dwell() { return sentences[idx].textContent.length * 170; }
+        function next() {
+          sentences[idx].classList.remove('lit');
+          idx = (idx + 1) % sentences.length;
+          sentences[idx].classList.add('lit');
+          timer = setTimeout(next, dwell());
+        }
         var ttsIo = new IntersectionObserver(function (entries) {
           entries.forEach(function (entry) {
             if (entry.isIntersecting && !timer) {
-              timer = setInterval(function () {
-                words[idx].classList.remove('lit');
-                idx = (idx + 1) % words.length;
-                words[idx].classList.add('lit');
-              }, 680);
+              timer = setTimeout(next, dwell());
             } else if (!entry.isIntersecting && timer) {
-              clearInterval(timer);
+              clearTimeout(timer);
               timer = null;
             }
           });
