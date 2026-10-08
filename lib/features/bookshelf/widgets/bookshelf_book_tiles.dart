@@ -56,57 +56,77 @@ class BookshelfCheckMark extends StatelessWidget {
   }
 }
 
-/// Telegram 聊天列表式的書架列：封面縮圖、最多兩行書名、次要墨色的進度與
-/// 更新資訊，髮絲分隔線從文字起點開始。
-class BookshelfListRow extends StatelessWidget {
-  const BookshelfListRow({
+/// 書名下方的細進度線：只畫已讀比例，不顯示數字。
+class BookshelfProgressLine extends StatelessWidget {
+  const BookshelfProgressLine({super.key, required this.book});
+
+  static const double height = 2;
+
+  final Book book;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: chrome.separator.withValues(alpha: 0.5),
+        borderRadius: AppRadius.pillShape,
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FractionallySizedBox(
+          widthFactor: bookshelfReadProgress(book),
+          child: Container(
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: AppRadius.pillShape,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 列表視圖的書：一本一張小紙卡，只放封面、書名、作者與細進度線。
+/// 編輯模式時勾選圓圈從左側滑入，選取的卡片帶淡主色底。
+class BookshelfListCard extends StatelessWidget {
+  const BookshelfListCard({
     super.key,
     required this.book,
     this.selecting = false,
     this.selected = false,
     this.onTap,
     this.onLongPress,
-    this.showSeparator = true,
     this.hero = true,
-    this.background,
   });
 
   static const double coverWidth = 52;
   static const double coverHeight = 72;
 
   /// 編輯模式時勾選圓圈佔用的寬度（含與封面的間距）。
-  static const double _checkSlot = BookshelfCheckMark.size + AppSpacing.lg;
+  static const double _checkSlot = BookshelfCheckMark.size + AppSpacing.md;
 
   final Book book;
   final bool selecting;
   final bool selected;
   final VoidCallback? onTap;
 
-  /// 長按時回傳整列在螢幕上的範圍，供情境預覽選單浮起。
+  /// 長按時回傳卡片在螢幕上的範圍，供情境預覽選單浮起。
   final ValueChanged<Rect>? onLongPress;
-  final bool showSeparator;
 
   /// 長按預覽裡的複本不能帶 Hero，否則與清單本身的 tag 重複。
   final bool hero;
 
-  /// 列底色；滑動動作需要不透明底色蓋住動作按鈕。預設為頁面底色。
-  final Color? background;
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final progress = bookshelfReadProgress(book);
     final slot = selecting ? _checkSlot : 0.0;
     final name = context.zh(book.name);
     final author = context.zh(book.author).trim();
-    final durTitle = context.zh(book.durChapterTitle ?? '').trim();
-    final latestTitle = context.zh(book.latestChapterTitle ?? '').trim();
-    final readingLine = [
-      if (author.isNotEmpty) author,
-      if (durTitle.isNotEmpty) '讀至：$durTitle',
-    ].join(' · ');
 
     Widget cover = BookCoverWidget(
       bookName: name,
@@ -121,10 +141,7 @@ class BookshelfListRow extends StatelessWidget {
     }
 
     final content = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppGrouped.margin,
-        vertical: AppSpacing.md,
-      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
           AnimatedContainer(
@@ -155,39 +172,20 @@ class BookshelfListRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.uiMd.copyWith(
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    if (progress > 0) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          '${(progress * 100).round()}%',
-                          style: AppTextStyles.uiXs.copyWith(
-                            color: chrome.sectionText,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.uiMd.copyWith(
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
                 ),
-                if (readingLine.isNotEmpty) ...[
+                if (author.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
-                    readingLine,
+                    author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.bodySm.copyWith(
@@ -196,16 +194,8 @@ class BookshelfListRow extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (latestTitle.isNotEmpty)
-                  Text(
-                    '最新：$latestTitle',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.3,
-                      color: chrome.sectionText.withValues(alpha: 0.75),
-                    ),
-                  ),
+                const SizedBox(height: AppSpacing.md),
+                BookshelfProgressLine(book: book),
               ],
             ),
           ),
@@ -213,37 +203,31 @@ class BookshelfListRow extends StatelessWidget {
       ),
     );
 
+    final surface = chrome.groupedSurface;
     return Semantics(
       selected: selecting ? selected : null,
       child: Material(
-        color: background ?? theme.scaffoldBackgroundColor,
+        color: selecting && selected
+            ? Color.alphaBlend(scheme.primary.withValues(alpha: 0.06), surface)
+            : surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppGrouped.cardRadius,
+          side: BorderSide(color: chrome.separator, width: AppGlass.hairline),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           onLongPress: onLongPress == null
               ? null
               : () => onLongPress!(globalRectOf(context)),
-          child: Stack(
-            children: [
-              content,
-              if (showSeparator)
-                AnimatedPositioned(
-                  duration: AppMotion.menu,
-                  curve: AppMotion.menuCurve,
-                  left: AppGrouped.margin + slot + coverWidth + AppSpacing.lg,
-                  right: 0,
-                  bottom: 0,
-                  height: AppGlass.hairline,
-                  child: ColoredBox(color: chrome.separator),
-                ),
-            ],
-          ),
+          child: content,
         ),
       ),
     );
   }
 }
 
-/// 網格視圖的書籍：封面、兩行書名與章節進度條；編輯模式時封面右上角
+/// 網格視圖的書籍：封面、兩行書名與細進度線；編輯模式時封面右上角
 /// 顯示勾選圓圈，選取的封面微縮。
 class BookshelfGridTile extends StatelessWidget {
   const BookshelfGridTile({
@@ -268,7 +252,6 @@ class BookshelfGridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
     final name = context.zh(book.name);
 
     return Semantics(
@@ -339,27 +322,8 @@ class BookshelfGridTile extends StatelessWidget {
                 color: scheme.onSurface,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Container(
-              height: 3,
-              margin: const EdgeInsets.only(top: 2),
-              decoration: BoxDecoration(
-                color: chrome.separator.withValues(alpha: 0.5),
-                borderRadius: AppRadius.pillShape,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: bookshelfReadProgress(book),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: AppRadius.pillShape,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            const SizedBox(height: AppSpacing.sm),
+            BookshelfProgressLine(book: book),
           ],
         ),
       ),
@@ -382,7 +346,8 @@ class BookshelfToolbarAction {
   final bool destructive;
 }
 
-/// 編輯模式底部的玻璃膠囊工具列；批次作業進行中時改顯示進度文字。
+/// 編輯模式的玻璃膠囊工具列，與浮動分頁列同高、佔用分頁列的位置；
+/// 批次作業進行中時改顯示進度文字。
 class BookshelfEditToolbar extends StatelessWidget {
   const BookshelfEditToolbar({
     super.key,
@@ -390,7 +355,7 @@ class BookshelfEditToolbar extends StatelessWidget {
     this.progressLabel,
   });
 
-  static const double height = AppGlass.tabItemHeight;
+  static const double height = AppGlass.tabBarHeight;
 
   final List<BookshelfToolbarAction> actions;
 

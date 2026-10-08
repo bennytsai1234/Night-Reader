@@ -20,6 +20,27 @@ class FloatingTabItem {
   final String label;
 }
 
+/// 主頁交給各分頁的開關：分頁進入整頁編輯（例如書架多選）時設為 true，
+/// 浮動分頁列沉下、主頁鎖住左右換頁，由分頁自己的工具列佔用
+/// [FloatingTabBar.slotOf] 的位置。
+class FloatingTabBarScope extends InheritedWidget {
+  const FloatingTabBarScope({
+    super.key,
+    required this.hidden,
+    required super.child,
+  });
+
+  final ValueNotifier<bool> hidden;
+
+  /// 分頁只寫入開關，不需要因開關變化而重建，因此不建立依賴。
+  static ValueNotifier<bool>? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<FloatingTabBarScope>()?.hidden;
+
+  @override
+  bool updateShouldNotify(FloatingTabBarScope oldWidget) =>
+      !identical(hidden, oldWidget.hidden);
+}
+
 /// Telegram iOS 26 式浮動膠囊分頁列，右側可附一顆圓形搜尋鈕。
 ///
 /// 選取膠囊跟著 [controller] 的頁面位置連續移動（滑動切頁時同步）；手指
@@ -35,6 +56,7 @@ class FloatingTabBar extends StatefulWidget {
     this.controller,
     this.onSearch,
     this.searchTooltip = '搜尋',
+    this.hidden = false,
   });
 
   final List<FloatingTabItem> items;
@@ -45,6 +67,18 @@ class FloatingTabBar extends StatefulWidget {
   final PageController? controller;
   final VoidCallback? onSearch;
   final String searchTooltip;
+
+  /// 沉到畫面外並停止接收點擊；佔用的高度不變，內容不會跟著跳動。
+  final bool hidden;
+
+  /// 分頁列在延伸到其下方的頁面（`extendBody: true`）裡的位置，給取代
+  /// 分頁列的工具列對齊用。Scaffold 只改 padding，viewPadding 仍是系統區。
+  static EdgeInsets slotOf(BuildContext context) => EdgeInsets.fromLTRB(
+    AppGrouped.margin,
+    0,
+    AppGrouped.margin,
+    MediaQuery.viewPaddingOf(context).bottom + AppGlass.tabBarBottomGap,
+  );
 
   @override
   State<FloatingTabBar> createState() => _FloatingTabBarState();
@@ -75,7 +109,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
       width - AppGrouped.margin * 2 - searchWidth,
     );
 
-    return Padding(
+    final bar = Padding(
       padding: EdgeInsets.fromLTRB(
         AppGrouped.margin,
         AppSpacing.sm,
@@ -112,6 +146,20 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             ),
           ],
         ],
+      ),
+    );
+
+    return IgnorePointer(
+      ignoring: widget.hidden,
+      child: AnimatedSlide(
+        offset: widget.hidden ? const Offset(0, 1) : Offset.zero,
+        duration: AppMotion.menu,
+        curve: widget.hidden ? Curves.easeInCubic : AppMotion.menuCurve,
+        child: AnimatedOpacity(
+          opacity: widget.hidden ? 0 : 1,
+          duration: AppMotion.menu,
+          child: bar,
+        ),
       ),
     );
   }

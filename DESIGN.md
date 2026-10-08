@@ -61,7 +61,7 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
 結構與幾何取自 Telegram iOS，色彩、字階與材質維持紙墨。新頁面與改版一律組合這些元件，不再直接使用 `AppBar`、`ListTile`、`PopupMenuButton`、`SegmentedButton`、`AlertDialog`。
 
 - **材質**：`GlassSurface` 為紙／墨色調加 0.5 髮絲亮邊與漫射陰影，強度由使用者在「外觀與主題 → 玻璃效果」選擇（`GlassStrength`）：實色（不模糊）、霧面（預設，約 84% 不透明、模糊 12）、通透（約 68%、模糊 20）、玻璃（約 50%、模糊 28）；App 介面與閱讀選單共用同一設定。頁面內的玻璃以 `BackdropFilter.grouped` 共用 App 根部 `BackdropGroup` 的取樣；疊在其他玻璃上的選單、提示框設 `grouped: false`。
-- **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。
+- **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。分頁進入整頁編輯（書架多選）時把 `FloatingTabBarScope` 的開關設為 true：分頁列沉下、左右換頁鎖住、返回鍵留給分頁，編輯工具列放在 `FloatingTabBar.slotOf` 的位置，底部永遠只有一條膠囊。
 - **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`，純文字動作用 `PlainTextAction`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方說明文字）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關為 iOS 樣式、開啟色為主色。
 - **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排），帶輸入框或勾選的用 `showStatefulAppAlert`＋`AlertTextField`／`AlertCheckRow`，控制器由提示框擁有（`TextControllersScope`），呼叫端不自行釋放；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
@@ -78,7 +78,9 @@ App 介面、正文閱讀區與閱讀選單是三個可個別自訂的主題區�
    - 「外觀與排版」面板最高 60% 螢幕、不加暗色遮罩，常用項（主題、字號、行高）在第一層，其餘收在「更多排版」，調整時正文保持可見。
    - 閱讀器面板與「閱讀偏好」設定頁共用 `reader_v2_settings_sections.dart` 的區塊，新增閱讀設定時只在該處實作一次。
 3. **書籍卡片與清單**：
-   - 書名保持最多 2 行，次要狀態（進度、章節更新）採用靜態次要墨色。
+   - 書架頁首只有「書架」兩字；左鈕「整理」（網格／列表、排序、選取、匯出書架），右鈕「加入」（搜尋書籍、加入本地書籍、從網址或檔案匯入書架）。
+   - 列表為一本一張小紙卡：封面、書名一行、作者、細進度線；網格為封面、書名最多 2 行、細進度線。閱讀進度只畫 2 高的線，不顯示百分比、章節或任何數字。
+   - 下拉只在背景檢查更新，不轉圈、不提示。
    - 點擊回饋為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；玻璃按鈕按下時微縮回彈。
 4. **數值設定**：
    - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。

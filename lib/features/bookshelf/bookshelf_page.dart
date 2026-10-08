@@ -12,6 +12,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.da
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
@@ -23,14 +24,17 @@ import 'package:night_reader/core/services/chinese_display.dart';
 
 enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
 
-/// 頁首「更多」選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
+/// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
+/// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
 enum _ShelfMenuAction {
   gridView,
   listView,
+  select,
+  export,
+  search,
   addLocal,
   importUrl,
   importFile,
-  export,
 }
 
 /// 長按書籍的情境選單項目。
@@ -48,11 +52,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
+  /// 編輯中由底部工具列取代浮動分頁列，主頁同時鎖住左右換頁。
+  void _enterEditMode([Book? first]) {
+    setState(() {
+      _isMultiSelect = true;
+      if (first != null) _selectedUrls.add(first.bookUrl);
+    });
+    FloatingTabBarScope.maybeOf(context)?.value = true;
+  }
+
   void _exitEditMode() {
     setState(() {
       _isMultiSelect = false;
       _selectedUrls.clear();
     });
+    FloatingTabBarScope.maybeOf(context)?.value = false;
   }
 
   void _toggleSelected(Book book) {
@@ -77,14 +91,14 @@ class _BookshelfPageState extends State<BookshelfPage> {
         appBar: _buildHeader(provider),
         body: Builder(
           builder: (context) {
-            final insets = MediaQuery.paddingOf(context);
+            final slot = FloatingTabBar.slotOf(context);
             return Stack(
               children: [
                 Positioned.fill(child: _buildContent(context, provider)),
                 Positioned(
-                  left: AppGrouped.margin,
-                  right: AppGrouped.margin,
-                  bottom: insets.bottom + AppSpacing.sm,
+                  left: slot.left,
+                  right: slot.right,
+                  bottom: slot.bottom,
                   child: AnimatedSwitcher(
                     duration: AppMotion.menu,
                     switchInCurve: AppMotion.menuCurve,
@@ -118,7 +132,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
           provider.books.isNotEmpty &&
           _selectedUrls.length == provider.books.length;
       return GlassNavHeader(
-        title: '已選擇 ${_selectedUrls.length} 本',
+        title: '已選 ${_selectedUrls.length} 本',
         leading: GlassTextButton(
           label: '完成',
           emphasized: true,
@@ -144,32 +158,34 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     return GlassNavHeader(
       title: '書架',
-      leading: GlassTextButton(
-        label: '編輯',
-        onPressed: provider.books.isEmpty
-            ? null
-            : () => setState(() => _isMultiSelect = true),
+      leading: GlassMenuButton<Object>(
+        icon: Icons.swap_vert_rounded,
+        tooltip: '整理書架',
+        entriesBuilder: (_) => _arrangeMenuEntries(provider),
+        onSelected: (value) => _onShelfMenuSelected(provider, value),
       ),
       actions: [
         GlassMenuButton<Object>(
-          entriesBuilder: (_) => _shelfMenuEntries(provider),
+          icon: Icons.add_rounded,
+          tooltip: '加入書籍',
+          entriesBuilder: (_) => _addMenuEntries,
           onSelected: (value) => _onShelfMenuSelected(provider, value),
         ),
       ],
     );
   }
 
-  List<GlassMenuEntry<Object>> _shelfMenuEntries(BookshelfProvider provider) {
+  List<GlassMenuEntry<Object>> _arrangeMenuEntries(BookshelfProvider provider) {
     return [
       GlassMenuItem(
         value: _ShelfMenuAction.gridView,
-        label: '網格視圖',
+        label: '網格',
         icon: Icons.grid_view_outlined,
         checked: provider.isGridView,
       ),
       GlassMenuItem(
         value: _ShelfMenuAction.listView,
-        label: '列表視圖',
+        label: '列表',
         icon: Icons.view_list_outlined,
         checked: !provider.isGridView,
       ),
@@ -177,26 +193,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
       for (final mode in BookshelfSortMode.values)
         GlassMenuItem(
           value: mode,
-          label: mode == BookshelfSortMode.custom
-              ? mode.label
-              : '依${mode.label}排序',
+          label: mode.label,
           checked: provider.sortMode == mode,
         ),
       const GlassMenuDivider(),
-      const GlassMenuItem(
-        value: _ShelfMenuAction.addLocal,
-        label: '加入本地書籍',
-        icon: Icons.file_open_outlined,
-      ),
-      const GlassMenuItem(
-        value: _ShelfMenuAction.importUrl,
-        label: '從網址匯入書架',
-        icon: Icons.link_rounded,
-      ),
-      const GlassMenuItem(
-        value: _ShelfMenuAction.importFile,
-        label: '從檔案匯入書架',
-        icon: Icons.file_download_outlined,
+      GlassMenuItem(
+        value: _ShelfMenuAction.select,
+        label: '選取',
+        icon: Icons.check_circle_outline,
+        enabled: provider.books.isNotEmpty,
       ),
       const GlassMenuItem(
         value: _ShelfMenuAction.export,
@@ -205,6 +210,30 @@ class _BookshelfPageState extends State<BookshelfPage> {
       ),
     ];
   }
+
+  static const List<GlassMenuEntry<Object>> _addMenuEntries = [
+    GlassMenuItem(
+      value: _ShelfMenuAction.search,
+      label: '搜尋書籍',
+      icon: Icons.search_rounded,
+    ),
+    GlassMenuItem(
+      value: _ShelfMenuAction.addLocal,
+      label: '加入本地書籍',
+      icon: Icons.file_open_outlined,
+    ),
+    GlassMenuDivider(),
+    GlassMenuItem(
+      value: _ShelfMenuAction.importUrl,
+      label: '從網址匯入書架',
+      icon: Icons.link_rounded,
+    ),
+    GlassMenuItem(
+      value: _ShelfMenuAction.importFile,
+      label: '從檔案匯入書架',
+      icon: Icons.file_download_outlined,
+    ),
+  ];
 
   Future<void> _onShelfMenuSelected(
     BookshelfProvider provider,
@@ -217,6 +246,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
         provider.setGridView(true);
       case _ShelfMenuAction.listView:
         provider.setGridView(false);
+      case _ShelfMenuAction.select:
+        _enterEditMode();
+      case _ShelfMenuAction.search:
+        _openSearch();
       case _ShelfMenuAction.addLocal:
         final path = await AppFileSelectionService.instance.pickLocalBookPath();
         if (path != null && mounted) {
@@ -246,22 +279,16 @@ class _BookshelfPageState extends State<BookshelfPage> {
           primaryAction: AppStateAction(
             label: '搜尋書籍',
             icon: Icons.search,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SearchPage()),
-            ),
+            onPressed: _openSearch,
           ),
         ),
       );
     }
-    // 編輯模式時底部多一條工具列，清單要讓出它的高度。
-    final bottom =
-        insets.bottom +
-        AppSpacing.md +
-        (_isMultiSelect ? BookshelfEditToolbar.height + AppSpacing.sm : 0);
-    return RefreshIndicator(
-      edgeOffset: insets.top,
-      onRefresh: () => provider.refreshBookshelf(),
+    // 編輯工具列佔用分頁列的位置，清單底部讓出的高度不變。
+    final bottom = insets.bottom + AppSpacing.md;
+    // 下拉只在背景檢查更新：不轉圈、不提示，檢查期間不會重複觸發。
+    return RefreshIndicator.noSpinner(
+      onRefresh: provider.refreshBookshelf,
       child: provider.isGridView
           ? _buildGridView(provider, insets.top, bottom)
           : _buildListView(provider, insets.top, bottom),
@@ -535,7 +562,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
     double topInset,
     double bottomInset,
   ) {
-    final padding = EdgeInsets.only(top: topInset, bottom: bottomInset);
+    final padding = EdgeInsets.fromLTRB(
+      AppGrouped.margin,
+      topInset + AppSpacing.xs,
+      AppGrouped.margin,
+      bottomInset,
+    );
     final books = provider.books;
     // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走左滑動作。
     if (!_isMultiSelect && provider.sortMode == BookshelfSortMode.custom) {
@@ -544,14 +576,16 @@ class _BookshelfPageState extends State<BookshelfPage> {
           padding: padding,
           itemCount: books.length,
           onReorderItem: provider.reorderBooks,
+          // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
+          proxyDecorator: (child, _, animation) => ScaleTransition(
+            scale: Tween<double>(begin: 1, end: 1.03).animate(
+              CurvedAnimation(parent: animation, curve: AppMotion.menuCurve),
+            ),
+            child: Material(type: MaterialType.transparency, child: child),
+          ),
           itemBuilder: (context, index) => KeyedSubtree(
             key: ValueKey(books[index].bookUrl),
-            child: _buildListRow(
-              provider,
-              books[index],
-              isLast: index == books.length - 1,
-              reorderable: true,
-            ),
+            child: _buildListCard(provider, books[index], reorderable: true),
           ),
         ),
       );
@@ -560,49 +594,51 @@ class _BookshelfPageState extends State<BookshelfPage> {
       child: ListView.builder(
         padding: padding,
         itemCount: books.length,
-        itemBuilder: (context, index) => _buildListRow(
-          provider,
-          books[index],
-          isLast: index == books.length - 1,
-        ),
+        itemBuilder: (context, index) =>
+            _buildListCard(provider, books[index]),
       ),
     );
   }
 
-  Widget _buildListRow(
+  Widget _buildListCard(
     BookshelfProvider provider,
     Book book, {
-    required bool isLast,
     bool reorderable = false,
   }) {
     final selecting = _isMultiSelect;
-    return SwipeActions(
-      enabled: !selecting,
-      trailing: [
-        if (!book.isLocal)
-          SwipeAction(
-            label: '檢查更新',
-            icon: Icons.update,
-            color: AppTint.azurite.color,
-            onPressed: () => _checkUpdateOne(provider, book),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      // 滑出的動作按鈕裁在卡片圓角內。
+      child: ClipRRect(
+        borderRadius: AppGrouped.cardRadius,
+        child: SwipeActions(
+          enabled: !selecting,
+          trailing: [
+            if (!book.isLocal)
+              SwipeAction(
+                label: '檢查更新',
+                icon: Icons.update,
+                color: AppTint.azurite.color,
+                onPressed: () => _checkUpdateOne(provider, book),
+              ),
+            SwipeAction(
+              label: '移出書架',
+              icon: Icons.delete_outline,
+              color: AppTint.rust.color,
+              destructive: true,
+              onPressed: () => _confirmRemoveOne(provider, book),
+            ),
+          ],
+          child: BookshelfListCard(
+            book: book,
+            selecting: selecting,
+            selected: _selectedUrls.contains(book.bookUrl),
+            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+            onLongPress: selecting || reorderable
+                ? null
+                : (rect) => _showBookMenu(provider, book, rect, grid: false),
           ),
-        SwipeAction(
-          label: '移出書架',
-          icon: Icons.delete_outline,
-          color: AppTint.rust.color,
-          destructive: true,
-          onPressed: () => _confirmRemoveOne(provider, book),
         ),
-      ],
-      child: BookshelfListRow(
-        book: book,
-        selecting: selecting,
-        selected: _selectedUrls.contains(book.bookUrl),
-        showSeparator: !isLast,
-        onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
-        onLongPress: selecting || reorderable
-            ? null
-            : (rect) => _showBookMenu(provider, book, rect, grid: false),
       ),
     );
   }
@@ -661,17 +697,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
             height: sourceRect.height,
             borderRadius: AppRadius.cardXs,
           )
-        : BookshelfListRow(
-            book: book,
-            hero: false,
-            showSeparator: false,
-            background: AppChrome.of(context).groupedSurface,
-          );
+        : BookshelfListCard(book: book, hero: false);
     final action = await showContextPreviewMenu<_BookMenuAction>(
       context: context,
       sourceRect: sourceRect,
       preview: preview,
-      previewRadius: grid ? AppRadius.cardXs : AppRadius.cardLg,
+      previewRadius: grid ? AppRadius.cardXs : AppGrouped.cardRadius,
       entries: [
         const GlassMenuItem(
           value: _BookMenuAction.detail,
@@ -712,10 +743,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
       case _BookMenuAction.detail:
         _openDetail(book);
       case _BookMenuAction.select:
-        setState(() {
-          _isMultiSelect = true;
-          _selectedUrls.add(book.bookUrl);
-        });
+        _enterEditMode(book);
       case _BookMenuAction.checkUpdate:
         await _checkUpdateOne(provider, book);
       case _BookMenuAction.download:
@@ -791,6 +819,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
+    );
+  }
+
+  void _openSearch() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SearchPage()),
     );
   }
 
