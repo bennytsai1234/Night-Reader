@@ -7,14 +7,27 @@ const List<FontFeature> kReaderV2CjkFontFeatures = <FontFeature>[
 /// 正文與資訊列的文字語系。
 ///
 /// Android 的 Noto Sans CJK 是一個字型集合，同一個碼位依語系選用
-/// 簡中／繁中／日文字形；未指定語系時回退鏈取第一個（簡中）字形，
-/// 「，。：；！？」因此擠在字格左下角、「」緊貼一側。指定繁中（臺灣）
-/// 後使用置中的全形標點與置中的上下引號，符合臺灣出版排版慣例。
+/// 簡中／繁中／日文字形；指定繁中（臺灣）讓漢字回退到繁中字形。
+/// 標點不靠語系：部分機型的系統字型不提供繁中字形，見
+/// [kReaderV2PunctFontFamily]。
 const Locale kReaderV2TextLocale = Locale.fromSubtags(
   languageCode: 'zh',
   scriptCode: 'Hant',
   countryCode: 'TW',
 );
+
+/// 正文與資訊列的標點字型（`assets/fonts/NightReaderPunct-*.ttf`，由同目錄
+/// `generate_punct_font.py` 從 Noto Sans CJK TC 產生）。
+///
+/// 只收「，。、；：！？」的繁中置中字形，以及改為教育部位置的「」『』
+/// （直筆外緣貼字格中線，各佔四分之一格）。放在字型清單首位，標點不受
+/// 手機系統字型的語系與廠商設定影響；其餘字元交給
+/// [kReaderV2FontFamilyFallback] 與平台回退，與未指定字型時相同。
+const String kReaderV2PunctFontFamily = 'NightReaderPunct';
+
+/// 未指定字型時引擎使用的平台預設字族；接在標點字型之後，讓拉丁字母與
+/// 數字維持原本的系統字型。
+const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
 
 // lastline-v1 為已移除的末行字距補償所留；保留字串以免無謂地讓既有
 // metrics 快取失效。
@@ -30,8 +43,10 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
 // 舊 metrics 不可沿用。
 // chapter-gap-v1：章末 block 高度含固定的章末空行，舊的章末高度不可沿用。
 // chapter-gap-v2：章末留白改為使用者設定的章節間距，不再疊加在段距之上。
+// twpunct-v1：標點改由 NightReaderPunct 繪製，字形與 run 切分改變，
+// 舊 metrics 不可沿用。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2';
+    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v1';
 
 /// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
 const double kReaderV2DefaultTitleSizeDelta = 4.0;

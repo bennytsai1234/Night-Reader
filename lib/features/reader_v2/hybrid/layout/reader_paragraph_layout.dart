@@ -219,6 +219,8 @@ final class ReaderParagraphLayout {
       height: style.lineHeight,
       letterSpacing: style.letterSpacing,
       fontWeight: style.bold ? ui.FontWeight.bold : ui.FontWeight.normal,
+      fontFamily: kReaderV2PunctFontFamily,
+      fontFamilyFallback: kReaderV2FontFamilyFallback,
       fontFeatures: kReaderV2CjkFontFeatures,
       locale: kReaderV2TextLocale,
     );

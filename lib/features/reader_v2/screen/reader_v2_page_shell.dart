@@ -431,6 +431,8 @@ class _InfoRow extends StatelessWidget {
             style: AppTextStyles.uiXs.copyWith(
               color: colors.info,
               fontWeight: FontWeight.w400,
+              fontFamily: kReaderV2PunctFontFamily,
+              fontFamilyFallback: kReaderV2FontFamilyFallback,
               locale: kReaderV2TextLocale,
             ),
             maxLines: 1,
