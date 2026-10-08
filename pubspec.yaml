@@ -129,3 +129,11 @@ flutter:
     - assets/ui/app_icon.webp
     - assets/default_sources/
     - assets/opencc/
+    - assets/fonts/OFL.txt
+
+  fonts:
+    - family: NightReaderPunct
+      fonts:
+        - asset: assets/fonts/NightReaderPunct-Regular.ttf
+        - asset: assets/fonts/NightReaderPunct-Bold.ttf
+          weight: 700

@@ -532,6 +532,8 @@ final class LayoutPump implements HybridLayoutPump {
       fontWeight: task.textStyle.bold
           ? ui.FontWeight.bold
           : ui.FontWeight.normal,
+      fontFamily: kReaderV2PunctFontFamily,
+      fontFamilyFallback: kReaderV2FontFamilyFallback,
       fontFeatures: kReaderV2CjkFontFeatures,
       locale: kReaderV2TextLocale,
     );

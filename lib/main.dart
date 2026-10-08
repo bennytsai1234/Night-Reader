@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
@@ -65,6 +66,13 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 const String kAppDisplayName = '夜讀';
 final StartupRetryGate _startupRetryGate = StartupRetryGate();
 
+/// 內建標點字型 NightReaderPunct 的 SIL OFL 授權，列在「開源授權」頁。
+Stream<LicenseEntry> _punctFontLicense() async* {
+  yield LicenseEntryWithLineBreaks(const <String>[
+    'NightReaderPunct (Noto Sans CJK TC)',
+  ], await rootBundle.loadString('assets/fonts/OFL.txt'));
+}
+
 void main() {
   runZonedGuarded(_startApp, (error, stack) {
     AppLog.e('Uncaught Error: $error', error: error, stackTrace: stack);
@@ -77,6 +85,7 @@ Future<void> _startApp() async {
   GestureBinding.instance.resamplingEnabled = true;
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
+  LicenseRegistry.addLicense(_punctFontLicense);
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
