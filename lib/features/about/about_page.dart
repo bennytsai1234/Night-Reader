@@ -87,7 +87,6 @@ class _AboutPageState extends State<AboutPage> {
           ),
           GroupedSection(
             header: '系統工具',
-            footer: '本專案為開源學習作品，不提供任何內容服務。所有數據由使用者自行導入。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

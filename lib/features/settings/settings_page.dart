@@ -114,7 +114,6 @@ class SettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            footer: '夜讀 · GPL-3.0',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -180,12 +179,6 @@ class _ProfileHeader extends StatelessWidget {
               letterSpacing: 1.6,
               color: scheme.onSurface,
             ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '本地書庫 · 閱讀，從這裡開始',
-            textAlign: TextAlign.center,
-            style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
           ),
         ],
       ),

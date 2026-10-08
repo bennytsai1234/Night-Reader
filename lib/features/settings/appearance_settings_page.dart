@@ -52,7 +52,6 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             GroupedSection(
               topGap: AppSpacing.lg,
               header: 'App 顯示模式',
-              footer: '跟隨系統時，手機為淺色就套用淺色方案，手機為深色就套用深色方案。',
               children: [
                 for (final (mode, label) in const [
                   (ThemeMode.system, '跟隨系統'),
@@ -70,7 +69,6 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             GroupedSection(
               topGap: AppSpacing.lg,
               header: _area == ThemeArea.reader ? '閱讀方案切換' : '閱讀選單方案切換',
-              footer: '淺色與深色各使用自己的配色方案；跟隨系統只負責依手機目前模式選擇要套用哪一套。',
               children: [
                 for (final (mode, label) in const [
                   (AreaThemeMode.followSystem, '跟隨系統'),
@@ -91,9 +89,6 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           if (_area == ThemeArea.app)
             GroupedSection(
               header: '玻璃效果',
-              footer:
-                  '浮動分頁列、頁首按鈕、選單與閱讀器選單的材質。越往右越透明、模糊越強，'
-                  '也越吃效能；選「實色」則完全不做背景模糊。',
               children: [
                 GroupedContent(
                   child: GlassSegmented<GlassStrength>(
@@ -322,8 +317,9 @@ class _Preview extends StatelessWidget {
                   style: TextStyle(color: c.text, height: 1.6),
                 ),
                 const SizedBox(height: AppSpacing.sm),
+                // 次要文字即閱讀器頁首／頁尾資訊的顏色，以一行頁尾範例預覽。
                 Text(
-                  '方案名稱只代表切換槽位，實際顏色由你自訂。',
+                  '第一章 · 12%',
                   style: AppTextStyles.labelSm.copyWith(color: c.secondaryText),
                 ),
               ],

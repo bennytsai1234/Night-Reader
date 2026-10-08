@@ -38,9 +38,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
         children: [
           GroupedSection(
             header: 'Cookie / WebView',
-            footer:
-                '清除全部 Cookie 會一併清除 App、網路請求與 WebView 的 Cookie；'
-                'localStorage 與 cache 只影響 WebView 的網頁資料，不會刪除書籍。',
             children: [
               GroupedRow(
                 title: '清除全部 Cookie',
@@ -88,9 +85,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
           _buildPermissionSection(),
           GroupedSection(
             header: '說明',
-            footer:
-                '隱私說明涵蓋本地資料、Cookie、WebView、備份與網路請求；'
-                '權限說明涵蓋檔案、通知、背景任務與網路相關權限。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -231,8 +225,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
         child: Icon(_permissionIcon(item.tone), color: color, size: 24),
       ),
       title: item.title,
-      subtitle: item.description,
-      maxSubtitleLines: 3,
       showChevron: item.actionLabel != null,
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 112),

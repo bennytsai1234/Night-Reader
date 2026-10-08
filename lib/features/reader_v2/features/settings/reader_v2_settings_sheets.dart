@@ -45,17 +45,11 @@ class _ReaderInterfaceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hintStyle = AppTextStyles.uiXs.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
     return ReaderV2SheetScaffold(
       title: '外觀與排版',
       maxHeightFactor: 0.6,
       children: [
-        SheetSection(
-          title: '閱讀主題',
-          trailing: Text('正文背景與文字', style: hintStyle),
-        ),
+        const SheetSection(title: '閱讀主題'),
         ListenableBuilder(
           listenable: settings,
           builder: (context, _) => _ReaderThemeSelector(
@@ -68,10 +62,7 @@ class _ReaderInterfaceSheet extends StatelessWidget {
           collapsible: true,
           moreChildren: [
             ReaderV2PageLayoutSection(settings: settings),
-            SheetSection(
-              title: '選單樣式',
-              trailing: Text('選單與工具列配色', style: hintStyle),
-            ),
+            const SheetSection(title: '選單樣式'),
             ListenableBuilder(
               listenable: settings,
               builder: (context, _) => _ReaderThemeSelector(
@@ -165,12 +156,6 @@ class _ReaderAdvancedSheet extends StatelessWidget {
             title: Text(
               '換源',
               style: AppTextStyles.uiMd.copyWith(color: colorScheme.onSurface),
-            ),
-            subtitle: Text(
-              '搜尋其他書源並切換本書來源',
-              style: AppTextStyles.bodyXs.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
             ),
             trailing: const Icon(Icons.chevron_right, size: 18),
             onTap: () {

@@ -30,8 +30,6 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
         children: [
           GroupedSection(
             header: '本地備份與還原',
-            footer:
-                '建立備份會產生 ZIP 檔，再選擇儲存或分享位置；還原時選擇 ZIP 備份檔並匯入書架、書源與設定。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

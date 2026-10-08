@@ -135,7 +135,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             GroupedSwitchRow(
               leading: const GroupedIconTile(Icons.auto_fix_high_rounded),
               title: '本書套用替換規則',
-              subtitle: _updatingToggle ? '正在套用設定…' : '切換後會重載目前閱讀位置內容',
               value: _useReplaceRule,
               onChanged: _updatingToggle ? null : _setUseReplaceRule,
             ),
@@ -149,7 +148,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                       tint: AppTint.moss,
                     ),
                     title: '啟用狀態',
-                    subtitle: '正在讀取本書可套用規則',
                     trailing: SizedBox.square(
                       dimension: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
@@ -163,7 +161,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                       tint: AppTint.rust,
                     ),
                     title: '規則讀取失敗',
-                    subtitle: '無法取得本書目前可套用的規則',
                     value: '重試',
                     showChevron: false,
                     onTap: () => setState(_reloadEnabledRules),
@@ -176,7 +173,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                     tint: AppTint.moss,
                   ),
                   title: '啟用狀態',
-                  subtitle: '本書可套用 ${rules.length} 條規則',
                   value: rules.isEmpty ? null : '${rules.length}',
                 );
               },
@@ -187,7 +183,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 tint: AppTint.azurite,
               ),
               title: '新增規則',
-              subtitle: '直接建立一條新的替換規則',
               onTap: () async {
                 await ReaderV2ReplaceRuleEditorSheet.show(
                   context,
@@ -208,7 +203,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 tint: AppTint.ink,
               ),
               title: '管理規則',
-              subtitle: '新增、編輯、啟用或刪除規則',
               onTap: () async {
                 await Navigator.push(
                   context,
@@ -231,7 +225,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               controller: _testController,
               minLines: 3,
               maxLines: 5,
-              hintText: '輸入一段文本，測試本書正文實際套用規則',
             ),
             GroupedRow(
               title: _testing ? '測試中…' : '執行測試',
