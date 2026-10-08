@@ -222,7 +222,6 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkSearch,
                 title: '校驗搜尋',
-                subtitle: '檢查 searchUrl 與搜尋結果',
                 onChanged: (value) {
                   setState(() {
                     checkSearch = value;
@@ -235,7 +234,6 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkDiscovery,
                 title: '校驗發現',
-                subtitle: '依 exploreUrl 解析並檢查發現入口',
                 onChanged: (value) {
                   setState(() {
                     checkDiscovery = value;
@@ -248,7 +246,6 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkInfo,
                 title: '校驗詳情',
-                subtitle: '拉取書籍詳情頁',
                 onChanged: (value) {
                   setState(() {
                     checkInfo = value;
@@ -262,7 +259,6 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkCategory,
                 title: '校驗目錄',
-                subtitle: '拉取章節列表',
                 onChanged:
                     checkInfo
                         ? (value) {
@@ -278,7 +274,6 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkContent,
                 title: '校驗正文',
-                subtitle: '拉取首個可閱讀章節正文',
                 onChanged:
                     checkInfo && checkCategory
                         ? (value) => setState(() => checkContent = value)

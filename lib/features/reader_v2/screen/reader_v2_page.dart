@@ -425,7 +425,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       actions: const [
         AppSheetAction(
           label: '全域系統設定',
-          subtitle: '備份、還原與解析引擎配置',
           icon: Icons.settings_suggest_rounded,
           value: _ReaderMoreAction.globalSettings,
         ),

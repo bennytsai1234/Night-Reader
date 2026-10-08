@@ -28,14 +28,12 @@ typedef AppPermissionPlatformPredicate = bool Function();
 class AppPermissionItem {
   const AppPermissionItem({
     required this.title,
-    required this.description,
     required this.status,
     required this.tone,
     this.actionLabel,
   });
 
   final String title;
-  final String description;
   final String status;
   final AppPermissionStatusTone tone;
   final String? actionLabel;
@@ -89,7 +87,6 @@ class AppPermissionService {
     if (!_isAndroid() && !_isIOS()) {
       return const AppPermissionItem(
         title: '通知',
-        description: '此平台不使用行動系統通知權限。',
         status: '不適用',
         tone: AppPermissionStatusTone.neutral,
       );
@@ -98,7 +95,6 @@ class AppPermissionService {
     final status = await _gateway.status(AppPermissionTarget.notification);
     return AppPermissionItem(
       title: '通知',
-      description: 'TTS 朗讀的媒體控制通知會使用此權限；拒絕後仍可朗讀，但通知列控制可能無法顯示。',
       status: _statusLabel(status),
       tone: _statusTone(status),
       actionLabel: _needsSettings(status) ? '開啟系統設定' : '要求權限',
@@ -109,7 +105,6 @@ class AppPermissionService {
     if (!_isIOS()) {
       return const AppPermissionItem(
         title: '相簿',
-        description: 'Android 使用系統圖片選取器處理封面更換，不需要夜讀取得整個相簿存取權。',
         status: '不需授權',
         tone: AppPermissionStatusTone.ok,
       );
@@ -118,7 +113,6 @@ class AppPermissionService {
     final status = await _gateway.status(AppPermissionTarget.photos);
     return AppPermissionItem(
       title: '相簿',
-      description: '只在使用者更換書籍封面並選取相簿圖片時使用。',
       status: _statusLabel(status),
       tone: _statusTone(status),
       actionLabel: _needsSettings(status) ? '開啟系統設定' : '要求權限',
@@ -128,7 +122,6 @@ class AppPermissionService {
   AppPermissionItem _filePickerItem() {
     return const AppPermissionItem(
       title: '檔案選取',
-      description: '本地書匯入、備份還原與書源匯入使用系統檔案選擇器，只處理使用者選取的檔案。',
       status: '不需廣域授權',
       tone: AppPermissionStatusTone.ok,
     );
@@ -137,7 +130,6 @@ class AppPermissionService {
   AppPermissionItem _allFilesItem() {
     return const AppPermissionItem(
       title: '所有檔案存取',
-      description: '夜讀不要求 Android 所有檔案存取權，避免取得超出閱讀器必要範圍的儲存權限。',
       status: '未使用',
       tone: AppPermissionStatusTone.ok,
     );
@@ -147,7 +139,6 @@ class AppPermissionService {
     if (_isIOS()) {
       return const AppPermissionItem(
         title: '背景音訊',
-        description: 'iOS Runner 已啟用 audio background mode，用於 TTS 背景朗讀。',
         status: '已配置',
         tone: AppPermissionStatusTone.ok,
       );
@@ -155,15 +146,12 @@ class AppPermissionService {
     if (_isAndroid()) {
       return const AppPermissionItem(
         title: '前台媒體服務',
-        description:
-            'Android 已宣告 foreground media playback service，用於 TTS 媒體控制與背景朗讀。',
         status: '已宣告',
         tone: AppPermissionStatusTone.ok,
       );
     }
     return const AppPermissionItem(
       title: '背景音訊',
-      description: '此平台未啟用行動背景音訊權限設計。',
       status: '不適用',
       tone: AppPermissionStatusTone.neutral,
     );

@@ -617,7 +617,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                                 else
                                   GroupedSection(
                                     header: '書源',
-                                    footer: '可複選；不選表示不限書源。',
                                     children: [
                                       for (final source in sources)
                                         Semantics(

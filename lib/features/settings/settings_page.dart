@@ -38,7 +38,6 @@ class SettingsPage extends StatelessWidget {
           const _ProfileHeader(),
           GroupedSection(
             header: '閱讀',
-            footer: '閱讀統計記錄每本書的累積閱讀時間；閱讀偏好包含排版、自動翻頁、繁簡轉換與點擊區域。',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -115,7 +114,6 @@ class SettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            footer: '夜讀 · GPL-3.0',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -181,12 +179,6 @@ class _ProfileHeader extends StatelessWidget {
               letterSpacing: 1.6,
               color: scheme.onSurface,
             ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '本地書庫 · 閱讀，從這裡開始',
-            textAlign: TextAlign.center,
-            style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
           ),
         ],
       ),

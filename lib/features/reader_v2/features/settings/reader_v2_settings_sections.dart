@@ -574,7 +574,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
         ),
         GroupedSection(
           margin: _sectionMargin,
-          footer: '收起時間、訊號與電量；鏡頭所在的那一行可改放頁首資訊。',
           children: [
             GroupedSwitchRow(
               title: '隱藏系統狀態列',
@@ -586,7 +585,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
         GroupedSection(
           margin: _sectionMargin,
           header: '頁首與頁尾',
-          footer: '左右兩欄都選「不顯示」即關閉該列。',
           children: [
             ..._infoSlotRows(
               title: '頁首',
@@ -751,7 +749,6 @@ class ReaderV2ClickActionSection extends StatelessWidget {
           headerTrailing: _ResetButton(
             onPressed: _isDefault ? null : settings.resetClickActions,
           ),
-          footer: '對應閱讀畫面的九宮格，點一格即可更換功能。',
           children: [
             GroupedContent(
               padding: const EdgeInsets.all(AppSpacing.md),
