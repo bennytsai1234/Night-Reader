@@ -73,17 +73,22 @@ class _MainPageState extends State<MainPage> {
   late final List<MainDestination> _destinations =
       widget.destinations ?? _defaultDestinations;
 
+  /// 分頁進入整頁編輯時由分頁設為 true（見 [FloatingTabBarScope]）。
+  final ValueNotifier<bool> _tabBarHidden = ValueNotifier(false);
+
   @override
   void dispose() {
     _splashTimeoutTimer?.cancel();
     _detachSplashShelfListener();
     _pageController.dispose();
+    _tabBarHidden.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    _tabBarHidden.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_initDeferredStartupData());
@@ -118,12 +123,21 @@ class _MainPageState extends State<MainPage> {
           children: [
             PageView(
               controller: _pageController,
+              physics:
+                  _tabBarHidden.value
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
               onPageChanged: (idx) {
                 setState(() => _currentIndex = idx);
               },
               children: List.generate(
                 _destinations.length,
-                (index) => _KeepAliveWrapper(child: _destinations[index].page),
+                (index) => _KeepAliveWrapper(
+                  child: FloatingTabBarScope(
+                    hidden: _tabBarHidden,
+                    child: _destinations[index].page,
+                  ),
+                ),
               ),
             ),
             Positioned.fill(
@@ -183,6 +197,7 @@ class _MainPageState extends State<MainPage> {
         bottomNavigationBar: FloatingTabBar(
           controller: _pageController,
           currentIndex: _currentIndex,
+          hidden: _tabBarHidden.value,
           items: [
             for (final destination in _destinations)
               FloatingTabItem(
@@ -322,6 +337,9 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> _handleBackIntent() async {
+    // 路由會通知所有 PopScope；主頁先於分頁註冊，此時分頁仍在整頁編輯中，
+    // 返回鍵留給分頁的 PopScope 退出編輯。
+    if (_tabBarHidden.value) return;
     if (_currentIndex != 0) {
       _pageController.animateToPage(
         0,
