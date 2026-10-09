@@ -128,6 +128,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.dayNightIcon,
     required this.dayNightTooltip,
     required this.onExitIntent,
+    required this.onSystemBack,
     required this.onMore,
     required this.onOpenDrawer,
     required this.onTts,
@@ -179,7 +180,12 @@ class ReaderV2PageShell extends StatelessWidget {
   final double? topCutoutExtent;
   final IconData dayNightIcon;
   final String dayNightTooltip;
+
+  /// 頂部返回鈕與錯誤頁的返回：直接走離開流程。
   final VoidCallback onExitIntent;
+
+  /// 系統返回且目錄沒開著時呼叫：由頁面決定先收起什麼。
+  final VoidCallback onSystemBack;
   final VoidCallback onMore;
   final VoidCallback onOpenDrawer;
   final VoidCallback onTts;
@@ -219,7 +225,13 @@ class ReaderV2PageShell extends StatelessWidget {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        onExitIntent();
+        // 目錄開著時返回只收目錄。
+        final scaffold = scaffoldKey.currentState;
+        if (scaffold != null && scaffold.isDrawerOpen) {
+          scaffold.closeDrawer();
+          return;
+        }
+        onSystemBack();
       },
       child: Scaffold(
         key: scaffoldKey,
@@ -240,7 +252,9 @@ class ReaderV2PageShell extends StatelessWidget {
                   height: layout.headerExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => onShowControls(),
+                    // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
+                    // 選單開著時由收起層處理。
+                    onTap: controlsVisible ? null : onShowControls,
                     child: ColoredBox(
                       color: backgroundColor,
                       child: layout.showHeaderInfo && infoVisible
@@ -269,7 +283,9 @@ class ReaderV2PageShell extends StatelessWidget {
                   height: layout.footerExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => onShowControls(),
+                    // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
+                    // 選單開著時由收起層處理。
+                    onTap: controlsVisible ? null : onShowControls,
                     child: _PermanentInfoBar(
                       shell: this,
                       rowBottom: layout.footerRowBottom,
@@ -696,8 +712,9 @@ class _ReaderV2ControlsDismissLayerState
 
   @override
   Widget build(BuildContext context) {
+    // 不擋住底下的正文：在正文上滑動會收起選單，同一次手勢也照常捲動。
     return Listener(
-      behavior: HitTestBehavior.opaque,
+      behavior: HitTestBehavior.translucent,
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
       onPointerUp: _handlePointerUp,

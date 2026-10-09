@@ -28,7 +28,7 @@ class ReaderV2ControllerHost {
     required this._isMounted,
   }) {
     settings.addListener(_onSettingsChanged);
-    menu.addListener(_onControllerChanged);
+    menu.addListener(_onMenuChanged);
     dependencies = ReaderV2Dependencies(
       book: book,
       initialChapters: initialChapters,
@@ -81,8 +81,24 @@ class ReaderV2ControllerHost {
   bool _presentationCallbackQueued = false;
   int _presentationRevision = 0;
   bool _opening = false;
+  bool _ttsWasPlaying = false;
 
   void _onControllerChanged() {
+    _onChanged();
+  }
+
+  void _onMenuChanged() {
+    autoPage?.setPaused(menu.controlsVisible);
+    _onChanged();
+  }
+
+  /// 朗讀跟隨與自動捲動都會移動正文，同一時間只留一個：朗讀一開始播放
+  /// 就停掉自動捲動；開始自動捲動時停掉朗讀，見
+  /// `ReaderV2PageCoordinator.toggleAutoPage`。
+  void _onTtsChanged() {
+    final playing = tts?.isPlaying ?? false;
+    if (playing && !_ttsWasPlaying) autoPage?.stop();
+    _ttsWasPlaying = playing;
     _onChanged();
   }
 
@@ -121,7 +137,7 @@ class ReaderV2ControllerHost {
       initialLocation: initialLocation,
     )..addListener(_onControllerChanged);
     final nextTts = ReaderV2TtsController(runtime: nextRuntime)
-      ..addListener(_onControllerChanged);
+      ..addListener(_onTtsChanged);
     final nextAutoPage = ReaderV2AutoPageController(
       runtime: nextRuntime,
       viewportController: viewportController,
@@ -398,9 +414,9 @@ class ReaderV2ControllerHost {
   void dispose() {
     _lifecycleListener.dispose();
     settings.removeListener(_onSettingsChanged);
-    menu.removeListener(_onControllerChanged);
+    menu.removeListener(_onMenuChanged);
     autoPage?.removeListener(_onControllerChanged);
-    tts?.removeListener(_onControllerChanged);
+    tts?.removeListener(_onTtsChanged);
     runtime?.removeListener(_onControllerChanged);
     autoPage?.dispose();
     tts?.dispose();

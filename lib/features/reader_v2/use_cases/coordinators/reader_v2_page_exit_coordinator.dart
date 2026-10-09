@@ -29,14 +29,9 @@ class ReaderV2PageExitCoordinator {
   Future<void> handleExitIntent({
     required BuildContext context,
     required ReaderV2ExitFlowDelegate provider,
-    required bool Function() isDrawerOpen,
     required VoidCallback popNavigator,
   }) async {
     if (_isHandlingExit || !context.mounted) return;
-    if (isDrawerOpen()) {
-      popNavigator();
-      return;
-    }
 
     _isHandlingExit = true;
     try {
