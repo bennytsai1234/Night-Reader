@@ -9551,7 +9551,16 @@ class $$BooksTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$BooksTable, Book>(table),
+                  BaseReferences<_$AppDatabase, $BooksTable, Book>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9962,7 +9971,16 @@ class $$ChaptersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ChaptersTable, BookChapter>(table),
+                  BaseReferences<_$AppDatabase, $ChaptersTable, BookChapter>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10258,7 +10276,19 @@ class $$ReaderChapterContentsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<
+                    $ReaderChapterContentsTable,
+                    ReaderChapterContent
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $ReaderChapterContentsTable,
+                    ReaderChapterContent
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10992,7 +11022,16 @@ class $$BookSourcesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$BookSourcesTable, BookSource>(table),
+                  BaseReferences<_$AppDatabase, $BookSourcesTable, BookSource>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11224,7 +11263,16 @@ class $$BookGroupsTableTableManager
                 bookSort: bookSort,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$BookGroupsTable, BookGroup>(table),
+                  BaseReferences<_$AppDatabase, $BookGroupsTable, BookGroup>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11388,7 +11436,18 @@ class $$SearchHistoryTableTableTableManager
                 searchTime: searchTime,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SearchHistoryTableTable, SearchHistoryRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SearchHistoryTableTable,
+                    SearchHistoryRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11751,7 +11810,16 @@ class $$ReplaceRulesTableTableManager
                 order: order,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ReplaceRulesTable, ReplaceRule>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $ReplaceRulesTable,
+                    ReplaceRule
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11879,7 +11947,16 @@ class $$CookiesTableTableManager
             Value<int> rowid = const Value.absent(),
           }) => CookiesCompanion.insert(url: url, cookie: cookie, rowid: rowid),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CookiesTable, Cookie>(table),
+                  BaseReferences<_$AppDatabase, $CookiesTable, Cookie>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12088,7 +12165,16 @@ class $$DictRulesTableTableManager
                 sortNumber: sortNumber,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DictRulesTable, DictRule>(table),
+                  BaseReferences<_$AppDatabase, $DictRulesTable, DictRule>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12419,7 +12505,16 @@ class $$HttpTtsTableTableTableManager
                 lastUpdateTime: lastUpdateTime,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$HttpTtsTableTable, HttpTTS>(table),
+                  BaseReferences<_$AppDatabase, $HttpTtsTableTable, HttpTTS>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12610,7 +12705,16 @@ class $$ReadRecordsTableTableManager
                 lastRead: lastRead,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ReadRecordsTable, ReadRecord>(table),
+                  BaseReferences<_$AppDatabase, $ReadRecordsTable, ReadRecord>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12801,7 +12905,16 @@ class $$ServersTableTableManager
                 sortNumber: sortNumber,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ServersTable, Server>(table),
+                  BaseReferences<_$AppDatabase, $ServersTable, Server>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -13013,7 +13126,16 @@ class $$TxtTocRulesTableTableManager
                 enable: enable,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$TxtTocRulesTable, TxtTocRule>(table),
+                  BaseReferences<_$AppDatabase, $TxtTocRulesTable, TxtTocRule>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -13170,7 +13292,16 @@ class $$CacheTableTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CacheTableTable, Cache>(table),
+                  BaseReferences<_$AppDatabase, $CacheTableTable, Cache>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -13355,7 +13486,16 @@ class $$KeyboardAssistsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$KeyboardAssistsTable, KeyboardAssist>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $KeyboardAssistsTable,
+                    KeyboardAssist
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -13563,7 +13703,16 @@ class $$RuleSubsTableTableManager
                 order: order,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$RuleSubsTable, RuleSub>(table),
+                  BaseReferences<_$AppDatabase, $RuleSubsTable, RuleSub>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -13957,7 +14106,16 @@ class $$SearchBooksTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SearchBooksTable, SearchBook>(table),
+                  BaseReferences<_$AppDatabase, $SearchBooksTable, SearchBook>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -14266,7 +14424,16 @@ class $$DownloadTasksTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DownloadTasksTable, DownloadTask>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $DownloadTasksTable,
+                    DownloadTask
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -14432,7 +14599,16 @@ class $$SearchKeywordsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SearchKeywordsTable, SearchKeyword>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SearchKeywordsTable,
+                    SearchKeyword
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
