@@ -36,7 +36,7 @@
 ## Git 流程
 
 - `main` 受分支保護：不能直接推送，所有改動都經 PR，`Analyze and test` 通過後才能合併。
-- 一件工作一個分支（`feat/`、`fix/`、`refactor/`、`chore/`、`release/` 開頭），推上去開 PR，以 squash merge 合併；PR 標題就是 `main` 上的 commit message，用 Conventional Commits 格式（`fix(reader): …`）。
+- 一件工作一個分支（`feat/`、`fix/`、`refactor/`、`chore/`、`release/` 開頭），推上去開 PR，以 squash merge 合併；PR 標題就是 `main` 上的 commit message，用 Conventional Commits 格式（`fix(reader): …`）。同一次對話的改動合成一個 PR，不每個小改動各開一個。
 - PR 說明寫改了什麼、怎麼驗證；長期規則寫進本檔，不寫完工紀錄文件。
 
 ```bash
