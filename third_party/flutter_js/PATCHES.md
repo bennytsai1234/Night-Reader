@@ -30,6 +30,21 @@ public API remain unchanged.
 
 The published 0.8.7 Android script applies the legacy Kotlin Android plugin and pins AGP/KGP versions that are incompatible with AGP 9 built-in Kotlin. No upstream issue or pull request has been submitted for this local patch. The wider Flutter plugin migration is tracked by [flutter/flutter#181383](https://github.com/flutter/flutter/issues/181383).
 
-## Removal condition
+## Patch `nightreader.2`: Android only
 
-Remove this fork and return to the hosted package after an upstream `flutter_js` release supports AGP 9 built-in Kotlin and the new Android DSL without changing the runtime API or supported ABIs, and Night Reader's analysis, tests, and Android CI build pass against that release.
+- Removed the iOS, macOS, Linux and Windows implementations, the JavaScriptCore
+  runtime, the legacy `QuickJsRuntime` and method-channel `FlutterJs` engines,
+  and the QuickJS sync-server bridge. `getJavascriptRuntime()` always returns
+  `QuickJsRuntime2`, which loads `libfastdev_quickjs_runtime.so` on Android.
+- The Android plugin class is now an empty `FlutterPlugin` whose only job is to
+  link the `fastdev-jsruntimes-quickjs` library; its unused `JSEngine`, method
+  channel and template stub were removed, as was the unused `CMakeLists.txt`.
+- The prebuilt desktop QuickJS bridge libraries moved to
+  `test/fixtures/quickjs/` and are used only by the test suite.
+- `pubspec.yaml` declares Android only and drops `sync_http`.
+- Dart sources follow Night Reader's `flutter_lints` and `dart format` rules;
+  the FFI bindings keep the QuickJS C API names.
+
+## Maintenance
+
+Night Reader maintains this package in-tree and no longer tracks upstream.

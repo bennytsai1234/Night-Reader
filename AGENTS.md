@@ -18,7 +18,7 @@
 
 - Flutter `3.47.0`，固定在 `.github/workflows/ci.yml` 與 `android-release.yml`；升級時兩處一起改。
 - Dart SDK 約束以 `pubspec.yaml` 為準；CI 使用 Java 17（Temurin）。
-- `third_party/` 是本專案自行維護的三個套件，以 path dependency 引用，不再追上游：`flutter_tts`（源自 4.2.5）、`flutter_js`（源自 0.8.7）、`file_picker`（源自 11.0.3）；各自的修補紀錄在套件內的 `PATCHES.md`。視同專案程式碼，套用同一套 lint 與格式檢查。
+- `third_party/` 是本專案自行維護的三個套件，以 path dependency 引用，不再追上游：`flutter_tts`（源自 4.2.5）、`flutter_js`（源自 0.8.7）、`file_picker`（源自 11.0.3）；各自的修補紀錄在套件內的 `PATCHES.md`。只保留 Android 實作；視同專案程式碼，套用同一套 lint 與格式檢查。測試在桌面上跑 QuickJS 用的橋接函式庫放在 `test/fixtures/quickjs/`。
 
 ## 驗證
 

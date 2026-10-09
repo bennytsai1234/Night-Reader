@@ -29,7 +29,7 @@ dependencies:
   path_provider: ^2.1.6
 
   # === Media / TTS ===
-  # Upstream 4.2.5 runtime + Night Reader AGP 9 built-in Kotlin build patch.
+  # 自行維護（源自 4.2.5），見 third_party/flutter_tts/PATCHES.md。
   flutter_tts:
     path: third_party/flutter_tts
   audio_service: ^0.18.19
@@ -46,7 +46,7 @@ dependencies:
   xpath_selector_html_parser: ^3.0.1
 
   # === JavaScript Engine (replaces Android Rhino) ===
-  # Upstream 0.8.7 runtime + Night Reader AGP 9 built-in Kotlin build patch.
+  # 自行維護（源自 0.8.7），見 third_party/flutter_js/PATCHES.md。
   flutter_js:
     path: third_party/flutter_js
 
@@ -70,7 +70,7 @@ dependencies:
   pool: ^1.5.3
 
   # === Local File Support ===
-  # Upstream 11.0.3 + Night Reader Win32 6 / AGP 9 compatibility patch.
+  # 自行維護（源自 11.0.3），見 third_party/file_picker/PATCHES.md。
   file_picker:
     path: third_party/file_picker
 
