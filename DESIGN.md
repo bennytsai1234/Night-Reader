@@ -67,7 +67,7 @@
 - **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`，純文字動作用 `PlainTextAction`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方說明文字）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關為 iOS 樣式、開啟色為主色。
 - **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排），帶輸入框或勾選的用 `showStatefulAppAlert`＋`AlertTextField`／`AlertCheckRow`，控制器由提示框擁有（`TextControllersScope`），呼叫端不自行釋放；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
-- **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`FolderTabs` 為資料夾式橫向分頁；`GlassCapsule` 為可點小膠囊；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
+- **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`GroupFilterBar` 為書源分組篩選列（「全部」固定在左、分組膠囊可橫向捲動並附書源數、右側格狀鈕開出全部分組面板），發現頁與換源面板共用；`GlassCapsule` 為可點小膠囊（可附小字數量）；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
 - **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。
 
 ## 元件質感與動態反饋

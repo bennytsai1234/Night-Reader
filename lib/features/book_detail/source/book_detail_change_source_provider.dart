@@ -38,8 +38,13 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
 
   List<SearchBook> allResults = <SearchBook>[];
   List<SearchBook> filteredResults = <SearchBook>[];
-  List<String> groups = <String>['全部'];
-  String selectedGroup = '全部';
+  static const String allGroups = '全部';
+
+  /// 已啟用書源的分組（不含「全部」）與各分組的書源數。
+  List<String> groups = <String>[];
+  Map<String, int> groupCounts = <String, int>{};
+  int enabledSourceCount = 0;
+  String selectedGroup = allGroups;
   bool isSearching = false;
   String status = '正在初始化...';
   bool checkAuthor = true;
@@ -53,15 +58,18 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final sources = await _sourceDao.getEnabled();
     if (_disposed) return;
 
-    final groupSet = <String>{};
+    final counts = <String, int>{};
     for (final source in sources) {
-      groupSet.addAll(_splitGroups(source.bookSourceGroup ?? ''));
+      for (final group in _splitGroups(source.bookSourceGroup ?? '').toSet()) {
+        counts[group] = (counts[group] ?? 0) + 1;
+      }
     }
 
-    final sortedGroups = groupSet.toList()..sort();
-    groups = <String>['全部', ...sortedGroups];
-    if (!groups.contains(selectedGroup)) {
-      selectedGroup = '全部';
+    groupCounts = counts;
+    enabledSourceCount = sources.length;
+    groups = counts.keys.toList()..sort();
+    if (!counts.containsKey(selectedGroup)) {
+      selectedGroup = allGroups;
     }
     _notifySafely();
   }
@@ -215,7 +223,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               source.bookSourceUrl != book.origin,
         )
         .toList();
-    if (selectedGroup == '全部') {
+    if (selectedGroup == allGroups) {
       return enabledSources;
     }
     enabledSources = enabledSources
