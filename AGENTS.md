@@ -58,4 +58,4 @@ gh pr merge --squash --auto --delete-branch
 
 ## 保持 repo 整潔
 
-- 根目錄只放：`AGENTS.md`、`README.md`、`DESIGN.md`、`LICENSE`、ignore 檔、Flutter 工具鏈要求的檔案（`pubspec.yaml`、`pubspec.lock`、`analysis_options.yaml`、`.metadata`、`flutter_native_splash.yaml`），以及 `android/`、`ios/`、`lib/`、`assets/`、`test/`、`third_party/`、`website/`、`.github/`。新檔案放進既有目錄；測試素材放 `test/fixtures/`。
+- 測試素材放 `test/fixtures/`。
