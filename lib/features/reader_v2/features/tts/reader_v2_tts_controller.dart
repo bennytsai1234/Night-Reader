@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
@@ -108,6 +109,9 @@ class ReaderV2TtsController extends ChangeNotifier
   bool get isPlaying => _tts.isPlaying;
 
   @override
+  bool get isPaused => !_tts.isPlaying && _tts.currentSpokenText.isNotEmpty;
+
+  @override
   double get rate => _tts.rate;
 
   @override
@@ -142,7 +146,7 @@ class ReaderV2TtsController extends ChangeNotifier
       await _tts.pause();
       return;
     }
-    if (_tts.currentSpokenText.isNotEmpty) {
+    if (isPaused) {
       await _tts.resume();
       return;
     }
@@ -154,32 +158,89 @@ class ReaderV2TtsController extends ChangeNotifier
     final location = runtime.state.visibleLocation.normalized(
       chapterCount: runtime.chapterCount,
     );
-    await _startFromLocation(location, generation: generation);
+    await _speakFrom(location, generation: generation);
   }
 
-  Future<bool> _startFromLocation(
+  /// 使用者手動跳到別處：正在朗讀就從新位置接著念；暫停中則丟掉舊句，
+  /// 下次播放從新位置開始。
+  Future<void> followManualJump() async {
+    final wasPlaying = _tts.isPlaying;
+    if (!wasPlaying &&
+        _currentSegment == null &&
+        _tts.currentSpokenText.isEmpty) {
+      return;
+    }
+    await stop();
+    if (wasPlaying) await startFromVisibleLocation();
+  }
+
+  /// 從 [location] 開始朗讀；這一章已沒有可念的內容就往後找下一個有正文的
+  /// 章節。章節載入失敗或念到書尾時停下並告知，不默默跳過。
+  Future<void> _speakFrom(
     ReaderV2Location location, {
     required int generation,
   }) async {
-    try {
-      final content = await runtime.loadContentForTts(location);
-      final safeOffset = location.charOffset
-          .clamp(0, content.displayText.length)
-          .toInt();
-      final segments = _segmentsFor(
-        text: content.displayText,
-        chapterIndex: location.chapterIndex,
-        startOffset: safeOffset,
-      );
-      if (!_isActiveGeneration(generation)) return false;
-      _segments = segments;
-      _segmentIndex = segments.isEmpty ? -1 : 0;
-      if (segments.isEmpty) return false;
-      return await _speakCurrentSegment(generation);
-    } catch (_) {
-      if (!_isActiveGeneration(generation)) return false;
-      return false;
+    var next = location;
+    while (_isActiveGeneration(generation)) {
+      switch (await _startFromLocation(next, generation: generation)) {
+        case _SpeechStart.started:
+        case _SpeechStart.cancelled:
+          return;
+        case _SpeechStart.unavailable:
+          _finishSpeech(
+            generation,
+            notice: '第 ${next.chapterIndex + 1} 章無法載入，朗讀已停止',
+          );
+          return;
+        case _SpeechStart.empty:
+          final chapterIndex = next.chapterIndex + 1;
+          if (chapterIndex >= runtime.chapterCount) {
+            _finishSpeech(generation, notice: '已朗讀到書尾');
+            return;
+          }
+          next = ReaderV2Location(
+            chapterIndex: chapterIndex,
+            charOffset: 0,
+            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+          );
+      }
     }
+  }
+
+  Future<_SpeechStart> _startFromLocation(
+    ReaderV2Location location, {
+    required int generation,
+  }) async {
+    final ReaderV2Content content;
+    try {
+      content = await runtime.loadContentForTts(location);
+    } catch (_) {
+      return _isActiveGeneration(generation)
+          ? _SpeechStart.unavailable
+          : _SpeechStart.cancelled;
+    }
+    if (!_isActiveGeneration(generation)) return _SpeechStart.cancelled;
+    final safeOffset = location.charOffset
+        .clamp(0, content.displayText.length)
+        .toInt();
+    final segments = _segmentsFor(
+      text: content.displayText,
+      chapterIndex: location.chapterIndex,
+      startOffset: safeOffset,
+    );
+    _segments = segments;
+    _segmentIndex = segments.isEmpty ? -1 : 0;
+    if (segments.isEmpty) return _SpeechStart.empty;
+    return await _speakCurrentSegment(generation)
+        ? _SpeechStart.started
+        : _SpeechStart.cancelled;
+  }
+
+  void _finishSpeech(int generation, {required String notice}) {
+    if (!_isActiveGeneration(generation)) return;
+    _clearSpeechStateWithoutNotify();
+    runtime.emitUserNotice(notice);
+    notifyListeners();
   }
 
   @override
@@ -266,33 +327,19 @@ class ReaderV2TtsController extends ChangeNotifier
         await _speakCurrentSegment(generation);
         return;
       }
-      var failCount = 0;
-      for (
-        var chapterIndex = completedSegment.chapterIndex + 1;
-        _isActiveGeneration(generation) && chapterIndex < runtime.chapterCount;
-        chapterIndex += 1
-      ) {
-        final started = await _startFromLocation(
-          ReaderV2Location(
-            chapterIndex: chapterIndex,
-            charOffset: 0,
-            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
-          ),
-          generation: generation,
-        );
-        if (started) {
-          return;
-        } else {
-          failCount++;
-          if (failCount >= 3) {
-            break;
-          }
-        }
+      final chapterIndex = completedSegment.chapterIndex + 1;
+      if (chapterIndex >= runtime.chapterCount) {
+        _finishSpeech(generation, notice: '已朗讀到書尾');
+        return;
       }
-      if (_isActiveGeneration(generation)) {
-        _clearSpeechStateWithoutNotify();
-        notifyListeners();
-      }
+      await _speakFrom(
+        ReaderV2Location(
+          chapterIndex: chapterIndex,
+          charOffset: 0,
+          visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+        ),
+        generation: generation,
+      );
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -378,3 +425,5 @@ class ReaderV2TtsController extends ChangeNotifier
     super.dispose();
   }
 }
+
+enum _SpeechStart { started, empty, unavailable, cancelled }

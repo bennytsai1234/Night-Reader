@@ -286,6 +286,16 @@ class ReaderV2Runtime extends ChangeNotifier {
     return completed;
   }
 
+  /// 跳轉還沒完成，使用者就自己捲動正文：以使用者捲到的位置為準，
+  /// 放棄這次跳轉。開書、排版與內容重載不受影響，它們不是使用者發起的移動。
+  void cancelJumpForUserScroll() {
+    final operation = stateMachine.currentOperation;
+    if (operation == null || operation.kind != ReaderV2OperationKind.jump) {
+      return;
+    }
+    if (stateMachine.abandonOperation(operation)) notifyListeners();
+  }
+
   void _finishContentUnavailable(
     ReaderV2OperationToken token,
     ReaderV2ContentUnavailableException error,

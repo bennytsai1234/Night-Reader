@@ -78,8 +78,10 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
       }
     }
 
-    if (!mounted || !succeeded || !Navigator.canPop(context)) return;
-    Navigator.pop(context);
+    // 只收自己的抽屜。用 Navigator.pop 的話，使用者在跳轉途中已經關上
+    // 抽屜時會改成關掉閱讀頁。
+    if (!mounted || !succeeded) return;
+    Scaffold.maybeOf(context)?.closeDrawer();
   }
 
   Widget _buildPendingIndicator(String chapterTitle) {

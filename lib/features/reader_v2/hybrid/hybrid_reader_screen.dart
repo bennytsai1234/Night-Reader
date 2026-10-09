@@ -137,6 +137,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   int _lastLayoutGeneration = 0;
   int _lastContentGeneration = 0;
   int _runtimeLocationRevision = 0;
+
+  /// 視窗還原的世代：只有新的還原與排版世代重建會讓進行中的還原作廢。
+  /// 使用者捲動或停止自動捲動不會；跳轉被使用者捲動取代時，由 Runtime
+  /// 放棄該操作。
+  int _restoreRevision = 0;
   ReaderV2Location? _lastReportedLocation;
   bool _initialRestoreCompleted = false;
   bool _dragging = false;
@@ -272,6 +277,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   void _handleEpochRebuild(String? previousBookUrl) {
     _runtimeLocationRevision += 1;
+    _restoreRevision += 1;
     _initialRestoreCompleted = false;
     final oldNamespace = _namespace;
     unawaited(
@@ -843,15 +849,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
-    if (notification is ScrollStartNotification &&
-        notification.dragDetails != null) {
-      _dragging = true;
-      _sawUserScroll = true;
-      _clearSelection();
-      _runtimeLocationRevision += 1;
-      _pump.onScrollStateChanged(PumpState.dragging);
-    } else if (notification is ScrollUpdateNotification) {
-      if (_dragging && notification.dragDetails == null) {
+    if (notification is ScrollUpdateNotification) {
+      // 拖動真的推動正文才算使用者接手捲動。正文上只有捲動手勢時，
+      // 原生 Scrollable 連單純的點擊也會發出零位移的拖動開始。
+      if (!_dragging && notification.dragDetails != null) {
+        _dragging = true;
+        _sawUserScroll = true;
+        _clearSelection();
+        _runtimeLocationRevision += 1;
+        widget.runtime.cancelJumpForUserScroll();
+        _pump.onScrollStateChanged(PumpState.dragging);
+      } else if (_dragging && notification.dragDetails == null) {
         _dragging = false;
         _pump.onScrollStateChanged(PumpState.ballistic);
       }
@@ -1171,12 +1179,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
     final binding = _pump;
-    final revision = ++_runtimeLocationRevision;
+    _runtimeLocationRevision += 1;
+    final revision = ++_restoreRevision;
     bool current() =>
         mounted &&
         identical(widget.runtime, runtime) &&
         identical(_pump, binding) &&
-        revision == _runtimeLocationRevision &&
+        revision == _restoreRevision &&
         (operation == null || runtime.isCurrentOperationToken(operation));
     if (!current() || runtime.chapterCount <= 0) return false;
     final controller = _scrollController;
@@ -1375,7 +1384,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       ..moveToNextPage = _moveToNextPage
       ..moveToPrevPage = _moveToPrevPage
       ..settleScroll = _settleScroll
-      ..ensureCharRangeVisible = _ensureCharRangeVisible;
+      ..ensureCharRangeVisible = _ensureCharRangeVisible
+      ..dismissSelection = _dismissSelection;
   }
 
   void _detachController(ReaderV2ViewportController? controller) {
@@ -1392,6 +1402,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     }
     if (controller.settleScroll == _settleScroll) {
       controller.settleScroll = null;
+    }
+    if (controller.dismissSelection == _dismissSelection) {
+      controller.dismissSelection = null;
     }
     if (controller.ensureCharRangeVisible == _ensureCharRangeVisible) {
       controller.ensureCharRangeVisible = null;
@@ -1439,6 +1452,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   );
 
   Future<void> _settleScroll() async {
+    // 使用者正在拖動或甩動時捲動歸使用者：停在這裡會打斷手勢，
+    // 手勢結束時也會自行儲存位置。
+    if (_sawUserScroll) return;
     _runtimeLocationRevision += 1;
     final controller = _scrollController;
     if (controller != null && controller.hasClients) {
@@ -1504,6 +1520,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       curve: Curves.easeOutCubic,
     );
     if (!isCurrent()) return false;
+    // 動畫被下一次觸碰打斷時直接翻完：連點翻頁每一下都翻滿一頁。
+    if ((position.pixels - target).abs() >= _minimumViewportMovement) {
+      position.jumpTo(
+        target
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble(),
+      );
+    }
     await _handleScrollSettled();
     return isCurrent();
   }
@@ -1920,6 +1944,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     _selection.clear();
   }
 
+  bool _dismissSelection() {
+    if (!_selection.active) return false;
+    _clearSelection();
+    return true;
+  }
+
   void _handleContentTapUp(TapUpDetails details) {
     // 選取中點正文只取消選取，不觸發翻頁或叫出選單。
     if (_selection.active) {
@@ -2063,17 +2093,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  bool _holdScrollOnPointerDown(PointerDownEvent event) {
+  /// 使用者甩出去的慣性還在跑：這時按下只是要停住它，放開不算點擊。
+  /// 停住由原生 Scrollable 在同一個按下事件裡處理。翻頁等程式捲動不算，
+  /// 連點翻頁時每一下都要生效。
+  bool _isUserFlingInProgress() {
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
-    final scrolling = controller.position.isScrollingNotifier.value;
-    if (scrolling && !_dragging) {
-      _runtimeLocationRevision += 1;
-      final pixels = controller.position.pixels;
-      controller.position.jumpTo(pixels);
-      return true;
-    }
-    return false;
+    return controller.position.isScrollingNotifier.value && _sawUserScroll;
   }
 
   ({double top, double bottom})? _lineAt(ui.Paragraph paragraph, double dy) {
@@ -2230,7 +2256,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
               onTapUp: widget.onContentTapUp == null
                   ? null
                   : _handleContentTapUp,
-              onPointerDownTapPolicy: _holdScrollOnPointerDown,
+              suppressTapAtPointerDown: _isUserFlingInProgress,
               child: GestureDetector(
                 onLongPressStart: widget.textSelectionEnabled
                     ? (details) => unawaited(_handleLongPressStart(details))

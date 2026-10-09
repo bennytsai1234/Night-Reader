@@ -91,6 +91,9 @@ class ReaderV2PageCoordinator {
         .clamp(0, (runtime.chapterCount - 1).clamp(0, 1 << 20))
         .toInt();
     await runtime.jumpToChapter(safeIndex);
+    if (runtime.state.visibleLocation.chapterIndex == safeIndex) {
+      await _host.tts?.followManualJump();
+    }
   }
 
   /// 拖動中跨檔位的即時預覽：防抖後跳到該位置，但不寫進度——
@@ -103,10 +106,11 @@ class ReaderV2PageCoordinator {
   }
 
   /// 拖動條放開：取消未觸發的預覽，跳到最終位置並存進度。
-  Future<void> commitChapterPercent(double percent) {
+  Future<void> commitChapterPercent(double percent) async {
     _scrubPreviewTimer?.cancel();
     _scrubPreviewTimer = null;
-    return jumpToCurrentChapterPercent(percent);
+    await jumpToCurrentChapterPercent(percent);
+    await _host.tts?.followManualJump();
   }
 
   /// 跳到「目前章節」的百分比位置。
@@ -152,11 +156,20 @@ class ReaderV2PageCoordinator {
   void toggleAutoPage() {
     final autoPage = _host.autoPage;
     if (autoPage == null) return;
-    if (!autoPage.isRunning) _host.menu.hideControlsForAutoPage();
+    if (!autoPage.isRunning) {
+      _host.menu.hideControlsForAutoPage();
+      // 自動捲動與朗讀跟隨不同時移動正文；後開的接手。
+      final tts = _host.tts;
+      if (tts != null && (tts.isPlaying || tts.currentHighlight != null)) {
+        unawaited(tts.stop());
+      }
+    }
     autoPage.toggle();
   }
 
   void maybeFollowTtsHighlight() {
+    // 拖進度條時畫面跟著拖動走，放開後朗讀改從新位置念。
+    if (_host.menu.isScrubbing) return;
     // 視窗只在換句時跟隨。
     _ttsFollower.update(_host.tts?.currentHighlight);
   }

@@ -235,6 +235,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               : Icons.dark_mode_rounded,
           dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
           onExitIntent: _handleExitIntent,
+          onSystemBack: _handleSystemBack,
           onMore: () => unawaited(_showMore()),
           onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
           onTts: _showTts,
@@ -304,7 +305,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !(_host.tts?.isPlaying ?? false),
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
-              onContentTapUp: _handleContentTap,
+              // 選單開著時，點正文只收起選單（由選單的收起層處理）。
+              onContentTapUp: _host.menu.controlsVisible
+                  ? null
+                  : _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
             ),
@@ -357,11 +361,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   void _handleContentTap(TapUpDetails details) {
+    _coordinator.handleTap(details, _lastViewportSize);
+  }
+
+  /// 系統返回先收掉正在操作的東西（目錄由頁面框架先處理），都沒有才
+  /// 離開閱讀器。
+  void _handleSystemBack() {
+    if (_host.viewportController.dismissSelection?.call() ?? false) return;
     if (_host.menu.controlsVisible) {
       _host.menu.dismissControls();
       return;
     }
-    _coordinator.handleTap(details, _lastViewportSize);
+    _handleExitIntent();
   }
 
   Future<bool> _jumpToChapterFromDrawer(int index) async {
@@ -403,7 +414,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _exitCoordinator.handleExitIntent(
         context: context,
         provider: this,
-        isDrawerOpen: () => _scaffoldKey.currentState?.isDrawerOpen ?? false,
         // The reader is always opened as an app-level route from the
         // bookshelf.  A Scaffold drawer can leave a LocalHistoryEntry on the
         // reader route while its closing animation settles; popUntil applies

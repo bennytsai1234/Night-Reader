@@ -13,6 +13,9 @@ import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;
+
+  /// 暫停中：播放鍵會從暫停處接著念，而不是從畫面位置開始。
+  bool get isPaused;
   double get rate;
   double get pitch;
 
@@ -45,7 +48,11 @@ class ReaderV2TtsPanel extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(tts.isPlaying ? Icons.pause : Icons.play_arrow),
               title: Text(
-                tts.isPlaying ? '暫停朗讀' : '從目前位置朗讀',
+                tts.isPlaying
+                    ? '暫停朗讀'
+                    : tts.isPaused
+                    ? '繼續朗讀'
+                    : '從目前位置朗讀',
                 style: AppTextStyles.uiMd,
               ),
               onTap: () => unawaited(tts.toggle()),

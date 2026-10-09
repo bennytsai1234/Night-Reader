@@ -35,6 +35,11 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   Timer? _timer;
   bool _stepping = false;
   DateTime? _lastScrollTick;
+
+  /// 每次開始或停止都換號；停止前就在等待的步進，回來後不得再推動正文
+  /// 或停掉新的一輪。
+  int _run = 0;
+  bool _paused = false;
   bool get isRunning => _timer != null;
 
   void toggle() {
@@ -47,38 +52,50 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   void start() {
     if (isRunning) return;
+    _run += 1;
     _lastScrollTick = null;
     _timer = _createTimerForCurrentMode();
     notifyListeners();
   }
 
+  /// 選單開著時暫停位移，關上後從原處接著捲；不改變是否在自動捲動。
+  void setPaused(bool paused) {
+    if (_paused == paused) return;
+    _paused = paused;
+    _lastScrollTick = null;
+  }
+
   Future<bool> stepAsync() async {
-    if (_stepping) return false;
+    if (_stepping || _paused) return false;
     _stepping = true;
+    final run = _run;
     try {
-      final moved = await _step();
-      if (!moved) stop();
+      final moved = await _step(run);
+      if (!moved && run == _run && !_paused) stop();
       return moved;
     } catch (error, stackTrace) {
       // Stop the periodic producer, but do not reinterpret a thrown viewport
       // invariant failure as the ordinary "could not move" false result.
-      stop();
+      if (run == _run) stop();
       Error.throwWithStackTrace(error, stackTrace);
     } finally {
       _stepping = false;
     }
   }
 
-  Future<bool> _step() async {
+  Future<bool> _step(int run) async {
+    bool current() => run == _run && !_paused;
     final delta = _scrollStepDeltaForElapsed();
     if (delta > 0) {
       final continuousScrollBy = _viewportController?.continuousScrollBy;
       if (continuousScrollBy != null && await continuousScrollBy(delta)) {
         return true;
       }
+      if (!current()) return false;
       final scrollBy = _viewportController?.scrollBy;
       if (scrollBy != null && await scrollBy(delta)) return true;
     }
+    if (!current()) return false;
     final moveToNextPage = _viewportController?.moveToNextPage;
     if (moveToNextPage != null && await moveToNextPage()) return true;
     return false;
@@ -126,6 +143,7 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   void stop() {
     final timer = _timer;
     if (timer == null) return;
+    _run += 1;
     timer.cancel();
     _timer = null;
     _lastScrollTick = null;
