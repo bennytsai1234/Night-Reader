@@ -234,7 +234,11 @@ class ExploreProvider extends ChangeNotifier {
 
     try {
       final kinds = await _kindsLoader(source.exploreUrl, source: source);
-      if (_latestKindsRequestByCacheKey[cacheKey] == requestGeneration) {
+      // 解析失敗時解析器回傳 ERROR: 分類而不丟例外；這種結果不快取，
+      // 收合再展開就會重新請求。
+      final failed = kinds.any((kind) => kind.title.startsWith('ERROR:'));
+      if (!failed &&
+          _latestKindsRequestByCacheKey[cacheKey] == requestGeneration) {
         _kindsCache[cacheKey] = kinds;
       }
       if (_isCurrentKindsRequest(source, requestGeneration)) {
@@ -295,8 +299,8 @@ class ExploreProvider extends ChangeNotifier {
         : _allSources
               .map((item) => item.customOrder)
               .reduce((a, b) => a < b ? a : b);
+    // 清單由 watchDiscoveryPart 推送新快照更新，不必整頁重新載入。
     await _sourceDao.updateCustomOrderByUrl(source.bookSourceUrl, minOrder - 1);
-    await _loadSources();
   }
 
   Future<void> deleteSource(BookSource source) async {
@@ -307,7 +311,6 @@ class ExploreProvider extends ChangeNotifier {
     _latestKindsRequestByCacheKey.removeWhere(
       (cacheKey, _) => cacheKey.startsWith('${source.bookSourceUrl}\n'),
     );
-    await _loadSources();
   }
 
   Future<void> refresh() async {
