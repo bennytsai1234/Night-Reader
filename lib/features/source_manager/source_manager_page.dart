@@ -74,6 +74,19 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     }
   }
 
+  /// 校驗由這一頁擁有，離開就會中止；先確認再走。
+  Future<void> _confirmLeaveWhileChecking() async {
+    final leave = await showAppConfirm(
+      context: context,
+      title: '校驗進行中',
+      message: '離開這一頁會取消校驗，已完成的部分不會產生摘要。',
+      confirmLabel: '取消校驗並離開',
+      cancelLabel: '繼續校驗',
+      destructive: true,
+    );
+    if (leave && mounted) Navigator.pop(context);
+  }
+
   void _exitEditMode(SourceManagerProvider p) {
     setState(() => _editMode = false);
     p.clearSelection();
@@ -86,11 +99,16 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       builder: (context, provider, child) {
         final mutationEnabled = !_isImporting && !provider.isMutationBusy;
         final editing = _isEditing(provider) && provider.totalSourceCount > 0;
+        final checking = provider.checkService.isChecking;
         return PopScope<void>(
-          canPop: !editing,
+          canPop: !editing && !checking,
           onPopInvokedWithResult: (didPop, _) {
-            if (didPop || !editing) return;
-            _exitEditMode(provider);
+            if (didPop) return;
+            if (editing) {
+              _exitEditMode(provider);
+            } else if (checking) {
+              _confirmLeaveWhileChecking();
+            }
           },
           child: Scaffold(
             extendBodyBehindAppBar: true,
@@ -331,7 +349,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       child: child,
     );
 
-    if (p.isLoading) {
+    // 只有還沒有任何資料時才整頁轉圈；之後的重新載入保留清單與捲動位置。
+    if (p.isLoading && p.totalSourceCount == 0) {
       return stateView(const Center(child: CircularProgressIndicator()));
     }
     if (p.loadErrorMessage != null && p.totalSourceCount == 0) {
@@ -398,7 +417,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     bool startsHostGroup(int i) =>
         groupByHost && (i == 0 || hostLabels[i - 1] != hostLabels[i]);
 
-    final canReorder = p.canReorder && !_isImporting;
+    final canReorder = p.showsManualOrder;
     final editing = _isEditing(p);
 
     Widget itemAt(int i) {
@@ -496,7 +515,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       hostLabel: hostLabel,
       showSeparator: showSeparator,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
-      mutationEnabled: !_isImporting && !p.isMutationBusy,
+      mutationEnabled: !_isImporting && !p.isSourceLocked(s.bookSourceUrl),
       onTap: () async {
         if (_isEditing(p)) {
           p.toggleSelect(s.bookSourceUrl);

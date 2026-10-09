@@ -246,9 +246,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     final sources = await _sourceDao.getAllPart();
     final groups = <String>{};
     for (var s in sources) {
-      if (s.bookSourceGroup != null && s.bookSourceGroup!.isNotEmpty) {
-        groups.addAll(s.bookSourceGroup!.split(',').map((e) => e.trim()));
-      }
+      groups.addAll(splitSourceGroups(s.bookSourceGroup));
     }
     _sourceGroups = groups.toList()..sort();
     notifyListeners();

@@ -72,7 +72,8 @@ class SourceItemTile extends StatelessWidget {
           color: chrome.groupedSurface,
           child: InkWell(
             onTap: mutationEnabled ? onTap : null,
-            onLongPress: editing
+            // 這一列被鎖住時（校驗、批次作業）選單裡的動作都不會生效，不開選單。
+            onLongPress: editing || !mutationEnabled
                 ? null
                 : () => onLongPress(
                     globalRectOf(rowContext),

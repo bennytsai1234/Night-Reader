@@ -172,12 +172,7 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   Future<void> renameGroup(String oldName, String newName) async {
     final all = await getAll();
     for (final s in all) {
-      if (s.bookSourceGroup == null) continue;
-      final groups = s.bookSourceGroup!
-          .split(RegExp(r'[,，]'))
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+      final groups = splitSourceGroups(s.bookSourceGroup);
       if (groups.contains(oldName)) {
         final updated = groups.map((g) => g == oldName ? newName : g).join(',');
         await (update(bookSources)
@@ -190,12 +185,8 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   Future<void> removeGroupLabel(String name) async {
     final all = await getAll();
     for (final s in all) {
-      if (s.bookSourceGroup == null) continue;
-      final groups = s.bookSourceGroup!
-          .split(RegExp(r'[,，]'))
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty && e != name)
-          .toList();
+      final groups = splitSourceGroups(s.bookSourceGroup);
+      if (!groups.remove(name)) continue;
       final updated = groups.join(',');
       await (update(
         bookSources,

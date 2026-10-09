@@ -113,32 +113,29 @@ class SourceRuntimeHealth {
   );
 }
 
+/// 把書源的分組欄位切成各個分組名稱（同 legado）：以半形／全形逗號與分號
+/// 分隔，名稱本身可以含空白（例如「🔥 精選」）。所有讀寫分組的地方都用這裡。
+Set<String> splitSourceGroups(String? value) {
+  if (value == null) return <String>{};
+  return value
+      .split(RegExp(r'[,;，；]'))
+      .map((group) => group.trim())
+      .where((group) => group.isNotEmpty)
+      .toSet();
+}
+
 /// BookSource 的業務邏輯擴展
 extension BookSourceLogic on BookSourceBase {
   // 分組操作
   void addGroup(String groups) {
-    final currentGroups =
-        bookSourceGroup
-            ?.split(RegExp(r'[,，\s]+'))
-            .where((s) => s.trim().isNotEmpty)
-            .toSet() ??
-        {};
-    currentGroups.addAll(
-      groups.split(RegExp(r'[,，\s]+')).where((s) => s.trim().isNotEmpty),
-    );
+    final currentGroups = splitSourceGroups(bookSourceGroup)
+      ..addAll(splitSourceGroups(groups));
     bookSourceGroup = currentGroups.isEmpty ? null : currentGroups.join(',');
   }
 
   void removeGroup(String groups) {
-    final currentGroups =
-        bookSourceGroup
-            ?.split(RegExp(r'[,，\s]+'))
-            .where((s) => s.trim().isNotEmpty)
-            .toSet() ??
-        {};
-    currentGroups.removeAll(
-      groups.split(RegExp(r'[,，\s]+')).where((s) => s.trim().isNotEmpty),
-    );
+    final currentGroups = splitSourceGroups(bookSourceGroup)
+      ..removeAll(splitSourceGroups(groups));
     bookSourceGroup = currentGroups.isEmpty ? null : currentGroups.join(',');
   }
 
@@ -204,11 +201,7 @@ extension BookSourceLogic on BookSourceBase {
     return null;
   }
 
-  Set<String> get groupTags => (bookSourceGroup ?? '')
-      .split(RegExp(r'[,，\s]+'))
-      .map((group) => group.trim())
-      .where((group) => group.isNotEmpty)
-      .toSet();
+  Set<String> get groupTags => splitSourceGroups(bookSourceGroup);
 
   bool hasGroupTag(String tag) => groupTags.contains(tag);
 
