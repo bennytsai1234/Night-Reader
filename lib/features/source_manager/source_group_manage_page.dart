@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -88,7 +87,7 @@ class SourceGroupManagePage extends StatelessWidget {
                           SwipeAction(
                             label: '刪除',
                             icon: Icons.delete_outline_rounded,
-                            color: context.danger,
+                            color: AppTint.rust.color,
                             destructive: true,
                             onPressed: () =>
                                 _confirmDelete(context, provider, group),

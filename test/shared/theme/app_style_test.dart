@@ -7,7 +7,9 @@ import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -71,7 +73,38 @@ void main() {
             );
           }
         });
+
+        test('$name：提示訊息的文字與動作字對比達標', () {
+          final chrome = buildAppTheme(
+            style,
+            brightness,
+          ).extension<AppChrome>()!;
+          // 提示底色帶一點透明，疊在頁面底色上量。
+          final toast = Color.alphaBlend(
+            chrome.toastBackground,
+            palette.background,
+          );
+          expect(
+            _contrast(chrome.toastForeground, toast),
+            greaterThanOrEqualTo(4.5),
+          );
+          expect(
+            _contrast(chrome.toastAction, toast),
+            greaterThanOrEqualTo(4.5),
+          );
+        });
       }
+    }
+  });
+
+  test('滑動動作的紙白字在顏料色底上對比達標', () {
+    // SwipeActions 的按鈕前景固定是 paper50，底色傳 AppTint 的顏料色。
+    for (final tint in [AppTint.rust, AppTint.azurite, AppTint.tea]) {
+      expect(
+        _contrast(AppPalette.paper50, tint.color),
+        greaterThanOrEqualTo(4.5),
+        reason: tint.name,
+      );
     }
   });
 

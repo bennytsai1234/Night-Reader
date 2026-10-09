@@ -142,7 +142,7 @@ class SourceItemTile extends StatelessWidget {
         SwipeAction(
           label: '刪除',
           icon: Icons.delete_outline_rounded,
-          color: context.danger,
+          color: AppTint.rust.color,
           destructive: true,
           onPressed: onDelete,
         ),
