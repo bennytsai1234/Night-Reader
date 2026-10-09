@@ -179,7 +179,18 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
       var chapters = await chapterDao.getByBook(book.bookUrl);
       if (chapters.isEmpty) {
-        chapters = await service.getChapterList(source, book);
+        // 一本書抓不到目錄只略過這本，不中斷整批（前面的書已經加入佇列）。
+        try {
+          chapters = await service.getChapterList(source, book);
+        } catch (error, stackTrace) {
+          AppLog.e(
+            '批次下載取得目錄失敗: ${book.name}',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          skippedBooks++;
+          continue;
+        }
         for (var i = 0; i < chapters.length; i++) {
           chapters[i].index = i;
           chapters[i].bookUrl = book.bookUrl;

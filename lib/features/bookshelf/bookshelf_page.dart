@@ -83,7 +83,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
     return PopScope<void>(
       canPop: !_isMultiSelect,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop || !_isMultiSelect) return;
+        // 批次作業進行中留在編輯模式，結束時才由作業本身退出。
+        if (didPop || !_isMultiSelect || _batchAction != null) return;
         _exitEditMode();
       },
       child: Scaffold(
@@ -136,7 +137,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         leading: GlassTextButton(
           label: '完成',
           emphasized: true,
-          onPressed: _exitEditMode,
+          onPressed: _batchAction != null ? null : _exitEditMode,
         ),
         actions: [
           GlassTextButton(
@@ -268,6 +269,23 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final insets = MediaQuery.paddingOf(context);
     if (provider.isLoading && provider.books.isEmpty) {
       return const Center(child: CircularProgressIndicator());
+    }
+    // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
+    if (provider.books.isEmpty && provider.loadErrorMessage != null) {
+      return Padding(
+        padding: EdgeInsets.only(top: insets.top, bottom: insets.bottom),
+        child: AppStateView(
+          icon: Icons.error_outline,
+          title: '書架載入失敗',
+          description: provider.loadErrorMessage,
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: provider.loadBooks,
+          ),
+        ),
+      );
     }
     if (provider.books.isEmpty) {
       return Padding(
@@ -647,6 +665,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     double topInset,
     double bottomInset,
   ) {
+    const columns = 3;
+    final width = MediaQuery.sizeOf(context).width;
+    final cellWidth =
+        (width - AppGrouped.margin * 2 - AppSpacing.lg * (columns - 1)) /
+        columns;
     return GridView.builder(
       padding: EdgeInsets.fromLTRB(
         AppGrouped.margin,
@@ -654,12 +677,13 @@ class _BookshelfPageState extends State<BookshelfPage> {
         AppGrouped.margin,
         bottomInset,
       ),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        // Leave a little room for the two-line title and the progress bar.
-        // The previous ratio overflowed by 1.5 px on the phone's narrow
-        // logical width after Flutter rounded the grid constraints.
-        childAspectRatio: 0.52,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
+        // 列高依格寬與系統字級算出，兩行書名放大時也放得下。
+        mainAxisExtent: BookshelfGridTile.heightFor(
+          cellWidth,
+          MediaQuery.textScalerOf(context),
+        ),
         crossAxisSpacing: AppSpacing.lg,
         mainAxisSpacing: AppSpacing.md,
       ),
@@ -828,16 +852,19 @@ class _BookshelfPageState extends State<BookshelfPage> {
     );
   }
 
-  void _openBook(Book book) {
+  Future<void> _openBook(Book book) async {
     if (book.type == 2) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
       return;
     }
-    Navigator.push(
+    final provider = context.read<BookshelfProvider>();
+    await Navigator.push(
       context,
       BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
+    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新進度線。
+    if (mounted) await provider.loadBooks();
   }
 
   Future<void> _showDeleteConfirm(
