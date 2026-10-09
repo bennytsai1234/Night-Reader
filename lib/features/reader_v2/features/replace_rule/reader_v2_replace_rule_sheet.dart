@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -60,6 +61,11 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       widget.book.origin,
     );
   }
+
+  /// 全部規則的內容快照，用來判斷管理頁裡有沒有改動。
+  Future<String> _rulesSnapshot() async => jsonEncode([
+    for (final rule in await widget.replaceDao.getAll()) rule.toJson(),
+  ]);
 
   Future<void> _setUseReplaceRule(bool value) async {
     if (_updatingToggle) return;
@@ -182,15 +188,18 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               ),
               title: '新增規則',
               onTap: () async {
+                var saved = false;
                 await ReaderV2ReplaceRuleEditorSheet.show(
                   context,
                   onSave: (rule) async {
                     final nextOrder = (await widget.replaceDao.getAll()).length;
                     rule.order = nextOrder;
                     await widget.replaceDao.upsert(rule);
+                    saved = true;
                   },
                 );
-                if (!mounted) return;
+                // 取消時不重載：重載會重新排版並打斷朗讀。
+                if (!mounted || !saved) return;
                 setState(_reloadEnabledRules);
                 await widget.onReload();
               },
@@ -202,13 +211,16 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               ),
               title: '管理規則',
               onTap: () async {
+                final before = await _rulesSnapshot();
+                if (!context.mounted) return;
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => const ReaderV2ReplaceRulePage(),
                   ),
                 );
-                if (!mounted) return;
+                // 只是進去看看、沒有改動時不重載正文。
+                if (!mounted || await _rulesSnapshot() == before) return;
                 setState(_reloadEnabledRules);
                 await widget.onReload();
               },
