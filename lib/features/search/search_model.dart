@@ -70,7 +70,10 @@ class SearchModel {
   final List<SearchBook> _rawBooks = [];
   List<SearchBook> _searchBooks = [];
   CancelToken? _cancelToken;
-  bool _isCancelled = false;
+
+  /// 每次搜尋或取消都遞增；工作完成時代號已過期，就丟掉結果、不更新進度、
+  /// 不回呼，舊搜尋晚到的結果不會混進新搜尋。
+  int _generation = 0;
   int _failedCount = 0;
   int _completedCount = 0;
   int _totalCount = 0;
@@ -85,7 +88,10 @@ class SearchModel {
     required bool precisionSearch,
   }) async {
     cancelSearch();
+    final generation = _generation;
     final sources = await scope.getBookSources();
+    // 等書源清單時又送出了新的搜尋或被取消，這次就不開始。
+    if (generation != _generation) return;
     await _searchSources(
       key: key,
       sources: sources,
@@ -115,13 +121,14 @@ class SearchModel {
   }) async {
     cancelSearch();
 
-    _isCancelled = false;
+    final generation = _generation;
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
     _rawBooks.clear();
     _rawBooks.addAll(_expandInitialResults(initialResults));
     _searchBooks = _rebuild(key, precisionSearch);
     _failedCount = 0;
     _completedCount = 0;
-    _cancelToken = CancelToken();
 
     callback.onSearchStart();
 
@@ -136,22 +143,26 @@ class SearchModel {
     final threadCount = await SharedPreferences.getInstance().then(
       (p) => p.getInt('thread_count') ?? 8,
     );
+    if (generation != _generation) return;
     final searchPool = Pool(threadCount);
 
-    final tasks = <Future<void>>[];
-    for (final source in sources) {
-      if (_isCancelled) break;
-      tasks.add(
+    final tasks = <Future<void>>[
+      for (final source in sources)
         searchPool.withResource(() async {
-          if (_isCancelled) return;
-          await _searchSingleSource(source, key, precisionSearch);
+          if (generation != _generation) return;
+          await _searchSingleSource(
+            source,
+            key,
+            precisionSearch,
+            generation,
+            cancelToken,
+          );
         }),
-      );
-    }
+    ];
 
     await Future.wait(tasks);
 
-    if (!_isCancelled) {
+    if (generation == _generation) {
       callback.onSearchFinish(isEmpty: _searchBooks.isEmpty);
     }
   }
@@ -160,8 +171,11 @@ class SearchModel {
     BookSource source,
     String key,
     bool precisionSearch,
+    int generation,
+    CancelToken cancelToken,
   ) async {
-    if (_isCancelled) return;
+    bool stale() => generation != _generation;
+    if (stale()) return;
 
     _currentSourceName = source.bookSourceName;
     callback.onSearchProgress(
@@ -172,15 +186,13 @@ class SearchModel {
     );
 
     try {
-      if (_isCancelled) return;
-
       final books = await WebBook.searchBookAwait(
         source,
         key,
-        cancelToken: _cancelToken,
+        cancelToken: cancelToken,
       ).timeout(const Duration(seconds: 30));
 
-      if (_isCancelled) return;
+      if (stale()) return;
 
       // 精準搜尋過濾
       final filteredBooks = precisionSearch
@@ -190,31 +202,35 @@ class SearchModel {
       if (filteredBooks.isNotEmpty) {
         // 持久化到搜尋快取
         await getIt<SearchBookDao>().insertList(filteredBooks);
+        if (stale()) return;
         // 合併結果
         _mergeItems(filteredBooks, key, precisionSearch);
         callback.onSearchSuccess(List.from(_searchBooks));
       }
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) return;
+      if (e.type == DioExceptionType.cancel || stale()) return;
       _failedCount++;
       callback.onSearchFailure(
         SearchFailure(source: source, message: e.message ?? e.toString()),
       );
       AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } catch (e) {
+      if (stale()) return;
       _failedCount++;
       callback.onSearchFailure(
         SearchFailure(source: source, message: e.toString()),
       );
       AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } finally {
-      _completedCount++;
-      callback.onSearchProgress(
-        currentSource: _currentSourceName,
-        completed: _completedCount,
-        total: _totalCount,
-        failed: _failedCount,
-      );
+      if (!stale()) {
+        _completedCount++;
+        callback.onSearchProgress(
+          currentSource: _currentSourceName,
+          completed: _completedCount,
+          total: _totalCount,
+          failed: _failedCount,
+        );
+      }
     }
   }
 
@@ -370,7 +386,7 @@ class SearchModel {
 
   /// 取消搜尋
   void cancelSearch() {
-    _isCancelled = true;
+    _generation++;
     _cancelToken?.cancel('搜尋取消');
     _cancelToken = null;
   }

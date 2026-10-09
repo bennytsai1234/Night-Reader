@@ -58,7 +58,7 @@ class SearchScope {
   /// 更新為全部
   void updateAll() {
     _scope = '';
-    _save();
+    save();
   }
 
   /// 移除某個分組
@@ -69,7 +69,7 @@ class SearchScope {
       final groups = _scope.split(',').where((s) => s != group).toList();
       _scope = groups.join(',');
     }
-    _save();
+    save();
   }
 
   /// 取得搜尋範圍內的書源列表 (對標 getBookSourceParts)
@@ -127,7 +127,7 @@ class SearchScope {
     // 清理無效分組
     if (validGroups.length != groups.length) {
       _scope = validGroups.join(',');
-      _save();
+      save();
     }
 
     // 去重
@@ -143,8 +143,8 @@ class SearchScope {
     return sorted;
   }
 
-  /// 持久化
-  Future<void> _save() async {
+  /// 寫入偏好設定；使用者在範圍面板選定的範圍由 SearchProvider 呼叫。
+  Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey, _scope);
   }
