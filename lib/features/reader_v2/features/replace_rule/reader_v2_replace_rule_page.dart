@@ -6,7 +6,6 @@ import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -229,7 +228,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         SwipeAction(
           label: '刪除',
           icon: Icons.delete_outline_rounded,
-          color: context.danger,
+          color: AppTint.rust.color,
           destructive: true,
           onPressed: () => _confirmDelete(rule),
         ),

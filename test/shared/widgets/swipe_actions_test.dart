@@ -118,4 +118,21 @@ void main() {
     await swipe(tester, 'row0', -300);
     expect(find.text('刪除'), findsNothing);
   });
+
+  testWidgets('收合動畫期間再點一次不會重複執行動作', (tester) async {
+    await pumpList(tester);
+    await swipe(tester, 'row0', -120);
+
+    await tester.tap(find.text('置頂'));
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.tap(find.text('置頂'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(log, ['row0:pin']);
+
+    // 下一次滑開後照常可以再執行。
+    await swipe(tester, 'row0', -120);
+    await tester.tap(find.text('置頂'));
+    await tester.pumpAndSettle();
+    expect(log, ['row0:pin', 'row0:pin']);
+  });
 }

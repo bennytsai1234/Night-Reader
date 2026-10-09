@@ -23,7 +23,8 @@ class SwipeAction {
   final String label;
   final IconData icon;
 
-  /// 按鈕底色；傳 [AppTint] 的顏色或 `context.danger`。
+  /// 按鈕底色；傳 [AppTint] 的顏料色（刪除用 `AppTint.rust`）。前景固定紙白，
+  /// 深淺色共用同一個底色才能維持對比；`context.danger` 是文字色，不能當底。
   final Color color;
   final VoidCallback onPressed;
 
@@ -228,6 +229,7 @@ class _SwipeActionsState extends State<SwipeActions>
     _group?.activate(this);
     _offset.stop();
     _dragging = true;
+    _fired = false;
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
@@ -280,7 +282,13 @@ class _SwipeActionsState extends State<SwipeActions>
     }
   }
 
+  /// 這次滑開後是否已經觸發過動作；收合動畫期間按鈕還在，再點一次不重複執行，
+  /// 下一次開始滑動才解除。
+  bool _fired = false;
+
   Future<void> _runFullSwipe(double offset, List<SwipeAction> actions) async {
+    if (_fired) return;
+    _fired = true;
     final action = offset < 0 ? actions.last : actions.first;
     if (action.destructive) {
       await _offset
@@ -298,6 +306,8 @@ class _SwipeActionsState extends State<SwipeActions>
   }
 
   void _onActionTap(SwipeAction action) {
+    if (_fired) return;
+    _fired = true;
     action.onPressed();
     if (mounted) _close();
   }

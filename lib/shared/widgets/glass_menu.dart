@@ -218,6 +218,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     Rect previewRect = anchor;
     double menuTop;
     bool menuBelow;
+    var menuMaxHeight = maxMenuHeight;
     if (hasPreview) {
       final needed = anchor.height + AppSpacing.md + clampedMenuHeight;
       final double top = anchor.top.clamp(
@@ -232,6 +233,12 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
       );
       menuTop = previewRect.bottom + AppSpacing.md;
       menuBelow = true;
+      // 預覽很高（例如橫向）時下方放不下整個選單：選單高度只取剩下的空間、
+      // 改成可捲動，最後幾項才不會畫到螢幕外。至少留一列的高度。
+      menuMaxHeight = math.max(
+        screen.height - safe.bottom - edge - menuTop,
+        AppGlass.menuRowHeight,
+      );
     } else {
       final spaceBelow = screen.height - safe.bottom - edge - anchor.bottom;
       menuBelow =
@@ -255,7 +262,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
 
     final menu = ConstrainedBox(
       constraints: BoxConstraints.tightFor(width: menuWidth)
-          .copyWith(maxHeight: maxMenuHeight),
+          .copyWith(maxHeight: menuMaxHeight),
       child: GlassSurface(
         borderRadius: AppRadius.cardXl,
         grouped: false,

@@ -106,7 +106,11 @@ class AppChrome extends ThemeExtension<AppChrome> {
               surface,
             ).withValues(alpha: 0.96),
       toastForeground: isLight ? background : textPrimary,
-      toastAction: isLight ? inversePrimary : primary,
+      // 深色浮層比卡片亮一階，主色直接用對比不夠（紙墨深色只有 3.8:1），
+      // 往文字色靠一些。
+      toastAction: isLight
+          ? inversePrimary
+          : Color.lerp(primary, textPrimary, 0.3)!,
     );
   }
 
