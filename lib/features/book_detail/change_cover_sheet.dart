@@ -76,8 +76,17 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
   @override
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
+    // 鍵盤出現時整個面板墊高，封面格線縮小，底部的網址輸入框留在鍵盤上方。
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: _buildSheet(context, chrome, keyboard),
+    );
+  }
+
+  Widget _buildSheet(BuildContext context, AppChrome chrome, double keyboard) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
+      height: (MediaQuery.sizeOf(context).height - keyboard) * 0.8,
       decoration: BoxDecoration(
         color: chrome.groupedBackground,
         borderRadius: AppRadius.topSheetXl,

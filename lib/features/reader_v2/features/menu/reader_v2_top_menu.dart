@@ -157,24 +157,33 @@ class ReaderV2TopMenu extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.xs / 2,
-              ),
-              decoration: BoxDecoration(
-                color: menuStyle.accentMuted,
-                borderRadius: AppRadius.pillShape,
-              ),
-              child: Text(
-                originName,
-                style: AppTextStyles.micro.copyWith(
-                  color: menuStyle.foreground,
-                  fontWeight: FontWeight.w600,
+            if (originName.isNotEmpty) ...[
+              const SizedBox(width: AppSpacing.md),
+              // 書源名稱可能很長；膠囊限寬（360 寬的畫面約四成），章節名稱
+              // 才不會被擠掉。
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs / 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: menuStyle.accentMuted,
+                    borderRadius: AppRadius.pillShape,
+                  ),
+                  child: Text(
+                    originName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.micro.copyWith(
+                      color: menuStyle.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

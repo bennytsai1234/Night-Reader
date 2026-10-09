@@ -39,7 +39,23 @@ class AppBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final maxHeight = MediaQuery.sizeOf(context).height * maxHeightFactor;
+    // 底部面板不會自己避開鍵盤：整個面板墊高鍵盤的高度，可捲動區也跟著
+    // 縮小，靠近底部的輸入框才捲得到鍵盤上方。
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final maxHeight =
+        (MediaQuery.sizeOf(context).height - keyboard) * maxHeightFactor;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: _buildBody(context, scheme, chrome, maxHeight),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    ColorScheme scheme,
+    AppChrome chrome,
+    double maxHeight,
+  ) {
     return SafeArea(
       top: false,
       child: ConstrainedBox(

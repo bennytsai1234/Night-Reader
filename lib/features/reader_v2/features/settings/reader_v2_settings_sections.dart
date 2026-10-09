@@ -561,10 +561,12 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
               _stepperRow(
                 NumberStepperRow(
                   label: '頁尾位置',
-                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。
+                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。系統
+                  // 內距從 View 取：面板外層的 SafeArea 已經把 MediaQuery 的
+                  // 底部內距扣成 0，閱讀頁排版用的卻是系統內距。
                   value:
                       settings.footerOffset ??
-                      MediaQuery.paddingOf(context).bottom +
+                      MediaQueryData.fromView(View.of(context)).padding.bottom +
                           kReaderFooterAutoSpacing,
                   min: ReaderV2SettingsController.minPagePadding,
                   max: ReaderV2SettingsController.maxPagePadding,
