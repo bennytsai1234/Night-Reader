@@ -22,6 +22,22 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:path/path.dart' as p;
 
+/// 一次還原的結果。單一檔案失敗時仍繼續還原其他檔案，失敗的檔名記在
+/// [failedFiles]；[invalidArchive] 表示不是可用的備份檔，什麼都沒寫入。
+class RestoreResult {
+  const RestoreResult({
+    this.restoredAny = false,
+    this.failedFiles = const [],
+    this.invalidArchive = false,
+  });
+
+  const RestoreResult.invalid() : this(invalidArchive: true);
+
+  final bool restoredAny;
+  final List<String> failedFiles;
+  final bool invalidArchive;
+}
+
 /// RestoreService - 統一恢復調度器
 /// (原 Android help/storage/Restore.kt)
 class RestoreService {
@@ -39,59 +55,62 @@ class RestoreService {
       getIt<ReaderChapterContentDao>();
 
   /// 從備份包 (ZIP) 恢復所有數據
-  Future<bool> restoreFromZip(File zipFile) async {
+  ///
+  /// 讀不到檔案時丟出例外，交給呼叫端顯示原因。
+  Future<RestoreResult> restoreFromZip(File zipFile) async {
+    final bytes = await zipFile.readAsBytes();
+    final Archive archive;
     try {
-      final bytes = await zipFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
-      final files = archive.where((file) => file.isFile).toList();
-      if (files.isEmpty) return false;
-
-      Map<String, dynamic>? manifest;
-      for (final file in files) {
-        if (_normalizedFileName(file.name) != 'manifest.json') continue;
-        final data = utf8.decode(
-          file.content as List<int>,
-          allowMalformed: true,
-        );
-        final decoded = jsonDecode(data);
-        if (decoded is Map<String, dynamic>) {
-          manifest = decoded;
-          break;
-        }
-      }
-      if (!_isManifestCompatible(manifest)) {
-        AppLog.w('Restore aborted: missing or incompatible manifest');
-        return false;
-      }
-
-      var restoredAny = false;
-      for (final file in files) {
-        final fileName = _normalizedFileName(file.name);
-        if (fileName == 'manifest.json') continue;
-        final data = utf8.decode(
-          file.content as List<int>,
-          allowMalformed: true,
-        );
-        try {
-          final dynamic decoded = jsonDecode(data);
-          if (decoded is List<dynamic>) {
-            final restored = await _importListData(fileName, decoded);
-            restoredAny = restoredAny || restored;
-          } else if (fileName == 'config.json' &&
-              decoded is Map<String, dynamic>) {
-            final restored = await _restorePreferences(decoded);
-            restoredAny = restoredAny || restored;
-          }
-        } catch (e) {
-          AppLog.e('Restore failed for $fileName: $e', error: e);
-          return false;
-        }
-      }
-      return restoredAny;
+      archive = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
-      AppLog.e('Restore from ZIP failed: $e', error: e);
-      return false;
+      AppLog.e('Restore aborted: not a zip archive', error: e);
+      return const RestoreResult.invalid();
     }
+    final files = archive.where((file) => file.isFile).toList();
+    if (files.isEmpty) return const RestoreResult.invalid();
+
+    Map<String, dynamic>? manifest;
+    for (final file in files) {
+      if (_normalizedFileName(file.name) != 'manifest.json') continue;
+      try {
+        final decoded = jsonDecode(
+          utf8.decode(file.content as List<int>, allowMalformed: true),
+        );
+        if (decoded is Map<String, dynamic>) manifest = decoded;
+      } on FormatException catch (e) {
+        AppLog.e('Restore aborted: unreadable manifest', error: e);
+      }
+      break;
+    }
+    if (!_isManifestCompatible(manifest)) {
+      AppLog.w('Restore aborted: missing or incompatible manifest');
+      return const RestoreResult.invalid();
+    }
+
+    var restoredAny = false;
+    final failedFiles = <String>[];
+    for (final file in files) {
+      final fileName = _normalizedFileName(file.name);
+      if (fileName == 'manifest.json') continue;
+      try {
+        final dynamic decoded = jsonDecode(
+          utf8.decode(file.content as List<int>, allowMalformed: true),
+        );
+        if (decoded is List<dynamic>) {
+          final restored = await _importListData(fileName, decoded);
+          restoredAny = restoredAny || restored;
+        } else if (fileName == 'config.json' &&
+            decoded is Map<String, dynamic>) {
+          final restored = await _restorePreferences(decoded);
+          restoredAny = restoredAny || restored;
+        }
+      } catch (e) {
+        // 單一檔案失敗不中斷，其他檔案照樣還原，最後一起回報。
+        AppLog.e('Restore failed for $fileName: $e', error: e);
+        failedFiles.add(fileName);
+      }
+    }
+    return RestoreResult(restoredAny: restoredAny, failedFiles: failedFiles);
   }
 
   Future<bool> _importListData(String fileName, List<dynamic> list) async {
@@ -185,6 +204,6 @@ class RestoreService {
     if (manifest == null) return false;
     final schemaVersion = manifest['schemaVersion'];
     if (schemaVersion is! int) return false;
-    return schemaVersion <= AppDatabase().schemaVersion;
+    return schemaVersion <= getIt<AppDatabase>().schemaVersion;
   }
 }

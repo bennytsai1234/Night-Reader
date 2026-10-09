@@ -17,7 +17,8 @@ class DataPrivacySettingsPage extends StatefulWidget {
       _DataPrivacySettingsPageState();
 }
 
-class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
+class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage>
+    with WidgetsBindingObserver {
   final WebViewDataService _dataService = WebViewDataService();
   final AppPermissionService _permissionService = AppPermissionService();
   late Future<AppPermissionSnapshot> _permissionSnapshot;
@@ -26,7 +27,20 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _permissionSnapshot = _permissionService.loadSnapshot();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 從系統設定改完權限回來時重新讀取狀態。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshPermissionSnapshot();
   }
 
   @override
@@ -192,10 +206,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
               title: '開啟系統設定',
               accent: true,
               showChevron: false,
-              onTap: () async {
-                await _permissionService.openSystemSettings();
-                _refreshPermissionSnapshot();
-              },
+              onTap: _permissionService.openSystemSettings,
             ),
             GroupedRow(
               title: '重新整理',
@@ -218,7 +229,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
         child: Icon(_permissionIcon(item.tone), color: color, size: 24),
       ),
       title: item.title,
-      showChevron: item.actionLabel != null,
+      showChevron: item.action != null,
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 112),
         child: Text(
@@ -231,17 +242,21 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
           ),
         ),
       ),
-      onTap: item.actionLabel == null ? null : () => _handlePermissionTap(item),
+      onTap: item.action == null ? null : () => _handlePermissionTap(item),
     );
   }
 
   Future<void> _handlePermissionTap(AppPermissionItem item) async {
-    if (item.title == '通知') {
-      await _permissionService.requestNotificationForTts();
-    } else if (item.title == '相簿') {
-      await _permissionService.requestPhotoLibraryIfNeeded();
+    switch (item.action) {
+      case AppPermissionAction.openSettings:
+        // 回到 App 時由 didChangeAppLifecycleState 重新讀取。
+        await _permissionService.openSystemSettings();
+      case AppPermissionAction.request:
+        await _permissionService.request(item.target!);
+        _refreshPermissionSnapshot();
+      case null:
+        return;
     }
-    _refreshPermissionSnapshot();
   }
 
   void _refreshPermissionSnapshot() {

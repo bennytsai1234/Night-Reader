@@ -23,6 +23,20 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 備份或還原進行中不離開頁面，結果提示與分享面板才會出現在這裡。
+    return PopScope<Object?>(
+      canPop: !_isProcessing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('處理中，完成後才能離開')));
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '備份與還原'),
@@ -65,6 +79,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     setState(() => _isProcessing = true);
     try {
       final file = await BackupService().createBackupZip();
+      if (!mounted) return;
       if (file != null && await file.exists()) {
         await SharePlus.instance.share(
           ShareParams(files: [XFile(file.path)], text: '夜讀備份檔'),
@@ -100,15 +115,20 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     final file = File(path);
     setState(() => _isProcessing = true);
     try {
-      final success = await RestoreService().restoreFromZip(file);
+      final result = await RestoreService().restoreFromZip(file);
       if (!mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('還原完成，重新啟動 App 後生效')));
-      } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
-      }
+      final failed = result.failedFiles.join('、');
+      final message = result.invalidArchive
+          ? '還原失敗，這不是可用的夜讀備份檔'
+          : result.failedFiles.isEmpty && result.restoredAny
+          ? '還原完成，重新啟動 App 後生效'
+          : result.failedFiles.isEmpty
+          ? '備份檔裡沒有可還原的資料'
+          : result.restoredAny
+          ? '部分資料已還原，$failed 匯入失敗；重新啟動 App 後生效'
+          : '還原失敗，$failed 無法匯入';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

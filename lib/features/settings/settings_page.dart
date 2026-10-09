@@ -33,8 +33,8 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      // 分頁頁面沒有返回鈕；頁首只提供狀態列下方的漸隱。
-      appBar: const GlassNavHeader(automaticallyImplyLeading: false),
+      // 當「我的」分頁時是根路由，不會出現返回鈕；從閱讀器推入時才有。
+      appBar: const GlassNavHeader(),
       body: GroupedListView(
         children: [
           const _ProfileHeader(),
