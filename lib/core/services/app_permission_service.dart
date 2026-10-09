@@ -25,18 +25,23 @@ abstract interface class AppPermissionGateway {
 
 typedef AppPermissionPlatformPredicate = bool Function();
 
+/// 點權限列時要做的事；權限已可用或不適用時沒有動作。
+enum AppPermissionAction { request, openSettings }
+
 class AppPermissionItem {
   const AppPermissionItem({
     required this.title,
     required this.status,
     required this.tone,
-    this.actionLabel,
+    this.target,
+    this.action,
   });
 
   final String title;
   final String status;
   final AppPermissionStatusTone tone;
-  final String? actionLabel;
+  final AppPermissionTarget? target;
+  final AppPermissionAction? action;
 }
 
 class AppPermissionSnapshot {
@@ -97,7 +102,8 @@ class AppPermissionService {
       title: '通知',
       status: _statusLabel(status),
       tone: _statusTone(status),
-      actionLabel: _needsSettings(status) ? '開啟系統設定' : '要求權限',
+      target: AppPermissionTarget.notification,
+      action: _actionFor(status),
     );
   }
 
@@ -115,7 +121,8 @@ class AppPermissionService {
       title: '相簿',
       status: _statusLabel(status),
       tone: _statusTone(status),
-      actionLabel: _needsSettings(status) ? '開啟系統設定' : '要求權限',
+      target: AppPermissionTarget.photos,
+      action: _actionFor(status),
     );
   }
 
@@ -168,6 +175,17 @@ class AppPermissionService {
     return status == AppPermissionState.granted ||
         status == AppPermissionState.limited ||
         status == AppPermissionState.provisional;
+  }
+
+  /// 依目前狀態要求一次權限；已永久拒絕時系統不會再跳對話框，改由
+  /// [openSystemSettings] 處理。
+  Future<bool> request(AppPermissionTarget target) => _requestIfNeeded(target);
+
+  AppPermissionAction? _actionFor(AppPermissionState status) {
+    if (_isUsable(status)) return null;
+    return _needsSettings(status)
+        ? AppPermissionAction.openSettings
+        : AppPermissionAction.request;
   }
 
   bool _needsSettings(AppPermissionState status) {
