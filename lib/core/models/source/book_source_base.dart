@@ -11,9 +11,6 @@ abstract class BookSourceBase extends BaseSource {
   int customOrder = 0; // 手動排序
   bool enabled = true; // 是否啟用
   bool enabledExplore = true; // 啟用發現
-  String? icon; // 書源圖標
-  String? get bookSourceIcon => icon;
-  set bookSourceIcon(String? v) => icon = v;
 
   @override
   String? jsLib;

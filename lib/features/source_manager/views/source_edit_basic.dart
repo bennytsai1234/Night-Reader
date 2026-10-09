@@ -23,7 +23,6 @@ class SourceEditBasic extends StatelessWidget {
           children: [
             _field(controllers['name']!, '書源名稱', '例如: 筆趣閣'),
             _field(controllers['url']!, '書源網址', '例如: https://example.com'),
-            _field(controllers['icon']!, '書源圖示', 'URL 或 Base64'),
             _field(controllers['group']!, '書源分組', '多個分組用逗號分隔'),
           ],
         ),

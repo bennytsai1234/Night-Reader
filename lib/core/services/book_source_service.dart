@@ -119,9 +119,9 @@ class BookSourceService {
     return getIt<BookDao>().getInBookshelf();
   }
 
-  /// 儲存（新增或更新）書源
-  Future<void> saveSource(BookSource source) =>
-      getIt<BookSourceDao>().upsert(source);
+  /// 儲存編輯後的書源；網址改過時一併移除原網址那筆。
+  Future<void> saveEditedSource(BookSource source, {String? previousUrl}) =>
+      getIt<BookSourceDao>().saveEdited(source, previousUrl: previousUrl);
 
   /// 依 URL 取得書源
   Future<BookSource?> getSourceByUrl(String url) =>
