@@ -11,6 +11,7 @@ import 'views/source_edit_content.dart';
 
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 
@@ -22,9 +23,8 @@ const double _kTabsHeight = 36 + AppSpacing.xs * 2;
 
 class SourceEditorPage extends StatefulWidget {
   final BookSource? source;
-  final Future<void> Function(BookSource source)? onSave;
 
-  const SourceEditorPage({super.key, this.source, this.onSave});
+  const SourceEditorPage({super.key, this.source});
 
   @override
   State<SourceEditorPage> createState() => _SourceEditorPageState();
@@ -35,7 +35,12 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   late BookSource _editingSource;
   late TabController _tabController;
   final Map<String, TextEditingController> _controllers = {};
+  final _bookSourceService = BookSourceService();
   bool _isSaving = false;
+
+  /// 開啟時各欄位的內容；與目前內容不同就是有未儲存的修改。
+  late final Map<String, String> _initialTexts;
+  bool _dirty = false;
 
   @override
   void initState() {
@@ -47,6 +52,30 @@ class _SourceEditorPageState extends State<SourceEditorPage>
           );
     _tabController = TabController(length: _tabLabels.length, vsync: this);
     _initControllers();
+    _initialTexts = {
+      for (final entry in _controllers.entries) entry.key: entry.value.text,
+    };
+    for (final controller in _controllers.values) {
+      controller.addListener(_updateDirty);
+    }
+  }
+
+  void _updateDirty() {
+    final dirty = _controllers.entries.any(
+      (entry) => entry.value.text != _initialTexts[entry.key],
+    );
+    if (dirty != _dirty) setState(() => _dirty = dirty);
+  }
+
+  Future<void> _confirmDiscard() async {
+    final discard = await showAppConfirm(
+      context: context,
+      title: '放棄未儲存的修改？',
+      message: '離開後，這次的修改都不會保留。',
+      confirmLabel: '放棄',
+      destructive: true,
+    );
+    if (discard && mounted) Navigator.pop(context);
   }
 
   void _initControllers() {
@@ -55,9 +84,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     );
     _controllers['url'] = TextEditingController(
       text: _editingSource.bookSourceUrl,
-    );
-    _controllers['icon'] = TextEditingController(
-      text: _editingSource.bookSourceIcon,
     );
     _controllers['group'] = TextEditingController(
       text: _editingSource.bookSourceGroup,
@@ -184,7 +210,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   void _syncSource() {
     _editingSource.bookSourceName = _controllers['name']!.text.trim();
     _editingSource.bookSourceUrl = _controllers['url']!.text.trim();
-    _editingSource.bookSourceIcon = _controllers['icon']!.text;
     _editingSource.bookSourceGroup = _controllers['group']!.text;
     _editingSource.bookSourceComment = _controllers['comment']!.text;
     _editingSource.loginUrl = _controllers['loginUrl']!.text;
@@ -192,53 +217,51 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     _editingSource.searchUrl = _controllers['searchUrl']!.text;
     _editingSource.exploreUrl = _controllers['exploreUrl']!.text;
 
-    _editingSource.ruleSearch = SearchRule(
-      bookList: _controllers['ruleSearchBookList']!.text._emptyToNull,
-      name: _controllers['ruleSearchName']!.text._emptyToNull,
-      author: _controllers['ruleSearchAuthor']!.text._emptyToNull,
-      kind: _controllers['ruleSearchKind']!.text._emptyToNull,
-      wordCount: _controllers['ruleSearchWordCount']!.text._emptyToNull,
-      lastChapter: _controllers['ruleSearchLastChapter']!.text._emptyToNull,
-      coverUrl: _controllers['ruleSearchCoverUrl']!.text._emptyToNull,
-      bookUrl: _controllers['ruleSearchNoteUrl']!.text._emptyToNull,
-    );
+    // 只改編輯器有的欄位；編輯器沒顯示的規則（例如 webJs、formatJs）原樣保留。
+    String? text(String key) => _controllers[key]!.text._emptyToNull;
 
-    _editingSource.ruleExplore = ExploreRule(
-      bookList: _controllers['ruleExploreBookList']!.text._emptyToNull,
-      name: _controllers['ruleExploreName']!.text._emptyToNull,
-      author: _controllers['ruleExploreAuthor']!.text._emptyToNull,
-      kind: _controllers['ruleExploreKind']!.text._emptyToNull,
-      wordCount: _controllers['ruleExploreWordCount']!.text._emptyToNull,
-      lastChapter: _controllers['ruleExploreLastChapter']!.text._emptyToNull,
-      coverUrl: _controllers['ruleExploreCoverUrl']!.text._emptyToNull,
-      bookUrl: _controllers['ruleExploreBookUrl']!.text._emptyToNull,
-    );
+    (_editingSource.ruleSearch ??= SearchRule())
+      ..bookList = text('ruleSearchBookList')
+      ..name = text('ruleSearchName')
+      ..author = text('ruleSearchAuthor')
+      ..kind = text('ruleSearchKind')
+      ..wordCount = text('ruleSearchWordCount')
+      ..lastChapter = text('ruleSearchLastChapter')
+      ..coverUrl = text('ruleSearchCoverUrl')
+      ..bookUrl = text('ruleSearchNoteUrl');
 
-    _editingSource.ruleBookInfo = BookInfoRule(
-      init: _controllers['ruleBookInfoInit']!.text._emptyToNull,
-      name: _controllers['ruleBookInfoName']!.text._emptyToNull,
-      author: _controllers['ruleBookInfoAuthor']!.text._emptyToNull,
-      intro: _controllers['ruleBookInfoIntro']!.text._emptyToNull,
-      kind: _controllers['ruleBookInfoKind']!.text._emptyToNull,
-      lastChapter: _controllers['ruleBookInfoLastChapter']!.text._emptyToNull,
-      updateTime: _controllers['ruleBookInfoUpdateTime']!.text._emptyToNull,
-      coverUrl: _controllers['ruleBookInfoCoverUrl']!.text._emptyToNull,
-      tocUrl: _controllers['ruleBookInfoTocUrl']!.text._emptyToNull,
-      wordCount: _controllers['ruleBookInfoWordCount']!.text._emptyToNull,
-    );
+    (_editingSource.ruleExplore ??= ExploreRule())
+      ..bookList = text('ruleExploreBookList')
+      ..name = text('ruleExploreName')
+      ..author = text('ruleExploreAuthor')
+      ..kind = text('ruleExploreKind')
+      ..wordCount = text('ruleExploreWordCount')
+      ..lastChapter = text('ruleExploreLastChapter')
+      ..coverUrl = text('ruleExploreCoverUrl')
+      ..bookUrl = text('ruleExploreBookUrl');
 
-    _editingSource.ruleToc = TocRule(
-      chapterList: _controllers['ruleTocChapterList']!.text._emptyToNull,
-      chapterName: _controllers['ruleTocChapterName']!.text._emptyToNull,
-      chapterUrl: _controllers['ruleTocChapterUrl']!.text._emptyToNull,
-      nextTocUrl: _controllers['ruleTocNextPage']!.text._emptyToNull,
-    );
+    (_editingSource.ruleBookInfo ??= BookInfoRule())
+      ..init = text('ruleBookInfoInit')
+      ..name = text('ruleBookInfoName')
+      ..author = text('ruleBookInfoAuthor')
+      ..intro = text('ruleBookInfoIntro')
+      ..kind = text('ruleBookInfoKind')
+      ..lastChapter = text('ruleBookInfoLastChapter')
+      ..updateTime = text('ruleBookInfoUpdateTime')
+      ..coverUrl = text('ruleBookInfoCoverUrl')
+      ..tocUrl = text('ruleBookInfoTocUrl')
+      ..wordCount = text('ruleBookInfoWordCount');
 
-    _editingSource.ruleContent = ContentRule(
-      content: _controllers['ruleContentContent']!.text._emptyToNull,
-      nextContentUrl: _controllers['ruleContentNextPage']!.text._emptyToNull,
-      replaceRegex: _controllers['ruleContentReplace']!.text._emptyToNull,
-    );
+    (_editingSource.ruleToc ??= TocRule())
+      ..chapterList = text('ruleTocChapterList')
+      ..chapterName = text('ruleTocChapterName')
+      ..chapterUrl = text('ruleTocChapterUrl')
+      ..nextTocUrl = text('ruleTocNextPage');
+
+    (_editingSource.ruleContent ??= ContentRule())
+      ..content = text('ruleContentContent')
+      ..nextContentUrl = text('ruleContentNextPage')
+      ..replaceRegex = text('ruleContentReplace');
   }
 
   Future<void> _save() async {
@@ -247,8 +270,26 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     if (!_validateRequiredFields()) return;
     setState(() => _isSaving = true);
     try {
-      final saveSource = widget.onSave ?? BookSourceService().saveSource;
-      await saveSource(_editingSource);
+      final previousUrl = widget.source?.bookSourceUrl;
+      final url = _editingSource.bookSourceUrl;
+      if (url != previousUrl) {
+        final existing = await _bookSourceService.getSourceByUrl(url);
+        if (!mounted) return;
+        if (existing != null) {
+          final overwrite = await showAppConfirm(
+            context: context,
+            title: '覆蓋現有書源？',
+            message: '「${existing.bookSourceName}」已經使用這個網址，儲存後會以這次的內容取代它。',
+            confirmLabel: '覆蓋',
+            destructive: true,
+          );
+          if (!overwrite || !mounted) return;
+        }
+      }
+      await _bookSourceService.saveEditedSource(
+        _editingSource,
+        previousUrl: previousUrl,
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
@@ -288,6 +329,16 @@ class _SourceEditorPageState extends State<SourceEditorPage>
 
   @override
   Widget build(BuildContext context) {
+    return PopScope<Object?>(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: GlassNavHeader(

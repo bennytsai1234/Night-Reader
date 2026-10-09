@@ -37,10 +37,16 @@ class SourceDebugService {
   Stream<DebugLog> get logStream => _logController.stream;
 
   final BookSourceService _bookSourceService = BookSourceService();
-  bool _isCancelled = false;
+
+  /// 目前這一輪除錯的代號；取消或開始新一輪時遞增。每一輪在自己的 Zone 裡
+  /// 執行，取消後才回來的請求寫的日誌對不上代號，直接丟掉。
+  int _runId = 0;
+  bool _runFailed = false;
+  static const Symbol _runKey = #sourceDebugRun;
 
   void log(String msg, {int state = 1, bool isHtml = false}) {
-    if (_isCancelled) return;
+    if (Zone.current[_runKey] != _runId) return;
+    if (state == -1) _runFailed = true;
 
     var printMsg = msg;
     if (isHtml) {
@@ -52,11 +58,16 @@ class SourceDebugService {
   }
 
   void cancel() {
-    _isCancelled = true;
+    _runId++;
   }
 
-  Future<void> startDebug(BookSource source, String key) async {
-    _isCancelled = false;
+  Future<void> startDebug(BookSource source, String key) {
+    final runId = ++_runId;
+    _runFailed = false;
+    return runZoned(() => _runDebug(source, key), zoneValues: {_runKey: runId});
+  }
+
+  Future<void> _runDebug(BookSource source, String key) async {
     log('⇒開始調試書源: ${source.bookSourceName}');
 
     try {
@@ -79,7 +90,8 @@ class SourceDebugService {
         log('⇒開始搜尋關鍵字: $key', state: 10);
         await _searchDebug(source, key);
       }
-      log('︽解析完成', state: 1000);
+      // 途中已記錄失敗（例如搜尋沒找到書）時，不再接一行成功的「解析完成」。
+      if (!_runFailed) log('︽解析完成', state: 1000);
     } catch (e) {
       log('❌ 發生錯誤: $e', state: -1);
     }

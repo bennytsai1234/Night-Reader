@@ -54,6 +54,16 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// 儲存編輯後的書源；網址改過時在同一個交易裡移除原網址那筆。
+  Future<void> saveEdited(BookSource source, {String? previousUrl}) {
+    return transaction(() async {
+      await upsert(source);
+      if (previousUrl != null && previousUrl != source.bookSourceUrl) {
+        await deleteByUrl(previousUrl);
+      }
+    });
+  }
+
   Future<void> deleteByUrl(String url) =>
       (delete(bookSources)..where((t) => t.bookSourceUrl.equals(url))).go();
 
