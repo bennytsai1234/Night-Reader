@@ -120,7 +120,10 @@ class _ExploreShowContent extends StatelessWidget {
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
             if (provider.errorMessage == null) {
-              provider.loadMore();
+              // loadMore 會同步通知監聽者，不能在排版途中呼叫。
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => provider.loadMore(),
+              );
             }
             return _buildLoadMoreIndicator(context, provider);
           }

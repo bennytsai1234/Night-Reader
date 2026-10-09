@@ -109,10 +109,14 @@ class ExploreShowProvider extends ChangeNotifier {
         return;
       }
 
-      if (results.isEmpty) {
+      // 分類網址沒有分頁參數的書源每頁都回傳同一批書；去重後沒有新書就
+      // 當作到底，不再無限追加同一頁。
+      final known = {for (final book in _books) book.bookUrl};
+      final fresh = results.where((book) => known.add(book.bookUrl)).toList();
+      if (fresh.isEmpty) {
         _hasMore = false;
       } else {
-        _books.addAll(results);
+        _books.addAll(fresh);
         _page++;
       }
     } on DioException catch (error) {
@@ -135,7 +139,7 @@ class ExploreShowProvider extends ChangeNotifier {
 
   /// 載入更多 (對標 Android scrollToBottom)
   Future<void> loadMore() async {
-    if (!_hasMore || _isLoading) return;
+    if (_isDisposed || !_hasMore || _isLoading) return;
     await _loadData();
   }
 
