@@ -618,8 +618,13 @@ class BookDetailProvider extends ChangeNotifier {
     if (tocUrl != null) {
       next.tocUrl = tocUrl.trim();
     }
-    next.coverUrl = coverUrl.trim();
-    next.coverLocalPath = null;
+    // 改過的封面記在 customCoverUrl：顯示時優先、書源更新不會蓋掉。
+    final editedCover = coverUrl.trim();
+    final currentCover = _book.customCoverUrl ?? _book.coverUrl ?? '';
+    if (editedCover != currentCover) {
+      next.customCoverUrl = editedCover.isEmpty ? null : editedCover;
+      next.customCoverLocalPath = null;
+    }
 
     try {
       await _bookDao.upsert(next);
@@ -691,6 +696,14 @@ class BookDetailProvider extends ChangeNotifier {
         newChapterCount: 0,
         totalChapterCount: 0,
         message: '本地書不需要檢查線上更新',
+      );
+    }
+    if (_isCheckingUpdate) {
+      return const BookDetailUpdateResult(
+        success: false,
+        newChapterCount: 0,
+        totalChapterCount: 0,
+        message: '正在檢查更新',
       );
     }
 

@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'http_client.dart';
@@ -23,55 +22,52 @@ class AppUpdateService {
     return info.version;
   }
 
-  /// 取得最新 release。回 `null` 表示沒新版、沒可安裝的 APK，或失敗。
+  /// 取得最新 release。回 `null` 表示確定沒新版或沒可安裝的 APK；
+  /// 連線失敗或 API 回應異常時丟出例外，呼叫端才分得出「已是最新」與「檢查失敗」。
   Future<UpdateInfo?> checkLatest() async {
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(_latestReleaseUrl);
-      if (response.statusCode != 200 || response.data == null) return null;
-
-      final data = response.data!;
-      final tagName = data['tag_name'] as String?;
-      final body = (data['body'] as String?) ?? '';
-      final assets = (data['assets'] as List?) ?? const [];
-      final htmlUrl = (data['html_url'] as String?) ?? '';
-      if (tagName == null || tagName.isEmpty) return null;
-
-      Map<String, dynamic>? apkAsset;
-      String? apkDownloadUrl;
-      for (final rawAsset in assets) {
-        if (rawAsset is! Map<String, dynamic>) continue;
-        final name = rawAsset['name'];
-        final downloadUrl = rawAsset['browser_download_url'];
-        final normalizedDownloadUrl = downloadUrl is String
-            ? downloadUrl.trim()
-            : null;
-        if (name is! String ||
-            !name.toLowerCase().endsWith('.apk') ||
-            normalizedDownloadUrl == null ||
-            !_isHttpUrl(normalizedDownloadUrl)) {
-          continue;
-        }
-        apkAsset = rawAsset;
-        apkDownloadUrl = normalizedDownloadUrl;
-        break;
-      }
-      if (apkAsset == null) return null;
-
-      final current = await _currentVersionLoader();
-      if (!_isNewer(tagName, current)) return null;
-
-      return UpdateInfo(
-        versionName: _stripV(tagName),
-        tagName: tagName,
-        updateLog: body,
-        downloadUrl: apkDownloadUrl!,
-        assetSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
-        releasePageUrl: htmlUrl,
-      );
-    } catch (e, stack) {
-      AppLog.e('Check update failed: $e', error: e, stackTrace: stack);
-      return null;
+    final response = await _dio.get<Map<String, dynamic>>(_latestReleaseUrl);
+    if (response.statusCode != 200 || response.data == null) {
+      throw StateError('Release API 回應異常：${response.statusCode}');
     }
+    final data = response.data!;
+    final tagName = data['tag_name'] as String?;
+    final body = (data['body'] as String?) ?? '';
+    final assets = (data['assets'] as List?) ?? const [];
+    final htmlUrl = (data['html_url'] as String?) ?? '';
+    if (tagName == null || tagName.isEmpty) return null;
+
+    Map<String, dynamic>? apkAsset;
+    String? apkDownloadUrl;
+    for (final rawAsset in assets) {
+      if (rawAsset is! Map<String, dynamic>) continue;
+      final name = rawAsset['name'];
+      final downloadUrl = rawAsset['browser_download_url'];
+      final normalizedDownloadUrl = downloadUrl is String
+          ? downloadUrl.trim()
+          : null;
+      if (name is! String ||
+          !name.toLowerCase().endsWith('.apk') ||
+          normalizedDownloadUrl == null ||
+          !_isHttpUrl(normalizedDownloadUrl)) {
+        continue;
+      }
+      apkAsset = rawAsset;
+      apkDownloadUrl = normalizedDownloadUrl;
+      break;
+    }
+    if (apkAsset == null) return null;
+
+    final current = await _currentVersionLoader();
+    if (!_isNewer(tagName, current)) return null;
+
+    return UpdateInfo(
+      versionName: _stripV(tagName),
+      tagName: tagName,
+      updateLog: body,
+      downloadUrl: apkDownloadUrl!,
+      assetSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
+      releasePageUrl: htmlUrl,
+    );
   }
 
   /// 版本比對 — 拆 semver 逐段比，無法解析的視為非新版。

@@ -52,6 +52,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
       super_list.ListController();
   final GlobalKey _tocKey = GlobalKey();
 
+  /// 匯出全書的進度（0–1）；null 表示沒有在匯出。
+  double? _exportProgress;
+
   /// 大頁首捲進玻璃頁首底下後，頁首標題淡入顯示書名。
   final ValueNotifier<bool> _titleCollapsed = ValueNotifier(false);
 
@@ -278,10 +281,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
           onSelected: (v) => _handleMenuSelection(context, provider, v),
           entriesBuilder: (ctx) => [
             if (!provider.book.isLocal)
-              const GlassMenuItem(
+              GlassMenuItem(
                 value: _MenuAction.checkUpdate,
-                label: '檢查更新',
+                label: provider.isCheckingUpdate ? '正在檢查更新…' : '檢查更新',
                 icon: Icons.update_rounded,
+                enabled: !provider.isCheckingUpdate,
               ),
             if (!provider.book.isLocal)
               const GlassMenuItem(
@@ -294,10 +298,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
               label: '換封面',
               icon: Icons.image_outlined,
             ),
-            const GlassMenuItem(
+            GlassMenuItem(
               value: _MenuAction.export,
-              label: '匯出全書',
+              label: _exportProgress == null
+                  ? '匯出全書'
+                  : '正在匯出 ${(_exportProgress! * 100).round()}%',
               icon: Icons.ios_share_rounded,
+              enabled: _exportProgress == null,
             ),
             const GlassMenuItem(
               value: _MenuAction.edit,
@@ -425,10 +432,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
       fetchMissingRemote = decision == 'export';
     }
 
+    // 補抓缺少的正文可能要好幾分鐘：選單顯示進度，期間不能再匯出一次。
+    if (_exportProgress != null) return;
+    setState(() => _exportProgress = 0);
     try {
       await ExportBookService().exportToTxt(
         provider.book,
         fetchMissingRemote: fetchMissingRemote,
+        onProgress: (progress) {
+          if (mounted) setState(() => _exportProgress = progress);
+        },
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -437,6 +450,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+    } finally {
+      if (mounted) setState(() => _exportProgress = null);
     }
   }
 
@@ -750,8 +765,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
       fieldTexts: [
         p.book.name,
         p.book.author,
-        p.book.intro ?? '',
-        p.book.coverUrl ?? '',
+        // 預填畫面上看到的內容（使用者改過的優先）。
+        p.book.getDisplayIntro() ?? '',
+        p.book.customCoverUrl ?? p.book.coverUrl ?? '',
         p.book.kind ?? '',
         p.book.customTag ?? '',
         p.book.originName,

@@ -57,9 +57,19 @@ class BookInfoParser {
         bookUrl: book.bookUrl,
       );
 
+      // 書架上的書名與作者以使用者看到（可能改過）的為準，除非書源規則
+      // 宣告 canReName（同 legado）；搜尋結果進詳情時仍以詳情頁為準。
+      final keepNames =
+          book.isInBookshelf &&
+          (infoRule.canReName == null || infoRule.canReName!.trim().isEmpty);
+      String pick(String parsed, String current) =>
+          parsed.isEmpty || (keepNames && current.isNotEmpty)
+          ? current
+          : parsed;
+
       return book.copyWith(
-        name: name.isEmpty ? book.name : name,
-        author: author.isEmpty ? book.author : author,
+        name: pick(name, book.name),
+        author: pick(author, book.author),
         kind: kind.isEmpty ? book.kind : kind,
         coverUrl: coverUrl.isEmpty ? book.coverUrl : coverUrl,
         intro: intro.isEmpty ? book.intro : intro,

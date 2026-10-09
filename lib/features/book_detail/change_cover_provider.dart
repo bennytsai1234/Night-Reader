@@ -9,7 +9,23 @@ import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/di/injection.dart';
 
+/// 換封面面板的狀態；每次開面板建立一個，關閉時停止搜尋。
 class ChangeCoverProvider extends ChangeNotifier {
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    // 還在排隊或進行中的書源搜尋看到這個旗標就不再寫入結果。
+    _isSearching = false;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   final SearchBookDao _searchBookDao = getIt<SearchBookDao>();
   final BookSourceService _service = BookSourceService();

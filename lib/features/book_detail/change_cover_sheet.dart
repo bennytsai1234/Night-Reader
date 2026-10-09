@@ -12,7 +12,7 @@ import 'widgets/cover/cover_header.dart';
 import 'widgets/cover/cover_grid_item.dart';
 import 'widgets/cover/cover_manual_input.dart';
 
-class ChangeCoverSheet extends StatefulWidget {
+class ChangeCoverSheet extends StatelessWidget {
   final String bookName;
   final String author;
   const ChangeCoverSheet({
@@ -20,22 +20,29 @@ class ChangeCoverSheet extends StatefulWidget {
     required this.bookName,
     required this.author,
   });
+
   @override
-  State<ChangeCoverSheet> createState() => _ChangeCoverSheetState();
+  Widget build(BuildContext context) {
+    // 每次開面板一個新的 provider：不會帶著上一本書的封面或還在跑的搜尋。
+    return ChangeNotifierProvider(
+      create: (_) => ChangeCoverProvider()..init(bookName, author),
+      child: _ChangeCoverSheetBody(bookName: bookName, author: author),
+    );
+  }
 }
 
-class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
+class _ChangeCoverSheetBody extends StatefulWidget {
+  final String bookName;
+  final String author;
+  const _ChangeCoverSheetBody({required this.bookName, required this.author});
+  @override
+  State<_ChangeCoverSheetBody> createState() => _ChangeCoverSheetState();
+}
+
+class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
   final TextEditingController _urlController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final AppPermissionService _permissionService = AppPermissionService();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChangeCoverProvider>().init(widget.bookName, widget.author);
-    });
-  }
 
   @override
   void dispose() {

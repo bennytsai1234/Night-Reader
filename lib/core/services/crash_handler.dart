@@ -137,40 +137,36 @@ class CrashHandler {
     }
   }
 
+  /// 最近的崩潰日誌；沒有任何紀錄時回傳空字串，讀取失敗時丟出例外，
+  /// 讓日誌頁顯示對應的空狀態或錯誤狀態。
   static Future<String> readLogs() async {
-    try {
-      final directory = await _logDirectory();
-      final logs =
-          directory
-              .listSync()
-              .whereType<File>()
-              .where((file) => _isCrashLogFile(file))
-              .toList()
-            ..sort((a, b) => b.path.compareTo(a.path));
+    final directory = await _logDirectory();
+    final logs =
+        directory
+            .listSync()
+            .whereType<File>()
+            .where((file) => _isCrashLogFile(file))
+            .toList()
+          ..sort((a, b) => b.path.compareTo(a.path));
 
-      if (logs.isNotEmpty) {
-        final buffer = StringBuffer();
-        for (final file in logs.take(20)) {
-          buffer.writeln(await file.readAsString());
-        }
-        return buffer.toString().trimRight();
-      }
-    } catch (_) {}
-    return '尚無日誌記錄';
+    final buffer = StringBuffer();
+    for (final file in logs.take(20)) {
+      buffer.writeln(await file.readAsString());
+    }
+    return buffer.toString().trimRight();
   }
 
+  /// 刪除所有崩潰日誌；失敗時丟出例外，不讓頁面誤報已清除。
   static Future<void> clearLogs() async {
-    try {
-      final directory = await _logDirectory();
-      final files = directory.listSync();
-      for (var file in files) {
-        if (file is File && _isCrashLogFile(file)) {
-          await file.delete();
-        }
+    final directory = await _logDirectory();
+    final files = directory.listSync();
+    for (var file in files) {
+      if (file is File && _isCrashLogFile(file)) {
+        await file.delete();
       }
-      final latest = File('${directory.path}/crash_log.txt');
-      if (await latest.exists()) await latest.delete();
-    } catch (_) {}
+    }
+    final latest = File('${directory.path}/crash_log.txt');
+    if (await latest.exists()) await latest.delete();
   }
 
   static Future<Directory> _logDirectory() async {
