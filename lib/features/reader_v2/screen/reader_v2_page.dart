@@ -515,10 +515,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       );
       AppEventBus().fire(AppEventBus.upBookshelf);
       onSuccess?.call(prepared);
-      return (
-        success: true,
-        message: '已切換到 ${prepared.source.bookSourceName}',
-      );
+      return (success: true, message: '已切換到 ${prepared.source.bookSourceName}');
     } catch (error) {
       if (!isSourceSwitchUnavailable(error)) rethrow;
       return (success: false, message: '換源失敗: $error');
@@ -606,7 +603,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (index < 0 || index >= widget.initialChapters.length) return '';
     return widget.initialChapters[index].url;
   }
-
 }
 
 enum _ReaderMoreAction { globalSettings }

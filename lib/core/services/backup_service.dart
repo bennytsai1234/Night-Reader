@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
@@ -42,9 +43,8 @@ class BackupService {
         'schemaVersion': currentSchemaVersion,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
-      await File(
-        p.join(backupFolder.path, 'manifest.json'),
-      ).writeAsString(jsonEncode(manifest));
+      await File(p.join(backupFolder.path, 'manifest.json'))
+          .writeAsString(jsonEncode(manifest));
 
       // 1. 導出資料庫表為 JSON (對標 Android Backup.kt)
       await _writeJson(
@@ -89,9 +89,8 @@ class BackupService {
       for (var key in prefs.getKeys()) {
         config[key] = prefs.get(key);
       }
-      await File(
-        p.join(backupFolder.path, 'config.json'),
-      ).writeAsString(jsonEncode(config));
+      await File(p.join(backupFolder.path, 'config.json'))
+          .writeAsString(jsonEncode(config));
 
       // 3. 打包為 ZIP（先寫暫存檔，再原子重新命名）
       final encoder = ZipFileEncoder();
@@ -124,15 +123,14 @@ class BackupService {
     List<dynamic> data,
   ) async {
     final file = File(p.join(folder.path, name));
-    final jsonList =
-        data.map((e) {
-          try {
-            return (e as dynamic).toJson();
-          } catch (err) {
-            AppLog.w('Backup: toJson failed for item in $name: $err');
-            return e;
-          }
-        }).toList();
+    final jsonList = data.map((e) {
+      try {
+        return (e as dynamic).toJson();
+      } catch (err) {
+        AppLog.w('Backup: toJson failed for item in $name: $err');
+        return e;
+      }
+    }).toList();
     await file.writeAsString(jsonEncode(jsonList));
   }
 }

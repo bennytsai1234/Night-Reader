@@ -25,10 +25,9 @@ class ExportBookService {
   }) async {
     final chapters = await _chapterDao.getByBook(book.bookUrl);
     if (chapters.isEmpty) return;
-    final source =
-        fetchMissingRemote && !book.isLocal
-            ? await _resolveReadableSource(book)
-            : null;
+    final source = fetchMissingRemote && !book.isLocal
+        ? await _resolveReadableSource(book)
+        : null;
 
     final buffer = StringBuffer();
     buffer.writeln(book.name);

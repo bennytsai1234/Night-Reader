@@ -30,7 +30,7 @@ final class ChapterOffsetRange {
 /// 兩側 list/Fenwick 的 append——熱路徑上沒有排序、沒有全量重建。
 /// 亂序 admit（理論上不發生）以 debug assert 攔截並 fallback 全量重建。
 final class DocumentIndex implements HybridDocumentIndex {
-  DocumentIndex({required BlockKey centerKey}) : _centerKey = centerKey;
+  DocumentIndex({required this._centerKey});
 
   BlockKey _centerKey;
   final Map<BlockKey, BlockMetrics> _metrics = <BlockKey, BlockMetrics>{};

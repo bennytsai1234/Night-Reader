@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+
 import '../search_provider.dart';
+
 import 'package:night_reader/shared/widgets/search_field.dart';
 
 /// SearchAppBar - 搜尋頁面頂部欄
@@ -32,15 +34,15 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
 
   @override
-  Size get preferredSize => const GlassNavHeader(
-    bottomHeight: _bottomHeight,
-  ).preferredSize;
+  Size get preferredSize =>
+      const GlassNavHeader(bottomHeight: _bottomHeight).preferredSize;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final scopeDisplay =
-        provider.scopeLoaded ? provider.searchScope.display : '載入中…';
+    final scopeDisplay = provider.scopeLoaded
+        ? provider.searchScope.display
+        : '載入中…';
 
     return GlassNavHeader(
       automaticallyImplyLeading: false,
@@ -87,10 +89,9 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: AppSpacing.sm),
             GlassCapsule(
               label: '精準搜尋',
-              icon:
-                  provider.precisionSearch
-                      ? Icons.check_rounded
-                      : Icons.text_fields_rounded,
+              icon: provider.precisionSearch
+                  ? Icons.check_rounded
+                  : Icons.text_fields_rounded,
               selected: provider.precisionSearch,
               tooltip: '精準搜尋（完全匹配）',
               onTap: provider.togglePrecisionSearch,
@@ -99,10 +100,9 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: AppSpacing.sm),
             GlassCapsule(
               label: provider.isSearching ? '停止' : '搜尋',
-              icon:
-                  provider.isSearching
-                      ? Icons.stop_rounded
-                      : Icons.search_rounded,
+              icon: provider.isSearching
+                  ? Icons.stop_rounded
+                  : Icons.search_rounded,
               foregroundColor: provider.isSearching ? scheme.error : null,
               tooltip: provider.isSearching ? '停止搜尋' : '搜尋',
               onTap: () {

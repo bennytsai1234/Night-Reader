@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/update_service.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+
 import 'external_url_launcher.dart';
 
 /// 結果類型：呼叫端用來決定是否寫入「忽略此版」。
@@ -16,8 +17,9 @@ class UpdateDialog extends StatelessWidget {
   final UpdateInfo info;
 
   Future<void> _openReleasePage(BuildContext context) async {
-    final url =
-        info.releasePageUrl.isNotEmpty ? info.releasePageUrl : info.downloadUrl;
+    final url = info.releasePageUrl.isNotEmpty
+        ? info.releasePageUrl
+        : info.downloadUrl;
     if (url.isEmpty) return;
     await launchExternalUrlWithFeedback(context, url);
   }
@@ -26,16 +28,15 @@ class UpdateDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppAlert<_UpdateAction>(
       title: '發現新版 ${info.versionName}',
-      content:
-          info.updateLog.isEmpty
-              ? null
-              : Text(
-                info.updateLog,
-                style: AppTextStyles.bodySm.copyWith(
-                  height: 1.5,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+      content: info.updateLog.isEmpty
+          ? null
+          : Text(
+              info.updateLog,
+              style: AppTextStyles.bodySm.copyWith(
+                height: 1.5,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
+            ),
       onAction: (action) {
         switch (action) {
           case _UpdateAction.download:

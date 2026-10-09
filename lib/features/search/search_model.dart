@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -9,13 +10,14 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models/search_scope.dart';
 
 String normalizeSearchText(String? value) {
   if (value == null) return '';
-  return StringUtils.fullToHalf(
-    value,
-  ).replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  return StringUtils.fullToHalf(value)
+      .replaceAll(RegExp(r'\s+'), '')
+      .toLowerCase();
 }
 
 bool matchesPrecisionSearch(SearchBook book, String key) {
@@ -181,10 +183,9 @@ class SearchModel {
       if (_isCancelled) return;
 
       // 精準搜尋過濾
-      final filteredBooks =
-          precisionSearch
-              ? books.where((b) => matchesPrecisionSearch(b, key)).toList()
-              : books;
+      final filteredBooks = precisionSearch
+          ? books.where((b) => matchesPrecisionSearch(b, key)).toList()
+          : books;
 
       if (filteredBooks.isNotEmpty) {
         // 持久化到搜尋快取
@@ -282,7 +283,9 @@ class SearchModel {
       } else {
         // 書名有 ≥2 個不同作者 → 缺作者同名書退出、單獨成「作者不詳」卡，
         // 不硬塞任一作者。
-        authorGroups[nameKey]!.putIfAbsent('', () => []).addAll(authorlessBooks);
+        authorGroups[nameKey]!
+            .putIfAbsent('', () => [])
+            .addAll(authorlessBooks);
       }
     });
 
@@ -382,7 +385,11 @@ class SearchModel {
   List<SearchBook> get searchBooksForTest => List.unmodifiable(_searchBooks);
 
   /// 驅動一次「單源回傳 → append + 從頭重建」流程（測試用）。
-  void mergeForTest(List<SearchBook> newBooks, String searchKey, bool precision) {
+  void mergeForTest(
+    List<SearchBook> newBooks,
+    String searchKey,
+    bool precision,
+  ) {
     _mergeItems(newBooks, searchKey, precision);
   }
 

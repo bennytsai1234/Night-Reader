@@ -62,8 +62,9 @@ class TxtParser {
           charOffsets,
           content: content,
           charStart: matches[i].start,
-          charEnd:
-              i + 1 < matches.length ? matches[i + 1].start : content.length,
+          charEnd: i + 1 < matches.length
+              ? matches[i + 1].start
+              : content.length,
           chunkChars: _maxChapterChars,
         );
       }
@@ -104,8 +105,9 @@ class TxtParser {
 
     for (var i = 0; i < matches.length; i++) {
       final charStart = matches[i].start;
-      final charEnd =
-          (i + 1 < matches.length) ? matches[i + 1].start : content.length;
+      final charEnd = (i + 1 < matches.length)
+          ? matches[i + 1].start
+          : content.length;
       final titleBase = matches[i].group(0)?.trim() ?? '第 ${i + 1} 章';
 
       _appendChunkedRange(
@@ -144,11 +146,10 @@ class TxtParser {
     var currentByte = initialByteOffset;
     for (final targetChar in sortedOffsets) {
       if (targetChar > currentChar) {
-        currentByte +=
-            EncodingDetect.encodeWithCharset(
-              content.substring(currentChar, targetChar),
-              charsetName,
-            ).length;
+        currentByte += EncodingDetect.encodeWithCharset(
+          content.substring(currentChar, targetChar),
+          charsetName,
+        ).length;
       }
       byteOffsets[targetChar] = currentByte;
       currentChar = targetChar;
@@ -301,10 +302,9 @@ class TxtParser {
 
     while (currentChar < charEnd) {
       part += 1;
-      var nextChar =
-          (currentChar + chunkChars < charEnd)
-              ? currentChar + chunkChars
-              : charEnd;
+      var nextChar = (currentChar + chunkChars < charEnd)
+          ? currentChar + chunkChars
+          : charEnd;
       nextChar = _safeChunkEnd(content, currentChar, nextChar, charEnd);
       final nextByte = byteOffsets[nextChar];
       if (nextByte == null) return;
@@ -333,10 +333,9 @@ class TxtParser {
       ..add(charEnd);
     var currentChar = charStart;
     while (currentChar < charEnd) {
-      var nextChar =
-          currentChar + chunkChars < charEnd
-              ? currentChar + chunkChars
-              : charEnd;
+      var nextChar = currentChar + chunkChars < charEnd
+          ? currentChar + chunkChars
+          : charEnd;
       nextChar = _safeChunkEnd(content, currentChar, nextChar, charEnd);
       offsets.add(nextChar);
       currentChar = nextChar;

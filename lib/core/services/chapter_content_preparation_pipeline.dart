@@ -198,9 +198,7 @@ class ChapterContentPreparationPipeline {
         '讀取本地書籍失敗: ${error.message}',
       );
     } on AppException catch (error) {
-      return ChapterContentPreparationResult.failed(
-        '加載章節失敗: ${error.message}',
-      );
+      return ChapterContentPreparationResult.failed('加載章節失敗: ${error.message}');
     }
   }
 

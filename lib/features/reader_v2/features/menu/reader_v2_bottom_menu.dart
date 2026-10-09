@@ -141,7 +141,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
   }
 
   /// 膠囊上方的圓形玻璃按鈕（自動翻頁、替換規則、日夜切換）。
-  Widget _buildFloatingButtons(BuildContext context, ReaderV2MenuStyle menuStyle) {
+  Widget _buildFloatingButtons(
+    BuildContext context,
+    ReaderV2MenuStyle menuStyle,
+  ) {
     final tint = menuStyle.glassTintOf(context);
     final actions = <Widget>[
       if (showAutoPage)

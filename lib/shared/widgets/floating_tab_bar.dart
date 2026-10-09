@@ -102,8 +102,9 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final width = MediaQuery.sizeOf(context).width;
-    final searchWidth =
-        widget.onSearch == null ? 0.0 : AppGlass.tabBarHeight + AppGlass.tabBarGap;
+    final searchWidth = widget.onSearch == null
+        ? 0.0
+        : AppGlass.tabBarHeight + AppGlass.tabBarGap;
     final barWidth = math.min(
       AppGlass.tabBarMaxWidth,
       width - AppGrouped.margin * 2 - searchWidth,
@@ -205,10 +206,9 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             return TweenAnimationBuilder<double>(
               tween: Tween(end: target),
               // 拖曳與跟頁時直接跟手；只有跳轉（例如無 controller）時用彈簧。
-              duration:
-                  _dragPosition != null || widget.controller != null
-                      ? Duration.zero
-                      : AppMotion.spring,
+              duration: _dragPosition != null || widget.controller != null
+                  ? Duration.zero
+                  : AppMotion.spring,
               curve: AppMotion.springCurve,
               builder: (context, position, _) {
                 return Stack(
@@ -277,8 +277,11 @@ class _TabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color =
-        Color.lerp(scheme.onSurfaceVariant, scheme.primary, selection)!;
+    final color = Color.lerp(
+      scheme.onSurfaceVariant,
+      scheme.primary,
+      selection,
+    )!;
     return Semantics(
       button: true,
       selected: selected,

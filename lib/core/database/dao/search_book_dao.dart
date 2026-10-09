@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/search_book.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -11,8 +12,9 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
   SearchBookDao(super.db);
 
   Future<List<SearchBook>> getByNameAuthor(String name, String author) {
-    return (select(searchBooks)
-      ..where((t) => t.name.equals(name) & t.author.equals(author))).get();
+    return (select(
+      searchBooks,
+    )..where((t) => t.name.equals(name) & t.author.equals(author))).get();
   }
 
   Future<List<SearchBook>> getEnabledHasCover(String name, String author) {
@@ -28,9 +30,9 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
     ).map((row) => SearchBook.fromJson(row.data)).get();
   }
 
-  Future<void> upsert(SearchBook book) => into(
-    searchBooks,
-  ).insertOnConflictUpdate(SearchBookToInsertable(book).toInsertable());
+  Future<void> upsert(SearchBook book) =>
+      into(searchBooks)
+          .insertOnConflictUpdate(SearchBookToInsertable(book).toInsertable());
 
   Future<void> insertList(List<SearchBook> books) async {
     await batch(
@@ -47,8 +49,9 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
   Future<void> clearAll() => delete(searchBooks).go();
 
   Future<void> clear(String name, String author) {
-    return (delete(searchBooks)
-      ..where((t) => t.name.equals(name) & t.author.equals(author))).go();
+    return (delete(
+      searchBooks,
+    )..where((t) => t.name.equals(name) & t.author.equals(author))).go();
   }
 
   Future<List<SearchBook>> getSearchBooks(String name, String author) =>

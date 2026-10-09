@@ -30,60 +30,55 @@ class DownloadManagerPage extends StatelessWidget {
         title: '背景下載佇列',
         actions: [
           GlassIconButton(
-            icon:
-                service.isPaused
-                    ? Icons.play_arrow_rounded
-                    : Icons.pause_rounded,
+            icon: service.isPaused
+                ? Icons.play_arrow_rounded
+                : Icons.pause_rounded,
             tooltip: service.isPaused ? '恢復全部' : '暫停全部',
             onPressed: hasActiveTasks ? service.togglePause : null,
           ),
           GlassIconButton(
             icon: Icons.delete_sweep_outlined,
             tooltip: '清除已完成',
-            onPressed:
-                hasCompletedTasks
-                    ? () {
-                      for (final task
-                          in tasks.where((task) => task.isCompleted).toList()) {
-                        service.removeTask(task.bookUrl);
-                      }
+            onPressed: hasCompletedTasks
+                ? () {
+                    for (final task
+                        in tasks.where((task) => task.isCompleted).toList()) {
+                      service.removeTask(task.bookUrl);
                     }
-                    : null,
+                  }
+                : null,
           ),
         ],
       ),
-      body:
-          tasks.isEmpty
-              ? Padding(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.paddingOf(context).top,
-                ),
-                child: const AppStateView(
-                  icon: Icons.download_done_rounded,
-                  title: '暫無背景下載任務',
-                  description: '從書籍詳情加入下載後，進度會顯示在這裡。',
-                ),
-              )
-              : SwipeActionsGroup(
-                child: GroupedListView(
-                  children: [
-                    _buildQueueSummary(context, service, tasks),
-                    GroupedSection(
-                      header: '任務',
-                      children: [
-                        for (var index = 0; index < tasks.length; index++)
-                          _buildTaskTile(
-                            context,
-                            service,
-                            tasks[index],
-                            index,
-                            tasks.length,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+      body: tasks.isEmpty
+          ? Padding(
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+              child: const AppStateView(
+                icon: Icons.download_done_rounded,
+                title: '暫無背景下載任務',
+                description: '從書籍詳情加入下載後，進度會顯示在這裡。',
               ),
+            )
+          : SwipeActionsGroup(
+              child: GroupedListView(
+                children: [
+                  _buildQueueSummary(context, service, tasks),
+                  GroupedSection(
+                    header: '任務',
+                    children: [
+                      for (var index = 0; index < tasks.length; index++)
+                        _buildTaskTile(
+                          context,
+                          service,
+                          tasks[index],
+                          index,
+                          tasks.length,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -104,10 +99,9 @@ class DownloadManagerPage extends StatelessWidget {
 
     return GroupedSection(
       topGap: AppSpacing.sm,
-      footer:
-          service.isBookshelfRefreshing
-              ? '書架正在檢查更新，下載會等檢查完成後繼續'
-              : '最近任務更新：${_formatTimestamp(latestUpdate)}',
+      footer: service.isBookshelfRefreshing
+          ? '書架正在檢查更新，下載會等檢查完成後繼續'
+          : '最近任務更新：${_formatTimestamp(latestUpdate)}',
       children: [
         GroupedContent(
           child: Row(
@@ -156,14 +150,14 @@ class DownloadManagerPage extends StatelessWidget {
   ) {
     final chrome = AppChrome.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final rawProgress =
-        task.totalCount <= 0 ? 0.0 : task.successCount / task.totalCount;
-    final progress =
-        rawProgress < 0
-            ? 0.0
-            : rawProgress > 1
-            ? 1.0
-            : rawProgress;
+    final rawProgress = task.totalCount <= 0
+        ? 0.0
+        : task.successCount / task.totalCount;
+    final progress = rawProgress < 0
+        ? 0.0
+        : rawProgress > 1
+        ? 1.0
+        : rawProgress;
     final canRetry = task.isFailed || task.errorCount > 0;
     final failureSummary = task.failureSummary;
 
@@ -178,114 +172,98 @@ class DownloadManagerPage extends StatelessWidget {
       control = _TaskControlButton(
         icon: task.isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
         tooltip: task.isPaused ? '繼續' : '暫停',
-        onPressed:
-            () =>
-                task.isPaused
-                    ? service.resumeTask(task.bookUrl)
-                    : service.pauseTask(task.bookUrl),
+        onPressed: () => task.isPaused
+            ? service.resumeTask(task.bookUrl)
+            : service.pauseTask(task.bookUrl),
       );
     }
 
     final row = Builder(
-      builder:
-          (rowContext) => InkWell(
-            onTap:
-                () => _showTaskMenu(
-                  rowContext,
-                  service,
-                  task,
-                  index,
-                  taskCount,
-                ),
-            onLongPress:
-                () => _showTaskMenu(
-                  rowContext,
-                  service,
-                  task,
-                  index,
-                  taskCount,
-                ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppGrouped.rowPadding,
-                vertical: AppSpacing.md,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
+      builder: (rowContext) => InkWell(
+        onTap: () => _showTaskMenu(rowContext, service, task, index, taskCount),
+        onLongPress: () =>
+            _showTaskMenu(rowContext, service, task, index, taskCount),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppGrouped.rowPadding,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      task.bookName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyBase.copyWith(
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    ClipRRect(
+                      borderRadius: AppRadius.pillShape,
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: chrome.separator,
+                        minHeight: 4,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          task.bookName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            fontWeight: FontWeight.w500,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        ClipRRect(
-                          borderRadius: AppRadius.pillShape,
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: chrome.separator,
-                            minHeight: 4,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _statusText(task),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.bodySm.copyWith(
-                                  height: 1.3,
-                                  color: _statusColor(context, task),
-                                ),
-                              ),
-                            ),
-                            if (task.isDownloading) ...[
-                              const SizedBox(width: AppSpacing.md),
-                              Text(
-                                '正在下載…',
-                                style: AppTextStyles.bodySm.copyWith(
-                                  height: 1.3,
-                                  color: scheme.primary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (failureSummary != null) ...[
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            failureSummary,
+                        Expanded(
+                          child: Text(
+                            _statusText(task),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.bodySm.copyWith(
                               height: 1.3,
-                              color: context.danger,
+                              color: _statusColor(context, task),
+                            ),
+                          ),
+                        ),
+                        if (task.isDownloading) ...[
+                          const SizedBox(width: AppSpacing.md),
+                          Text(
+                            '正在下載…',
+                            style: AppTextStyles.bodySm.copyWith(
+                              height: 1.3,
+                              color: scheme.primary,
                             ),
                           ),
                         ],
                       ],
                     ),
-                  ),
-                  if (control != null) ...[
-                    const SizedBox(width: AppSpacing.md),
-                    control,
+                    if (failureSummary != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        failureSummary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySm.copyWith(
+                          height: 1.3,
+                          color: context.danger,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
+              if (control != null) ...[
+                const SizedBox(width: AppSpacing.md),
+                control,
+              ],
+            ],
           ),
+        ),
+      ),
     );
 
     return SwipeActions(

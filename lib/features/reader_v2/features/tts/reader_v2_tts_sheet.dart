@@ -133,9 +133,9 @@ class _HighlightPreview extends StatelessWidget {
               text: '他放下手中的書，望向窗外的月光。',
               style: TextStyle(
                 background: Paint()
-                  ..color = settings.highlightColor.resolve(palette).withValues(
-                    alpha: settings.highlightStrength,
-                  ),
+                  ..color = settings.highlightColor
+                      .resolve(palette)
+                      .withValues(alpha: settings.highlightStrength),
               ),
             ),
             const TextSpan(text: '遠處傳來幾聲犬吠。'),

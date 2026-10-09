@@ -5,7 +5,9 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+
 import '../search_provider.dart';
+
 import 'package:night_reader/shared/widgets/glass.dart';
 
 /// SearchHistoryView - 搜尋歷史顯示元件
@@ -58,6 +60,7 @@ class SearchHistoryView extends StatelessWidget {
               onPressed: () => _confirmClearHistory(context),
             ),
             separatorIndent: _separatorIndent,
+            footer: '長按單筆記錄可刪除。',
             children: [
               for (final keyword in provider.historyKeywords)
                 GroupedRow(
@@ -75,7 +78,6 @@ class SearchHistoryView extends StatelessWidget {
                   onLongPress: () => _confirmDeleteKeyword(context, keyword),
                 ),
             ],
-            footer: '長按單筆記錄可刪除。',
           )
         else
           Padding(

@@ -220,12 +220,17 @@ class ReaderV2PrefsRepository {
         prefs.getDouble(PreferKey.readerFooterOffset),
       ),
       hideStatusBar:
-          prefs.getBool(PreferKey.readerHideStatusBar) ?? defaults.hideStatusBar,
+          prefs.getBool(PreferKey.readerHideStatusBar) ??
+          defaults.hideStatusBar,
       headerInfo:
-          ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerHeaderInfo)) ??
+          ReaderV2InfoSlots.decode(
+            prefs.getString(PreferKey.readerHeaderInfo),
+          ) ??
           defaults.headerInfo,
       footerInfo:
-          ReaderV2InfoSlots.decode(prefs.getString(PreferKey.readerFooterInfo)) ??
+          ReaderV2InfoSlots.decode(
+            prefs.getString(PreferKey.readerFooterInfo),
+          ) ??
           defaults.footerInfo,
       highlightColor: ReaderV2HighlightColor.parse(
         prefs.getString(PreferKey.readerHighlightColor),
@@ -364,12 +369,11 @@ class ReaderV2PrefsRepository {
   }
 
   List<int> _parseClickActions(String? stored) {
-    final normalized =
-        stored
-            ?.split(',')
-            .map((value) => int.tryParse(value.trim()))
-            .whereType<int>()
-            .toList();
+    final normalized = stored
+        ?.split(',')
+        .map((value) => int.tryParse(value.trim()))
+        .whereType<int>()
+        .toList();
     return _normalizeClickActions(normalized);
   }
 
@@ -396,8 +400,9 @@ class ReaderV2PrefsRepository {
   }
 
   double _normalizeAutoPageSpeed(double? value) {
-    if (value == null || !value.isFinite)
+    if (value == null || !value.isFinite) {
       return ReaderV2PrefsSnapshot.defaults().autoPageSpeed;
+    }
     if (value > 1) {
       return (value / 100).clamp(minAutoPageSpeed, maxAutoPageSpeed).toDouble();
     }

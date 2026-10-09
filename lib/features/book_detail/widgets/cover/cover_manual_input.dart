@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+
 import '../../book_detail_provider.dart';
 
 /// 換封面面板底部：手動輸入網址（分組輸入列）＋「確定」與從相簿選取。
@@ -26,9 +27,8 @@ class CoverManualInput extends StatelessWidget {
       Navigator.pop(context);
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(outcome.message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(outcome.message)));
   }
 
   @override

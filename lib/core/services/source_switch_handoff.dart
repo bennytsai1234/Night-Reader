@@ -16,5 +16,7 @@ abstract interface class SourceSwitchOperationLease {
 typedef SourceSwitchOperationQuiescer =
     Future<SourceSwitchOperationLease> Function(Book oldBook);
 
-typedef SourceSwitchAssetRetirer =
-    Future<void> Function(Book oldBook, Book migratedBook);
+typedef SourceSwitchAssetRetirer = Future<void> Function(
+  Book oldBook,
+  Book migratedBook,
+);

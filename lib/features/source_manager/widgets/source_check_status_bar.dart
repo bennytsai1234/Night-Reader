@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+
 import '../source_manager_provider.dart';
 
 /// 校驗進度／上次校驗摘要的玻璃膠囊，放在導航頁首搜尋框下方。
@@ -50,17 +51,16 @@ class SourceCheckStatusBar extends StatelessWidget {
                         SizedBox(
                           width: 16,
                           height: 16,
-                          child:
-                              isChecking
-                                  ? CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: accent,
-                                  )
-                                  : Icon(
-                                    Icons.rule_folder_outlined,
-                                    size: 16,
-                                    color: accent,
-                                  ),
+                          child: isChecking
+                              ? CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: accent,
+                                )
+                              : Icon(
+                                  Icons.rule_folder_outlined,
+                                  size: 16,
+                                  color: accent,
+                                ),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(

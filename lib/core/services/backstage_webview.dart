@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+
 import 'dart:convert';
+
 import 'package:html_unescape/html_unescape.dart';
 
 class BackstageWebView {
@@ -104,10 +107,9 @@ class BackstageWebView {
           await Future.delayed(Duration(milliseconds: 1000 + delayTime));
           if (isCompleted) return;
 
-          final jsToRun =
-              javaScript?.isNotEmpty == true
-                  ? javaScript!
-                  : 'document.documentElement.outerHTML';
+          final jsToRun = javaScript?.isNotEmpty == true
+              ? javaScript!
+              : 'document.documentElement.outerHTML';
 
           void evaluateAndCheck() async {
             if (isCompleted) return;
@@ -127,10 +129,9 @@ class BackstageWebView {
                   final match = RegExp(sourceRegex!).firstMatch(content);
                   if (match != null) {
                     finish({
-                      'body':
-                          match.groupCount > 0
-                              ? (match.group(1) ?? match.group(0) ?? '')
-                              : (match.group(0) ?? ''),
+                      'body': match.groupCount > 0
+                          ? (match.group(1) ?? match.group(0) ?? '')
+                          : (match.group(0) ?? ''),
                       'url': currentUrl,
                       'code': 200,
                     });

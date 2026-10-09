@@ -44,41 +44,38 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                 destructive: true,
                 showChevron: false,
                 enabled: !_busy,
-                onTap:
-                    () => _confirmAndRun(
-                      title: '清除全部 Cookie',
-                      message: '這會移除所有書源登入狀態與驗證 Cookie。',
-                      successMessage: '已清除全部 Cookie',
-                      action: () async {
-                        await _dataService.clearAllCookies();
-                      },
-                    ),
+                onTap: () => _confirmAndRun(
+                  title: '清除全部 Cookie',
+                  message: '這會移除所有書源登入狀態與驗證 Cookie。',
+                  successMessage: '已清除全部 Cookie',
+                  action: () async {
+                    await _dataService.clearAllCookies();
+                  },
+                ),
               ),
               GroupedRow(
                 title: '清除 WebView localStorage',
                 destructive: true,
                 showChevron: false,
                 enabled: !_busy,
-                onTap:
-                    () => _confirmAndRun(
-                      title: '清除 WebView localStorage',
-                      message: '這可能會讓部分需要網頁驗證的書源重新登入。',
-                      successMessage: '已清除 WebView localStorage',
-                      action: _dataService.clearWebViewLocalStorage,
-                    ),
+                onTap: () => _confirmAndRun(
+                  title: '清除 WebView localStorage',
+                  message: '這可能會讓部分需要網頁驗證的書源重新登入。',
+                  successMessage: '已清除 WebView localStorage',
+                  action: _dataService.clearWebViewLocalStorage,
+                ),
               ),
               GroupedRow(
                 title: '清除 WebView cache',
                 destructive: true,
                 showChevron: false,
                 enabled: !_busy,
-                onTap:
-                    () => _confirmAndRun(
-                      title: '清除 WebView cache',
-                      message: '這只會清除 WebView 快取，不會刪除書籍資料。',
-                      successMessage: '已清除 WebView cache',
-                      action: _dataService.clearWebViewCache,
-                    ),
+                onTap: () => _confirmAndRun(
+                  title: '清除 WebView cache',
+                  message: '這只會清除 WebView 快取，不會刪除書籍資料。',
+                  successMessage: '已清除 WebView cache',
+                  action: _dataService.clearWebViewCache,
+                ),
               ),
             ],
           ),
@@ -92,11 +89,10 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                   tint: AppTint.ink,
                 ),
                 title: '隱私說明',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const PrivacyNoticePage()),
-                    ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PrivacyNoticePage()),
+                ),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -104,13 +100,12 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                   tint: AppTint.ink,
                 ),
                 title: '權限說明',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const PermissionNoticePage(),
-                      ),
-                    ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PermissionNoticePage(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -144,14 +139,12 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(successMessage)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(successMessage)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失敗: $error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('操作失敗: $error')));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -300,13 +293,11 @@ class PrivacyNoticePage extends StatelessWidget {
         ),
         _NoticeSection(
           title: 'Cookie 與 WebView',
-          body:
-              '需要登入或驗證的書源可能會保存 Cookie。WebView 書源可能會產生 Cookie、localStorage 與網頁快取，可在資料與隱私頁清除。',
+          body: '需要登入或驗證的書源可能會保存 Cookie。WebView 書源可能會產生 Cookie、localStorage 與網頁快取，可在資料與隱私頁清除。',
         ),
         _NoticeSection(
           title: '網路請求',
-          body:
-              '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。',
+          body: '搜尋、詳情、目錄、正文、封面與書源驗證會向使用者配置的書源或網址發出請求，請求可能包含 User-Agent、Headers 與 Cookie。',
         ),
         _NoticeSection(
           title: '備份資料',
@@ -331,8 +322,7 @@ class PermissionNoticePage extends StatelessWidget {
       sections: [
         _NoticeSection(
           title: '檔案',
-          body:
-              '匯入本地書、匯入/匯出書源、備份與還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
+          body: '匯入本地書、匯入/匯出書源、備份與還原會透過系統檔案選擇器或分享面板讀取、建立檔案。App 只處理使用者選取或分享的檔案，不要求 Android 所有檔案存取權。',
         ),
         _NoticeSection(
           title: '網路',
@@ -340,18 +330,15 @@ class PermissionNoticePage extends StatelessWidget {
         ),
         _NoticeSection(
           title: '通知與背景任務',
-          body:
-              'TTS 朗讀的媒體控制會使用通知權限；若使用者拒絕，朗讀仍可執行，但通知列控制可能無法顯示。背景任務會受到系統省電與背景執行設定限制。',
+          body: 'TTS 朗讀的媒體控制會使用通知權限；若使用者拒絕，朗讀仍可執行，但通知列控制可能無法顯示。背景任務會受到系統省電與背景執行設定限制。',
         ),
         _NoticeSection(
           title: '相簿',
-          body:
-              '更換書籍封面時可能會開啟系統圖片選取器。iOS 會顯示相簿權限提示，Android 以系統圖片選取流程為主，不要求整個相簿或儲存空間存取權。',
+          body: '更換書籍封面時可能會開啟系統圖片選取器。iOS 會顯示相簿權限提示，Android 以系統圖片選取流程為主，不要求整個相簿或儲存空間存取權。',
         ),
         _NoticeSection(
           title: 'WebView',
-          body:
-              '部分書源會使用 WebView 載入網頁、執行必要腳本或完成驗證。WebView 可能產生 Cookie、localStorage 與 cache。',
+          body: '部分書源會使用 WebView 載入網頁、執行必要腳本或完成驗證。WebView 可能產生 Cookie、localStorage 與 cache。',
         ),
       ],
     );

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/chapter.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -35,9 +36,9 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   }
 
   Future<BookChapter?> getChapter(String bookUrl, int index) {
-    return (select(chapters)..where(
-      (t) => t.bookUrl.equals(bookUrl) & t.index.equals(index),
-    )).getSingleOrNull();
+    return (select(chapters)
+          ..where((t) => t.bookUrl.equals(bookUrl) & t.index.equals(index)))
+        .getSingleOrNull();
   }
 
   Future<void> deleteByBook(String bookUrl) {

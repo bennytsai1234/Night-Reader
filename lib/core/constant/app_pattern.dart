@@ -33,10 +33,7 @@ class AppPattern {
   static final RegExp debugMessageSymbolRegex = RegExp(r'[⇒◇┌└≡]');
 
   // 本地書籍支援類型
-  static final RegExp bookFileRegex = RegExp(
-    r'.*\.txt',
-    caseSensitive: false,
-  );
+  static final RegExp bookFileRegex = RegExp(r'.*\.txt', caseSensitive: false);
   // 壓縮文件支援類型
   static final RegExp archiveFileRegex = RegExp(
     r'.*\.(zip|rar|7z)$',

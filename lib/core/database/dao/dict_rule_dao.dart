@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/dict_rule.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -11,18 +12,20 @@ class DictRuleDao extends DatabaseAccessor<AppDatabase>
   DictRuleDao(super.db);
 
   Future<List<DictRule>> getAll() {
-    return (select(dictRules)
-      ..orderBy([(t) => OrderingTerm(expression: t.sortNumber)])).get();
+    return (select(
+      dictRules,
+    )..orderBy([(t) => OrderingTerm(expression: t.sortNumber)])).get();
   }
 
   Stream<List<DictRule>> watchAll() {
-    return (select(dictRules)
-      ..orderBy([(t) => OrderingTerm(expression: t.sortNumber)])).watch();
+    return (select(
+      dictRules,
+    )..orderBy([(t) => OrderingTerm(expression: t.sortNumber)])).watch();
   }
 
-  Future<void> upsert(DictRule rule) => into(
-    dictRules,
-  ).insertOnConflictUpdate(DictRuleToInsertable(rule).toInsertable());
+  Future<void> upsert(DictRule rule) =>
+      into(dictRules)
+          .insertOnConflictUpdate(DictRuleToInsertable(rule).toInsertable());
 
   Future<void> deleteById(int id) =>
       (delete(dictRules)..where((t) => t.id.equals(id))).go();

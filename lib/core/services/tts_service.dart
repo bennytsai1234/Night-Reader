@@ -726,7 +726,10 @@ class TTSService extends ChangeNotifier {
     return !features.contains('notinstalled');
   }
 
-  static bool _voiceMatchesLanguage(Map<String, String> voice, String language) {
+  static bool _voiceMatchesLanguage(
+    Map<String, String> voice,
+    String language,
+  ) {
     final target = _normalizeLocale(language);
     final locale = _normalizeLocale(voice['locale'] ?? '');
     if (target.isEmpty || locale.isEmpty) return true;

@@ -71,7 +71,7 @@ class MethodChannelFilePicker extends FilePickerPlatform {
       return await methodChannel.invokeMethod('dir', {});
     } on PlatformException catch (ex) {
       if (ex.code == "unknown_path") {
-        print(
+        debugPrint(
             '[$_tag] Could not resolve directory path. Maybe it\'s a protected one or unsupported (such as Downloads folder). If you are on Android, make sure that you are on SDK 21 or above.');
       }
     }
@@ -135,10 +135,10 @@ class MethodChannelFilePicker extends FilePickerPlatform {
 
       return FilePickerResult(platformFiles);
     } on PlatformException catch (e) {
-      print('[$_tag] Platform exception: $e');
+      debugPrint('[$_tag] Platform exception: $e');
       rethrow;
     } catch (e) {
-      print(
+      debugPrint(
           '[$_tag] Unsupported operation. Method not found. The exception thrown was: $e');
       rethrow;
     }

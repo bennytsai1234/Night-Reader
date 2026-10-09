@@ -25,8 +25,8 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
     return AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
-      builder:
-          (_) => ReaderV2ReplaceRuleEditorSheet(rule: rule, onSave: onSave),
+      builder: (_) =>
+          ReaderV2ReplaceRuleEditorSheet(rule: rule, onSave: onSave),
     );
   }
 
@@ -126,9 +126,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
       order: widget.rule?.order ?? 0,
     );
     if (!rule.isValid()) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('規則格式無效，請檢查正則內容')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('規則格式無效，請檢查正則內容')));
       return;
     }
     setState(() => _saving = true);
@@ -138,9 +137,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('儲存規則失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('儲存規則失敗：$error')));
       setState(() => _saving = false);
     }
   }
@@ -197,8 +195,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
                   _runTest();
                 },
                 onTitleChanged: (value) => setState(() => _scopeTitle = value),
-                onContentChanged:
-                    (value) => setState(() => _scopeContent = value),
+                onContentChanged: (value) =>
+                    setState(() => _scopeContent = value),
               ),
               ReplaceEditTestPanel(
                 margin: EdgeInsets.zero,

@@ -164,10 +164,9 @@ class CacheManager {
     String content, {
     int saveTimeSeconds = 0,
   }) async {
-    final deadline =
-        saveTimeSeconds == 0
-            ? 0
-            : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
+    final deadline = saveTimeSeconds == 0
+        ? 0
+        : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
     _putMemory(key, content, deadline: deadline);
 
     // 儲存至資料庫

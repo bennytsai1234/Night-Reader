@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
@@ -8,6 +9,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models/search_scope.dart';
 import 'search_model.dart';
 
@@ -85,10 +87,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get isSearching => _isSearching;
   String get currentSource => _currentSource;
   String get lastSearchKey => _lastSearchKey;
-  double get progress =>
-      _totalSources == 0
-          ? 0
-          : (_completedSources / _totalSources).clamp(0.0, 1.0);
+  double get progress => _totalSources == 0
+      ? 0
+      : (_completedSources / _totalSources).clamp(0.0, 1.0);
   int get failedSources => _failedSources;
   int get totalSources => _totalSources;
   bool get precisionSearch => _precisionSearch;
@@ -140,10 +141,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool isInBookshelf(SearchBook book) =>
       _bookshelfTracker.containsSearchBook(book);
 
-  List<String> _sourceLabelsFor(SearchBook book) =>
-      book.sourceLabels.isNotEmpty
-          ? book.sourceLabels
-          : [book.originName ?? book.origin];
+  List<String> _sourceLabelsFor(SearchBook book) => book.sourceLabels.isNotEmpty
+      ? book.sourceLabels
+      : [book.originName ?? book.origin];
 
   List<SearchBook> _filteredResults() {
     final authorKey = normalizeSearchText(_authorFilter);
@@ -337,11 +337,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (_lastSearchKey.isEmpty || _sourceFailures.isEmpty || _isSearching) {
       return;
     }
-    final sources =
-        _sourceFailures
-            .map((failure) => failure.source)
-            .where((source) => source.isSearchEnabledByRuntime)
-            .toList();
+    final sources = _sourceFailures
+        .map((failure) => failure.source)
+        .where((source) => source.isSearchEnabledByRuntime)
+        .toList();
     if (sources.isEmpty) return;
 
     final existingResults = List<SearchBook>.from(_results);

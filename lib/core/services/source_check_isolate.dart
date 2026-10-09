@@ -250,11 +250,7 @@ class _IsolateSourceChecker {
   static const int _validationChapterLimit = 8;
   static const int _validationContentProbeLimit = 5;
 
-  _IsolateSourceChecker({
-    required BookSource source,
-    required IsolateCheckConfig config,
-  }) : _source = source,
-       _config = config;
+  _IsolateSourceChecker({required this._source, required this._config});
 
   Future<SourceCheckIsolateResult> run() async {
     _source.removeInvalidGroups();
@@ -652,24 +648,22 @@ class _IsolateSourceChecker {
     }
 
     if (readableChapters.isEmpty) {
-      final health =
-          _looksLikeDownloadOnly(book, readableChapters)
-              ? const SourceRuntimeHealth(
-                category: SourceHealthCategory.downloadOnly,
-                label: downloadOnlySourceGroupTag,
-                description: '來源只提供下載，不提供線上正文閱讀',
-                allowsSearch: false,
-                allowsReading: false,
-                cleanupCandidate: true,
-                quarantined: false,
-              )
-              : _tocHealthFor(mode);
-      final message =
-          health.category == SourceHealthCategory.downloadOnly
-              ? '來源為下載站，不提供線上目錄'
-              : mode == _CheckMode.search
-              ? '目錄抓取失敗或沒有可閱讀章節'
-              : '發現書籍目錄抓取失敗或沒有可閱讀章節';
+      final health = _looksLikeDownloadOnly(book, readableChapters)
+          ? const SourceRuntimeHealth(
+              category: SourceHealthCategory.downloadOnly,
+              label: downloadOnlySourceGroupTag,
+              description: '來源只提供下載，不提供線上正文閱讀',
+              allowsSearch: false,
+              allowsReading: false,
+              cleanupCandidate: true,
+              quarantined: false,
+            )
+          : _tocHealthFor(mode);
+      final message = health.category == SourceHealthCategory.downloadOnly
+          ? '來源為下載站，不提供線上目錄'
+          : mode == _CheckMode.search
+          ? '目錄抓取失敗或沒有可閱讀章節'
+          : '發現書籍目錄抓取失敗或沒有可閱讀章節';
       _recordIssue(
         issues,
         _IssueData(
@@ -793,10 +787,9 @@ class _IsolateSourceChecker {
       issues,
       _IssueData(
         stage: _stageFor(mode, 'content'),
-        message:
-            mode == _CheckMode.search
-                ? '前 $probedCount 個候選章節正文內容過短或為空'
-                : '發現書籍前 $probedCount 個候選章節正文內容過短或為空',
+        message: mode == _CheckMode.search
+            ? '前 $probedCount 個候選章節正文內容過短或為空'
+            : '發現書籍前 $probedCount 個候選章節正文內容過短或為空',
         health: _contentHealthFor(mode),
       ),
     );
@@ -1219,8 +1212,9 @@ _IssueData _lockedChapterIssue(_CheckMode mode, BookChapter chapter) {
   final title = _compactChapterTitle(chapter.title);
   return _IssueData(
     stage: _stageFor(mode, 'content'),
-    message:
-        title.isEmpty ? '章節疑似 VIP/鎖章，需要登入或付費' : '章節疑似 VIP/鎖章，需要登入或付費: $title',
+    message: title.isEmpty
+        ? '章節疑似 VIP/鎖章，需要登入或付費'
+        : '章節疑似 VIP/鎖章，需要登入或付費: $title',
     health: _kLoginRequiredHealth,
   );
 }
@@ -1277,10 +1271,14 @@ List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
   }
 
   final headCount = math.min(maxProbe, chapters.length);
-  for (var i = 0; i < headCount; i++) addProbe(i);
+  for (var i = 0; i < headCount; i++) {
+    addProbe(i);
+  }
 
   final tailStart = math.max(chapters.length - maxProbe, 0);
-  for (var i = tailStart; i < chapters.length; i++) addProbe(i);
+  for (var i = tailStart; i < chapters.length; i++) {
+    addProbe(i);
+  }
 
   return <int>[...preferred, ...fallback].take(maxProbe).toList();
 }

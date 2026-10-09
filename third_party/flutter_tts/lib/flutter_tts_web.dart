@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'dart:collection';
 import 'dart:js_interop';
@@ -46,7 +47,8 @@ class FlutterTtsPlugin {
       _listeners();
       supported = true;
     } catch (e) {
-      print('Initialization of TTS failed. Functions are disabled. Error: $e');
+      debugPrint(
+          'Initialization of TTS failed. Functions are disabled. Error: $e');
     }
   }
 
@@ -96,15 +98,15 @@ class FlutterTtsPlugin {
         _speechCompleter = null;
       }
       t?.cancel();
-      print(event); // Log the entire event object to get more details
+      debugPrint('$event'); // Log the entire event object to get more details
       channel.invokeMethod("speak.onError", event["error"]);
     }.toJS;
 
     utterance.onBoundary = (JSObject event) {
-      int charIndex = event['charIndex'] as int;
-      String name = event['name'] as String;
+      int charIndex = (event['charIndex'] as JSNumber).toDartInt;
+      String name = (event['name'] as JSString).toDart;
       if (name == 'sentence') return;
-      String text = utterance['text'] as String;
+      String text = (utterance['text'] as JSString).toDart;
       int endIndex = charIndex;
       while (endIndex < text.length &&
           !RegExp(r'[\s,.!?]').hasMatch(text[endIndex])) {

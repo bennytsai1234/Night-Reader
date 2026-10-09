@@ -10,10 +10,9 @@ Future<bool> launchExternalUrlWithFeedback(
 }) async {
   try {
     final uri = Uri.parse(url);
-    final opened =
-        launcher == null
-            ? await launchUrl(uri, mode: LaunchMode.externalApplication)
-            : await launcher(uri);
+    final opened = launcher == null
+        ? await launchUrl(uri, mode: LaunchMode.externalApplication)
+        : await launcher(uri);
     if (opened) {
       return true;
     }

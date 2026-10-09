@@ -183,10 +183,7 @@ class _GlassMenuRoute<T> extends PopupRoute<T> {
     Animation<double> secondaryAnimation,
   ) {
     return capturedThemes.wrap(
-      _GlassMenuOverlay<T>(
-        route: this,
-        animation: animation,
-      ),
+      _GlassMenuOverlay<T>(route: this, animation: animation),
     );
   }
 }
@@ -227,7 +224,12 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         safe.top + edge,
         math.max(safe.top + edge, screen.height - safe.bottom - edge - needed),
       );
-      previewRect = Rect.fromLTWH(anchor.left, top, anchor.width, anchor.height);
+      previewRect = Rect.fromLTWH(
+        anchor.left,
+        top,
+        anchor.width,
+        anchor.height,
+      );
       menuTop = previewRect.bottom + AppSpacing.md;
       menuBelow = true;
     } else {
@@ -235,10 +237,9 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
       menuBelow =
           spaceBelow >= clampedMenuHeight ||
           spaceBelow >= anchor.top - safe.top - edge;
-      menuTop =
-          menuBelow
-              ? anchor.bottom + AppSpacing.sm
-              : anchor.top - AppSpacing.sm - clampedMenuHeight;
+      menuTop = menuBelow
+          ? anchor.bottom + AppSpacing.sm
+          : anchor.top - AppSpacing.sm - clampedMenuHeight;
       menuTop = menuTop.clamp(
         safe.top + edge,
         screen.height - safe.bottom - edge - clampedMenuHeight,
@@ -250,15 +251,11 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
       curve: AppMotion.springCurve,
       reverseCurve: Curves.easeInCubic,
     );
-    final fade = CurvedAnimation(
-      parent: animation,
-      curve: AppMotion.fadeCurve,
-    );
+    final fade = CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve);
 
     final menu = ConstrainedBox(
-      constraints: BoxConstraints.tightFor(
-        width: menuWidth,
-      ).copyWith(maxHeight: maxMenuHeight),
+      constraints: BoxConstraints.tightFor(width: menuWidth)
+          .copyWith(maxHeight: maxMenuHeight),
       child: GlassSurface(
         borderRadius: AppRadius.cardXl,
         grouped: false,
@@ -283,17 +280,16 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
             onTap: () => Navigator.of(context).pop(),
             child: FadeTransition(
               opacity: fade,
-              child:
-                  hasPreview
-                      ? BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                        child: ColoredBox(color: chrome.barrier),
-                      )
-                      : ColoredBox(
-                        color: chrome.barrier.withValues(
-                          alpha: chrome.barrier.a * 0.4,
-                        ),
+              child: hasPreview
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                      child: ColoredBox(color: chrome.barrier),
+                    )
+                  : ColoredBox(
+                      color: chrome.barrier.withValues(
+                        alpha: chrome.barrier.a * 0.4,
                       ),
+                    ),
             ),
           ),
         ),
@@ -334,10 +330,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
             opacity: fade,
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.85, end: 1).animate(curved),
-              alignment: Alignment(
-                alignRight ? 1 : -1,
-                menuBelow ? -1 : 1,
-              ),
+              alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
               child: menu,
             ),
           ),
@@ -353,10 +346,9 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         case GlassMenuDivider<T>():
           height += AppSpacing.sm;
         case GlassMenuItem<T>(:final subtitle):
-          height +=
-              subtitle == null
-                  ? AppGlass.menuRowHeight
-                  : AppGrouped.rowTallMinHeight;
+          height += subtitle == null
+              ? AppGlass.menuRowHeight
+              : AppGrouped.rowTallMinHeight;
       }
     }
     return height;
@@ -364,10 +356,9 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
 
   List<Widget> _buildEntries(BuildContext context, AppChrome chrome) {
     final scheme = Theme.of(context).colorScheme;
-    final danger =
-        Theme.of(context).brightness == Brightness.dark
-            ? AppPalette.rustDark
-            : AppPalette.rust;
+    final danger = Theme.of(context).brightness == Brightness.dark
+        ? AppPalette.rustDark
+        : AppPalette.rust;
     final hasChecks = route.entries.any(
       (e) => e is GlassMenuItem<T> && e.checked,
     );
@@ -377,9 +368,12 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
       switch (entry) {
         case GlassMenuDivider<T>():
           widgets.add(
-            Container(height: AppSpacing.sm, color: chrome.separator.withValues(
-              alpha: chrome.separator.a * 0.5,
-            )),
+            Container(
+              height: AppSpacing.sm,
+              color: chrome.separator.withValues(
+                alpha: chrome.separator.a * 0.5,
+              ),
+            ),
           );
         case GlassMenuItem<T>():
           if (previous is GlassMenuItem<T>) {
@@ -387,22 +381,19 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
               Container(height: AppGlass.hairline, color: chrome.separator),
             );
           }
-          final color =
-              entry.destructive ? danger : scheme.onSurface;
+          final color = entry.destructive ? danger : scheme.onSurface;
           widgets.add(
             InkWell(
-              onTap:
-                  entry.enabled
-                      ? () => Navigator.of(context).pop(entry.value)
-                      : null,
+              onTap: entry.enabled
+                  ? () => Navigator.of(context).pop(entry.value)
+                  : null,
               child: Opacity(
                 opacity: entry.enabled ? 1 : 0.4,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    minHeight:
-                        entry.subtitle == null
-                            ? AppGlass.menuRowHeight
-                            : AppGrouped.rowTallMinHeight,
+                    minHeight: entry.subtitle == null
+                        ? AppGlass.menuRowHeight
+                        : AppGrouped.rowTallMinHeight,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -413,14 +404,13 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                         if (hasChecks)
                           SizedBox(
                             width: 26,
-                            child:
-                                entry.checked
-                                    ? Icon(
-                                      Icons.check_rounded,
-                                      size: 18,
-                                      color: color,
-                                    )
-                                    : null,
+                            child: entry.checked
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                    color: color,
+                                  )
+                                : null,
                           ),
                         Expanded(
                           child: Column(

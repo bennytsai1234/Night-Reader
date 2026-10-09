@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book_source.dart';
+
 import 'source_debug_page.dart';
 import 'views/source_edit_basic.dart';
 import 'views/source_edit_search.dart';
@@ -7,6 +8,7 @@ import 'views/source_edit_explore.dart';
 import 'views/source_edit_book_info.dart';
 import 'views/source_edit_toc.dart';
 import 'views/source_edit_content.dart';
+
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -38,12 +40,11 @@ class _SourceEditorPageState extends State<SourceEditorPage>
   @override
   void initState() {
     super.initState();
-    _editingSource =
-        widget.source == null
-            ? BookSource(bookSourceUrl: '')
-            : BookSource.fromJson(
-              Map<String, dynamic>.from(widget.source!.toJson()),
-            );
+    _editingSource = widget.source == null
+        ? BookSource(bookSourceUrl: '')
+        : BookSource.fromJson(
+            Map<String, dynamic>.from(widget.source!.toJson()),
+          );
     _tabController = TabController(length: _tabLabels.length, vsync: this);
     _initControllers();
   }
@@ -251,9 +252,8 @@ class _SourceEditorPageState extends State<SourceEditorPage>
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('儲存失敗，請稍後再試')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('儲存失敗，請稍後再試')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -269,9 +269,8 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     }
     if (message == null) return true;
     _tabController.animateTo(0);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
     return false;
   }
 
@@ -281,8 +280,8 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (_) => SourceDebugPage(source: _editingSource, debugKey: '我的世界'),
+        builder: (_) =>
+            SourceDebugPage(source: _editingSource, debugKey: '我的世界'),
       ),
     );
   }
@@ -318,15 +317,14 @@ class _SourceEditorPageState extends State<SourceEditorPage>
           ),
           child: AnimatedBuilder(
             animation: _tabController,
-            builder:
-                (context, _) => GlassSegmented<int>(
-                  segments: [
-                    for (var i = 0; i < _tabLabels.length; i++)
-                      GlassSegment(i, _tabLabels[i]),
-                  ],
-                  selected: _tabController.index,
-                  onChanged: _tabController.animateTo,
-                ),
+            builder: (context, _) => GlassSegmented<int>(
+              segments: [
+                for (var i = 0; i < _tabLabels.length; i++)
+                  GlassSegment(i, _tabLabels[i]),
+              ],
+              selected: _tabController.index,
+              onChanged: _tabController.animateTo,
+            ),
           ),
         ),
       ),

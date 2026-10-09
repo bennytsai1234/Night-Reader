@@ -36,8 +36,8 @@ class BookshelfExchangeService {
   final Dio _dio = getIt<NetworkService>().dio;
   ReaderChapterContentDao? get _contentDao =>
       getIt.isRegistered<ReaderChapterContentDao>()
-          ? getIt<ReaderChapterContentDao>()
-          : null;
+      ? getIt<ReaderChapterContentDao>()
+      : null;
 
   Future<File> exportBookshelf({
     List<Book>? books,
@@ -64,12 +64,11 @@ class BookshelfExchangeService {
       'exportedAt': DateTime.now().toIso8601String(),
       'books': shelfBooks.map((e) => e.toJson()).toList(),
       'chapters': chapters.map((e) => e.toJson()).toList(),
-      'chapterContents':
-          contentDao == null
-              ? const <Map<String, dynamic>>[]
-              : (await contentDao.getEntriesByBookUrls(
-                shelfBooks.map((book) => book.bookUrl),
-              )).map((e) => e.toJson()).toList(),
+      'chapterContents': contentDao == null
+          ? const <Map<String, dynamic>>[]
+          : (await contentDao.getEntriesByBookUrls(
+              shelfBooks.map((book) => book.bookUrl),
+            )).map((e) => e.toJson()).toList(),
       'sources': sourcesByUrl.values.map((e) => e.toJson()).toList(),
     };
 
@@ -181,10 +180,9 @@ class BookshelfExchangeService {
     for (final book in books) {
       final normalized = book.copyWith(
         isInBookshelf: true,
-        syncTime:
-            book.syncTime == 0
-                ? DateTime.now().millisecondsSinceEpoch
-                : book.syncTime,
+        syncTime: book.syncTime == 0
+            ? DateTime.now().millisecondsSinceEpoch
+            : book.syncTime,
       );
       await _bookDao.upsert(normalized);
     }

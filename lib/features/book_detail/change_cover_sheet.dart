@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/app_permission_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+
 import 'change_cover_provider.dart';
 import 'book_detail_provider.dart';
 import 'widgets/cover/cover_header.dart';
@@ -47,30 +48,27 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
       final allowed = await _permissionService.requestPhotoLibraryIfNeeded();
       if (!allowed) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('未取得相簿權限，無法選取封面圖片')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('未取得相簿權限，無法選取封面圖片')));
         }
         return;
       }
       final image = await _picker.pickImage(source: ImageSource.gallery);
       if (image == null || !mounted) return;
-      final outcome = await context
-          .read<BookDetailProvider>()
-          .updateCover('file://${image.path}');
+      final outcome = await context.read<BookDetailProvider>().updateCover(
+        'file://${image.path}',
+      );
       if (!mounted) return;
       if (outcome.success) {
         Navigator.pop(context);
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(outcome.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(outcome.message)));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('選取圖片失敗: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('選取圖片失敗: $e')));
       }
     }
   }
@@ -144,8 +142,8 @@ class _ChangeCoverSheetState extends State<ChangeCoverSheet> {
             mainAxisSpacing: 16,
           ),
           itemCount: provider.covers.length,
-          itemBuilder:
-              (context, index) => CoverGridItem(result: provider.covers[index]),
+          itemBuilder: (context, index) =>
+              CoverGridItem(result: provider.covers[index]),
         );
       },
     );

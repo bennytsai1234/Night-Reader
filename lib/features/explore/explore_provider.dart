@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -7,11 +8,10 @@ import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
-typedef ExploreKindsLoader =
-    Future<List<ExploreKind>> Function(
-      String? exploreUrl, {
-      BookSource? source,
-    });
+typedef ExploreKindsLoader = Future<List<ExploreKind>> Function(
+  String? exploreUrl, {
+  BookSource? source,
+});
 
 /// ExploreProvider - 發現主頁面的狀態管理
 /// (對標 Android ExploreFragment + ExploreAdapter + ExploreViewModel)
@@ -95,11 +95,12 @@ class ExploreProvider extends ChangeNotifier {
   void _reloadFromSnapshot(List<BookSource> sources) {
     final expandedSource =
         _expandedIndex >= 0 && _expandedIndex < _filteredSources.length
-            ? _filteredSources[_expandedIndex]
-            : null;
+        ? _filteredSources[_expandedIndex]
+        : null;
     final expandedSourceUrl = expandedSource?.bookSourceUrl;
-    final expandedCacheKey =
-        expandedSource == null ? null : _cacheKeyForSource(expandedSource);
+    final expandedCacheKey = expandedSource == null
+        ? null
+        : _cacheKeyForSource(expandedSource);
 
     _allSources =
         sources.where((source) => source.canParticipateInDiscovery).toList()
@@ -107,7 +108,8 @@ class ExploreProvider extends ChangeNotifier {
 
     final groupSet = <String>{};
     for (final source in _allSources) {
-      if (source.bookSourceGroup != null && source.bookSourceGroup!.isNotEmpty) {
+      if (source.bookSourceGroup != null &&
+          source.bookSourceGroup!.isNotEmpty) {
         for (final group in source.bookSourceGroup!.split(RegExp(r'[,，]'))) {
           final trimmed = group.trim();
           if (trimmed.isNotEmpty) groupSet.add(trimmed);
@@ -171,21 +173,19 @@ class ExploreProvider extends ChangeNotifier {
 
   void _applyFilter() {
     if (_selectedGroup != null) {
-      _filteredSources =
-          _allSources.where((source) {
-            if (source.bookSourceGroup == null) return false;
-            final groups = source.bookSourceGroup!
-                .split(RegExp(r'[,，]'))
-                .map((value) => value.trim());
-            return groups.contains(_selectedGroup);
-          }).toList();
+      _filteredSources = _allSources.where((source) {
+        if (source.bookSourceGroup == null) return false;
+        final groups = source.bookSourceGroup!
+            .split(RegExp(r'[,，]'))
+            .map((value) => value.trim());
+        return groups.contains(_selectedGroup);
+      }).toList();
     } else if (_searchQuery.isNotEmpty) {
       final key = _searchQuery.toLowerCase();
-      _filteredSources =
-          _allSources.where((source) {
-            return source.bookSourceName.toLowerCase().contains(key) ||
-                (source.bookSourceGroup?.toLowerCase().contains(key) ?? false);
-          }).toList();
+      _filteredSources = _allSources.where((source) {
+        return source.bookSourceName.toLowerCase().contains(key) ||
+            (source.bookSourceGroup?.toLowerCase().contains(key) ?? false);
+      }).toList();
     } else {
       _filteredSources = List.from(_allSources);
     }
@@ -273,7 +273,8 @@ class ExploreProvider extends ChangeNotifier {
     await ExploreUrlParser.clearCache(source, exploreUrl: source.exploreUrl);
     if (_expandedIndex >= 0 &&
         _expandedIndex < _filteredSources.length &&
-        _filteredSources[_expandedIndex].bookSourceUrl == source.bookSourceUrl) {
+        _filteredSources[_expandedIndex].bookSourceUrl ==
+            source.bookSourceUrl) {
       final requestGeneration = ++_kindsRequestGeneration;
       _isLoadingKinds = true;
       _expandedKinds = [];
@@ -283,12 +284,11 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   Future<void> topSource(BookSource source) async {
-    final minOrder =
-        _allSources.isEmpty
-            ? 0
-            : _allSources
-                .map((item) => item.customOrder)
-                .reduce((a, b) => a < b ? a : b);
+    final minOrder = _allSources.isEmpty
+        ? 0
+        : _allSources
+              .map((item) => item.customOrder)
+              .reduce((a, b) => a < b ? a : b);
     await _sourceDao.updateCustomOrderByUrl(source.bookSourceUrl, minOrder - 1);
     await _loadSources();
   }

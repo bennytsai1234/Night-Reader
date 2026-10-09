@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 import 'package:archive/archive.dart';
+
 import 'encode_utils_base.dart';
 
 /// JsEncodeUtils 的雜湊與摘要算法擴展

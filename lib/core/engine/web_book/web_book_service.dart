@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -178,11 +179,10 @@ class WebBook {
       if (chapterLimit == null || allChapters.length < chapterLimit) {
         if (firstResult.nextUrls.length > 1) {
           // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
-          final pending =
-              firstResult.nextUrls
-                  .where((u) => visitedUrls.add(u))
-                  .take(_maxTocPages - 1)
-                  .toList();
+          final pending = firstResult.nextUrls
+              .where((u) => visitedUrls.add(u))
+              .take(_maxTocPages - 1)
+              .toList();
           final responses = await _fetchParallel(
             pending,
             source,
@@ -203,20 +203,18 @@ class WebBook {
               book: book,
               body: res.body,
               baseUrl: res.url,
-              maxChapters:
-                  chapterLimit == null
-                      ? null
-                      : chapterLimit - allChapters.length,
+              maxChapters: chapterLimit == null
+                  ? null
+                  : chapterLimit - allChapters.length,
             );
             allChapters.addAll(pageResult.chapters);
             // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
           }
         } else {
           // 單 nextUrl → daisy chain 循序抓取
-          String? currentUrl =
-              firstResult.nextUrls.isNotEmpty
-                  ? firstResult.nextUrls.first
-                  : null;
+          String? currentUrl = firstResult.nextUrls.isNotEmpty
+              ? firstResult.nextUrls.first
+              : null;
           for (
             var pageNum = 1;
             pageNum < _maxTocPages && currentUrl != null;
@@ -242,14 +240,14 @@ class WebBook {
               book: book,
               body: res.body,
               baseUrl: res.url,
-              maxChapters:
-                  chapterLimit == null
-                      ? null
-                      : (chapterLimit - allChapters.length),
+              maxChapters: chapterLimit == null
+                  ? null
+                  : (chapterLimit - allChapters.length),
             );
             allChapters.addAll(result.chapters);
-            currentUrl =
-                result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
+            currentUrl = result.nextUrls.isNotEmpty
+                ? result.nextUrls.first
+                : null;
           }
         }
       }
@@ -379,11 +377,10 @@ class WebBook {
 
     if (firstResult.nextUrls.length > 1) {
       // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
-      final pending =
-          firstResult.nextUrls
-              .where((u) => visitedUrls.add(u))
-              .take(_maxContentPages - 1)
-              .toList();
+      final pending = firstResult.nextUrls
+          .where((u) => visitedUrls.add(u))
+          .take(_maxContentPages - 1)
+          .toList();
       final responses = await _fetchParallel(
         pending,
         source,
@@ -411,8 +408,9 @@ class WebBook {
       }
     } else {
       // 單 nextUrl → daisy chain 循序抓取
-      String? currentUrl =
-          firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
+      String? currentUrl = firstResult.nextUrls.isNotEmpty
+          ? firstResult.nextUrls.first
+          : null;
       for (
         var pageNum = 1;
         pageNum < _maxContentPages && currentUrl != null;
@@ -529,49 +527,48 @@ class WebBook {
   }) async {
     if (urls.isEmpty) return const [];
     final sem = _Semaphore(concurrency);
-    final futures =
-        urls.map((url) async {
-          await sem.acquire();
-          try {
-            final analyzeUrl = await AnalyzeUrl.create(
-              url,
-              source: source,
-              ruleData: book,
-            );
-            var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
-            res = _runLoginCheckJs(source, res, ruleData: book);
-            _checkRedirect(source, res);
-            _checkLoginRequired(res, stage: stage);
-            return res;
-          } on DioException catch (error, stackTrace) {
-            if (CancelToken.isCancel(error)) rethrow;
-            AppLog.e(
-              'WebBook: 並發網路抓取失敗 $url',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            if (!allowPartial) rethrow;
-            return null;
-          } on AppException catch (error, stackTrace) {
-            AppLog.e(
-              'WebBook: 並發書源資料取得失敗 $url',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            if (!allowPartial) rethrow;
-            return null;
-          } on TimeoutException catch (error, stackTrace) {
-            AppLog.e(
-              'WebBook: 並發書源資料取得逾時 $url',
-              error: error,
-              stackTrace: stackTrace,
-            );
-            if (!allowPartial) rethrow;
-            return null;
-          } finally {
-            sem.release();
-          }
-        }).toList();
+    final futures = urls.map((url) async {
+      await sem.acquire();
+      try {
+        final analyzeUrl = await AnalyzeUrl.create(
+          url,
+          source: source,
+          ruleData: book,
+        );
+        var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
+        res = _runLoginCheckJs(source, res, ruleData: book);
+        _checkRedirect(source, res);
+        _checkLoginRequired(res, stage: stage);
+        return res;
+      } on DioException catch (error, stackTrace) {
+        if (CancelToken.isCancel(error)) rethrow;
+        AppLog.e(
+          'WebBook: 並發網路抓取失敗 $url',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!allowPartial) rethrow;
+        return null;
+      } on AppException catch (error, stackTrace) {
+        AppLog.e(
+          'WebBook: 並發書源資料取得失敗 $url',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!allowPartial) rethrow;
+        return null;
+      } on TimeoutException catch (error, stackTrace) {
+        AppLog.e(
+          'WebBook: 並發書源資料取得逾時 $url',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (!allowPartial) rethrow;
+        return null;
+      } finally {
+        sem.release();
+      }
+    }).toList();
     return Future.wait(futures);
   }
 
@@ -581,14 +578,13 @@ class WebBook {
     required String initialUrl,
     CancelToken? cancelToken,
   }) async {
-    final cachedBody =
-        (book.tocHtml != null && book.tocHtml!.isNotEmpty)
-            ? book.tocHtml
-            : (initialUrl == book.bookUrl &&
-                book.infoHtml != null &&
-                book.infoHtml!.isNotEmpty)
-            ? book.infoHtml
-            : null;
+    final cachedBody = (book.tocHtml != null && book.tocHtml!.isNotEmpty)
+        ? book.tocHtml
+        : (initialUrl == book.bookUrl &&
+              book.infoHtml != null &&
+              book.infoHtml!.isNotEmpty)
+        ? book.infoHtml
+        : null;
     if (cachedBody != null && cachedBody.isNotEmpty) {
       return StrResponse(
         url: initialUrl,

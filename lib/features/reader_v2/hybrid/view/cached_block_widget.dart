@@ -56,18 +56,13 @@ final class CachedBlockWidget extends LeafRenderObjectWidget {
 
 final class RenderCachedBlock extends RenderBox {
   RenderCachedBlock({
-    required BlockKey blockKey,
-    required LayoutEpoch epoch,
-    required MeasurementNamespace namespace,
-    required MeasurementStore measurementStore,
-    required ParagraphCache paragraphCache,
-    required Color textColor,
-  }) : _blockKey = blockKey,
-       _epoch = epoch,
-       _namespace = namespace,
-       _measurementStore = measurementStore,
-       _paragraphCache = paragraphCache,
-       _textColor = textColor;
+    required this._blockKey,
+    required this._epoch,
+    required this._namespace,
+    required this._measurementStore,
+    required this._paragraphCache,
+    required this._textColor,
+  });
 
   BlockKey _blockKey;
   LayoutEpoch _epoch;

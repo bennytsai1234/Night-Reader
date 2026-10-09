@@ -124,8 +124,7 @@ class FilePickerWindows extends FilePickerPlatform {
       return using((arena) {
         final fileDialog = arena.com<IFileOpenDialog>(FileOpenDialog);
 
-        final options =
-            fileDialog.getOptions() |
+        final options = fileDialog.getOptions() |
             FOS_PICKFOLDERS |
             FOS_FORCEFILESYSTEM |
             FOS_NOCHANGEDIR;

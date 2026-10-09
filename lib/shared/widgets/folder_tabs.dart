@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
@@ -81,9 +82,9 @@ class _FolderTabsState<T> extends State<FolderTabs<T>> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
       final position = _scrollController.position;
-      final target = (offsets[index] -
-              (position.viewportDimension - widths[index]) / 2)
-          .clamp(0.0, position.maxScrollExtent);
+      final target =
+          (offsets[index] - (position.viewportDimension - widths[index]) / 2)
+              .clamp(0.0, position.maxScrollExtent);
       if (first) {
         _scrollController.jumpTo(target);
       } else {
@@ -121,10 +122,9 @@ class _FolderTabsState<T> extends State<FolderTabs<T>> {
                 final widest = widths.reduce((a, b) => a > b ? a : b);
                 final even = available / widths.length;
                 // 每個分頁都放得進等分寬度時等分；否則依標籤長度按比例撐滿。
-                widths =
-                    widest <= even
-                        ? List.filled(widths.length, even)
-                        : [for (final w in widths) w * available / total];
+                widths = widest <= even
+                    ? List.filled(widths.length, even)
+                    : [for (final w in widths) w * available / total];
               }
               final offsets = <double>[];
               var cursor = 0.0;
@@ -139,10 +139,9 @@ class _FolderTabsState<T> extends State<FolderTabs<T>> {
               return SingleChildScrollView(
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
-                physics:
-                    fits
-                        ? const NeverScrollableScrollPhysics()
-                        : const BouncingScrollPhysics(),
+                physics: fits
+                    ? const NeverScrollableScrollPhysics()
+                    : const BouncingScrollPhysics(),
                 child: SizedBox(
                   width: fits ? available : total,
                   height: constraints.maxHeight,
@@ -173,24 +172,21 @@ class _FolderTabsState<T> extends State<FolderTabs<T>> {
                                 selected: i == selectedIndex,
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap:
-                                      i == selectedIndex
-                                          ? null
-                                          : () => widget.onChanged(
-                                            widget.tabs[i].value,
-                                          ),
+                                  onTap: i == selectedIndex
+                                      ? null
+                                      : () => widget.onChanged(
+                                          widget.tabs[i].value,
+                                        ),
                                   child: Center(
                                     child: AnimatedDefaultTextStyle(
                                       duration: AppMotion.fade,
                                       curve: AppMotion.fadeCurve,
-                                      style: _labelStyle(
-                                        i == selectedIndex,
-                                      ).copyWith(
-                                        color:
-                                            i == selectedIndex
+                                      style: _labelStyle(i == selectedIndex)
+                                          .copyWith(
+                                            color: i == selectedIndex
                                                 ? scheme.primary
                                                 : scheme.onSurface,
-                                      ),
+                                          ),
                                       child: Text(
                                         widget.tabs[i].label,
                                         maxLines: 1,

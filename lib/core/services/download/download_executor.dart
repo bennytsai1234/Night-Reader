@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'download_base.dart';
 import 'download_scheduler.dart';
+
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -98,8 +100,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       if (book == null) {
         throw Exception('書籍不存在');
       }
-      final source =
-          book.origin == 'local' ? null : await sourceDao.getByUrl(book.origin);
+      final source = book.origin == 'local'
+          ? null
+          : await sourceDao.getByUrl(book.origin);
       if (book.origin != 'local' && source == null) {
         throw Exception('書源不存在');
       }
@@ -123,14 +126,13 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         task = newTask;
       }
 
-      final toDownload =
-          chapters
-              .where(
-                (c) =>
-                    c.index >= task.startChapterIndex &&
-                    c.index <= task.endChapterIndex,
-              )
-              .toList();
+      final toDownload = chapters
+          .where(
+            (c) =>
+                c.index >= task.startChapterIndex &&
+                c.index <= task.endChapterIndex,
+          )
+          .toList();
       final countsPreStoredChapters = downloadTaskCountsPreStoredChapters(
         task: task,
         chapterCountInRange: toDownload.length,
@@ -237,10 +239,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
 
       if (!stoppedEarly && task.status != DownloadTask.statusPaused) {
-        task.status =
-            task.errorCount > 0
-                ? DownloadTask.statusFailed
-                : DownloadTask.statusCompleted;
+        task.status = task.errorCount > 0
+            ? DownloadTask.statusFailed
+            : DownloadTask.statusCompleted;
         await downloadDao.updateProgress(task.bookUrl, status: task.status);
         AppEventBus().fire(AppEventBus.upBookshelf, data: task.bookUrl);
       }

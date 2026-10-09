@@ -1,4 +1,5 @@
 import 'package:audio_service/audio_service.dart';
+
 import 'dart:async';
 
 /// ReaderAudioHandler - 處理系統媒體控制 (通知欄、鎖屏、藍牙耳機)
@@ -44,10 +45,9 @@ class ReaderAudioHandler extends BaseAudioHandler {
         album: '夜讀朗讀',
         title: title,
         artist: author,
-        artUri:
-            normalizedArtUri == null || normalizedArtUri.isEmpty
-                ? null
-                : Uri.tryParse(normalizedArtUri),
+        artUri: normalizedArtUri == null || normalizedArtUri.isEmpty
+            ? null
+            : Uri.tryParse(normalizedArtUri),
       ),
     );
   }

@@ -1,19 +1,18 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
-typedef AppPickFiles =
-    Future<FilePickerResult?> Function({
-      required FileType type,
-      required List<String> allowedExtensions,
-      required bool allowMultiple,
-    });
+typedef AppPickFiles = Future<FilePickerResult?> Function({
+  required FileType type,
+  required List<String> allowedExtensions,
+  required bool allowMultiple,
+});
 
 /// App-owned facade for selecting import files.
 ///
 /// Native pickers are filters rather than a trust boundary. Every selected
 /// path is therefore validated again before it can reach an import service.
 class AppFileSelectionService {
-  const AppFileSelectionService({AppPickFiles? picker}) : _picker = picker;
+  const AppFileSelectionService({this._picker});
 
   static const AppFileSelectionService instance = AppFileSelectionService();
 

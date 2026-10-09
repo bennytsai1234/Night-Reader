@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
+
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
@@ -21,6 +22,7 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
 import 'widgets/source_batch_toolbar.dart';
@@ -101,88 +103,75 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               mutationEnabled: mutationEnabled,
             ),
             body: Builder(
-              builder: (bodyContext) => _buildMainContent(bodyContext, provider),
+              builder: (bodyContext) =>
+                  _buildMainContent(bodyContext, provider),
             ),
-            bottomNavigationBar:
-                editing
-                    ? SelectActionBar(
-                      provider: provider,
-                      externallyBusy: _isImporting,
-                      onEnable:
-                          () => _runAction(
-                            () => provider.batchSetEnabled(true),
-                            errorPrefix: '啟用書源失敗',
+            bottomNavigationBar: editing
+                ? SelectActionBar(
+                    provider: provider,
+                    externallyBusy: _isImporting,
+                    onEnable: () => _runAction(
+                      () => provider.batchSetEnabled(true),
+                      errorPrefix: '啟用書源失敗',
+                    ),
+                    onDisable: () => _runAction(
+                      () => provider.batchSetEnabled(false),
+                      errorPrefix: '停用書源失敗',
+                    ),
+                    onAddGroup: () => _showSelectionGroupDialog(
+                      context,
+                      provider,
+                      remove: false,
+                    ),
+                    onRemoveGroup: () => _showSelectionGroupDialog(
+                      context,
+                      provider,
+                      remove: true,
+                    ),
+                    onEnableExplore: () => _runAction(
+                      () => provider.batchSetEnabledExplore(true),
+                      errorPrefix: '啟用發現失敗',
+                    ),
+                    onDisableExplore: () => _runAction(
+                      () => provider.batchSetEnabledExplore(false),
+                      errorPrefix: '停用發現失敗',
+                    ),
+                    onSelectInterval: provider.checkSelectedInterval,
+                    onMoveToTop: () => _runAction(
+                      provider.moveSelectedToTop,
+                      errorPrefix: '移動書源失敗',
+                    ),
+                    onMoveToBottom: () => _runAction(
+                      provider.moveSelectedToBottom,
+                      errorPrefix: '移動書源失敗',
+                    ),
+                    onExport: () => _runAction(() async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final copiedToClipboard = await provider.exportSelected();
+                      if (!mounted) return;
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出',
                           ),
-                      onDisable:
-                          () => _runAction(
-                            () => provider.batchSetEnabled(false),
-                            errorPrefix: '停用書源失敗',
-                          ),
-                      onAddGroup:
-                          () => _showSelectionGroupDialog(
-                            context,
-                            provider,
-                            remove: false,
-                          ),
-                      onRemoveGroup:
-                          () => _showSelectionGroupDialog(
-                            context,
-                            provider,
-                            remove: true,
-                          ),
-                      onEnableExplore:
-                          () => _runAction(
-                            () => provider.batchSetEnabledExplore(true),
-                            errorPrefix: '啟用發現失敗',
-                          ),
-                      onDisableExplore:
-                          () => _runAction(
-                            () => provider.batchSetEnabledExplore(false),
-                            errorPrefix: '停用發現失敗',
-                          ),
-                      onSelectInterval: provider.checkSelectedInterval,
-                      onMoveToTop:
-                          () => _runAction(
-                            provider.moveSelectedToTop,
-                            errorPrefix: '移動書源失敗',
-                          ),
-                      onMoveToBottom:
-                          () => _runAction(
-                            provider.moveSelectedToBottom,
-                            errorPrefix: '移動書源失敗',
-                          ),
-                      onExport:
-                          () => _runAction(() async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            final copiedToClipboard =
-                                await provider.exportSelected();
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  copiedToClipboard
-                                      ? '已複製至剪貼簿'
-                                      : '書源過多，已改用分享方式匯出',
-                                ),
-                              ),
-                            );
-                          }, errorPrefix: '匯出書源失敗'),
-                      onShare:
-                          () => _runAction(
-                            provider.shareSelectedSources,
-                            errorPrefix: '分享書源失敗',
-                          ),
-                      onCheckSource: () {
-                        SourceManagerDialogs.showCheckConfigDialog(
-                          context,
-                          provider,
-                        );
-                      },
-                      onDelete: () {
-                        _confirmDeleteSelected(context, provider);
-                      },
-                    )
-                    : null,
+                        ),
+                      );
+                    }, errorPrefix: '匯出書源失敗'),
+                    onShare: () => _runAction(
+                      provider.shareSelectedSources,
+                      errorPrefix: '分享書源失敗',
+                    ),
+                    onCheckSource: () {
+                      SourceManagerDialogs.showCheckConfigDialog(
+                        context,
+                        provider,
+                      );
+                    },
+                    onDelete: () {
+                      _confirmDeleteSelected(context, provider);
+                    },
+                  )
+                : null,
           ),
         );
       },
@@ -250,13 +239,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         (showSearch ? SearchField.height + AppSpacing.xs * 2 : 0.0) +
         (showStatus ? SourceCheckStatusBar.height + AppSpacing.xs * 2 : 0.0) +
         (_isImporting ? 2.0 : 0.0);
-    final bottom =
-        bottomChildren.isEmpty
-            ? null
-            : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: bottomChildren,
-            );
+    final bottom = bottomChildren.isEmpty
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: bottomChildren,
+          );
 
     if (editing) {
       final visibleUrls = provider.sources.map((s) => s.bookSourceUrl);
@@ -269,8 +257,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         title: count == 0 ? '選取書源' : '已選 $count 項',
         leading: GlassTextButton(
           label: allSelected ? '取消全選' : '全選',
-          onPressed:
-              provider.sources.isNotEmpty && !busy ? provider.selectAll : null,
+          onPressed: provider.sources.isNotEmpty && !busy
+              ? provider.selectAll
+              : null,
         ),
         actions: [
           GlassTextButton(
@@ -302,16 +291,15 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           onImportClipboard: () => _importFromClipboard(context),
           onManageGroups: () => _openGroupManagePage(nav, provider),
           onNewSource: () => _openNewEditor(provider),
-          onCheckAllSources:
-              () => SourceManagerDialogs.showCheckConfigDialog(
-                context,
-                provider,
-                checkAll: true,
-              ),
-          onClearInvalid:
-              (p) => SourceManagerDialogs.confirmClearInvalid(context, p),
-          onDeleteNonNovel:
-              (p) => SourceManagerDialogs.confirmDeleteNonNovel(context, p),
+          onCheckAllSources: () => SourceManagerDialogs.showCheckConfigDialog(
+            context,
+            provider,
+            checkAll: true,
+          ),
+          onClearInvalid: (p) =>
+              SourceManagerDialogs.confirmClearInvalid(context, p),
+          onDeleteNonNovel: (p) =>
+              SourceManagerDialogs.confirmDeleteNonNovel(context, p),
           importEnabled: !_isImporting,
           mutationEnabled: mutationEnabled,
         ),
@@ -327,11 +315,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   ) {
     return nav.push(
       MaterialPageRoute(
-        builder:
-            (_) => ChangeNotifierProvider<SourceManagerProvider>.value(
-              value: provider,
-              child: const SourceGroupManagePage(),
-            ),
+        builder: (_) => ChangeNotifierProvider<SourceManagerProvider>.value(
+          value: provider,
+          child: const SourceGroupManagePage(),
+        ),
       ),
     );
   }
@@ -373,8 +360,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             primaryAction: AppStateAction(
               label: '從網址匯入',
               icon: Icons.link,
-              onPressed:
-                  _isImporting ? null : () => _showImportDialog(context, true),
+              onPressed: _isImporting
+                  ? null
+                  : () => _showImportDialog(context, true),
             ),
             secondaryAction: AppStateAction(
               label: '從檔案匯入',
@@ -402,12 +390,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       );
     }
     final groupByHost = p.groupByDomain;
-    final hostLabels =
-        groupByHost
-            ? list
-                .map((source) => p.getSourceHost(source.bookSourceUrl))
-                .toList(growable: false)
-            : const <String>[];
+    final hostLabels = groupByHost
+        ? list
+              .map((source) => p.getSourceHost(source.bookSourceUrl))
+              .toList(growable: false)
+        : const <String>[];
     bool startsHostGroup(int i) =>
         groupByHost && (i == 0 || hostLabels[i - 1] != hostLabels[i]);
 
@@ -458,34 +445,31 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 top: groupByHost ? 0 : AppSpacing.sm,
                 bottom: padding.bottom + AppSpacing.xxl,
               ),
-              sliver:
-                  canReorder
-                      ? SliverReorderableList(
-                        itemCount: list.length,
-                        onReorderItem:
-                            (oldIndex, newIndex) => _runAction(
-                              () => p.reorderSource(oldIndex, newIndex),
-                              errorPrefix: '調整書源排序失敗',
-                            ),
-                        proxyDecorator:
-                            (child, _, _) => DecoratedBox(
-                              decoration: BoxDecoration(
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: chrome.glassShadow,
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: child,
-                            ),
-                        itemBuilder: (ctx, i) => itemAt(i),
-                      )
-                      : SliverList.builder(
-                        itemCount: list.length,
-                        itemBuilder: (ctx, i) => itemAt(i),
+              sliver: canReorder
+                  ? SliverReorderableList(
+                      itemCount: list.length,
+                      onReorderItem: (oldIndex, newIndex) => _runAction(
+                        () => p.reorderSource(oldIndex, newIndex),
+                        errorPrefix: '調整書源排序失敗',
                       ),
+                      proxyDecorator: (child, _, _) => DecoratedBox(
+                        decoration: BoxDecoration(
+                          boxShadow: [
+                            BoxShadow(
+                              color: chrome.glassShadow,
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: child,
+                      ),
+                      itemBuilder: (ctx, i) => itemAt(i),
+                    )
+                  : SliverList.builder(
+                      itemCount: list.length,
+                      itemBuilder: (ctx, i) => itemAt(i),
+                    ),
             ),
           ],
         ),
@@ -522,15 +506,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       },
       onLongPress: (rect, preview) => _showSourceMenu(p, s, rect, preview),
       onEdit: () => _openEditor(p, s.bookSourceUrl),
-      onMoveToTop:
-          () => _runAction(
-            () => p.moveToTop(s.bookSourceUrl),
-            errorPrefix: '移動書源失敗',
-          ),
+      onMoveToTop: () =>
+          _runAction(() => p.moveToTop(s.bookSourceUrl), errorPrefix: '移動書源失敗'),
       onDelete: () => _confirmDeleteSource(p, s),
-      onEnabledChanged:
-          (_) =>
-              _runAction(() => p.toggleEnabled(s), errorPrefix: '更新書源狀態失敗'),
+      onEnabledChanged: (_) =>
+          _runAction(() => p.toggleEnabled(s), errorPrefix: '更新書源狀態失敗'),
     );
   }
 
@@ -567,10 +547,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           GlassMenuItem(
             value: 'explore',
             label: s.enabledExplore ? '停用發現' : '啟用發現',
-            icon:
-                s.enabledExplore
-                    ? Icons.explore_off_outlined
-                    : Icons.travel_explore,
+            icon: s.enabledExplore
+                ? Icons.explore_off_outlined
+                : Icons.travel_explore,
           ),
         const GlassMenuDivider(),
         const GlassMenuItem(
@@ -712,9 +691,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             } catch (error) {
               if (pageContext.mounted) {
                 ScaffoldMessenger.of(pageContext).showSnackBar(
-                  SnackBar(
-                    content: Text('${remove ? '移出' : '加入'}分組失敗：$error'),
-                  ),
+                  SnackBar(content: Text('${remove ? '移出' : '加入'}分組失敗：$error')),
                 );
               }
             }
@@ -745,16 +722,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                   child: ListView.separated(
                     padding: EdgeInsets.zero,
                     itemCount: p.allGroups.length,
-                    separatorBuilder:
-                        (_, _) => Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppSpacing.md,
-                          ),
-                          child: Container(
-                            height: AppGlass.hairline,
-                            color: chrome.separator,
-                          ),
-                        ),
+                    separatorBuilder: (_, _) => Padding(
+                      padding: const EdgeInsets.only(left: AppSpacing.md),
+                      child: Container(
+                        height: AppGlass.hairline,
+                        color: chrome.separator,
+                      ),
+                    ),
                     itemBuilder: (_, i) {
                       final g = p.allGroups[i];
                       final picked = ctrl.text.trim() == g;
@@ -830,8 +804,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       if (confirmed != null && confirmed.isNotEmpty) {
         final count = await p.importSources(confirmed);
         if (context.mounted) {
-          final unsupportedCount =
-              confirmed.where((source) => !source.isNovelTextSource).length;
+          final unsupportedCount = confirmed
+              .where((source) => !source.isNovelTextSource)
+              .length;
           messenger.showSnackBar(
             SnackBar(
               content: Text(
@@ -856,56 +831,53 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     await showStatefulAppAlert<void>(
       context: context,
       fieldTexts: const [''],
-      builder:
-          (dialogContext, setDialogState, fields) => AppAlert<bool>(
-            title: isUrl ? '網路匯入' : '文本匯入',
-            onAction: (confirmed) async {
-              if (!confirmed) {
-                Navigator.pop(dialogContext);
-                return;
-              }
-              final p = pageContext.read<SourceManagerProvider>();
-              final input = fields.single.text.trim();
-              if (input.isEmpty) {
-                setDialogState(
-                  () => inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON',
-                );
-                return;
-              }
-              Navigator.pop(dialogContext);
-              await _runImportFlow(() async {
-                if (isUrl) {
-                  final jsonText = await p.fetchImportTextFromUrl(input);
-                  if (!pageContext.mounted) return;
-                  await _importWithPreview(pageContext, jsonText);
-                } else if (pageContext.mounted) {
-                  await _importWithPreview(pageContext, input);
-                }
-              }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
-            },
-            content: AlertTextField(
-              controller: fields.single,
-              hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
-              errorText: inputError,
-              maxLines: 5,
-              onChanged: (_) {
-                if (inputError != null) {
-                  setDialogState(() => inputError = null);
-                }
-              },
-            ),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '匯入', value: true, isDefault: true),
-            ],
-          ),
+      builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
+        title: isUrl ? '網路匯入' : '文本匯入',
+        onAction: (confirmed) async {
+          if (!confirmed) {
+            Navigator.pop(dialogContext);
+            return;
+          }
+          final p = pageContext.read<SourceManagerProvider>();
+          final input = fields.single.text.trim();
+          if (input.isEmpty) {
+            setDialogState(() => inputError = isUrl ? '請輸入匯入網址' : '請貼上書源 JSON');
+            return;
+          }
+          Navigator.pop(dialogContext);
+          await _runImportFlow(() async {
+            if (isUrl) {
+              final jsonText = await p.fetchImportTextFromUrl(input);
+              if (!pageContext.mounted) return;
+              await _importWithPreview(pageContext, jsonText);
+            } else if (pageContext.mounted) {
+              await _importWithPreview(pageContext, input);
+            }
+          }, errorPrefix: isUrl ? '網路匯入失敗' : '文本匯入失敗');
+        },
+        content: AlertTextField(
+          controller: fields.single,
+          hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
+          errorText: inputError,
+          maxLines: 5,
+          onChanged: (_) {
+            if (inputError != null) {
+              setDialogState(() => inputError = null);
+            }
+          },
+        ),
+        actions: const [
+          AppAlertAction(label: '取消', value: false),
+          AppAlertAction(label: '匯入', value: true, isDefault: true),
+        ],
+      ),
     );
   }
 
   Future<void> _importFromFile(BuildContext context) async {
     await _runImportFlow(() async {
-      final path =
-          await AppFileSelectionService.instance.pickBookSourceImportPath();
+      final path = await AppFileSelectionService.instance
+          .pickBookSourceImportPath();
       if (path == null) return;
       final content = await File(path).readAsString();
       if (context.mounted) await _importWithPreview(context, content);
@@ -918,9 +890,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       final text = data?.text;
       if (!context.mounted) return;
       if (text == null || text.trim().isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('剪貼簿沒有可匯入的內容')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('剪貼簿沒有可匯入的內容')));
         return;
       }
       await _importWithPreview(context, text);
@@ -937,9 +908,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       await operation();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$errorPrefix: $error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$errorPrefix: $error')));
       }
     } finally {
       if (mounted) setState(() => _isImporting = false);
@@ -971,9 +941,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       await operation();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$errorPrefix：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$errorPrefix：$error')));
     }
   }
 }

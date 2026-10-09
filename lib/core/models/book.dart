@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:night_reader/core/models/rule_data_interface.dart';
+
 import 'book/book_base.dart';
 import 'book/book_serialization.dart';
 
@@ -117,14 +119,13 @@ class Book extends BookBase implements RuleDataInterface {
       order: BookSerialization.toInt(json['order']),
       originOrder: BookSerialization.toInt(json['originOrder']),
       variable: json['variable'],
-      readConfig:
-          json['readConfig'] != null
-              ? ReadConfig.fromJson(
-                json['readConfig'] is String
-                    ? jsonDecode(json['readConfig'])
-                    : json['readConfig'],
-              )
-              : null,
+      readConfig: json['readConfig'] != null
+          ? ReadConfig.fromJson(
+              json['readConfig'] is String
+                  ? jsonDecode(json['readConfig'])
+                  : json['readConfig'],
+            )
+          : null,
       syncTime: BookSerialization.toInt(json['syncTime']),
       isInBookshelf:
           json['isInBookshelf'] == 1 || json['isInBookshelf'] == true,

@@ -4,6 +4,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
+
 import 'download/download_base.dart';
 import 'download/download_scheduler.dart';
 import 'download/download_executor.dart';
@@ -27,7 +28,9 @@ class DownloadService extends DownloadBase
     _initialization = _loadTasks();
   }
 
-  Future<SourceSwitchOperationLease> quiesceForSourceSwitch(Book oldBook) async {
+  Future<SourceSwitchOperationLease> quiesceForSourceSwitch(
+    Book oldBook,
+  ) async {
     await _initialization;
     final bookUrl = oldBook.bookUrl;
     markTaskRetiring(bookUrl);

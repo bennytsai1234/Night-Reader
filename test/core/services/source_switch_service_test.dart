@@ -420,7 +420,11 @@ void main() {
           targetChapterTitle: '第6章',
         ),
         throwsA(
-          isA<SourceException>().having((e) => e.message, 'message', '目標章節內容不可讀'),
+          isA<SourceException>().having(
+            (e) => e.message,
+            'message',
+            '目標章節內容不可讀',
+          ),
         ),
       );
     });
@@ -436,13 +440,13 @@ void main() {
       );
 
       await expectLater(
-        service.prepareSwitch(
-          _currentBook(),
-          candidate,
-          targetChapterIndex: 5,
-        ),
+        service.prepareSwitch(_currentBook(), candidate, targetChapterIndex: 5),
         throwsA(
-          isA<SourceException>().having((e) => e.message, 'message', '新來源沒有可用目錄'),
+          isA<SourceException>().having(
+            (e) => e.message,
+            'message',
+            '新來源沒有可用目錄',
+          ),
         ),
       );
     });
@@ -593,8 +597,9 @@ void main() {
       expect(lease.committedCalled, isTrue);
       expect(lease.rolledBackCalled, isFalse);
       expect(
-        (await db.downloadDao.getAll())
-            .where((task) => task.bookUrl == oldBook.bookUrl),
+        (await db.downloadDao.getAll()).where(
+          (task) => task.bookUrl == oldBook.bookUrl,
+        ),
         isEmpty,
       );
     });
@@ -717,8 +722,9 @@ void main() {
       expect(lease.committedCalled, isFalse);
       expect(lease.rolledBackCalled, isTrue);
       expect(
-        (await db.downloadDao.getAll())
-            .where((task) => task.bookUrl == oldBook.bookUrl),
+        (await db.downloadDao.getAll()).where(
+          (task) => task.bookUrl == oldBook.bookUrl,
+        ),
         hasLength(1),
       );
     });

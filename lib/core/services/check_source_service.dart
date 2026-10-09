@@ -246,8 +246,9 @@ class SourceCheckConfig {
       normalizedContent = false;
     }
 
-    final trimmedKeyword =
-        keyword.trim().isEmpty ? defaults.keyword : keyword.trim();
+    final trimmedKeyword = keyword.trim().isEmpty
+        ? defaults.keyword
+        : keyword.trim();
     final normalizedTimeout = timeoutSeconds < 1 ? 1 : timeoutSeconds;
     return SourceCheckConfig(
       keyword: trimmedKeyword,
@@ -652,10 +653,9 @@ class CheckSourceService extends ChangeNotifier {
     }
     await _queueStatusWrite(source);
     final hasIssue = !result.isHealthy;
-    final progressMsg =
-        result.isHealthy
-            ? '校驗成功'
-            : '${source.runtimeHealth.label}: ${result.message}';
+    final progressMsg = result.isHealthy
+        ? '校驗成功'
+        : '${source.runtimeHealth.label}: ${result.message}';
     _setSourceProgress(source, progressMsg, isFinal: true, hasIssue: hasIssue);
     return SourceCheckEntry(
       sourceUrl: source.bookSourceUrl,

@@ -1,7 +1,9 @@
 import 'dart:io' show gzip;
 import 'dart:convert';
+
 import 'package:convert/convert.dart';
 import 'package:uuid/uuid.dart';
+
 import '../js_extensions.dart';
 import '../js_encode_utils.dart';
 
@@ -41,8 +43,9 @@ extension JsCryptoExtensions on JsExtensions {
       if (payload is List && payload.length >= 2) {
         final data = payload[0].toString();
         final algorithm = payload[1].toString();
-        final hexFormat =
-            payload.length > 2 ? payload[2].toString() != 'false' : true;
+        final hexFormat = payload.length > 2
+            ? payload[2].toString() != 'false'
+            : true;
         return JsEncodeUtils.digest(data, algorithm, hexFormat: hexFormat);
       }
       return '';
@@ -65,10 +68,10 @@ extension JsCryptoExtensions on JsExtensions {
         final key = payload[1];
         final transformation =
             payload.length > 2 &&
-                    payload[2] != null &&
-                    payload[2].toString().isNotEmpty
-                ? payload[2].toString()
-                : 'DES/ECB/PKCS5Padding';
+                payload[2] != null &&
+                payload[2].toString().isNotEmpty
+            ? payload[2].toString()
+            : 'DES/ECB/PKCS5Padding';
         final iv = payload.length > 3 ? payload[3] : null;
         return JsEncodeUtils.symmetricCrypto(
           'encrypt',
@@ -88,16 +91,16 @@ extension JsCryptoExtensions on JsExtensions {
     runtime.onMessage('_base64Decode', (dynamic args) {
       final payload = _decodeArgs(args);
       final str = payload is List ? payload[0].toString() : payload.toString();
-      final charset =
-          payload is List && payload.length > 1
-              ? payload[1].toString()
-              : 'UTF-8';
+      final charset = payload is List && payload.length > 1
+          ? payload[1].toString()
+          : 'UTF-8';
       return JsEncodeUtils.base64Decode(str, charset: charset);
     });
     runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
       final payload = _decodeArgs(args);
-      final str =
-          payload is List ? payload.first.toString() : payload.toString();
+      final str = payload is List
+          ? payload.first.toString()
+          : payload.toString();
       return jsonEncode(JsEncodeUtils.base64DecodeToBytes(str).toList());
     });
     runtime.onMessage(
@@ -113,8 +116,8 @@ extension JsCryptoExtensions on JsExtensions {
       final payload = _decodeArgs(args);
       final bytesSource =
           payload is List && payload.every((item) => item is num)
-              ? payload
-              : (payload is List ? payload.first : payload);
+          ? payload
+          : (payload is List ? payload.first : payload);
       final bytes = List<int>.from(bytesSource as List);
       return jsonEncode(gzip.decode(bytes));
     });

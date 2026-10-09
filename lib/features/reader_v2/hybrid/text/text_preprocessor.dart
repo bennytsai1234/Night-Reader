@@ -30,8 +30,9 @@ final class _PreprocessRequest {
 
 ChapterBlocks _processSync(_PreprocessRequest request) {
   final chapter = request.chapter;
-  final maxBlockChars =
-      request.maxBlockChars <= 0 ? 1 << 30 : request.maxBlockChars;
+  final maxBlockChars = request.maxBlockChars <= 0
+      ? 1 << 30
+      : request.maxBlockChars;
   final blocks = <ChapterBlock>[];
   var blockIndex = 0;
   if (chapter.title.isNotEmpty) {
@@ -47,12 +48,11 @@ ChapterBlocks _processSync(_PreprocessRequest request) {
     blockIndex += 1;
   }
 
-  final bodyStartOffset =
-      chapter.title.isEmpty
-          ? 0
-          : chapter.paragraphs.isEmpty
-          ? chapter.title.length
-          : chapter.title.length + 2;
+  final bodyStartOffset = chapter.title.isEmpty
+      ? 0
+      : chapter.paragraphs.isEmpty
+      ? chapter.title.length
+      : chapter.title.length + 2;
   var paragraphOffset = bodyStartOffset;
   for (
     var paragraphIndex = 0;
@@ -106,8 +106,9 @@ List<String> _splitParagraph(String paragraph, int maxBlockChars) {
   final chunks = <String>[];
   var start = 0;
   while (start < paragraph.length) {
-    var end =
-        (start + maxBlockChars).clamp(start + 1, paragraph.length).toInt();
+    var end = (start + maxBlockChars)
+        .clamp(start + 1, paragraph.length)
+        .toInt();
     if (end < paragraph.length) {
       end =
           _findSentenceBoundary(paragraph, start, end) ??

@@ -133,9 +133,7 @@ class TtsSettingsPage extends StatelessWidget {
                             } catch (_) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('音色無法套用，請改選其他音色'),
-                                ),
+                                const SnackBar(content: Text('音色無法套用，請改選其他音色')),
                               );
                             }
                           },
@@ -183,11 +181,8 @@ Future<String?> _pick(
   return Navigator.push<String>(
     context,
     MaterialPageRoute(
-      builder: (_) => _ChoicePage(
-        title: title,
-        options: options,
-        selected: selected,
-      ),
+      builder: (_) =>
+          _ChoicePage(title: title, options: options, selected: selected),
     ),
   );
 }
@@ -231,9 +226,8 @@ void _reportSaveFailure(BuildContext context, Future<void> save) {
   unawaited(
     save.catchError((Object _) {
       if (!context.mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')),
-      );
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(const SnackBar(content: Text('朗讀設定儲存失敗，已恢復原本的值')));
     }),
   );
 }

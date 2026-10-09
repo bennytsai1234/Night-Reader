@@ -363,8 +363,9 @@ class AsyncJsRewriter {
       match.openParenIndex + 1,
       match.closeParenIndex,
     );
-    final rewrittenArgs =
-        rawArgs.isEmpty ? rawArgs : _scan(rawArgs, rewrite: true).result;
+    final rewrittenArgs = rawArgs.isEmpty
+        ? rawArgs
+        : _scan(rawArgs, rewrite: true).result;
     return '$beforeArgs$rewrittenArgs)';
   }
 

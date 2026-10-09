@@ -17,8 +17,8 @@ class BookOpenRoute extends PageRouteBuilder {
     this.openTarget,
     this.initialChapters = const <BookChapter>[],
   }) : super(
-         pageBuilder:
-             (context, animation, secondaryAnimation) => ReaderV2ReadTimeScope(
+         pageBuilder: (context, animation, secondaryAnimation) =>
+             ReaderV2ReadTimeScope(
                book: book,
                child: ReaderV2Page(
                  book: book,

@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:html_unescape/html_unescape.dart';
+
 import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';
 import '../js/js_engine.dart';
+
 import 'package:night_reader/core/models/rule_data_interface.dart';
 import 'package:night_reader/core/services/rule_big_data_service.dart';
 import 'package:night_reader/core/utils/lru_map.dart';

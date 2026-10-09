@@ -62,9 +62,7 @@ final class ReaderV2PageChromeLayout {
       headerExtent = top;
       headerRowTop = top;
     } else if (hideStatusBar) {
-      headerExtent = top > kReaderInfoRowHeight
-          ? top
-          : kReaderInfoRowHeight;
+      headerExtent = top > kReaderInfoRowHeight ? top : kReaderInfoRowHeight;
       headerRowTop = 0;
     } else {
       headerExtent = top + kReaderInfoRowHeight;

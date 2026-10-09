@@ -39,13 +39,12 @@ Future<T?> showAppAlert<T>({
   return _showAlertRoute<T>(
     context: context,
     barrierDismissible: barrierDismissible,
-    builder:
-        (context) => AppAlert<T>(
-          title: title,
-          message: message,
-          content: content,
-          actions: actions,
-        ),
+    builder: (context) => AppAlert<T>(
+      title: title,
+      message: message,
+      content: content,
+      actions: actions,
+    ),
   );
 }
 
@@ -70,14 +69,12 @@ Future<T?> showStatefulAppAlert<T>({
   return _showAlertRoute<T>(
     context: context,
     barrierDismissible: barrierDismissible,
-    builder:
-        (context) => TextControllersScope(
-          initialTexts: fieldTexts,
-          builder:
-              (context, fields) => StatefulBuilder(
-                builder: (context, setState) => builder(context, setState, fields),
-              ),
-        ),
+    builder: (context) => TextControllersScope(
+      initialTexts: fieldTexts,
+      builder: (context, fields) => StatefulBuilder(
+        builder: (context, setState) => builder(context, setState, fields),
+      ),
+    ),
   );
 }
 
@@ -209,23 +206,21 @@ class AppAlert<T> extends StatelessWidget {
     final horizontal = actions.length <= 2;
 
     Widget actionButton(AppAlertAction<T> action) {
-      final color =
-          action.destructive
-              ? (Theme.of(context).brightness == Brightness.dark
-                  ? AppPalette.rustDark
-                  : AppPalette.rust)
-              : scheme.primary;
+      final color = action.destructive
+          ? (Theme.of(context).brightness == Brightness.dark
+                ? AppPalette.rustDark
+                : AppPalette.rust)
+          : scheme.primary;
       return InkWell(
-        onTap:
-            action.enabled
-                ? () {
-                  if (onAction != null) {
-                    onAction!(action.value);
-                  } else {
-                    Navigator.of(context).pop(action.value);
-                  }
+        onTap: action.enabled
+            ? () {
+                if (onAction != null) {
+                  onAction!(action.value);
+                } else {
+                  Navigator.of(context).pop(action.value);
                 }
-                : null,
+              }
+            : null,
         child: SizedBox(
           height: AppGrouped.rowMinHeight + AppSpacing.xs,
           child: Center(
@@ -238,8 +233,9 @@ class AppAlert<T> extends StatelessWidget {
                 style: AppTextStyles.bodyMd.copyWith(
                   height: 1.2,
                   color: color.withValues(alpha: action.enabled ? 1 : 0.4),
-                  fontWeight:
-                      action.isDefault ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: action.isDefault
+                      ? FontWeight.w600
+                      : FontWeight.w400,
                 ),
               ),
             ),
@@ -254,29 +250,28 @@ class AppAlert<T> extends StatelessWidget {
       color: chrome.separator,
     );
 
-    final buttons =
-        horizontal
-            ? IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < actions.length; i++) ...[
-                    if (i > 0) hairline,
-                    Expanded(child: actionButton(actions[i])),
-                  ],
-                ],
-              ),
-            )
-            : Column(
-              mainAxisSize: MainAxisSize.min,
+    final buttons = horizontal
+        ? IntrinsicHeight(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var i = 0; i < actions.length; i++) ...[
                   if (i > 0) hairline,
-                  actionButton(actions[i]),
+                  Expanded(child: actionButton(actions[i])),
                 ],
               ],
-            );
+            ),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) hairline,
+                actionButton(actions[i]),
+              ],
+            ],
+          );
 
     return Center(
       child: Padding(
@@ -537,13 +532,12 @@ Future<T?> showAppActionSheet<T>({
     backgroundColor: Colors.transparent,
     elevation: 0,
     barrierColor: AppChrome.of(context).barrier,
-    builder:
-        (context) => _AppActionSheet<T>(
-          title: title,
-          message: message,
-          actions: actions,
-          cancelLabel: cancelLabel,
-        ),
+    builder: (context) => _AppActionSheet<T>(
+      title: title,
+      message: message,
+      actions: actions,
+      cancelLabel: cancelLabel,
+    ),
   );
 }
 
@@ -633,35 +627,29 @@ class _AppActionSheet<T> extends StatelessWidget {
                         destructive: actions[i].destructive,
                         enabled: actions[i].enabled,
                         showChevron: false,
-                        leading:
-                            actions[i].icon == null
-                                ? null
-                                : Icon(
-                                  actions[i].icon,
-                                  size: 22,
-                                  color:
-                                      actions[i].destructive
-                                          ? null
-                                          : scheme.onSurface.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                ),
-                        trailing:
-                            anySelected
-                                ? SizedBox(
-                                  width: 22,
-                                  child:
-                                      actions[i].selected
-                                          ? Icon(
-                                            Icons.check_rounded,
-                                            size: 22,
-                                            color: scheme.primary,
-                                          )
-                                          : null,
-                                )
-                                : null,
-                        onTap:
-                            () => Navigator.of(context).pop(actions[i].value),
+                        leading: actions[i].icon == null
+                            ? null
+                            : Icon(
+                                actions[i].icon,
+                                size: 22,
+                                color: actions[i].destructive
+                                    ? null
+                                    : scheme.onSurface.withValues(alpha: 0.8),
+                              ),
+                        trailing: anySelected
+                            ? SizedBox(
+                                width: 22,
+                                child: actions[i].selected
+                                    ? Icon(
+                                        Icons.check_rounded,
+                                        size: 22,
+                                        color: scheme.primary,
+                                      )
+                                    : null,
+                              )
+                            : null,
+                        onTap: () =>
+                            Navigator.of(context).pop(actions[i].value),
                       ),
                     ],
                   ],

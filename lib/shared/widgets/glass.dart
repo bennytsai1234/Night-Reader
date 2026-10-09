@@ -51,18 +51,13 @@ class GlassSurface extends StatelessWidget {
     final sigma = chrome.glassStrength.blur;
     if (blur && sigma > 0) {
       final filter = ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
-      content =
-          grouped
-              ? BackdropFilter.grouped(filter: filter, child: content)
-              : BackdropFilter(filter: filter, child: content);
+      content = grouped
+          ? BackdropFilter.grouped(filter: filter, child: content)
+          : BackdropFilter(filter: filter, child: content);
     }
-    content =
-        shape == BoxShape.circle
-            ? ClipOval(child: content)
-            : ClipRRect(
-              borderRadius: radius ?? BorderRadius.zero,
-              child: content,
-            );
+    content = shape == BoxShape.circle
+        ? ClipOval(child: content)
+        : ClipRRect(borderRadius: radius ?? BorderRadius.zero, child: content);
     if (!shadow) return content;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -120,7 +115,9 @@ class _PressScaleState extends State<PressScale> {
       onLongPress: widget.onLongPress,
       child: AnimatedScale(
         scale: _pressed ? widget.scale : 1,
-        duration: _pressed ? const Duration(milliseconds: 90) : AppMotion.spring,
+        duration: _pressed
+            ? const Duration(milliseconds: 90)
+            : AppMotion.spring,
         curve: _pressed ? Curves.easeOut : AppMotion.springCurve,
         child: widget.child,
       ),
@@ -260,12 +257,11 @@ class PlainTextAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
-    final base =
-        destructive
-            ? (Theme.of(context).brightness == Brightness.dark
-                ? AppPalette.rustDark
-                : AppPalette.rust)
-            : scheme.primary;
+    final base = destructive
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? AppPalette.rustDark
+              : AppPalette.rust)
+        : scheme.primary;
     final style = (small ? AppTextStyles.uiSm : AppTextStyles.bodyBase)
         .copyWith(
           height: 1.2,
@@ -286,10 +282,7 @@ class PlainTextAction extends StatelessWidget {
             padding: EdgeInsets.symmetric(
               horizontal: small ? 0 : AppSpacing.xs,
             ),
-            child: Center(
-              widthFactor: 1,
-              child: Text(label, style: style),
-            ),
+            child: Center(widthFactor: 1, child: Text(label, style: style)),
           ),
         ),
       ),
@@ -338,9 +331,9 @@ class GlassCapsule extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onTap != null;
-    final color = (foregroundColor ??
-            (selected ? scheme.primary : scheme.onSurface))
-        .withValues(alpha: enabled ? 1 : 0.45);
+    final color =
+        (foregroundColor ?? (selected ? scheme.primary : scheme.onSurface))
+            .withValues(alpha: enabled ? 1 : 0.45);
     final style = AppTextStyles.uiSm.copyWith(
       color: color,
       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
@@ -352,13 +345,12 @@ class GlassCapsule extends StatelessWidget {
         borderRadius: AppRadius.pillShape,
         shadow: false,
         blur: blur,
-        tint:
-            selected
-                ? Color.alphaBlend(
-                  scheme.primary.withValues(alpha: 0.12),
-                  scheme.surface.withValues(alpha: 0.9),
-                )
-                : tint,
+        tint: selected
+            ? Color.alphaBlend(
+                scheme.primary.withValues(alpha: 0.12),
+                scheme.surface.withValues(alpha: 0.9),
+              )
+            : tint,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,
@@ -540,15 +532,14 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
         leading ??
         (automaticallyImplyLeading && canPop
             ? GlassIconButton(
-              icon:
-                  route is PageRoute && route.fullscreenDialog
-                      ? Icons.close_rounded
-                      : Icons.arrow_back_ios_new_rounded,
-              iconSize: 20,
-              tooltip: '返回',
-              color: fg,
-              onPressed: () => Navigator.maybePop(context),
-            )
+                icon: route is PageRoute && route.fullscreenDialog
+                    ? Icons.close_rounded
+                    : Icons.arrow_back_ios_new_rounded,
+                iconSize: 20,
+                tooltip: '返回',
+                color: fg,
+                onPressed: () => Navigator.maybePop(context),
+              )
             : null);
     final solidHeight =
         topPadding + AppGlass.headerToolbarHeight + bottomHeight;
@@ -580,54 +571,50 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
               height: AppGlass.headerToolbarHeight,
               child: NavigationToolbar(
                 middleSpacing: AppSpacing.md,
-                leading:
-                    effectiveLeading == null
-                        ? null
-                        : Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppGrouped.margin,
-                          ),
-                          child: IconTheme.merge(
-                            data: IconThemeData(color: fg),
-                            child: effectiveLeading,
-                          ),
+                leading: effectiveLeading == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(left: AppGrouped.margin),
+                        child: IconTheme.merge(
+                          data: IconThemeData(color: fg),
+                          child: effectiveLeading,
                         ),
+                      ),
                 middle:
                     titleWidget ??
                     (title == null
                         ? null
                         : Semantics(
-                          header: true,
-                          child: Text(
-                            title!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.titleSm.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: fg,
+                            header: true,
+                            child: Text(
+                              title!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.titleSm.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: fg,
+                              ),
                             ),
-                          ),
-                        )),
-                trailing:
-                    actions.isEmpty
-                        ? null
-                        : Padding(
-                          padding: const EdgeInsets.only(
-                            right: AppGrouped.margin,
-                          ),
-                          child: IconTheme.merge(
-                            data: IconThemeData(color: fg),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (var i = 0; i < actions.length; i++) ...[
-                                  if (i > 0) const SizedBox(width: AppSpacing.sm),
-                                  actions[i],
-                                ],
+                          )),
+                trailing: actions.isEmpty
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(
+                          right: AppGrouped.margin,
+                        ),
+                        child: IconTheme.merge(
+                          data: IconThemeData(color: fg),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (var i = 0; i < actions.length; i++) ...[
+                                if (i > 0) const SizedBox(width: AppSpacing.sm),
+                                actions[i],
                               ],
-                            ),
+                            ],
                           ),
                         ),
+                      ),
               ),
             ),
             if (bottom != null)

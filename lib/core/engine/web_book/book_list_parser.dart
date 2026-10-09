@@ -70,10 +70,9 @@ class BookListParser {
         ruleList = ruleList.substring(1);
       }
 
-      var elements =
-          listRuleNeedsAsync
-              ? await rule.getElementsAsync(ruleList)
-              : rule.getElements(ruleList);
+      var elements = listRuleNeedsAsync
+          ? await rule.getElementsAsync(ruleList)
+          : rule.getElements(ruleList);
 
       if (!isSearch &&
           elements.isEmpty &&
@@ -91,10 +90,9 @@ class BookListParser {
           if (ruleList.startsWith('+')) {
             ruleList = ruleList.substring(1);
           }
-          elements =
-              fallbackNeedsAsync
-                  ? await rule.getElementsAsync(ruleList)
-                  : rule.getElements(ruleList);
+          elements = fallbackNeedsAsync
+              ? await rule.getElementsAsync(ruleList)
+              : rule.getElements(ruleList);
         }
       }
 

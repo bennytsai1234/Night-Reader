@@ -5,6 +5,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+
 import '../source_manager_provider.dart';
 
 /// 編輯模式底部的浮動玻璃工具列 — 對標 legado SelectActionBar。
@@ -56,21 +57,17 @@ class SelectActionBar extends StatelessWidget {
     final chrome = AppChrome.of(context);
     final selectCount = provider.selectedUrls.length;
     final allCount = provider.sources.length;
-    final visibleSelectedCount =
-        provider.sources
-            .where(
-              (source) => provider.selectedUrls.contains(source.bookSourceUrl),
-            )
-            .length;
+    final visibleSelectedCount = provider.sources
+        .where((source) => provider.selectedUrls.contains(source.bookSourceUrl))
+        .length;
     final hiddenSelectedCount = selectCount - visibleSelectedCount;
     final hasSelection = selectCount > 0;
     final isBusy = provider.isMutationBusy || externallyBusy;
     final actionsEnabled = hasSelection && !isBusy;
-    final selectionLabel =
-        allCount == 0 && hasSelection
-            ? '已選 $selectCount 個（目前篩選無項目）'
-            : '$visibleSelectedCount/$allCount'
-                '${hiddenSelectedCount > 0 ? '，另選 $hiddenSelectedCount 個' : ''}';
+    final selectionLabel = allCount == 0 && hasSelection
+        ? '已選 $selectCount 個（目前篩選無項目）'
+        : '$visibleSelectedCount/$allCount'
+              '${hiddenSelectedCount > 0 ? '，另選 $hiddenSelectedCount 個' : ''}';
 
     return SafeArea(
       top: false,
@@ -84,7 +81,9 @@ class SelectActionBar extends StatelessWidget {
               _BarTextButton(
                 label: '反選',
                 color: scheme.onSurface,
-                onTap: allCount > 0 && !isBusy ? provider.revertSelection : null,
+                onTap: allCount > 0 && !isBusy
+                    ? provider.revertSelection
+                    : null,
               ),
               Expanded(
                 child: Text(

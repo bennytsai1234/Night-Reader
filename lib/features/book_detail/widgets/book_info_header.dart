@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../book_detail_provider.dart';
+
 import 'package:night_reader/core/services/chinese_display.dart';
 
 /// Telegram 個人資料頁式的書籍頁首：置中封面、書名與作者，下方一排圓角
@@ -114,10 +115,9 @@ class BookInfoHeader extends StatelessWidget {
                   onTap: onRead,
                 ),
                 _ActionButton(
-                  icon:
-                      provider.isInBookshelf
-                          ? Icons.library_add_check_rounded
-                          : Icons.library_add_outlined,
+                  icon: provider.isInBookshelf
+                      ? Icons.library_add_check_rounded
+                      : Icons.library_add_outlined,
                   label: provider.isInBookshelf ? '已在書架' : '加入書架',
                   tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
                   onTap: onToggleBookshelf,
@@ -217,10 +217,9 @@ class SourceStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final healthy = provider.sourceStatusIsHealthy;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final color =
-        healthy
-            ? (dark ? AppPalette.mossDark : AppPalette.moss)
-            : (dark ? AppPalette.teaDark : AppPalette.tea);
+    final color = healthy
+        ? (dark ? AppPalette.mossDark : AppPalette.moss)
+        : (dark ? AppPalette.teaDark : AppPalette.tea);
     return Tooltip(
       message: provider.sourceStatusDescription,
       child: Container(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -10,7 +11,9 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
+
 import 'chinese_utils.dart';
+
 import 'package:night_reader/core/di/injection.dart';
 
 /// DefaultData - 預設資料初始化
@@ -92,8 +95,9 @@ class DefaultData {
         'assets/default_sources/sources.json',
       );
       final List<dynamic> jsonList = jsonDecode(jsonStr);
-      final sources =
-          jsonList.map((j) => BookSource.fromJson(jsonAt(j))).toList();
+      final sources = jsonList
+          .map((j) => BookSource.fromJson(jsonAt(j)))
+          .toList();
       await getIt<BookSourceDao>().insertOrUpdateAll(sources);
     } catch (e) {
       AppLog.e('Error loading default sources: $e', error: e);

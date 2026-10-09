@@ -22,7 +22,7 @@ import 'package:sync_http/sync_http.dart';
 // }
 
 class QuickJsService extends JavascriptRuntime {
-  ReceivePort _receivePort = new ReceivePort();
+  final ReceivePort _receivePort = ReceivePort();
   SendPort? _callServerSendPort;
 
   bool _ready = false;
@@ -38,27 +38,27 @@ class QuickJsService extends JavascriptRuntime {
   }
 
   bool get isReady => _ready;
-  _startServer() async {
+  Future<void> _startServer() async {
     _receivePort.listen((message) async {
       if (_dartAddress == null) {
         _dartAddress = message;
         _ready = true;
         return;
       }
-      if (_callServerSendPort == null) {
-        _callServerSendPort = message;
-      }
+      _callServerSendPort ??= message;
     });
     Isolate.spawn(startQuickJsServer, _receivePort.sendPort);
   }
 
+  @override
   void dispose() {
-    this._callServerSendPort!.send('STOP');
+    _callServerSendPort!.send('STOP');
     _flutterJs.dispose();
   }
 
+  @override
   JsEvalResult evaluate(String code, {String? sourceUrl}) {
-    var request = SyncHttpClient.postUrl(new Uri.http(
+    var request = SyncHttpClient.postUrl(Uri.http(
       "localhost:${FlutterJs.httpPort}",
       "",
       {
@@ -66,14 +66,16 @@ class QuickJsService extends JavascriptRuntime {
         "password": FlutterJs.httpPassword,
       },
     ));
-    request..write(code);
+    request.write(code);
     var response = request.close();
 
     var result = response.body!;
 
     try {
       result = json.decode(result);
-    } catch (e) {}
+    } catch (e) {
+      // 不是 JSON 就回傳原字串。
+    }
 
     return JsEvalResult(
       response.body != null && response.body!.isNotEmpty ? result : "",
@@ -140,7 +142,7 @@ class QuickJsService extends JavascriptRuntime {
     _flutterJs.addChannel(channelName, (args) {
       final mapArgs = json.decode(args!);
       final res = fn(mapArgs);
-      this.evaluate("""
+      evaluate("""
          FLUTTERJS_pendingMessages['${mapArgs['id']}'].resolve(${json.encode(res)});
       """
           .trim());
@@ -163,7 +165,7 @@ class QuickJsService extends JavascriptRuntime {
 }
 
 void startQuickJsServer(SendPort sendPort) async {
-  var server = new QuickJsSyncServer();
+  var server = QuickJsSyncServer();
 
   server.serve().then((address) {
     sendPort.send(address);
@@ -178,7 +180,7 @@ class QuickJsSyncServer {
   SendPort get dispatchSendPort => _dispatchPort.sendPort;
   late ReceivePort _dispatchPort;
 
-  ReceivePort _receiveCallDartResponsePort = ReceivePort();
+  final ReceivePort _receiveCallDartResponsePort = ReceivePort();
 
   /// Optional server port (note: might be already taken)
   /// Defaults to 0 (binds server to a random free port)
@@ -189,7 +191,7 @@ class QuickJsSyncServer {
   QuickJsSyncServer() {
     address = InternetAddress.loopbackIPv4;
     port = 0;
-    _dispatchPort = new ReceivePort();
+    _dispatchPort = ReceivePort();
 
     IsolateNameServer.registerPortWithName(
       _receiveCallDartResponsePort.sendPort,
@@ -204,16 +206,16 @@ class QuickJsSyncServer {
   }
 
   /// Actual port server is listening on
-  get boundPort => _server.port;
+  int get boundPort => _server.port;
 
   /// Starts server
   Future<String> serve() async {
-    _server = await HttpServer.bind(this.address, this.port);
+    _server = await HttpServer.bind(address, port);
     _server.listen(_handleReq);
     return '${_server.address.address}:${_server.port}';
   }
 
-  _handleReq(HttpRequest request) async {
+  Future<void> _handleReq(HttpRequest request) async {
     String path = request.requestedUri.path.replaceFirst('/', '');
 
     if (path == '') {

@@ -40,9 +40,8 @@ class BookInfoParser {
         infoRule.tocUrl ?? '',
         isUrl: true,
       );
-      final kind = (await rule.getStringListAsync(
-        infoRule.kind ?? '',
-      )).join(',');
+      final kind = (await rule.getStringListAsync(infoRule.kind ?? ''))
+          .join(',');
       final coverUrl = await rule.getStringAsync(
         infoRule.coverUrl ?? '',
         isUrl: true,
@@ -64,10 +63,9 @@ class BookInfoParser {
         kind: kind.isEmpty ? book.kind : kind,
         coverUrl: coverUrl.isEmpty ? book.coverUrl : coverUrl,
         intro: intro.isEmpty ? book.intro : intro,
-        latestChapterTitle:
-            latestChapterTitle.isEmpty
-                ? book.latestChapterTitle
-                : latestChapterTitle,
+        latestChapterTitle: latestChapterTitle.isEmpty
+            ? book.latestChapterTitle
+            : latestChapterTitle,
         // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
         tocUrl: normalizedTocUrl,
       );

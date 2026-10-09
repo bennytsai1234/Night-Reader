@@ -18,7 +18,8 @@ class ReaderV2Style {
     this.bold = false,
     this.textIndent = 0,
     double? titleFontSize,
-  }) : titleFontSize = titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
+  }) : titleFontSize =
+           titleFontSize ?? fontSize + kReaderV2DefaultTitleSizeDelta;
 
   final double fontSize;
   final double lineHeight;

@@ -78,8 +78,8 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (_) => SearchPage(initialQuery: record.bookName),
+                            builder: (_) =>
+                                SearchPage(initialQuery: record.bookName),
                           ),
                         );
                       },

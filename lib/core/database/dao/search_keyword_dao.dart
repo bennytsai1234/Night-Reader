@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/search_keyword.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -13,8 +14,9 @@ class SearchKeywordDao extends DatabaseAccessor<AppDatabase>
   /// 按使用頻率降序取得全部 (對標 Legado flowByUsage)
   Future<List<SearchKeyword>> getAll() {
     return (select(searchKeywords)..orderBy([
-      (t) => OrderingTerm(expression: t.usage, mode: OrderingMode.desc),
-    ])).get();
+          (t) => OrderingTerm(expression: t.usage, mode: OrderingMode.desc),
+        ]))
+        .get();
   }
 
   /// 按最後使用時間降序取得全部 (對標 Legado flowByTime)
@@ -42,8 +44,9 @@ class SearchKeywordDao extends DatabaseAccessor<AppDatabase>
 
   /// 取得單一關鍵字 (對標 Legado get)
   Future<SearchKeyword?> getByWord(String word) {
-    return (select(searchKeywords)
-      ..where((t) => t.word.equals(word))).getSingleOrNull();
+    return (select(
+      searchKeywords,
+    )..where((t) => t.word.equals(word))).getSingleOrNull();
   }
 
   /// 儲存搜尋關鍵字：存在則 +1 usage 並更新時間，不存在則新增

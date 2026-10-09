@@ -6,6 +6,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+
 import '../../book_detail_provider.dart';
 
 class CoverGridItem extends StatelessWidget {
@@ -28,9 +29,8 @@ class CoverGridItem extends StatelessWidget {
           Navigator.pop(context);
           return;
         }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(outcome.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(outcome.message)));
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,44 +38,35 @@ class CoverGridItem extends StatelessWidget {
           Expanded(
             child: ClipRRect(
               borderRadius: AppRadius.cardSm,
-              child:
-                  isDefault
-                      ? Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                        child: Center(
-                          child: Icon(
-                            Icons.settings_backup_restore,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 32,
-                          ),
+              child: isDefault
+                  ? Container(
+                      color: Theme.of(context).colorScheme.primary
+                          .withValues(alpha: 0.1),
+                      child: Center(
+                        child: Icon(
+                          Icons.settings_backup_restore,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 32,
                         ),
-                      )
-                      : CachedNetworkImage(
-                        imageUrl: result.book.coverUrl!,
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (context, url) => Container(
-                              color: chrome.groupedSurface,
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
-                        errorWidget:
-                            (context, url, error) => Container(
-                              color: chrome.groupedSurface,
-                              child: Icon(
-                                Icons.broken_image,
-                                color:
-                                    Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
                       ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: result.book.coverUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: chrome.groupedSurface,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: chrome.groupedSurface,
+                        child: Icon(
+                          Icons.broken_image,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 4),

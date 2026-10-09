@@ -16,21 +16,17 @@ import 'layout_cost_model.dart';
 
 final class LayoutPump implements HybridLayoutPump {
   static const double _minBlockHeight = 1e-6;
-  static const ReaderParagraphLayout _paragraphLayout =
-      ReaderParagraphLayout();
+  static const ReaderParagraphLayout _paragraphLayout = ReaderParagraphLayout();
   static const VisualLineLayoutEngine _lineLayoutEngine =
       VisualLineLayoutEngine(paragraphLayout: _paragraphLayout);
 
   LayoutPump({
-    required ParagraphCache paragraphCache,
-    required HybridMeasurementStore measurementStore,
-    required MeasurementNamespace namespace,
+    required this._paragraphCache,
+    required this._measurementStore,
+    required this._namespace,
     BudgetGovernor? governor,
     LayoutCostModel? costModel,
-  }) : _paragraphCache = paragraphCache,
-       _measurementStore = measurementStore,
-       _namespace = namespace,
-       _governor = governor ?? BudgetGovernor(),
+  }) : _governor = governor ?? BudgetGovernor(),
        _costModel = costModel ?? LayoutCostModel();
 
   final ParagraphCache _paragraphCache;
@@ -137,10 +133,7 @@ final class LayoutPump implements HybridLayoutPump {
   /// Promote already queued chapter planning when speculative work becomes
   /// current viewport demand. Promotion reuses progress; it never cancels or
   /// duplicates the existing chapter plan.
-  void promoteChapterVisualLines(
-    int chapter,
-    LayoutTaskPriority priority,
-  ) {
+  void promoteChapterVisualLines(int chapter, LayoutTaskPriority priority) {
     for (final work in _queue.whereType<_ChapterWork>()) {
       if (work.chapter == chapter) work.promote(priority.index);
     }
@@ -151,8 +144,9 @@ final class LayoutPump implements HybridLayoutPump {
     if (_disposed ||
         !_wantsChapter(task.block.chapterIndex) ||
         task.epoch != _namespace.epoch ||
-        task.fingerprint != _namespace.fingerprint)
+        task.fingerprint != _namespace.fingerprint) {
       return;
+    }
     for (final work in _queue.whereType<_LayoutWork>()) {
       if (work.task.block.key == task.block.key) {
         work.task = task;
@@ -264,10 +258,7 @@ final class LayoutPump implements HybridLayoutPump {
       _measurementStore.put(_namespace, keys[i], metricsList[i]);
     }
     final elapsed = started.elapsed;
-    _costModel.record(
-      charCount: task.layoutText.length,
-      elapsed: elapsed,
-    );
+    _costModel.record(charCount: task.layoutText.length, elapsed: elapsed);
     for (var i = 0; i < keys.length; i += 1) {
       _completed.add(
         BlockReady(key: keys[i], epoch: task.epoch, metrics: metricsList[i]),
@@ -356,8 +347,7 @@ final class LayoutPump implements HybridLayoutPump {
             sourceParagraphIndex: head.sourceParagraphIndex,
             isTitle: head.isTitle,
             isContinuation: head.isContinuation || transactionIndex > 0,
-            layoutBreakBefore:
-                head.layoutBreakBefore || transactionIndex > 0,
+            layoutBreakBefore: head.layoutBreakBefore || transactionIndex > 0,
             visualLineBreakOffsets: plan.visualLineBreakOffsets,
           ),
         );
@@ -563,12 +553,8 @@ final class _LayoutWork extends _PumpWork {
 }
 
 final class _ChapterWork extends _PumpWork {
-  _ChapterWork(
-    this.chapter,
-    int priority,
-    this.sourceIdentity,
-    this.steps,
-  ) : _priority = priority;
+  _ChapterWork(this.chapter, int priority, this.sourceIdentity, this.steps)
+    : _priority = priority;
 
   @override
   final int chapter;

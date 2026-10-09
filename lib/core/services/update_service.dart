@@ -42,8 +42,9 @@ class AppUpdateService {
         if (rawAsset is! Map<String, dynamic>) continue;
         final name = rawAsset['name'];
         final downloadUrl = rawAsset['browser_download_url'];
-        final normalizedDownloadUrl =
-            downloadUrl is String ? downloadUrl.trim() : null;
+        final normalizedDownloadUrl = downloadUrl is String
+            ? downloadUrl.trim()
+            : null;
         if (name is! String ||
             !name.toLowerCase().endsWith('.apk') ||
             normalizedDownloadUrl == null ||

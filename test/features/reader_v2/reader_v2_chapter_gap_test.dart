@@ -27,11 +27,7 @@ void main() {
   const lineExtent = 30.0;
 
   double chapterEnd(ReaderV2LayoutStyle style, {bool isTitle = false}) =>
-      readerV2BlockTrailingSpacing(
-        style,
-        isTitle: isTitle,
-        isChapterEnd: true,
-      );
+      readerV2BlockTrailingSpacing(style, isTitle: isTitle, isChapterEnd: true);
 
   test('chapter end leaves exactly the configured lines', () {
     expect(chapterEnd(styleWith()), lineExtent);

@@ -61,10 +61,7 @@ final class MetricsDiskCache {
     final previous = _writeTails[path];
     final ready = previous == null
         ? Future<void>.value()
-        : previous.then<void>(
-            (_) {},
-            onError: (Object _, StackTrace __) {},
-          );
+        : previous.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     late final Future<void> current;
     current = ready.then((_) async {
       await file.parent.create(recursive: true);

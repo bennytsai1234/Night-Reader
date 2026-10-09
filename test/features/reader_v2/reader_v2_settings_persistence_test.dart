@@ -111,24 +111,27 @@ void main() {
     expect(snapshot.chapterSpacing, ReaderV2PrefsRepository.maxChapterSpacing);
   });
 
-  test('footer offset persists and reset returns to following the system', () async {
-    final settings = ReaderV2SettingsController();
-    await settings.loadSettings();
-    expect(settings.footerOffset, isNull);
+  test(
+    'footer offset persists and reset returns to following the system',
+    () async {
+      final settings = ReaderV2SettingsController();
+      await settings.loadSettings();
+      expect(settings.footerOffset, isNull);
 
-    settings.setFooterOffset(0);
-    await pumpEventQueue();
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getDouble(PreferKey.readerFooterOffset), 0);
-    expect((await const ReaderV2PrefsRepository().load()).footerOffset, 0);
+      settings.setFooterOffset(0);
+      await pumpEventQueue();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getDouble(PreferKey.readerFooterOffset), 0);
+      expect((await const ReaderV2PrefsRepository().load()).footerOffset, 0);
 
-    settings.resetPageLayout();
-    await pumpEventQueue();
-    expect(settings.footerOffset, isNull);
-    expect(prefs.containsKey(PreferKey.readerFooterOffset), isFalse);
-    expect(settings.isPageLayoutDefault, isTrue);
-    settings.dispose();
-  });
+      settings.resetPageLayout();
+      await pumpEventQueue();
+      expect(settings.footerOffset, isNull);
+      expect(prefs.containsKey(PreferKey.readerFooterOffset), isFalse);
+      expect(settings.isPageLayoutDefault, isTrue);
+      settings.dispose();
+    },
+  );
 
   test('battery info items round-trip through stored slots', () {
     const slots = ReaderV2InfoSlots(

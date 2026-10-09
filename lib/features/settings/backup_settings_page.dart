@@ -70,15 +70,13 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
           ShareParams(files: [XFile(file.path)], text: '夜讀備份檔'),
         );
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('建立備份失敗')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('建立備份失敗')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('備份出錯: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('備份出錯: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -105,19 +103,16 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       final success = await RestoreService().restoreFromZip(file);
       if (!mounted) return;
       if (success) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('還原完成，重新啟動 App 後生效')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('還原完成，重新啟動 App 後生效')));
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('還原出錯: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('還原出錯: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);

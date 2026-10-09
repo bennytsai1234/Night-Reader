@@ -99,25 +99,23 @@ class SearchField extends StatelessWidget {
     );
     return SizedBox(
       height: height,
-      child:
-          glass
-              ? GlassSurface(
-                borderRadius: AppRadius.pillShape,
-                shadow: false,
-                child: content,
-              )
-              : DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.onSurface.withValues(
-                    alpha:
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 0.1
-                            : 0.07,
-                  ),
-                  borderRadius: AppRadius.pillShape,
+      child: glass
+          ? GlassSurface(
+              borderRadius: AppRadius.pillShape,
+              shadow: false,
+              child: content,
+            )
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.1
+                      : 0.07,
                 ),
-                child: content,
+                borderRadius: AppRadius.pillShape,
               ),
+              child: content,
+            ),
     );
   }
 }

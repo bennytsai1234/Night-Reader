@@ -19,10 +19,7 @@ final class LayoutCostModel {
     return (budgetMs / _msPerChar).floor().clamp(min, max).toInt();
   }
 
-  void record({
-    required int charCount,
-    required Duration elapsed,
-  }) {
+  void record({required int charCount, required Duration elapsed}) {
     if (charCount <= 0) return;
     final observed = elapsed.inMicroseconds / 1000 / charCount;
     _msPerChar = _msPerChar * 0.85 + observed * 0.15;

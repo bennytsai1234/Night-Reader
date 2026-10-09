@@ -9,7 +9,9 @@ void main() {
     final db = AppDatabase.forTesting(
       NativeDatabase.memory(
         setup: (raw) {
-          raw.execute('CREATE TABLE bookmarks (id INTEGER PRIMARY KEY, bookUrl TEXT)');
+          raw.execute(
+            'CREATE TABLE bookmarks (id INTEGER PRIMARY KEY, bookUrl TEXT)',
+          );
           raw.execute('CREATE INDEX idx_bookmarks_book ON bookmarks (bookUrl)');
           raw.execute("INSERT INTO bookmarks (bookUrl) VALUES ('book-a')");
           raw.execute('PRAGMA user_version = 2');

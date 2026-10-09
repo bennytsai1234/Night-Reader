@@ -178,12 +178,11 @@ void main() {
         ),
       );
 
-      final redirectedCookies =
-          (redirectedCookieHeaders ?? const <String>[])
-              .expand((header) => header.split(';'))
-              .map((cookie) => cookie.trim())
-              .where((cookie) => cookie.isNotEmpty)
-              .toList();
+      final redirectedCookies = (redirectedCookieHeaders ?? const <String>[])
+          .expand((header) => header.split(';'))
+          .map((cookie) => cookie.trim())
+          .where((cookie) => cookie.isNotEmpty)
+          .toList();
       expect(response.data, 'redirect complete');
       expect(response.realUri.toString(), '$baseUrl/done');
       expect(response.extra['_manualRedirectChain'], <String>['$baseUrl/done']);

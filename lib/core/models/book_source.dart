@@ -108,43 +108,35 @@ class BookSource extends BookSourceBase {
       weight: json['weight'] ?? 0,
       exploreUrl: json['exploreUrl'],
       exploreScreen: json['exploreScreen'],
-      ruleExplore:
-          json['ruleExplore'] != null
-              ? ExploreRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleExplore']),
-              )
-              : null,
+      ruleExplore: json['ruleExplore'] != null
+          ? ExploreRule.fromJson(
+              BookSourceSerialization.parseRule(json['ruleExplore']),
+            )
+          : null,
       searchUrl: json['searchUrl'],
-      ruleSearch:
-          json['ruleSearch'] != null
-              ? SearchRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleSearch']),
-              )
-              : null,
-      ruleBookInfo:
-          json['ruleBookInfo'] != null
-              ? BookInfoRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleBookInfo']),
-              )
-              : null,
-      ruleToc:
-          json['ruleToc'] != null
-              ? TocRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleToc']),
-              )
-              : null,
-      ruleContent:
-          json['ruleContent'] != null
-              ? ContentRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleContent']),
-              )
-              : null,
-      ruleReview:
-          json['ruleReview'] != null
-              ? ReviewRule.fromJson(
-                BookSourceSerialization.parseRule(json['ruleReview']),
-              )
-              : null,
+      ruleSearch: json['ruleSearch'] != null
+          ? SearchRule.fromJson(
+              BookSourceSerialization.parseRule(json['ruleSearch']),
+            )
+          : null,
+      ruleBookInfo: json['ruleBookInfo'] != null
+          ? BookInfoRule.fromJson(
+              BookSourceSerialization.parseRule(json['ruleBookInfo']),
+            )
+          : null,
+      ruleToc: json['ruleToc'] != null
+          ? TocRule.fromJson(BookSourceSerialization.parseRule(json['ruleToc']))
+          : null,
+      ruleContent: json['ruleContent'] != null
+          ? ContentRule.fromJson(
+              BookSourceSerialization.parseRule(json['ruleContent']),
+            )
+          : null,
+      ruleReview: json['ruleReview'] != null
+          ? ReviewRule.fromJson(
+              BookSourceSerialization.parseRule(json['ruleReview']),
+            )
+          : null,
     );
   }
 

@@ -136,9 +136,16 @@ jobs:
           emit artifact_label "$tag_name"
           emit mode version-push
 
+  verify:
+    needs: plan-release
+    if: needs.plan-release.outputs.should_build == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.plan-release.outputs.target_sha }}
+
   build-release-apk:
     name: Build signed arm64-v8a release APK
-    needs: plan-release
+    needs: [plan-release, verify]
     if: needs.plan-release.outputs.should_build == 'true'
     runs-on: ubuntu-latest
 
@@ -170,28 +177,6 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Run reviewed contract suite
-        run: |
-          flutter analyze \
-            lib/features/reader_v2 \
-            lib/core/engine \
-            lib/core/network \
-            lib/core/services/source_switch_service.dart \
-            lib/core/services/source_switch_handoff.dart \
-            lib/core/local_book
-          flutter test \
-            test/core/engine/source_compatibility_test.dart \
-            test/core/engine/js/js_extensions_test.dart \
-            test/core/network/post_redirect_test.dart \
-            test/local_txt_test.dart \
-            test/core/services/source_switch_service_test.dart \
-            test/features/reader_v2/reader_v2_state_machine_test.dart \
-            test/features/reader_v2/reader_v2_runtime_operation_test.dart \
-            test/features/reader_v2/hybrid/hybrid_pump_test.dart \
-            test/features/reader_v2/reader_v2_chapter_gap_test.dart \
-            test/features/reader_v2/reader_v2_page_chrome_layout_test.dart \
-            test/features/reader_v2/reader_v2_settings_persistence_test.dart \
-            test/features/reader_v2/reader_v2_settings_sections_test.dart
       - name: Decode Android release keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

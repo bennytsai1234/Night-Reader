@@ -19,7 +19,7 @@ class JSContextGroup {
   /// or resolving WebAssembly compilations. By default, calling JSContextGroupCreate will use
   /// the run loop of the thread it was called on. Currently, there is no API to change a
   /// JSContextGroup's run loop once it has been created.
-  JSContextGroup.create() : this.pointer = JSContextRef.jSContextGroupCreate();
+  JSContextGroup.create() : pointer = JSContextRef.jSContextGroupCreate();
 
   /// Retains a JavaScript context group.
   /// [@result] (JSContextGroupRef) A JSContextGroup that is the same as group.

@@ -9,6 +9,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
+
 import 'source_manager_provider.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
@@ -22,15 +23,13 @@ class SourceGroupManagePage extends StatelessWidget {
         title: '書源分組管理',
         actions: [
           Consumer<SourceManagerProvider>(
-            builder:
-                (context, provider, _) => GlassIconButton(
-                  icon: Icons.add_rounded,
-                  tooltip: '新增分組',
-                  onPressed:
-                      provider.isMutationBusy
-                          ? null
-                          : () => _showEditDialog(context),
-                ),
+            builder: (context, provider, _) => GlassIconButton(
+              icon: Icons.add_rounded,
+              tooltip: '新增分組',
+              onPressed: provider.isMutationBusy
+                  ? null
+                  : () => _showEditDialog(context),
+            ),
           ),
         ],
       ),
@@ -41,9 +40,7 @@ class SourceGroupManagePage extends StatelessWidget {
 
           if (groups.isEmpty) {
             return Padding(
-              padding: EdgeInsets.only(
-                top: MediaQuery.paddingOf(context).top,
-              ),
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
               child: AppStateView(
                 icon: Icons.folder_outlined,
                 title: '尚未建立自訂分組',
@@ -51,8 +48,9 @@ class SourceGroupManagePage extends StatelessWidget {
                 primaryAction: AppStateAction(
                   label: '新增分組',
                   icon: Icons.add,
-                  onPressed:
-                      mutationEnabled ? () => _showEditDialog(context) : null,
+                  onPressed: mutationEnabled
+                      ? () => _showEditDialog(context)
+                      : null,
                 ),
               ),
             );
@@ -73,8 +71,8 @@ class SourceGroupManagePage extends StatelessWidget {
                             label: '分享',
                             icon: Icons.share_outlined,
                             color: AppTint.azurite.color,
-                            onPressed:
-                                () => _shareGroup(context, provider, group),
+                            onPressed: () =>
+                                _shareGroup(context, provider, group),
                           ),
                         ],
                         trailing: [
@@ -82,24 +80,23 @@ class SourceGroupManagePage extends StatelessWidget {
                             label: '重新命名',
                             icon: Icons.edit_outlined,
                             color: AppTint.tea.color,
-                            onPressed:
-                                () => _showEditDialog(context, oldName: group),
+                            onPressed: () =>
+                                _showEditDialog(context, oldName: group),
                           ),
                           SwipeAction(
                             label: '刪除',
                             icon: Icons.delete_outline_rounded,
                             color: context.danger,
                             destructive: true,
-                            onPressed:
-                                () => _confirmDelete(context, provider, group),
+                            onPressed: () =>
+                                _confirmDelete(context, provider, group),
                           ),
                         ],
                         child: _GroupRow(
                           group: group,
                           enabled: mutationEnabled,
-                          onMenu:
-                              (rowContext) =>
-                                  _showGroupMenu(rowContext, provider, group),
+                          onMenu: (rowContext) =>
+                              _showGroupMenu(rowContext, provider, group),
                         ),
                       ),
                   ],
@@ -159,9 +156,8 @@ class SourceGroupManagePage extends StatelessWidget {
     final urls = p.sourceUrlsInGroup(groupName);
 
     if (urls.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('該分組下無書源')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('該分組下無書源')));
       return;
     }
 
@@ -169,9 +165,8 @@ class SourceGroupManagePage extends StatelessWidget {
       await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('分享分組失敗：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('分享分組失敗：$error')));
       }
     }
   }
@@ -183,50 +178,48 @@ class SourceGroupManagePage extends StatelessWidget {
     await showStatefulAppAlert<void>(
       context: context,
       fieldTexts: [oldName ?? ''],
-      builder:
-          (dialogContext, setDialogState, fields) => AppAlert<bool>(
-            title: oldName == null ? '新增分組' : '重新命名分組',
-            onAction: (confirmed) async {
-              if (!confirmed) {
-                Navigator.pop(dialogContext);
-                return;
-              }
-              final name = fields.single.text.trim();
-              if (name.isEmpty) {
-                setDialogState(() => inputError = '請輸入分組名稱');
-                return;
-              }
-              Navigator.pop(dialogContext);
-              try {
-                if (oldName == null) {
-                  await provider.addGroup(name);
-                } else {
-                  await provider.renameGroup(oldName, name);
-                }
-              } catch (error) {
-                if (pageContext.mounted) {
-                  ScaffoldMessenger.of(pageContext).showSnackBar(
-                    SnackBar(content: Text('儲存分組失敗：$error')),
-                  );
-                }
-              }
-            },
-            content: AlertTextField(
-              controller: fields.single,
-              autofocus: true,
-              hintText: '輸入分組名稱',
-              errorText: inputError,
-              onChanged: (_) {
-                if (inputError != null) {
-                  setDialogState(() => inputError = null);
-                }
-              },
-            ),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '確定', value: true, isDefault: true),
-            ],
-          ),
+      builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
+        title: oldName == null ? '新增分組' : '重新命名分組',
+        onAction: (confirmed) async {
+          if (!confirmed) {
+            Navigator.pop(dialogContext);
+            return;
+          }
+          final name = fields.single.text.trim();
+          if (name.isEmpty) {
+            setDialogState(() => inputError = '請輸入分組名稱');
+            return;
+          }
+          Navigator.pop(dialogContext);
+          try {
+            if (oldName == null) {
+              await provider.addGroup(name);
+            } else {
+              await provider.renameGroup(oldName, name);
+            }
+          } catch (error) {
+            if (pageContext.mounted) {
+              ScaffoldMessenger.of(pageContext)
+                  .showSnackBar(SnackBar(content: Text('儲存分組失敗：$error')));
+            }
+          }
+        },
+        content: AlertTextField(
+          controller: fields.single,
+          autofocus: true,
+          hintText: '輸入分組名稱',
+          errorText: inputError,
+          onChanged: (_) {
+            if (inputError != null) {
+              setDialogState(() => inputError = null);
+            }
+          },
+        ),
+        actions: const [
+          AppAlertAction(label: '取消', value: false),
+          AppAlertAction(label: '確定', value: true, isDefault: true),
+        ],
+      ),
     );
   }
 
@@ -247,9 +240,8 @@ class SourceGroupManagePage extends StatelessWidget {
       await provider.deleteGroup(name);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
       }
     }
   }

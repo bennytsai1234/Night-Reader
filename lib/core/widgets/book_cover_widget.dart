@@ -31,10 +31,9 @@ class BookCoverWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveBorderRadius = borderRadius ?? AppRadius.cardXs;
     final trimmedAuthor = author?.trim();
-    final semanticLabel =
-        trimmedAuthor == null || trimmedAuthor.isEmpty
-            ? '《$bookName》封面'
-            : '《$bookName》封面，作者 $trimmedAuthor';
+    final semanticLabel = trimmedAuthor == null || trimmedAuthor.isEmpty
+        ? '《$bookName》封面'
+        : '《$bookName》封面，作者 $trimmedAuthor';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -71,9 +70,8 @@ class BookCoverWidget extends StatelessWidget {
               children: [
                 // 網格以 double.infinity 撐滿格子，解碼尺寸要用實際版面大小。
                 LayoutBuilder(
-                  builder:
-                      (context, constraints) =>
-                          _buildCover(context, constraints),
+                  builder: (context, constraints) =>
+                      _buildCover(context, constraints),
                 ),
                 // Book Spine and tactile lighting overlay
                 Positioned.fill(
@@ -170,10 +168,9 @@ class BookCoverWidget extends StatelessWidget {
     }
 
     if (source.startsWith('local://') || source.startsWith('file://')) {
-      final file =
-          source.startsWith('local://')
-              ? File(source.replaceFirst('local://', ''))
-              : File(Uri.parse(source).toFilePath());
+      final file = source.startsWith('local://')
+          ? File(source.replaceFirst('local://', ''))
+          : File(Uri.parse(source).toFilePath());
       return Image.file(
         file,
         fit: BoxFit.cover,
@@ -273,12 +270,12 @@ class BookCoverWidget extends StatelessWidget {
     double contrastRatio(Color foreground) {
       final lighter =
           foreground.computeLuminance() > background.computeLuminance()
-              ? foreground.computeLuminance()
-              : background.computeLuminance();
+          ? foreground.computeLuminance()
+          : background.computeLuminance();
       final darker =
           foreground.computeLuminance() > background.computeLuminance()
-              ? background.computeLuminance()
-              : foreground.computeLuminance();
+          ? background.computeLuminance()
+          : foreground.computeLuminance();
       return (lighter + 0.05) / (darker + 0.05);
     }
 

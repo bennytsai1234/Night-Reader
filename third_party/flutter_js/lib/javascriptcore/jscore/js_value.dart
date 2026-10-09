@@ -175,39 +175,39 @@ class JSValue {
 
   /// Creates a JavaScript value of the undefined type.
   JSValue.makeUndefined(this.context)
-      : this.pointer = JSValueRef.jSValueMakeUndefined(context.pointer);
+      : pointer = JSValueRef.jSValueMakeUndefined(context.pointer);
 
   /// Creates a JavaScript value of the null type.
   JSValue.makeNull(this.context)
-      : this.pointer = JSValueRef.jSValueMakeNull(context.pointer);
+      : pointer = JSValueRef.jSValueMakeNull(context.pointer);
 
   /// Creates a JavaScript value of the boolean type.
   /// [boolean] The bool to assign to the newly created JSValue.
   JSValue.makeBoolean(this.context, bool boolean)
-      : this.pointer = JSValueRef.jSValueMakeBoolean(
+      : pointer = JSValueRef.jSValueMakeBoolean(
             context.pointer, boolean == true ? 1 : 0);
 
   /// Creates a JavaScript value of the number type.
   /// [number] The double to assign to the newly created JSValue.
   JSValue.makeNumber(this.context, double number)
-      : this.pointer = JSValueRef.jSValueMakeNumber(context.pointer, number);
+      : pointer = JSValueRef.jSValueMakeNumber(context.pointer, number);
 
   /// Creates a JavaScript value of the string type.
   /// [string] The double to assign to the newly created JSValue.
   JSValue.makeString(this.context, String string)
-      : this.pointer = JSValueRef.jSValueMakeString(
+      : pointer = JSValueRef.jSValueMakeString(
             context.pointer, JSString.fromString(string).pointer);
 
   /// Creates a JavaScript value of the symbol type.
   /// [description] A description of the newly created symbol value.
   JSValue.makeSymbol(this.context, String description)
-      : this.pointer = JSValueRef.jSValueMakeSymbol(
+      : pointer = JSValueRef.jSValueMakeSymbol(
             context.pointer, JSString.fromString(description).pointer);
 
   /// Creates a JavaScript value from a JSON formatted string.
   /// [string] The JSString containing the JSON string to be parsed.
   JSValue.makeFromJSONString(this.context, String string)
-      : this.pointer = JSValueRef.jSValueMakeFromJSONString(
+      : pointer = JSValueRef.jSValueMakeFromJSONString(
             context.pointer, JSString.fromString(string).pointer);
 
   /// Value type
@@ -393,17 +393,17 @@ class JSValuePointer {
   final int count;
 
   JSValuePointer([Pointer? value])
-      : this.count = 1,
-        this.pointer = malloc.call<Pointer>(1) {
+      : count = 1,
+        pointer = malloc.call<Pointer>(1) {
     pointer.value = value ?? nullptr;
   }
 
   /// JSValueRef array
   JSValuePointer.array(List<JSValue> array)
-      : this.count = array.length,
-        this.pointer = malloc.call<Pointer>(array.length) {
+      : count = array.length,
+        pointer = malloc.call<Pointer>(array.length) {
     for (int i = 0; i < array.length; i++) {
-      this.pointer[i] = array[i].pointer;
+      pointer[i] = array[i].pointer;
     }
   }
 

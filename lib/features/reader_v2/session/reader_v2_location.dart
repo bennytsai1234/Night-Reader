@@ -78,18 +78,18 @@ class ReaderV2Location {
   }
 
   ReaderV2Location normalized({int? chapterCount, int? chapterLength}) {
-    final maxChapter =
-        chapterCount == null || chapterCount <= 0 ? null : chapterCount - 1;
-    final safeChapter =
-        maxChapter == null
-            ? (chapterIndex < 0 ? 0 : chapterIndex)
-            : chapterIndex.clamp(0, maxChapter).toInt();
-    final maxOffset =
-        chapterLength == null || chapterLength < 0 ? null : chapterLength;
-    final safeOffset =
-        maxOffset == null
-            ? (charOffset < 0 ? 0 : charOffset)
-            : charOffset.clamp(0, maxOffset).toInt();
+    final maxChapter = chapterCount == null || chapterCount <= 0
+        ? null
+        : chapterCount - 1;
+    final safeChapter = maxChapter == null
+        ? (chapterIndex < 0 ? 0 : chapterIndex)
+        : chapterIndex.clamp(0, maxChapter).toInt();
+    final maxOffset = chapterLength == null || chapterLength < 0
+        ? null
+        : chapterLength;
+    final safeOffset = maxOffset == null
+        ? (charOffset < 0 ? 0 : charOffset)
+        : charOffset.clamp(0, maxOffset).toInt();
     return ReaderV2Location(
       chapterIndex: safeChapter,
       charOffset: safeOffset,
@@ -167,14 +167,18 @@ class ReaderV2Location {
       chapterIndex: chapterIndex ?? this.chapterIndex,
       charOffset: charOffset ?? this.charOffset,
       visualOffsetPx: visualOffsetPx ?? this.visualOffsetPx,
-      contentHash: clearContentIdentity ? null : contentHash ?? this.contentHash,
+      contentHash: clearContentIdentity
+          ? null
+          : contentHash ?? this.contentHash,
       contentLength: clearContentIdentity
           ? null
           : contentLength ?? this.contentLength,
       anchorBefore: clearContentIdentity
           ? null
           : anchorBefore ?? this.anchorBefore,
-      anchorAfter: clearContentIdentity ? null : anchorAfter ?? this.anchorAfter,
+      anchorAfter: clearContentIdentity
+          ? null
+          : anchorAfter ?? this.anchorAfter,
     );
   }
 

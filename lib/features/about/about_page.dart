@@ -6,6 +6,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
 import 'update_check_runner.dart';
@@ -56,11 +57,10 @@ class _AboutPageState extends State<AboutPage> {
                 ),
                 title: 'GitHub 開源位址',
                 subtitle: 'github.com/bennytsai1234/Night-Reader',
-                onTap:
-                    () => launchExternalUrlWithFeedback(
-                      context,
-                      'https://github.com/bennytsai1234/Night-Reader',
-                    ),
+                onTap: () => launchExternalUrlWithFeedback(
+                  context,
+                  'https://github.com/bennytsai1234/Night-Reader',
+                ),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -68,12 +68,11 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.azurite,
                 ),
                 title: '開源許可證',
-                onTap:
-                    () => showLicensePage(
-                      context: context,
-                      applicationName: '夜讀',
-                      applicationVersion: '$_version ($_buildNumber)',
-                    ),
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: '夜讀',
+                  applicationVersion: '$_version ($_buildNumber)',
+                ),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -95,13 +94,12 @@ class _AboutPageState extends State<AboutPage> {
                 ),
                 title: '檢查更新',
                 value: _checkingUpdate ? '檢查中…' : 'v$_version',
-                trailing:
-                    _checkingUpdate
-                        ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : null,
+                trailing: _checkingUpdate
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : null,
                 showChevron: !_checkingUpdate,
                 onTap: _checkUpdate,
               ),
@@ -111,11 +109,10 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.rust,
                 ),
                 title: '崩潰日誌',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CrashLogPage()),
-                    ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CrashLogPage()),
+                ),
               ),
             ],
           ),
@@ -192,9 +189,8 @@ class _AboutPageState extends State<AboutPage> {
       UpdateCheckOutcome.notSupported => '目前平台不支援自動更新',
     };
     if (message != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }

@@ -132,14 +132,10 @@ class ReaderV2ChapterRepository {
       if (error.type == DioExceptionType.cancel) rethrow;
       final status = error.response?.statusCode;
       throw ReaderV2ContentUnavailableException(
-        status == null
-            ? '章節目錄載入失敗: 網路錯誤'
-            : '章節目錄載入失敗: 伺服器回應 $status',
+        status == null ? '章節目錄載入失敗: 網路錯誤' : '章節目錄載入失敗: 伺服器回應 $status',
       );
     } on AppException catch (error) {
-      throw ReaderV2ContentUnavailableException(
-        '章節目錄載入失敗: ${error.message}',
-      );
+      throw ReaderV2ContentUnavailableException('章節目錄載入失敗: ${error.message}');
     }
   }
 

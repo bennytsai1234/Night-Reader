@@ -74,8 +74,7 @@ final class ReaderParagraphLayout {
     required double? cellWidth,
   }) {
     if (indentChars <= 0) return 0.0;
-    final cell =
-        cellWidth != null && cellWidth.isFinite && cellWidth > 0
+    final cell = cellWidth != null && cellWidth.isFinite && cellWidth > 0
         ? cellWidth
         : fontSize;
     return indentChars.clamp(0, 8) * cell;
@@ -96,9 +95,7 @@ final class ReaderParagraphLayout {
     final unitWidth =
         textStyle.fontSize.abs() * 3 + textStyle.letterSpacing.abs() + 1;
     paragraph.layout(
-      ui.ParagraphConstraints(
-        width: math.max(1.0, text.length * unitWidth),
-      ),
+      ui.ParagraphConstraints(width: math.max(1.0, text.length * unitWidth)),
     );
 
     final result = <ShapedGrapheme>[];
@@ -172,8 +169,7 @@ final class ReaderParagraphLayout {
     final builder = ui.ParagraphBuilder(paragraphStyle)
       ..pushStyle(_textStyle(textStyle, textColor));
 
-    final indentCell =
-        cellWidth != null && cellWidth.isFinite && cellWidth > 0
+    final indentCell = cellWidth != null && cellWidth.isFinite && cellWidth > 0
         ? cellWidth
         : textStyle.fontSize;
     for (var i = 0; i < textMap.indentLength; i += 1) {
@@ -209,10 +205,7 @@ final class ReaderParagraphLayout {
     return builder.build();
   }
 
-  ui.TextStyle _textStyle(
-    HybridBlockTextStyle style,
-    ui.Color color,
-  ) {
+  ui.TextStyle _textStyle(HybridBlockTextStyle style, ui.Color color) {
     return ui.TextStyle(
       color: color,
       fontSize: style.fontSize,

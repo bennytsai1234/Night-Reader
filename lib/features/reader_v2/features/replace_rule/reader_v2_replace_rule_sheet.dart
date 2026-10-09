@@ -88,9 +88,8 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('更新替換規則設定失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('更新替換規則設定失敗：$error')));
     } finally {
       if (mounted) setState(() => _updatingToggle = false);
     }
@@ -114,9 +113,8 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       setState(() => _testResult = text);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('執行測試失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('執行測試失敗：$error')));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -238,21 +236,20 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               accent: true,
               showChevron: false,
               enabled: !_updatingToggle,
-              onTap:
-                  _updatingToggle
-                      ? null
-                      : () async {
-                        try {
-                          await widget.onReload();
-                          if (!mounted) return;
-                          Navigator.pop(context);
-                        } catch (error) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('重載內容失敗：$error')),
-                          );
-                        }
-                      },
+              onTap: _updatingToggle
+                  ? null
+                  : () async {
+                      try {
+                        await widget.onReload();
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                      } catch (error) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('重載內容失敗：$error')),
+                        );
+                      }
+                    },
             ),
           ],
         ),
@@ -265,10 +262,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               child: Text(
                 _testResult.isEmpty ? '測試結果會顯示在這裡' : _testResult,
                 style: AppTextStyles.bodySm.copyWith(
-                  color:
-                      _testResult.isEmpty
-                          ? AppChrome.of(context).sectionText
-                          : Theme.of(context).colorScheme.onSurface,
+                  color: _testResult.isEmpty
+                      ? AppChrome.of(context).sectionText
+                      : Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),

@@ -21,15 +21,14 @@ void main() {
             child: SizedBox(
               width: 300,
               child: StatefulBuilder(
-                builder:
-                    (context, setState) => GlassSegmented<int>(
-                      segments: segments,
-                      selected: selected,
-                      onChanged: (value) {
-                        changes.add(value);
-                        setState(() => selected = value);
-                      },
-                    ),
+                builder: (context, setState) => GlassSegmented<int>(
+                  segments: segments,
+                  selected: selected,
+                  onChanged: (value) {
+                    changes.add(value);
+                    setState(() => selected = value);
+                  },
+                ),
               ),
             ),
           ),
@@ -101,10 +100,7 @@ void main() {
     final changes = await pump(tester);
     final semantics = node(tester, '繁轉簡');
     expect(semantics, isSemantics(isButton: true, hasTapAction: true));
-    semantics.owner!.performAction(
-      semantics.id,
-      SemanticsAction.tap,
-    );
+    semantics.owner!.performAction(semantics.id, SemanticsAction.tap);
     await tester.pumpAndSettle();
     expect(changes, [2]);
     handle.dispose();

@@ -97,19 +97,17 @@ class SearchScope {
 
     // 分組模式
     final groups = _scope.split(',').where((s) => s.isNotEmpty).toList();
-    final allEnabled =
-        (await dao.getEnabled())
-            .where((source) => source.isSearchEnabledByRuntime)
-            .toList();
+    final allEnabled = (await dao.getEnabled())
+        .where((source) => source.isSearchEnabledByRuntime)
+        .toList();
     final result = <BookSource>[];
     final validGroups = <String>[];
 
     for (final group in groups) {
-      final matched =
-          allEnabled.where((s) {
-            final g = s.bookSourceGroup ?? '';
-            return g.split(',').map((e) => e.trim()).contains(group);
-          }).toList();
+      final matched = allEnabled.where((s) {
+        final g = s.bookSourceGroup ?? '';
+        return g.split(',').map((e) => e.trim()).contains(group);
+      }).toList();
       if (matched.isNotEmpty) {
         validGroups.add(group);
         result.addAll(matched);

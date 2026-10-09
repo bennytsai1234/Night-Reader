@@ -38,8 +38,9 @@ class AppStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final accent =
-        tone == AppStateTone.error ? scheme.error : scheme.onSurfaceVariant;
+    final accent = tone == AppStateTone.error
+        ? scheme.error
+        : scheme.onSurfaceVariant;
     final descriptionText = description?.trim();
 
     return LayoutBuilder(
@@ -96,10 +97,9 @@ class AppStateView extends StatelessWidget {
                             if (primaryAction != null)
                               _StateActionButton(
                                 action: primaryAction!,
-                                emphasis:
-                                    tone == AppStateTone.error
-                                        ? _ActionEmphasis.filled
-                                        : _ActionEmphasis.outlined,
+                                emphasis: tone == AppStateTone.error
+                                    ? _ActionEmphasis.filled
+                                    : _ActionEmphasis.outlined,
                               ),
                             if (secondaryAction != null)
                               _StateActionButton(
@@ -135,33 +135,33 @@ class _StateActionButton extends StatelessWidget {
       case _ActionEmphasis.filled:
         return action.icon == null
             ? FilledButton(
-              onPressed: action.onPressed,
-              child: Text(action.label),
-            )
+                onPressed: action.onPressed,
+                child: Text(action.label),
+              )
             : FilledButton.icon(
-              onPressed: action.onPressed,
-              icon: Icon(action.icon),
-              label: Text(action.label),
-            );
+                onPressed: action.onPressed,
+                icon: Icon(action.icon),
+                label: Text(action.label),
+              );
       case _ActionEmphasis.outlined:
         return action.icon == null
             ? OutlinedButton(
-              onPressed: action.onPressed,
-              child: Text(action.label),
-            )
+                onPressed: action.onPressed,
+                child: Text(action.label),
+              )
             : OutlinedButton.icon(
-              onPressed: action.onPressed,
-              icon: Icon(action.icon),
-              label: Text(action.label),
-            );
+                onPressed: action.onPressed,
+                icon: Icon(action.icon),
+                label: Text(action.label),
+              );
       case _ActionEmphasis.text:
         return action.icon == null
             ? TextButton(onPressed: action.onPressed, child: Text(action.label))
             : TextButton.icon(
-              onPressed: action.onPressed,
-              icon: Icon(action.icon),
-              label: Text(action.label),
-            );
+                onPressed: action.onPressed,
+                icon: Icon(action.icon),
+                label: Text(action.label),
+              );
     }
   }
 }

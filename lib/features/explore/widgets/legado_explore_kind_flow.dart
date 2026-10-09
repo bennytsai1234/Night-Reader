@@ -68,12 +68,10 @@ class _RenderLegadoExploreKindFlow extends RenderBox
           _LegadoExploreKindParentData
         > {
   _RenderLegadoExploreKindFlow({
-    required List<FlexChildStyle> styles,
-    required double horizontalSpacing,
-    required double verticalSpacing,
-  }) : _styles = styles,
-       _horizontalSpacing = horizontalSpacing,
-       _verticalSpacing = verticalSpacing;
+    required this._styles,
+    required this._horizontalSpacing,
+    required this._verticalSpacing,
+  });
 
   List<FlexChildStyle> _styles;
   double _horizontalSpacing;
@@ -251,13 +249,13 @@ class _RenderLegadoExploreKindFlow extends RenderBox
           item.style.layoutFlexBasisPercent >= 0 ||
           item.style.layoutFlexGrow > 0 ||
           remainingWidth < 0;
-      final childConstraints =
-          shouldConstrainWidth
-              ? BoxConstraints.tightFor(width: item.allocatedWidth)
-              : BoxConstraints(maxWidth: item.allocatedWidth);
+      final childConstraints = shouldConstrainWidth
+          ? BoxConstraints.tightFor(width: item.allocatedWidth)
+          : BoxConstraints(maxWidth: item.allocatedWidth);
       item.child.layout(childConstraints, parentUsesSize: true);
-      item.actualWidth =
-          shouldConstrainWidth ? item.allocatedWidth : item.child.size.width;
+      item.actualWidth = shouldConstrainWidth
+          ? item.allocatedWidth
+          : item.child.size.width;
       item.actualHeight = item.child.size.height;
       rowHeight = math.max(rowHeight, item.actualHeight);
     }

@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'association_base.dart';
+
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
@@ -75,15 +77,12 @@ mixin AssociationDialogHelper on AssociationBase {
     try {
       switch (kind) {
         case _ImportKind.bookSource:
-          final count =
-              isFile
-                  ? await SourceImportService().importFromJson(jsonData!)
-                  : await SourceImportService().importFromUrl(src);
+          final count = isFile
+              ? await SourceImportService().importFromJson(jsonData!)
+              : await SourceImportService().importFromUrl(src);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源'),
-            ),
+            SnackBar(content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源')),
           );
         case _ImportKind.bookshelf:
           if (isFile) {
@@ -94,7 +93,10 @@ mixin AssociationDialogHelper on AssociationBase {
             await context.read<BookshelfProvider>().loadBooks();
             if (!context.mounted) return;
             final total =
-                result.books + result.chapters + result.sources + result.contents;
+                result.books +
+                result.chapters +
+                result.sources +
+                result.contents;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -107,15 +109,13 @@ mixin AssociationDialogHelper on AssociationBase {
           } else {
             await context.read<BookshelfProvider>().importBookshelfFromUrl(src);
             if (!context.mounted) return;
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('書架匯入完成')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('書架匯入完成')));
           }
         case _ImportKind.replaceRule:
-          final text =
-              isFile
-                  ? jsonData!
-                  : await SourceImportService().fetchImportTextFromUrl(src);
+          final text = isFile
+              ? jsonData!
+              : await SourceImportService().fetchImportTextFromUrl(src);
           final count = await _importReplaceRules(text);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -126,9 +126,8 @@ mixin AssociationDialogHelper on AssociationBase {
       }
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$label失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$label失敗：$error')));
     }
   }
 

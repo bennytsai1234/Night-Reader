@@ -83,8 +83,7 @@ final class LayoutEpoch {
   int get hashCode => Object.hash(value, contentGeneration);
 
   @override
-  String toString() =>
-      'LayoutEpoch(layout=$value, content=$contentGeneration)';
+  String toString() => 'LayoutEpoch(layout=$value, content=$contentGeneration)';
 }
 
 final class StyleFingerprint {
@@ -461,9 +460,7 @@ final class ParagraphTextMap {
     required this.sourceLength,
     required this.indentLength,
     List<int> visualLineBreakOffsets = const <int>[],
-  }) : visualLineBreakOffsets = List<int>.unmodifiable(
-         visualLineBreakOffsets,
-       ) {
+  }) : visualLineBreakOffsets = List<int>.unmodifiable(visualLineBreakOffsets) {
     var previous = 0;
     for (final offset in this.visualLineBreakOffsets) {
       if (offset <= previous || offset >= sourceLength) {

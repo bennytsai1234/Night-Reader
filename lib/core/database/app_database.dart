@@ -1,8 +1,10 @@
 import 'dart:io' hide Cookie;
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
 import 'tables/app_tables.dart';
 // model imports required by app_database.g.dart (part shares this namespace)
 import '../models/book.dart';
@@ -92,7 +94,7 @@ class AppDatabase extends _$AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
   factory AppDatabase() => _instance;
   AppDatabase._internal() : super(_openConnection());
-  AppDatabase.forTesting(QueryExecutor executor) : super(executor);
+  AppDatabase.forTesting(super.executor);
 
   @override
   int get schemaVersion => 3;

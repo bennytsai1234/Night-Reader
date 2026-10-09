@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -9,13 +10,12 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 
-typedef ExploreBookLoader =
-    Future<List<SearchBook>> Function(
-      BookSource source,
-      String exploreUrl, {
-      int? page,
-      CancelToken? cancelToken,
-    });
+typedef ExploreBookLoader = Future<List<SearchBook>> Function(
+  BookSource source,
+  String exploreUrl, {
+  int? page,
+  CancelToken? cancelToken,
+});
 
 /// ExploreShowProvider - 探索結果列表的狀態管理
 /// (對標 Android ExploreShowViewModel)

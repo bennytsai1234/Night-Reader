@@ -36,8 +36,9 @@ class LenientCookieManager extends Interceptor {
   ) async {
     try {
       final cookies = await loadCookies(options);
-      options.headers[HttpHeaders.cookieHeader] =
-          cookies.isNotEmpty ? cookies : null;
+      options.headers[HttpHeaders.cookieHeader] = cookies.isNotEmpty
+          ? cookies
+          : null;
       handler.next(options);
     } catch (e, s) {
       handler.reject(
@@ -137,14 +138,13 @@ class LenientCookieManager extends Interceptor {
       return;
     }
 
-    final cookies =
-        setCookies
-            .map((str) => str.split(_setCookieReg))
-            .expand((cookie) => cookie)
-            .where((cookie) => cookie.isNotEmpty)
-            .map((str) => _fromSetCookieValue(str))
-            .whereType<Cookie>()
-            .toList();
+    final cookies = setCookies
+        .map((str) => str.split(_setCookieReg))
+        .expand((cookie) => cookie)
+        .where((cookie) => cookie.isNotEmpty)
+        .map((str) => _fromSetCookieValue(str))
+        .whereType<Cookie>()
+        .toList();
 
     final originalUri = response.requestOptions.uri;
     final realUri = originalUri.resolveUri(response.realUri);
@@ -232,7 +232,9 @@ bool _isSessionSentinelDirective(String segment) {
   }
 
   final rawValue = segment.substring(separatorIndex + 1).trim();
-  final normalizedValue =
-      rawValue.replaceAll(RegExp("^[\"']+|[\"']+\$"), '').trim().toLowerCase();
+  final normalizedValue = rawValue
+      .replaceAll(RegExp("^[\"']+|[\"']+\$"), '')
+      .trim()
+      .toLowerCase();
   return normalizedValue == 'session';
 }

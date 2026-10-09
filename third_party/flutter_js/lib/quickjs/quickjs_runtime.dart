@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -33,10 +34,10 @@ Pointer<JSValueConst> bridgeCallbackGlobalHandler(
       result = mapJsBridge[channelNameStr]!.call(jsonDecode(messageStr));
     } on Error catch (e) {
       result = e.toString();
-      print('ERROR ------ $e');
+      debugPrint('ERROR ------ $e');
     } on Exception catch (e) {
       result = e.toString();
-      print('EXCEPTION ------ $e');
+      debugPrint('EXCEPTION ------ $e');
     }
     if (result == null) {
       Pointer<JSValueConst> nullValue = calloc();
@@ -104,42 +105,44 @@ class QuickJsRuntime extends JavascriptRuntime {
       .asFunction();
 
   // NATIVE BRIDGE DECLARATIONS
-  static JSEvalWrapper _jsEvalWrapper = qjsDynamicLibrary
+  static final JSEvalWrapper _jsEvalWrapper = qjsDynamicLibrary
       .lookupFunction<JSEvalWrapperNative, JSEvalWrapper>('JSEvalWrapper');
 
-  static JS_NewRuntimeDartBridge _jsNewRuntimeDartBridge = qjsDynamicLibrary
-      .lookup<NativeFunction<JS_NewRuntimeDartBridge>>(
-        'JS_NewRuntimeDartBridge',
-      )
-      .asFunction();
-  static JS_NewContextFn _jsNewContext = qjsDynamicLibrary
+  static final JS_NewRuntimeDartBridge _jsNewRuntimeDartBridge =
+      qjsDynamicLibrary
+          .lookup<NativeFunction<JS_NewRuntimeDartBridge>>(
+            'JS_NewRuntimeDartBridge',
+          )
+          .asFunction();
+  static final JS_NewContextFn _jsNewContext = qjsDynamicLibrary
       .lookup<NativeFunction<JS_NewContextFn>>('JS_NewContextDartBridge')
       .asFunction();
 
-  static JS_GetNullValue _jsGetNullValue = qjsDynamicLibrary
+  static final JS_GetNullValue _jsGetNullValue = qjsDynamicLibrary
       .lookup<NativeFunction<JS_GetNullValue>>('JS_GetNullValue')
       .asFunction();
 
-  static JSExecutePendingJob _jsExecutePendingJob = qjsDynamicLibrary
+  static final JSExecutePendingJob _jsExecutePendingJob = qjsDynamicLibrary
       .lookupFunction<JSExecutePendingJobNative, JSExecutePendingJob>(
     'JS_ExecutePendingJob',
   );
 
-  static JSCallFunction1Arg _callJsFunction1Arg = qjsDynamicLibrary
+  static final JSCallFunction1Arg _callJsFunction1Arg = qjsDynamicLibrary
       .lookupFunction<JSCallFunction1ArgNative, JSCallFunction1Arg>(
           'callJsFunction1Arg');
 
-  static JSGetTypeTag _jsGetTypeTag = qjsDynamicLibrary
+  static final JSGetTypeTag _jsGetTypeTag = qjsDynamicLibrary
       .lookupFunction<JSGetTypeTagNative, JSGetTypeTag>('getTypeTag');
 
-  static JSIsArray _jsIsArray = qjsDynamicLibrary
+  static final JSIsArray _jsIsArray = qjsDynamicLibrary
       .lookupFunction<JSIsArrayNative, JSIsArray>('JS_IsArrayDartWrapper');
 
-  static JSJSONStringify _jSJSONStringify =
+  static final JSJSONStringify _jSJSONStringify =
       qjsDynamicLibrary.lookupFunction<JSJSONStringifyNative, JSJSONStringify>(
           'JS_JSONStringifyDartWrapper');
   // END NATIVE BRIDGE DECLARATIONS
 
+  @override
   JsEvalResult callFunction(
     Pointer function,
     Pointer argument,
@@ -188,6 +191,7 @@ class QuickJsRuntime extends JavascriptRuntime {
     }
   }
 
+  @override
   JsEvalResult evaluate(String js, {String? sourceUrl}) {
     return jsEval(_context, js);
   }
@@ -278,7 +282,8 @@ class QuickJsRuntime extends JavascriptRuntime {
         }
         sendMessage
       """);
-    print('RESULT creating sendMessage function: $sendMessageCreateFnResult');
+    debugPrint(
+        'RESULT creating sendMessage function: $sendMessageCreateFnResult');
   }
 
   @override

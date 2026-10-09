@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/keyboard_assist.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -11,13 +12,15 @@ class KeyboardAssistDao extends DatabaseAccessor<AppDatabase>
   KeyboardAssistDao(super.db);
 
   Future<List<KeyboardAssist>> getAll() {
-    return (select(keyboardAssists)
-      ..orderBy([(t) => OrderingTerm(expression: t.serialNo)])).get();
+    return (select(
+      keyboardAssists,
+    )..orderBy([(t) => OrderingTerm(expression: t.serialNo)])).get();
   }
 
   Stream<List<KeyboardAssist>> watchAll() {
-    return (select(keyboardAssists)
-      ..orderBy([(t) => OrderingTerm(expression: t.serialNo)])).watch();
+    return (select(
+      keyboardAssists,
+    )..orderBy([(t) => OrderingTerm(expression: t.serialNo)])).watch();
   }
 
   Future<void> upsert(KeyboardAssist assist) => into(

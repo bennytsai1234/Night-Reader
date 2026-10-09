@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:night_reader/core/models/base_source.dart';
 
 /// ConcurrentRecord - 並發記錄

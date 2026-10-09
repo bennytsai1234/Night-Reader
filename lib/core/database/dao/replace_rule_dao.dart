@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/replace_rule.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -11,13 +12,15 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
   ReplaceRuleDao(super.db);
 
   Future<List<ReplaceRule>> getAll() {
-    return (select(replaceRules)
-      ..orderBy([(t) => OrderingTerm(expression: t.order)])).get();
+    return (select(
+      replaceRules,
+    )..orderBy([(t) => OrderingTerm(expression: t.order)])).get();
   }
 
   Stream<List<ReplaceRule>> watchAll() {
-    return (select(replaceRules)
-      ..orderBy([(t) => OrderingTerm(expression: t.order)])).watch();
+    return (select(
+      replaceRules,
+    )..orderBy([(t) => OrderingTerm(expression: t.order)])).watch();
   }
 
   Future<void> upsert(ReplaceRule rule) =>
@@ -62,15 +65,15 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> updateEnabled(int id, bool enabled) {
-    return (update(replaceRules)..where(
-      (t) => t.id.equals(id),
-    )).write(ReplaceRulesCompanion(isEnabled: Value(enabled)));
+    return (update(replaceRules)..where((t) => t.id.equals(id))).write(
+      ReplaceRulesCompanion(isEnabled: Value(enabled)),
+    );
   }
 
   Future<void> updateOrder(int id, int order) {
-    return (update(replaceRules)..where(
-      (t) => t.id.equals(id),
-    )).write(ReplaceRulesCompanion(order: Value(order)));
+    return (update(replaceRules)..where((t) => t.id.equals(id))).write(
+      ReplaceRulesCompanion(order: Value(order)),
+    );
   }
 
   Future<List<ReplaceRule>> _getEnabledScoped({
@@ -78,9 +81,8 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
     required String origin,
     required String scopePredicateSql,
   }) async {
-    final rows =
-        await customSelect(
-          '''
+    final rows = await customSelect(
+      '''
       SELECT * FROM replace_rules
       WHERE isEnabled = 1
         AND $scopePredicateSql
@@ -99,18 +101,18 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
         )
       ORDER BY "order" ASC
       ''',
-          variables: [
-            Variable.withString(name),
-            Variable.withString(name),
-            Variable.withString(origin),
-            Variable.withString(origin),
-            Variable.withString(name),
-            Variable.withString(name),
-            Variable.withString(origin),
-            Variable.withString(origin),
-          ],
-          readsFrom: {replaceRules},
-        ).get();
+      variables: [
+        Variable.withString(name),
+        Variable.withString(name),
+        Variable.withString(origin),
+        Variable.withString(origin),
+        Variable.withString(name),
+        Variable.withString(name),
+        Variable.withString(origin),
+        Variable.withString(origin),
+      ],
+      readsFrom: {replaceRules},
+    ).get();
     return Future.wait(rows.map((row) => replaceRules.mapFromRow(row)));
   }
 

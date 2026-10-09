@@ -401,9 +401,8 @@ String _normalizePairedSingleQuotes(String input) {
           quote: 0x27,
           openReplacement: '『',
           closeReplacement: '』',
-          skipAt:
-              (runes, index) =>
-                  _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
+          skipAt: (runes, index) =>
+              _isLatinLetterOrDigit(index > 0 ? runes[index - 1] : null),
         ),
       )
       .join('\n');
@@ -709,9 +708,8 @@ class ReaderV2ContentTransformer {
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
     final rawContent = args['rawContent'] as String? ?? '';
-    final rulesJson =
-        (args['rulesJson'] as List<dynamic>? ?? const [])
-            .cast<Map<String, dynamic>>();
+    final rulesJson = (args['rulesJson'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
     final rules =
@@ -772,9 +770,8 @@ class ReaderV2ContentTransformer {
     final effectiveRules = <ReplaceRule>[];
 
     final nameRegex = RegExp.escape(bookName);
-    final titleRegex = RegExp.escape(
-      chapterTitle,
-    ).replaceAll(AppPattern.spaceRegex, r'\s*');
+    final titleRegex = RegExp.escape(chapterTitle)
+        .replaceAll(AppPattern.spaceRegex, r'\s*');
     final duplicateTitlePattern = _getOrCreateRegex(
       '^(\\s|\\p{P}|$nameRegex)*$titleRegex'
       '$_duplicateTitleBoundary(\\s)*',
@@ -791,9 +788,8 @@ class ReaderV2ContentTransformer {
         useReplaceRules: true,
       );
       if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
-        final displayTitleRegex = RegExp.escape(
-          displayTitle,
-        ).replaceAll(AppPattern.spaceRegex, r'\s*');
+        final displayTitleRegex = RegExp.escape(displayTitle)
+            .replaceAll(AppPattern.spaceRegex, r'\s*');
         final displayDuplicateTitlePattern = _getOrCreateRegex(
           '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex'
           '$_duplicateTitleBoundary(\\s)*',
@@ -860,8 +856,10 @@ class ReaderV2ContentTransformer {
         .replaceAll(RegExp(r'\r\n?'), '\n')
         .replaceAll(RegExp(r'\n{2,}'), '\n')
         .replaceAll(RegExp(r'[ \t]+\n'), '\n');
-    final nonEmptyLines =
-        normalized.split('\n').where((line) => line.trim().isNotEmpty).length;
+    final nonEmptyLines = normalized
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .length;
     if (nonEmptyLines > 1 || normalized.trim().length < 180) {
       return normalized;
     }

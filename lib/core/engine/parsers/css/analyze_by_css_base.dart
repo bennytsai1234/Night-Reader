@@ -39,12 +39,11 @@ abstract class AnalyzeByCssBase {
       return html_parser.parse(html).documentElement!;
     }
     final fragment = html_parser.parseFragment(html);
-    final meaningfulNodes =
-        fragment.nodes.where((node) {
-          if (node is Element) return true;
-          final text = node.text?.trim() ?? '';
-          return text.isNotEmpty;
-        }).toList();
+    final meaningfulNodes = fragment.nodes.where((node) {
+      if (node is Element) return true;
+      final text = node.text?.trim() ?? '';
+      return text.isNotEmpty;
+    }).toList();
     if (meaningfulNodes.length == 1 && meaningfulNodes.first is Element) {
       return meaningfulNodes.first as Element;
     }

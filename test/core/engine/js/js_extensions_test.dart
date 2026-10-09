@@ -134,25 +134,22 @@ void main() {
       expect(result.stringResult, 'bridge-value');
     });
 
-    test(
-      'string match with string regex patterns behaves like legacy sources expect',
-      () {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
+    test('string match with string regex patterns behaves like legacy sources expect', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
 
-        final result = runtime!.evaluate(r'''
+      final result = runtime!.evaluate(r'''
         var input = 'd918eac({"id":"164"})';
         var matched = input.match('918eac\\((.*)\\)');
         matched ? matched[1] : '';
       ''');
 
-        expect(result.stringResult, '{"id":"164"}');
-      },
-    );
+      expect(result.stringResult, '{"id":"164"}');
+    });
 
     test('cookie and cache bridges are exposed', () {
       if (runtime == null) {
@@ -255,10 +252,10 @@ void main() {
       final root = await Directory.systemTemp.createTemp(
         'night_reader_js_archive_',
       );
-      final documents =
-          await Directory(p.join(root.path, 'documents')).create();
-      final temporary =
-          await Directory(p.join(root.path, 'temporary')).create();
+      final documents = await Directory(p.join(root.path, 'documents'))
+          .create();
+      final temporary = await Directory(p.join(root.path, 'temporary'))
+          .create();
       final previousPathProvider = PathProviderPlatform.instance;
       PathProviderPlatform.instance = _FakePathProvider(
         temporaryPath: temporary.path,
@@ -269,14 +266,12 @@ void main() {
         if (await root.exists()) await root.delete(recursive: true);
       });
 
-      final archive =
-          Archive()
-            ..addFile(ArchiveFile.string('safe.txt', 'safe'))
-            ..addFile(ArchiveFile.string('../../escape.txt', 'escape'));
+      final archive = Archive()
+        ..addFile(ArchiveFile.string('safe.txt', 'safe'))
+        ..addFile(ArchiveFile.string('../../escape.txt', 'escape'));
       final zipBytes = ZipEncoder().encode(archive);
-      await File(
-        p.join(documents.path, 'archive.zip'),
-      ).writeAsBytes(zipBytes, flush: true);
+      await File(p.join(documents.path, 'archive.zip'))
+          .writeAsBytes(zipBytes, flush: true);
 
       final ext = JsExtensions(runtime!);
       ext.inject();
@@ -292,9 +287,8 @@ void main() {
 
       final relativeOutputPath = (await future).toString();
       expect(
-        await File(
-          p.join(temporary.path, relativeOutputPath, 'safe.txt'),
-        ).readAsString(),
+        await File(p.join(temporary.path, relativeOutputPath, 'safe.txt'))
+            .readAsString(),
         'safe',
       );
       expect(
@@ -764,17 +758,15 @@ void main() {
       },
     );
 
-    test(
-      'JavaImporter shim supports javax crypto, Arrays.copyOfRange, and digestHex',
-      () {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
+    test('JavaImporter shim supports javax crypto, Arrays.copyOfRange, and digestHex', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
 
-        final result = runtime!.evaluate(r'''
+      final result = runtime!.evaluate(r'''
         var javaImport = new JavaImporter();
         javaImport.importPackage(
           Packages.java.lang,
@@ -801,9 +793,8 @@ void main() {
         }
       ''');
 
-        expect(result.stringResult, '123|255|64|hello');
-      },
-    );
+      expect(result.stringResult, '123|255|64|hello');
+    });
 
     test(
       'Cipher.doFinal decrypts large byte arrays without corrupting payloads',
@@ -855,17 +846,15 @@ void main() {
       },
     );
 
-    test(
-      'Cipher.doFinal matches createSymmetricCrypto for signed byte key material',
-      () {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
+    test('Cipher.doFinal matches createSymmetricCrypto for signed byte key material', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
 
-        final result = runtime!.evaluate(r'''
+      final result = runtime!.evaluate(r'''
         function intToByte(i) {
           var b = i & 0xFF;
           if (b >= 128) {
@@ -909,9 +898,8 @@ void main() {
         }
       ''');
 
-        expect(result.stringResult, '{"book":[{"title":"深空彼岸"}],"ok":true}');
-      },
-    );
+      expect(result.stringResult, '{"book":[{"title":"深空彼岸"}],"ok":true}');
+    });
 
     test('java.toNumChapter matches Legado chapter numbering helper', () {
       if (runtime == null) {

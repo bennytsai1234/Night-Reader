@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'download_base.dart';
+
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -72,10 +74,7 @@ mixin DownloadScheduler on DownloadBase {
   /// the decision to resume a task the user paused or retry a failed task.
   ///
   /// Returns true only when a new waiting task was actually admitted.
-  Future<bool> ensureDownloadTask(
-    Book book,
-    List<BookChapter> chapters,
-  ) {
+  Future<bool> ensureDownloadTask(Book book, List<BookChapter> chapters) {
     return _admitDownloadTask(
       book,
       chapters,
@@ -146,12 +145,9 @@ mixin DownloadScheduler on DownloadBase {
       isDownloading = true;
       update();
       while (tasks.any((t) => t.isWaiting || t.isDownloading)) {
-        final activeTasks =
-            tasks
-                .where(
-                  (t) => t.isDownloading || activeTaskUrls.contains(t.bookUrl),
-                )
-                .toList();
+        final activeTasks = tasks
+            .where((t) => t.isDownloading || activeTaskUrls.contains(t.bookUrl))
+            .toList();
         if (activeTasks.length < maxConcurrent) {
           final nextTask = tasks.cast<DownloadTask?>().firstWhere((t) {
             if (t == null || !t.isWaiting) return false;
@@ -173,6 +169,5 @@ mixin DownloadScheduler on DownloadBase {
     }
   }
 }
-
 
 enum _DownloadTaskAdmissionIntent { userRequested, backgroundEnsure }
