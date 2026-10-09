@@ -44,6 +44,10 @@ enum _SourceAction { edit, top, search, refresh, delete }
 class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
+  final Map<String, GlobalKey> _kindsKeys = <String, GlobalKey>{};
+
+  /// 直接展開下一個書源時，上方被收合的書源；它這一幀立即收合，不播動畫。
+  String? _snapCollapseUrl;
 
   /// Scaffold 內容區的系統內距（含玻璃頁首與底部浮動分頁列）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
@@ -217,6 +221,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           builder: (rowContext) => InkWell(
             key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
             onTap: () {
+              if (!isExpanded) _collapseExpandedAbove(provider, index);
               provider.toggleExpand(index);
               if (!isExpanded) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,28 +237,33 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
             ),
           ),
         ),
-        AnimatedSize(
-          duration: AppMotion.menu,
-          curve: AppMotion.menuCurve,
-          alignment: Alignment.topCenter,
-          child: isExpanded && !provider.isLoadingKinds
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppGrouped.rowPadding,
-                    0,
-                    AppGrouped.rowPadding,
-                    AppSpacing.lg,
-                  ),
-                  child: provider.expandedKinds.isEmpty
-                      ? Text(
-                          '暫無分類',
-                          style: AppTextStyles.bodySm.copyWith(
-                            color: AppChrome.of(context).sectionText,
-                          ),
-                        )
-                      : _buildKindTags(provider, source),
-                )
-              : const SizedBox(width: double.infinity),
+        KeyedSubtree(
+          key: _kindsKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
+          child: AnimatedSize(
+            // 換 key 讓它以收合後的大小重建，不播收合動畫。
+            key: ValueKey(source.bookSourceUrl == _snapCollapseUrl),
+            duration: AppMotion.menu,
+            curve: AppMotion.menuCurve,
+            alignment: Alignment.topCenter,
+            child: isExpanded && !provider.isLoadingKinds
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppGrouped.rowPadding,
+                      0,
+                      AppGrouped.rowPadding,
+                      AppSpacing.lg,
+                    ),
+                    child: provider.expandedKinds.isEmpty
+                        ? Text(
+                            '暫無分類',
+                            style: AppTextStyles.bodySm.copyWith(
+                              color: AppChrome.of(context).sectionText,
+                            ),
+                          )
+                        : _buildKindTags(provider, source),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ),
       ],
     );
@@ -417,6 +427,30 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
     }
+  }
+
+  /// 不先收起就展開 [index] 時，若展開中的書源在它上方，該書源的分類區
+  /// 會收掉、把下面整段往上拉。這裡讓它立即收合並同步扣掉捲動位置，
+  /// 被點的書源留在原處；之後的 [_ensureSourceVisible] 才量得到正確位置。
+  void _collapseExpandedAbove(ExploreProvider provider, int index) {
+    final previous = provider.expandedIndex;
+    if (previous < 0 || previous >= index) return;
+    final previousUrl = provider.sources[previous].bookSourceUrl;
+    final collapsing =
+        _kindsKeys[previousUrl]?.currentContext?.size?.height ?? 0;
+    if (collapsing <= 0 || !_scrollController.hasClients) return;
+
+    _snapCollapseUrl = previousUrl;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _snapCollapseUrl = null;
+    });
+    final position = _scrollController.position;
+    _scrollController.jumpTo(
+      (position.pixels - collapsing).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
   }
 
   Future<void> _ensureSourceVisible(String sourceUrl) async {
