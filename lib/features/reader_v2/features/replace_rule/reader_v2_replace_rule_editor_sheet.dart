@@ -114,7 +114,8 @@ class _ReaderV2ReplaceRuleEditorSheetState
       id: widget.rule?.id ?? 0,
       name: _nameCtrl.text.trim(),
       group: _groupCtrl.text.trim(),
-      pattern: _patternCtrl.text.trim(),
+      // 與規則調試用同一個字串；前後空白是替換內容的一部分。
+      pattern: _patternCtrl.text,
       replacement: _replacementCtrl.text,
       scope: _scopeCtrl.text.trim(),
       excludeScope: _excludeScopeCtrl.text.trim(),

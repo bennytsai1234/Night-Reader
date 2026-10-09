@@ -35,6 +35,23 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- 書源網站的匯入連結（AssociationHandlerService / app_links）。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="legado"/>
+                <data android:scheme="yuedu"/>
+            </intent-filter>
+            <!-- 從其他 App 分享書源 JSON 或書籍檔（receive_sharing_intent）。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/json"/>
+                <data android:mimeType="text/plain"/>
+                <data android:mimeType="application/epub+zip"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

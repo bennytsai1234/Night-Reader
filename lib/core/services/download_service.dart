@@ -117,11 +117,7 @@ class DownloadService extends DownloadBase
     );
     if (task == null) return;
 
-    if (isPaused) {
-      isPaused = false;
-      pauseCompleter?.complete();
-      pauseCompleter = null;
-    }
+    // 只恢復這一本；「暫停全部」仍生效時它排隊等待，要等恢復全部才會開始。
     task.status = DownloadTask.statusWaiting;
     downloadDao.updateProgress(bookUrl, status: DownloadTask.statusWaiting);
     update();
@@ -135,7 +131,8 @@ class DownloadService extends DownloadBase
       (t) => t?.bookUrl == bookUrl,
       orElse: () => null,
     );
-    if (task == null) return;
+    // 下載中或排隊中的任務不能重試：那一輪還在跑，歸零計數會把失敗章節當成完成。
+    if (task == null || task.isDownloading || task.isWaiting) return;
 
     task
       ..status = DownloadTask.statusWaiting

@@ -55,7 +55,8 @@ class ReplaceEditForm extends StatelessWidget {
               controller: patternCtrl,
               maxLines: 3,
               style: mono,
-              validator: (v) => v!.trim().isEmpty ? '正則內容不能為空' : null,
+              // 不 trim：只有空白（含全形空格）的規則也是合法的替換內容。
+              validator: (v) => v!.isEmpty ? '正則內容不能為空' : null,
             ),
           ],
         ),

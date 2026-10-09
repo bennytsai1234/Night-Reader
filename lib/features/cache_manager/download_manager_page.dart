@@ -87,9 +87,21 @@ class DownloadManagerPage extends StatelessWidget {
     DownloadService service,
     List<DownloadTask> tasks,
   ) {
-    final waiting = tasks.where((task) => task.isWaiting).length;
-    final running = tasks.where((task) => task.isDownloading).length;
-    final paused = tasks.where((task) => task.isPaused).length;
+    // 「暫停全部」時進行中與等待中的任務都算暫停。
+    final globallyPaused = service.isPaused;
+    final waiting = globallyPaused
+        ? 0
+        : tasks.where((task) => task.isWaiting).length;
+    final running = globallyPaused
+        ? 0
+        : tasks.where((task) => task.isDownloading).length;
+    final paused = tasks
+        .where(
+          (task) =>
+              task.isPaused ||
+              (globallyPaused && (task.isWaiting || task.isDownloading)),
+        )
+        .length;
     final failed = tasks.where((task) => task.hasFailures).length;
     final latestUpdate = tasks.fold<int>(
       0,
@@ -158,11 +170,17 @@ class DownloadManagerPage extends StatelessWidget {
         : rawProgress > 1
         ? 1.0
         : rawProgress;
-    final canRetry = task.isFailed || task.errorCount > 0;
+    final active = task.isDownloading || task.isWaiting;
+    // 下載中有章節失敗時照樣可以暫停；停下來之後才換成重試。
+    final canRetry = task.isFailed || (task.errorCount > 0 && !active);
+    // 「暫停全部」時進行中的任務其實停著，單本的暫停／繼續交給頁首的恢復全部。
+    final globallyPaused = service.isPaused && active;
     final failureSummary = task.failureSummary;
 
     Widget? control;
-    if (canRetry) {
+    if (globallyPaused) {
+      control = null;
+    } else if (canRetry) {
       control = _TaskControlButton(
         icon: Icons.refresh_rounded,
         tooltip: '重試',
@@ -220,16 +238,20 @@ class DownloadManagerPage extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            _statusText(task),
+                            _statusText(task, globallyPaused: globallyPaused),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.bodySm.copyWith(
                               height: 1.3,
-                              color: _statusColor(context, task),
+                              color: _statusColor(
+                                context,
+                                task,
+                                globallyPaused: globallyPaused,
+                              ),
                             ),
                           ),
                         ),
-                        if (task.isDownloading) ...[
+                        if (task.isDownloading && !globallyPaused) ...[
                           const SizedBox(width: AppSpacing.md),
                           Text(
                             '正在下載…',
@@ -394,12 +416,16 @@ class DownloadManagerPage extends StatelessWidget {
     );
   }
 
-  String _statusText(DownloadTask task) {
+  String _statusText(DownloadTask task, {required bool globallyPaused}) {
     if (task.isCompleted && task.errorCount == 0) {
       return '下載完成';
     }
-    if (task.isFailed || task.errorCount > 0) {
+    final active = task.isDownloading || task.isWaiting;
+    if (task.isFailed || (task.errorCount > 0 && !active)) {
       return '下載失敗 ${task.successCount}/${task.totalCount} 章，失敗 ${task.errorCount} 章';
+    }
+    if (globallyPaused) {
+      return '已暫停全部 ${task.successCount}/${task.totalCount} 章';
     }
     if (task.isPaused) {
       return '已暫停 ${task.successCount}/${task.totalCount} 章';
@@ -410,11 +436,16 @@ class DownloadManagerPage extends StatelessWidget {
     return '${task.successCount} / ${task.totalCount} 章';
   }
 
-  Color _statusColor(BuildContext context, DownloadTask task) {
-    if (task.isFailed || task.errorCount > 0) {
+  Color _statusColor(
+    BuildContext context,
+    DownloadTask task, {
+    required bool globallyPaused,
+  }) {
+    final active = task.isDownloading || task.isWaiting;
+    if (task.isFailed || (task.errorCount > 0 && !active)) {
       return context.danger;
     }
-    if (task.isPaused) return context.warning;
+    if (task.isPaused || globallyPaused) return context.warning;
     if (task.isCompleted) return context.success;
     return AppChrome.of(context).sectionText;
   }
