@@ -51,12 +51,14 @@ class BookInfoIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 使用者改過的簡介（customIntro）優先，書源更新不會蓋掉。
+    final intro = book.getDisplayIntro()?.trim() ?? '';
     return GroupedSection(
       header: '簡介',
       children: [
         GroupedContent(
           child: Text(
-            context.zh(book.intro ?? '暫無簡介'),
+            intro.isEmpty ? '暫無簡介' : context.zh(intro),
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.6,
               color: Theme.of(context).colorScheme.onSurface,

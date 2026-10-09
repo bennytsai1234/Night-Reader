@@ -21,7 +21,18 @@ class UpdateCheckRunner {
   /// 拿到的 `contextProvider` 是延遲取 context，避免 caller 持有不安全的 BuildContext。
   Future<void> runAutomatic(BuildContext? Function() contextProvider) async {
     if (!Platform.isAndroid) return;
-    final info = await _service.checkLatest();
+    final UpdateInfo? info;
+    try {
+      info = await _service.checkLatest();
+    } catch (e, stack) {
+      // 背景檢查失敗不打擾使用者，記錄即可。
+      AppLog.e(
+        'Automatic update check failed: $e',
+        error: e,
+        stackTrace: stack,
+      );
+      return;
+    }
     if (info == null) return;
     if (await _ignoreStore.isIgnored(info.tagName)) return;
     final context = contextProvider();
