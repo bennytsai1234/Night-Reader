@@ -39,8 +39,14 @@ patches below are applied.
   Flutter 3.47 / AGP 9 toolchain; it is not an AGP 8 compatibility package.
 - Upstream tracking: <https://github.com/miguelpruivo/flutter_file_picker/issues/1942>.
 
-## Removal condition
+### Patch `nightreader.2`: Android only
 
-Remove this fork when a stable upstream `file_picker` release simultaneously
-supports Win32 6, AGP 9 with built-in Kotlin, compile SDK 37, and Night Reader's
-current Flutter/Dart baseline without changing the 11.0.3 selection semantics.
+- Removed the iOS, macOS, Windows, Linux and Web implementations (including the
+  Win32 6 port above) and their plugin registrations; `pubspec.yaml` declares
+  Android only and drops `win32`, `ffi`, `dbus`, `web` and
+  `flutter_web_plugins`.
+- Dart sources follow Night Reader's `flutter_lints` and `dart format` rules.
+
+## Maintenance
+
+Night Reader maintains this package in-tree and no longer tracks upstream.

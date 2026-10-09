@@ -33,8 +33,13 @@ compatible with AGP 9's default built-in Kotlin and new public DSL.
 - Upstream `flutter_tts` issue/PR: none filed for this package-specific patch as
   of 2026-08-13.
 
-## Removal condition
+## Patch `nightreader.2`: Android only
 
-Remove this fork and return to the hosted package after `flutter_tts` publishes
-an AGP 9 built-in-Kotlin-compatible release that preserves the 4.2.5 runtime API
-and passes Night Reader's Android build, analyzer, and complete regression suite.
+- Removed the iOS, macOS, Windows and Web implementations and their plugin
+  registrations; `pubspec.yaml` declares Android only and drops
+  `flutter_web_plugins`.
+- Dart sources follow Night Reader's `flutter_lints` and `dart format` rules.
+
+## Maintenance
+
+Night Reader maintains this package in-tree and no longer tracks upstream.

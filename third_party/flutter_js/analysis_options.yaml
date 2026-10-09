@@ -2,6 +2,5 @@ include: ../../analysis_options.yaml
 
 linter:
   rules:
-    # FFI 綁定沿用 QuickJS／JavaScriptCore C API 的原名，方便對照原生介面。
+    # FFI 綁定沿用 QuickJS C API 的原名，方便對照原生介面。
     constant_identifier_names: false
-    library_prefixes: false

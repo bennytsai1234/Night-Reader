@@ -305,14 +305,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.13"
-  dbus:
-    dependency: transitive
-    description:
-      name: dbus
-      sha256: a48d5da28e89bd02196e80d81ed8d7954923d00a0f4a68cc20b575038f023383
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.15"
   dio:
     dependency: "direct main"
     description:
@@ -415,7 +407,7 @@ packages:
       path: "third_party/file_picker"
       relative: true
     source: path
-    version: "11.0.3+nightreader.1"
+    version: "11.0.3+nightreader.2"
   file_selector_linux:
     dependency: transitive
     description:
@@ -475,7 +467,7 @@ packages:
       path: "third_party/flutter_js"
       relative: true
     source: path
-    version: "0.8.7+nightreader.1"
+    version: "0.8.7+nightreader.2"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -524,7 +516,7 @@ packages:
       path: "third_party/flutter_tts"
       relative: true
     source: path
-    version: "4.2.5+nightreader.1"
+    version: "4.2.5+nightreader.2"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -1335,14 +1327,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.4.1"
-  sync_http:
-    dependency: transitive
-    description:
-      name: sync_http
-      sha256: "7f0cd72eca000d2e026bcd6f990b81d0ca06022ef4e32fb257b30d3d1014a961"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.1"
   synchronized:
     dependency: "direct main"
     description:
