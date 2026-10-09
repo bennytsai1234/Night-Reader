@@ -594,8 +594,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
       child: ListView.builder(
         padding: padding,
         itemCount: books.length,
-        itemBuilder: (context, index) =>
-            _buildListCard(provider, books[index]),
+        itemBuilder: (context, index) => _buildListCard(provider, books[index]),
       ),
     );
   }

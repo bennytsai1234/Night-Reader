@@ -199,11 +199,10 @@ bool _matchesCompoundSelector(Element element, String compound) {
   }
 
   final text = element.text;
-  final ownText =
-      element.nodes
-          .where((node) => node.nodeType == Node.TEXT_NODE)
-          .map((node) => node.text ?? '')
-          .join();
+  final ownText = element.nodes
+      .where((node) => node.nodeType == Node.TEXT_NODE)
+      .map((node) => node.text ?? '')
+      .join();
   if (!parsed.containsValues.every(text.contains)) {
     return false;
   }
@@ -273,9 +272,8 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
     return null;
   }
 
-  final match = RegExp(
-    r'^([a-zA-Z][\w-]*)?(#[\w-]+)?((?:\.[\w-]+)*)$',
-  ).firstMatch(normalizedSelector);
+  final match = RegExp(r'^([a-zA-Z][\w-]*)?(#[\w-]+)?((?:\.[\w-]+)*)$')
+      .firstMatch(normalizedSelector);
   if (match == null) {
     return null;
   }
@@ -638,9 +636,8 @@ String normalizeCssSelectorCompat(String selector) {
 }
 
 bool _hasExactAttributeSelector(String selector) {
-  return RegExp(
-    r'\[\s*([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]',
-  ).hasMatch(selector);
+  return RegExp(r'\[\s*([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]')
+      .hasMatch(selector);
 }
 
 bool _hasRegexAttributeSelector(String selector) {
@@ -906,12 +903,11 @@ bool _matchesNthExpression(int index1Based, String? expression) {
 
   final aToken = match.group(1) ?? '';
   final bToken = match.group(2);
-  final a =
-      aToken.isEmpty || aToken == '+'
-          ? 1
-          : aToken == '-'
-          ? -1
-          : int.tryParse(aToken);
+  final a = aToken.isEmpty || aToken == '+'
+      ? 1
+      : aToken == '-'
+      ? -1
+      : int.tryParse(aToken);
   final b = bToken == null ? 0 : int.tryParse(bToken);
   if (a == null || b == null) return false;
   if (a == 0) return index1Based == b;
@@ -961,39 +957,33 @@ class ElementsSingle {
         final selector = '.${rules.sublist(1).join('.')}';
         elements = _withSelfIf(
           temp,
-          descendants:
-              selector.contains(':') || selector.contains('[')
-                  ? querySelectorAllCompat(temp, selector)
-                  : temp.getElementsByClassName(rules[1]),
-          selfMatches:
-              selector.contains(':') || selector.contains('[')
-                  ? matchesSelectorWithinParentCompat(temp, selector)
-                  : temp.classes.contains(rules[1]),
+          descendants: selector.contains(':') || selector.contains('[')
+              ? querySelectorAllCompat(temp, selector)
+              : temp.getElementsByClassName(rules[1]),
+          selfMatches: selector.contains(':') || selector.contains('[')
+              ? matchesSelectorWithinParentCompat(temp, selector)
+              : temp.classes.contains(rules[1]),
         );
       } else if (rules[0] == 'tag' && rules.length > 1) {
         final selector = rules.sublist(1).join('.');
         elements = _withSelfIf(
           temp,
-          descendants:
-              selector.contains(':') || selector.contains('[')
-                  ? querySelectorAllCompat(temp, selector)
-                  : temp.getElementsByTagName(rules[1]),
-          selfMatches:
-              selector.contains(':') || selector.contains('[')
-                  ? matchesSelectorWithinParentCompat(temp, selector)
-                  : temp.localName == rules[1],
+          descendants: selector.contains(':') || selector.contains('[')
+              ? querySelectorAllCompat(temp, selector)
+              : temp.getElementsByTagName(rules[1]),
+          selfMatches: selector.contains(':') || selector.contains('[')
+              ? matchesSelectorWithinParentCompat(temp, selector)
+              : temp.localName == rules[1],
         );
       } else if (rules[0] == 'id' && rules.length > 1) {
         final el = temp.querySelector('#${rules[1]}');
         elements = temp.id == rules[1] ? [temp] : (el != null ? [el] : []);
       } else if (rules[0] == 'text' && rules.length > 1) {
-        final descendants =
-            temp.querySelectorAll('*').where((el) {
-              return el.nodes.any(
-                (n) =>
-                    n.nodeType == Node.TEXT_NODE && n.text!.contains(rules[1]),
-              );
-            }).toList();
+        final descendants = temp.querySelectorAll('*').where((el) {
+          return el.nodes.any(
+            (n) => n.nodeType == Node.TEXT_NODE && n.text!.contains(rules[1]),
+          );
+        }).toList();
         final selfMatches = temp.nodes.any(
           (n) =>
               n.nodeType == Node.TEXT_NODE && (n.text ?? '').contains(rules[1]),
@@ -1019,8 +1009,9 @@ class ElementsSingle {
     final len = elements.length;
     if (len == 0) return [];
 
-    final lastIndexes =
-        indexDefault.isNotEmpty ? indexDefault.length - 1 : indexes.length - 1;
+    final lastIndexes = indexDefault.isNotEmpty
+        ? indexDefault.length - 1
+        : indexes.length - 1;
     final indexSet = <int>{};
 
     if (indexes.isEmpty) {
@@ -1123,8 +1114,8 @@ class ElementsSingle {
           final parts = segment.split(':').map((e) => e.trim()).toList();
           int? parsePart(int index) =>
               index < parts.length && parts[index].isNotEmpty
-                  ? int.tryParse(parts[index])
-                  : null;
+              ? int.tryParse(parts[index])
+              : null;
           indexes.add(
             Triple(
               parsePart(0),

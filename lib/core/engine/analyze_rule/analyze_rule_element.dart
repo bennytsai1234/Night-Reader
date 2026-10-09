@@ -4,6 +4,7 @@ import 'analyze_rule_regex_helper.dart';
 import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
+
 import 'package:night_reader/core/exception/app_exception.dart';
 
 /// AnalyzeRule 的元素解析擴展
@@ -70,10 +71,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              final jsonRule =
-                  isJsonLikeRuleInput(result)
-                      ? buildJsonFallbackRule(rule)
-                      : null;
+              final jsonRule = isJsonLikeRuleInput(result)
+                  ? buildJsonFallbackRule(rule)
+                  : null;
               if (jsonRule != null) {
                 tempResult = sourceRule
                     .getAnalyzeByJSonPath(this, result)
@@ -175,10 +175,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = await evalJSAsync(rule, result);
               break;
             default:
-              final jsonRule =
-                  isJsonLikeRuleInput(result)
-                      ? buildJsonFallbackRule(rule)
-                      : null;
+              final jsonRule = isJsonLikeRuleInput(result)
+                  ? buildJsonFallbackRule(rule)
+                  : null;
               if (jsonRule != null) {
                 tempResult = sourceRule
                     .getAnalyzeByJSonPath(this, result)
@@ -278,10 +277,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              final jsonRule =
-                  isJsonLikeRuleInput(result)
-                      ? buildJsonFallbackRule(rule)
-                      : null;
+              final jsonRule = isJsonLikeRuleInput(result)
+                  ? buildJsonFallbackRule(rule)
+                  : null;
               if (jsonRule != null) {
                 tempResult = sourceRule
                     .getAnalyzeByJSonPath(this, result)
@@ -315,10 +313,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         if (result != null && sourceRule.replaceRegex.isNotEmpty) {
           log('  ◇ 正則替換列表元素: ${sourceRule.replaceRegex}');
           if (result is List) {
-            result =
-                result
-                    .map((e) => replaceRegexLogic(e.toString(), sourceRule))
-                    .toList();
+            result = result
+                .map((e) => replaceRegexLogic(e.toString(), sourceRule))
+                .toList();
           } else {
             result = replaceRegexLogic(result.toString(), sourceRule);
           }
@@ -390,10 +387,9 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = await evalJSAsync(rule, result);
               break;
             default:
-              final jsonRule =
-                  isJsonLikeRuleInput(result)
-                      ? buildJsonFallbackRule(rule)
-                      : null;
+              final jsonRule = isJsonLikeRuleInput(result)
+                  ? buildJsonFallbackRule(rule)
+                  : null;
               if (jsonRule != null) {
                 tempResult = sourceRule
                     .getAnalyzeByJSonPath(this, result)
@@ -427,13 +423,11 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         if (result != null && sourceRule.replaceRegex.isNotEmpty) {
           log('  ◇ 正則替換列表元素: ${sourceRule.replaceRegex}');
           if (result is List) {
-            result =
-                result
-                    .map(
-                      (e) =>
-                          replaceRegexLogic(stringifyRuleResult(e), sourceRule),
-                    )
-                    .toList();
+            result = result
+                .map(
+                  (e) => replaceRegexLogic(stringifyRuleResult(e), sourceRule),
+                )
+                .toList();
           } else {
             result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
           }

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/txt_toc_rule.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -11,8 +12,9 @@ class TxtTocRuleDao extends DatabaseAccessor<AppDatabase>
   TxtTocRuleDao(super.db);
 
   Future<List<TxtTocRule>> getAll() {
-    return (select(txtTocRules)
-      ..orderBy([(t) => OrderingTerm(expression: t.serialNumber)])).get();
+    return (select(
+      txtTocRules,
+    )..orderBy([(t) => OrderingTerm(expression: t.serialNumber)])).get();
   }
 
   Stream<List<TxtTocRule>> watchEnabled() {
@@ -22,9 +24,9 @@ class TxtTocRuleDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  Future<void> upsert(TxtTocRule rule) => into(
-    txtTocRules,
-  ).insertOnConflictUpdate(TxtTocRuleToInsertable(rule).toInsertable());
+  Future<void> upsert(TxtTocRule rule) =>
+      into(txtTocRules)
+          .insertOnConflictUpdate(TxtTocRuleToInsertable(rule).toInsertable());
 
   Future<void> deleteById(int id) =>
       (delete(txtTocRules)..where((t) => t.id.equals(id))).go();

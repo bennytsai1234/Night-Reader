@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../constant/source_type.dart';
 import '../../models/book_source.dart';
 import '../tables/app_tables.dart';
@@ -36,13 +37,13 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<BookSource?> getByUrl(String url) {
-    return (select(bookSources)
-      ..where((t) => t.bookSourceUrl.equals(url))).getSingleOrNull();
+    return (select(
+      bookSources,
+    )..where((t) => t.bookSourceUrl.equals(url))).getSingleOrNull();
   }
 
-  Future<void> upsert(BookSource source) => into(
-    bookSources,
-  ).insertOnConflictUpdate(BookSourceToInsertable(source).toInsertable());
+  Future<void> upsert(BookSource source) => into(bookSources)
+      .insertOnConflictUpdate(BookSourceToInsertable(source).toInsertable());
 
   Future<void> upsertAll(List<BookSource> sources) async {
     await batch(
@@ -65,28 +66,24 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
       upsertAll(sources);
 
   Future<void> updateCustomOrderByUrl(String url, int customOrder) {
-    return (update(bookSources)..where(
-      (t) => t.bookSourceUrl.equals(url),
-    )).write(BookSourcesCompanion(customOrder: Value(customOrder)));
+    return (update(bookSources)..where((t) => t.bookSourceUrl.equals(url)))
+        .write(BookSourcesCompanion(customOrder: Value(customOrder)));
   }
 
   Future<void> updateEnabledByUrl(String url, bool enabled) {
-    return (update(bookSources)..where(
-      (t) => t.bookSourceUrl.equals(url),
-    )).write(BookSourcesCompanion(enabled: Value(enabled)));
+    return (update(bookSources)..where((t) => t.bookSourceUrl.equals(url)))
+        .write(BookSourcesCompanion(enabled: Value(enabled)));
   }
 
   Future<void> updateEnabledExploreByUrl(String url, bool enabledExplore) {
-    return (update(bookSources)..where(
-      (t) => t.bookSourceUrl.equals(url),
-    )).write(BookSourcesCompanion(enabledExplore: Value(enabledExplore)));
+    return (update(bookSources)..where((t) => t.bookSourceUrl.equals(url)))
+        .write(BookSourcesCompanion(enabledExplore: Value(enabledExplore)));
   }
 
   Future<void> updateEnabledByUrls(List<String> urls, bool enabled) {
     if (urls.isEmpty) return Future.value();
-    return (update(bookSources)..where(
-      (t) => t.bookSourceUrl.isIn(urls),
-    )).write(BookSourcesCompanion(enabled: Value(enabled)));
+    return (update(bookSources)..where((t) => t.bookSourceUrl.isIn(urls)))
+        .write(BookSourcesCompanion(enabled: Value(enabled)));
   }
 
   Future<void> updateEnabledExploreByUrls(
@@ -94,16 +91,15 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     bool enabledExplore,
   ) {
     if (urls.isEmpty) return Future.value();
-    return (update(bookSources)..where(
-      (t) => t.bookSourceUrl.isIn(urls),
-    )).write(BookSourcesCompanion(enabledExplore: Value(enabledExplore)));
+    return (update(bookSources)..where((t) => t.bookSourceUrl.isIn(urls)))
+        .write(BookSourcesCompanion(enabledExplore: Value(enabledExplore)));
   }
 
   Future<void> updateCustomOrder(List<BookSource> sources) async {
     for (var i = 0; i < sources.length; i++) {
-      await (update(bookSources)..where(
-        (t) => t.bookSourceUrl.equals(sources[i].bookSourceUrl),
-      )).write(BookSourcesCompanion(customOrder: Value(i)));
+      await (update(bookSources)
+            ..where((t) => t.bookSourceUrl.equals(sources[i].bookSourceUrl)))
+          .write(BookSourcesCompanion(customOrder: Value(i)));
     }
   }
 
@@ -132,10 +128,9 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
       ${discoveryOnly ? _discoveryWhereClause : ''}
       ORDER BY customOrder ASC
       ''',
-      variables:
-          discoveryOnly
-              ? [Variable<int>(SourceType.book), const Variable<String>('')]
-              : const [],
+      variables: discoveryOnly
+          ? [Variable<int>(SourceType.book), const Variable<String>('')]
+          : const [],
       readsFrom: {bookSources},
     );
   }
@@ -178,17 +173,16 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     final all = await getAll();
     for (final s in all) {
       if (s.bookSourceGroup == null) continue;
-      final groups =
-          s.bookSourceGroup!
-              .split(RegExp(r'[,，]'))
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
-              .toList();
+      final groups = s.bookSourceGroup!
+          .split(RegExp(r'[,，]'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
       if (groups.contains(oldName)) {
         final updated = groups.map((g) => g == oldName ? newName : g).join(',');
-        await (update(bookSources)..where(
-          (t) => t.bookSourceUrl.equals(s.bookSourceUrl),
-        )).write(BookSourcesCompanion(bookSourceGroup: Value(updated)));
+        await (update(bookSources)
+              ..where((t) => t.bookSourceUrl.equals(s.bookSourceUrl)))
+            .write(BookSourcesCompanion(bookSourceGroup: Value(updated)));
       }
     }
   }
@@ -197,15 +191,15 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     final all = await getAll();
     for (final s in all) {
       if (s.bookSourceGroup == null) continue;
-      final groups =
-          s.bookSourceGroup!
-              .split(RegExp(r'[,，]'))
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty && e != name)
-              .toList();
+      final groups = s.bookSourceGroup!
+          .split(RegExp(r'[,，]'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty && e != name)
+          .toList();
       final updated = groups.join(',');
-      await (update(bookSources)
-        ..where((t) => t.bookSourceUrl.equals(s.bookSourceUrl))).write(
+      await (update(
+        bookSources,
+      )..where((t) => t.bookSourceUrl.equals(s.bookSourceUrl))).write(
         BookSourcesCompanion(
           bookSourceGroup: Value(updated.isEmpty ? null : updated),
         ),
@@ -214,9 +208,8 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> adjustSortNumbers() async {
-    final stats =
-        await customSelect(
-          '''
+    final stats = await customSelect(
+      '''
           SELECT
             COUNT(*) AS sourceCount,
             COUNT(DISTINCT customOrder) AS distinctOrderCount,
@@ -224,8 +217,8 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
             MAX(customOrder) AS maxOrder
           FROM book_sources
           ''',
-          readsFrom: {bookSources},
-        ).getSingle();
+      readsFrom: {bookSources},
+    ).getSingle();
     final sourceCount = stats.read<int>('sourceCount');
     if (sourceCount == 0) return;
 
@@ -238,15 +231,14 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
         maxOrder > 99999;
     if (!needsAdjustment) return;
 
-    final rows =
-        await customSelect(
-          '''
+    final rows = await customSelect(
+      '''
           SELECT bookSourceUrl, customOrder
           FROM book_sources
           ORDER BY customOrder ASC
           ''',
-          readsFrom: {bookSources},
-        ).get();
+      readsFrom: {bookSources},
+    ).get();
     await batch((b) {
       for (var i = 0; i < rows.length; i++) {
         final row = rows[i];
@@ -254,8 +246,8 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
         b.update(
           bookSources,
           BookSourcesCompanion(customOrder: Value(i)),
-          where:
-              (t) => t.bookSourceUrl.equals(row.read<String>('bookSourceUrl')),
+          where: (t) =>
+              t.bookSourceUrl.equals(row.read<String>('bookSourceUrl')),
         );
       }
     });

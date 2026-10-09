@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'book_base.dart';
 
 /// Book 序列化與複制擴展
@@ -60,10 +61,9 @@ extension BookSerialization on BookBase {
       'order': book.order,
       'originOrder': book.originOrder,
       'variable': book.variable,
-      'readConfig':
-          book.readConfig != null
-              ? jsonEncode(book.readConfig!.toJson())
-              : null,
+      'readConfig': book.readConfig != null
+          ? jsonEncode(book.readConfig!.toJson())
+          : null,
       'syncTime': book.syncTime,
       'isInBookshelf': book.isInBookshelf ? 1 : 0,
     };

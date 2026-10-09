@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/book_type.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
+
 import 'book_base.dart';
 
 /// Book 擴展 - 類型感知與業務屬性

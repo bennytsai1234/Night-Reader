@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:json_path/json_path.dart';
 import 'package:night_reader/core/engine/rule_analyzer.dart';
 

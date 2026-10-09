@@ -21,14 +21,14 @@ class AppPalette {
   static const Color aubergine = Color(0xFF6B5570); // cover pigment
 
   // Paper (Light mode surfaces)
-  static const Color paper50  = Color(0xFFFFFBF2);
+  static const Color paper50 = Color(0xFFFFFBF2);
   static const Color paper100 = Color(0xFFFAF5E9);
   static const Color paper200 = Color(0xFFF4EFE3);
   static const Color paper300 = Color(0xFFECE5D4);
   static const Color paper400 = Color(0xFFDCD2BD);
 
   // Ink (Dark mode surfaces & text)
-  static const Color ink50  = Color(0xFFF4EDD7);
+  static const Color ink50 = Color(0xFFF4EDD7);
   static const Color ink100 = Color(0xFFC8C0AC);
   static const Color ink200 = Color(0xFF8A8473);
   static const Color ink300 = Color(0xFF5F5A4D);
@@ -42,35 +42,37 @@ class AppPalette {
 /// Spacing scale (logical pixels).
 class AppSpacing {
   AppSpacing._();
-  static const double xs   = 4.0;
-  static const double sm   = 6.0;
-  static const double md   = 10.0;
-  static const double lg   = 14.0;
-  static const double xl   = 20.0;
-  static const double xxl  = 28.0;
+  static const double xs = 4.0;
+  static const double sm = 6.0;
+  static const double md = 10.0;
+  static const double lg = 14.0;
+  static const double xl = 20.0;
+  static const double xxl = 28.0;
   static const double xxxl = 40.0;
 }
 
 /// Border-radius tokens.
 class AppRadius {
   AppRadius._();
-  static const double xs   = 4.0;
-  static const double sm   = 6.0;
-  static const double md   = 10.0;
-  static const double lg   = 14.0;
-  static const double xl   = 20.0;
+  static const double xs = 4.0;
+  static const double sm = 6.0;
+  static const double md = 10.0;
+  static const double lg = 14.0;
+  static const double xl = 20.0;
   static const double pill = 999.0;
 
-  static const BorderRadius cardXs    = BorderRadius.all(Radius.circular(xs));
-  static const BorderRadius cardSm    = BorderRadius.all(Radius.circular(sm));
-  static const BorderRadius cardMd    = BorderRadius.all(Radius.circular(md));
-  static const BorderRadius cardLg    = BorderRadius.all(Radius.circular(lg));
-  static const BorderRadius cardXl    = BorderRadius.all(Radius.circular(xl));
+  static const BorderRadius cardXs = BorderRadius.all(Radius.circular(xs));
+  static const BorderRadius cardSm = BorderRadius.all(Radius.circular(sm));
+  static const BorderRadius cardMd = BorderRadius.all(Radius.circular(md));
+  static const BorderRadius cardLg = BorderRadius.all(Radius.circular(lg));
+  static const BorderRadius cardXl = BorderRadius.all(Radius.circular(xl));
   static const BorderRadius pillShape = BorderRadius.all(Radius.circular(pill));
-  static const BorderRadius topSheetLg =
-      BorderRadius.vertical(top: Radius.circular(lg));
-  static const BorderRadius topSheetXl =
-      BorderRadius.vertical(top: Radius.circular(xl));
+  static const BorderRadius topSheetLg = BorderRadius.vertical(
+    top: Radius.circular(lg),
+  );
+  static const BorderRadius topSheetXl = BorderRadius.vertical(
+    top: Radius.circular(xl),
+  );
 }
 
 /// 分組清單幾何（Telegram iOS inset-grouped 清單的紙墨版本）。
@@ -173,7 +175,8 @@ class AppSpringCurve extends Curve {
     final value =
         1 -
         decay *
-            (math.cos(omegaD * t) + (zeta * omega / omegaD) * math.sin(omegaD * t));
+            (math.cos(omegaD * t) +
+                (zeta * omega / omegaD) * math.sin(omegaD * t));
     // 在 t = 1 精確收斂到 1。
     final end =
         1 -

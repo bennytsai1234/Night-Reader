@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
@@ -11,6 +12,7 @@ import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'widgets/import_preview_dialog.dart';
 
 String _normalizeImportJson(String value) {
@@ -69,9 +71,8 @@ class ParsedSourceImportResult {
 }
 
 class SourceImportService {
-  SourceImportService({BookSourceDao? dao, NetworkService? networkService})
-    : _dao = dao ?? getIt<BookSourceDao>(),
-      _networkService = networkService;
+  SourceImportService({BookSourceDao? dao, this._networkService})
+    : _dao = dao ?? getIt<BookSourceDao>();
 
   final BookSourceDao _dao;
   NetworkService? _networkService;
@@ -190,7 +191,6 @@ class SourceImportService {
     return _importPayloadToText(response.data);
   }
 
-
   Future<List<BookSource>> _prepareImportSources(
     List<BookSource> sources,
   ) async {
@@ -276,15 +276,14 @@ class SourceManagerProvider with ChangeNotifier {
     // 全文搜尋
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      list =
-          list
-              .where(
-                (s) =>
-                    s.bookSourceName.toLowerCase().contains(q) ||
-                    s.bookSourceUrl.toLowerCase().contains(q) ||
-                    (s.bookSourceComment?.toLowerCase().contains(q) ?? false),
-              )
-              .toList();
+      list = list
+          .where(
+            (s) =>
+                s.bookSourceName.toLowerCase().contains(q) ||
+                s.bookSourceUrl.toLowerCase().contains(q) ||
+                (s.bookSourceComment?.toLowerCase().contains(q) ?? false),
+          )
+          .toList();
     }
 
     if (filterGroup == '已啟用') {
@@ -296,19 +295,20 @@ class SourceManagerProvider with ChangeNotifier {
     } else if (filterGroup == '已禁用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '無分組') {
-      list =
-          list.where((s) => _groupLabels(s.bookSourceGroup).isEmpty).toList();
+      list = list
+          .where((s) => _groupLabels(s.bookSourceGroup).isEmpty)
+          .toList();
     } else if (filterGroup != '全部') {
-      list =
-          list.where((s) => _hasGroup(s.bookSourceGroup, filterGroup)).toList();
+      list = list
+          .where((s) => _hasGroup(s.bookSourceGroup, filterGroup))
+          .toList();
     }
 
     final comparator = _buildComparator();
     if (groupByDomain) {
       list.sort((a, b) {
-        final hostCompare = getSourceHost(
-          a.bookSourceUrl,
-        ).compareTo(getSourceHost(b.bookSourceUrl));
+        final hostCompare = getSourceHost(a.bookSourceUrl)
+            .compareTo(getSourceHost(b.bookSourceUrl));
         if (hostCompare != 0) {
           return hostCompare;
         }
@@ -639,10 +639,12 @@ class SourceManagerProvider with ChangeNotifier {
     try {
       final all = await _dao.getAll();
       all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-      final selected =
-          all.where((s) => selectedUrls.contains(s.bookSourceUrl)).toList();
-      final rest =
-          all.where((s) => !selectedUrls.contains(s.bookSourceUrl)).toList();
+      final selected = all
+          .where((s) => selectedUrls.contains(s.bookSourceUrl))
+          .toList();
+      final rest = all
+          .where((s) => !selectedUrls.contains(s.bookSourceUrl))
+          .toList();
       final reordered = [...selected, ...rest];
       await _dao.updateCustomOrder(reordered);
       await loadSources();
@@ -657,10 +659,12 @@ class SourceManagerProvider with ChangeNotifier {
     try {
       final all = await _dao.getAll();
       all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-      final selected =
-          all.where((s) => selectedUrls.contains(s.bookSourceUrl)).toList();
-      final rest =
-          all.where((s) => !selectedUrls.contains(s.bookSourceUrl)).toList();
+      final selected = all
+          .where((s) => selectedUrls.contains(s.bookSourceUrl))
+          .toList();
+      final rest = all
+          .where((s) => !selectedUrls.contains(s.bookSourceUrl))
+          .toList();
       final reordered = [...rest, ...selected];
       await _dao.updateCustomOrder(reordered);
       await loadSources();
@@ -733,12 +737,11 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   static String _sanitizeExportBaseName(String fileName) {
-    var baseName =
-        fileName
-            .replaceAll(RegExp(r'\.(legado|json)$', caseSensitive: false), '')
-            .trim()
-            .replaceAll(RegExp(r'[\x00-\x1F\x7F\\/:*?"<>|]'), '_')
-            .trim();
+    var baseName = fileName
+        .replaceAll(RegExp(r'\.(legado|json)$', caseSensitive: false), '')
+        .trim()
+        .replaceAll(RegExp(r'[\x00-\x1F\x7F\\/:*?"<>|]'), '_')
+        .trim();
     if (baseName.isEmpty || baseName == '.' || baseName == '..') {
       baseName = 'source';
     }
@@ -772,10 +775,9 @@ class SourceManagerProvider with ChangeNotifier {
     // Android Binder IPC 上限約 1 MB；超過時改走檔案分享。
     const clipboardSafeBytes = 512 * 1024;
     if (_shouldShareExportPayload(json, limitBytes: clipboardSafeBytes)) {
-      final fileName =
-          selectedFullSources.length == 1
-              ? selectedFullSources.first.bookSourceName
-              : 'export_${selectedFullSources.length}_sources';
+      final fileName = selectedFullSources.length == 1
+          ? selectedFullSources.first.bookSourceName
+          : 'export_${selectedFullSources.length}_sources';
       await _shareSourceObjects(selectedFullSources, fileName: fileName);
       return false; // false = 已改走分享，非剪貼簿
     }
@@ -876,11 +878,10 @@ class SourceManagerProvider with ChangeNotifier {
       for (var url in selectedUrls) {
         final s = await _dao.getByUrl(url);
         if (s != null) {
-          final groups =
-              (s.bookSourceGroup ?? '')
-                  .split(RegExp(r'[,，\s]+'))
-                  .where((e) => e.isNotEmpty)
-                  .toSet();
+          final groups = (s.bookSourceGroup ?? '')
+              .split(RegExp(r'[,，\s]+'))
+              .where((e) => e.isNotEmpty)
+              .toSet();
           groups.add(normalizedGroup);
           s.bookSourceGroup = groups.join(',');
           await _dao.upsert(s);
@@ -902,11 +903,10 @@ class SourceManagerProvider with ChangeNotifier {
       for (var url in selectedUrls) {
         final s = await _dao.getByUrl(url);
         if (s != null) {
-          final groups =
-              (s.bookSourceGroup ?? '')
-                  .split(RegExp(r'[,，\s]+'))
-                  .where((e) => e.isNotEmpty)
-                  .toSet();
+          final groups = (s.bookSourceGroup ?? '')
+              .split(RegExp(r'[,，\s]+'))
+              .where((e) => e.isNotEmpty)
+              .toSet();
           groups.remove(normalizedGroup);
           s.bookSourceGroup = groups.join(',');
           await _dao.upsert(s);
@@ -1047,7 +1047,6 @@ class SourceManagerProvider with ChangeNotifier {
   Future<String> fetchImportTextFromUrl(String url) async {
     return _importService.fetchImportTextFromUrl(url);
   }
-
 
   Future<int> importFromText(String text) async {
     return await importFromJson(text);

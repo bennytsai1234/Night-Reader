@@ -33,21 +33,20 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
-            builder:
-                (context, setState) => NumberStepperRow(
-                  label: '字號',
-                  value: value,
-                  min: min,
-                  max: max,
-                  step: step,
-                  fractionDigits: fractionDigits,
-                  displayScale: displayScale,
-                  unit: unit,
-                  onChanged: (next) {
-                    changes.add(next);
-                    setState(() => value = next);
-                  },
-                ),
+            builder: (context, setState) => NumberStepperRow(
+              label: '字號',
+              value: value,
+              min: min,
+              max: max,
+              step: step,
+              fractionDigits: fractionDigits,
+              displayScale: displayScale,
+              unit: unit,
+              onChanged: (next) {
+                changes.add(next);
+                setState(() => value = next);
+              },
+            ),
           ),
         ),
       ),

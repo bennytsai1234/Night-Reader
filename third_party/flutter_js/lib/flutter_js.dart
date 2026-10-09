@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:convert';
 import 'dart:io';
 
@@ -98,7 +99,7 @@ class FlutterJs {
 
   int? get id => _engineId;
 
-  Map<String, FlutterJsChannelCallbak> _channels = {};
+  final Map<String, FlutterJsChannelCallbak> _channels = {};
 
   FlutterJs() {
     _engineCount += 1;
@@ -107,11 +108,11 @@ class FlutterJs {
     _engineMap[_engineId] = this;
   }
 
-  dispose() {
+  void dispose() {
     FlutterJs.close(_engineId);
   }
 
-  addChannel(String name, FlutterJsChannelCallbak fn,
+  void addChannel(String name, FlutterJsChannelCallbak fn,
       {String? dartChannelAddress}) {
     _channels[name] = fn;
     _methodChannel.invokeMethod(
@@ -170,7 +171,7 @@ class FlutterJs {
     final rs = await _methodChannel.invokeMethod("evaluate", arguments);
     final String? jsResult = rs is Map || rs is List ? json.encode(rs) : rs;
     if (DEBUG) {
-      print("${DateTime.now().toIso8601String()} - JS RESULT : $jsResult");
+      debugPrint("${DateTime.now().toIso8601String()} - JS RESULT : $jsResult");
     }
     return jsResult ?? "null";
   }

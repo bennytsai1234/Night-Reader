@@ -8,6 +8,7 @@ import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/event_bus.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+
 import 'bookshelf_provider_base.dart';
 
 class BookshelfBatchDownloadResult {
@@ -90,10 +91,12 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         chapters[i].bookUrl = book.bookUrl;
       }
 
-      final oldTotal =
-          book.totalChapterNum > 0 ? book.totalChapterNum : chapters.length;
-      final newCount =
-          chapters.length > oldTotal ? chapters.length - oldTotal : 0;
+      final oldTotal = book.totalChapterNum > 0
+          ? book.totalChapterNum
+          : chapters.length;
+      final newCount = chapters.length > oldTotal
+          ? chapters.length - oldTotal
+          : 0;
       info.isInBookshelf = true;
       info.group = book.group;
       info.order = book.order;
@@ -155,10 +158,9 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
   Future<BookshelfBatchDownloadResult> batchDownload(Set<String> urls) async {
     final selected = await _booksForUrls(urls);
-    final contentDao =
-        getIt.isRegistered<ReaderChapterContentDao>()
-            ? getIt<ReaderChapterContentDao>()
-            : null;
+    final contentDao = getIt.isRegistered<ReaderChapterContentDao>()
+        ? getIt<ReaderChapterContentDao>()
+        : null;
     final downloadService = DownloadService();
     var queuedBooks = 0;
     var queuedChapters = 0;
@@ -195,10 +197,9 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
           chapterDao: chapterDao,
           contentDao: contentDao,
         ).storedChapterIndices(book: book);
-        toDownload =
-            chapters
-                .where((chapter) => !stored.contains(chapter.index))
-                .toList();
+        toDownload = chapters
+            .where((chapter) => !stored.contains(chapter.index))
+            .toList();
       }
       if (toDownload.isEmpty) {
         skippedBooks++;
@@ -220,10 +221,9 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     Set<String> urls,
   ) async {
     final selected = await _booksForUrls(urls);
-    final contentDao =
-        getIt.isRegistered<ReaderChapterContentDao>()
-            ? getIt<ReaderChapterContentDao>()
-            : null;
+    final contentDao = getIt.isRegistered<ReaderChapterContentDao>()
+        ? getIt<ReaderChapterContentDao>()
+        : null;
     final downloadService = DownloadService();
     var queuedBooks = 0;
     var queuedChapters = 0;
@@ -268,10 +268,9 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
           chapterDao: chapterDao,
           contentDao: contentDao,
         ).storedChapterIndices(book: book);
-        toDownload =
-            chapters
-                .where((chapter) => !stored.contains(chapter.index))
-                .toList();
+        toDownload = chapters
+            .where((chapter) => !stored.contains(chapter.index))
+            .toList();
       }
       if (toDownload.isEmpty) {
         skippedBooks++;

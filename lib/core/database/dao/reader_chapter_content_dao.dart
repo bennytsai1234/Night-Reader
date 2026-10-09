@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
+
 import '../app_database.dart';
 import '../tables/app_tables.dart';
 
@@ -72,9 +73,9 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
   ) async {
     final urls = bookUrls.where((url) => url.isNotEmpty).toSet();
     if (urls.isEmpty) return const <ReaderChapterContentEntry>[];
-    final rows =
-        await (select(readerChapterContents)
-          ..where((t) => t.bookUrl.isIn(urls))).get();
+    final rows = await (select(
+      readerChapterContents,
+    )..where((t) => t.bookUrl.isIn(urls))).get();
     return rows
         .map(
           (row) => ReaderChapterContentEntry(
@@ -111,9 +112,8 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<bool> hasReadyContent({required String contentKey}) async {
-    final row =
-        await customSelect(
-          '''
+    final row = await customSelect(
+      '''
           SELECT 1
           FROM reader_chapter_contents
           WHERE contentKey = ?
@@ -122,12 +122,12 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
             AND content != ''
           LIMIT 1
           ''',
-          variables: [
-            Variable.withString(contentKey),
-            Variable.withInt(ReaderChapterContentStatus.ready.code),
-          ],
-          readsFrom: {readerChapterContents},
-        ).getSingleOrNull();
+      variables: [
+        Variable.withString(contentKey),
+        Variable.withInt(ReaderChapterContentStatus.ready.code),
+      ],
+      readsFrom: {readerChapterContents},
+    ).getSingleOrNull();
     return row != null;
   }
 
@@ -135,9 +135,8 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     required String origin,
     required String bookUrl,
   }) async {
-    final rows =
-        await customSelect(
-          '''
+    final rows = await customSelect(
+      '''
           SELECT chapterIndex
           FROM reader_chapter_contents
           WHERE origin = ?
@@ -147,13 +146,13 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
             AND content != ''
           ORDER BY chapterIndex
           ''',
-          variables: [
-            Variable.withString(origin),
-            Variable.withString(bookUrl),
-            Variable.withInt(ReaderChapterContentStatus.ready.code),
-          ],
-          readsFrom: {readerChapterContents},
-        ).get();
+      variables: [
+        Variable.withString(origin),
+        Variable.withString(bookUrl),
+        Variable.withInt(ReaderChapterContentStatus.ready.code),
+      ],
+      readsFrom: {readerChapterContents},
+    ).get();
     return rows.map((row) => row.read<int>('chapterIndex')).toSet();
   }
 
@@ -206,13 +205,15 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> deleteContent({required String contentKey}) {
-    return (delete(readerChapterContents)
-      ..where((t) => t.contentKey.equals(contentKey))).go();
+    return (delete(
+      readerChapterContents,
+    )..where((t) => t.contentKey.equals(contentKey))).go();
   }
 
   Future<void> deleteByBook(String origin, String bookUrl) {
-    return (delete(readerChapterContents)
-      ..where((t) => t.origin.equals(origin) & t.bookUrl.equals(bookUrl))).go();
+    return (delete(
+      readerChapterContents,
+    )..where((t) => t.origin.equals(origin) & t.bookUrl.equals(bookUrl))).go();
   }
 
   Future<void> clearAllContent() {
@@ -220,11 +221,10 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<int> getTotalContentSize() async {
-    final rows =
-        await customSelect(
-          'SELECT COALESCE(SUM(LENGTH(content)), 0) AS total FROM reader_chapter_contents WHERE status = 1 AND content IS NOT NULL AND content != ""',
-          readsFrom: {readerChapterContents},
-        ).get();
+    final rows = await customSelect(
+      'SELECT COALESCE(SUM(LENGTH(content)), 0) AS total FROM reader_chapter_contents WHERE status = 1 AND content IS NOT NULL AND content != ""',
+      readsFrom: {readerChapterContents},
+    ).get();
     if (rows.isEmpty) return 0;
     return rows.first.read<int>('total');
   }

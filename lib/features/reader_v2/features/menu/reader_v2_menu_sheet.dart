@@ -29,9 +29,8 @@ class ReaderV2MenuSheet {
       builder: (sheetContext) => ListenableBuilder(
         listenable: settings,
         builder: (context, _) {
-          final theme = ReaderV2MenuStyle.of(
-            context,
-          ).toSheetTheme(Theme.of(context));
+          final theme = ReaderV2MenuStyle.of(context)
+              .toSheetTheme(Theme.of(context));
           return Theme(
             data: theme,
             child: Material(

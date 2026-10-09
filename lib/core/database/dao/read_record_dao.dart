@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/read_record.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -25,8 +26,9 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<ReadRecord?> getByBookName(String bookName) {
-    return (select(readRecords)
-      ..where((t) => t.bookName.equals(bookName))).getSingleOrNull();
+    return (select(
+      readRecords,
+    )..where((t) => t.bookName.equals(bookName))).getSingleOrNull();
   }
 
   Future<void> recordReadActivity({
@@ -83,7 +85,8 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<ReadRecord>> getAllShow() {
     return (select(readRecords)..orderBy([
-      (t) => OrderingTerm(expression: t.lastRead, mode: OrderingMode.desc),
-    ])).get();
+          (t) => OrderingTerm(expression: t.lastRead, mode: OrderingMode.desc),
+        ]))
+        .get();
   }
 }

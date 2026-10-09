@@ -8,8 +8,9 @@ bool isSupportedLocalBookExtension(String ext) {
 }
 
 String localBookExtensionFromPath(String path) {
-  final filePath =
-      path.startsWith('local://') ? path.substring('local://'.length) : path;
+  final filePath = path.startsWith('local://')
+      ? path.substring('local://'.length)
+      : path;
   return p.extension(filePath).replaceFirst('.', '').toLowerCase();
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter_js/flutter_js.dart';
 import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
@@ -9,6 +10,7 @@ import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
+
 import 'async_js_rewriter.dart';
 import 'js_extensions.dart';
 import 'js_rule_async_wrapper.dart';

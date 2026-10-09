@@ -47,10 +47,9 @@ class DownloadTask {
   String? get failureSummary {
     if (!hasFailures && (lastErrorMessage ?? '').isEmpty) return null;
     final reason = lastErrorReason ?? '下載失敗';
-    final chapter =
-        lastErrorChapterIndex == null
-            ? ''
-            : '，第 ${lastErrorChapterIndex! + 1} 章';
+    final chapter = lastErrorChapterIndex == null
+        ? ''
+        : '，第 ${lastErrorChapterIndex! + 1} 章';
     final message = lastErrorMessage;
     if (message == null || message.isEmpty) {
       return '$reason$chapter';

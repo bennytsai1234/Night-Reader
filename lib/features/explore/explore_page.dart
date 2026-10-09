@@ -18,7 +18,9 @@ import 'package:night_reader/features/source_manager/source_manager_page.dart';
 
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
+
 import 'package:night_reader/shared/widgets/folder_tabs.dart';
+
 import 'widgets/legado_explore_kind_flow.dart';
 
 class ExplorePage extends StatelessWidget {
@@ -66,28 +68,27 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       appBar: GlassNavHeader(
         title: '發現',
         backgroundColor: AppChrome.of(context).groupedBackground,
-        bottom:
-            showTabs
-                ? Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppGrouped.margin,
-                    0,
-                    AppGrouped.margin,
-                    AppSpacing.sm,
-                  ),
-                  child: FolderTabs<String?>(
-                    tabs: [
-                      const FolderTab<String?>(null, '全部'),
-                      for (final group in provider.groups)
-                        FolderTab<String?>(group, group),
-                    ],
-                    selected: provider.selectedGroup,
-                    // 分組篩選以資料夾分頁切換；provider 對同一分組是切換語意，
-                    // 分頁只在選到不同分頁時回報，因此不會誤觸取消。
-                    onChanged: provider.setGroupFilter,
-                  ),
-                )
-                : null,
+        bottom: showTabs
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppGrouped.margin,
+                  0,
+                  AppGrouped.margin,
+                  AppSpacing.sm,
+                ),
+                child: FolderTabs<String?>(
+                  tabs: [
+                    const FolderTab<String?>(null, '全部'),
+                    for (final group in provider.groups)
+                      FolderTab<String?>(group, group),
+                  ],
+                  selected: provider.selectedGroup,
+                  // 分組篩選以資料夾分頁切換；provider 對同一分組是切換語意，
+                  // 分頁只在選到不同分頁時回報，因此不會誤觸取消。
+                  onChanged: provider.setGroupFilter,
+                ),
+              )
+            : null,
         bottomHeight: showTabs ? FolderTabs.height + AppSpacing.sm : 0,
       ),
       // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
@@ -141,11 +142,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           primaryAction: AppStateAction(
             label: '管理書源',
             icon: Icons.source_outlined,
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SourceManagerPage()),
-                ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+            ),
           ),
           secondaryAction: AppStateAction(
             label: '重新整理',
@@ -214,50 +214,46 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Builder(
-          builder:
-              (rowContext) => InkWell(
-                key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-                onTap: () {
-                  provider.toggleExpand(index);
-                  if (!isExpanded) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _ensureSourceVisible(source.bookSourceUrl);
-                    });
-                  }
-                },
-                onLongPress:
-                    () => _showSourceMenu(rowContext, provider, source),
-                child: _SourceRow(
-                  name: source.bookSourceName,
-                  expanded: isExpanded,
-                  loading: isExpanded && provider.isLoadingKinds,
-                ),
-              ),
+          builder: (rowContext) => InkWell(
+            key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
+            onTap: () {
+              provider.toggleExpand(index);
+              if (!isExpanded) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _ensureSourceVisible(source.bookSourceUrl);
+                });
+              }
+            },
+            onLongPress: () => _showSourceMenu(rowContext, provider, source),
+            child: _SourceRow(
+              name: source.bookSourceName,
+              expanded: isExpanded,
+              loading: isExpanded && provider.isLoadingKinds,
+            ),
+          ),
         ),
         AnimatedSize(
           duration: AppMotion.menu,
           curve: AppMotion.menuCurve,
           alignment: Alignment.topCenter,
-          child:
-              isExpanded && !provider.isLoadingKinds
-                  ? Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppGrouped.rowPadding,
-                      0,
-                      AppGrouped.rowPadding,
-                      AppSpacing.lg,
-                    ),
-                    child:
-                        provider.expandedKinds.isEmpty
-                            ? Text(
-                              '暫無分類',
-                              style: AppTextStyles.bodySm.copyWith(
-                                color: AppChrome.of(context).sectionText,
-                              ),
-                            )
-                            : _buildKindTags(provider, source),
-                  )
-                  : const SizedBox(width: double.infinity),
+          child: isExpanded && !provider.isLoadingKinds
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppGrouped.rowPadding,
+                    0,
+                    AppGrouped.rowPadding,
+                    AppSpacing.lg,
+                  ),
+                  child: provider.expandedKinds.isEmpty
+                      ? Text(
+                          '暫無分類',
+                          style: AppTextStyles.bodySm.copyWith(
+                            color: AppChrome.of(context).sectionText,
+                          ),
+                        )
+                      : _buildKindTags(provider, source),
+                )
+              : const SizedBox(width: double.infinity),
         ),
       ],
     );
@@ -270,24 +266,22 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
     return LegadoExploreKindFlow(
       styles: kinds.map((kind) => kind.effectiveStyle).toList(),
-      children:
-          kinds.map((kind) {
-            final isError = kind.title.startsWith('ERROR:');
-            final hasUrl = kind.url != null && kind.url!.isNotEmpty;
-            return GlassCapsule(
-              label: isError ? '分類載入失敗' : kind.title,
-              maxLines: 2,
-              blur: false,
-              tint: chrome.groupedBackground,
-              foregroundColor: isError ? error : null,
-              onTap:
-                  isError
-                      ? () => _showKindError(context, kind)
-                      : hasUrl
-                      ? () => _navigateToExploreShow(source, kind)
-                      : null,
-            );
-          }).toList(),
+      children: kinds.map((kind) {
+        final isError = kind.title.startsWith('ERROR:');
+        final hasUrl = kind.url != null && kind.url!.isNotEmpty;
+        return GlassCapsule(
+          label: isError ? '分類載入失敗' : kind.title,
+          maxLines: 2,
+          blur: false,
+          tint: chrome.groupedBackground,
+          foregroundColor: isError ? error : null,
+          onTap: isError
+              ? () => _showKindError(context, kind)
+              : hasUrl
+              ? () => _navigateToExploreShow(source, kind)
+              : null,
+        );
+      }).toList(),
     );
   }
 
@@ -299,7 +293,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         kind.url ?? kind.title,
         style: AppTextStyles.bodySm,
       ),
-      actions: const [AppAlertAction(label: '關閉', value: null, isDefault: true)],
+      actions: const [
+        AppAlertAction(label: '關閉', value: null, isDefault: true),
+      ],
     );
   }
 
@@ -307,12 +303,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (_) => ExploreShowPage(
-              sourceUrl: source.bookSourceUrl,
-              exploreUrl: kind.url!,
-              exploreName: kind.title,
-            ),
+        builder: (_) => ExploreShowPage(
+          sourceUrl: source.bookSourceUrl,
+          exploreUrl: kind.url!,
+          exploreName: kind.title,
+        ),
       ),
     );
   }
@@ -398,13 +393,15 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
     }
   }
 
-  Future<void> _confirmDelete(ExploreProvider provider, BookSource source) async {
+  Future<void> _confirmDelete(
+    ExploreProvider provider,
+    BookSource source,
+  ) async {
     final confirmed = await showAppConfirm(
       context: context,
       title: '刪除書源',
@@ -417,9 +414,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       await provider.deleteSource(source);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
     }
   }
 
@@ -433,8 +429,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     // 展開的書源捲到玻璃頁首與資料夾分頁下方，而不是被頁首蓋住。
     final headerExtent = _bodyPadding.top;
     final position = _scrollController.position;
-    final offset = (viewport.getOffsetToReveal(target, 0).offset -
-            headerExtent)
+    final offset = (viewport.getOffsetToReveal(target, 0).offset - headerExtent)
         .clamp(position.minScrollExtent, position.maxScrollExtent);
     await _scrollController.animateTo(
       offset,

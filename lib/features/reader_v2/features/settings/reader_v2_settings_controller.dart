@@ -12,15 +12,19 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constant
 
 class ReaderV2SettingsController extends ChangeNotifier {
   ReaderV2SettingsController({
-    ReaderV2PrefsRepository prefsRepository = const ReaderV2PrefsRepository(),
-  }) : _prefsRepository = prefsRepository {
+    this._prefsRepository = const ReaderV2PrefsRepository(),
+  }) {
     _initFromCache(ReaderV2PrefsRepository.cachedSnapshot);
   }
 
-  static const double minReadableLineHeight = ReaderV2Style.minReadableLineHeight;
-  static const double maxReadableLineHeight = ReaderV2Style.maxReadableLineHeight;
-  static const double minAutoPageSpeed = ReaderV2PrefsRepository.minAutoPageSpeed;
-  static const double maxAutoPageSpeed = ReaderV2PrefsRepository.maxAutoPageSpeed;
+  static const double minReadableLineHeight =
+      ReaderV2Style.minReadableLineHeight;
+  static const double maxReadableLineHeight =
+      ReaderV2Style.maxReadableLineHeight;
+  static const double minAutoPageSpeed =
+      ReaderV2PrefsRepository.minAutoPageSpeed;
+  static const double maxAutoPageSpeed =
+      ReaderV2PrefsRepository.maxAutoPageSpeed;
   static const double minPagePadding = ReaderV2PrefsRepository.minPagePadding;
   static const double maxPagePadding = ReaderV2PrefsRepository.maxPagePadding;
   static const double minChapterSpacing =
@@ -146,7 +150,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     bool bottomInfoReservedExternally = false,
   }) {
     final top =
-        (topInfoReservedExternally ? 0.0 : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
+        (topInfoReservedExternally
+            ? 0.0
+            : mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
     final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
     return ReaderV2Style(
@@ -167,7 +173,8 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   void setFontSize(double value) => setTypography(fontSize: value);
   void setLineHeight(double value) => setTypography(lineHeight: value);
-  void setParagraphSpacing(double value) => setTypography(paragraphSpacing: value);
+  void setParagraphSpacing(double value) =>
+      setTypography(paragraphSpacing: value);
   void setLetterSpacing(double value) => setTypography(letterSpacing: value);
 
   void setTypography({

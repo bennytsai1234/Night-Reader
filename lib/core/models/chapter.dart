@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
+
 import 'replace_rule.dart';
 import '../services/chinese_utils.dart';
 

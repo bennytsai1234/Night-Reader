@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 
 import 'package:flutter_js/javascript_runtime.dart';
@@ -6,8 +7,8 @@ import 'package:flutter_js/js_eval_result.dart';
 const REGISTER_PROMISE_FUNCTION = 'FLUTTER_NATIVEJS_REGISTER_PROMISE';
 
 extension HandlePromises on JavascriptRuntime {
-  enableHandlePromises() {
-    final fnRegisterPromise = evaluate(""" 
+  void enableHandlePromises() {
+    final fnRegisterPromise = evaluate("""
      var FLUTTER_NATIVEJS_PENDING_PROMISES = {};
       var FLUTTER_NATIVEJS_PENDING_PROMISES_COUNT = -1;
 
@@ -107,13 +108,13 @@ extension HandlePromises on JavascriptRuntime {
       var completed = false;
       Function? fnEvaluatePromise;
       fnEvaluatePromise = () async {
-        this.executePendingJob();
+        executePendingJob();
         if (!completed) {
           await Future.delayed(
               Duration(milliseconds: 20), () => fnEvaluatePromise!.call());
         } else {
           if (JavascriptRuntime.debugEnabled) {
-            print('Promise completed');
+            debugPrint('Promise completed');
           }
         }
       };
@@ -141,7 +142,7 @@ extension HandlePromises on JavascriptRuntime {
     int idxPromise = int.parse(promiseQuerableIdx);
     Timer.periodic(Duration(milliseconds: 20), (timer) {
       // call to _JS_ExecutePendingJob
-      this.executePendingJob();
+      executePendingJob();
       //eval(REGISTER_PROMISE_FUNCTION);
       // REFERENCE: https://github.com/p7s1digital/oasis-jsbridge-android/blob/3b104ec46d4817a0688e2e50e18eb3e5b2976485/jsbridge/src/main/jni/JsBridgeContext_quickjs.cpp#L343
       //  * https://github.com/p7s1digital/oasis-jsbridge-android/blob/82e2cb0211cefc4ae74675a4fa59ea3e4f2845f0/jsbridge/src/main/jni/java-types/Deferred_quickjs.cpp

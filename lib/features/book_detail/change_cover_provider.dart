@@ -110,14 +110,13 @@ class ChangeCoverProvider extends ChangeNotifier {
       }
 
       final enabledSources = await _sourceDao.getEnabled();
-      final coverSources =
-          enabledSources
-              .where(
-                (source) =>
-                    source.ruleSearch?.coverUrl != null &&
-                    source.ruleSearch!.coverUrl!.isNotEmpty,
-              )
-              .toList();
+      final coverSources = enabledSources
+          .where(
+            (source) =>
+                source.ruleSearch?.coverUrl != null &&
+                source.ruleSearch!.coverUrl!.isNotEmpty,
+          )
+          .toList();
 
       _totalSources = coverSources.length;
       if (_totalSources == 0) return;
@@ -182,10 +181,7 @@ class ChangeCoverProvider extends ChangeNotifier {
       }
       return true;
     } catch (error) {
-      AppLog.e(
-        '搜尋封面書源 ${source.bookSourceName} 失敗: $error',
-        error: error,
-      );
+      AppLog.e('搜尋封面書源 ${source.bookSourceName} 失敗: $error', error: error);
       return false;
     } finally {
       _searchCount++;

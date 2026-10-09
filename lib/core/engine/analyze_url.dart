@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
@@ -122,8 +123,9 @@ class AnalyzeUrl {
 
   /// 將 BookSource.header（JSON 格式）解析並注入 headerMap
   void _initSourceHeaders() {
-    final headerStr =
-        source is BaseSource ? (source as BaseSource).header : null;
+    final headerStr = source is BaseSource
+        ? (source as BaseSource).header
+        : null;
     if (headerStr == null || headerStr.isEmpty) return;
     try {
       final resolvedHeaderStr = _resolveMaybeJsString(headerStr);
@@ -697,8 +699,8 @@ class AnalyzeUrl {
       final rawBody = (body as String).trimLeft();
       headers['Content-Type'] =
           (rawBody.startsWith('{') || rawBody.startsWith('['))
-              ? 'application/json; charset=utf-8'
-              : 'application/x-www-form-urlencoded; charset=utf-8';
+          ? 'application/json; charset=utf-8'
+          : 'application/x-www-form-urlencoded; charset=utf-8';
     }
     return headers;
   }
@@ -779,5 +781,4 @@ class AnalyzeUrl {
   bool _hasContentType(Map<String, String> headers) {
     return headers.keys.any((key) => key.toLowerCase() == 'content-type');
   }
-
 }

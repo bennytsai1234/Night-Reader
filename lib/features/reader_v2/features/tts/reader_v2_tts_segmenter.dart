@@ -73,7 +73,8 @@ final class ReaderV2TtsSegmenter {
         // 下一句開頭，否則下一句的高亮會從一個孤立的「」」開始。
         var end = index + 1;
         if (codeUnit != 0x0A) {
-          while (end < chapterEnd && _isClosingPunctuation(text.codeUnitAt(end))) {
+          while (end < chapterEnd &&
+              _isClosingPunctuation(text.codeUnitAt(end))) {
             end += 1;
           }
         }

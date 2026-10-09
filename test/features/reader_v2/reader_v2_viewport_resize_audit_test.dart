@@ -37,9 +37,7 @@ void main() {
           await tester.pump();
         }
 
-        final viewportTop = tester
-            .getTopLeft(find.byKey(_viewportKey))
-            .dy;
+        final viewportTop = tester.getTopLeft(find.byKey(_viewportKey)).dy;
         final markerY = tester.getTopLeft(find.byKey(markerKey)).dy;
         return (
           pixels: controller.position.pixels,
@@ -69,10 +67,7 @@ void main() {
 const _viewportKey = ValueKey<String>('reader-viewport');
 
 class _ViewportHarness extends StatelessWidget {
-  const _ViewportHarness({
-    required this.controller,
-    required this.markerKey,
-  });
+  const _ViewportHarness({required this.controller, required this.markerKey});
 
   final ScrollController controller;
   final GlobalKey markerKey;

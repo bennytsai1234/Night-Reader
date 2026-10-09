@@ -5,22 +5,20 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_pref
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
-typedef ReaderV2AutoPageTimerFactory =
-    Timer Function(Duration interval, void Function(Timer timer) onTick);
+typedef ReaderV2AutoPageTimerFactory = Timer Function(
+  Duration interval,
+  void Function(Timer timer) onTick,
+);
 
 class ReaderV2AutoPageController extends ChangeNotifier {
   ReaderV2AutoPageController({
     required this.runtime,
-    ReaderV2ViewportController? viewportController,
-    double Function()? viewportExtent,
-    double Function()? autoPageSpeed,
-    Duration scrollInterval = const Duration(milliseconds: 16),
+    this._viewportController,
+    this._viewportExtent,
+    this._autoPageSpeed,
+    this._scrollInterval = const Duration(milliseconds: 16),
     ReaderV2AutoPageTimerFactory? timerFactory,
-  }) : _viewportController = viewportController,
-       _viewportExtent = viewportExtent,
-       _autoPageSpeed = autoPageSpeed,
-       _scrollInterval = scrollInterval,
-       _timerFactory = timerFactory ?? Timer.periodic;
+  }) : _timerFactory = timerFactory ?? Timer.periodic;
 
   static const double _minAutoPageSpeed =
       ReaderV2PrefsRepository.minAutoPageSpeed;
@@ -104,19 +102,17 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   double _scrollStepDeltaForElapsed() {
     final explicit = _viewportExtent?.call();
-    final viewportHeight =
-        explicit != null && explicit.isFinite && explicit > 0
-            ? explicit
-            : runtime.state.layoutSpec.viewportSize.height;
+    final viewportHeight = explicit != null && explicit.isFinite && explicit > 0
+        ? explicit
+        : runtime.state.layoutSpec.viewportSize.height;
     if (!viewportHeight.isFinite || viewportHeight <= 0) return 0;
     final now = DateTime.now();
     final previous = _lastScrollTick;
     _lastScrollTick = now;
-    final elapsedSeconds =
-        previous == null
-            ? _scrollInterval.inMicroseconds / Duration.microsecondsPerSecond
-            : now.difference(previous).inMicroseconds /
-                Duration.microsecondsPerSecond;
+    final elapsedSeconds = previous == null
+        ? _scrollInterval.inMicroseconds / Duration.microsecondsPerSecond
+        : now.difference(previous).inMicroseconds /
+              Duration.microsecondsPerSecond;
     final boundedElapsed = elapsedSeconds.clamp(0.004, 0.08).toDouble();
     return viewportHeight * _speed * boundedElapsed;
   }

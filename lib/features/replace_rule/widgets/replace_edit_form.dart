@@ -76,8 +76,8 @@ class ReplaceEditForm extends StatelessWidget {
 }
 
 /// 正則、替換內容等程式碼欄位的等寬字樣式。
-TextStyle _monospaceFieldStyle(BuildContext context) => AppTextStyles.bodySm
-    .copyWith(
+TextStyle _monospaceFieldStyle(BuildContext context) =>
+    AppTextStyles.bodySm.copyWith(
       height: 1.3,
       color: Theme.of(context).colorScheme.onSurface,
       fontFamily: 'monospace',

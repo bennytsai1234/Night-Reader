@@ -8,7 +8,9 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+
 import '../models/search_scope.dart';
+
 import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
@@ -42,12 +44,11 @@ class SearchScopeSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder:
-          (_) => SearchScopeSheet(
-            currentScope: currentScope,
-            groups: groups,
-            onScopeChanged: onScopeChanged,
-          ),
+      builder: (_) => SearchScopeSheet(
+        currentScope: currentScope,
+        groups: groups,
+        onScopeChanged: onScopeChanged,
+      ),
     );
   }
 
@@ -71,8 +72,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
   @override
   void initState() {
     super.initState();
-    _mode =
-        widget.currentScope.isSource ? _ScopeMode.source : _ScopeMode.groups;
+    _mode = widget.currentScope.isSource
+        ? _ScopeMode.source
+        : _ScopeMode.groups;
     if (!widget.currentScope.isAll && !widget.currentScope.isSource) {
       _selectedGroups.addAll(widget.currentScope.displayNames);
     }
@@ -100,8 +102,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
       if (widget.currentScope.isSource) {
         final scopeStr = widget.currentScope.toString();
         final url = scopeStr.substring(scopeStr.indexOf('::') + 2);
-        _selectedSource =
-            _allSources.where((s) => s.bookSourceUrl == url).firstOrNull;
+        _selectedSource = _allSources
+            .where((s) => s.bookSourceUrl == url)
+            .firstOrNull;
       }
     } catch (error) {
       if (!mounted) return;
@@ -118,13 +121,10 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
       if (query.isEmpty) {
         _filteredSources = List.from(_allSources);
       } else {
-        _filteredSources =
-            _allSources.where((s) {
-              return s.bookSourceName.toLowerCase().contains(
-                    query.toLowerCase(),
-                  ) ||
-                  s.bookSourceUrl.toLowerCase().contains(query.toLowerCase());
-            }).toList();
+        _filteredSources = _allSources.where((s) {
+          return s.bookSourceName.toLowerCase().contains(query.toLowerCase()) ||
+              s.bookSourceUrl.toLowerCase().contains(query.toLowerCase());
+        }).toList();
       }
     });
   }
@@ -181,10 +181,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
             Expanded(
               child: KeyedSubtree(
                 key: ValueKey(_mode),
-                child:
-                    _mode == _ScopeMode.groups
-                        ? _buildGroupTab(scrollController)
-                        : _buildSourceTab(scrollController),
+                child: _mode == _ScopeMode.groups
+                    ? _buildGroupTab(scrollController)
+                    : _buildSourceTab(scrollController),
               ),
             ),
           ],
@@ -243,10 +242,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
               },
               trailing: SizedBox(
                 width: 22,
-                child:
-                    isSelected
-                        ? Icon(Icons.check_rounded, size: 22, color: primary)
-                        : null,
+                child: isSelected
+                    ? Icon(Icons.check_rounded, size: 22, color: primary)
+                    : null,
               ),
             ),
           ),
@@ -296,33 +294,30 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
           ),
         ),
         Expanded(
-          child:
-              count == 0
-                  ? _emptyHint(
-                    _allSources.isEmpty ? '目前沒有可搜尋的書源' : '找不到符合條件的書源',
-                  )
-                  : ListView.builder(
-                    controller: scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: _listPadding(),
-                    itemCount: count,
-                    itemBuilder: (context, index) {
-                      final source = _filteredSources[index];
-                      return GroupedSliceItem(
-                        index: index,
-                        count: count,
-                        child: GroupedCheckRow(
-                          title: source.bookSourceName,
-                          subtitle: source.bookSourceUrl,
-                          selected:
-                              _selectedSource?.bookSourceUrl ==
-                              source.bookSourceUrl,
-                          onTap: () => setState(() => _selectedSource = source),
-                        ),
-                      );
-                    },
-                  ),
+          child: count == 0
+              ? _emptyHint(_allSources.isEmpty ? '目前沒有可搜尋的書源' : '找不到符合條件的書源')
+              : ListView.builder(
+                  controller: scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: _listPadding(),
+                  itemCount: count,
+                  itemBuilder: (context, index) {
+                    final source = _filteredSources[index];
+                    return GroupedSliceItem(
+                      index: index,
+                      count: count,
+                      child: GroupedCheckRow(
+                        title: source.bookSourceName,
+                        subtitle: source.bookSourceUrl,
+                        selected:
+                            _selectedSource?.bookSourceUrl ==
+                            source.bookSourceUrl,
+                        onTap: () => setState(() => _selectedSource = source),
+                      ),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -331,15 +326,13 @@ class _SearchScopeSheetState extends State<SearchScopeSheet> {
   void _onConfirm() {
     final SearchScope newScope;
     if (_mode == _ScopeMode.groups) {
-      newScope =
-          _selectedGroups.isEmpty
-              ? SearchScope()
-              : SearchScope.fromGroups(_selectedGroups.toList());
+      newScope = _selectedGroups.isEmpty
+          ? SearchScope()
+          : SearchScope.fromGroups(_selectedGroups.toList());
     } else {
-      newScope =
-          _selectedSource != null
-              ? SearchScope.fromSource(_selectedSource!)
-              : SearchScope();
+      newScope = _selectedSource != null
+          ? SearchScope.fromSource(_selectedSource!)
+          : SearchScope();
     }
     widget.onScopeChanged(newScope);
     Navigator.pop(context);

@@ -1,7 +1,10 @@
 import 'dart:convert';
+
 import 'package:html/parser.dart' as html_parser;
 import 'package:fast_gbk/fast_gbk.dart';
+
 import '../js_extensions.dart';
+
 import 'package:night_reader/core/services/chinese_utils.dart';
 
 extension JsStringExtensions on JsExtensions {
@@ -102,14 +105,12 @@ extension JsStringExtensions on JsExtensions {
     // 實作 java.strToBytes
     runtime.onMessage('strToBytes', (dynamic args) {
       final payload = _decodeArgs(args);
-      final str =
-          payload is List && payload.isNotEmpty
-              ? payload[0].toString()
-              : payload.toString();
-      final charset =
-          payload is List && payload.length > 1
-              ? payload[1].toString()
-              : 'UTF-8';
+      final str = payload is List && payload.isNotEmpty
+          ? payload[0].toString()
+          : payload.toString();
+      final charset = payload is List && payload.length > 1
+          ? payload[1].toString()
+          : 'UTF-8';
       if (charset.toUpperCase().contains('GBK') ||
           charset.toUpperCase().contains('GB2312')) {
         return jsonEncode(gbk.encode(str));
@@ -120,13 +121,13 @@ extension JsStringExtensions on JsExtensions {
     // 實作 java.bytesToStr
     runtime.onMessage('bytesToStr', (dynamic args) {
       final payload = _decodeArgs(args);
-      final bytesSource =
-          payload is List && payload.isNotEmpty ? payload[0] : payload;
+      final bytesSource = payload is List && payload.isNotEmpty
+          ? payload[0]
+          : payload;
       final bytes = List<int>.from(bytesSource as List);
-      final charset =
-          payload is List && payload.length > 1
-              ? payload[1].toString()
-              : 'UTF-8';
+      final charset = payload is List && payload.length > 1
+          ? payload[1].toString()
+          : 'UTF-8';
       if (charset.toUpperCase().contains('GBK') ||
           charset.toUpperCase().contains('GB2312')) {
         return gbk.decode(bytes);
@@ -245,10 +246,10 @@ extension JsStringExtensions on JsExtensions {
         } else {
           tmp =
               (i >= 2 &&
-                      i == chNum.length - 1 &&
-                      (chnMap[chNum[i - 1]] ?? 0) > 10)
-                  ? val * (chnMap[chNum[i - 1]] ?? 0) ~/ 10
-                  : tmp * 10 + val;
+                  i == chNum.length - 1 &&
+                  (chnMap[chNum[i - 1]] ?? 0) > 10)
+              ? val * (chnMap[chNum[i - 1]] ?? 0) ~/ 10
+              : tmp * 10 + val;
         }
       }
       return result + tmp + billion;

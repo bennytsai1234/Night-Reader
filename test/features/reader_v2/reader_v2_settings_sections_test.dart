@@ -107,9 +107,8 @@ void main() {
     tester,
   ) async {
     final settings = await pumpSection(tester);
-    TextButton resetButton() => tester.widget<TextButton>(
-      find.widgetWithText(TextButton, '恢復預設'),
-    );
+    TextButton resetButton() =>
+        tester.widget<TextButton>(find.widgetWithText(TextButton, '恢復預設'));
     expect(resetButton().onPressed, isNull);
 
     await tester.tap(find.byIcon(Icons.add_rounded).first);
@@ -179,11 +178,10 @@ void main() {
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () =>
-                    ReaderV2SettingsSheets.showInterfaceSettings(
-                      context,
-                      settings,
-                    ),
+                onPressed: () => ReaderV2SettingsSheets.showInterfaceSettings(
+                  context,
+                  settings,
+                ),
                 child: const Text('開啟'),
               ),
             ),

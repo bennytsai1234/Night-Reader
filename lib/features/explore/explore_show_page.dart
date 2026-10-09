@@ -6,6 +6,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 
@@ -28,12 +29,11 @@ class ExploreShowPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create:
-          (_) => ExploreShowProvider(
-            sourceUrl: sourceUrl,
-            exploreUrl: exploreUrl,
-            exploreName: exploreName,
-          ),
+      create: (_) => ExploreShowProvider(
+        sourceUrl: sourceUrl,
+        exploreUrl: exploreUrl,
+        exploreName: exploreName,
+      ),
       child: _ExploreShowContent(exploreName: exploreName),
     );
   }
@@ -70,36 +70,40 @@ class _ExploreShowContent extends StatelessWidget {
     }
 
     if (provider.errorMessage != null && provider.books.isEmpty) {
-      return padState(AppStateView(
-        icon: Icons.error_outline,
-        title: '分類載入失敗',
-        description: provider.errorMessage,
-        tone: AppStateTone.error,
-        primaryAction: AppStateAction(
-          label: '重試',
-          icon: Icons.refresh,
-          onPressed: provider.refresh,
+      return padState(
+        AppStateView(
+          icon: Icons.error_outline,
+          title: '分類載入失敗',
+          description: provider.errorMessage,
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: provider.refresh,
+          ),
+          secondaryAction: AppStateAction(
+            label: '查看錯誤',
+            icon: Icons.info_outline,
+            onPressed: () =>
+                _showErrorDialog(context, provider.errorMessage ?? ''),
+          ),
         ),
-        secondaryAction: AppStateAction(
-          label: '查看錯誤',
-          icon: Icons.info_outline,
-          onPressed:
-              () => _showErrorDialog(context, provider.errorMessage ?? ''),
-        ),
-      ));
+      );
     }
 
     if (provider.isEmpty) {
-      return padState(AppStateView(
-        icon: Icons.inbox_outlined,
-        title: '這個分類目前沒有內容',
-        description: '書源可能尚未提供資料，也可以稍後再試。',
-        primaryAction: AppStateAction(
-          label: '重新整理',
-          icon: Icons.refresh,
-          onPressed: provider.refresh,
+      return padState(
+        AppStateView(
+          icon: Icons.inbox_outlined,
+          title: '這個分類目前沒有內容',
+          description: '書源可能尚未提供資料，也可以稍後再試。',
+          primaryAction: AppStateAction(
+            label: '重新整理',
+            icon: Icons.refresh,
+            onPressed: provider.refresh,
+          ),
         ),
-      ));
+      );
     }
 
     return RefreshIndicator(
@@ -111,9 +115,8 @@ class _ExploreShowContent extends StatelessWidget {
           bottom: padding.bottom + AppSpacing.xl,
         ),
         itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
-        separatorBuilder:
-            (_, __) =>
-                const InsetSeparator(indent: ExploreBookItem.textIndent),
+        separatorBuilder: (_, _) =>
+            const InsetSeparator(indent: ExploreBookItem.textIndent),
         itemBuilder: (context, index) {
           if (index == provider.books.length) {
             if (provider.errorMessage == null) {
@@ -162,7 +165,9 @@ class _ExploreShowContent extends StatelessWidget {
       context: context,
       title: '錯誤原因',
       content: SelectableText(message, style: AppTextStyles.bodySm),
-      actions: const [AppAlertAction(label: '關閉', value: null, isDefault: true)],
+      actions: const [
+        AppAlertAction(label: '關閉', value: null, isDefault: true),
+      ],
     );
   }
 }

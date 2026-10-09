@@ -57,8 +57,7 @@ class GroupedSection extends StatelessWidget {
       rows.add(children[i]);
     }
     final effectiveMargin =
-        margin ??
-        const EdgeInsets.symmetric(horizontal: AppGrouped.margin);
+        margin ?? const EdgeInsets.symmetric(horizontal: AppGrouped.margin);
 
     return Padding(
       padding: EdgeInsets.only(top: topGap),
@@ -80,7 +79,7 @@ class GroupedSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(child: GroupedSectionHeader(header ?? '')),
-                  if (headerTrailing != null) headerTrailing!,
+                  ?headerTrailing,
                 ],
               ),
             ),
@@ -340,21 +339,21 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
-    final titleColor =
-        destructive
-            ? (Theme.of(context).brightness == Brightness.dark
-                ? AppPalette.rustDark
-                : AppPalette.rust)
-            : accent
-            ? scheme.primary
-            : scheme.onSurface;
+    final titleColor = destructive
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? AppPalette.rustDark
+              : AppPalette.rust)
+        : accent
+        ? scheme.primary
+        : scheme.onSurface;
     final chevron = showChevron ?? (onTap != null && trailing == null);
     final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
 
     Widget row = ConstrainedBox(
       constraints: BoxConstraints(
-        minHeight:
-            hasSubtitle ? AppGrouped.rowTallMinHeight : AppGrouped.rowMinHeight,
+        minHeight: hasSubtitle
+            ? AppGrouped.rowTallMinHeight
+            : AppGrouped.rowMinHeight,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -378,8 +377,9 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
                           color: titleColor,
-                          fontWeight:
-                              accent ? FontWeight.w500 : FontWeight.w400,
+                          fontWeight: accent
+                              ? FontWeight.w500
+                              : FontWeight.w400,
                         ),
                       ),
                   if (hasSubtitle) ...[
@@ -543,14 +543,13 @@ class GroupedCheckRow extends StatelessWidget implements GroupedRowLike {
         onTap: onTap,
         trailing: SizedBox(
           width: 22,
-          child:
-              selected
-                  ? Icon(
-                    Icons.check_rounded,
-                    size: 22,
-                    color: Theme.of(context).colorScheme.primary,
-                  )
-                  : null,
+          child: selected
+              ? Icon(
+                  Icons.check_rounded,
+                  size: 22,
+                  color: Theme.of(context).colorScheme.primary,
+                )
+              : null,
         ),
       ),
     );
@@ -655,63 +654,61 @@ class GroupedTextFieldRow extends StatelessWidget {
         style ??
         AppTextStyles.bodyBase.copyWith(height: 1.3, color: scheme.onSurface);
     final effectiveMaxLines = obscureText ? 1 : maxLines;
-    final field =
-        validator == null
-            ? TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              onSubmitted: onSubmitted,
-              keyboardType: keyboardType,
-              textInputAction: textInputAction,
-              maxLines: effectiveMaxLines,
-              minLines: minLines,
-              autofocus: autofocus,
-              obscureText: obscureText,
-              style: effectiveStyle,
-              decoration: decoration,
-            )
-            : TextFormField(
-              controller: controller,
-              focusNode: focusNode,
-              validator: validator,
-              onChanged: onChanged,
-              onFieldSubmitted: onSubmitted,
-              keyboardType: keyboardType,
-              textInputAction: textInputAction,
-              maxLines: effectiveMaxLines,
-              minLines: minLines,
-              autofocus: autofocus,
-              obscureText: obscureText,
-              style: effectiveStyle,
-              decoration: decoration,
-            );
+    final field = validator == null
+        ? TextField(
+            controller: controller,
+            focusNode: focusNode,
+            onChanged: onChanged,
+            onSubmitted: onSubmitted,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            maxLines: effectiveMaxLines,
+            minLines: minLines,
+            autofocus: autofocus,
+            obscureText: obscureText,
+            style: effectiveStyle,
+            decoration: decoration,
+          )
+        : TextFormField(
+            controller: controller,
+            focusNode: focusNode,
+            validator: validator,
+            onChanged: onChanged,
+            onFieldSubmitted: onSubmitted,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            maxLines: effectiveMaxLines,
+            minLines: minLines,
+            autofocus: autofocus,
+            obscureText: obscureText,
+            style: effectiveStyle,
+            decoration: decoration,
+          );
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: AppGrouped.rowMinHeight),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
-        child:
-            label == null
-                ? field
-                : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.md),
-                      child: SizedBox(
-                        width: labelWidth,
-                        child: Text(
-                          label!,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                          ),
+        child: label == null
+            ? field
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.md),
+                    child: SizedBox(
+                      width: labelWidth,
+                      child: Text(
+                        label!,
+                        style: AppTextStyles.bodyBase.copyWith(
+                          height: 1.3,
+                          color: scheme.onSurface,
                         ),
                       ),
                     ),
-                    Expanded(child: field),
-                  ],
-                ),
+                  ),
+                  Expanded(child: field),
+                ],
+              ),
       ),
     );
   }

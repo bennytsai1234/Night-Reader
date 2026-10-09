@@ -9,7 +9,7 @@ import '../binding/js_string_ref.dart' as JSStringRef;
 class JSString {
   /// C pointer
   late Pointer _pointer;
-  get pointer => _pointer;
+  Pointer<NativeType> get pointer => _pointer;
 
   JSString(this._pointer);
 
@@ -78,17 +78,17 @@ class JSStringPointer {
   final int count;
 
   JSStringPointer([Pointer? value])
-      : this.count = 1,
-        this.pointer = malloc.call<Pointer>(1) {
+      : count = 1,
+        pointer = malloc.call<Pointer>(1) {
     pointer.value = value ?? nullptr;
   }
 
   /// JSStringRef array
   JSStringPointer.array(List<String> array)
-      : this.count = array.length,
-        this.pointer = malloc.call<Pointer>(array.length) {
+      : count = array.length,
+        pointer = malloc.call<Pointer>(array.length) {
     for (int i = 0; i < array.length; i++) {
-      this.pointer[i] = JSString.fromString(array[i]).pointer;
+      pointer[i] = JSString.fromString(array[i]).pointer;
     }
   }
 

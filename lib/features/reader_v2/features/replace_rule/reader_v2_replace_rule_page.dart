@@ -75,9 +75,8 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('刪除規則失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('刪除規則失敗：$error')));
     }
   }
 
@@ -87,9 +86,8 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('更新規則狀態失敗：$error')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('更新規則狀態失敗：$error')));
     }
   }
 
@@ -101,8 +99,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         title: '替換規則',
         actions: [
           GlassIconButton(
-            onPressed:
-                _loading || _loadError != null ? null : () => _openEditor(),
+            onPressed: _loading || _loadError != null
+                ? null
+                : () => _openEditor(),
             icon: Icons.add_rounded,
             tooltip: '新增規則',
           ),
@@ -118,44 +117,43 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       padding: EdgeInsets.only(
         top: _loading || _loadError != null || _rules.isEmpty ? padding.top : 0,
       ),
-      child:
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null
-              ? AppStateView(
-                icon: Icons.error_outline,
-                title: '替換規則載入失敗',
-                description: '無法讀取現有規則，請稍後再試。',
-                tone: AppStateTone.error,
-                primaryAction: AppStateAction(
-                  label: '重試',
-                  icon: Icons.refresh,
-                  onPressed: _loadRules,
-                ),
-              )
-              : _rules.isEmpty
-              ? AppStateView(
-                icon: Icons.rule_rounded,
-                title: '還沒有替換規則',
-                description: '新增規則後，可在閱讀時自動整理標題或正文。',
-                primaryAction: AppStateAction(
-                  label: '新增規則',
-                  icon: Icons.add,
-                  onPressed: _openEditor,
-                ),
-              )
-              : SwipeActionsGroup(
-                child: GroupedListView(
-                  children: [
-                    GroupedSection(
-                      topGap: AppSpacing.sm,
-                      children: [
-                        for (final rule in _rules) _buildRuleRow(context, rule),
-                      ],
-                    ),
-                  ],
-                ),
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? AppStateView(
+              icon: Icons.error_outline,
+              title: '替換規則載入失敗',
+              description: '無法讀取現有規則，請稍後再試。',
+              tone: AppStateTone.error,
+              primaryAction: AppStateAction(
+                label: '重試',
+                icon: Icons.refresh,
+                onPressed: _loadRules,
               ),
+            )
+          : _rules.isEmpty
+          ? AppStateView(
+              icon: Icons.rule_rounded,
+              title: '還沒有替換規則',
+              description: '新增規則後，可在閱讀時自動整理標題或正文。',
+              primaryAction: AppStateAction(
+                label: '新增規則',
+                icon: Icons.add,
+                onPressed: _openEditor,
+              ),
+            )
+          : SwipeActionsGroup(
+              child: GroupedListView(
+                children: [
+                  GroupedSection(
+                    topGap: AppSpacing.sm,
+                    children: [
+                      for (final rule in _rules) _buildRuleRow(context, rule),
+                    ],
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -163,68 +161,67 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     final chrome = AppChrome.of(context);
     final scheme = Theme.of(context).colorScheme;
     final content = Builder(
-      builder:
-          (rowContext) => InkWell(
-            onTap: () => _openEditor(rule: rule),
-            onLongPress: () => _showRuleMenu(rowContext, rule),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppGrouped.rowPadding,
-                vertical: AppSpacing.md,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+      builder: (rowContext) => InkWell(
+        onTap: () => _openEditor(rule: rule),
+        onLongPress: () => _showRuleMenu(rowContext, rule),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppGrouped.rowPadding,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      rule.name.isEmpty ? '未命名規則' : rule.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodyBase.copyWith(
+                        height: 1.3,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${rule.pattern} → ${rule.replacement}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySm.copyWith(
+                        height: 1.3,
+                        color: chrome.sectionText,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: [
-                        Text(
-                          rule.name.isEmpty ? '未命名規則' : rule.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${rule.pattern} → ${rule.replacement}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodySm.copyWith(
-                            height: 1.3,
-                            color: chrome.sectionText,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Wrap(
-                          spacing: AppSpacing.xs,
-                          runSpacing: AppSpacing.xs,
-                          children: [
-                            _chip(context, rule.isEnabled ? '已啟用' : '已停用'),
-                            _chip(context, rule.isRegex ? '正則' : '純文字'),
-                            if (rule.scopeContent) _chip(context, '正文'),
-                            if (rule.scopeTitle) _chip(context, '標題'),
-                          ],
-                        ),
+                        _chip(context, rule.isEnabled ? '已啟用' : '已停用'),
+                        _chip(context, rule.isRegex ? '正則' : '純文字'),
+                        if (rule.scopeContent) _chip(context, '正文'),
+                        if (rule.scopeTitle) _chip(context, '標題'),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Semantics(
-                    label: '啟用 ${rule.name}',
-                    child: GroupedSwitch(
-                      value: rule.isEnabled,
-                      onChanged: (value) => _toggleEnabled(rule, value),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: AppSpacing.md),
+              Semantics(
+                label: '啟用 ${rule.name}',
+                child: GroupedSwitch(
+                  value: rule.isEnabled,
+                  onChanged: (value) => _toggleEnabled(rule, value),
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
     );
     return SwipeActions(
       key: ValueKey(rule.id),
@@ -254,10 +251,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
         GlassMenuItem(
           value: 'toggle',
           label: rule.isEnabled ? '停用規則' : '啟用規則',
-          icon:
-              rule.isEnabled
-                  ? Icons.toggle_off_outlined
-                  : Icons.toggle_on_outlined,
+          icon: rule.isEnabled
+              ? Icons.toggle_off_outlined
+              : Icons.toggle_on_outlined,
         ),
         const GlassMenuDivider(),
         const GlassMenuItem(
@@ -282,7 +278,10 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
   Widget _chip(BuildContext context, String label) {
     final chrome = AppChrome.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: chrome.sectionText.withValues(alpha: 0.1),
         borderRadius: AppRadius.cardXs,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -7,7 +8,9 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+
 import 'association_base.dart';
+
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的檔案分享與解析邏輯擴展
@@ -63,18 +66,15 @@ mixin FileAssociationHandler on AssociationBase {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            imported
-                ? '已將書籍加入書架：$fileName'
-                : '檔案已複製，但加入書架失敗：$fileName',
+            imported ? '已將書籍加入書架：$fileName' : '檔案已複製，但加入書架失敗：$fileName',
           ),
         ),
       );
     } catch (e) {
       AppLog.e('搬移並匯入書籍失敗: $e', error: e);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('匯入書籍失敗：$e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('匯入書籍失敗：$e')));
     }
   }
 
@@ -90,8 +90,9 @@ mixin FileAssociationHandler on AssociationBase {
       final data = jsonDecode(content);
       var type = 'auto';
 
-      final dynamic first =
-          (data is List && data.isNotEmpty) ? data.first : data;
+      final dynamic first = (data is List && data.isNotEmpty)
+          ? data.first
+          : data;
       if (first is Map) {
         if (first.containsKey('bookSourceUrl')) {
           type = 'bookSource';

@@ -20,10 +20,9 @@ class ReaderChapterContentStorage {
   ReaderChapterContentStorage({
     required this.book,
     required this.contentStore,
-    required ChapterContentMaterializer materialize,
-    void Function()? resetMaterializer,
-  }) : _materialize = materialize,
-       _resetMaterializer = resetMaterializer;
+    required this._materialize,
+    this._resetMaterializer,
+  });
 
   factory ReaderChapterContentStorage.withMaterializer({
     required Book book,
@@ -145,8 +144,9 @@ class ReaderChapterContentStorage {
       book: book,
       chapter: chapter,
     );
-    if (entry == null || !entry.hasDisplayContent || entry.isFailed)
+    if (entry == null || !entry.hasDisplayContent || entry.isFailed) {
       return null;
+    }
     return ChapterContentPreparationResult.ready(entry.content!);
   }
 }

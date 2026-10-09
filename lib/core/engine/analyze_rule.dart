@@ -88,10 +88,9 @@ class AnalyzeRule extends AnalyzeRuleBase
     final service = BookSourceService();
     // 模擬精確搜尋與更新
     final results = await service.searchBooks(source as BookSource, book.name);
-    final match =
-        results
-            .where((e) => e.name == book.name && e.author == book.author)
-            .firstOrNull;
+    final match = results
+        .where((e) => e.name == book.name && e.author == book.author)
+        .firstOrNull;
     if (match != null) {
       book.bookUrl = match.bookUrl;
       await service.getBookInfo(source as BookSource, book);

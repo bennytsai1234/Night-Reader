@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -17,6 +18,7 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
   late JSContext context;
   late Pointer _globalObject;
 
+  @override
   int executePendingJob() {
     evaluate('(function(){})();');
     return 0;
@@ -73,7 +75,7 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
         exception.pointer);
     calloc.free(scriptCString);
     if (sourceUrlCString != null) {
-        calloc.free(sourceUrlCString as Pointer<NativeType>);
+      calloc.free(sourceUrlCString as Pointer<NativeType>);
     }
 
     String result;
@@ -116,7 +118,7 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
       try {
         context.setInspectable(inspectable);
       } on Error {
-        print('Could not set inspectable to $inspectable');
+        debugPrint('Could not set inspectable to $inspectable');
       }
     }
   }
@@ -192,11 +194,11 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
         final encoded = json.encode(result);
         return JSValue.makeFromJSONString(context, encoded).pointer;
       } catch (err) {
-        print(
+        debugPrint(
             'Could not encode return value of message on channel $channelName to json... returning null');
       }
     } else {
-      print('No channel $channelName registered');
+      debugPrint('No channel $channelName registered');
     }
 
     return nullptr;
@@ -204,8 +206,8 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
 
   Pointer<NativeType> _constructPromiseFor(Future future) {
     final id = future.hashCode;
-    Pointer<Utf8> scriptCString = ('var __JSC_promise_result$id = {};' +
-            'new Promise(function(resolve, reject) { __JSC_promise_result$id.resolve = resolve;' +
+    Pointer<Utf8> scriptCString = ('var __JSC_promise_result$id = {};'
+            'new Promise(function(resolve, reject) { __JSC_promise_result$id.resolve = resolve;'
             ' __JSC_promise_result$id.reject = reject;});')
         .toNativeUtf8();
 
@@ -275,14 +277,14 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
         try {
           return double.parse(valueString) as T;
         } on TypeError {
-          print('Failed to cast $valueString... returning null');
+          debugPrint('Failed to cast $valueString... returning null');
           return null;
         }
       } else {
         try {
           return int.parse(valueString) as T;
         } on TypeError {
-          print('Failed to cast $valueString... returning null');
+          debugPrint('Failed to cast $valueString... returning null');
           return null;
         }
       }

@@ -1,7 +1,9 @@
 import 'dart:collection';
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
+
 import '../di/injection.dart';
 
 /// AppLog - 全域日誌記錄器 (原 Android constant/AppLog.kt)

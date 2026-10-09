@@ -73,10 +73,8 @@ class StartupFailurePanel extends StatelessWidget {
         ),
         GroupedRow(
           title: '崩潰日誌',
-          onTap:
-              () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CrashLogPage()),
-              ),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const CrashLogPage())),
         ),
       ],
     );
@@ -103,8 +101,7 @@ class StartupFailurePanel extends StatelessWidget {
   Future<void> _copyDetails(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: details));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已複製錯誤詳情')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已複製錯誤詳情')));
   }
 }

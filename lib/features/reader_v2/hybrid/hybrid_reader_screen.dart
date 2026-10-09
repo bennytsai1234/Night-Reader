@@ -367,11 +367,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
           target: target ?? 0,
           operationOwnsReadyWorld: operationOwnsReadyWorld,
         );
-        _requestWindow(
-          readyTop,
-          readyBottom,
-          anchorKey: anchor.blockKey,
-        );
+        _requestWindow(readyTop, readyBottom, anchorKey: anchor.blockKey);
         final positionedTarget = _offsetForAnchor(anchor, blocks);
         if (positionedTarget != null &&
             _windowReady(
@@ -383,8 +379,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
                 target: positionedTarget,
                 operationOwnsReadyWorld: operationOwnsReadyWorld,
               ),
-            ))
+            )) {
           break;
+        }
         // Cached exact metrics may advance admission synchronously, without
         // creating a layout task. Re-evaluate that progress before waiting.
         if (_documentIndex.revisionNumber != revision) continue;
@@ -538,10 +535,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   bool _windowReady(double top, double bottom) {
     if (_documentIndex.admittedCount == 0) return false;
-    if (-_documentIndex.beforeExtent > top + 0.001 && !_isBookStartAdmitted())
+    if (-_documentIndex.beforeExtent > top + 0.001 && !_isBookStartAdmitted()) {
       return false;
-    if (_documentIndex.afterExtent < bottom - 0.001 && !_isBookEndAdmitted())
+    }
+    if (_documentIndex.afterExtent < bottom - 0.001 && !_isBookEndAdmitted()) {
       return false;
+    }
     return _documentIndex
         .keysInRange(top, bottom)
         .every((key) => _paragraphCache.contains(key, _epoch));
@@ -632,8 +631,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   void _setDemandRange(int first, int last) {
     _pump.setDemandRange(first, last);
     if (_chapterRepo.residentFirst == first &&
-        _chapterRepo.residentLast == last)
+        _chapterRepo.residentLast == last) {
       return;
+    }
     _chapterRepo.setResidentRange(first, last);
   }
 
@@ -655,10 +655,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     LayoutTaskPriority priority,
   ) async {
     try {
-      final blocks = await _ensureChapterBlocks(
-        chapter,
-        priority: priority,
-      );
+      final blocks = await _ensureChapterBlocks(chapter, priority: priority);
       if (blocks != null && mounted && identical(binding, _pump)) {
         _reconcileVisibleWindow();
       }
@@ -672,8 +669,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     if (!mounted) return;
     switch (event.kind) {
       case ChapterEventKind.loaded:
-        if (_chapterRepo.isResident(event.chapterId))
+        if (_chapterRepo.isResident(event.chapterId)) {
           _requestChapter(event.chapterId);
+        }
       case ChapterEventKind.evicted:
         // The active document keeps only text-free boundaries and metrics.
         // Raw text can be released without reinterpreting its geometry.
@@ -781,23 +779,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _documentIndex.centerKey;
     final blocks = _blocks[edge.chapterIndex];
     if (blocks == null) {
-      _requestChapter(
-        edge.chapterIndex,
-        priority: LayoutTaskPriority.visible,
-      );
+      _requestChapter(edge.chapterIndex, priority: LayoutTaskPriority.visible);
       return null;
     }
     final index = edge.blockIndex + (forward ? 1 : -1);
-    if (index >= 0 && index < blocks.blocks.length)
+    if (index >= 0 && index < blocks.blocks.length) {
       return blocks.blocks[index].key;
+    }
     final chapter = edge.chapterIndex + (forward ? 1 : -1);
     if (chapter < 0 || chapter >= widget.runtime.chapterCount) return null;
     final neighbor = _blocks[chapter];
     if (neighbor == null) {
-      _requestChapter(
-        chapter,
-        priority: LayoutTaskPriority.visible,
-      );
+      _requestChapter(chapter, priority: LayoutTaskPriority.visible);
       return null;
     }
     return (forward ? neighbor.blocks.first : neighbor.blocks.last).key;
@@ -881,8 +874,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       _captureFramePending = false;
       if (!mounted ||
           !_initialRestoreCompleted ||
-          revision != _runtimeLocationRevision)
+          revision != _runtimeLocationRevision) {
         return;
+      }
       if (widget.runtime.pendingLocation != null) return;
       final location = _captureAndReport(notify: false);
       if (location != null) _windowCenter = location.chapterIndex;
@@ -894,8 +888,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<void> _handleScrollSettled() async {
     if (!mounted ||
         !_initialRestoreCompleted ||
-        widget.runtime.pendingLocation != null)
+        widget.runtime.pendingLocation != null) {
       return;
+    }
     final location = _captureAndReport(notify: true);
     if (location != null) _windowCenter = location.chapterIndex;
     _reconcileVisibleWindow();
@@ -910,8 +905,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   }) async {
     if (!isCurrent() ||
         distance <= 0 ||
-        !(_scrollController?.hasClients ?? false))
+        !(_scrollController?.hasClients ?? false)) {
       return false;
+    }
     final geometryRevision = _documentIndex.revisionNumber;
     final pixels = _scrollController!.position.pixels;
     final target = pixels + (forward ? distance : -distance);
@@ -920,8 +916,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     while (isCurrent()) {
       _requestWindow(top, bottom);
       if (_windowReady(top, bottom)) {
-        if (_documentIndex.revisionNumber != geometryRevision)
+        if (_documentIndex.revisionNumber != geometryRevision) {
           await _nextFrame();
+        }
         return isCurrent();
       }
       final wait = await _waitForMaterialization(isCurrent);
@@ -1358,8 +1355,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     // Chapter progress is semantic content progress, not materialized layout
     // progress. DocumentIndex intentionally contains only the admitted window.
     final runtimeLocationIsPublished =
-        _initialRestoreCompleted &&
-        widget.runtime.state.hasStableWorld;
+        _initialRestoreCompleted && widget.runtime.state.hasStableWorld;
     final location = runtimeLocationIsPublished
         ? widget.runtime.state.visibleLocation
         : _captureVisibleLocation();
@@ -1484,7 +1480,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     return isCurrent();
   }
 
-  Future<bool> _animatePageByNow(double delta, bool Function() isCurrent) async {
+  Future<bool> _animatePageByNow(
+    double delta,
+    bool Function() isCurrent,
+  ) async {
     final controller = _scrollController;
     if (!isCurrent() ||
         controller == null ||
@@ -1661,13 +1660,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     if (sourceEnd <= sourceStart) return const <ui.TextBox>[];
     // Paragraph 內除了縮排 placeholder，還有排版插入的換行；兩者都要
     // 經 ParagraphTextMap 換算，否則框會在每個插入換行之後偏一個字。
-    final local = ParagraphTextMap.forBlocks(
-      group,
-      indentLength: _indentCharsFor(group.first),
-    ).paragraphRangeForSourceRange(
-      sourceStart - groupStart,
-      sourceEnd - groupStart,
-    );
+    final local =
+        ParagraphTextMap.forBlocks(
+          group,
+          indentLength: _indentCharsFor(group.first),
+        ).paragraphRangeForSourceRange(
+          sourceStart - groupStart,
+          sourceEnd - groupStart,
+        );
     final boxes = _boxesPerLine(
       entry.paragraph,
       entry.paragraph.getBoxesForRange(local.start, local.end),
@@ -2015,7 +2015,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
           }
         },
       );
-    } on io.FileSystemException {}
+    } on io.FileSystemException {
+      // 磁碟快取只用來加速；讀不到就照常量測。
+    }
   }
 
   Future<void> _writeDiskMetrics(
@@ -2039,7 +2041,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         metrics: snapshot,
         chapterLayoutIdentities: chapterLayoutIdentities,
       );
-    } on io.FileSystemException {}
+    } on io.FileSystemException {
+      // 寫不進去只是少了下次的加速，不影響這次排版。
+    }
   }
 
   Future<MetricsDiskCache> _obtainDiskCache() async {
@@ -2102,9 +2106,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   Widget _buildLoading(ReaderV2State state) {
     final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;
-    final message = unavailable
-        ? _friendlyErrorMessage
-        : '正在準備閱讀內容';
+    final message = unavailable ? _friendlyErrorMessage : '正在準備閱讀內容';
     final Widget child;
     if (unavailable) {
       child = Padding(
@@ -2287,7 +2289,7 @@ final class _HybridCommandQueue {
     });
     final drained = result.then<void>(
       (_) {},
-      onError: (Object _, StackTrace __) {},
+      onError: (Object _, StackTrace _) {},
     );
     _tail = drained;
     unawaited(

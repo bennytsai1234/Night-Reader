@@ -1,4 +1,5 @@
 /* START PARTS IMPORT QJS ENGINE */
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -18,10 +19,10 @@ part './object.dart';
 part './wrapper.dart';
 
 /// Handler function to manage js module.
-typedef _JsModuleHandler = String Function(String name);
+typedef JsModuleHandler = String Function(String name);
 
 /// Handler to manage unhandled promise rejection.
-typedef _JsHostPromiseRejectionHandler = void Function(dynamic reason);
+typedef JsHostPromiseRejectionHandler = void Function(dynamic reason);
 
 /// Quickjs engine for flutter.
 class QuickJsRuntime2 extends JavascriptRuntime {
@@ -41,10 +42,10 @@ class QuickJsRuntime2 extends JavascriptRuntime {
   ReceivePort port = ReceivePort();
 
   /// Handler function to manage js module.
-  final _JsModuleHandler? moduleHandler;
+  final JsModuleHandler? moduleHandler;
 
   /// Handler function to manage js module.
-  final _JsHostPromiseRejectionHandler? hostPromiseRejectionHandler;
+  final JsHostPromiseRejectionHandler? hostPromiseRejectionHandler;
 
   QuickJsRuntime2({
     this.moduleHandler,
@@ -53,10 +54,10 @@ class QuickJsRuntime2 extends JavascriptRuntime {
     this.memoryLimit,
     this.hostPromiseRejectionHandler,
   }) {
-    this.init();
+    init();
   }
 
-  _ensureEngine() {
+  void _ensureEngine() {
     if (_rt != null) return;
     final rt = jsNewRuntime((ctx, type, ptr) {
       try {
@@ -97,7 +98,7 @@ class QuickJsRuntime2 extends JavascriptRuntime {
             if (hostPromiseRejectionHandler != null) {
               hostPromiseRejectionHandler!(err);
             } else {
-              print('unhandled promise rejection: $err');
+              debugPrint('unhandled promise rejection: $err');
             }
             return nullptr;
           case JSChannelType.FREE_OBJECT:
@@ -108,11 +109,11 @@ class QuickJsRuntime2 extends JavascriptRuntime {
         throw JSError('call channel with wrong type');
       } catch (e) {
         if (type == JSChannelType.FREE_OBJECT) {
-          print('DartObject release error: $e');
+          debugPrint('DartObject release error: $e');
           return nullptr;
         }
         if (type == JSChannelType.MODULE) {
-          print('host Promise Rejection Handler error: $e');
+          debugPrint('host Promise Rejection Handler error: $e');
           return nullptr;
         }
         final throwObj = _dartToJs(ctx, e);
@@ -134,7 +135,7 @@ class QuickJsRuntime2 extends JavascriptRuntime {
   }
 
   /// Free Runtime and Context which can be recreate when evaluate again.
-  close() {
+  void close() {
     final rt = _rt;
     final ctx = _ctx;
     _rt = null;
@@ -159,7 +160,7 @@ class QuickJsRuntime2 extends JavascriptRuntime {
     while (true) {
       int err = jsExecutePendingJob(rt);
       if (err <= 0) {
-        if (err < 0) print(_parseJSException(ctx));
+        if (err < 0) debugPrint(_parseJSException(ctx));
         break;
       }
     }
@@ -178,6 +179,7 @@ class QuickJsRuntime2 extends JavascriptRuntime {
   }
 
   /// Evaluate js script.
+  @override
   JsEvalResult evaluate(
     String command, {
     String? name,
@@ -219,7 +221,7 @@ class QuickJsRuntime2 extends JavascriptRuntime {
       port.close(); // stop dispatch loop
       close(); // close engine
     } on JSError catch (e) {
-      print(e); // catch reference leak exception
+      debugPrint('$e'); // catch reference leak exception
     }
   }
 
@@ -230,13 +232,13 @@ class QuickJsRuntime2 extends JavascriptRuntime {
 
   @override
   int executePendingJob() {
-    this.dispatch();
+    dispatch();
     return 0;
   }
 
   @override
   String getEngineInstanceId() {
-    return this.hashCode.toString();
+    return hashCode.toString();
   }
 
   @override
@@ -254,10 +256,10 @@ class QuickJsRuntime2 extends JavascriptRuntime {
         if (channelFunctions.containsKey(channelName)) {
           return channelFunctions[channelName]!.call(jsonDecode(message));
         } else {
-          print('No channel $channelName registered');
+          debugPrint('No channel $channelName registered');
         }
         if (JavascriptRuntime.debugEnabled) {
-          print('CHANNEL: $channelName - Message: $message');
+          debugPrint('CHANNEL: $channelName - Message: $message');
         }
       }
     ]);

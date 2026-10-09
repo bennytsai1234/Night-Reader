@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'dart:convert';
 
@@ -23,7 +24,7 @@ import 'package:http/http.dart' as http;
 // ignore: non_constant_identifier_names
 var _XHR_DEBUG = false;
 
-setXhrDebug(bool value) => _XHR_DEBUG = value;
+bool setXhrDebug(bool value) => _XHR_DEBUG = value;
 
 const HTTP_GET = "get";
 const HTTP_POST = "post";
@@ -42,8 +43,9 @@ String _debugSendNativeCallback() {
       console.log(responseInfo);
       console.log(responseText);
       console.log(error);""";
-  } else
+  } else {
     return "";
+  }
 }
 
 final String xhrJsCode = """
@@ -241,7 +243,7 @@ const XHR_PENDING_CALLS_KEY = "xhrPendingCalls";
 
 http.Client? httpClient;
 
-xhrSetHttpClient(http.Client client) {
+void xhrSetHttpClient(http.Client client) {
   httpClient = client;
 }
 
@@ -250,7 +252,7 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
     return dartContext[XHR_PENDING_CALLS_KEY];
   }
 
-  bool hasPendingXhrCalls() => getPendingXhrCalls()!.length > 0;
+  bool hasPendingXhrCalls() => getPendingXhrCalls()!.isNotEmpty;
   void clearXhrPendingCalls() {
     dartContext[XHR_PENDING_CALLS_KEY] = [];
   }
@@ -269,6 +271,8 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
       clearXhrPendingCalls();
 
       // for each pending call, calls the remote http service
+      // forEach + async 讓所有請求同時送出；改成 for + await 會變成逐一等待。
+      // ignore: avoid_function_literals_in_foreach_calls
       pendingCalls.forEach((element) async {
         XhrPendingCall pendingCall = element as XhrPendingCall;
         HttpMethod eMethod = HttpMethod.values.firstWhere((e) =>
@@ -326,7 +330,9 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
         String responseText = utf8.decode(response.bodyBytes);
         try {
           responseText = jsonEncode(json.decode(responseText));
-        } on Exception {}
+        } on Exception {
+          // 不是 JSON 就保留原文。
+        }
         final xhrResult = XmlHttpRequestResponse(
           responseText: responseText,
           responseInfo:
@@ -338,13 +344,13 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
         final error = xhrResult.error;
         // send back to the javascript environment the
         // response for the http pending callback
-        this.evaluate(
+        evaluate(
           "globalThis.xhrRequests[${pendingCall.idRequest}].callback($responseInfo, `$responseText`, $error);",
         );
       });
     });
 
-    final evalXhrSendNative = this.evaluate("""
+    final evalXhrSendNative = evaluate("""
     var xhrRequests = {};
     var idRequest = -1;
     function XMLHttpRequestExtension_send_native() {
@@ -366,12 +372,12 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
     }
     """);
 
-    final evalXhrResult = this.evaluate(xhrJsCode);
+    final evalXhrResult = evaluate(xhrJsCode);
     localContext['enableXhr'] = evalXhrResult.rawResult;
     localContext['xhrSendNative'] = evalXhrSendNative.rawResult;
-    if (_XHR_DEBUG) print('RESULT evalXhrResult: $evalXhrResult');
+    if (_XHR_DEBUG) debugPrint('RESULT evalXhrResult: $evalXhrResult');
 
-    this.onMessage('SendNative', (arguments) {
+    onMessage('SendNative', (arguments) {
       try {
         String? method = arguments[0];
         String? url = arguments[1];
@@ -400,9 +406,11 @@ extension JavascriptRuntimeXhrExtension on JavascriptRuntime {
           ),
         );
       } on Error catch (e) {
-        if (_XHR_DEBUG) print('ERROR calling sendNative on Dart: >>>> $e');
+        if (_XHR_DEBUG) debugPrint('ERROR calling sendNative on Dart: >>>> $e');
       } on Exception catch (e) {
-        if (_XHR_DEBUG) print('Exception calling sendNative on Dart: >>>> $e');
+        if (_XHR_DEBUG) {
+          debugPrint('Exception calling sendNative on Dart: >>>> $e');
+        }
       }
     });
     return this;

@@ -153,10 +153,9 @@ class AnalyzeByXPath {
       if (customMatch != null) {
         final baseXPath = rule.substring(0, customMatch.start);
         final functionName = customMatch.group(1)!;
-        final nodes =
-            baseXPath.isEmpty
-                ? _queryNodesCompat('//*')
-                : _queryNodesCompat(baseXPath);
+        final nodes = baseXPath.isEmpty
+            ? _queryNodesCompat('//*')
+            : _queryNodesCompat(baseXPath);
         return _applyCustomFunction(nodes, functionName);
       }
 
@@ -173,11 +172,10 @@ class AnalyzeByXPath {
 
       // 2. 處理文本提取 /text()
       if (rule.endsWith('/text()')) {
-        final texts =
-            queryResult.nodes
-                .map((n) => n.text?.trim() ?? '')
-                .where((t) => t.isNotEmpty)
-                .toList();
+        final texts = queryResult.nodes
+            .map((n) => n.text?.trim() ?? '')
+            .where((t) => t.isNotEmpty)
+            .toList();
         if (texts.isNotEmpty) {
           return texts;
         }
@@ -185,17 +183,16 @@ class AnalyzeByXPath {
       }
 
       // 3. 預設返回節點的 outerHtml 或 text (對標 Android asString)
-      final strings =
-          queryResult.nodes
-              .map((n) {
-                final domNode = n.node;
-                if (domNode is Element) {
-                  return domNode.outerHtml;
-                }
-                return n.text?.trim() ?? '';
-              })
-              .where((t) => t.isNotEmpty)
-              .toList();
+      final strings = queryResult.nodes
+          .map((n) {
+            final domNode = n.node;
+            if (domNode is Element) {
+              return domNode.outerHtml;
+            }
+            return n.text?.trim() ?? '';
+          })
+          .where((t) => t.isNotEmpty)
+          .toList();
       if (strings.isNotEmpty) {
         return strings;
       }
@@ -381,9 +378,8 @@ class AnalyzeByXPath {
       extractor = _XPathCompatExtractor.html;
       path = path.substring(0, path.length - '/outerHtml()'.length);
     } else {
-      final attrMatch = RegExp(
-        r'/@([a-zA-Z_:][-a-zA-Z0-9_:.]*)$',
-      ).firstMatch(path);
+      final attrMatch = RegExp(r'/@([a-zA-Z_:][-a-zA-Z0-9_:.]*)$')
+          .firstMatch(path);
       if (attrMatch != null) {
         extractor = _XPathCompatExtractor.attr;
         attrName = attrMatch.group(1);
@@ -479,8 +475,9 @@ class AnalyzeByXPath {
       selector.write(cssPredicate);
     }
 
-    final residual =
-        predicatesPart.replaceAll(RegExp(r'\[[^\]]*\]'), '').trim();
+    final residual = predicatesPart
+        .replaceAll(RegExp(r'\[[^\]]*\]'), '')
+        .trim();
     if (residual.isNotEmpty) {
       return null;
     }
@@ -488,12 +485,11 @@ class AnalyzeByXPath {
   }
 
   String? _convertXPathPredicateToCss(String predicate) {
-    final conjunctionParts =
-        predicate
-            .split(RegExp(r'\s+and\s+'))
-            .map((part) => part.trim())
-            .where((part) => part.isNotEmpty)
-            .toList();
+    final conjunctionParts = predicate
+        .split(RegExp(r'\s+and\s+'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
     if (conjunctionParts.length > 1) {
       final selectors = <String>[];
       for (final part in conjunctionParts) {
@@ -506,9 +502,8 @@ class AnalyzeByXPath {
       return selectors.join();
     }
 
-    final classEqualsMatch = RegExp(
-      r'''^@class\s*=\s*("([^"]*)"|'([^']*)')$''',
-    ).firstMatch(predicate);
+    final classEqualsMatch = RegExp(r'''^@class\s*=\s*("([^"]*)"|'([^']*)')$''')
+        .firstMatch(predicate);
     if (classEqualsMatch != null) {
       final rawValue =
           classEqualsMatch.group(2) ?? classEqualsMatch.group(3) ?? '';
@@ -555,12 +550,11 @@ class AnalyzeByXPath {
       RegExp("@class\\s*=\\s*(\"([^\"]*)\"|'([^']*)')"),
       (match) {
         final rawValue = match.group(2) ?? match.group(3) ?? '';
-        final classNames =
-            rawValue
-                .split(RegExp(r'\s+'))
-                .map((token) => token.trim())
-                .where((token) => token.isNotEmpty)
-                .toList();
+        final classNames = rawValue
+            .split(RegExp(r'\s+'))
+            .map((token) => token.trim())
+            .where((token) => token.isNotEmpty)
+            .toList();
         return classNames
             .map((token) => 'contains(@class, "$token")')
             .join(' and ');

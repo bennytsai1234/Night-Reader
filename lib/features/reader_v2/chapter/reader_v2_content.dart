@@ -33,22 +33,20 @@ class ReaderV2Content {
     required String rawText,
   }) {
     final normalized = normalizeRawText(rawText);
-    final paragraphs =
-        normalized.isEmpty
-            ? <String>[]
-            : normalized
-                .split(RegExp(r'\n+'))
-                .map((line) => line.trim())
-                .where((line) => line.isNotEmpty)
-                .toList(growable: false);
+    final paragraphs = normalized.isEmpty
+        ? <String>[]
+        : normalized
+              .split(RegExp(r'\n+'))
+              .map((line) => line.trim())
+              .where((line) => line.isNotEmpty)
+              .toList(growable: false);
     final plainText = paragraphs.join('\n\n');
     final normalizedTitle = title.trim();
-    final displayText =
-        normalizedTitle.isEmpty
-            ? plainText
-            : plainText.isEmpty
-            ? normalizedTitle
-            : '$normalizedTitle\n\n$plainText';
+    final displayText = normalizedTitle.isEmpty
+        ? plainText
+        : plainText.isEmpty
+        ? normalizedTitle
+        : '$normalizedTitle\n\n$plainText';
     final hashMaterial = jsonEncode(<String, Object>{
       'chapterIndex': chapterIndex,
       'title': normalizedTitle,
@@ -184,9 +182,10 @@ final class ReaderV2ContentLocationMapper {
 
     if (left.isNotEmpty && right.isNotEmpty) {
       final combined = '$left$right';
-      final matches = _allOccurrences(text, combined)
-          .map((start) => start + left.length)
-          .toList(growable: false);
+      final matches = _allOccurrences(
+        text,
+        combined,
+      ).map((start) => start + left.length).toList(growable: false);
       if (matches.isNotEmpty) return _nearest(matches, projectedOffset);
     }
 
@@ -257,10 +256,7 @@ final class ReaderV2ContentLocationMapper {
         final middle = (low + high) ~/ 2;
         final rawOffset = boundaries[middle];
         final canonicalLength = _converter
-            .convert(
-              after.substring(0, rawOffset),
-              convertType: canonicalType,
-            )
+            .convert(after.substring(0, rawOffset), convertType: canonicalType)
             .length;
         if (canonicalLength < canonicalPrefixLength) {
           low = middle + 1;

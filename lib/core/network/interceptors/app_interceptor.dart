@@ -146,11 +146,10 @@ class AppInterceptor extends Interceptor {
             .toList();
     redirectChain.add(resolvedUri.toString());
 
-    final redirectedExtra =
-        Map<String, dynamic>.from(request.extra)
-          ..[manualRedirectCountKey] = redirectCount + 1
-          ..[manualRedirectChainKey] = redirectChain
-          ..[_manualRedirectVisitedKey] = visited.toList();
+    final redirectedExtra = Map<String, dynamic>.from(request.extra)
+      ..[manualRedirectCountKey] = redirectCount + 1
+      ..[manualRedirectChainKey] = redirectChain
+      ..[_manualRedirectVisitedKey] = visited.toList();
 
     final redirectedRequest = RequestOptions(
       method: redirectedMethod,
@@ -246,10 +245,9 @@ class AppInterceptor extends Interceptor {
 
   void _removeHeader(Map<String, dynamic> headers, String headerName) {
     final target = headerName.toLowerCase();
-    final matches =
-        headers.keys
-            .where((key) => key.toString().toLowerCase() == target)
-            .toList();
+    final matches = headers.keys
+        .where((key) => key.toString().toLowerCase() == target)
+        .toList();
     for (final key in matches) {
       headers.remove(key);
     }

@@ -451,7 +451,9 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
   double? _pendingBottom;
 
   bool get _hasPending =>
-      _pendingHorizontal != null || _pendingTop != null || _pendingBottom != null;
+      _pendingHorizontal != null ||
+      _pendingTop != null ||
+      _pendingBottom != null;
 
   @override
   void initState() {
@@ -517,8 +519,9 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
           margin: _sectionMargin,
           header: '版面',
           headerTrailing: _ResetButton(
-            onPressed:
-                settings.isPageLayoutDefault && !_hasPending ? null : _reset,
+            onPressed: settings.isPageLayoutDefault && !_hasPending
+                ? null
+                : _reset,
           ),
           children: [
             _stepperRow(
@@ -777,9 +780,7 @@ class ReaderV2ClickActionSection extends StatelessWidget {
                       borderRadius: AppRadius.cardMd,
                       side: isCenter
                           ? BorderSide(
-                              color: colorScheme.primary.withValues(
-                                alpha: 0.6,
-                              ),
+                              color: colorScheme.primary.withValues(alpha: 0.6),
                               width: AppGlass.hairline * 2,
                             )
                           : BorderSide.none,

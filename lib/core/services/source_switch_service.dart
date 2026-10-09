@@ -66,12 +66,10 @@ class SourceSwitchService {
   SourceSwitchService({
     BookSourceService? service,
     BookSourceDao? sourceDao,
-    SourceSwitchOperationQuiescer? operationQuiescer,
-    SourceSwitchAssetRetirer? assetRetirer,
+    this._operationQuiescer,
+    this._assetRetirer,
   }) : _service = service ?? BookSourceService(),
-       _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-       _operationQuiescer = operationQuiescer,
-       _assetRetirer = assetRetirer;
+       _sourceDao = sourceDao ?? getIt<BookSourceDao>();
 
   static const int _maxConcurrentSearches = 6;
 
@@ -84,44 +82,38 @@ class SourceSwitchService {
     Book book, {
     bool checkAuthor = true,
   }) async {
-    final enabledSources =
-        (await _sourceDao.getEnabled())
-            .where(
-              (source) =>
-                  source.isSearchEnabledByRuntime &&
-                  source.bookSourceUrl != book.origin,
-            )
-            .toList();
+    final enabledSources = (await _sourceDao.getEnabled())
+        .where(
+          (source) =>
+              source.isSearchEnabledByRuntime &&
+              source.bookSourceUrl != book.origin,
+        )
+        .toList();
     if (enabledSources.isEmpty) {
       return const <SearchBook>[];
     }
 
     final searchPool = Pool(_maxConcurrentSearches);
     try {
-      final tasks =
-          enabledSources.map((source) {
-            return searchPool.withResource(() async {
-              try {
-                final author = book.author.trim();
-                if (checkAuthor && author.isNotEmpty) {
-                  return await _service.preciseSearch(
-                    source,
-                    book.name,
-                    author,
-                  );
-                }
-                return await _service.searchBooks(
-                  source,
-                  book.name,
-                  filter: (name, _) => name == book.name,
-                  shouldBreak: (size) => size >= 1,
-                );
-              } catch (error) {
-                if (!isSourceSwitchUnavailable(error)) rethrow;
-                return const <SearchBook>[];
-              }
-            });
-          }).toList();
+      final tasks = enabledSources.map((source) {
+        return searchPool.withResource(() async {
+          try {
+            final author = book.author.trim();
+            if (checkAuthor && author.isNotEmpty) {
+              return await _service.preciseSearch(source, book.name, author);
+            }
+            return await _service.searchBooks(
+              source,
+              book.name,
+              filter: (name, _) => name == book.name,
+              shouldBreak: (size) => size >= 1,
+            );
+          } catch (error) {
+            if (!isSourceSwitchUnavailable(error)) rethrow;
+            return const <SearchBook>[];
+          }
+        });
+      }).toList();
       final results = await Future.wait(tasks);
       final merged = results.expand((items) => items).toList();
       merged.removeWhere((item) => item.origin == book.origin);

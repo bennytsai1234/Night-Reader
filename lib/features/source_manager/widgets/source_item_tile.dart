@@ -71,25 +71,24 @@ class SourceItemTile extends StatelessWidget {
           color: chrome.groupedSurface,
           child: InkWell(
             onTap: mutationEnabled ? onTap : null,
-            onLongPress:
-                editing
-                    ? null
-                    : () => onLongPress(
-                      globalRectOf(rowContext),
-                      Material(
-                        color: chrome.groupedSurface,
-                        child: _SourceRowContent(
-                          source: source,
-                          provider: provider,
-                          isSelected: false,
-                          editing: false,
-                          mutationEnabled: false,
-                          showSeparator: false,
-                          // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
-                          trailing: _enabledSwitch(),
-                        ),
+            onLongPress: editing
+                ? null
+                : () => onLongPress(
+                    globalRectOf(rowContext),
+                    Material(
+                      color: chrome.groupedSurface,
+                      child: _SourceRowContent(
+                        source: source,
+                        provider: provider,
+                        isSelected: false,
+                        editing: false,
+                        mutationEnabled: false,
+                        showSeparator: false,
+                        // 預覽不接收觸控，開關保持一般外觀而非停用的淡色。
+                        trailing: _enabledSwitch(),
                       ),
                     ),
+                  ),
             child: _SourceRowContent(
               source: source,
               provider: provider,
@@ -97,10 +96,9 @@ class SourceItemTile extends StatelessWidget {
               editing: editing,
               mutationEnabled: mutationEnabled,
               showSeparator: showSeparator,
-              trailing:
-                  editing
-                      ? (canDrag
-                          ? ReorderableDragStartListener(
+              trailing: editing
+                  ? (canDrag
+                        ? ReorderableDragStartListener(
                             index: index!,
                             child: Semantics(
                               label: '拖曳調整 ${source.bookSourceName} 順序',
@@ -114,8 +112,8 @@ class SourceItemTile extends StatelessWidget {
                               ),
                             ),
                           )
-                          : null)
-                      : _enabledSwitch(),
+                        : null)
+                  : _enabledSwitch(),
             ),
           ),
         );
@@ -257,10 +255,9 @@ class _SourceRowContent extends StatelessWidget {
                         child: Icon(
                           Icons.circle,
                           size: 8,
-                          color:
-                              source.enabledExplore
-                                  ? context.success
-                                  : chrome.sectionText,
+                          color: source.enabledExplore
+                              ? context.success
+                              : chrome.sectionText,
                         ),
                       ),
                     if (source.runtimeHealth.category !=
@@ -306,14 +303,13 @@ class _SourceRowContent extends StatelessWidget {
             duration: AppMotion.fade,
             switchInCurve: AppMotion.fadeCurve,
             switchOutCurve: AppMotion.fadeCurve,
-            child:
-                trailing == null
-                    ? const SizedBox.shrink()
-                    : Padding(
-                      key: ValueKey(editing),
-                      padding: const EdgeInsets.only(left: AppSpacing.md),
-                      child: trailing,
-                    ),
+            child: trailing == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    key: ValueKey(editing),
+                    padding: const EdgeInsets.only(left: AppSpacing.md),
+                    child: trailing,
+                  ),
           ),
         ],
       ),
@@ -326,10 +322,9 @@ class _SourceRowContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ColoredBox(
-            color:
-                isSelected && editing
-                    ? scheme.primary.withValues(alpha: 0.06)
-                    : Colors.transparent,
+            color: isSelected && editing
+                ? scheme.primary.withValues(alpha: 0.06)
+                : Colors.transparent,
             child: content,
           ),
           if (showSeparator)
@@ -356,12 +351,11 @@ class _SourceRowContent extends StatelessWidget {
   }
 
   Widget _buildStatusTag(BuildContext context, SourceRuntimeHealth health) {
-    final color =
-        health.cleanupCandidate
-            ? context.danger
-            : health.quarantined
-            ? context.warning
-            : AppChrome.of(context).sectionText;
+    final color = health.cleanupCandidate
+        ? context.danger
+        : health.quarantined
+        ? context.warning
+        : AppChrome.of(context).sectionText;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.xs,
@@ -420,32 +414,30 @@ class _SourceRowContent extends StatelessWidget {
     BuildContext context,
     SourceCheckProgress progress,
   ) {
-    final color =
-        progress.isFinal
-            ? (progress.hasIssue ? context.warning : context.success)
-            : Theme.of(context).colorScheme.primary;
+    final color = progress.isFinal
+        ? (progress.hasIssue ? context.warning : context.success)
+        : Theme.of(context).colorScheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 2, right: AppSpacing.sm),
-          child:
-              progress.isFinal
-                  ? Icon(
-                    progress.hasIssue
-                        ? Icons.info_outline_rounded
-                        : Icons.check_circle_rounded,
-                    size: 14,
+          child: progress.isFinal
+              ? Icon(
+                  progress.hasIssue
+                      ? Icons.info_outline_rounded
+                      : Icons.check_circle_rounded,
+                  size: 14,
+                  color: color,
+                )
+              : SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
                     color: color,
-                  )
-                  : SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: color,
-                    ),
                   ),
+                ),
         ),
         Expanded(
           child: Text(
@@ -501,10 +493,9 @@ class _SelectionCircle extends StatelessWidget {
             width: 1.5,
           ),
         ),
-        child:
-            selected
-                ? Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary)
-                : null,
+        child: selected
+            ? Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary)
+            : null,
       ),
     );
   }

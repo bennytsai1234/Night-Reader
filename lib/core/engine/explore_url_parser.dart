@@ -38,32 +38,30 @@ class ExploreUrlParser {
 
     final normalizedExploreUrl = exploreUrl.trim();
     final useJsRuntime = _isJsExploreUrl(normalizedExploreUrl);
-    final cachedResolved =
-        useJsRuntime
-            ? await _readCachedResolved(source, normalizedExploreUrl)
-            : null;
+    final cachedResolved = useJsRuntime
+        ? await _readCachedResolved(source, normalizedExploreUrl)
+        : null;
     final cachedKinds = _parseCachedKinds(cachedResolved);
     if (cachedKinds.isNotEmpty) {
       return cachedKinds;
     }
 
     try {
-      final resolved =
-          useJsRuntime
-              ? await _runSerializedJsResolution(
-                () => _resolveAsync(
-                  normalizedExploreUrl,
-                  source: source,
-                  jsExecutor: jsExecutor,
-                  jsTimeout: jsTimeout,
-                ),
-              )
-              : await _resolveAsync(
+      final resolved = useJsRuntime
+          ? await _runSerializedJsResolution(
+              () => _resolveAsync(
                 normalizedExploreUrl,
                 source: source,
                 jsExecutor: jsExecutor,
                 jsTimeout: jsTimeout,
-              );
+              ),
+            )
+          : await _resolveAsync(
+              normalizedExploreUrl,
+              source: source,
+              jsExecutor: jsExecutor,
+              jsTimeout: jsTimeout,
+            );
       if (_looksLikeJsError(resolved)) {
         return cachedKinds.isNotEmpty
             ? cachedKinds
@@ -316,12 +314,11 @@ class ExploreUrlParser {
   static List<ExploreKind> _buildErrorKinds(String message) {
     final trimmed = message.trim();
     if (trimmed.isEmpty) return const <ExploreKind>[];
-    final title =
-        trimmed.startsWith('ERROR:')
-            ? trimmed
-            : trimmed.startsWith('JS_ERROR:')
-            ? 'ERROR:${trimmed.substring('JS_ERROR:'.length).trim()}'
-            : 'ERROR:$trimmed';
+    final title = trimmed.startsWith('ERROR:')
+        ? trimmed
+        : trimmed.startsWith('JS_ERROR:')
+        ? 'ERROR:${trimmed.substring('JS_ERROR:'.length).trim()}'
+        : 'ERROR:$trimmed';
     return <ExploreKind>[ExploreKind(title: title, url: trimmed)];
   }
 

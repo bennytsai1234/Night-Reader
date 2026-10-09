@@ -53,9 +53,8 @@ class ReaderV2MenuStyle {
   /// 玻璃強度的不透明度，背後的正文經模糊後只透出色塊。
   Color glassTintOf(BuildContext context) {
     return background.withValues(
-      alpha: AppChrome.of(context).glassStrength.opacity(
-        dark: brightness == Brightness.dark,
-      ),
+      alpha: AppChrome.of(context).glassStrength
+          .opacity(dark: brightness == Brightness.dark),
     );
   }
 

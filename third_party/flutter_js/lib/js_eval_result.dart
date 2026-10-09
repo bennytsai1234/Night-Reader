@@ -7,5 +7,6 @@ class JsEvalResult {
   JsEvalResult(this.stringResult, this.rawResult,
       {this.isError = false, this.isPromise = false});
 
+  @override
   toString() => stringResult;
 }

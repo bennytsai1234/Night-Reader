@@ -30,7 +30,6 @@ final class AdmissionController extends ChangeNotifier {
   bool _notifyScheduled = false;
   bool _disposed = false;
 
-
   bool get atForwardBookBoundary {
     final chapter = _chapterCount - 1;
     final count = _chapterBlockCounts[chapter];

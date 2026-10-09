@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_js/javascript_runtime.dart';
 import './xhr.dart';
 
 var _fetchDebug = false;
 
-setFetchDebug(bool value) => _fetchDebug = value;
+bool setFetchDebug(bool value) => _fetchDebug = value;
 
 extension JavascriptRuntimeFetchExtension on JavascriptRuntime {
   Future<JavascriptRuntime> enableFetch() async {
@@ -22,6 +23,6 @@ extension JavascriptRuntimeFetchExtension on JavascriptRuntime {
 
 void debug(String message) {
   if (_fetchDebug) {
-    print('JavascriptRuntimeFetchExtension: $message');
+    debugPrint('JavascriptRuntimeFetchExtension: $message');
   }
 }

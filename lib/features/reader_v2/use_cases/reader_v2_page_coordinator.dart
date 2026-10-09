@@ -12,11 +12,7 @@ import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 typedef ReaderV2NoticeSink = void Function(String message);
 
 class ReaderV2PageCoordinator {
-  ReaderV2PageCoordinator({
-    required ReaderV2ControllerHost host,
-    required ReaderV2NoticeSink showNotice,
-  }) : _host = host,
-       _showNotice = showNotice {
+  ReaderV2PageCoordinator({required this._host, required this._showNotice}) {
     _ttsFollower = ReaderV2TtsHighlightFollower(
       ensureHighlightVisible: (highlight) {
         final ensureVisible = _host.viewportController.ensureCharRangeVisible;

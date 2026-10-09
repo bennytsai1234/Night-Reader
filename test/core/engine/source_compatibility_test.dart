@@ -6,6 +6,7 @@ import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+
 import '../../test_helper.dart';
 
 void main() {
@@ -227,8 +228,7 @@ void main() {
         final results = await BookListParser.parse(
           source: source,
           body: searchHtml,
-          baseUrl:
-              'https://novels-c.test/s/1.html?keyword=%E7%A5%9E%E9%81%93%E5%B8%9D%E5%B0%8A',
+          baseUrl: 'https://novels-c.test/s/1.html?keyword=%E7%A5%9E%E9%81%93%E5%B8%9D%E5%B0%8A',
           isSearch: true,
         );
 
@@ -244,8 +244,7 @@ void main() {
         'bookSourceName': '測試書庫',
         'bookSourceUrl': 'https://novels-d.test/',
         'ruleSearch': {
-          'bookList':
-              '//div[@class="one-row"]/div[@class="col-md-3 col-sm-6 col-xs-6 home-truyendecu"]',
+          'bookList': '//div[@class="one-row"]/div[@class="col-md-3 col-sm-6 col-xs-6 home-truyendecu"]',
           'bookUrl': '//div[@class="each_truyen"]/a/@href',
           'coverUrl': '//div[@class="each_truyen"]/a/img/@src',
           'name': '//h3[@itemprop="name"]/text()',
@@ -387,8 +386,7 @@ void main() {
           'bookList': r'$.body.list',
           'name': 'v_book',
           'author': 'penname',
-          'bookUrl':
-              r'https://novels-api.test/v1/book/get_book_infos?from=search&subsite=m&book={{$.book}}',
+          'bookUrl': r'https://novels-api.test/v1/book/get_book_infos?from=search&subsite=m&book={{$.book}}',
           'lastChapter': 'v_u_chapter',
           'wordCount': 'public_size',
         },
@@ -413,8 +411,7 @@ void main() {
       final results = await BookListParser.parse(
         source: source,
         body: searchJson,
-        baseUrl:
-            'https://novels-api.test/v1/book/search?keyword=%E9%BE%99%E7%8E%8B%E6%AE%BF',
+        baseUrl: 'https://novels-api.test/v1/book/search?keyword=%E9%BE%99%E7%8E%8B%E6%AE%BF',
         isSearch: true,
       );
 
@@ -471,39 +468,36 @@ void main() {
       },
     );
 
-    test(
-      'Search parsing keeps valid items when optional metadata rules are unusable',
-      () async {
-        final source = BookSource.fromJson({
-          'bookSourceName': 'Optional metadata failure source',
-          'bookSourceUrl': 'https://example.com',
-          'ruleSearch': {
-            'bookList': '.item',
-            'name': '.title@text',
-            'bookUrl': '.title@href',
-            'kind': '@js:throw new Error("boom")',
-            'intro': '@js:throw new Error("boom")',
-          },
-        });
+    test('Search parsing keeps valid items when optional metadata rules are unusable', () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': 'Optional metadata failure source',
+        'bookSourceUrl': 'https://example.com',
+        'ruleSearch': {
+          'bookList': '.item',
+          'name': '.title@text',
+          'bookUrl': '.title@href',
+          'kind': '@js:throw new Error("boom")',
+          'intro': '@js:throw new Error("boom")',
+        },
+      });
 
-        const searchHtml = '''
+      const searchHtml = '''
       <div class="item">
         <a class="title" href="/book/42">可保留的書</a>
       </div>
       ''';
 
-        final results = await BookListParser.parse(
-          source: source,
-          body: searchHtml,
-          baseUrl: 'https://example.com/search?q=test',
-          isSearch: true,
-        );
+      final results = await BookListParser.parse(
+        source: source,
+        body: searchHtml,
+        baseUrl: 'https://example.com/search?q=test',
+        isSearch: true,
+      );
 
-        expect(results, hasLength(1));
-        expect(results.first.name, '可保留的書');
-        expect(results.first.bookUrl, 'https://example.com/book/42');
-      },
-    );
+      expect(results, hasLength(1));
+      expect(results.first.name, '可保留的書');
+      expect(results.first.bookUrl, 'https://example.com/book/42');
+    });
 
     test('Legado-style content keeps multi-section chapter text', () async {
       final source = BookSource.fromJson({

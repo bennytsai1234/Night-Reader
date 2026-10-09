@@ -123,10 +123,9 @@ class _MainPageState extends State<MainPage> {
           children: [
             PageView(
               controller: _pageController,
-              physics:
-                  _tabBarHidden.value
-                      ? const NeverScrollableScrollPhysics()
-                      : null,
+              physics: _tabBarHidden.value
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
               onPageChanged: (idx) {
                 setState(() => _currentIndex = idx);
               },
@@ -144,33 +143,31 @@ class _MainPageState extends State<MainPage> {
               child: IgnorePointer(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
-                  child:
-                      _showStartupLoadingOverlay
-                          ? ColoredBox(
-                            key: const ValueKey('startup-loading-overlay'),
-                            color: Theme.of(
-                              context,
-                            ).scaffoldBackgroundColor.withValues(alpha: 0.96),
-                            child: Center(
-                              child: Semantics(
-                                liveRegion: true,
-                                label: '正在載入書架',
-                                child: ExcludeSemantics(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      CircularProgressIndicator(),
-                                      SizedBox(height: AppSpacing.lg),
-                                      Text('正在載入書架…'),
-                                    ],
-                                  ),
+                  child: _showStartupLoadingOverlay
+                      ? ColoredBox(
+                          key: const ValueKey('startup-loading-overlay'),
+                          color: Theme.of(context).scaffoldBackgroundColor
+                              .withValues(alpha: 0.96),
+                          child: Center(
+                            child: Semantics(
+                              liveRegion: true,
+                              label: '正在載入書架',
+                              child: ExcludeSemantics(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: AppSpacing.lg),
+                                    Text('正在載入書架…'),
+                                  ],
                                 ),
                               ),
                             ),
-                          )
-                          : const SizedBox.shrink(
-                            key: ValueKey('startup-loading-overlay-hidden'),
                           ),
+                        )
+                      : const SizedBox.shrink(
+                          key: ValueKey('startup-loading-overlay-hidden'),
+                        ),
                 ),
               ),
             ),
@@ -206,13 +203,12 @@ class _MainPageState extends State<MainPage> {
                 label: destination.label,
               ),
           ],
-          onSearch:
-              widget.destinations == null
-                  ? () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SearchPage()),
-                  )
-                  : null,
+          onSearch: widget.destinations == null
+              ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SearchPage()),
+                )
+              : null,
           onTap: (index) {
             if (_currentIndex == index) {
               if (DateTime.now().difference(_lastTapTime).inMilliseconds <
@@ -297,10 +293,9 @@ class _MainPageState extends State<MainPage> {
     _nativeSplashReleaseScheduled = true;
     if (widget.destinations != null) return;
     final heldAt = _splashHeldAt;
-    final remaining =
-        heldAt == null
-            ? Duration.zero
-            : _splashMinDisplay - DateTime.now().difference(heldAt);
+    final remaining = heldAt == null
+        ? Duration.zero
+        : _splashMinDisplay - DateTime.now().difference(heldAt);
     if (remaining > Duration.zero) {
       Future<void>.delayed(remaining, FlutterNativeSplash.remove);
     } else {
@@ -363,8 +358,10 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-typedef MainDestinationDoubleTapCallback =
-    void Function(BuildContext context, int index);
+typedef MainDestinationDoubleTapCallback = void Function(
+  BuildContext context,
+  int index,
+);
 
 class MainDestination {
   const MainDestination({

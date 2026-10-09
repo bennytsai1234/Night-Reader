@@ -160,8 +160,8 @@ extension BookSourceLogic on BookSourceBase {
     final newErrorLine = '// Error: $error';
     bookSourceComment =
         (bookSourceComment == null || bookSourceComment!.isEmpty)
-            ? newErrorLine
-            : '$newErrorLine\n\n$bookSourceComment';
+        ? newErrorLine
+        : '$newErrorLine\n\n$bookSourceComment';
   }
 
   bool get isNovelTextSource => nonNovelExclusionReason == null;
@@ -187,15 +187,14 @@ extension BookSourceLogic on BookSourceBase {
   }
 
   String? get detectedNonNovelMarker {
-    final haystack =
-        <String>[
-          bookSourceName,
-          bookSourceGroup ?? '',
-          bookSourceComment ?? '',
-          bookSourceUrl,
-          exploreUrl ?? '',
-          searchUrl ?? '',
-        ].join('\n').toLowerCase();
+    final haystack = <String>[
+      bookSourceName,
+      bookSourceGroup ?? '',
+      bookSourceComment ?? '',
+      bookSourceUrl,
+      exploreUrl ?? '',
+      searchUrl ?? '',
+    ].join('\n').toLowerCase();
 
     for (final marker in _nonNovelSourceMarkers) {
       if (haystack.contains(marker.toLowerCase())) {
@@ -205,12 +204,11 @@ extension BookSourceLogic on BookSourceBase {
     return null;
   }
 
-  Set<String> get groupTags =>
-      (bookSourceGroup ?? '')
-          .split(RegExp(r'[,，\s]+'))
-          .map((group) => group.trim())
-          .where((group) => group.isNotEmpty)
-          .toSet();
+  Set<String> get groupTags => (bookSourceGroup ?? '')
+      .split(RegExp(r'[,，\s]+'))
+      .map((group) => group.trim())
+      .where((group) => group.isNotEmpty)
+      .toSet();
 
   bool hasGroupTag(String tag) => groupTags.contains(tag);
 

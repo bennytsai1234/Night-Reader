@@ -90,8 +90,7 @@ class _StyleGrid extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            (constraints.maxWidth - _gap * (_columns - 1)) / _columns;
+        final width = (constraints.maxWidth - _gap * (_columns - 1)) / _columns;
         return Wrap(
           spacing: _gap,
           runSpacing: _gap,

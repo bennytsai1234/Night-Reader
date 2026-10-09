@@ -115,7 +115,10 @@ class AppBottomSheet extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [...children, const SizedBox(height: AppSpacing.xxl)],
+                  children: [
+                    ...children,
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
                 ),
               ),
             ),
@@ -136,13 +139,12 @@ class AppBottomSheet extends StatelessWidget {
     return showCustom<T>(
       context: context,
       isScrollControlled: true,
-      builder:
-          (ctx) => AppBottomSheet(
-            title: title,
-            icon: icon,
-            trailing: trailing,
-            children: children,
-          ),
+      builder: (ctx) => AppBottomSheet(
+        title: title,
+        icon: icon,
+        trailing: trailing,
+        children: children,
+      ),
     );
   }
 
@@ -238,7 +240,7 @@ class SheetSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(child: GroupedSectionHeader(title)),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

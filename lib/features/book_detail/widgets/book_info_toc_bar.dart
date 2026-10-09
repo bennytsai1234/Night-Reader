@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+
 import '../book_detail_provider.dart';
 
 /// 目錄分組的組標題：章數與搜尋、清除搜尋、定位、排序四個小圓鈕。
@@ -77,10 +78,9 @@ class BookInfoTocBar extends StatelessWidget {
               onPressed: onLocateCurrent,
             ),
             button(
-              icon:
-                  provider.isReversed
-                      ? Icons.vertical_align_top_rounded
-                      : Icons.vertical_align_bottom_rounded,
+              icon: provider.isReversed
+                  ? Icons.vertical_align_top_rounded
+                  : Icons.vertical_align_bottom_rounded,
               tooltip: provider.isReversed ? '目前倒序' : '目前正序',
               onPressed: provider.toggleSort,
               color: provider.isReversed ? primary : null,

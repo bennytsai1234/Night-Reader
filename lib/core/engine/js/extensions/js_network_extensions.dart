@@ -3,7 +3,9 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
+
 import '../js_extensions.dart';
+
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/services/http_client.dart';
@@ -33,8 +35,9 @@ extension JsNetworkExtensions on JsExtensions {
   }
 
   List<String> _redirectsForResponse(Response response) {
-    final nativeRedirects =
-        response.redirects.map((record) => record.location.toString()).toList();
+    final nativeRedirects = response.redirects
+        .map((record) => record.location.toString())
+        .toList();
     if (nativeRedirects.isNotEmpty) {
       return nativeRedirects;
     }
@@ -132,10 +135,9 @@ extension JsNetworkExtensions on JsExtensions {
         return null;
       }
       final url = payload[0].toString();
-      final headers =
-          payload.length > 1 && payload[1] is Map
-              ? Map<String, dynamic>.from(payload[1] as Map)
-              : <String, dynamic>{};
+      final headers = payload.length > 1 && payload[1] is Map
+          ? Map<String, dynamic>.from(payload[1] as Map)
+          : <String, dynamic>{};
       _requestWithoutRedirects(method: 'GET', url: url, headers: headers)
           .then((response) {
             final payload = {
@@ -177,10 +179,9 @@ extension JsNetworkExtensions on JsExtensions {
       }
       final url = payload[0].toString();
       final body = payload[1];
-      final headers =
-          payload.length > 2 && payload[2] is Map
-              ? Map<String, dynamic>.from(payload[2] as Map)
-              : <String, dynamic>{};
+      final headers = payload.length > 2 && payload[2] is Map
+          ? Map<String, dynamic>.from(payload[2] as Map)
+          : <String, dynamic>{};
       if (body is String &&
           !headers.keys.any(
             (key) => key.toString().toLowerCase() == 'content-type',
@@ -188,8 +189,8 @@ extension JsNetworkExtensions on JsExtensions {
         final rawBody = body.trimLeft();
         headers['Content-Type'] =
             (rawBody.startsWith('{') || rawBody.startsWith('['))
-                ? 'application/json; charset=utf-8'
-                : 'application/x-www-form-urlencoded; charset=utf-8';
+            ? 'application/json; charset=utf-8'
+            : 'application/x-www-form-urlencoded; charset=utf-8';
       }
       _requestWithoutRedirects(
             method: 'POST',
@@ -236,10 +237,9 @@ extension JsNetworkExtensions on JsExtensions {
         return null;
       }
       final url = payload[0].toString();
-      final headers =
-          payload.length > 1 && payload[1] is Map
-              ? Map<String, dynamic>.from(payload[1] as Map)
-              : <String, dynamic>{};
+      final headers = payload.length > 1 && payload[1] is Map
+          ? Map<String, dynamic>.from(payload[1] as Map)
+          : <String, dynamic>{};
       _requestWithoutRedirects(method: 'HEAD', url: url, headers: headers)
           .then((response) {
             resolveJsPending(parsed.callId, {
@@ -380,8 +380,9 @@ extension JsNetworkExtensions on JsExtensions {
       final html = payload.isNotEmpty ? payload[0]?.toString() : null;
       final url = payload.length > 1 ? payload[1]?.toString() : null;
       final js = payload.length > 2 ? payload[2]?.toString() : null;
-      final overrideUrlRegex =
-          payload.length > 3 ? payload[3]?.toString() : null;
+      final overrideUrlRegex = payload.length > 3
+          ? payload[3]?.toString()
+          : null;
       () async {
         try {
           final webView = BackstageWebView(

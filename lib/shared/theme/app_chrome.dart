@@ -85,30 +85,26 @@ class AppChrome extends ThemeExtension<AppChrome> {
       sectionText: textSecondary,
       pressedHighlight: textPrimary.withValues(alpha: isLight ? 0.06 : 0.08),
       glassTint: bar.withValues(alpha: glassStrength.opacity(dark: !isLight)),
-      glassBorder:
-          isLight
-              ? surface.withValues(alpha: 0.7)
-              : textPrimary.withValues(alpha: 0.08),
-      glassShadow:
-          isLight
-              ? textPrimary.withValues(alpha: 0.1)
-              : const Color(0x59000000),
+      glassBorder: isLight
+          ? surface.withValues(alpha: 0.7)
+          : textPrimary.withValues(alpha: 0.08),
+      glassShadow: isLight
+          ? textPrimary.withValues(alpha: 0.1)
+          : const Color(0x59000000),
       selectionLens: Color.alphaBlend(
         primary.withValues(alpha: isLight ? 0.12 : 0.18),
         surface.withValues(alpha: 0.6),
       ),
-      barrier:
-          isLight
-              ? textPrimary.withValues(alpha: 0.18)
-              : const Color(0x66000000),
+      barrier: isLight
+          ? textPrimary.withValues(alpha: 0.18)
+          : const Color(0x66000000),
       // 淺色時是墨色底配紙色字；深色時是比卡片再亮一階的浮層。
-      toastBackground:
-          isLight
-              ? textPrimary.withValues(alpha: 0.94)
-              : Color.alphaBlend(
-                textPrimary.withValues(alpha: 0.1),
-                surface,
-              ).withValues(alpha: 0.96),
+      toastBackground: isLight
+          ? textPrimary.withValues(alpha: 0.94)
+          : Color.alphaBlend(
+              textPrimary.withValues(alpha: 0.1),
+              surface,
+            ).withValues(alpha: 0.96),
       toastForeground: isLight ? background : textPrimary,
       toastAction: isLight ? inversePrimary : primary,
     );
@@ -172,13 +168,19 @@ class AppChrome extends ThemeExtension<AppChrome> {
   AppChrome lerp(ThemeExtension<AppChrome>? other, double t) {
     if (other is! AppChrome) return this;
     return AppChrome(
-      groupedBackground:
-          Color.lerp(groupedBackground, other.groupedBackground, t)!,
+      groupedBackground: Color.lerp(
+        groupedBackground,
+        other.groupedBackground,
+        t,
+      )!,
       groupedSurface: Color.lerp(groupedSurface, other.groupedSurface, t)!,
       separator: Color.lerp(separator, other.separator, t)!,
       sectionText: Color.lerp(sectionText, other.sectionText, t)!,
-      pressedHighlight:
-          Color.lerp(pressedHighlight, other.pressedHighlight, t)!,
+      pressedHighlight: Color.lerp(
+        pressedHighlight,
+        other.pressedHighlight,
+        t,
+      )!,
       glassTint: Color.lerp(glassTint, other.glassTint, t)!,
       glassBorder: Color.lerp(glassBorder, other.glassBorder, t)!,
       glassShadow: Color.lerp(glassShadow, other.glassShadow, t)!,

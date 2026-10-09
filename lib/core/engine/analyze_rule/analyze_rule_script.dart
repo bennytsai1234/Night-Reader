@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'analyze_rule_base.dart';
 import '../js/js_engine.dart';
+
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/http_client.dart';
@@ -108,10 +110,9 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
 
   /// 執行目錄預整理 JS
   Future<void> preUpdateToc() async {
-    final js =
-        source is BookSource
-            ? (source as BookSource).ruleToc?.preUpdateJs
-            : null;
+    final js = source is BookSource
+        ? (source as BookSource).ruleToc?.preUpdateJs
+        : null;
     if (js != null && js.isNotEmpty) {
       log('⇒ 執行 preUpdateJs');
       evalJS(js, null);

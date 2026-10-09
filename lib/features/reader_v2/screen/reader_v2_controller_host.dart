@@ -23,12 +23,10 @@ class ReaderV2ControllerHost {
     required this.book,
     required this.initialChapters,
     required this.openTarget,
-    required VoidCallback onChanged,
-    required VoidCallback onProgressPersisted,
-    required bool Function() isMounted,
-  }) : _onChanged = onChanged,
-       _onProgressPersisted = onProgressPersisted,
-       _isMounted = isMounted {
+    required this._onChanged,
+    required this._onProgressPersisted,
+    required this._isMounted,
+  }) {
     settings.addListener(_onSettingsChanged);
     menu.addListener(_onControllerChanged);
     dependencies = ReaderV2Dependencies(
@@ -73,20 +71,12 @@ class ReaderV2ControllerHost {
   Size? _lastViewportSize;
   int _appliedContentSettingsGeneration = 0;
   int? _contentSettingsInFlightGeneration;
-  ({
-    int settingsGeneration,
-    int chapterIndex,
-    int contentGeneration,
-  })?
+  ({int settingsGeneration, int chapterIndex, int contentGeneration})?
   _lastFailedContentSettingsAttempt;
   bool _contentSettingsCallbackQueued = false;
   ReaderV2LayoutSpec? _pendingPresentationSpec;
   ReaderV2LayoutSpec? _presentationInFlightSpec;
-  ({
-    int presentationSignature,
-    int chapterIndex,
-    int contentGeneration,
-  })?
+  ({int presentationSignature, int chapterIndex, int contentGeneration})?
   _lastFailedPresentationAttempt;
   bool _presentationCallbackQueued = false;
   int _presentationRevision = 0;
@@ -230,17 +220,12 @@ class ReaderV2ControllerHost {
   Future<void> _applyContentSettings(
     ReaderV2Runtime runtime, {
     required int desiredGeneration,
-    required ({
-      int settingsGeneration,
-      int chapterIndex,
-      int contentGeneration,
-    })
+    required ({int settingsGeneration, int chapterIndex, int contentGeneration})
     attempt,
   }) async {
     try {
       final applied = await runtime.reloadContentPreservingLocation();
-      if (applied &&
-          settings.contentSettingsGeneration == desiredGeneration) {
+      if (applied && settings.contentSettingsGeneration == desiredGeneration) {
         _appliedContentSettingsGeneration = desiredGeneration;
         if (_lastFailedContentSettingsAttempt?.settingsGeneration ==
             desiredGeneration) {
@@ -259,15 +244,8 @@ class ReaderV2ControllerHost {
     _reconcileContentSettings(runtime);
   }
 
-  ({
-    int settingsGeneration,
-    int chapterIndex,
-    int contentGeneration,
-  })
-  _contentSettingsAttempt(
-    ReaderV2Runtime runtime,
-    int settingsGeneration,
-  ) {
+  ({int settingsGeneration, int chapterIndex, int contentGeneration})
+  _contentSettingsAttempt(ReaderV2Runtime runtime, int settingsGeneration) {
     final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
     return (
       settingsGeneration: settingsGeneration,
@@ -348,15 +326,8 @@ class ReaderV2ControllerHost {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  ({
-    int presentationSignature,
-    int chapterIndex,
-    int contentGeneration,
-  })
-  _presentationAttempt(
-    ReaderV2Runtime runtime,
-    ReaderV2LayoutSpec spec,
-  ) {
+  ({int presentationSignature, int chapterIndex, int contentGeneration})
+  _presentationAttempt(ReaderV2Runtime runtime, ReaderV2LayoutSpec spec) {
     final target = runtime.pendingLocation ?? runtime.state.visibleLocation;
     return (
       presentationSignature: spec.presentationSignature,

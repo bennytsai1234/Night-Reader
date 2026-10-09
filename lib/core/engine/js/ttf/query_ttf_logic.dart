@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+
 import 'buffer_reader.dart';
 import 'ttf_tables.dart';
 import 'query_ttf_base.dart';
@@ -161,10 +162,9 @@ extension QueryTTFLogic on QueryTTFBase {
         glyph.glyphSimple!.instructions = reader.readUInt8Array(
           glyph.glyphSimple!.instructionLength,
         );
-        final flagLength =
-            glyph.glyphSimple!.endPtsOfContours.isEmpty
-                ? 0
-                : glyph.glyphSimple!.endPtsOfContours.last + 1;
+        final flagLength = glyph.glyphSimple!.endPtsOfContours.isEmpty
+            ? 0
+            : glyph.glyphSimple!.endPtsOfContours.last + 1;
         glyph.glyphSimple!.flags = List<int>.filled(flagLength, 0);
 
         for (var n = 0; n < flagLength; ++n) {

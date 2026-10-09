@@ -134,8 +134,9 @@ abstract class BaseSource {
     }
 
     if (hasLoginHeader) {
-      final loginHeaderRaw =
-          CacheManager().getFromMemory('loginHeader_${getKey()}')?.toString();
+      final loginHeaderRaw = CacheManager()
+          .getFromMemory('loginHeader_${getKey()}')
+          ?.toString();
       if (loginHeaderRaw != null && loginHeaderRaw.isNotEmpty) {
         try {
           final decoded = jsonDecode(loginHeaderRaw);

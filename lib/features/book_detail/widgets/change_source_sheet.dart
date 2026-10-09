@@ -21,8 +21,9 @@ typedef ChangeSourceOutcome = ({bool success, String message});
 /// 詳情頁情境不傳，沿用 [BookDetailProvider.changeSource]；閱讀器情境傳入走
 /// [SourceSwitchService] 的回呼。回呼負責執行換源並回傳結果，由面板顯示
 /// SnackBar、成功時 pop。
-typedef OnSelectSource =
-    Future<ChangeSourceOutcome> Function(SearchBook selected);
+typedef OnSelectSource = Future<ChangeSourceOutcome> Function(
+  SearchBook selected,
+);
 
 class ChangeSourceSheet extends StatelessWidget {
   final Book book;
@@ -84,10 +85,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BookDetailChangeSourceProvider>();
-    final sources =
-        provider.filteredResults
-            .where((result) => result.name == widget.originalBook.name)
-            .toList();
+    final sources = provider.filteredResults
+        .where((result) => result.name == widget.originalBook.name)
+        .toList();
 
     final chrome = AppChrome.of(context);
     final count = sources.length;
@@ -109,10 +109,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
           ),
           SizedBox(
             height: 2,
-            child:
-                provider.isSearching || _isSwitchingSource
-                    ? const LinearProgressIndicator(minHeight: 2)
-                    : null,
+            child: provider.isSearching || _isSwitchingSource
+                ? const LinearProgressIndicator(minHeight: 2)
+                : null,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -135,41 +134,39 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
           Expanded(
             child: IgnorePointer(
               ignoring: _isSwitchingSource,
-              child:
-                  sources.isEmpty && !provider.isSearching
-                      ? Center(
-                        child: Text(
-                          '未找到其他來源',
-                          style: AppTextStyles.bodyBase.copyWith(
-                            color: chrome.sectionText,
-                          ),
+              child: sources.isEmpty && !provider.isSearching
+                  ? Center(
+                      child: Text(
+                        '未找到其他來源',
+                        style: AppTextStyles.bodyBase.copyWith(
+                          color: chrome.sectionText,
                         ),
-                      )
-                      : ListView.builder(
-                        padding: EdgeInsets.only(
-                          bottom:
-                              MediaQuery.paddingOf(context).bottom +
-                              AppSpacing.xl,
-                        ),
-                        itemCount: count,
-                        itemBuilder: (ctx, i) {
-                          final result = sources[i];
-                          final isCurrent =
-                              result.origin == widget.originalBook.origin;
-                          return GroupedSliceItem(
-                            index: i,
-                            count: count,
-                            child: BookDetailChangeSourceItem(
-                              searchBook: result,
-                              isCurrent: isCurrent,
-                              onTap:
-                                  isCurrent
-                                      ? null
-                                      : () => _handleSelect(context, result),
-                            ),
-                          );
-                        },
                       ),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.only(
+                        bottom:
+                            MediaQuery.paddingOf(context).bottom +
+                            AppSpacing.xl,
+                      ),
+                      itemCount: count,
+                      itemBuilder: (ctx, i) {
+                        final result = sources[i];
+                        final isCurrent =
+                            result.origin == widget.originalBook.origin;
+                        return GroupedSliceItem(
+                          index: i,
+                          count: count,
+                          child: BookDetailChangeSourceItem(
+                            searchBook: result,
+                            isCurrent: isCurrent,
+                            onTap: isCurrent
+                                ? null
+                                : () => _handleSelect(context, result),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ),
         ],
@@ -193,9 +190,8 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
         );
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(outcome.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(outcome.message)));
       if (outcome.success) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _isSwitchingSource = false);
@@ -207,32 +203,30 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
     return SheetHeader(
       title: '更換來源',
       leading: GlassIconButton(
-        icon:
-            provider.checkAuthor
-                ? Icons.person_rounded
-                : Icons.person_off_outlined,
+        icon: provider.checkAuthor
+            ? Icons.person_rounded
+            : Icons.person_off_outlined,
         iconSize: 20,
         color: provider.checkAuthor ? primary : null,
         tooltip: provider.checkAuthor ? '校驗作者：開' : '校驗作者：關',
         onPressed: _isSwitchingSource ? null : provider.toggleCheckAuthor,
       ),
-      trailing:
-          provider.isSearching
-              ? const SizedBox.square(
-                dimension: AppGlass.buttonSize,
-                child: Center(
-                  child: SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+      trailing: provider.isSearching
+          ? const SizedBox.square(
+              dimension: AppGlass.buttonSize,
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-              )
-              : GlassIconButton(
-                icon: Icons.refresh_rounded,
-                iconSize: 20,
-                tooltip: '重新搜尋',
-                onPressed: _isSwitchingSource ? null : provider.startSearch,
               ),
+            )
+          : GlassIconButton(
+              icon: Icons.refresh_rounded,
+              iconSize: 20,
+              tooltip: '重新搜尋',
+              onPressed: _isSwitchingSource ? null : provider.startSearch,
+            ),
     );
   }
 }

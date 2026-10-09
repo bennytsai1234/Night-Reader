@@ -178,13 +178,12 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
       chrome.pressedHighlight,
       chrome.groupedSurface,
     );
-    final thumb =
-        isLight
-            ? chrome.groupedSurface
-            : Color.alphaBlend(
-              scheme.onSurface.withValues(alpha: 0.14),
-              chrome.groupedSurface,
-            );
+    final thumb = isLight
+        ? chrome.groupedSurface
+        : Color.alphaBlend(
+            scheme.onSurface.withValues(alpha: 0.14),
+            chrome.groupedSurface,
+          );
     final selectedIndex = _selectedIndex;
     // 拖動中以選取塊所在的分段顯示粗體，放開前就能看出會落在哪一段。
     final emphasized = _dragPosition?.round() ?? selectedIndex;
@@ -275,17 +274,16 @@ class _SegmentLabel extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         child: Center(
-          child:
-              icon == null
-                  ? text
-                  : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 16, color: color),
-                      const SizedBox(width: AppSpacing.xs),
-                      Flexible(child: text),
-                    ],
-                  ),
+          child: icon == null
+              ? text
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16, color: color),
+                    const SizedBox(width: AppSpacing.xs),
+                    Flexible(child: text),
+                  ],
+                ),
         ),
       ),
     );
@@ -335,8 +333,7 @@ class _TrackPainter extends CustomPainter {
       rect,
       Radius.circular(rect.height / 2),
     );
-    final shadow =
-        BoxShadow(color: shadowColor, blurRadius: 6).toPaint();
+    final shadow = BoxShadow(color: shadowColor, blurRadius: 6).toPaint();
     canvas.drawRRect(thumb.shift(const Offset(0, 2)), shadow);
     canvas.drawRRect(thumb, Paint()..color = thumbColor);
   }

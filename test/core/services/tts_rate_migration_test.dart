@@ -19,10 +19,7 @@ void main() {
   });
 
   test('the new multiplier key wins over legacy keys', () {
-    expect(
-      TTSService.resolveStoredRate(multiplier: 1.3, legacyRate: 1.0),
-      1.3,
-    );
+    expect(TTSService.resolveStoredRate(multiplier: 1.3, legacyRate: 1.0), 1.3);
     expect(TTSService.resolveStoredRate(), isNull);
   });
 }

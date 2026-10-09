@@ -10,7 +10,7 @@ import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
 /// （0：不轉換、1：簡轉繁、2：繁轉簡），由 ReaderV2SettingsController
 /// 在載入與變更時同步；App 啟動時由 [dictionaryReady] 載入。
 abstract final class ChineseDisplay {
-  static final _ChineseDisplayMode mode = _ChineseDisplayMode();
+  static final ChineseDisplayMode mode = ChineseDisplayMode();
   static const ChineseTextConverter _converter = ChineseTextConverter();
 
   /// 字典在背景載入；載入完成前轉換會原樣返回，完成後要讓已顯示的
@@ -25,8 +25,8 @@ abstract final class ChineseDisplay {
   }
 }
 
-final class _ChineseDisplayMode extends ValueNotifier<int> {
-  _ChineseDisplayMode() : super(0);
+final class ChineseDisplayMode extends ValueNotifier<int> {
+  ChineseDisplayMode() : super(0);
 
   void refresh() => notifyListeners();
 }
@@ -41,8 +41,8 @@ class ChineseDisplayScope extends InheritedNotifier<ValueNotifier<int>> {
 extension ChineseDisplayContext on BuildContext {
   /// 以目前的繁簡轉換模式顯示書籍資訊文字，並登記模式變更時重建。
   String zh(String text) {
-    final notifier = dependOnInheritedWidgetOfExactType<ChineseDisplayScope>()
-        ?.notifier;
+    final notifier =
+        dependOnInheritedWidgetOfExactType<ChineseDisplayScope>()?.notifier;
     return ChineseDisplay.convert(
       text,
       convertType: notifier?.value ?? ChineseDisplay.mode.value,

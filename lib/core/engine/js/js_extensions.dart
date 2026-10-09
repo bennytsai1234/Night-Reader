@@ -11,6 +11,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
 import 'package:night_reader/core/models/search_book.dart';
+
 import 'js_extensions_base.dart';
 import 'extensions/js_network_extensions.dart';
 import 'extensions/js_crypto_extensions.dart';
@@ -19,6 +20,7 @@ import 'extensions/js_file_extensions.dart';
 import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_object.dart';
 import 'js_encode_utils.dart';
+
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 
@@ -135,8 +137,9 @@ class JsExtensions extends JsExtensionsBase {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.isNotEmpty && ruleContext != null) {
         try {
-          final nextBaseUrl =
-              payload.length > 1 ? payload[1]?.toString() : null;
+          final nextBaseUrl = payload.length > 1
+              ? payload[1]?.toString()
+              : null;
           ruleContext.setContent(payload[0], baseUrl: nextBaseUrl);
         } catch (_) {}
       }
@@ -276,8 +279,9 @@ class JsExtensions extends JsExtensionsBase {
     });
     runtime.onMessage('putCache', (args) {
       if (args is List && args.length >= 2) {
-        final saveTime =
-            args.length > 2 ? int.tryParse(args[2].toString()) ?? 0 : 0;
+        final saveTime = args.length > 2
+            ? int.tryParse(args[2].toString()) ?? 0
+            : 0;
         cacheManager.put(
           args[0].toString(),
           args[1].toString(),
@@ -313,8 +317,9 @@ class JsExtensions extends JsExtensionsBase {
     });
     runtime.onMessage('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
-      final includeLoginHeader =
-          _decodeSyncArgs(args) is bool ? _decodeSyncArgs(args) as bool : true;
+      final includeLoginHeader = _decodeSyncArgs(args) is bool
+          ? _decodeSyncArgs(args) as bool
+          : true;
       return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
     });
 
@@ -336,14 +341,12 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('cacheTextFile', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
-      final url =
-          payload is List && payload.isNotEmpty
-              ? payload[0].toString()
-              : payload.toString();
-      final saveTime =
-          payload is List && payload.length > 1
-              ? int.tryParse(payload[1].toString()) ?? 0
-              : 0;
+      final url = payload is List && payload.isNotEmpty
+          ? payload[0].toString()
+          : payload.toString();
+      final saveTime = payload is List && payload.length > 1
+          ? int.tryParse(payload[1].toString()) ?? 0
+          : 0;
       cacheFile(url, saveTime)
           .then((content) {
             resolveJsPending(parsed.callId, content);
@@ -820,12 +823,11 @@ class JsExtensions extends JsExtensionsBase {
     dom.Document document,
     String selector,
   ) {
-    final selectors =
-        selector
-            .split(',')
-            .map((part) => part.trim())
-            .where((part) => part.isNotEmpty)
-            .toList();
+    final selectors = selector
+        .split(',')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
     final results = <dom.Element>[];
     final seen = <dom.Element>{};
 
@@ -847,9 +849,8 @@ class JsExtensions extends JsExtensionsBase {
     dom.Document document,
     String selector,
   ) {
-    final nthChildMatch = RegExp(
-      r'^(.*):nth-child\((\d+)\)\s*$',
-    ).firstMatch(selector);
+    final nthChildMatch = RegExp(r'^(.*):nth-child\((\d+)\)\s*$')
+        .firstMatch(selector);
     if (nthChildMatch != null) {
       final baseSelector = nthChildMatch.group(1)!.trim();
       final targetIndex = int.parse(nthChildMatch.group(2)!);
@@ -860,9 +861,8 @@ class JsExtensions extends JsExtensionsBase {
       }).toList();
     }
 
-    final nthLastChildMatch = RegExp(
-      r'^(.*):nth-last-child\((\d+)\)\s*$',
-    ).firstMatch(selector);
+    final nthLastChildMatch = RegExp(r'^(.*):nth-last-child\((\d+)\)\s*$')
+        .firstMatch(selector);
     if (nthLastChildMatch != null) {
       final baseSelector = nthLastChildMatch.group(1)!.trim();
       final targetIndex = int.parse(nthLastChildMatch.group(2)!);
@@ -874,9 +874,8 @@ class JsExtensions extends JsExtensionsBase {
       }).toList();
     }
 
-    final firstChildMatch = RegExp(
-      r'^(.*):first-child\s*$',
-    ).firstMatch(selector);
+    final firstChildMatch = RegExp(r'^(.*):first-child\s*$')
+        .firstMatch(selector);
     if (firstChildMatch != null) {
       final baseSelector = firstChildMatch.group(1)!.trim();
       final candidates = document.querySelectorAll(baseSelector);
@@ -1016,23 +1015,20 @@ class JsExtensions extends JsExtensionsBase {
   }
 
   String? _tryExtractAnchoredLiteral(String pattern) {
-    final match = RegExp(
-      r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$',
-    ).firstMatch(pattern);
+    final match = RegExp(r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$')
+        .firstMatch(pattern);
     return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
   }
 
   String? _tryExtractPrefixLiteral(String pattern) {
-    final match = RegExp(
-      r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)$',
-    ).firstMatch(pattern);
+    final match = RegExp(r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)$')
+        .firstMatch(pattern);
     return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
   }
 
   String? _tryExtractSuffixLiteral(String pattern) {
-    final match = RegExp(
-      r'^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$',
-    ).firstMatch(pattern);
+    final match = RegExp(r'^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$')
+        .firstMatch(pattern);
     return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
   }
 
@@ -1074,16 +1070,15 @@ class JsExtensions extends JsExtensionsBase {
   String _selectHtmlData(String html, String selector) {
     if (selector == 'html') {
       final document = html_parser.parse(html);
-      final contentElements =
-          document
-              .querySelectorAll('*')
-              .where(
-                (element) =>
-                    element.localName != 'html' &&
-                    element.localName != 'head' &&
-                    element.localName != 'body',
-              )
-              .toList();
+      final contentElements = document
+          .querySelectorAll('*')
+          .where(
+            (element) =>
+                element.localName != 'html' &&
+                element.localName != 'head' &&
+                element.localName != 'body',
+          )
+          .toList();
       if (contentElements.length == 1) {
         return contentElements.first.innerHtml;
       }

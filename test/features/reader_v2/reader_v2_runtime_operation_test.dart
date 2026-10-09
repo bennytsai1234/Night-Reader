@@ -30,7 +30,9 @@ class _FakeBookDao extends Fake implements BookDao {
     String? readerAnchorJson,
   }) async {}
 }
+
 class _FakeChapterDao extends Fake implements ChapterDao {}
+
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
 void main() {
@@ -125,32 +127,38 @@ void main() {
 
     expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
     expect(runtime.state.visibleLocation, target);
-    expect(runtime.state.layoutSpec.layoutSignature, specWithFontSize(22).layoutSignature);
+    expect(
+      runtime.state.layoutSpec.layoutSignature,
+      specWithFontSize(22).layoutSignature,
+    );
     expect(restores.last, target);
     expect(runtime.pendingLocation, isNull);
   });
 
-  test('progress flush can catch persistence up without notifying Reader UI', () async {
-    final runtime = makeRuntime([chapter(0)]);
-    addTearDown(runtime.dispose);
-    runtime.registerViewportRestore(Object(), (_) async => true);
-    await runtime.openBook();
+  test(
+    'progress flush can catch persistence up without notifying Reader UI',
+    () async {
+      final runtime = makeRuntime([chapter(0)]);
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
 
-    const captured = ReaderV2Location(
-      chapterIndex: 0,
-      charOffset: 2,
-      visualOffsetPx: 12,
-    );
-    runtime.registerVisibleLocationCapture(Object(), () => captured);
-    var notifications = 0;
-    runtime.addListener(() => notifications += 1);
+      const captured = ReaderV2Location(
+        chapterIndex: 0,
+        charOffset: 2,
+        visualOffsetPx: 12,
+      );
+      runtime.registerVisibleLocationCapture(Object(), () => captured);
+      var notifications = 0;
+      runtime.addListener(() => notifications += 1);
 
-    await runtime.flushProgress();
+      await runtime.flushProgress();
 
-    expect(runtime.state.visibleLocation, captured);
-    expect(runtime.state.committedLocation, captured);
-    expect(notifications, 0);
-  });
+      expect(runtime.state.visibleLocation, captured);
+      expect(runtime.state.committedLocation, captured);
+      expect(notifications, 0);
+    },
+  );
 
   test('viewport height updates only the viewport listener', () async {
     final runtime = makeRuntime([chapter(0)]);
@@ -169,14 +177,8 @@ void main() {
 
     final generation = runtime.state.layoutGeneration;
     final restoresBeforeResize = restores;
-    final resized = specWithFontSize(
-      18,
-      viewportSize: const Size(220, 160),
-    );
-    expect(
-      resized.layoutSignature,
-      runtime.state.layoutSpec.layoutSignature,
-    );
+    final resized = specWithFontSize(18, viewportSize: const Size(220, 160));
+    expect(resized.layoutSignature, runtime.state.layoutSpec.layoutSignature);
 
     await runtime.applyPresentation(spec: resized);
 
@@ -191,40 +193,43 @@ void main() {
     expect(viewportNotifications, 1);
   });
 
-  test('viewport change does not replace an in-flight jump operation', () async {
-    final runtime = makeRuntime(List.generate(4, chapter));
-    addTearDown(runtime.dispose);
-    var restores = 0;
-    runtime.registerViewportRestore(Object(), (_) async {
-      restores += 1;
-      return true;
-    });
-    await runtime.openBook();
+  test(
+    'viewport change does not replace an in-flight jump operation',
+    () async {
+      final runtime = makeRuntime(List.generate(4, chapter));
+      addTearDown(runtime.dispose);
+      var restores = 0;
+      runtime.registerViewportRestore(Object(), (_) async {
+        restores += 1;
+        return true;
+      });
+      await runtime.openBook();
 
-    final staged = specWithFontSize(22);
-    runtime.stateMachine.beginPresentation(
-      spec: staged,
-      layoutGeneration: runtime.state.layoutGeneration + 1,
-    );
-    const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
-    final jump = runtime.beginJumpOperation(location: target);
-    final restoresBeforeResize = restores;
-    final resized = specWithFontSize(
-      22,
-      viewportSize: const Size(220, 160),
-    );
+      final staged = specWithFontSize(22);
+      runtime.stateMachine.beginPresentation(
+        spec: staged,
+        layoutGeneration: runtime.state.layoutGeneration + 1,
+      );
+      const target = ReaderV2Location(chapterIndex: 3, charOffset: 4);
+      final jump = runtime.beginJumpOperation(location: target);
+      final restoresBeforeResize = restores;
+      final resized = specWithFontSize(22, viewportSize: const Size(220, 160));
 
-    await runtime.applyPresentation(spec: resized);
+      await runtime.applyPresentation(spec: resized);
 
-    expect(runtime.stateMachine.currentOperation, same(jump));
-    expect(runtime.stateMachine.currentOperation!.kind, ReaderV2OperationKind.jump);
-    expect(runtime.pendingLocation, target);
-    expect(
-      runtime.stateMachine.stagedLayoutSpec!.presentationSignature,
-      resized.presentationSignature,
-    );
-    expect(restores, restoresBeforeResize);
-  });
+      expect(runtime.stateMachine.currentOperation, same(jump));
+      expect(
+        runtime.stateMachine.currentOperation!.kind,
+        ReaderV2OperationKind.jump,
+      );
+      expect(runtime.pendingLocation, target);
+      expect(
+        runtime.stateMachine.stagedLayoutSpec!.presentationSignature,
+        resized.presentationSignature,
+      );
+      expect(restores, restoresBeforeResize);
+    },
+  );
 
   test(
     'content generation change re-resolves the same active operation token',
@@ -236,7 +241,7 @@ void main() {
       };
       final runtime = makeRuntime(
         chapters,
-        contentLoader: (index, __) async => raw[index],
+        contentLoader: (index, _) async => raw[index],
       );
       addTearDown(runtime.dispose);
 
@@ -273,144 +278,155 @@ void main() {
     },
   );
 
-  test('target content unavailable leaves the existing Reader world intact', () async {
-    final runtime = makeRuntime(
-      [chapter(0), chapter(1)],
-      contentLoader: (index, chapter) async {
-        if (index == 1) {
-          throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
-        }
-        return chapter.content;
-      },
-    );
+  test(
+    'target content unavailable leaves the existing Reader world intact',
+    () async {
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        contentLoader: (index, chapter) async {
+          if (index == 1) {
+            throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
+          }
+          return chapter.content;
+        },
+      );
+      addTearDown(runtime.dispose);
+      final owner = Object();
+      runtime.registerViewportRestore(owner, (_) async => true);
+      await runtime.openBook();
+      final before = runtime.state.visibleLocation;
+      final generation = runtime.state.layoutGeneration;
+
+      await runtime.jumpToChapter(1);
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.state.visibleLocation, before);
+      expect(runtime.state.layoutGeneration, generation);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+    },
+  );
+
+  test('content reload publishes semantic generation without changing layout generation', () async {
+    var raw = '第一版正文。';
+    final runtime = makeRuntime([
+      chapter(0),
+    ], contentLoader: (_, _) async => raw);
     addTearDown(runtime.dispose);
-    final owner = Object();
-    runtime.registerViewportRestore(owner, (_) async => true);
+    runtime.registerViewportRestore(Object(), (_) async => true);
     await runtime.openBook();
-    final before = runtime.state.visibleLocation;
-    final generation = runtime.state.layoutGeneration;
 
-    await runtime.jumpToChapter(1);
+    final layoutBefore = runtime.state.layoutGeneration;
+    final contentBefore = runtime.state.contentGeneration;
+    raw = '第二版正文，內容已改變。';
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(await runtime.reloadContentPreservingLocation(), isTrue);
+
+    expect(runtime.state.layoutGeneration, layoutBefore);
+    expect(runtime.state.contentGeneration, contentBefore + 1);
+    expect(
+      runtime.state.contentGeneration,
+      runtime.repository.contentGeneration,
+    );
     expect(runtime.state.hasStableWorld, isTrue);
-    expect(runtime.state.visibleLocation, before);
-    expect(runtime.state.layoutGeneration, generation);
-    expect(runtime.pendingLocation, isNull);
-    expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
   });
 
   test(
-    'content reload publishes semantic generation without changing layout generation',
+    'failed content reload rolls back to the committed content identity',
     () async {
-      var raw = '第一版正文。';
+      var failRefresh = false;
       final runtime = makeRuntime(
         [chapter(0)],
-        contentLoader: (_, __) async => raw,
+        contentLoader: (_, chapter) async {
+          if (failRefresh) {
+            throw ReaderV2ContentUnavailableException('重新載入正文失敗');
+          }
+          return chapter.content;
+        },
       );
       addTearDown(runtime.dispose);
       runtime.registerViewportRestore(Object(), (_) async => true);
       await runtime.openBook();
 
+      final before = runtime.repository.cachedContent(0);
+      final generationBefore = runtime.repository.contentGeneration;
+      final publishedBefore = runtime.state.contentGeneration;
       final layoutBefore = runtime.state.layoutGeneration;
-      final contentBefore = runtime.state.contentGeneration;
-      raw = '第二版正文，內容已改變。';
+      expect(before, isNotNull);
+      failRefresh = true;
 
-      expect(await runtime.reloadContentPreservingLocation(), isTrue);
+      expect(await runtime.reloadContentPreservingLocation(), isFalse);
 
-      expect(runtime.state.layoutGeneration, layoutBefore);
-      expect(runtime.state.contentGeneration, contentBefore + 1);
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.repository.cachedContent(0), same(before));
+      expect(runtime.repository.contentGeneration, generationBefore);
+      expect(runtime.state.contentGeneration, publishedBefore);
       expect(
         runtime.state.contentGeneration,
         runtime.repository.contentGeneration,
       );
-      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.state.layoutGeneration, layoutBefore);
+      expect(runtime.takeUserNotice(), '重新載入正文失敗');
     },
   );
 
-  test('failed content reload rolls back to the committed content identity', () async {
-    var failRefresh = false;
-    final runtime = makeRuntime(
-      [chapter(0)],
-      contentLoader: (_, chapter) async {
-        if (failRefresh) {
-          throw ReaderV2ContentUnavailableException('重新載入正文失敗');
-        }
-        return chapter.content;
-      },
-    );
-    addTearDown(runtime.dispose);
-    runtime.registerViewportRestore(Object(), (_) async => true);
-    await runtime.openBook();
+  test(
+    'unknown content failure is exposed without replacing the stable world',
+    () async {
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        contentLoader: (index, chapter) async {
+          if (index == 1) throw StateError('layout/content invariant broke');
+          return chapter.content;
+        },
+      );
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
+      final before = runtime.state.visibleLocation;
 
-    final before = runtime.repository.cachedContent(0);
-    final generationBefore = runtime.repository.contentGeneration;
-    final publishedBefore = runtime.state.contentGeneration;
-    final layoutBefore = runtime.state.layoutGeneration;
-    expect(before, isNotNull);
-    failRefresh = true;
-
-    expect(await runtime.reloadContentPreservingLocation(), isFalse);
-
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
-    expect(runtime.state.hasStableWorld, isTrue);
-    expect(runtime.repository.cachedContent(0), same(before));
-    expect(runtime.repository.contentGeneration, generationBefore);
-    expect(runtime.state.contentGeneration, publishedBefore);
-    expect(runtime.state.contentGeneration, runtime.repository.contentGeneration);
-    expect(runtime.state.layoutGeneration, layoutBefore);
-    expect(runtime.takeUserNotice(), '重新載入正文失敗');
-  });
-
-  test('unknown content failure is exposed without replacing the stable world', () async {
-    final runtime = makeRuntime(
-      [chapter(0), chapter(1)],
-      contentLoader: (index, chapter) async {
-        if (index == 1) throw StateError('layout/content invariant broke');
-        return chapter.content;
-      },
-    );
-    addTearDown(runtime.dispose);
-    runtime.registerViewportRestore(Object(), (_) async => true);
-    await runtime.openBook();
-    final before = runtime.state.visibleLocation;
-
-    await expectLater(
-      runtime.jumpToChapter(1),
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          'layout/content invariant broke',
+      await expectLater(
+        runtime.jumpToChapter(1),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'layout/content invariant broke',
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
-    expect(runtime.state.hasStableWorld, isTrue);
-    expect(runtime.state.visibleLocation, before);
-    expect(runtime.pendingLocation, isNull);
-    expect(runtime.takeUserNotice(), isNull);
-  });
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
+      expect(runtime.state.visibleLocation, before);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.takeUserNotice(), isNull);
+    },
+  );
 
-  test('first readable world unavailable marks the Reader unavailable', () async {
-    final runtime = makeRuntime(
-      [chapter(0)],
-      contentLoader: (_, __) async {
-        throw ReaderV2ContentUnavailableException('正文暫時無法取得');
-      },
-    );
-    addTearDown(runtime.dispose);
-    runtime.registerViewportRestore(Object(), (_) async => true);
+  test(
+    'first readable world unavailable marks the Reader unavailable',
+    () async {
+      final runtime = makeRuntime(
+        [chapter(0)],
+        contentLoader: (_, _) async {
+          throw ReaderV2ContentUnavailableException('正文暫時無法取得');
+        },
+      );
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
 
-    await runtime.openBook();
+      await runtime.openBook();
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
-    expect(runtime.state.hasStableWorld, isFalse);
-    expect(runtime.pendingLocation, isNull);
-    expect(runtime.state.unavailableMessage, contains('正文暫時無法取得'));
-    expect(runtime.takeUserNotice(), isNull);
-  });
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.unavailable);
+      expect(runtime.state.hasStableWorld, isFalse);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.state.unavailableMessage, contains('正文暫時無法取得'));
+      expect(runtime.takeUserNotice(), isNull);
+    },
+  );
 
   test('internal viewport ownership violation is exposed as a bug', () async {
     final runtime = makeRuntime([chapter(0), chapter(1)]);
@@ -427,43 +443,49 @@ void main() {
     expect(runtime.pendingLocation, isNull);
   });
 
-  test('detaching the active viewport owner cancels its current operation', () async {
-    final runtime = makeRuntime([chapter(0), chapter(1)]);
-    addTearDown(runtime.dispose);
-    final owner = Object();
-    runtime.registerViewportRestore(owner, (_) async => true);
-    await runtime.openBook();
+  test(
+    'detaching the active viewport owner cancels its current operation',
+    () async {
+      final runtime = makeRuntime([chapter(0), chapter(1)]);
+      addTearDown(runtime.dispose);
+      final owner = Object();
+      runtime.registerViewportRestore(owner, (_) async => true);
+      await runtime.openBook();
 
-    final operation = runtime.beginJumpOperation(
-      location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
-    );
-    expect(runtime.stateMachine.currentOperation, same(operation));
-    expect(runtime.state.hasStableWorld, isTrue);
+      final operation = runtime.beginJumpOperation(
+        location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+      );
+      expect(runtime.stateMachine.currentOperation, same(operation));
+      expect(runtime.state.hasStableWorld, isTrue);
 
-    runtime.unregisterViewportRestore(owner);
+      runtime.unregisterViewportRestore(owner);
 
-    expect(runtime.stateMachine.currentOperation, isNull);
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
-    expect(runtime.state.hasStableWorld, isTrue);
-  });
+      expect(runtime.stateMachine.currentOperation, isNull);
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.hasStableWorld, isTrue);
+    },
+  );
 
-  test('detaching a stale viewport owner does not cancel the active operation', () async {
-    final runtime = makeRuntime([chapter(0), chapter(1)]);
-    addTearDown(runtime.dispose);
-    final staleOwner = Object();
-    final activeOwner = Object();
-    runtime.registerViewportRestore(staleOwner, (_) async => true);
-    runtime.registerViewportRestore(activeOwner, (_) async => true);
-    await runtime.openBook();
+  test(
+    'detaching a stale viewport owner does not cancel the active operation',
+    () async {
+      final runtime = makeRuntime([chapter(0), chapter(1)]);
+      addTearDown(runtime.dispose);
+      final staleOwner = Object();
+      final activeOwner = Object();
+      runtime.registerViewportRestore(staleOwner, (_) async => true);
+      runtime.registerViewportRestore(activeOwner, (_) async => true);
+      await runtime.openBook();
 
-    final operation = runtime.beginJumpOperation(
-      location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
-    );
-    runtime.unregisterViewportRestore(staleOwner);
+      final operation = runtime.beginJumpOperation(
+        location: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+      );
+      runtime.unregisterViewportRestore(staleOwner);
 
-    expect(runtime.stateMachine.currentOperation, same(operation));
-    expect(runtime.state.hasStableWorld, isTrue);
-  });
+      expect(runtime.stateMachine.currentOperation, same(operation));
+      expect(runtime.state.hasStableWorld, isTrue);
+    },
+  );
 
   test('disposing runtime expires an awaiting viewport operation', () async {
     final runtime = makeRuntime([chapter(0)]);
@@ -483,25 +505,28 @@ void main() {
     expect(runtime.state.hasStableWorld, isFalse);
   });
 
-  test('presentation and reload converge through the same viewport owner', () async {
-    final runtime = makeRuntime(List.generate(3, chapter));
-    addTearDown(runtime.dispose);
-    final restores = <ReaderV2Location>[];
-    runtime.registerViewportRestore(Object(), (location) async {
-      restores.add(location);
-      return true;
-    });
+  test(
+    'presentation and reload converge through the same viewport owner',
+    () async {
+      final runtime = makeRuntime(List.generate(3, chapter));
+      addTearDown(runtime.dispose);
+      final restores = <ReaderV2Location>[];
+      runtime.registerViewportRestore(Object(), (location) async {
+        restores.add(location);
+        return true;
+      });
 
-    await runtime.openBook();
-    await runtime.jumpToChapter(1);
-    await runtime.applyPresentation(spec: specWithFontSize(22));
-    await runtime.reloadContentPreservingLocation();
+      await runtime.openBook();
+      await runtime.jumpToChapter(1);
+      await runtime.applyPresentation(spec: specWithFontSize(22));
+      await runtime.reloadContentPreservingLocation();
 
-    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
-    expect(runtime.state.visibleLocation.chapterIndex, 1);
-    expect(runtime.pendingLocation, isNull);
-    expect(restores, isNotEmpty);
-  });
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expect(runtime.pendingLocation, isNull);
+      expect(restores, isNotEmpty);
+    },
+  );
 
   test(
     'overlapping reload failure cannot hide a later semantic identity change',
@@ -511,7 +536,7 @@ void main() {
       final secondReload = Completer<String?>();
       final runtime = makeRuntime(
         [chapter(0)],
-        contentLoader: (_, __) {
+        contentLoader: (_, _) {
           loadCount += 1;
           switch (loadCount) {
             case 1:
@@ -749,9 +774,7 @@ void main() {
           loads[index] = (loads[index] ?? 0) + 1;
           if (failNextReload) {
             failNextReload = false;
-            throw const ReaderV2ContentUnavailableException(
-              '正文設定重新載入失敗',
-            );
+            throw const ReaderV2ContentUnavailableException('正文設定重新載入失敗');
           }
           return chapter.content;
         },
@@ -789,11 +812,13 @@ void main() {
 
       failNextReload = true;
       await tester.pumpWidget(buildHarness());
-      for (var frame = 0;
-          frame < 12 &&
-              ((loads[0] ?? 0) < chapter0Baseline + 1 ||
-                  runtime.stateMachine.currentOperation != null);
-          frame++) {
+      for (
+        var frame = 0;
+        frame < 12 &&
+            ((loads[0] ?? 0) < chapter0Baseline + 1 ||
+                runtime.stateMachine.currentOperation != null);
+        frame++
+      ) {
         await tester.pump();
       }
 
@@ -814,11 +839,13 @@ void main() {
       expect(loads[1], 1);
 
       await tester.pumpWidget(buildHarness());
-      for (var frame = 0;
-          frame < 12 &&
-              ((loads[1] ?? 0) < 2 ||
-                  runtime.stateMachine.currentOperation != null);
-          frame++) {
+      for (
+        var frame = 0;
+        frame < 12 &&
+            ((loads[1] ?? 0) < 2 ||
+                runtime.stateMachine.currentOperation != null);
+        frame++
+      ) {
         await tester.pump();
       }
 

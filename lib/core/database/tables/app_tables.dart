@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:drift/drift.dart';
+
 import '../../models/book.dart';
 import '../../models/chapter.dart';
 import '../../models/replace_rule.dart';
@@ -310,23 +312,20 @@ class BookSources extends Table {
   TextColumn get searchUrl => text().named('searchUrl').nullable()();
   TextColumn get ruleSearch =>
       text().named('ruleSearch').nullable().map(const SearchRuleConverter())();
-  TextColumn get ruleExplore =>
-      text()
-          .named('ruleExplore')
-          .nullable()
-          .map(const ExploreRuleConverter())();
-  TextColumn get ruleBookInfo =>
-      text()
-          .named('ruleBookInfo')
-          .nullable()
-          .map(const BookInfoRuleConverter())();
+  TextColumn get ruleExplore => text()
+      .named('ruleExplore')
+      .nullable()
+      .map(const ExploreRuleConverter())();
+  TextColumn get ruleBookInfo => text()
+      .named('ruleBookInfo')
+      .nullable()
+      .map(const BookInfoRuleConverter())();
   TextColumn get ruleToc =>
       text().named('ruleToc').nullable().map(const TocRuleConverter())();
-  TextColumn get ruleContent =>
-      text()
-          .named('ruleContent')
-          .nullable()
-          .map(const ContentRuleConverter())();
+  TextColumn get ruleContent => text()
+      .named('ruleContent')
+      .nullable()
+      .map(const ContentRuleConverter())();
   TextColumn get ruleReview =>
       text().named('ruleReview').nullable().map(const ReviewRuleConverter())();
 

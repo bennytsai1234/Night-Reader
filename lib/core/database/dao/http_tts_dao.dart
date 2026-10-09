@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/http_tts.dart';
 import '../tables/app_tables.dart';
 import '../app_database.dart';
@@ -16,9 +17,9 @@ class HttpTtsDao extends DatabaseAccessor<AppDatabase> with _$HttpTtsDaoMixin {
 
   Stream<List<HttpTTS>> watchAll() => select(httpTtsTable).watch();
 
-  Future<void> upsert(HttpTTS tts) => into(
-    httpTtsTable,
-  ).insertOnConflictUpdate(HttpTTSToInsertable(tts).toInsertable());
+  Future<void> upsert(HttpTTS tts) =>
+      into(httpTtsTable)
+          .insertOnConflictUpdate(HttpTTSToInsertable(tts).toInsertable());
 
   Future<int> create(HttpTTS tts) {
     return into(httpTtsTable).insert(

@@ -4,6 +4,7 @@ import 'analyze_rule_regex_helper.dart';
 import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
+
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
@@ -71,14 +72,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                 }
                 break;
               default:
-                tempResult =
-                    isUrl
-                        ? sourceRule
-                            .getAnalyzeByJSoup(this, result)
-                            .getString0(rule, isUrl: true)
-                        : sourceRule
-                            .getAnalyzeByJSoup(this, result)
-                            .getString(rule);
+                tempResult = isUrl
+                    ? sourceRule
+                          .getAnalyzeByJSoup(this, result)
+                          .getString0(rule, isUrl: true)
+                    : sourceRule
+                          .getAnalyzeByJSoup(this, result)
+                          .getString(rule);
                 if ((tempResult == null || tempResult.toString().isEmpty) &&
                     isJsonLikeRuleInput(result)) {
                   final jsonRule = buildJsonFallbackRule(rule);
@@ -200,14 +200,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                 }
                 break;
               default:
-                tempResult =
-                    isUrl
-                        ? sourceRule
-                            .getAnalyzeByJSoup(this, result)
-                            .getString0(rule, isUrl: true)
-                        : sourceRule
-                            .getAnalyzeByJSoup(this, result)
-                            .getString(rule);
+                tempResult = isUrl
+                    ? sourceRule
+                          .getAnalyzeByJSoup(this, result)
+                          .getString0(rule, isUrl: true)
+                    : sourceRule
+                          .getAnalyzeByJSoup(this, result)
+                          .getString(rule);
                 if ((tempResult == null || tempResult.toString().isEmpty) &&
                     isJsonLikeRuleInput(result)) {
                   final jsonRule = buildJsonFallbackRule(rule);
@@ -381,15 +380,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           if (sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換列表: ${sourceRule.replaceRegex}');
             if (result is List) {
-              result =
-                  result
-                      .map(
-                        (e) => replaceRegexListItemLogic(
-                          stringifyRuleResult(e),
-                          sourceRule,
-                        ),
-                      )
-                      .toList();
+              result = result
+                  .map(
+                    (e) => replaceRegexListItemLogic(
+                      stringifyRuleResult(e),
+                      sourceRule,
+                    ),
+                  )
+                  .toList();
             } else {
               result = replaceRegexLogic(
                 result == null ? '' : stringifyRuleResult(result),
@@ -491,15 +489,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           if (sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換列表: ${sourceRule.replaceRegex}');
             if (result is List) {
-              result =
-                  result
-                      .map(
-                        (e) => replaceRegexListItemLogic(
-                          stringifyRuleResult(e),
-                          sourceRule,
-                        ),
-                      )
-                      .toList();
+              result = result
+                  .map(
+                    (e) => replaceRegexListItemLogic(
+                      stringifyRuleResult(e),
+                      sourceRule,
+                    ),
+                  )
+                  .toList();
             } else {
               result = replaceRegexLogic(
                 result == null ? '' : stringifyRuleResult(result),
@@ -536,20 +533,15 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     Iterable<String> values, {
     required bool isUrl,
   }) {
-    final normalized =
-        values
-            .where((value) => value.isNotEmpty)
-            .map(
-              (value) =>
-                  isUrl
-                      ? NetworkUtils.getAbsoluteURL(
-                        redirectUrl ?? baseUrl,
-                        value,
-                      )
-                      : value,
-            )
-            .toSet()
-            .toList();
+    final normalized = values
+        .where((value) => value.isNotEmpty)
+        .map(
+          (value) => isUrl
+              ? NetworkUtils.getAbsoluteURL(redirectUrl ?? baseUrl, value)
+              : value,
+        )
+        .toSet()
+        .toList();
     return normalized;
   }
 }

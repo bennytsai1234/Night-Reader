@@ -35,7 +35,10 @@ final class ReaderV2InfoSlots {
   bool get isEmpty =>
       left == ReaderV2InfoItem.none && right == ReaderV2InfoItem.none;
 
-  ReaderV2InfoSlots copyWith({ReaderV2InfoItem? left, ReaderV2InfoItem? right}) {
+  ReaderV2InfoSlots copyWith({
+    ReaderV2InfoItem? left,
+    ReaderV2InfoItem? right,
+  }) {
     return ReaderV2InfoSlots(
       left: left ?? this.left,
       right: right ?? this.right,

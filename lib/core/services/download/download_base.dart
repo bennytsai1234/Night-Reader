@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -6,7 +7,9 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
+
 import '../book_source_service.dart';
+
 import 'package:night_reader/core/di/injection.dart';
 
 /// DownloadService 的基礎狀態與 DAO 定義
@@ -33,7 +36,6 @@ abstract class DownloadBase extends ChangeNotifier {
   final Map<String, Completer<void>> _retirementSignals =
       <String, Completer<void>>{};
 
-
   final int maxConcurrent = 3;
   final int maxChapterConcurrent = 5;
 
@@ -53,9 +55,7 @@ abstract class DownloadBase extends ChangeNotifier {
   bool isTaskRetiring(String bookUrl) => retiringTaskUrls.contains(bookUrl);
 
   Future<void> retirementSignal(String bookUrl) =>
-      _retirementSignals
-          .putIfAbsent(bookUrl, () => Completer<void>())
-          .future;
+      _retirementSignals.putIfAbsent(bookUrl, () => Completer<void>()).future;
 
   void markTaskRetiring(String bookUrl) {
     retiringTaskUrls.add(bookUrl);

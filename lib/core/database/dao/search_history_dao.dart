@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../tables/app_tables.dart';
 import '../app_database.dart';
 
@@ -11,8 +12,10 @@ class SearchHistoryDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<SearchHistoryRow>> getAll() {
     return (select(searchHistoryTable)..orderBy([
-      (t) => OrderingTerm(expression: t.searchTime, mode: OrderingMode.desc),
-    ])).get();
+          (t) =>
+              OrderingTerm(expression: t.searchTime, mode: OrderingMode.desc),
+        ]))
+        .get();
   }
 
   Future<void> add(String keyword) {
@@ -30,11 +33,10 @@ class SearchHistoryDao extends DatabaseAccessor<AppDatabase>
   Future<void> clearAll() => delete(searchHistoryTable).go();
 
   Future<int> countAll() async {
-    final row =
-        await customSelect(
-          'SELECT COUNT(*) AS total FROM search_history_table',
-          readsFrom: {searchHistoryTable},
-        ).getSingle();
+    final row = await customSelect(
+      'SELECT COUNT(*) AS total FROM search_history_table',
+      readsFrom: {searchHistoryTable},
+    ).getSingle();
     return row.read<int>('total');
   }
 
@@ -51,7 +53,8 @@ class SearchHistoryDao extends DatabaseAccessor<AppDatabase>
 
   /// 清除 beforeTime 之前的舊搜尋紀錄
   Future<void> clearOld(int beforeTime) {
-    return (delete(searchHistoryTable)
-      ..where((t) => t.searchTime.isSmallerThanValue(beforeTime))).go();
+    return (delete(
+      searchHistoryTable,
+    )..where((t) => t.searchTime.isSmallerThanValue(beforeTime))).go();
   }
 }

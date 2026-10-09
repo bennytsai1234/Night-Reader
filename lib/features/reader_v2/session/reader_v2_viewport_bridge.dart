@@ -39,9 +39,8 @@ class ReaderV2ViewportBridge {
     return true;
   }
 
-  ReaderV2Location? captureVisibleLocation({
-    bool notifyIfChanged = true,
-  }) => _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
+  ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
+      _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
 
   Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
@@ -95,9 +94,7 @@ class ReaderV2ViewportBridge {
     return normalized;
   }
 
-  ReaderV2Location? _captureVisibleLocation({
-    bool notifyIfChanged = true,
-  }) {
+  ReaderV2Location? _captureVisibleLocation({bool notifyIfChanged = true}) {
     if (_runtime.disposed || !_runtime.state.hasStableWorld) return null;
     final capture = _visibleLocationCapture;
     if (capture == null) return null;

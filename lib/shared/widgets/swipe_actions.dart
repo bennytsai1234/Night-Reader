@@ -140,9 +140,9 @@ class _SwipeActionsState extends State<SwipeActions>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final group =
-        context.dependOnInheritedWidgetOfExactType<_SwipeGroupScope>()
-            ?.controller;
+    final group = context
+        .dependOnInheritedWidgetOfExactType<_SwipeGroupScope>()
+        ?.controller;
     if (!identical(group, _group)) {
       _group?.release(this);
       _group = group;
@@ -409,10 +409,9 @@ class _ActionStrip extends StatelessWidget {
         final children = <Widget>[];
         for (var i = 0; i < actions.length; i++) {
           // 未滑過列寬時平均分配露出寬度；預備完整滑動時最外側動作吃掉其他格。
-          final w =
-              i == outer
-                  ? base + (extent - base) * expand
-                  : base * (1 - expand);
+          final w = i == outer
+              ? base + (extent - base) * expand
+              : base * (1 - expand);
           children.add(
             Positioned(
               left: left,

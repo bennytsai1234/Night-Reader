@@ -5,9 +5,11 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+
 import '../search_provider.dart';
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
+
 import 'package:night_reader/core/services/chinese_display.dart';
 
 class SearchResultItem extends StatefulWidget {
@@ -129,66 +131,64 @@ class _SearchResultItemState extends State<SearchResultItem> {
     final style = AppTextStyles.labelSm.copyWith(height: 1.35, color: color);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap:
-          sourceCount > 1
-              ? () => setState(() => _sourcesExpanded = !_sourcesExpanded)
-              : null,
+      onTap: sourceCount > 1
+          ? () => setState(() => _sourcesExpanded = !_sourcesExpanded)
+          : null,
       child: AnimatedSize(
         duration: AppMotion.menu,
         curve: AppMotion.menuCurve,
         alignment: Alignment.topLeft,
-        child:
-            _sourcesExpanded
-                ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text('來源（$sourceCount）', style: style),
-                        Icon(Icons.expand_less_rounded, size: 16, color: color),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Wrap(
-                      spacing: AppSpacing.xs,
-                      runSpacing: AppSpacing.xs,
-                      children: [
-                        for (final source in widget.result.sources)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.12),
-                              borderRadius: AppRadius.pillShape,
-                            ),
-                            child: Text(
-                              source,
-                              style: AppTextStyles.labelXs.copyWith(
-                                height: 1.25,
-                                color: color,
-                              ),
+        child: _sourcesExpanded
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('來源（$sourceCount）', style: style),
+                      Icon(Icons.expand_less_rounded, size: 16, color: color),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      for (final source in widget.result.sources)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: AppRadius.pillShape,
+                          ),
+                          child: Text(
+                            source,
+                            style: AppTextStyles.labelXs.copyWith(
+                              height: 1.25,
+                              color: color,
                             ),
                           ),
-                      ],
+                        ),
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '來源：${widget.result.sources.join('、')}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: style,
                     ),
-                  ],
-                )
-                : Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '來源：${widget.result.sources.join('、')}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: style,
-                      ),
-                    ),
-                    if (sourceCount > 1)
-                      Icon(Icons.expand_more_rounded, size: 16, color: color),
-                  ],
-                ),
+                  ),
+                  if (sourceCount > 1)
+                    Icon(Icons.expand_more_rounded, size: 16, color: color),
+                ],
+              ),
       ),
     );
   }

@@ -78,13 +78,14 @@ class BookCoverStorageService {
           final source = migratedBook.customCoverUrl!.trim();
           final sourceHash = sha1.convert(utf8.encode(source)).toString();
           final extension = p.extension(oldCustomFile.path).toLowerCase();
-          final safeExtension = const {
-            '.jpg',
-            '.jpeg',
-            '.png',
-            '.webp',
-            '.gif',
-          }.contains(extension)
+          final safeExtension =
+              const {
+                '.jpg',
+                '.jpeg',
+                '.png',
+                '.webp',
+                '.gif',
+              }.contains(extension)
               ? extension
               : '.jpg';
           final newCustomFile = File(
@@ -97,11 +98,7 @@ class BookCoverStorageService {
           // fails, keep the old cached file referenced rather than deleting it.
           migratedBook.customCoverLocalPath = oldCustomPath;
           keepOldAssets = true;
-          AppLog.e(
-            '遷移自訂封面快取失敗，保留舊檔: $error',
-            error: error,
-            stackTrace: stack,
-          );
+          AppLog.e('遷移自訂封面快取失敗，保留舊檔: $error', error: error, stackTrace: stack);
         }
       }
     }
@@ -112,11 +109,7 @@ class BookCoverStorageService {
       } catch (error, stack) {
         // Old source cover cache is derived data. Cleanup failure must not
         // prevent the migrated custom-cover path from becoming authoritative.
-        AppLog.e(
-          '清理舊來源封面快取失敗: $error',
-          error: error,
-          stackTrace: stack,
-        );
+        AppLog.e('清理舊來源封面快取失敗: $error', error: error, stackTrace: stack);
       }
     }
   }

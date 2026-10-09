@@ -58,9 +58,7 @@ class ReaderV2StateMachine {
     );
   }
 
-  ReaderV2OperationToken beginContentReload({
-    ReaderV2Location? location,
-  }) {
+  ReaderV2OperationToken beginContentReload({ReaderV2Location? location}) {
     return _beginOperation(
       ReaderV2OperationKind.contentReload,
       targetLocation: location,
@@ -79,9 +77,7 @@ class ReaderV2StateMachine {
     final operation = _currentOperation;
     final ownerSpec = effectiveLayoutSpec;
     if (spec.layoutSignature != ownerSpec.layoutSignature) {
-      throw StateError(
-        'Viewport updates cannot change text layout identity.',
-      );
+      throw StateError('Viewport updates cannot change text layout identity.');
     }
     if (spec.presentationSignature == ownerSpec.presentationSignature) {
       return false;

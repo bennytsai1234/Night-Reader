@@ -52,11 +52,10 @@ class ReaderV2OpenTarget {
   factory ReaderV2OpenTarget.chapterStart(int chapterIndex) {
     return ReaderV2OpenTarget(
       intent: ReaderV2OpenIntent.chapterStart,
-      location:
-          ReaderV2Location(
-            chapterIndex: chapterIndex,
-            charOffset: 0,
-          ).normalized(),
+      location: ReaderV2Location(
+        chapterIndex: chapterIndex,
+        charOffset: 0,
+      ).normalized(),
     );
   }
 

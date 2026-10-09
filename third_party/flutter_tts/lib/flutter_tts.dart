@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'dart:io' show Platform;
 
@@ -456,7 +457,7 @@ class FlutterTts {
         iosAudioModeKey: modeToString[mode],
       });
     } on PlatformException catch (e) {
-      print(
+      debugPrint(
           'setIosAudioCategory error, category: $category, mode: $mode, error: ${e.message}');
     }
   }
@@ -658,7 +659,7 @@ class FlutterTts {
         }
         break;
       default:
-        print('Unknown method ${call.method}');
+        debugPrint('Unknown method ${call.method}');
     }
   }
 

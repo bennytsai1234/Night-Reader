@@ -17,102 +17,97 @@ class SourceManagerDialogs {
   ) {
     showStatefulAppAlert<void>(
       context: context,
-      builder:
-          (context, _, _) => AnimatedBuilder(
-            animation: provider.checkService,
-            builder: (context, _) {
-              final logs = provider.checkService.logs;
-              final chrome = AppChrome.of(context);
-              final scheme = Theme.of(context).colorScheme;
-              return AppAlert<String>(
-                title: '校驗詳情',
-                message: provider.checkService.config.summary,
-                onAction: (value) {
-                  if (value == 'cancel') {
-                    provider.cancelSourceCheck();
-                  } else {
-                    Navigator.pop(context);
-                  }
-                },
-                content: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      provider.checkService.isChecking
-                          ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
-                          : '已完成',
-                      style: AppTextStyles.uiSm.copyWith(
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      provider.checkService.statusMsg,
-                      style: AppTextStyles.bodySm.copyWith(
-                        color: chrome.sectionText,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Container(
-                      height: 320,
-                      decoration: BoxDecoration(
-                        color: chrome.groupedBackground,
-                        borderRadius: AppRadius.cardMd,
-                      ),
-                      child:
-                          logs.isEmpty
-                              ? Center(
-                                child: Text(
-                                  '目前還沒有校驗日誌',
-                                  style: AppTextStyles.bodySm.copyWith(
-                                    color: chrome.sectionText,
-                                  ),
-                                ),
-                              )
-                              : ListView.separated(
-                                padding: const EdgeInsets.all(AppSpacing.md),
-                                itemCount: logs.length,
-                                separatorBuilder:
-                                    (_, _) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: AppSpacing.sm,
-                                      ),
-                                      child: Container(
-                                        height: AppGlass.hairline,
-                                        color: chrome.separator,
-                                      ),
-                                    ),
-                                itemBuilder: (context, index) {
-                                  final entry = logs[index];
-                                  return SelectableText(
-                                    '${entry.formattedTime} ${entry.message}',
-                                    style: AppTextStyles.labelSm.copyWith(
-                                      fontFamily: 'monospace',
-                                      height: 1.45,
-                                    ),
-                                  );
-                                },
-                              ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  if (provider.checkService.isChecking)
-                    const AppAlertAction(
-                      label: '取消校驗',
-                      value: 'cancel',
-                      destructive: true,
-                    ),
-                  const AppAlertAction(
-                    label: '關閉',
-                    value: 'close',
-                    isDefault: true,
-                  ),
-                ],
-              );
+      builder: (context, _, _) => AnimatedBuilder(
+        animation: provider.checkService,
+        builder: (context, _) {
+          final logs = provider.checkService.logs;
+          final chrome = AppChrome.of(context);
+          final scheme = Theme.of(context).colorScheme;
+          return AppAlert<String>(
+            title: '校驗詳情',
+            message: provider.checkService.config.summary,
+            onAction: (value) {
+              if (value == 'cancel') {
+                provider.cancelSourceCheck();
+              } else {
+                Navigator.pop(context);
+              }
             },
-          ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  provider.checkService.isChecking
+                      ? '進度 ${provider.checkService.currentCount}/${provider.checkService.totalCount}'
+                      : '已完成',
+                  style: AppTextStyles.uiSm.copyWith(color: scheme.onSurface),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  provider.checkService.statusMsg,
+                  style: AppTextStyles.bodySm.copyWith(
+                    color: chrome.sectionText,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  height: 320,
+                  decoration: BoxDecoration(
+                    color: chrome.groupedBackground,
+                    borderRadius: AppRadius.cardMd,
+                  ),
+                  child: logs.isEmpty
+                      ? Center(
+                          child: Text(
+                            '目前還沒有校驗日誌',
+                            style: AppTextStyles.bodySm.copyWith(
+                              color: chrome.sectionText,
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          itemCount: logs.length,
+                          separatorBuilder: (_, _) => Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.sm,
+                            ),
+                            child: Container(
+                              height: AppGlass.hairline,
+                              color: chrome.separator,
+                            ),
+                          ),
+                          itemBuilder: (context, index) {
+                            final entry = logs[index];
+                            return SelectableText(
+                              '${entry.formattedTime} ${entry.message}',
+                              style: AppTextStyles.labelSm.copyWith(
+                                fontFamily: 'monospace',
+                                height: 1.45,
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+            actions: [
+              if (provider.checkService.isChecking)
+                const AppAlertAction(
+                  label: '取消校驗',
+                  value: 'cancel',
+                  destructive: true,
+                ),
+              const AppAlertAction(
+                label: '關閉',
+                value: 'close',
+                isDefault: true,
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -121,8 +116,9 @@ class SourceManagerDialogs {
     SourceManagerProvider provider, {
     bool checkAll = false,
   }) async {
-    final targetCount =
-        checkAll ? provider.totalSourceCount : provider.selectedUrls.length;
+    final targetCount = checkAll
+        ? provider.totalSourceCount
+        : provider.selectedUrls.length;
     if (targetCount == 0) {
       return;
     }
@@ -149,16 +145,15 @@ class SourceManagerDialogs {
         return;
       }
 
-      final config =
-          SourceCheckConfig(
-            keyword: keywordController.text,
-            timeoutSeconds: timeoutSeconds,
-            checkSearch: checkSearch,
-            checkDiscovery: checkDiscovery,
-            checkInfo: checkInfo,
-            checkCategory: checkCategory,
-            checkContent: checkContent,
-          ).normalized();
+      final config = SourceCheckConfig(
+        keyword: keywordController.text,
+        timeoutSeconds: timeoutSeconds,
+        checkSearch: checkSearch,
+        checkDiscovery: checkDiscovery,
+        checkInfo: checkInfo,
+        checkCategory: checkCategory,
+        checkContent: checkContent,
+      ).normalized();
 
       Navigator.pop(dialogContext);
       try {
@@ -169,9 +164,8 @@ class SourceManagerDialogs {
         }
       } catch (error) {
         if (pageContext.mounted) {
-          ScaffoldMessenger.of(
-            pageContext,
-          ).showSnackBar(SnackBar(content: Text('校驗啟動失敗：$error')));
+          ScaffoldMessenger.of(pageContext)
+              .showSnackBar(SnackBar(content: Text('校驗啟動失敗：$error')));
         }
       }
     }
@@ -183,10 +177,9 @@ class SourceManagerDialogs {
         final [keywordController, timeoutController] = fields;
         final chrome = AppChrome.of(dialogContext);
         return AppAlert<bool>(
-          title:
-              checkAll
-                  ? '校驗所有書源（全部 $targetCount 項）'
-                  : '校驗選中書源 ($targetCount)',
+          title: checkAll
+              ? '校驗所有書源（全部 $targetCount 項）'
+              : '校驗選中書源 ($targetCount)',
           onAction: (confirmed) {
             if (confirmed) {
               start(
@@ -259,25 +252,23 @@ class SourceManagerDialogs {
               AlertCheckRow(
                 value: checkCategory,
                 title: '校驗目錄',
-                onChanged:
-                    checkInfo
-                        ? (value) {
-                          setState(() {
-                            checkCategory = value;
-                            if (!checkCategory) {
-                              checkContent = false;
-                            }
-                          });
-                        }
-                        : null,
+                onChanged: checkInfo
+                    ? (value) {
+                        setState(() {
+                          checkCategory = value;
+                          if (!checkCategory) {
+                            checkContent = false;
+                          }
+                        });
+                      }
+                    : null,
               ),
               AlertCheckRow(
                 value: checkContent,
                 title: '校驗正文',
-                onChanged:
-                    checkInfo && checkCategory
-                        ? (value) => setState(() => checkContent = value)
-                        : null,
+                onChanged: checkInfo && checkCategory
+                    ? (value) => setState(() => checkContent = value)
+                    : null,
               ),
               const SizedBox(height: AppSpacing.sm),
               Container(
@@ -329,15 +320,13 @@ class SourceManagerDialogs {
     try {
       await provider.clearInvalidSources();
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('清理完成')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('清理完成')));
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('清理失敗：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('清理失敗：$error')));
       }
     }
   }
@@ -357,15 +346,13 @@ class SourceManagerDialogs {
     try {
       final affected = await provider.deleteNonNovelSources();
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已刪除 $affected 個非小說源')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('已刪除 $affected 個非小說源')));
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('刪除非小說源失敗：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('刪除非小說源失敗：$error')));
       }
     }
   }
@@ -379,45 +366,43 @@ class SourceManagerDialogs {
     await showStatefulAppAlert<void>(
       context: context,
       fieldTexts: const ['我的世界'],
-      builder:
-          (dialogContext, setDialogState, fields) => AppAlert<bool>(
-            title: '輸入調試關鍵字',
-            onAction: (confirmed) {
-              if (!confirmed) {
-                Navigator.pop(dialogContext);
-                return;
-              }
-              final debugKey = fields.single.text.trim();
-              if (debugKey.isEmpty) {
-                setDialogState(() => inputError = '請輸入調試關鍵字或 URL');
-                return;
-              }
-              Navigator.pop(dialogContext);
-              Navigator.push(
-                pageContext,
-                MaterialPageRoute(
-                  builder:
-                      (c) =>
-                          SourceDebugPage(source: source, debugKey: debugKey),
-                ),
-              );
-            },
-            content: AlertTextField(
-              controller: fields.single,
-              autofocus: true,
-              hintText: '搜尋詞或 URL',
-              errorText: inputError,
-              onChanged: (_) {
-                if (inputError != null) {
-                  setDialogState(() => inputError = null);
-                }
-              },
+      builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
+        title: '輸入調試關鍵字',
+        onAction: (confirmed) {
+          if (!confirmed) {
+            Navigator.pop(dialogContext);
+            return;
+          }
+          final debugKey = fields.single.text.trim();
+          if (debugKey.isEmpty) {
+            setDialogState(() => inputError = '請輸入調試關鍵字或 URL');
+            return;
+          }
+          Navigator.pop(dialogContext);
+          Navigator.push(
+            pageContext,
+            MaterialPageRoute(
+              builder: (c) =>
+                  SourceDebugPage(source: source, debugKey: debugKey),
             ),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '開始調試', value: true, isDefault: true),
-            ],
-          ),
+          );
+        },
+        content: AlertTextField(
+          controller: fields.single,
+          autofocus: true,
+          hintText: '搜尋詞或 URL',
+          errorText: inputError,
+          onChanged: (_) {
+            if (inputError != null) {
+              setDialogState(() => inputError = null);
+            }
+          },
+        ),
+        actions: const [
+          AppAlertAction(label: '取消', value: false),
+          AppAlertAction(label: '開始調試', value: true, isDefault: true),
+        ],
+      ),
     );
   }
 }

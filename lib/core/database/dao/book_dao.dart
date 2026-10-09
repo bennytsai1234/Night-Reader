@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import '../../models/book.dart';
 import '../../models/book_group.dart';
 import '../tables/app_tables.dart';
@@ -39,8 +40,9 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   }
 
   Future<Book?> getByUrl(String url) {
-    return (select(books)
-      ..where((t) => t.bookUrl.equals(url))).getSingleOrNull();
+    return (select(
+      books,
+    )..where((t) => t.bookUrl.equals(url))).getSingleOrNull();
   }
 
   Future<void> upsert(Book book) =>
@@ -62,16 +64,18 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   Future<List<Book>> getInGroup(int groupId) {
     if (groupId == BookGroup.idAll) return getInBookshelf();
     if (groupId == 0) {
-      return (select(books)
-        ..where((t) => t.isInBookshelf.equals(true) & t.group.equals(0))).get();
+      return (select(
+        books,
+      )..where((t) => t.isInBookshelf.equals(true) & t.group.equals(0))).get();
     }
     return (select(books)..where(
-      (t) =>
-          t.isInBookshelf.equals(true) &
-          t.group
-              .bitwiseAnd(Variable<int>(groupId))
-              .isBiggerThan(const Constant(0)),
-    )).get();
+          (t) =>
+              t.isInBookshelf.equals(true) &
+              t.group
+                  .bitwiseAnd(Variable<int>(groupId))
+                  .isBiggerThan(const Constant(0)),
+        ))
+        .get();
   }
 
   Future<void> updateProgress(

@@ -200,7 +200,7 @@ class BookDetailProvider extends ChangeNotifier {
     BookSourceService? service,
     SourceSwitchService? sourceSwitchService,
     BookCoverStorageService? coverStorage,
-    DownloadService? downloadService,
+    this._downloadService,
     BookStorageService? bookStorageService,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
        _chapterDao = chapterDao ?? getIt<ChapterDao>(),
@@ -211,8 +211,7 @@ class BookDetailProvider extends ChangeNotifier {
                ? getIt<ReaderChapterContentDao>()
                : null),
        _service = service ?? BookSourceService(),
-       _coverStorage = coverStorage ?? BookCoverStorageService(),
-       _downloadService = downloadService {
+       _coverStorage = coverStorage ?? BookCoverStorageService() {
     _sourceSwitchService =
         sourceSwitchService ??
         SourceSwitchService(
@@ -231,19 +230,18 @@ class BookDetailProvider extends ChangeNotifier {
           downloadService: _downloadService,
           coverStorage: _coverStorage,
         );
-    _book =
-        searchBook.book is Book
-            ? searchBook.book as Book
-            : Book(
-              bookUrl: searchBook.book.bookUrl,
-              name: searchBook.book.name,
-              author: searchBook.book.author ?? '未知',
-              coverUrl: searchBook.book.coverUrl,
-              intro: searchBook.book.intro,
-              origin: searchBook.book.origin,
-              originName: searchBook.book.originName ?? '發現',
-              type: searchBook.book.type,
-            );
+    _book = searchBook.book is Book
+        ? searchBook.book as Book
+        : Book(
+            bookUrl: searchBook.book.bookUrl,
+            name: searchBook.book.name,
+            author: searchBook.book.author ?? '未知',
+            coverUrl: searchBook.book.coverUrl,
+            intro: searchBook.book.intro,
+            origin: searchBook.book.origin,
+            originName: searchBook.book.originName ?? '發現',
+            type: searchBook.book.type,
+          );
     _init();
   }
 
@@ -269,11 +267,7 @@ class BookDetailProvider extends ChangeNotifier {
       _worldState = BookDetailWorldState.ready;
       unawaited(_storeDisplayCover());
     } catch (error, stackTrace) {
-      AppLog.e(
-        '載入書籍詳情失敗: $error',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      AppLog.e('載入書籍詳情失敗: $error', error: error, stackTrace: stackTrace);
       _loadErrorMessage = '書籍詳情載入失敗，請重試';
       _worldState = BookDetailWorldState.unavailable;
     } finally {
@@ -401,11 +395,9 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<StorageDownloadQueueResult> queueDownloadMissing() async {
     return _queueStorageDownload(
-      resolveChapters:
-          (storedIndices) =>
-              _allChapters
-                  .where((chapter) => !storedIndices.contains(chapter.index))
-                  .toList(),
+      resolveChapters: (storedIndices) => _allChapters
+          .where((chapter) => !storedIndices.contains(chapter.index))
+          .toList(),
       emptyMessage: '目前沒有新的章節需要下載',
     );
   }
@@ -493,13 +485,11 @@ class BookDetailProvider extends ChangeNotifier {
   void _applyFilter() {
     var list = _allChapters;
     if (_searchQuery.isNotEmpty) {
-      list =
-          list
-              .where(
-                (c) =>
-                    c.title.toLowerCase().contains(_searchQuery.toLowerCase()),
-              )
-              .toList();
+      list = list
+          .where(
+            (c) => c.title.toLowerCase().contains(_searchQuery.toLowerCase()),
+          )
+          .toList();
     }
     _displayChapters = _isReversed ? list.reversed.toList() : List.from(list);
     notifyListeners();
@@ -717,10 +707,9 @@ class BookDetailProvider extends ChangeNotifier {
       }
 
       final oldBook = _book.copyWith();
-      final oldTotal =
-          _allChapters.isNotEmpty
-              ? _allChapters.length
-              : math.max(0, oldBook.totalChapterNum);
+      final oldTotal = _allChapters.isNotEmpty
+          ? _allChapters.length
+          : math.max(0, oldBook.totalChapterNum);
       final info = await _service.getBookInfo(source, oldBook);
       final chapters = await _service.getChapterList(source, info);
       for (var i = 0; i < chapters.length; i++) {
@@ -728,8 +717,9 @@ class BookDetailProvider extends ChangeNotifier {
         chapters[i].bookUrl = oldBook.bookUrl;
       }
 
-      final newCount =
-          chapters.length > oldTotal ? chapters.length - oldTotal : 0;
+      final newCount = chapters.length > oldTotal
+          ? chapters.length - oldTotal
+          : 0;
       info.bookUrl = oldBook.bookUrl;
       info.origin = oldBook.origin;
       info.originName = oldBook.originName;
@@ -776,8 +766,9 @@ class BookDetailProvider extends ChangeNotifier {
         success: true,
         newChapterCount: newCount,
         totalChapterCount: chapters.length,
-        message:
-            newCount > 0 ? '發現 $newCount 個新章節' : '已是最新，總共 ${chapters.length} 章',
+        message: newCount > 0
+            ? '發現 $newCount 個新章節'
+            : '已是最新，總共 ${chapters.length} 章',
       );
     } catch (e) {
       AppLog.e('檢查書籍更新失敗: $e', error: e);
@@ -834,12 +825,11 @@ class BookDetailProvider extends ChangeNotifier {
     if (notify) notifyListeners();
     try {
       final chapterContentDao = _chapterContentDao;
-      final entries =
-          chapterContentDao == null
-              ? const <ReaderChapterContentEntry>[]
-              : await chapterContentDao.getEntriesByBookUrls(<String>[
-                _book.bookUrl,
-              ]);
+      final entries = chapterContentDao == null
+          ? const <ReaderChapterContentEntry>[]
+          : await chapterContentDao.getEntriesByBookUrls(<String>[
+              _book.bookUrl,
+            ]);
       final storedIndices = <int>{};
       var contentBytes = 0;
       var latestUpdatedAt = 0;

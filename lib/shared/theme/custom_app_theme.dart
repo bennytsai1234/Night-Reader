@@ -28,39 +28,39 @@ ThemeData buildAppTheme(
     colors.surface,
   );
 
-  final scheme = ColorScheme.fromSeed(
-    seedColor: colors.primary,
-    brightness: brightness,
-  ).copyWith(
-    primary: colors.primary,
-    onPrimary: colors.onPrimary,
-    primaryContainer: primaryContainer,
-    onPrimaryContainer: colors.text,
-    secondary: colors.secondary,
-    secondaryContainer: secondaryContainer,
-    onSecondaryContainer: colors.text,
-    surface: colors.surface,
-    onSurface: colors.text,
-    onSurfaceVariant: colors.textMuted,
-    outline: colors.border,
-    outlineVariant: colors.border.withValues(alpha: 0.72),
-    inversePrimary: inversePrimary,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: colors.primary,
+        brightness: brightness,
+      ).copyWith(
+        primary: colors.primary,
+        onPrimary: colors.onPrimary,
+        primaryContainer: primaryContainer,
+        onPrimaryContainer: colors.text,
+        secondary: colors.secondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: colors.text,
+        surface: colors.surface,
+        onSurface: colors.text,
+        onSurfaceVariant: colors.textMuted,
+        outline: colors.border,
+        outlineVariant: colors.border.withValues(alpha: 0.72),
+        inversePrimary: inversePrimary,
+      );
 
-  final textTheme = ThemeData(brightness: brightness).textTheme.copyWith(
-    titleLarge: AppTextStyles.titleLg,
-    titleMedium: AppTextStyles.titleMd,
-    titleSmall: AppTextStyles.uiMd,
-    bodyLarge: AppTextStyles.bodyMd,
-    bodyMedium: AppTextStyles.bodyBase,
-    bodySmall: AppTextStyles.bodySm,
-    labelLarge: AppTextStyles.uiSm,
-    labelMedium: AppTextStyles.labelSm,
-    labelSmall: AppTextStyles.labelXs,
-  ).apply(
-    bodyColor: colors.text,
-    displayColor: colors.text,
-  );
+  final textTheme = ThemeData(brightness: brightness).textTheme
+      .copyWith(
+        titleLarge: AppTextStyles.titleLg,
+        titleMedium: AppTextStyles.titleMd,
+        titleSmall: AppTextStyles.uiMd,
+        bodyLarge: AppTextStyles.bodyMd,
+        bodyMedium: AppTextStyles.bodyBase,
+        bodySmall: AppTextStyles.bodySm,
+        labelLarge: AppTextStyles.uiSm,
+        labelMedium: AppTextStyles.labelSm,
+        labelSmall: AppTextStyles.labelXs,
+      )
+      .apply(bodyColor: colors.text, displayColor: colors.text);
 
   final chrome = AppChrome.derive(
     brightness: brightness,
@@ -134,8 +134,9 @@ ThemeData buildAppTheme(
         ),
       ),
       color: colors.surface,
-      shadowColor:
-          brightness == Brightness.light ? const Color(0x0A241C10) : null,
+      shadowColor: brightness == Brightness.light
+          ? const Color(0x0A241C10)
+          : null,
     ),
     bottomSheetTheme: BottomSheetThemeData(
       clipBehavior: Clip.antiAlias,

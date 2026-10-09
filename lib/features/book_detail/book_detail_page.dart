@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
@@ -24,10 +25,12 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
 import 'widgets/change_source_sheet.dart';
+
 import 'package:night_reader/core/services/chinese_display.dart';
 
 class BookDetailPage extends StatefulWidget {
@@ -82,11 +85,10 @@ class _BookDetailPageState extends State<BookDetailPage> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create:
-          (_) => BookDetailProvider(
-            widget.searchBook ??
-                AggregatedSearchBook(book: widget.book!, sources: []),
-          ),
+      create: (_) => BookDetailProvider(
+        widget.searchBook ??
+            AggregatedSearchBook(book: widget.book!, sources: []),
+      ),
       child: Consumer<BookDetailProvider>(
         builder: (context, provider, child) {
           final chrome = AppChrome.of(context);
@@ -96,13 +98,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
             appBar: _buildHeader(context, provider),
             // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
             body: Builder(
-              builder:
-                  (bodyContext) =>
-                      provider.isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : provider.loadErrorMessage != null
-                          ? _buildLoadError(bodyContext, provider)
-                          : _buildContent(bodyContext, provider),
+              builder: (bodyContext) => provider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.loadErrorMessage != null
+                  ? _buildLoadError(bodyContext, provider)
+                  : _buildContent(bodyContext, provider),
             ),
           );
         },
@@ -123,18 +123,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
             book: currentBook,
             provider: provider,
             showPhotoView: _showPhotoView,
-            onRead:
-                () => _navigateToReader(
-                  context,
-                  currentBook,
-                  ReaderV2OpenTarget.resume(currentBook),
-                  provider.allChapters,
-                ),
+            onRead: () => _navigateToReader(
+              context,
+              currentBook,
+              ReaderV2OpenTarget.resume(currentBook),
+              provider.allChapters,
+            ),
             onToggleBookshelf: () => _handleBookshelfToggle(context, provider),
-            onChangeSource:
-                currentBook.isLocal
-                    ? null
-                    : () => _showChangeSourceDialog(context, provider),
+            onChangeSource: currentBook.isLocal
+                ? null
+                : () => _showChangeSourceDialog(context, provider),
             onShowToc: _scrollToToc,
           ),
         ),
@@ -209,13 +207,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 child: _ChapterRow(
                   title: ctx.zh(chapter.title),
                   isCurrent: isCurrent,
-                  onTap:
-                      () => _navigateToReader(
-                        context,
-                        currentBook,
-                        ReaderV2OpenTarget.chapterStart(chapter.index),
-                        provider.allChapters,
-                      ),
+                  onTap: () => _navigateToReader(
+                    context,
+                    currentBook,
+                    ReaderV2OpenTarget.chapterStart(chapter.index),
+                    provider.allChapters,
+                  ),
                 ),
               );
             }, childCount: chapters.length),
@@ -256,13 +253,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
       backgroundColor: AppChrome.of(context).groupedBackground,
       titleWidget: ValueListenableBuilder<bool>(
         valueListenable: _titleCollapsed,
-        builder:
-            (context, collapsed, child) => AnimatedOpacity(
-              opacity: collapsed || !ready ? 1 : 0,
-              duration: AppMotion.fade,
-              curve: AppMotion.fadeCurve,
-              child: child,
-            ),
+        builder: (context, collapsed, child) => AnimatedOpacity(
+          opacity: collapsed || !ready ? 1 : 0,
+          duration: AppMotion.fade,
+          curve: AppMotion.fadeCurve,
+          child: child,
+        ),
         child: Semantics(
           header: true,
           child: Text(
@@ -280,36 +276,35 @@ class _BookDetailPageState extends State<BookDetailPage> {
         GlassMenuButton<_MenuAction>(
           enabled: actionsEnabled,
           onSelected: (v) => _handleMenuSelection(context, provider, v),
-          entriesBuilder:
-              (ctx) => [
-                if (!provider.book.isLocal)
-                  const GlassMenuItem(
-                    value: _MenuAction.checkUpdate,
-                    label: '檢查更新',
-                    icon: Icons.update_rounded,
-                  ),
-                if (!provider.book.isLocal)
-                  const GlassMenuItem(
-                    value: _MenuAction.download,
-                    label: '預下載章節',
-                    icon: Icons.download_rounded,
-                  ),
-                const GlassMenuItem(
-                  value: _MenuAction.changeCover,
-                  label: '換封面',
-                  icon: Icons.image_outlined,
-                ),
-                const GlassMenuItem(
-                  value: _MenuAction.export,
-                  label: '匯出全書',
-                  icon: Icons.ios_share_rounded,
-                ),
-                const GlassMenuItem(
-                  value: _MenuAction.edit,
-                  label: '編輯資訊',
-                  icon: Icons.edit_outlined,
-                ),
-              ],
+          entriesBuilder: (ctx) => [
+            if (!provider.book.isLocal)
+              const GlassMenuItem(
+                value: _MenuAction.checkUpdate,
+                label: '檢查更新',
+                icon: Icons.update_rounded,
+              ),
+            if (!provider.book.isLocal)
+              const GlassMenuItem(
+                value: _MenuAction.download,
+                label: '預下載章節',
+                icon: Icons.download_rounded,
+              ),
+            const GlassMenuItem(
+              value: _MenuAction.changeCover,
+              label: '換封面',
+              icon: Icons.image_outlined,
+            ),
+            const GlassMenuItem(
+              value: _MenuAction.export,
+              label: '匯出全書',
+              icon: Icons.ios_share_rounded,
+            ),
+            const GlassMenuItem(
+              value: _MenuAction.edit,
+              label: '編輯資訊',
+              icon: Icons.edit_outlined,
+            ),
+          ],
         ),
       ],
     );
@@ -343,9 +338,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (viewport == null) return;
     final position = _scrollController.position;
     // 目錄組標題停在玻璃頁首下方。
-    final offset = (viewport.getOffsetToReveal(target, 0).offset -
-            _headerExtent(context))
-        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    final offset =
+        (viewport.getOffsetToReveal(target, 0).offset - _headerExtent(context))
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
     _scrollController.animateTo(
       offset,
       duration: AppMotion.spring,
@@ -388,9 +383,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
   ) async {
     final result = await provider.checkForUpdates();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<void> _handleExport(
@@ -398,9 +392,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BookDetailProvider provider,
   ) async {
     if (provider.totalChapterCount == 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('沒有可匯出的章節')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('沒有可匯出的章節')));
       return;
     }
     await provider.refreshCacheStatus();
@@ -425,9 +418,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
       if (decision == 'download') {
         final result = await provider.queueDownloadMissing();
         if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(result.message)));
         return;
       }
       fetchMissingRemote = decision == 'export';
@@ -439,14 +431,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
         fetchMissingRemote: fetchMissingRemote,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已建立匯出檔案')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已建立匯出檔案')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
     }
   }
 
@@ -513,9 +503,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
   ) async {
     final result = await task;
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   /// 提示框內的分組輸入卡片。
@@ -547,48 +536,46 @@ class _BookDetailPageState extends State<BookDetailPage> {
         '${provider.book.chapterIndex + 1}',
         '${provider.totalChapterCount}',
       ],
-      builder:
-          (ctx, _, fields) => AppAlert<bool>(
-            title: '指定下載範圍',
-            content: _fieldCard(ctx, [
-              GroupedTextFieldRow(
-                label: '起始章節',
-                controller: fields[0],
-                keyboardType: TextInputType.number,
-              ),
-              GroupedTextFieldRow(
-                label: '結束章節',
-                controller: fields[1],
-                keyboardType: TextInputType.number,
-              ),
-            ]),
-            actions: const [
-              AppAlertAction(label: '取消', value: false),
-              AppAlertAction(label: '加入佇列', value: true, isDefault: true),
-            ],
-            onAction: (confirmed) {
-              if (!confirmed) {
-                Navigator.pop(ctx);
-                return;
-              }
-              final startValue = int.tryParse(fields[0].text.trim());
-              final endValue = int.tryParse(fields[1].text.trim());
-              if (startValue == null ||
-                  endValue == null ||
-                  startValue <= 0 ||
-                  endValue < startValue) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('請輸入有效章節範圍')));
-                return;
-              }
-              Navigator.pop(ctx);
-              _queueDownload(
-                context,
-                provider.queueDownloadRange(startValue - 1, endValue - 1),
-              );
-            },
+      builder: (ctx, _, fields) => AppAlert<bool>(
+        title: '指定下載範圍',
+        content: _fieldCard(ctx, [
+          GroupedTextFieldRow(
+            label: '起始章節',
+            controller: fields[0],
+            keyboardType: TextInputType.number,
           ),
+          GroupedTextFieldRow(
+            label: '結束章節',
+            controller: fields[1],
+            keyboardType: TextInputType.number,
+          ),
+        ]),
+        actions: const [
+          AppAlertAction(label: '取消', value: false),
+          AppAlertAction(label: '加入佇列', value: true, isDefault: true),
+        ],
+        onAction: (confirmed) {
+          if (!confirmed) {
+            Navigator.pop(ctx);
+            return;
+          }
+          final startValue = int.tryParse(fields[0].text.trim());
+          final endValue = int.tryParse(fields[1].text.trim());
+          if (startValue == null ||
+              endValue == null ||
+              startValue <= 0 ||
+              endValue < startValue) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('請輸入有效章節範圍')));
+            return;
+          }
+          Navigator.pop(ctx);
+          _queueDownload(
+            context,
+            provider.queueDownloadRange(startValue - 1, endValue - 1),
+          );
+        },
+      ),
     );
   }
 
@@ -601,21 +588,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
       if (!_scrollController.hasClients || !context.mounted) return;
       final index = provider.displayIndexForChapter(provider.book.chapterIndex);
       if (index < 0) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('目前閱讀章節不在目錄中')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('目前閱讀章節不在目錄中')));
         return;
       }
       if (!_chapterListController.isAttached) return;
       final viewport = _scrollController.position.viewportDimension;
       // 章節停在玻璃頁首下方一點，不被頁首蓋住。
-      final alignment =
-          viewport <= 0
-              ? 0.12
-              : ((_headerExtent(context) + AppSpacing.xl) / viewport).clamp(
-                0.0,
-                0.5,
-              );
+      final alignment = viewport <= 0
+          ? 0.12
+          : ((_headerExtent(context) + AppSpacing.xl) / viewport).clamp(
+              0.0,
+              0.5,
+            );
       _chapterListController.animateToItem(
         index: index,
         scrollController: _scrollController,
@@ -631,28 +616,26 @@ class _BookDetailPageState extends State<BookDetailPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (ctx) => Scaffold(
-              backgroundColor: Colors.black,
-              extendBodyBehindAppBar: true,
-              appBar: const GlassNavHeader(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-              ),
-              body: Center(
-                child: Hero(
-                  tag: heroTag,
-                  child:
-                      isLocal
-                          ? Image.file(
-                            url.startsWith('local://')
-                                ? File(url.replaceFirst('local://', ''))
-                                : File(Uri.parse(url).toFilePath()),
-                          )
-                          : CachedNetworkImage(imageUrl: url),
-                ),
-              ),
+        builder: (ctx) => Scaffold(
+          backgroundColor: Colors.black,
+          extendBodyBehindAppBar: true,
+          appBar: const GlassNavHeader(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+          ),
+          body: Center(
+            child: Hero(
+              tag: heroTag,
+              child: isLocal
+                  ? Image.file(
+                      url.startsWith('local://')
+                          ? File(url.replaceFirst('local://', ''))
+                          : File(Uri.parse(url).toFilePath()),
+                    )
+                  : CachedNetworkImage(imageUrl: url),
             ),
+          ),
+        ),
       ),
     );
   }
@@ -741,21 +724,20 @@ class _BookDetailPageState extends State<BookDetailPage> {
     await showStatefulAppAlert<void>(
       context: context,
       fieldTexts: [p.tocSearchQuery],
-      builder:
-          (ctx, _, fields) => AppAlert<void>(
-            title: '搜尋目錄',
-            content: _fieldCard(ctx, [
-              GroupedTextFieldRow(
-                controller: fields.single,
-                hintText: '章節名稱',
-                autofocus: true,
-                onChanged: p.setSearchQuery,
-              ),
-            ]),
-            actions: const [
-              AppAlertAction(label: '關閉', value: null, isDefault: true),
-            ],
+      builder: (ctx, _, fields) => AppAlert<void>(
+        title: '搜尋目錄',
+        content: _fieldCard(ctx, [
+          GroupedTextFieldRow(
+            controller: fields.single,
+            hintText: '章節名稱',
+            autofocus: true,
+            onChanged: p.setSearchQuery,
           ),
+        ]),
+        actions: const [
+          AppAlertAction(label: '關閉', value: null, isDefault: true),
+        ],
+      ),
     );
   }
 
@@ -803,11 +785,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               field('簡介', i, maxLines: 3),
             ]),
             actions: [
-              AppAlertAction(
-                label: '取消',
-                value: false,
-                enabled: !saving,
-              ),
+              AppAlertAction(label: '取消', value: false, enabled: !saving),
               AppAlertAction(
                 label: saving ? '儲存中…' : '儲存',
                 value: true,
@@ -854,14 +832,10 @@ class _BookDetailPageState extends State<BookDetailPage> {
       AppBottomSheet.showCustom(
         context: context,
         isScrollControlled: true,
-        builder:
-            (ctx) => ChangeNotifierProvider.value(
-              value: p,
-              child: ChangeCoverSheet(
-                bookName: p.book.name,
-                author: p.book.author,
-              ),
-            ),
+        builder: (ctx) => ChangeNotifierProvider.value(
+          value: p,
+          child: ChangeCoverSheet(bookName: p.book.name, author: p.book.author),
+        ),
       );
 }
 
@@ -893,13 +867,12 @@ class _ChapterRow extends StatelessWidget {
         ),
       ),
       showChevron: false,
-      trailing:
-          isCurrent
-              ? Text(
-                '目前',
-                style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
-              )
-              : null,
+      trailing: isCurrent
+          ? Text(
+              '目前',
+              style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
+            )
+          : null,
       onTap: onTap,
     );
   }

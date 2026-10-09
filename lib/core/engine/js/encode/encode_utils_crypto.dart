@@ -55,12 +55,11 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
     String outputFormat,
   ) {
     final forEncryption = action == 'encrypt';
-    final inputBytes =
-        forEncryption
-            ? Uint8List.fromList(EncodeUtilsBase.toBytes(data))
-            : data is String
-            ? base64.decode(data)
-            : Uint8List.fromList(EncodeUtilsBase.toBytes(data));
+    final inputBytes = forEncryption
+        ? Uint8List.fromList(EncodeUtilsBase.toBytes(data))
+        : data is String
+        ? base64.decode(data)
+        : Uint8List.fromList(EncodeUtilsBase.toBytes(data));
 
     if (modeName != 'ECB' && ivBytes == null) {
       throw StateError('IV is required.');
@@ -70,18 +69,17 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
     late final Uint8List resultBytes;
 
     if (modeName == 'GCM') {
-      final cipher =
-          pc.GCMBlockCipher(pc.AESEngine())
-            ..reset()
-            ..init(
-              forEncryption,
-              pc.AEADParameters(
-                keyParameter,
-                128,
-                Uint8List.fromList(ivBytes!),
-                Uint8List(0),
-              ),
-            );
+      final cipher = pc.GCMBlockCipher(pc.AESEngine())
+        ..reset()
+        ..init(
+          forEncryption,
+          pc.AEADParameters(
+            keyParameter,
+            128,
+            Uint8List.fromList(ivBytes!),
+            Uint8List(0),
+          ),
+        );
       resultBytes = cipher.process(inputBytes);
     } else {
       final cipher =
@@ -96,9 +94,9 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
                 modeName == 'ECB'
                     ? keyParameter
                     : pc.ParametersWithIV(
-                      keyParameter,
-                      Uint8List.fromList(ivBytes!),
-                    ),
+                        keyParameter,
+                        Uint8List.fromList(ivBytes!),
+                      ),
                 null,
               ),
             );
@@ -109,18 +107,18 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
       return outputFormat == 'hex'
           ? hex.encode(resultBytes)
           : (outputFormat == 'bytes'
-              ? resultBytes
-              : base64.encode(resultBytes));
+                ? resultBytes
+                : base64.encode(resultBytes));
     }
 
     final decryptedBytes = Uint8List.fromList(resultBytes);
     return outputFormat == 'string'
         ? utf8.decode(decryptedBytes)
         : (outputFormat == 'bytes'
-            ? decryptedBytes
-            : (outputFormat == 'hex'
-                ? hex.encode(decryptedBytes)
-                : base64.encode(decryptedBytes)));
+              ? decryptedBytes
+              : (outputFormat == 'hex'
+                    ? hex.encode(decryptedBytes)
+                    : base64.encode(decryptedBytes)));
   }
 
   static pc.BlockCipher _createAesBlockCipher(String modeName) {
@@ -152,21 +150,24 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
   ) {
     final engine = (algorithmName == 'DES') ? DESEngine() : DESedeEngine();
     final cipher = (modeName == 'ECB') ? engine : pc.CBCBlockCipher(engine);
-    final padder = pc.PaddedBlockCipherImpl(pc.PKCS7Padding(), cipher)..init(
-      action == 'encrypt',
-      modeName == 'ECB'
-          ? pc.PaddedBlockCipherParameters(
-            pc.KeyParameter(Uint8List.fromList(keyBytes)),
-            null,
-          )
-          : pc.PaddedBlockCipherParameters(
-            pc.ParametersWithIV(
-              pc.KeyParameter(Uint8List.fromList(keyBytes)),
-              Uint8List.fromList(ivBytes ?? List.filled(engine.blockSize, 0)),
-            ),
-            null,
-          ),
-    );
+    final padder = pc.PaddedBlockCipherImpl(pc.PKCS7Padding(), cipher)
+      ..init(
+        action == 'encrypt',
+        modeName == 'ECB'
+            ? pc.PaddedBlockCipherParameters(
+                pc.KeyParameter(Uint8List.fromList(keyBytes)),
+                null,
+              )
+            : pc.PaddedBlockCipherParameters(
+                pc.ParametersWithIV(
+                  pc.KeyParameter(Uint8List.fromList(keyBytes)),
+                  Uint8List.fromList(
+                    ivBytes ?? List.filled(engine.blockSize, 0),
+                  ),
+                ),
+                null,
+              ),
+      );
     if (action == 'encrypt') {
       final encryptedBytes = padder.process(
         Uint8List.fromList(EncodeUtilsBase.toBytes(data)),
@@ -174,8 +175,8 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
       return outputFormat == 'hex'
           ? hex.encode(encryptedBytes)
           : (outputFormat == 'bytes'
-              ? encryptedBytes
-              : base64.encode(encryptedBytes));
+                ? encryptedBytes
+                : base64.encode(encryptedBytes));
     } else {
       final decryptedBytes = padder.process(
         data is String
@@ -185,10 +186,10 @@ extension EncodeUtilsCrypto on EncodeUtilsBase {
       return outputFormat == 'string'
           ? utf8.decode(decryptedBytes)
           : (outputFormat == 'bytes'
-              ? decryptedBytes
-              : (outputFormat == 'hex'
-                  ? hex.encode(decryptedBytes)
-                  : base64.encode(decryptedBytes)));
+                ? decryptedBytes
+                : (outputFormat == 'hex'
+                      ? hex.encode(decryptedBytes)
+                      : base64.encode(decryptedBytes)));
     }
   }
 }

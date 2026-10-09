@@ -72,10 +72,9 @@ class ChapterListParser {
       final isVipRuleNeedsAsync = _ruleNeedsAsync(isVipRule);
       final isPayRuleNeedsAsync = _ruleNeedsAsync(isPayRule);
       final nextTocUrlRuleNeedsAsync = _ruleNeedsAsync(nextTocUrlRule);
-      final elements =
-          listRuleNeedsAsync
-              ? await rule.getElementsAsync(listRule)
-              : rule.getElements(listRule);
+      final elements = listRuleNeedsAsync
+          ? await rule.getElementsAsync(listRule)
+          : rule.getElements(listRule);
 
       final chapters = <BookChapter>[];
       for (var i = 0; i < elements.length; i++) {
@@ -155,10 +154,9 @@ class ChapterListParser {
 
       final nextUrls = <String>[];
       if (nextTocUrlRule.isNotEmpty) {
-        final list =
-            nextTocUrlRuleNeedsAsync
-                ? await rule.getStringListAsync(nextTocUrlRule, isUrl: true)
-                : rule.getStringList(nextTocUrlRule, isUrl: true);
+        final list = nextTocUrlRuleNeedsAsync
+            ? await rule.getStringListAsync(nextTocUrlRule, isUrl: true)
+            : rule.getStringList(nextTocUrlRule, isUrl: true);
         for (final u in list) {
           if (u.isNotEmpty && u != baseUrl) nextUrls.add(u);
         }

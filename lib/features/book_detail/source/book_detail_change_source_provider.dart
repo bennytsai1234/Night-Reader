@@ -17,12 +17,11 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     BookSourceService? service,
     BookSourceDao? sourceDao,
     SearchBookDao? searchBookDao,
-    Duration sourceSearchTimeout = const Duration(seconds: 15),
+    this._sourceSearchTimeout = const Duration(seconds: 15),
     bool autoStart = true,
   }) : service = service ?? BookSourceService(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-       searchBookDao = searchBookDao ?? getIt<SearchBookDao>(),
-       _sourceSearchTimeout = sourceSearchTimeout {
+       searchBookDao = searchBookDao ?? getIt<SearchBookDao>() {
     if (autoStart) {
       unawaited(loadGroups());
       unawaited(startSearch());
@@ -82,8 +81,9 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final cached = await searchBookDao.getSearchBooks(book.name, book.author);
     if (!_isSearchActive(searchId)) return;
 
-    final allowedOrigins =
-        enabledSources.map((source) => source.bookSourceUrl).toSet();
+    final allowedOrigins = enabledSources
+        .map((source) => source.bookSourceUrl)
+        .toSet();
     final cachedResults = _sortResults(
       cached.where((result) => allowedOrigins.contains(result.origin)).toList(),
     );
@@ -111,67 +111,61 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       var completedSources = 0;
       final searchPool = Pool(_maxConcurrentSearches);
       try {
-        final searchTasks =
-            enabledSources.map((source) {
-              return searchPool.withResource(() async {
-                if (!_isSearchActive(searchId)) return;
+        final searchTasks = enabledSources.map((source) {
+          return searchPool.withResource(() async {
+            if (!_isSearchActive(searchId)) return;
 
-                final cancelToken = CancelToken();
-                _activeSearchTokens.add(cancelToken);
-                try {
-                  final author = book.author.trim();
-                  final shouldCheckAuthor = checkAuthor && author.isNotEmpty;
-                  final results = await service
-                      .searchBooks(
-                        source,
-                        book.name,
-                        filter:
-                            shouldCheckAuthor
-                                ? (name, candidateAuthor) =>
-                                    name == book.name && candidateAuthor == author
-                                : (name, _) => name == book.name,
-                        shouldBreak: (size) => size >= 1,
-                        cancelToken: cancelToken,
-                      )
-                      .timeout(
-                        _sourceSearchTimeout,
-                        onTimeout: () {
-                          cancelToken.cancel('換源搜尋逾時');
-                          throw TimeoutException('換源搜尋逾時');
-                        },
-                      );
-                  if (!_isSearchActive(searchId)) return;
-                  _replaceSourceResults(source.bookSourceUrl, results);
-                } catch (_) {
-                  if (_isSearchActive(searchId)) {
-                    failedSources++;
-                    _replaceSourceResults(
-                      source.bookSourceUrl,
-                      const <SearchBook>[],
-                    );
-                  }
-                } finally {
-                  _activeSearchTokens.remove(cancelToken);
-                  if (_isSearchActive(searchId)) {
-                    completedSources++;
-                    _updateSearchingStatus(
-                      completedSources,
-                      enabledSources.length,
-                    );
-                  }
-                }
-              });
-            }).toList();
+            final cancelToken = CancelToken();
+            _activeSearchTokens.add(cancelToken);
+            try {
+              final author = book.author.trim();
+              final shouldCheckAuthor = checkAuthor && author.isNotEmpty;
+              final results = await service
+                  .searchBooks(
+                    source,
+                    book.name,
+                    filter: shouldCheckAuthor
+                        ? (name, candidateAuthor) =>
+                              name == book.name && candidateAuthor == author
+                        : (name, _) => name == book.name,
+                    shouldBreak: (size) => size >= 1,
+                    cancelToken: cancelToken,
+                  )
+                  .timeout(
+                    _sourceSearchTimeout,
+                    onTimeout: () {
+                      cancelToken.cancel('換源搜尋逾時');
+                      throw TimeoutException('換源搜尋逾時');
+                    },
+                  );
+              if (!_isSearchActive(searchId)) return;
+              _replaceSourceResults(source.bookSourceUrl, results);
+            } catch (_) {
+              if (_isSearchActive(searchId)) {
+                failedSources++;
+                _replaceSourceResults(
+                  source.bookSourceUrl,
+                  const <SearchBook>[],
+                );
+              }
+            } finally {
+              _activeSearchTokens.remove(cancelToken);
+              if (_isSearchActive(searchId)) {
+                completedSources++;
+                _updateSearchingStatus(completedSources, enabledSources.length);
+              }
+            }
+          });
+        }).toList();
 
         await Future.wait(searchTasks);
         if (!_isSearchActive(searchId)) return;
 
         isSearching = false;
         if (allResults.isEmpty) {
-          status =
-              failedSources == enabledSources.length
-                  ? '搜尋完成，但所有書源都失敗'
-                  : '未找到備用書源';
+          status = failedSources == enabledSources.length
+              ? '搜尋完成，但所有書源都失敗'
+              : '未找到備用書源';
         } else if (failedSources > 0) {
           status = '搜尋完成 ($failedSources 個書源失敗)';
         } else {
@@ -214,25 +208,23 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       !_disposed && searchId == _activeSearchId;
 
   Future<List<BookSource>> _loadEnabledSources() async {
-    var enabledSources =
-        (await _sourceDao.getEnabled())
-            .where(
-              (source) =>
-                  source.isSearchEnabledByRuntime &&
-                  source.bookSourceUrl != book.origin,
-            )
-            .toList();
+    var enabledSources = (await _sourceDao.getEnabled())
+        .where(
+          (source) =>
+              source.isSearchEnabledByRuntime &&
+              source.bookSourceUrl != book.origin,
+        )
+        .toList();
     if (selectedGroup == '全部') {
       return enabledSources;
     }
-    enabledSources =
-        enabledSources
-            .where(
-              (source) => _splitGroups(
-                source.bookSourceGroup ?? '',
-              ).contains(selectedGroup),
-            )
-            .toList();
+    enabledSources = enabledSources
+        .where(
+          (source) =>
+              _splitGroups(source.bookSourceGroup ?? '')
+                  .contains(selectedGroup),
+        )
+        .toList();
     return enabledSources;
   }
 
@@ -276,16 +268,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       return;
     }
 
-    filteredResults =
-        allResults.where((result) {
-          return <String>[
-            result.originName ?? '',
-            result.latestChapterTitle ?? '',
-            result.author ?? '',
-            result.wordCount ?? '',
-            result.kind ?? '',
-          ].any((field) => field.toLowerCase().contains(_filterQuery));
-        }).toList();
+    filteredResults = allResults.where((result) {
+      return <String>[
+        result.originName ?? '',
+        result.latestChapterTitle ?? '',
+        result.author ?? '',
+        result.wordCount ?? '',
+        result.kind ?? '',
+      ].any((field) => field.toLowerCase().contains(_filterQuery));
+    }).toList();
   }
 
   List<SearchBook> _sortResults(List<SearchBook> results) {

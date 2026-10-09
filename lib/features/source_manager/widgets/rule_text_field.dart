@@ -105,27 +105,26 @@ class RuleTextField extends StatelessWidget {
   }
 
   Future<void> _showHelperMenu(BuildContext context) async {
-    final List<Map<String, String>> helpers =
-        isUrl
-            ? [
-              {'label': '搜尋關鍵字 {{key}}', 'value': '{{key}}'},
-              {'label': '分頁佔位符 {{page}}', 'value': '{{page}}'},
-              {'label': 'JS 腳本 @js:', 'value': '@js:'},
-              {
-                'label': 'POST 請求',
-                'value':
-                    ',{"method": "POST", "body": "key={{key}}&page={{page}}"}',
-              },
-            ]
-            : [
-              {'label': 'CSS 選擇器 @css:', 'value': '@css:'},
-              {'label': 'XPath 選擇器 //', 'value': '//'},
-              {'label': 'JSONPath \$.', 'value': r'$.'},
-              {'label': '正規表達式 ##', 'value': '##'},
-              {'label': 'JS 腳本 {{js:}}', 'value': '{{js:}}'},
-              {'label': '取內容屬性 @text', 'value': '@text'},
-              {'label': '取連結屬性 @href', 'value': '@href'},
-            ];
+    final List<Map<String, String>> helpers = isUrl
+        ? [
+            {'label': '搜尋關鍵字 {{key}}', 'value': '{{key}}'},
+            {'label': '分頁佔位符 {{page}}', 'value': '{{page}}'},
+            {'label': 'JS 腳本 @js:', 'value': '@js:'},
+            {
+              'label': 'POST 請求',
+              'value':
+                  ',{"method": "POST", "body": "key={{key}}&page={{page}}"}',
+            },
+          ]
+        : [
+            {'label': 'CSS 選擇器 @css:', 'value': '@css:'},
+            {'label': 'XPath 選擇器 //', 'value': '//'},
+            {'label': 'JSONPath \$.', 'value': r'$.'},
+            {'label': '正規表達式 ##', 'value': '##'},
+            {'label': 'JS 腳本 {{js:}}', 'value': '{{js:}}'},
+            {'label': '取內容屬性 @text', 'value': '@text'},
+            {'label': '取連結屬性 @href', 'value': '@href'},
+          ];
 
     final value = await showAppActionSheet<String>(
       context: context,

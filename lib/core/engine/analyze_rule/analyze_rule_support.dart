@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:html/dom.dart';
+
 import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';

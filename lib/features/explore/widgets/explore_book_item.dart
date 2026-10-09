@@ -4,7 +4,9 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+
 import '../../book_detail/book_detail_page.dart';
+
 import 'package:night_reader/core/services/chinese_display.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
@@ -151,13 +153,12 @@ class ExploreBookItem extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => BookDetailPage(
-              searchBook: AggregatedSearchBook(
-                book: book,
-                sources: [book.originName ?? sourceName ?? '發現'],
-              ),
-            ),
+        builder: (context) => BookDetailPage(
+          searchBook: AggregatedSearchBook(
+            book: book,
+            sources: [book.originName ?? sourceName ?? '發現'],
+          ),
+        ),
       ),
     );
   }
@@ -173,7 +174,10 @@ class InfoBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: scheme.primary.withValues(alpha: 0.12),
         borderRadius: AppRadius.pillShape,

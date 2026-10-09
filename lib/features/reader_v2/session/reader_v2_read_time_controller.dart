@@ -35,7 +35,7 @@ class ReaderV2ReadTimeController {
 
     final write = _writeTail.then<void>(
       (_) => _persist(seconds, stoppedAt),
-      onError: (Object _, StackTrace __) => _persist(seconds, stoppedAt),
+      onError: (Object _, StackTrace _) => _persist(seconds, stoppedAt),
     );
     _writeTail = write;
     await write;
@@ -56,11 +56,7 @@ class ReaderV2ReadTimeController {
         lastRead: stoppedAt.millisecondsSinceEpoch,
       );
     } catch (e, stack) {
-      AppLog.e(
-        '寫入閱讀時間失敗: $e',
-        error: e,
-        stackTrace: stack,
-      );
+      AppLog.e('寫入閱讀時間失敗: $e', error: e, stackTrace: stack);
     }
   }
 }

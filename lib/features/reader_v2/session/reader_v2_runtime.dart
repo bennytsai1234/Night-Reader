@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -74,7 +75,6 @@ class ReaderV2Runtime extends ChangeNotifier {
   bool disposed = false;
   String? _pendingUserNotice;
   ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
-
 
   ReaderV2State get state => stateMachine.state;
 
@@ -184,8 +184,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     final stagedSpec = stateMachine.effectiveLayoutSpec;
     if (stagedSpec.presentationSignature == spec.presentationSignature) return;
 
-    final sameTextLayout =
-        stagedSpec.layoutSignature == spec.layoutSignature;
+    final sameTextLayout = stagedSpec.layoutSignature == spec.layoutSignature;
     if (sameTextLayout) {
       if (stateMachine.updateViewportSpec(spec)) {
         _viewportGeometryNotifier.notifyListeners();
@@ -313,10 +312,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     Error.throwWithStackTrace(error, stackTrace);
   }
 
-  Never _failOperationInvariant(
-    ReaderV2OperationToken token,
-    String message,
-  ) {
+  Never _failOperationInvariant(ReaderV2OperationToken token, String message) {
     if (isCurrentOperationToken(token)) {
       stateMachine.abandonOperation(token);
       notifyListeners();
@@ -482,13 +478,14 @@ class ReaderV2Runtime extends ChangeNotifier {
       // `charOffset` is meaningful only in the display-text identity that
       // owned it when captured. Re-resolve the same operation intent whenever
       // the semantic document generation advances during viewport work.
-      final resolved = ReaderV2ContentLocationMapper.resolve(
-        location: location.copyWith(chapterIndex: chapterIndex),
-        target: content,
-      ).normalized(
-        chapterCount: chapterCount,
-        chapterLength: content.displayText.length,
-      );
+      final resolved =
+          ReaderV2ContentLocationMapper.resolve(
+            location: location.copyWith(chapterIndex: chapterIndex),
+            target: content,
+          ).normalized(
+            chapterCount: chapterCount,
+            chapterLength: content.displayText.length,
+          );
       final targetContentGeneration = state.contentGeneration;
 
       final restore = viewportBridge.viewportRestore;
@@ -525,10 +522,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         );
       }
 
-      final completed = completeOperation(
-        token,
-        visibleLocation: resolved,
-      );
+      final completed = completeOperation(token, visibleLocation: resolved);
       AppLog.d(
         'Reader viewport complete op=${token.id} completed=$completed '
         'lifecycle=${state.lifecycle.name} '

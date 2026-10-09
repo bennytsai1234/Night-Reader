@@ -239,10 +239,9 @@ ${_indent(body, '      ')}
     final transformedConsequent = _injectReturnIntoStatement(consequent);
     if (transformedConsequent == null) return null;
 
-    final out =
-        StringBuffer()
-          ..write(stmt.substring(0, consequentStart))
-          ..write(transformedConsequent);
+    final out = StringBuffer()
+      ..write(stmt.substring(0, consequentStart))
+      ..write(transformedConsequent);
 
     var cursor = _skipWhitespaceIndex(stmt, consequentEnd);
     if (_startsWithKeyword(stmt, cursor, 'else')) {
@@ -276,10 +275,9 @@ ${_indent(body, '      ')}
     );
     if (transformedTryBlock == null) return null;
 
-    final out =
-        StringBuffer()
-          ..write(stmt.substring(0, index))
-          ..write(transformedTryBlock);
+    final out = StringBuffer()
+      ..write(stmt.substring(0, index))
+      ..write(transformedTryBlock);
 
     var cursor = tryBlockEnd + 1;
     var sawCatch = false;
@@ -579,8 +577,9 @@ ${_indent(body, '      ')}
     }
     final before = start == 0 ? null : source.codeUnitAt(start - 1);
     final afterIndex = start + keyword.length;
-    final after =
-        afterIndex < source.length ? source.codeUnitAt(afterIndex) : null;
+    final after = afterIndex < source.length
+        ? source.codeUnitAt(afterIndex)
+        : null;
     final beforeOk = before == null || !_isIdentChar(before);
     final afterOk = after == null || !_isIdentChar(after);
     return beforeOk && afterOk;

@@ -50,10 +50,9 @@ final class RenderHybridBlockSliver extends RenderSliverVariedExtentList {
   RenderHybridBlockSliver({
     required super.childManager,
     required super.itemExtentBuilder,
-    required DocumentIndex documentIndex,
-    required bool beforeCenter,
-  }) : _documentIndex = documentIndex,
-       _beforeCenter = beforeCenter;
+    required this._documentIndex,
+    required this._beforeCenter,
+  });
 
   DocumentIndex _documentIndex;
   set documentIndex(DocumentIndex value) {
