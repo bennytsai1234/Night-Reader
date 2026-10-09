@@ -5,10 +5,6 @@
 - 本專案為 Flutter/Dart 專案 `night_reader`，App 顯示名稱為 `夜讀`，發布目標是 Android `arm64-v8a`。
 - 面向人類的產品說明在 `README.md`；視覺與互動設計系統在 `DESIGN.md`。
 
-## 語言
-
-- 面向使用者的溝通與專案規則討論一律使用繁體中文。
-
 ## 維護範圍
 
 - 工作重心是打磨現有功能：功能改進、UI 修復與精修、體驗與互動優化、精簡、效能調校、相容性調整與重構。
@@ -63,7 +59,3 @@ gh pr merge --squash --auto --delete-branch
 ## 保持 repo 整潔
 
 - 根目錄只放：`AGENTS.md`、`README.md`、`DESIGN.md`、`LICENSE`、ignore 檔、Flutter 工具鏈要求的檔案（`pubspec.yaml`、`pubspec.lock`、`analysis_options.yaml`、`.metadata`、`flutter_native_splash.yaml`），以及 `android/`、`ios/`、`lib/`、`assets/`、`test/`、`third_party/`、`website/`、`.github/`。新檔案放進既有目錄；測試素材放 `test/fixtures/`。
-- 取代某樣東西時，同一個變更裡移除舊的：舊的 workflow、腳本、設定，以及指向它們的引用。新的參數或版本是既有腳本的參數，不複製出 `xxx_v2`。
-- 不建立 `docs/` 或其他文件：規則寫在這裡，行為規格寫成測試，工作歷程寫在 PR 與 commit message。
-- 歷史留在 git：不建立 `*.bak`、日期複本或備份資料夾。暫存檔、下載物與交接檔放在 repo 外或 ignore 路徑，任務結束時刪掉。
-- 回報完成前檢查 `git status` 與根目錄，沒有新增的雜檔；回報只寫改了什麼、怎麼驗證。
