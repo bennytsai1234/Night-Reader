@@ -256,9 +256,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   void updateSearchScope(SearchScope scope) {
     _searchScope = scope;
+    unawaited(scope.save());
     notifyListeners();
-    // 若正在顯示搜尋結果，自動以新範圍重新搜尋
-    if (_lastSearchKey.isNotEmpty && !_isSearching) {
+    // 已經搜尋過就以新範圍重搜；搜尋中也一樣，舊的那次會被取消。
+    if (_lastSearchKey.isNotEmpty) {
       search(_lastSearchKey);
     }
   }
@@ -298,6 +299,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _lastSearchKey = searchKey;
     _results = [];
     _sourceFailures.clear();
+    _markSearchPending();
     clearResultFilters();
     notifyListeners();
 
@@ -320,6 +322,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _lastSearchKey = searchKey;
     _results = [];
     _sourceFailures.clear();
+    _markSearchPending();
     clearResultFilters();
 
     // 使用單一書源的 scope
@@ -352,6 +355,16 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       precisionSearch: _precisionSearch,
       initialResults: existingResults,
     );
+  }
+
+  /// 送出搜尋後、引擎真正開始前（存歷史、讀書源清單）就先進入搜尋中，
+  /// 這段空檔才不會閃出空狀態，也擋住重複送出。
+  void _markSearchPending() {
+    _isSearching = true;
+    _completedSources = 0;
+    _totalSources = 0;
+    _failedSources = 0;
+    _currentSource = '';
   }
 
   void stopSearch() {

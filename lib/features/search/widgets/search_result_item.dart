@@ -46,7 +46,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
     );
     return InkWell(
       onTap: () {
-        context.read<SearchProvider>().stopSearch();
+        // 搜尋在背景繼續，回來時結果已經補齊。
         Navigator.push(
           context,
           MaterialPageRoute(
