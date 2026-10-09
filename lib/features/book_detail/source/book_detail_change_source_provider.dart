@@ -306,14 +306,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     return results;
   }
 
-  Iterable<String> _splitGroups(String value) sync* {
-    for (final group in value.split(RegExp(r'[,，]'))) {
-      final trimmed = group.trim();
-      if (trimmed.isNotEmpty) {
-        yield trimmed;
-      }
-    }
-  }
+  Set<String> _splitGroups(String value) => splitSourceGroups(value);
 
   void _notifySafely() {
     if (!_disposed) {

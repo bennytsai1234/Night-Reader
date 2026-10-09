@@ -113,16 +113,8 @@ class ExploreProvider extends ChangeNotifier {
 
     final counts = <String, int>{};
     for (final source in _allSources) {
-      if (source.bookSourceGroup != null &&
-          source.bookSourceGroup!.isNotEmpty) {
-        final groups = source.bookSourceGroup!
-            .split(RegExp(r'[,，]'))
-            .map((group) => group.trim())
-            .where((group) => group.isNotEmpty)
-            .toSet();
-        for (final group in groups) {
-          counts[group] = (counts[group] ?? 0) + 1;
-        }
+      for (final group in splitSourceGroups(source.bookSourceGroup)) {
+        counts[group] = (counts[group] ?? 0) + 1;
       }
     }
     _groupCounts = counts;
@@ -187,13 +179,13 @@ class ExploreProvider extends ChangeNotifier {
 
   void _applyFilter() {
     if (_selectedGroup != null) {
-      _filteredSources = _allSources.where((source) {
-        if (source.bookSourceGroup == null) return false;
-        final groups = source.bookSourceGroup!
-            .split(RegExp(r'[,，]'))
-            .map((value) => value.trim());
-        return groups.contains(_selectedGroup);
-      }).toList();
+      _filteredSources = _allSources
+          .where(
+            (source) =>
+                splitSourceGroups(source.bookSourceGroup)
+                    .contains(_selectedGroup),
+          )
+          .toList();
     } else if (_searchQuery.isNotEmpty) {
       final key = _searchQuery.toLowerCase();
       _filteredSources = _allSources.where((source) {

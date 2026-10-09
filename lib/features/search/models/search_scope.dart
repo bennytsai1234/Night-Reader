@@ -105,8 +105,7 @@ class SearchScope {
 
     for (final group in groups) {
       final matched = allEnabled.where((s) {
-        final g = s.bookSourceGroup ?? '';
-        return g.split(',').map((e) => e.trim()).contains(group);
+        return splitSourceGroups(s.bookSourceGroup).contains(group);
       }).toList();
       if (matched.isNotEmpty) {
         validGroups.add(group);

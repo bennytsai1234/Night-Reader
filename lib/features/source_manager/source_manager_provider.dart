@@ -258,6 +258,12 @@ class SourceManagerProvider with ChangeNotifier {
   bool get hasLastCheckReport => checkService.hasLastReport;
   SourceCheckConfig get checkConfig => checkService.config;
   int get totalSourceCount => _sources.length;
+
+  /// 全部書源（依手動順序，不受目前的搜尋與篩選影響）。
+  List<BookSourcePart> get allSources => List<BookSourcePart>.unmodifiable(
+    List<BookSourcePart>.from(_sources)
+      ..sort((a, b) => a.customOrder.compareTo(b.customOrder)),
+  );
   String? get loadErrorMessage => _loadError == null ? null : '載入書源失敗，請稍後重試';
 
   List<BookSourcePart> get sources {
@@ -330,14 +336,24 @@ class SourceManagerProvider with ChangeNotifier {
       checkService.isChecking ||
       _pendingSourceMutations.isNotEmpty;
   bool get isMutationBusy => _isLoading || _hasActiveMutation;
-  bool get canReorder =>
+
+  /// 清單是否照手動順序完整列出；決定清單用可拖曳排序的版面。與一時的忙碌
+  /// 狀態無關，切開關時版面才不會整個換掉重建。
+  bool get showsManualOrder =>
       sortMode == 0 &&
       !sortDesc &&
       !groupByDomain &&
       filterGroup == '全部' &&
       _searchQuery.isEmpty &&
-      sources.length == _sources.length &&
-      !isMutationBusy;
+      sources.length == _sources.length;
+  bool get canReorder => showsManualOrder && !isMutationBusy;
+
+  /// 這一列此刻能不能操作：批次作業或校驗進行中全部鎖住；單一書源的修改
+  /// 只鎖住那一列。
+  bool isSourceLocked(String url) =>
+      _isBatchOperationInProgress ||
+      checkService.isChecking ||
+      _pendingSourceMutations.contains(url);
   final Set<String> _selectedUrls = {};
   Set<String> get selectedUrls => Set<String>.unmodifiable(_selectedUrls);
   List<String> _allGroups = [];
@@ -673,8 +689,9 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  // 置頂／置底會改寫所有書源的順序，必須獨占執行。
   Future<void> moveToTop(String url) async {
-    if (!_beginSourceMutation(url)) return;
+    if (!_beginBatchOperation()) return;
     try {
       final all = await _dao.getAll();
       all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
@@ -685,12 +702,12 @@ class SourceManagerProvider with ChangeNotifier {
       await _dao.updateCustomOrder(all);
       await loadSources();
     } finally {
-      _endSourceMutation(url);
+      _endBatchOperation();
     }
   }
 
   Future<void> moveToBottom(String url) async {
-    if (!_beginSourceMutation(url)) return;
+    if (!_beginBatchOperation()) return;
     try {
       final all = await _dao.getAll();
       all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
@@ -701,7 +718,7 @@ class SourceManagerProvider with ChangeNotifier {
       await _dao.updateCustomOrder(all);
       await loadSources();
     } finally {
-      _endSourceMutation(url);
+      _endBatchOperation();
     }
   }
 
@@ -810,19 +827,6 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addGroup(String name) async {
-    final normalizedName = name.trim();
-    if (isMutationBusy ||
-        normalizedName.isEmpty ||
-        _allGroups.contains(normalizedName)) {
-      return;
-    }
-    // 這裡只需要更新本地緩存並刷新即可
-    _allGroups.add(normalizedName);
-    _allGroups.sort();
-    notifyListeners();
-  }
-
   Future<void> renameGroup(String oldName, String newName) async {
     final normalizedOldName = oldName.trim();
     final normalizedNewName = newName.trim();
@@ -878,12 +882,7 @@ class SourceManagerProvider with ChangeNotifier {
       for (var url in selectedUrls) {
         final s = await _dao.getByUrl(url);
         if (s != null) {
-          final groups = (s.bookSourceGroup ?? '')
-              .split(RegExp(r'[,，\s]+'))
-              .where((e) => e.isNotEmpty)
-              .toSet();
-          groups.add(normalizedGroup);
-          s.bookSourceGroup = groups.join(',');
+          s.addGroup(normalizedGroup);
           await _dao.upsert(s);
         }
       }
@@ -903,12 +902,7 @@ class SourceManagerProvider with ChangeNotifier {
       for (var url in selectedUrls) {
         final s = await _dao.getByUrl(url);
         if (s != null) {
-          final groups = (s.bookSourceGroup ?? '')
-              .split(RegExp(r'[,，\s]+'))
-              .where((e) => e.isNotEmpty)
-              .toSet();
-          groups.remove(normalizedGroup);
-          s.bookSourceGroup = groups.join(',');
+          s.removeGroup(normalizedGroup);
           await _dao.upsert(s);
         }
       }
@@ -1075,8 +1069,14 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 不同書源的單筆修改可以同時進行；同一筆或批次作業、校驗、載入中則拒絕。
   bool _beginSourceMutation(String url) {
-    if (isMutationBusy || !_pendingSourceMutations.add(url)) return false;
+    if (_isLoading ||
+        _isBatchOperationInProgress ||
+        checkService.isChecking ||
+        !_pendingSourceMutations.add(url)) {
+      return false;
+    }
     notifyListeners();
     return true;
   }
@@ -1095,14 +1095,7 @@ class SourceManagerProvider with ChangeNotifier {
     );
   }
 
-  Set<String> _groupLabels(String? value) {
-    if (value == null || value.trim().isEmpty) return const <String>{};
-    return value
-        .split(RegExp(r'[,，\s]+'))
-        .map((group) => group.trim())
-        .where((group) => group.isNotEmpty)
-        .toSet();
-  }
+  Set<String> _groupLabels(String? value) => splitSourceGroups(value);
 
   bool _hasGroup(String? value, String group) =>
       _groupLabels(value).contains(group);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
@@ -8,6 +9,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'source_manager_provider.dart';
@@ -44,7 +46,7 @@ class SourceGroupManagePage extends StatelessWidget {
               child: AppStateView(
                 icon: Icons.folder_outlined,
                 title: '尚未建立自訂分組',
-                description: '建立分組後，可依分組管理、篩選與分享書源。',
+                description: '新增分組並選擇要加入的書源，就能依分組管理、篩選與分享。',
                 primaryAction: AppStateAction(
                   label: '新增分組',
                   icon: Icons.add,
@@ -193,7 +195,18 @@ class SourceGroupManagePage extends StatelessWidget {
           Navigator.pop(dialogContext);
           try {
             if (oldName == null) {
-              await provider.addGroup(name);
+              // 分組由書源組成：接著選要放進這個分組的書源，沒選就不建立。
+              final urls = await Navigator.push<Set<String>>(
+                pageContext,
+                MaterialPageRoute(
+                  builder: (_) => _GroupSourcePickerPage(
+                    group: name,
+                    sources: provider.allSources,
+                  ),
+                ),
+              );
+              if (urls == null || urls.isEmpty) return;
+              await provider.selectionAddToGroups(urls, name);
             } else {
               await provider.renameGroup(oldName, name);
             }
@@ -276,6 +289,103 @@ class _GroupRow extends StatelessWidget implements GroupedRowLike {
         showChevron: false,
         onTap: () => onMenu(context),
         onLongPress: () => onMenu(context),
+      ),
+    );
+  }
+}
+
+/// 新增分組時選擇要加入的書源；回傳選中的書源網址。
+class _GroupSourcePickerPage extends StatefulWidget {
+  const _GroupSourcePickerPage({required this.group, required this.sources});
+
+  final String group;
+  final List<BookSourcePart> sources;
+
+  @override
+  State<_GroupSourcePickerPage> createState() => _GroupSourcePickerPageState();
+}
+
+class _GroupSourcePickerPageState extends State<_GroupSourcePickerPage> {
+  final _searchController = TextEditingController();
+  final Set<String> _selected = <String>{};
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.toLowerCase();
+    final sources = query.isEmpty
+        ? widget.sources
+        : widget.sources
+              .where(
+                (s) =>
+                    s.bookSourceName.toLowerCase().contains(query) ||
+                    s.bookSourceUrl.toLowerCase().contains(query),
+              )
+              .toList();
+    final padding = MediaQuery.paddingOf(context);
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavHeader(
+        title: '加入「${widget.group}」',
+        actions: [
+          GlassTextButton(
+            label: _selected.isEmpty ? '完成' : '完成（${_selected.length}）',
+            emphasized: true,
+            onPressed: _selected.isEmpty
+                ? null
+                : () => Navigator.pop(context, Set<String>.of(_selected)),
+          ),
+        ],
+        bottom: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.xs,
+            AppGrouped.margin,
+            AppSpacing.xs,
+          ),
+          child: SearchField(
+            controller: _searchController,
+            hintText: '搜尋書源名稱、網址',
+            glass: true,
+            onChanged: (value) => setState(() => _query = value.trim()),
+          ),
+        ),
+        bottomHeight: SearchField.height + AppSpacing.xs * 2,
+      ),
+      body: Builder(
+        builder: (bodyContext) {
+          final bodyPadding = MediaQuery.paddingOf(bodyContext);
+          return ListView.builder(
+            padding: EdgeInsets.only(
+              top: bodyPadding.top + AppSpacing.sm,
+              bottom: padding.bottom + AppSpacing.xxl,
+            ),
+            itemCount: sources.length,
+            itemBuilder: (context, index) {
+              final source = sources[index];
+              final url = source.bookSourceUrl;
+              return GroupedSliceItem(
+                index: index,
+                count: sources.length,
+                child: GroupedCheckRow(
+                  title: source.bookSourceName,
+                  subtitle: url,
+                  selected: _selected.contains(url),
+                  onTap: () => setState(() {
+                    if (!_selected.remove(url)) _selected.add(url);
+                  }),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
