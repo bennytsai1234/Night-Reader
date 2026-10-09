@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/models/source/book_source_logic.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
@@ -223,6 +224,8 @@ class _SourceRowContent extends StatelessWidget {
               width: editing ? _kCheckSlotWidth : 0,
               alignment: Alignment.centerLeft,
               child: OverflowBox(
+                // 列表列的高度不設上限，預設的 max 會把高度撐成無限大。
+                fit: OverflowBoxFit.deferToChild,
                 alignment: Alignment.centerLeft,
                 minWidth: _kCheckSlotWidth,
                 maxWidth: _kCheckSlotWidth,
