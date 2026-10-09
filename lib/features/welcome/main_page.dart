@@ -13,7 +13,6 @@ import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
 const List<MainDestination> _defaultDestinations = [
@@ -104,13 +103,6 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    final shelf = context.watch<BookshelfProvider?>();
-    final isRealShelfTab = widget.destinations == null && _currentIndex == 0;
-    final showShelfLoadError =
-        isRealShelfTab &&
-        shelf != null &&
-        !shelf.isLoading &&
-        shelf.loadErrorMessage != null;
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -171,23 +163,6 @@ class _MainPageState extends State<MainPage> {
                 ),
               ),
             ),
-            if (showShelfLoadError)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  child: AppStateView(
-                    icon: Icons.error_outline,
-                    title: '書架載入失敗',
-                    description: shelf.loadErrorMessage,
-                    tone: AppStateTone.error,
-                    primaryAction: AppStateAction(
-                      label: '重試',
-                      icon: Icons.refresh,
-                      onPressed: shelf.loadBooks,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
         extendBody: true,

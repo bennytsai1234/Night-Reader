@@ -241,6 +241,21 @@ class BookshelfGridTile extends StatelessWidget {
 
   static const double coverAspectRatio = 0.72;
 
+  /// 書名字級與行高，[heightFor] 依此推算兩行書名佔的高度。
+  static const double _titleFontSize = 11;
+  static const double _titleLineHeight = 1.25;
+
+  /// 一格的實際高度：封面、兩行書名（跟著系統字級放大）與進度線，
+  /// 網格據此決定列高，字級放大時才不會溢出。
+  static double heightFor(double width, TextScaler textScaler) {
+    final titleHeight = textScaler.scale(_titleFontSize) * _titleLineHeight * 2;
+    return width / coverAspectRatio +
+        AppSpacing.sm * 2 +
+        titleHeight +
+        BookshelfProgressLine.height +
+        1; // 字形度量取整的餘裕。
+  }
+
   final Book book;
   final bool selecting;
   final bool selected;
@@ -317,8 +332,9 @@ class BookshelfGridTile extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.labelXs.copyWith(
+                fontSize: _titleFontSize,
                 fontWeight: FontWeight.w600,
-                height: 1.25,
+                height: _titleLineHeight,
                 color: scheme.onSurface,
               ),
             ),

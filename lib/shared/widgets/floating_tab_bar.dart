@@ -192,6 +192,8 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      // 讀屏的點擊沒有位置，交給各分頁自己的語意動作。
+      excludeFromSemantics: true,
       onTapUp: (d) => widget.onTap(indexAt(d.localPosition.dx)),
       onHorizontalDragStart: (d) => updateDrag(d.localPosition.dx),
       onHorizontalDragUpdate: (d) => updateDrag(d.localPosition.dx),
@@ -247,6 +249,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
                                   1.0,
                                 ),
                                 selected: i == widget.currentIndex,
+                                onActivate: () => widget.onTap(i),
                               ),
                             ),
                         ],
@@ -268,11 +271,15 @@ class _TabItem extends StatelessWidget {
     required this.item,
     required this.selection,
     required this.selected,
+    required this.onActivate,
   });
 
   final FloatingTabItem item;
   final double selection;
   final bool selected;
+
+  /// 讀屏的點擊動作；手指點擊由外層依位置判斷，讀屏沒有位置可用。
+  final VoidCallback onActivate;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +293,7 @@ class _TabItem extends StatelessWidget {
       button: true,
       selected: selected,
       label: item.label,
+      onTap: onActivate,
       excludeSemantics: true,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

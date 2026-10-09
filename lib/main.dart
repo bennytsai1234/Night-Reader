@@ -16,6 +16,7 @@ import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
+import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
@@ -144,33 +145,27 @@ Widget buildFlutterErrorWidget(
   // A provider/widget build failure can happen after runApp(), so the
   // dependency try/catch cannot release the native splash for this path.
   (releaseNativeSplash ?? FlutterNativeSplash.remove)();
-  return Scaffold(
-    backgroundColor: Colors.black,
-    body: Container(
-      padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Detected an Error:',
-              style: TextStyle(
-                color: Colors.red,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+  // 會被換進任何位置（清單列、Row、整個 App），所以不能撐滿上層：在沒有
+  // 上限的方向限制大小，也不依賴主題或 Directionality。詳情已記到 AppLog 與
+  // CrashHandler，畫面上只放一句說明。
+  return Directionality(
+    textDirection: TextDirection.ltr,
+    child: LimitedBox(
+      maxWidth: 360,
+      maxHeight: 120,
+      child: ColoredBox(
+        color: AppPalette.ink500,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Text(
+              kDebugMode ? '這部分無法顯示：${details.exception}' : '這部分無法顯示',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppPalette.ink50, fontSize: 13),
             ),
-            const SizedBox(height: 10),
-            Text(
-              details.exceptionAsString(),
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              details.stack.toString(),
-              style: const TextStyle(color: Colors.grey, fontSize: 10),
-            ),
-          ],
+          ),
         ),
       ),
     ),
