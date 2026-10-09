@@ -306,6 +306,7 @@ class GlassCapsule extends StatelessWidget {
     this.tint,
     this.maxLines = 1,
     this.tooltip,
+    this.count,
   });
 
   static const double height = 34.0;
@@ -326,6 +327,9 @@ class GlassCapsule extends StatelessWidget {
   final Color? tint;
   final int maxLines;
   final String? tooltip;
+
+  /// 標籤後方的小字數量（例如分組內的書源數）。
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
@@ -373,6 +377,16 @@ class GlassCapsule extends StatelessWidget {
                   style: style,
                 ),
               ),
+              if (count != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  '$count',
+                  style: AppTextStyles.uiXs.copyWith(
+                    color: color.withValues(alpha: color.a * 0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
               if (trailingIcon != null) ...[
                 const SizedBox(width: 2),
                 Icon(trailingIcon, size: 16, color: color),

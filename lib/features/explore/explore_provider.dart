@@ -34,6 +34,7 @@ class ExploreProvider extends ChangeNotifier {
   int _kindsRequestGeneration = 0;
 
   List<String> _groups = [];
+  Map<String, int> _groupCounts = {};
   String? _selectedGroup;
 
   final Map<String, List<ExploreKind>> _kindsCache = {};
@@ -41,6 +42,10 @@ class ExploreProvider extends ChangeNotifier {
 
   List<BookSource> get sources => _filteredSources;
   List<String> get groups => _groups;
+
+  /// 各分組內的發現書源數。
+  Map<String, int> get groupCounts => _groupCounts;
+  int get totalSourceCount => _allSources.length;
   String? get selectedGroup => _selectedGroup;
   int get expandedIndex => _expandedIndex;
   List<ExploreKind> get expandedKinds => _expandedKinds;
@@ -106,17 +111,26 @@ class ExploreProvider extends ChangeNotifier {
         sources.where((source) => source.canParticipateInDiscovery).toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 
-    final groupSet = <String>{};
+    final counts = <String, int>{};
     for (final source in _allSources) {
       if (source.bookSourceGroup != null &&
           source.bookSourceGroup!.isNotEmpty) {
-        for (final group in source.bookSourceGroup!.split(RegExp(r'[,，]'))) {
-          final trimmed = group.trim();
-          if (trimmed.isNotEmpty) groupSet.add(trimmed);
+        final groups = source.bookSourceGroup!
+            .split(RegExp(r'[,，]'))
+            .map((group) => group.trim())
+            .where((group) => group.isNotEmpty)
+            .toSet();
+        for (final group in groups) {
+          counts[group] = (counts[group] ?? 0) + 1;
         }
       }
     }
-    _groups = groupSet.toList()..sort();
+    _groupCounts = counts;
+    _groups = counts.keys.toList()..sort();
+    // 選中的分組已不存在（書源被刪除或改分組）時回到「全部」。
+    if (_selectedGroup != null && !counts.containsKey(_selectedGroup)) {
+      _selectedGroup = null;
+    }
 
     _applyFilter();
     if (expandedSourceUrl != null) {

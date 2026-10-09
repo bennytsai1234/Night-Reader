@@ -19,7 +19,7 @@ import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
 
-import 'package:night_reader/shared/widgets/folder_tabs.dart';
+import 'package:night_reader/shared/widgets/group_filter_bar.dart';
 
 import 'widgets/legado_explore_kind_flow.dart';
 
@@ -76,20 +76,28 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                   AppGrouped.margin,
                   AppSpacing.sm,
                 ),
-                child: FolderTabs<String?>(
-                  tabs: [
-                    const FolderTab<String?>(null, '全部'),
+                child: GroupFilterBar<String?>(
+                  all: GroupFilterOption<String?>(
+                    null,
+                    '全部',
+                    count: provider.totalSourceCount,
+                  ),
+                  groups: [
                     for (final group in provider.groups)
-                      FolderTab<String?>(group, group),
+                      GroupFilterOption<String?>(
+                        group,
+                        group,
+                        count: provider.groupCounts[group],
+                      ),
                   ],
                   selected: provider.selectedGroup,
-                  // 分組篩選以資料夾分頁切換；provider 對同一分組是切換語意，
-                  // 分頁只在選到不同分頁時回報，因此不會誤觸取消。
+                  // provider 對同一分組是切換語意；篩選列只在選到不同分組時
+                  // 回報，因此不會誤觸取消。
                   onChanged: provider.setGroupFilter,
                 ),
               )
             : null,
-        bottomHeight: showTabs ? FolderTabs.height + AppSpacing.sm : 0,
+        bottomHeight: showTabs ? GroupFilterBar.height + AppSpacing.sm : 0,
       ),
       // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
       body: Builder(
