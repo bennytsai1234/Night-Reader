@@ -282,7 +282,10 @@ APK 透過 GitHub Actions 建置並發布至 GitHub Releases。
 
 開發與維護文件：
 
-- [AGENTS.md](AGENTS.md)：工具鏈、驗證、發布與維護規則
+- [AGENTS.md](AGENTS.md)：工具鏈、驗證、Git 與發布流程
+- [CODING_STANDARDS.md](CODING_STANDARDS.md)：寫碼規範
+- [GLOSSARY.md](GLOSSARY.md)：專案用語
+- [docs/adr/](docs/adr/)：架構決定與理由
 - [DESIGN.md](DESIGN.md)：視覺、主題與互動系統
 
 基本驗證：

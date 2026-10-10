@@ -93,4 +93,4 @@
 
 ## 變更檢查
 
-風格配色或 `buildAppTheme` 變更後執行 `flutter analyze` 與 `test/shared/theme/app_style_test.dart`。Reader 排版若涉及幾何或文字邊界，執行 `test/features/reader_v2/hybrid/hybrid_pump_test.dart` 驗證契約；視覺與排版呈現由開發者人工確認，不要為視覺細節新增 production test hook。
+風格配色或 `buildAppTheme` 變更後執行 `flutter analyze` 與 `test/shared/theme/app_style_test.dart`。Reader 排版若涉及幾何或文字邊界，執行 `test/features/reader_v2/hybrid/hybrid_pump_test.dart` 驗證契約；視覺與排版呈現由開發者人工確認（測試 hook 的規範見 [`CODING_STANDARDS.md`](CODING_STANDARDS.md#測試)）。
