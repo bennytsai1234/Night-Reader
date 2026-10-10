@@ -35,8 +35,9 @@ gh pr merge --squash --auto --delete-branch
 
 ## 發布流程
 
-- 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002）：合併到 `main` 的 commit 若把 `pubspec.yaml` 的 `version: X.Y.Z+build` 升到尚未發布的版本，CI 會建置簽章 APK、建立 `vX.Y.Z` tag 並發布 GitHub Release。
-- 發版就是一個只改版號的 PR（分支 `release/X.Y.Z`，標題 `release: bump version to X.Y.Z+build`），照上面的 Git 流程合併。
+- 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取 `main` 的提交數。
+- 測試版：每個改到 App 內容的 PR 合併進 `main`，CI 就發一個 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數）。日常改進照 Git 流程合併即可，不用另外升版號。
+- 正式版：一個只改版號的 PR（分支 `release/X.Y.Z`，標題 `release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，照上面的 Git 流程合併；CI 會建置簽章 APK、建立 `vX.Y.Z` tag 並發布 GitHub Release。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
 - 合併後檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
 - 手動 `workflow_dispatch` 與 `internal-test/**` 分支只建置測試 APK artifact，不打 tag、不發布。

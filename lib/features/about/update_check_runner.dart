@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/app_update_installer.dart';
-import 'package:night_reader/core/services/update_ignore_store.dart';
+import 'package:night_reader/core/services/update_preferences.dart';
 import 'package:night_reader/core/services/update_service.dart';
 import 'package:night_reader/features/about/update_dialog.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -12,14 +12,14 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 class UpdateCheckRunner {
   UpdateCheckRunner({
     AppUpdateService? service,
-    UpdateIgnoreStore? ignoreStore,
+    UpdatePreferences? preferences,
     AppUpdateInstaller? installer,
   }) : _service = service ?? AppUpdateService(),
-       _ignoreStore = ignoreStore ?? UpdateIgnoreStore(),
+       _preferences = preferences ?? UpdatePreferences(),
        _installer = installer ?? AppUpdateInstaller();
 
   final AppUpdateService _service;
-  final UpdateIgnoreStore _ignoreStore;
+  final UpdatePreferences _preferences;
   final AppUpdateInstaller _installer;
 
   /// 啟動時的背景檢查。對忽略過的版本會直接 return；非 Android 直接 return。
@@ -29,7 +29,7 @@ class UpdateCheckRunner {
     if (!Platform.isAndroid) return;
     final UpdateInfo? info;
     try {
-      info = await _service.checkLatest();
+      info = await _check();
     } catch (e, stack) {
       // 背景檢查失敗不打擾使用者，記錄即可。
       AppLog.e(
@@ -43,7 +43,7 @@ class UpdateCheckRunner {
       await _clearDownloads();
       return;
     }
-    if (await _ignoreStore.isIgnored(info.tagName)) return;
+    if (await _preferences.isIgnored(info.tagName)) return;
     final context = contextProvider();
     if (context == null || !context.mounted) return;
     await _showDialog(context, info);
@@ -55,7 +55,7 @@ class UpdateCheckRunner {
       return UpdateCheckOutcome.notSupported;
     }
     try {
-      final info = await _service.checkLatest();
+      final info = await _check();
       if (info == null) {
         await _clearDownloads();
         return UpdateCheckOutcome.upToDate;
@@ -69,6 +69,9 @@ class UpdateCheckRunner {
     }
   }
 
+  Future<UpdateInfo?> _check() async =>
+      _service.checkLatest(includeBeta: await _preferences.betaChannel());
+
   Future<void> _showDialog(BuildContext context, UpdateInfo info) async {
     final result = await showDialog<UpdateDialogResult>(
       context: context,
@@ -77,7 +80,7 @@ class UpdateCheckRunner {
       builder: (_) => UpdateDialog(info: info, installer: _installer),
     );
     if (result == UpdateDialogResult.ignored) {
-      await _ignoreStore.ignore(info.tagName);
+      await _preferences.ignore(info.tagName);
     }
   }
 

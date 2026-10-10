@@ -7,15 +7,18 @@ on:
     paths:
       - pubspec.yaml
       - .github/workflows/android-release.yml
+  # main 上每次會改到 App 內容的合併都要發版（正式版或測試版），
+  # 只排除不進 APK 的文件、網站與測試。
   push:
     branches:
       - main
       - "internal-test/**"
-    paths:
-      - pubspec.yaml
-      - pubspec.lock
-      - android/**
-      - .github/workflows/android-release.yml
+    paths-ignore:
+      - "**.md"
+      - docs/**
+      - website/**
+      - test/**
+      - .github/workflows/website-deploy.yml
     tags:
       - "v*"
   workflow_dispatch:
@@ -30,8 +33,12 @@ jobs:
     outputs:
       should_build: ${{ steps.plan.outputs.should_build }}
       publish: ${{ steps.plan.outputs.publish }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
       tag_name: ${{ steps.plan.outputs.tag_name }}
+      notes_start_tag: ${{ steps.plan.outputs.notes_start_tag }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
+      build_name: ${{ steps.plan.outputs.build_name }}
+      build_number: ${{ steps.plan.outputs.build_number }}
       artifact_label: ${{ steps.plan.outputs.artifact_label }}
       mode: ${{ steps.plan.outputs.mode }}
 
@@ -48,93 +55,120 @@ jobs:
         run: |
           set -euo pipefail
 
-          raw_version="$(awk '$1 == "version:" { print $2; exit }' pubspec.yaml)"
-          test -n "$raw_version"
-          app_version="${raw_version%%+*}"
-          tag_name="v${app_version}"
-
-          emit() {
-            printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
-          }
-
-          emit tag_name "$tag_name"
-
-          # PR 只驗證 release metadata / workflow 本身可以執行，不 build、不發布。
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            emit should_build false
-            emit publish false
-            emit target_sha "$GITHUB_SHA"
-            emit artifact_label "pr-check"
-            emit mode pr-check
-            exit 0
-          fi
-
-          # 手動執行與 internal-test branch 永遠只做 signed APK 驗證，不發布。
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
-            emit should_build true
-            emit publish false
-            emit target_sha "$GITHUB_SHA"
-            emit artifact_label "manual-${GITHUB_SHA::7}"
-            emit mode manual-test
-            exit 0
-          fi
-
-          # 保留既有 tag-driven release；tag 必須和 pubspec 版本一致。
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            if [[ "$GITHUB_REF_NAME" != "$tag_name" ]]; then
-              echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $tag_name"
-              exit 1
-            fi
-            emit should_build true
-            emit publish true
-            emit target_sha "$(git rev-list -n 1 "$GITHUB_REF_NAME")"
-            emit artifact_label "$GITHUB_REF_NAME"
-            emit mode tag
-            exit 0
-          fi
-
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Unsupported release ref: $GITHUB_REF"
+          app_version="$(awk '$1 == "version:" { print $2; exit }' pubspec.yaml)"
+          # build number 由 CI 決定（見下方 build_number），pubspec 只寫 X.Y.Z。
+          if [[ ! "$app_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::pubspec version must be X.Y.Z, got '$app_version'"
             exit 1
           fi
+          stable_tag="v${app_version}"
 
-          # main 上只要把 pubspec 的 app version 升到尚未發布的版本，
-          # 這個 workflow 就會成為 tag / Release 的唯一發布 owner。
-          if gh release view "$tag_name" >/dev/null 2>&1; then
-            echo "Release $tag_name already exists; nothing to publish."
-            emit should_build false
-            emit publish false
-            emit target_sha "$GITHUB_SHA"
-            emit artifact_label "$tag_name"
-            emit mode already-released
-            exit 0
-          fi
+          # 正式版 tag 只有 vX.Y.Z；測試版 vX.Y.Z-beta.N 不參與正式版的版號檢查。
+          stable_tags() {
+            git tag --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
+          }
 
-          if git show-ref --verify --quiet "refs/tags/$tag_name"; then
-            # 支援「tag 已建立但 Release 尚未完成」的恢復路徑。
-            target_sha="$(git rev-list -n 1 "$tag_name")"
-            emit should_build true
-            emit publish true
-            emit target_sha "$target_sha"
-            emit artifact_label "$tag_name"
-            emit mode recover-existing-tag
-            exit 0
-          fi
+          # 比 $1 舊的最近一個正式版，作為正式版發布說明的起點，
+          # 讓說明涵蓋上一個正式版以來的所有改動，而不是只從上一個測試版算起。
+          previous_stable_tag() {
+            { stable_tags; echo "$1"; } | sort -V -u | grep -x -F -B1 "$1" | grep -v -x -F "$1" || true
+          }
 
-          latest_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1 || true)"
-          if [[ -n "$latest_tag" ]]; then
-            highest="$(printf '%s\n%s\n' "$latest_tag" "$tag_name" | sort -V | tail -n 1)"
-            if [[ "$highest" != "$tag_name" || "$latest_tag" == "$tag_name" ]]; then
-              echo "::error::pubspec version $tag_name must be newer than latest tag $latest_tag"
+          mode=""
+          should_build=false
+          publish=false
+          prerelease=false
+          tag_name="$stable_tag"
+          notes_start_tag=""
+          target_sha="$GITHUB_SHA"
+          build_name="$app_version"
+          artifact_label="$stable_tag"
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            # PR 只驗證 release metadata / workflow 本身可以執行，不 build、不發布。
+            mode=pr-check
+            artifact_label=pr-check
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
+            # 手動執行與 internal-test branch 永遠只做 signed APK 驗證，不發布。
+            mode=manual-test
+            should_build=true
+            artifact_label="manual-${GITHUB_SHA::7}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # 保留既有 tag-driven release；tag 必須和 pubspec 版本一致。
+            if [[ "$GITHUB_REF_NAME" != "$stable_tag" ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $stable_tag"
               exit 1
             fi
+            mode=tag
+            should_build=true
+            publish=true
+            target_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+            notes_start_tag="$(previous_stable_tag "$stable_tag")"
+          elif [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Unsupported release ref: $GITHUB_REF"
+            exit 1
+          elif gh release view "$stable_tag" >/dev/null 2>&1; then
+            # pubspec 版本已發布過：這次合併發成測試版 v<下一個修訂號>-beta.<正式版之後的提交數>。
+            commits="$(git rev-list --count "${stable_tag}..${GITHUB_SHA}")"
+            if [[ "$commits" == 0 ]]; then
+              echo "Release $stable_tag already exists; nothing to publish."
+              mode=already-released
+            else
+              IFS=. read -r major minor patch <<< "$app_version"
+              build_name="${major}.${minor}.$((patch + 1))-beta.${commits}"
+              tag_name="v${build_name}"
+              artifact_label="$tag_name"
+              prerelease=true
+              if gh release view "$tag_name" >/dev/null 2>&1; then
+                echo "Beta $tag_name already exists; nothing to publish."
+                mode=already-released
+              else
+                mode=beta
+                should_build=true
+                publish=true
+              fi
+            fi
+          elif git show-ref --verify --quiet "refs/tags/$stable_tag"; then
+            # 支援「tag 已建立但 Release 尚未完成」的恢復路徑。
+            mode=recover-existing-tag
+            should_build=true
+            publish=true
+            target_sha="$(git rev-list -n 1 "$stable_tag")"
+            notes_start_tag="$(previous_stable_tag "$stable_tag")"
+          else
+            # main 上把 pubspec 的 app version 升到尚未發布的版本，就發正式版；
+            # 這個 workflow 是 tag / Release 的唯一發布 owner。
+            latest_tag="$(stable_tags | sort -V | tail -n 1)"
+            if [[ -n "$latest_tag" ]]; then
+              highest="$(printf '%s\n%s\n' "$latest_tag" "$stable_tag" | sort -V | tail -n 1)"
+              if [[ "$highest" != "$stable_tag" || "$latest_tag" == "$stable_tag" ]]; then
+                echo "::error::pubspec version $stable_tag must be newer than latest tag $latest_tag"
+                exit 1
+              fi
+            fi
+            mode=version-push
+            should_build=true
+            publish=true
+            notes_start_tag="$latest_tag"
           fi
 
-          emit should_build true
-          emit publish true
-          emit target_sha "$GITHUB_SHA"
-          emit artifact_label "$tag_name"
-          emit mode version-push
+          # Android versionCode 取 main 的提交數：squash merge 讓它只增不減，
+          # 正式版與測試版共用同一條序列，裝了測試版也能直接更新到之後的正式版。
+          build_number="$(git rev-list --count "$target_sha")"
+
+          {
+            echo "mode=$mode"
+            echo "should_build=$should_build"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+            echo "tag_name=$tag_name"
+            echo "notes_start_tag=$notes_start_tag"
+            echo "target_sha=$target_sha"
+            echo "build_name=$build_name"
+            echo "build_number=$build_number"
+            echo "artifact_label=$artifact_label"
+          } >> "$GITHUB_OUTPUT"
+          echo "Plan: $mode $tag_name (versionName $build_name, versionCode $build_number)"
 
   verify:
     needs: plan-release
@@ -190,11 +224,15 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BUILD_NAME: ${{ needs.plan-release.outputs.build_name }}
+          BUILD_NUMBER: ${{ needs.plan-release.outputs.build_number }}
         run: >-
           flutter build apk
           --release
           --split-per-abi
           --target-platform android-arm64
+          --build-name "$BUILD_NAME"
+          --build-number "$BUILD_NUMBER"
           --analyze-size
           --code-size-directory build/size-analysis
 
@@ -227,10 +265,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.plan-release.outputs.tag_name }}
           TARGET_SHA: ${{ needs.plan-release.outputs.target_sha }}
+          PRERELEASE: ${{ needs.plan-release.outputs.prerelease }}
+          NOTES_START_TAG: ${{ needs.plan-release.outputs.notes_start_tag }}
         run: |
           set -euo pipefail
           apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
+
+          # 測試版標成預發布版：不會成為 Latest，網站與只收正式版的 App 都看不到。
+          if [[ "$PRERELEASE" == "true" ]]; then
+            release_args=(--prerelease)
+          else
+            release_args=(--latest)
+            if [[ -n "$NOTES_START_TAG" ]]; then
+              release_args+=(--notes-start-tag "$NOTES_START_TAG")
+            fi
+          fi
 
           if ! git show-ref --verify --quiet "refs/tags/$TAG_NAME"; then
             git tag "$TAG_NAME" "$TARGET_SHA"
@@ -242,7 +292,8 @@ jobs:
           else
             gh release create "$TAG_NAME" "$apk_path#$asset_name" \
               --title "$TAG_NAME" \
-              --generate-notes
+              --generate-notes \
+              "${release_args[@]}"
           fi
 
       - name: Upload test APK artifact
