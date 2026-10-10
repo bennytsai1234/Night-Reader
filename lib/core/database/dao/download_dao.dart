@@ -11,10 +11,24 @@ class DownloadDao extends DatabaseAccessor<AppDatabase>
     with _$DownloadDaoMixin {
   DownloadDao(super.db);
 
+  /// 依佇列順序；同順序（舊版留下的 0）時照加入時間。
   Future<List<DownloadTask>> getAll() {
-    return (select(
-      downloadTasks,
-    )..orderBy([(t) => OrderingTerm.asc(t.lastUpdateTime)])).get();
+    return (select(downloadTasks)..orderBy([
+          (t) => OrderingTerm.asc(t.sortOrder),
+          (t) => OrderingTerm.asc(t.lastUpdateTime),
+        ]))
+        .get();
+  }
+
+  /// 把整個佇列的順序寫回：清單中的位置就是 sortOrder。
+  Future<void> saveOrder(List<String> bookUrls) {
+    return transaction(() async {
+      for (var i = 0; i < bookUrls.length; i++) {
+        await (update(downloadTasks)
+              ..where((t) => t.bookUrl.equals(bookUrls[i])))
+            .write(DownloadTasksCompanion(sortOrder: Value(i)));
+      }
+    });
   }
 
   Stream<List<DownloadTask>> watchAll() => select(downloadTasks).watch();

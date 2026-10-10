@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -203,6 +205,11 @@ class DownloadService extends DownloadBase
     if (next < 0 || next >= tasks.length) return;
     final task = tasks.removeAt(current);
     tasks.insert(next, task);
+    // 順序寫回資料庫，重開 App 後照使用者排的先後下載。
+    for (var i = 0; i < tasks.length; i++) {
+      tasks[i].sortOrder = i;
+    }
+    unawaited(downloadDao.saveOrder([for (final t in tasks) t.bookUrl]));
     update();
   }
 }

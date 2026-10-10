@@ -547,6 +547,10 @@ class DownloadTasks extends Table {
   IntColumn get lastUpdateTime =>
       integer().named('addTime').withDefault(const Constant(0))();
 
+  /// 佇列順序；schema 4 起才有，舊資料以插入順序（rowid）初始化。
+  IntColumn get sortOrder =>
+      integer().named('sortOrder').withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {bookUrl};
 }

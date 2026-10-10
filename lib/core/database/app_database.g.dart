@@ -8123,6 +8123,18 @@ class $DownloadTasksTable extends DownloadTasks
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sortOrder',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     bookUrl,
@@ -8135,6 +8147,7 @@ class $DownloadTasksTable extends DownloadTasks
     successCount,
     errorCount,
     lastUpdateTime,
+    sortOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8230,6 +8243,12 @@ class $DownloadTasksTable extends DownloadTasks
         ),
       );
     }
+    if (data.containsKey('sortOrder')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sortOrder']!, _sortOrderMeta),
+      );
+    }
     return context;
   }
 
@@ -8279,6 +8298,10 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.int,
         data['${effectivePrefix}addTime'],
       )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sortOrder'],
+      )!,
     );
   }
 
@@ -8299,6 +8322,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   final Value<int> successCount;
   final Value<int> errorCount;
   final Value<int> lastUpdateTime;
+  final Value<int> sortOrder;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.bookUrl = const Value.absent(),
@@ -8311,6 +8335,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     this.successCount = const Value.absent(),
     this.errorCount = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -8324,6 +8349,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     this.successCount = const Value.absent(),
     this.errorCount = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : bookUrl = Value(bookUrl),
        bookName = Value(bookName);
@@ -8338,6 +8364,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     Expression<int>? successCount,
     Expression<int>? errorCount,
     Expression<int>? lastUpdateTime,
+    Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8352,6 +8379,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
       if (successCount != null) 'successCount': successCount,
       if (errorCount != null) 'errorCount': errorCount,
       if (lastUpdateTime != null) 'addTime': lastUpdateTime,
+      if (sortOrder != null) 'sortOrder': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8367,6 +8395,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     Value<int>? successCount,
     Value<int>? errorCount,
     Value<int>? lastUpdateTime,
+    Value<int>? sortOrder,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -8380,6 +8409,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
       successCount: successCount ?? this.successCount,
       errorCount: errorCount ?? this.errorCount,
       lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
+      sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8417,6 +8447,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     if (lastUpdateTime.present) {
       map['addTime'] = Variable<int>(lastUpdateTime.value);
     }
+    if (sortOrder.present) {
+      map['sortOrder'] = Variable<int>(sortOrder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8436,6 +8469,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
           ..write('successCount: $successCount, ')
           ..write('errorCount: $errorCount, ')
           ..write('lastUpdateTime: $lastUpdateTime, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8458,6 +8492,7 @@ class _$DownloadTaskInsertable implements Insertable<DownloadTask> {
       successCount: Value(_object.successCount),
       errorCount: Value(_object.errorCount),
       lastUpdateTime: Value(_object.lastUpdateTime),
+      sortOrder: Value(_object.sortOrder),
     ).toColumns(false);
   }
 }
@@ -14151,6 +14186,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<int> successCount,
       Value<int> errorCount,
       Value<int> lastUpdateTime,
+      Value<int> sortOrder,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -14165,6 +14201,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<int> successCount,
       Value<int> errorCount,
       Value<int> lastUpdateTime,
+      Value<int> sortOrder,
       Value<int> rowid,
     });
 
@@ -14224,6 +14261,11 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<int> get lastUpdateTime => $composableBuilder(
     column: $table.lastUpdateTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14286,6 +14328,11 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.lastUpdateTime,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -14340,6 +14387,9 @@ class $$DownloadTasksTableAnnotationComposer
     column: $table.lastUpdateTime,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager
@@ -14383,6 +14433,7 @@ class $$DownloadTasksTableTableManager
                 Value<int> successCount = const Value.absent(),
                 Value<int> errorCount = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 bookUrl: bookUrl,
@@ -14395,6 +14446,7 @@ class $$DownloadTasksTableTableManager
                 successCount: successCount,
                 errorCount: errorCount,
                 lastUpdateTime: lastUpdateTime,
+                sortOrder: sortOrder,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14409,6 +14461,7 @@ class $$DownloadTasksTableTableManager
                 Value<int> successCount = const Value.absent(),
                 Value<int> errorCount = const Value.absent(),
                 Value<int> lastUpdateTime = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 bookUrl: bookUrl,
@@ -14421,6 +14474,7 @@ class $$DownloadTasksTableTableManager
                 successCount: successCount,
                 errorCount: errorCount,
                 lastUpdateTime: lastUpdateTime,
+                sortOrder: sortOrder,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

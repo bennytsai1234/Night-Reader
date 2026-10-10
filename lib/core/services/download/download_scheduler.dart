@@ -108,6 +108,11 @@ mixin DownloadScheduler on DownloadBase {
         }
       }
 
+      // 重新加入的任務保留原本的位置；新任務排在佇列最後。
+      final sortOrder = existingIndex != -1
+          ? tasks[existingIndex].sortOrder
+          : tasks.fold<int>(-1, (m, t) => t.sortOrder > m ? t.sortOrder : m) +
+                1;
       final task = DownloadTask(
         bookUrl: book.bookUrl,
         bookName: book.name,
@@ -116,6 +121,7 @@ mixin DownloadScheduler on DownloadBase {
         totalCount: chapters.length,
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
+        sortOrder: sortOrder,
       );
       await downloadDao.upsert(task);
 
