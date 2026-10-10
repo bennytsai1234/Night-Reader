@@ -66,7 +66,8 @@ class SourceCheckStatusBar extends StatelessWidget {
                         Expanded(
                           child: Text(
                             isChecking
-                                ? '正在校驗 (${provider.checkService.currentCount}/${provider.checkService.totalCount}): ${provider.checkService.statusMsg}'
+                                // statusMsg 已經是「正在校驗: 書源名」，前面只補進度。
+                                ? '(${provider.checkService.currentCount}/${provider.checkService.totalCount}) ${provider.checkService.statusMsg}'
                                 : '上次校驗摘要: ${report.summary}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

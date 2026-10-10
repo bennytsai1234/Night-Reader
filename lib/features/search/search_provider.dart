@@ -80,7 +80,23 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   // --- Getters ---
   List<SearchKeyword> get historyKeywords => _history;
   List<String> get history => _history.map((e) => e.word).toList();
-  List<SearchBook> get results => _sortedResults(_filteredResults());
+
+  /// 篩選並排序後的結果。一次畫面更新會讀好幾次，算一次就快取；任何狀態
+  /// 變更都會經過 [notifyListeners]，在那裡失效。
+  List<SearchBook> get results =>
+      _resultsCache ??= _sortedResults(_filteredResults());
+  List<SearchBook>? _resultsCache;
+
+  @override
+  void notifyListeners() {
+    _resultsCache = null;
+    super.notifyListeners();
+  }
+
+  /// 這次搜尋的書源總數；重試失敗書源時不會被縮成重試的數量。
+  int get searchedSourceCount => _searchedSourceCount;
+  int _searchedSourceCount = 0;
+  bool _retrying = false;
   int get unfilteredResultCount => _results.length;
   int get resultCount => results.length;
   bool get hasUnfilteredResults => _results.isNotEmpty;
@@ -347,12 +363,17 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     final existingResults = List<SearchBook>.from(_results);
     _sourceFailures.clear();
     notifyListeners();
-    await _searchModel.searchSources(
-      key: _lastSearchKey,
-      sources: sources,
-      precisionSearch: _precisionSearch,
-      initialResults: existingResults,
-    );
+    _retrying = true;
+    try {
+      await _searchModel.searchSources(
+        key: _lastSearchKey,
+        sources: sources,
+        precisionSearch: _precisionSearch,
+        initialResults: existingResults,
+      );
+    } finally {
+      _retrying = false;
+    }
   }
 
   /// 送出搜尋後、引擎真正開始前（存歷史、讀書源清單）就先進入搜尋中，
@@ -437,6 +458,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _completedSources = completed;
     _totalSources = total;
     _failedSources = failed;
+    if (!_retrying) _searchedSourceCount = total;
     notifyListeners();
   }
 

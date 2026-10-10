@@ -98,6 +98,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     return Consumer<SourceManagerProvider>(
       builder: (context, provider, child) {
         final mutationEnabled = !_isImporting && !provider.isMutationBusy;
+        // 書源全部刪光時順便結束編輯模式，之後匯入才不會直接回到選取狀態。
+        if (provider.totalSourceCount == 0 && !provider.isLoading) {
+          _editMode = false;
+        }
         final editing = _isEditing(provider) && provider.totalSourceCount > 0;
         final checking = provider.checkService.isChecking;
         return PopScope<void>(
@@ -233,10 +237,13 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           child: SourceCheckStatusBar(
             provider: provider,
             onTap: () {
-              if (provider.checkService.isChecking) {
-                SourceManagerDialogs.showCheckLog(context, provider);
-              } else if (provider.lastCheckReport.affectedCount > 0) {
+              // 有異常就篩出異常書源；校驗中或全部可用時打開校驗日誌，
+              // 狀態列的箭頭才不會點了沒反應。
+              if (!provider.checkService.isChecking &&
+                  provider.lastCheckReport.affectedCount > 0) {
                 provider.setFilterGroup(abnormalSourceGroupTag);
+              } else {
+                SourceManagerDialogs.showCheckLog(context, provider);
               }
             },
           ),
@@ -559,7 +566,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
         const GlassMenuItem(
           value: 'debug',
-          label: '調試書源',
+          label: '除錯書源',
           icon: Icons.bug_report_outlined,
         ),
         if (s.hasExploreUrl)
@@ -723,11 +730,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                 controller: ctrl,
                 hintText: '分組名稱',
                 errorText: inputError,
-                onChanged: (_) {
-                  if (inputError != null) {
-                    setDialogState(() => inputError = null);
-                  }
-                },
+                // 每次輸入都重建，下方清單的勾選才跟著輸入框的內容。
+                onChanged: (_) => setDialogState(() => inputError = null),
               ),
               if (p.allGroups.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),

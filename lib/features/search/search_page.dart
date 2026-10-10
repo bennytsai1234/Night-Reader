@@ -326,7 +326,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       _noticeBar(
         color: Theme.of(context).colorScheme.error,
         icon: Icons.warning_amber_rounded,
-        text: '${p.failedSources} 個書源搜尋失敗（共 ${p.totalSources} 個）',
+        text: '${p.failedSources} 個書源搜尋失敗（共 ${p.searchedSourceCount} 個）',
         actions: [
           PlainTextAction(
             label: '查看',
@@ -364,7 +364,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     color: context.warning,
     icon: Icons.filter_alt,
     text:
-        '已開啟：${p.precisionSearch ? "精準搜尋" : ""} ${!p.searchScope.isAll ? "範圍（${p.searchScope.display}）" : ""}',
+        '已開啟：${[if (p.precisionSearch) '精準搜尋', if (!p.searchScope.isAll) '範圍（${p.searchScope.display}）'].join('、')}',
     actions: [
       PlainTextAction(
         label: '全部重設',
@@ -692,6 +692,9 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         final index = i - panels.length;
         final book = results[index];
         return Column(
+          // 結果會隨書源回傳重新排序；以書名＋作者當 key，「展開來源」等列內
+          // 狀態才會跟著那本書，不會留在原本的位置。
+          key: ValueKey('${book.name}\u0000${book.author ?? ''}'),
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

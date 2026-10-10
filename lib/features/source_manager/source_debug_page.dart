@@ -29,6 +29,7 @@ class SourceDebugPage extends StatefulWidget {
 
 class _SourceDebugPageState extends State<SourceDebugPage> {
   final ScrollController _scrollController = ScrollController();
+  int _followedLogCount = 0;
 
   void _scrollToBottom() {
     if (!mounted) return;
@@ -72,9 +73,18 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
       },
       child: Consumer<SourceDebugProvider>(
         builder: (context, provider, child) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _scrollToBottom(),
-          );
+          // 只在有新日誌、而且使用者原本就停在底部附近（不到約兩行）時才跟到
+          // 最底；往上捲著看前面的日誌時不打斷。
+          final grew = provider.logs.length > _followedLogCount;
+          _followedLogCount = provider.logs.length;
+          final atBottom =
+              !_scrollController.hasClients ||
+              _scrollController.position.extentAfter < 48;
+          if (grew && atBottom) {
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _scrollToBottom(),
+            );
+          }
 
           final busy = provider.isRunning || !provider.isFinished;
           return Scaffold(
@@ -90,15 +100,21 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
                   tooltip: '複製完整日誌',
                 ),
                 busy
-                    ? const SizedBox.square(
-                        dimension: AppGlass.buttonSize,
-                        child: GlassSurface(
-                          shape: BoxShape.circle,
-                          shadow: false,
-                          child: Center(
-                            child: SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                    ? Semantics(
+                        label: '除錯中',
+                        liveRegion: true,
+                        child: const SizedBox.square(
+                          dimension: AppGlass.buttonSize,
+                          child: GlassSurface(
+                            shape: BoxShape.circle,
+                            shadow: false,
+                            child: Center(
+                              child: SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
                             ),
                           ),
                         ),

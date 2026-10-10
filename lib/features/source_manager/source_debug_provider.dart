@@ -45,7 +45,7 @@ class SourceDebugProvider extends BaseProvider {
       await _debugService.startDebug(source, key);
     } catch (error) {
       if (!_isDisposed) {
-        _logs.add(DebugLog(-1, '調試失敗：$error', DateTime.now()));
+        _logs.add(DebugLog(-1, '除錯失敗：$error', DateTime.now()));
         _isFinished = true;
       }
     } finally {

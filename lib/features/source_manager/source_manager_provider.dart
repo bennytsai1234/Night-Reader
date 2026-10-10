@@ -432,7 +432,7 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
-  /// 獲取完整書源 (用於編輯或調試)
+  /// 獲取完整書源 (用於編輯或除錯)
   Future<BookSource?> getFullSource(String url) => _dao.getByUrl(url);
 
   void _updateGroups() {

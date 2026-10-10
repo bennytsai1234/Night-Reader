@@ -83,11 +83,18 @@ class _StyleGrid extends StatelessWidget {
 
   static const int _columns = 3;
   static const double _gap = AppSpacing.md;
-  static const double _cardHeight = 112;
+
+  /// 卡片高度 = 不隨字級變動的留白與色塊 + 三行文字（「永」、範例字、
+  /// 風格名稱）。1 倍字級時是 112，系統字級放大時跟著長高。
+  static const double _cardChromeHeight = 60;
+  static const double _cardTextHeight = 52;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
+    final cardHeight =
+        _cardChromeHeight +
+        MediaQuery.textScalerOf(context).scale(_cardTextHeight);
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = (constraints.maxWidth - _gap * (_columns - 1)) / _columns;
@@ -98,7 +105,7 @@ class _StyleGrid extends StatelessWidget {
             for (final style in AppStyle.values)
               SizedBox(
                 width: width,
-                height: _cardHeight,
+                height: cardHeight,
                 child: _StyleCard(
                   style: style,
                   palette: style.of(brightness),
@@ -136,6 +143,8 @@ class _StyleCard extends StatelessWidget {
       label: style.label,
       selected: selected,
       button: true,
+      // excludeSemantics 也排除了子樹手勢的點擊動作，要在這裡補上。
+      onTap: onTap,
       excludeSemantics: true,
       child: PressScale(
         scale: 0.96,
@@ -189,7 +198,8 @@ class _StyleCard extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    height: _stripHeight,
+                    // 字級放大時色條跟著長高，標籤不被裁掉。
+                    constraints: const BoxConstraints(minHeight: _stripHeight),
                     color: palette.surface,
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md,
@@ -205,11 +215,15 @@ class _StyleCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
-                        Text(
-                          style.label,
-                          style: AppTextStyles.uiSm.copyWith(
-                            color: palette.text,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            style.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.uiSm.copyWith(
+                              color: palette.text,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
