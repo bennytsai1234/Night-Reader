@@ -1,6 +1,6 @@
 # 專案規則
 
-Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」。產品說明在 `README.md`，視覺與互動設計在 `DESIGN.md`。寫碼前查 `CODING_STANDARDS.md`（寫碼規範）、`GLOSSARY.md`（用語）與 `docs/adr/`（架構決定，例如為什麼自行維護 `third_party/`、只在 CI 建置發布）。
+Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Android `arm64-v8a`（ADR 0003）。產品說明在 `README.md`，視覺與互動設計在 `DESIGN.md`。寫碼前查 `CODING_STANDARDS.md`（寫碼規範）、`GLOSSARY.md`（用語）與 `docs/adr/`（架構決定，例如為什麼自行維護 `third_party/`、只在 CI 建置發布）。
 
 ## 維護範圍
 
