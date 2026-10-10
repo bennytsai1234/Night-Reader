@@ -39,7 +39,6 @@ class SettingsPage extends StatelessWidget {
         children: [
           const _ProfileHeader(),
           GroupedSection(
-            header: '閱讀',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
