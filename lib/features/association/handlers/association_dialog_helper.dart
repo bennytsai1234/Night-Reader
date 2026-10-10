@@ -77,9 +77,14 @@ mixin AssociationDialogHelper on AssociationBase {
     try {
       switch (kind) {
         case _ImportKind.bookSource:
-          final count = isFile
-              ? await SourceImportService().importFromJson(jsonData!)
-              : await SourceImportService().importFromUrl(src);
+          // 逐步呼叫會丟出原因的方法（網址、HTTP、JSON 錯誤），交給外層顯示
+          // 「匯入書源失敗：原因」，不再一律變成「未匯入有效書源」。
+          final service = SourceImportService();
+          final text = isFile
+              ? jsonData!
+              : await service.fetchImportTextFromUrl(src);
+          final parsed = await service.parseSourcesDetailedAsync(text);
+          final count = await service.importSources(parsed.allSources);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(count > 0 ? '成功匯入 $count 個書源' : '未匯入有效書源')),
@@ -133,14 +138,19 @@ mixin AssociationDialogHelper on AssociationBase {
 
   Future<int> _importReplaceRules(String text) async {
     final decoded = jsonDecode(text);
-    if (decoded is! List) {
-      throw const FormatException('替換規則格式不正確');
-    }
+    // 單一規則的匯出是一個物件，辨識時也當成替換規則，這裡一併接受。
+    final items = decoded is Map
+        ? [decoded]
+        : decoded is List
+        ? decoded
+        : throw const FormatException('替換規則格式不正確');
     final dao = getIt<ReplaceRuleDao>();
     var count = 0;
-    for (final item in decoded) {
+    for (final item in items) {
       if (item is! Map) continue;
       final rule = ReplaceRule.fromJson(Map<String, dynamic>.from(item));
+      // 空的或正則寫錯的規則不寫入，也不算進成功數。
+      if (!rule.isValid()) continue;
       await dao.upsert(rule);
       count += 1;
     }

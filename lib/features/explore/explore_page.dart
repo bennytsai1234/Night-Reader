@@ -226,22 +226,26 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Builder(
-          builder: (rowContext) => InkWell(
-            key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-            onTap: () {
-              if (!isExpanded) _collapseExpandedAbove(provider, index);
-              provider.toggleExpand(index);
-              if (!isExpanded) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _ensureSourceVisible(source.bookSourceUrl);
-                });
-              }
-            },
-            onLongPress: () => _showSourceMenu(rowContext, provider, source),
-            child: _SourceRow(
-              name: source.bookSourceName,
-              expanded: isExpanded,
-              loading: isExpanded && provider.isLoadingKinds,
+          builder: (rowContext) => Semantics(
+            // 讀屏才知道分類已展開或收合。
+            expanded: isExpanded,
+            child: InkWell(
+              key: _itemKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
+              onTap: () {
+                if (!isExpanded) _collapseExpandedAbove(provider, index);
+                provider.toggleExpand(index);
+                if (!isExpanded) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _ensureSourceVisible(source.bookSourceUrl);
+                  });
+                }
+              },
+              onLongPress: () => _showSourceMenu(rowContext, provider, source),
+              child: _SourceRow(
+                name: source.bookSourceName,
+                expanded: isExpanded,
+                loading: isExpanded && provider.isLoadingKinds,
+              ),
             ),
           ),
         ),
@@ -524,6 +528,7 @@ class _SourceRow extends StatelessWidget {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: scheme.primary,
+                  semanticsLabel: '正在載入分類',
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),

@@ -140,18 +140,24 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   Future<List<BookUpdateCheckResult>> batchCheckUpdate(Set<String> urls) async {
     final selected = await _booksForUrls(urls);
     final results = <BookUpdateCheckResult>[];
-    updatingCount = selected.where((book) => !book.isLocal).length;
+    // 以增減計數：單本與批次的檢查可能同時進行，先結束的那次只扣掉自己的
+    // 剩餘數，不會把另一次的進度歸零。
+    var remaining = selected.where((book) => !book.isLocal).length;
+    updatingCount += remaining;
     notifyListeners();
     try {
       for (final book in selected) {
         results.add(await checkBookUpdate(book));
-        updatingCount = (updatingCount - 1).clamp(0, selected.length).toInt();
-        notifyListeners();
+        if (!book.isLocal && remaining > 0) {
+          remaining--;
+          updatingCount--;
+          notifyListeners();
+        }
       }
       await loadBooks();
       return results;
     } finally {
-      updatingCount = 0;
+      updatingCount -= remaining;
       notifyListeners();
     }
   }

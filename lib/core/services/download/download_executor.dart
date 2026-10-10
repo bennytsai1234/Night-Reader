@@ -166,6 +166,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
             task.successCount++;
           }
           task.currentChapterIndex = chapter.index;
+          task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
           await downloadDao.updateProgress(
             task.bookUrl,
             currentChapterIndex: chapter.index,
@@ -205,6 +206,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
               }
               poolCount--;
               task.currentChapterIndex = chapter.index;
+              task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
               downloadDao.updateProgress(
                 task.bookUrl,
                 currentChapterIndex: chapter.index,
@@ -224,6 +226,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
               );
               poolCount--;
               task.currentChapterIndex = chapter.index;
+              task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
               downloadDao.updateProgress(
                 task.bookUrl,
                 currentChapterIndex: chapter.index,
