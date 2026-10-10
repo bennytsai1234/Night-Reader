@@ -311,6 +311,12 @@ class GlassCapsule extends StatelessWidget {
 
   static const double height = 34.0;
 
+  /// 選取中的淡主色底。字也是主色，主色比例壓低才維持 4.5:1 的文字對比。
+  static Color selectedTintOf(ColorScheme scheme) => Color.alphaBlend(
+    scheme.primary.withValues(alpha: 0.06),
+    scheme.surface.withValues(alpha: 0.9),
+  );
+
   final String label;
   final VoidCallback? onTap;
   final IconData? icon;
@@ -349,12 +355,7 @@ class GlassCapsule extends StatelessWidget {
         borderRadius: AppRadius.pillShape,
         shadow: false,
         blur: blur,
-        tint: selected
-            ? Color.alphaBlend(
-                scheme.primary.withValues(alpha: 0.12),
-                scheme.surface.withValues(alpha: 0.9),
-              )
-            : tint,
+        tint: selected ? selectedTintOf(scheme) : tint,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md + 2,
