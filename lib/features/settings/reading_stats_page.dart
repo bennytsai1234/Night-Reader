@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/read_record.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -72,7 +73,8 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
                 children: [
                   for (final record in records)
                     GroupedRow(
-                      title: record.bookName,
+                      // 顯示時做繁簡轉換，和書架一致；點擊搜尋仍用原文。
+                      title: context.zh(record.bookName),
                       value: _formatDuration(record.readTime),
                       onTap: () {
                         Navigator.push(

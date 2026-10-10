@@ -26,6 +26,24 @@ class ChangeCoverProvider extends ChangeNotifier {
     if (!_disposed) super.notifyListeners();
   }
 
+  /// 正在套用封面（下載並儲存圖片可能要好幾秒）。期間忽略其他點選，
+  /// 連點才不會在面板關閉後再多 pop 一層、把詳情頁也關掉。
+  bool get isApplying => _isApplying;
+  bool _isApplying = false;
+
+  /// 以「套用中」包住一次套用；已經在套用時回傳 null、不執行。
+  Future<T?> runApplying<T>(Future<T> Function() apply) async {
+    if (_isApplying) return null;
+    _isApplying = true;
+    notifyListeners();
+    try {
+      return await apply();
+    } finally {
+      _isApplying = false;
+      notifyListeners();
+    }
+  }
+
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   final SearchBookDao _searchBookDao = getIt<SearchBookDao>();
   final BookSourceService _service = BookSourceService();

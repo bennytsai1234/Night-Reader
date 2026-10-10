@@ -55,8 +55,28 @@ class TTSService extends ChangeNotifier {
   String? get language => _language;
   List<dynamic> get languages => _languages;
   List<String> get engines => List<String>.unmodifiable(_engines);
+
+  /// 引擎的顯示名稱；系統沒提供時退回套件名稱。
+  String engineLabelOf(String engine) => _engineLabels[engine] ?? engine;
+  Map<String, String> _engineLabels = <String, String>{};
   List<Map<String, String>> get voices =>
       List<Map<String, String>>.unmodifiable(_voices);
+
+  /// 依顯示名稱排序的音色。朗讀時每個字都會通知監聽者，設定頁跟著重建；
+  /// 排序結果只在音色清單換掉時重算。
+  List<Map<String, String>> get sortedVoices {
+    if (!identical(_sortedVoicesSource, _voices)) {
+      _sortedVoicesSource = _voices;
+      _sortedVoices = List<Map<String, String>>.unmodifiable(
+        [..._voices]
+          ..sort((a, b) => voiceLabelOf(a).compareTo(voiceLabelOf(b))),
+      );
+    }
+    return _sortedVoices;
+  }
+
+  List<Map<String, String>>? _sortedVoicesSource;
+  List<Map<String, String>> _sortedVoices = const [];
   String? get selectedEngine => _selectedEngine;
   String? get selectedVoiceKey =>
       _selectedVoice == null ? null : voiceKeyOf(_selectedVoice!);
@@ -655,11 +675,22 @@ class TTSService extends ChangeNotifier {
     try {
       final raw = await _flutterTts.getEngines;
       if (raw is List) {
-        return raw
-            .whereType<Object>()
-            .map((engine) => engine.toString().trim())
-            .where((engine) => engine.isNotEmpty)
-            .toList(growable: false);
+        final names = <String>[];
+        final labels = <String, String>{};
+        for (final engine in raw) {
+          // 外掛回傳 {name, label}；name 給 setEngine，label 給畫面顯示。
+          final name = (engine is Map ? engine['name'] : engine)
+              ?.toString()
+              .trim();
+          if (name == null || name.isEmpty) continue;
+          names.add(name);
+          final label = engine is Map
+              ? engine['label']?.toString().trim()
+              : null;
+          if (label != null && label.isNotEmpty) labels[name] = label;
+        }
+        _engineLabels = labels;
+        return names;
       }
     } catch (_) {}
     return const <String>[];

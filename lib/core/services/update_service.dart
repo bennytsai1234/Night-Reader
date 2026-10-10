@@ -105,6 +105,26 @@ class AppUpdateService {
   }
 }
 
+/// 把 GitHub 自動產生的發布說明（`--generate-notes`）整理成給使用者看的純文字：
+/// 每個「* 標題 by @作者 in 連結」只留標題、前面加「•」；去掉「What's
+/// Changed」標題、Full Changelog 連結、發版本身的提交與其他 Markdown 符號。
+String releaseNotesForDisplay(String markdown) {
+  final lines = <String>[];
+  for (final raw in markdown.split('\n')) {
+    var line = raw.trim();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    if (line.contains('Full Changelog')) continue;
+    if (line.startsWith('* ') || line.startsWith('- ')) {
+      line = line.substring(2);
+      line = line.replaceFirst(RegExp(r'\s+by @\S+\s+in\s+\S+$'), '');
+      if (line.startsWith('release:')) continue;
+      line = '• $line';
+    }
+    lines.add(line.replaceAll('**', '').replaceAll('`', ''));
+  }
+  return lines.join('\n');
+}
+
 /// UpdateInfo - GitHub Release 的精簡視圖。
 class UpdateInfo {
   const UpdateInfo({

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
-import '../../book_detail_provider.dart';
+import '../../change_cover_sheet.dart';
 
 class CoverGridItem extends StatelessWidget {
   final AggregatedSearchBook result;
@@ -20,18 +19,10 @@ class CoverGridItem extends StatelessWidget {
     final chrome = AppChrome.of(context);
     return PressScale(
       scale: 0.95,
-      onTap: () async {
-        final outcome = await context.read<BookDetailProvider>().updateCover(
-          isDefault ? '' : (result.book.coverUrl ?? ''),
-        );
-        if (!context.mounted) return;
-        if (outcome.success) {
-          Navigator.pop(context);
-          return;
-        }
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(outcome.message)));
-      },
+      onTap: () => applyCoverFromSheet(
+        context,
+        isDefault ? '' : (result.book.coverUrl ?? ''),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

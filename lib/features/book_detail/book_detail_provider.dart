@@ -546,7 +546,25 @@ class BookDetailProvider extends ChangeNotifier {
     await setInBookshelf(!_isInBookshelf);
   }
 
+  /// 加入或移出書架進行中（加入時可能要先抓目錄、移出時要刪正文與封面）；
+  /// 期間不接受反向操作，兩者才不會交錯寫入。
+  bool get isUpdatingBookshelf => _isUpdatingBookshelf;
+  bool _isUpdatingBookshelf = false;
+
   Future<BookDetailOperationResult> setInBookshelf(bool value) async {
+    if (_isUpdatingBookshelf) {
+      return BookDetailOperationResult.failure('正在更新書架，請稍候');
+    }
+    _isUpdatingBookshelf = true;
+    try {
+      return await _setInBookshelf(value);
+    } finally {
+      _isUpdatingBookshelf = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<BookDetailOperationResult> _setInBookshelf(bool value) async {
     if (_isInBookshelf == value) {
       return BookDetailOperationResult.success(value ? '已在書架中' : '已移出書架');
     }

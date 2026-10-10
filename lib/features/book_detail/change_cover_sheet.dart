@@ -12,6 +12,21 @@ import 'widgets/cover/cover_header.dart';
 import 'widgets/cover/cover_grid_item.dart';
 import 'widgets/cover/cover_manual_input.dart';
 
+/// 套用一張封面：套用中忽略其他點選；成功時關閉面板（面板已不是最上層就
+/// 不 pop，避免把詳情頁也關掉），失敗時顯示原因。面板裡三種來源共用。
+Future<void> applyCoverFromSheet(BuildContext context, String url) async {
+  final outcome = await context.read<ChangeCoverProvider>().runApplying(
+    () => context.read<BookDetailProvider>().updateCover(url),
+  );
+  if (outcome == null || !context.mounted) return;
+  if (outcome.success) {
+    if (ModalRoute.of(context)?.isCurrent ?? false) Navigator.pop(context);
+    return;
+  }
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(outcome.message)));
+}
+
 class ChangeCoverSheet extends StatelessWidget {
   final String bookName;
   final String author;
@@ -62,16 +77,7 @@ class _ChangeCoverSheetState extends State<_ChangeCoverSheetBody> {
       }
       final image = await _picker.pickImage(source: ImageSource.gallery);
       if (image == null || !mounted) return;
-      final outcome = await context.read<BookDetailProvider>().updateCover(
-        'file://${image.path}',
-      );
-      if (!mounted) return;
-      if (outcome.success) {
-        Navigator.pop(context);
-        return;
-      }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(outcome.message)));
+      await applyCoverFromSheet(context, 'file://${image.path}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

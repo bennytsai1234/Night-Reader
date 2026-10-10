@@ -26,12 +26,13 @@ class UpdateDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final notes = releaseNotesForDisplay(info.updateLog);
     return AppAlert<_UpdateAction>(
       title: '發現新版 ${info.versionName}',
-      content: info.updateLog.isEmpty
+      content: notes.isEmpty
           ? null
           : Text(
-              info.updateLog,
+              notes,
               style: AppTextStyles.bodySm.copyWith(
                 height: 1.5,
                 color: Theme.of(context).colorScheme.onSurface,

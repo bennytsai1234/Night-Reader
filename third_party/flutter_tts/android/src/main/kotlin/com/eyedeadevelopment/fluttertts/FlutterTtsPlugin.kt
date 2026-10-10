@@ -589,11 +589,17 @@ class FlutterTtsPlugin : MethodCallHandler, FlutterPlugin {
         result.success(locales)
     }
 
+    // nightreader.3：一併回傳引擎的顯示名稱（label），設定頁才不必顯示套件名稱。
     private fun getEngines(result: Result) {
-        val engines = ArrayList<String>()
+        val engines = ArrayList<HashMap<String, String>>()
         try {
             for (engineInfo in tts!!.engines) {
-                engines.add(engineInfo.name)
+                engines.add(
+                    hashMapOf(
+                        "name" to engineInfo.name,
+                        "label" to (engineInfo.label ?: engineInfo.name),
+                    ),
+                )
             }
         } catch (e: Exception) {
             Log.d(tag, "getEngines: " + e.message)

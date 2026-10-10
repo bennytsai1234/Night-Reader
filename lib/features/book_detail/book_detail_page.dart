@@ -360,6 +360,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BookDetailProvider provider,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    // 加入或移出還在進行時，不再跳出反向操作的確認框。
+    if (provider.isUpdatingBookshelf) return;
     if (provider.isInBookshelf) {
       final confirmed = await showAppConfirm(
         context: context,
@@ -545,14 +547,17 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BuildContext context,
     BookDetailProvider provider,
   ) {
+    String? errorMessage;
     showStatefulAppAlert<void>(
       context: context,
       fieldTexts: [
         '${provider.book.chapterIndex + 1}',
         '${provider.totalChapterCount}',
       ],
-      builder: (ctx, _, fields) => AppAlert<bool>(
+      builder: (ctx, setDialogState, fields) => AppAlert<bool>(
         title: '指定下載範圍',
+        // 錯誤寫在對話框裡；頁面的 SnackBar 會被對話框的遮罩蓋住。
+        message: errorMessage,
         content: _fieldCard(ctx, [
           GroupedTextFieldRow(
             label: '起始章節',
@@ -580,8 +585,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               endValue == null ||
               startValue <= 0 ||
               endValue < startValue) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('請輸入有效章節範圍')));
+            setDialogState(() => errorMessage = '請輸入有效章節範圍');
             return;
           }
           Navigator.pop(ctx);

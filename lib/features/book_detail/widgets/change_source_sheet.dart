@@ -137,7 +137,9 @@ class _ChangeSourceContentState extends State<_ChangeSourceContent> {
               child: sources.isEmpty && !provider.isSearching
                   ? Center(
                       child: Text(
-                        '未找到其他來源',
+                        provider.allResults.isNotEmpty
+                            ? '沒有符合篩選的來源'
+                            : '未找到其他來源',
                         style: AppTextStyles.bodyBase.copyWith(
                           color: chrome.sectionText,
                         ),

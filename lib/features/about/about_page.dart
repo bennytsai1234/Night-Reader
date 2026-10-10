@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -19,8 +20,9 @@ class AboutPage extends StatefulWidget {
 }
 
 class _AboutPageState extends State<AboutPage> {
-  String _version = '0.1.0';
-  String _buildNumber = '1';
+  // 載入前不顯示版號；讀不到時顯示「未知版本」，不會停在錯誤的預設值。
+  String? _version;
+  String _buildNumber = '';
   bool _checkingUpdate = false;
 
   @override
@@ -30,14 +32,25 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Future<void> _loadPackageInfo() async {
-    final info = await PackageInfo.fromPlatform();
-    if (mounted) {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
       setState(() {
         _version = info.version;
         _buildNumber = info.buildNumber;
       });
+    } catch (error, stackTrace) {
+      AppLog.e('讀取版本資訊失敗', error: error, stackTrace: stackTrace);
+      if (mounted) setState(() => _version = '');
     }
   }
+
+  /// 頁面上顯示的版號：載入中為空字串，讀不到為「未知版本」。
+  String get _versionLabel => switch (_version) {
+    null => '',
+    '' => '未知版本',
+    final version => 'v$version',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +84,9 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => showLicensePage(
                   context: context,
                   applicationName: '夜讀',
-                  applicationVersion: '$_version ($_buildNumber)',
+                  applicationVersion: _version == null || _version!.isEmpty
+                      ? null
+                      : '$_version ($_buildNumber)',
                 ),
               ),
               GroupedRow(
@@ -93,7 +108,7 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.moss,
                 ),
                 title: '檢查更新',
-                value: _checkingUpdate ? '檢查中…' : 'v$_version',
+                value: _checkingUpdate ? '檢查中…' : _versionLabel,
                 trailing: _checkingUpdate
                     ? const SizedBox.square(
                         dimension: 18,
@@ -145,7 +160,7 @@ class _AboutPageState extends State<AboutPage> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'v$_version',
+            _versionLabel,
             style: AppTextStyles.bodySm.copyWith(
               height: 1.4,
               color: AppChrome.of(context).sectionText,

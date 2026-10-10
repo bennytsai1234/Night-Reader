@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
-import '../../book_detail_provider.dart';
+import '../../change_cover_sheet.dart';
 
 /// 換封面面板底部：手動輸入網址（分組輸入列）＋「確定」與從相簿選取。
 class CoverManualInput extends StatelessWidget {
@@ -21,14 +20,7 @@ class CoverManualInput extends StatelessWidget {
   Future<void> _submit(BuildContext context) async {
     final url = urlController.text.trim();
     if (url.isEmpty) return;
-    final outcome = await context.read<BookDetailProvider>().updateCover(url);
-    if (!context.mounted) return;
-    if (outcome.success) {
-      Navigator.pop(context);
-      return;
-    }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(outcome.message)));
+    await applyCoverFromSheet(context, url);
   }
 
   @override
