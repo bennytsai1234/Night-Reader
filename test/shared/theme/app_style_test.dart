@@ -11,6 +11,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// WCAG 2.x 對比度。
@@ -44,7 +45,7 @@ void main() {
 
         test('$name：文字對比達標', () {
           // 正文與主要文字 WCAG AAA（7:1）；次要文字 AA（4.5:1）；
-          // 主色作為開關、選取等元件色 3:1。
+          // 主色也當文字用（「完成」、選取膠囊），同為 AA。
           expect(
             _contrast(palette.readerText, palette.readerBackground),
             greaterThanOrEqualTo(7),
@@ -69,9 +70,19 @@ void main() {
             );
             expect(
               _contrast(palette.primary, background),
-              greaterThanOrEqualTo(3),
+              greaterThanOrEqualTo(4.5),
             );
           }
+          // 選取中的膠囊：主色字在淡主色底（疊在頁面底色上）。
+          final scheme = buildAppTheme(style, brightness).colorScheme;
+          final capsule = Color.alphaBlend(
+            GlassCapsule.selectedTintOf(scheme),
+            palette.background,
+          );
+          expect(
+            _contrast(palette.primary, capsule),
+            greaterThanOrEqualTo(4.5),
+          );
         });
 
         test('$name：提示訊息的文字與動作字對比達標', () {

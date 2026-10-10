@@ -123,7 +123,8 @@ enum AppStyle {
       text: Color(0xFF2C2014),
       textMuted: Color(0xFF6B5840),
       border: Color(0xFFD2C2A2),
-      primary: Color(0xFF8A5A2B),
+      // 主色也當文字用（「完成」、選取膠囊），對頁面底色要有 4.5:1。
+      primary: Color(0xFF7E5124),
       secondary: AppPalette.gold,
       readerBackground: Color(0xFFDFD0B0),
       readerText: Color(0xFF3E2A1E),

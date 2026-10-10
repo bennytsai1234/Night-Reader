@@ -31,7 +31,7 @@
 | 正文閱讀文字 | `#2A241C` | `#CFC6B2` | 正文溫和但不低於 7:1 |
 | 閱讀資訊列（`readerInfo`） | `#6D675E` | `#938C7D` | 頁首／頁尾的時間、進度等，對紙張至少 4.5:1 |
 
-一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文、資訊列、高亮與閱讀選單一律經 `StylePalette.of(context)`（選單經 `ReaderV2MenuStyle.of`）取色，不自行判斷深淺。主色上的勾勾與文字（`StylePalette.onPrimary`）取紙白、墨色中對比較高者，App 主題與閱讀選單共用。新增或調整風格時，每個深淺都要通過 `test/shared/theme/app_style_test.dart` 的對比度契約：正文與主要文字 7:1、次要文字與資訊列 4.5:1、主色上的勾勾與文字 4.5:1、主色 3:1。
+一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文、資訊列、高亮與閱讀選單一律經 `StylePalette.of(context)`（選單經 `ReaderV2MenuStyle.of`）取色，不自行判斷深淺。主色上的勾勾與文字（`StylePalette.onPrimary`）取紙白、墨色中對比較高者，App 主題與閱讀選單共用。新增或調整風格時，每個深淺都要通過 `test/shared/theme/app_style_test.dart` 的對比度契約：正文與主要文字 7:1、次要文字與資訊列 4.5:1、主色上的勾勾與文字 4.5:1、主色 4.5:1（主色也當文字用：純文字動作、選取中的膠囊，膠囊的淡主色底見 `GlassCapsule.selectedTintOf`）、提示訊息的文字與動作字 4.5:1。
 
 ## 字體與書卷排版
 
