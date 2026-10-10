@@ -29,12 +29,24 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - name: Check Flutter version matches across workflows
+        # ci.yml 與 android-release.yml 各自固定 Flutter 版本，升級時兩處要一起改。
+        run: |
+          versions=$(grep -ho "flutter-version: *['\"][^'\"]*['\"]" .github/workflows/*.yml | sed "s/.*['\"]\(.*\)['\"]/\1/" | sort -u)
+          echo "Flutter versions pinned in workflows: $versions"
+          if [ -z "$versions" ] || [ "$(printf '%s\n' "$versions" | wc -l)" -ne 1 ]; then
+            echo "::error::Workflows pin different Flutter versions; update ci.yml and android-release.yml together."
+            exit 1
+          fi
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Regenerate Drift code
+        # 提交的 *.g.dart 過時時，最後的 git diff 會擋下來。
+        run: dart run build_runner build
       - name: Check formatting
         # *.g.dart 由 build_runner 產生，格式不在這裡把關。
         run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
