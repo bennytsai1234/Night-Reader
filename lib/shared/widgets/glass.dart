@@ -180,7 +180,12 @@ class GlassIconButton extends StatelessWidget {
       child: button,
     );
     if (tooltip == null) return button;
-    return Tooltip(message: tooltip!, child: button);
+    // 名稱已由上面的 Semantics 提供；Tooltip 再提供一次，讀屏會念兩遍。
+    return Tooltip(
+      message: tooltip!,
+      excludeFromSemantics: true,
+      child: button,
+    );
   }
 }
 
@@ -404,7 +409,11 @@ class GlassCapsule extends StatelessWidget {
       child: PressScale(scale: 0.95, onTap: onTap, child: capsule),
     );
     if (tooltip == null) return capsule;
-    return Tooltip(message: tooltip!, child: capsule);
+    return Tooltip(
+      message: tooltip!,
+      excludeFromSemantics: true,
+      child: capsule,
+    );
   }
 }
 

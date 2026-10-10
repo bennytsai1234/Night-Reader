@@ -396,8 +396,16 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
         },
         onSubmitted: (_) => _submit(),
         textAlign: TextAlign.center,
+        // 和 AlertTextField 一樣用分組底色當欄位底：預設的表面色和提示框
+        // 幾乎同色，看不出欄位範圍。
         decoration: InputDecoration(
           isDense: true,
+          filled: true,
+          fillColor: AppChrome.of(context).groupedBackground,
+          border: const OutlineInputBorder(
+            borderRadius: AppRadius.cardMd,
+            borderSide: BorderSide.none,
+          ),
           errorText: _errorText,
           suffixText: widget.unit.isEmpty ? null : widget.unit,
         ),

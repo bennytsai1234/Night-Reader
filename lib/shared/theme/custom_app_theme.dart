@@ -46,6 +46,13 @@ ThemeData buildAppTheme(
         outline: colors.border,
         outlineVariant: colors.border.withValues(alpha: 0.72),
         inversePrimary: inversePrimary,
+        // 危險色用設計的赭石（同 context.danger），不用 Material 預設紅。
+        error: brightness == Brightness.light
+            ? AppPalette.rust
+            : AppPalette.rustDark,
+        onError: brightness == Brightness.light
+            ? AppPalette.paper50
+            : AppPalette.ink700,
       );
 
   final textTheme = ThemeData(brightness: brightness).textTheme
@@ -148,6 +155,11 @@ ThemeData buildAppTheme(
       thickness: 1,
       space: 1,
       color: colors.border,
+    ),
+    // outline 是髮絲分隔線色，當按鈕外框對頁面底只有約 1.3:1；外框按鈕
+    // 改用主色框線。
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(side: BorderSide(color: colors.primary)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,

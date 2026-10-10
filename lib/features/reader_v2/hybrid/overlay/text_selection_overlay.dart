@@ -255,6 +255,8 @@ final class _SelectionPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 跨出正文可視區的行框不畫進上下邊距與頁尾；把手另外畫，不受影響。
+    canvas.clipRect(Offset.zero & size);
     final paint = Paint()..color = color;
     for (final box in boxes) {
       canvas.drawRect(

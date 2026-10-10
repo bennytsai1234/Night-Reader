@@ -476,6 +476,7 @@ class _TaskControlButton extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
+      excludeFromSemantics: true,
       child: Semantics(
         button: true,
         label: tooltip,

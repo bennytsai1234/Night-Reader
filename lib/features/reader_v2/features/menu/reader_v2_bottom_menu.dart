@@ -292,14 +292,19 @@ class ReaderV2BottomMenu extends StatelessWidget {
         (navigation.isScrubbing ? navigation.scrubPercent : currentPercent)
             .clamp(0.0, 100.0)
             .toDouble();
-    return Slider(
-      value: value,
-      min: 0,
-      max: 100,
-      divisions: 10,
-      onChangeStart: canScrub ? onScrubStart : null,
-      onChanged: canScrub ? onScrubbing : null,
-      onChangeEnd: canScrub ? onScrubEnd : null,
+    return Semantics(
+      label: '本章進度',
+      child: Slider(
+        value: value,
+        min: 0,
+        max: 100,
+        divisions: 10,
+        // 讀屏念出「本章 n/10」，和拖動時的提示一致，而不只是百分比。
+        semanticFormatterCallback: (v) => '本章 ${(v / 10).round()}/10',
+        onChangeStart: canScrub ? onScrubStart : null,
+        onChanged: canScrub ? onScrubbing : null,
+        onChangeEnd: canScrub ? onScrubEnd : null,
+      ),
     );
   }
 

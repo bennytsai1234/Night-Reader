@@ -436,7 +436,8 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
       row = Opacity(opacity: 0.45, child: row);
     }
     if (onTap == null && onLongPress == null) {
-      return Semantics(container: true, label: title, child: row);
+      // 標題文字本來就會併進這個節點，再設 label 讀屏會念成「標題、標題、值」。
+      return Semantics(container: true, child: row);
     }
     return InkWell(
       onTap: enabled ? onTap : null,
