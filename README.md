@@ -27,7 +27,7 @@
 
 夜讀（Night Reader）是一款 Android 小說閱讀器，主要面向長篇文字閱讀與自訂書源使用情境。
 
-本專案參考開源閱讀器 [Legado（閱讀）](https://github.com/gedoor/legado) 進行二次開發，以 Flutter 重新實作，並沿用其書源規則格式。
+本專案參考開源閱讀器 [Legado（閱讀）](https://github.com/gedoor/legado) 進行二次開發，以 Flutter 重新實作，並沿用其部分書源規則。
 
 專案提供網頁書源規則解析、搜尋、目錄與正文讀取、本地 TXT、閱讀器、TTS、離線快取與資料管理等能力。
 
