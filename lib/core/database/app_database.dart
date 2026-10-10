@@ -97,7 +97,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -113,6 +113,11 @@ class AppDatabase extends _$AppDatabase {
         // 書籤功能已移除；表與索引一併刪除，不留無人使用的資料。
         await customStatement('DROP INDEX IF EXISTS idx_bookmarks_book');
         await customStatement('DROP TABLE IF EXISTS bookmarks');
+      }
+      if (from < 4) {
+        // 下載佇列的順序改存資料庫；既有任務照加入的先後（rowid）排。
+        await m.addColumn(downloadTasks, downloadTasks.sortOrder);
+        await customStatement('UPDATE download_tasks SET sortOrder = rowid');
       }
     },
     beforeOpen: (_) async {

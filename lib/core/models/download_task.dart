@@ -17,6 +17,9 @@ class DownloadTask {
   int successCount;
   int errorCount;
   int lastUpdateTime;
+
+  /// 佇列中的順序（小的先下載）；上移／下移時寫回，重開 App 後保留。
+  int sortOrder;
   String? lastErrorReason;
   String? lastErrorMessage;
   int? lastErrorChapterIndex;
@@ -32,6 +35,7 @@ class DownloadTask {
     this.successCount = 0,
     this.errorCount = 0,
     this.lastUpdateTime = 0,
+    this.sortOrder = 0,
     this.lastErrorReason,
     this.lastErrorMessage,
     this.lastErrorChapterIndex,
@@ -85,6 +89,7 @@ class DownloadTask {
       successCount: json['successCount'] ?? 0,
       errorCount: json['errorCount'] ?? 0,
       lastUpdateTime: json['lastUpdateTime'] ?? 0,
+      sortOrder: json['sortOrder'] ?? 0,
       lastErrorReason: json['lastErrorReason'],
       lastErrorMessage: json['lastErrorMessage'],
       lastErrorChapterIndex: json['lastErrorChapterIndex'],
@@ -103,6 +108,7 @@ class DownloadTask {
       'successCount': successCount,
       'errorCount': errorCount,
       'lastUpdateTime': lastUpdateTime,
+      'sortOrder': sortOrder,
       'lastErrorReason': lastErrorReason,
       'lastErrorMessage': lastErrorMessage,
       'lastErrorChapterIndex': lastErrorChapterIndex,

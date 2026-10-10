@@ -14,6 +14,11 @@ void main() {
           );
           raw.execute('CREATE INDEX idx_bookmarks_book ON bookmarks (bookUrl)');
           raw.execute("INSERT INTO bookmarks (bookUrl) VALUES ('book-a')");
+          // 舊版本來就有下載佇列表；之後的遷移（schema 4）會替它加欄位。
+          raw.execute(
+            'CREATE TABLE download_tasks (bookUrl TEXT NOT NULL PRIMARY KEY, '
+            'bookName TEXT NOT NULL, addTime INTEGER NOT NULL DEFAULT 0)',
+          );
           raw.execute('PRAGMA user_version = 2');
         },
       ),
@@ -28,6 +33,6 @@ void main() {
         .get();
     expect(leftovers, isEmpty);
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 3);
+    expect(version.data.values.single, db.schemaVersion);
   });
 }
