@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/update_preferences.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -24,11 +25,24 @@ class _AboutPageState extends State<AboutPage> {
   String? _version;
   String _buildNumber = '';
   bool _checkingUpdate = false;
+  final _updatePreferences = UpdatePreferences();
+  bool _betaChannel = false;
 
   @override
   void initState() {
     super.initState();
     _loadPackageInfo();
+    _loadBetaChannel();
+  }
+
+  Future<void> _loadBetaChannel() async {
+    final enabled = await _updatePreferences.betaChannel();
+    if (mounted) setState(() => _betaChannel = enabled);
+  }
+
+  Future<void> _setBetaChannel(bool enabled) async {
+    setState(() => _betaChannel = enabled);
+    await _updatePreferences.setBetaChannel(enabled);
   }
 
   Future<void> _loadPackageInfo() async {
@@ -117,6 +131,16 @@ class _AboutPageState extends State<AboutPage> {
                     : null,
                 showChevron: !_checkingUpdate,
                 onTap: _checkUpdate,
+              ),
+              GroupedSwitchRow(
+                leading: const GroupedIconTile(
+                  Icons.science_outlined,
+                  tint: AppTint.aubergine,
+                ),
+                title: '接收測試版更新',
+                subtitle: '搶先使用還在測試的改進，可能不夠穩定',
+                value: _betaChannel,
+                onChanged: _setBetaChannel,
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

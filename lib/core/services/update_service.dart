@@ -11,8 +11,8 @@ class AppUpdateService {
     : _dio = dio ?? HttpClient().client,
       _currentVersionLoader = currentVersionLoader ?? _defaultCurrentVersion;
 
-  static const _latestReleaseUrl =
-      'https://api.github.com/repos/bennytsai1234/night-reader/releases/latest';
+  static const _releasesUrl =
+      'https://api.github.com/repos/bennytsai1234/night-reader/releases';
 
   final Dio _dio;
   final Future<String> Function() _currentVersionLoader;
@@ -22,14 +22,45 @@ class AppUpdateService {
     return info.version;
   }
 
-  /// 取得最新 release。回 `null` 表示確定沒新版或沒可安裝的 APK；
+  /// 取得比目前版本新、且附 APK 的 release。回 `null` 表示確定沒新版；
   /// 連線失敗或 API 回應異常時丟出例外，呼叫端才分得出「已是最新」與「檢查失敗」。
-  Future<UpdateInfo?> checkLatest() async {
-    final response = await _dio.get<Map<String, dynamic>>(_latestReleaseUrl);
-    if (response.statusCode != 200 || response.data == null) {
+  ///
+  /// [includeBeta] 為 false 時只看最新正式版（`/releases/latest` 不含預發布版）；
+  /// 為 true 時從最近的 release 清單（含測試版）挑版本最高的一個。
+  Future<UpdateInfo?> checkLatest({bool includeBeta = false}) async {
+    final releases = includeBeta
+        ? await _fetch<List<dynamic>>('$_releasesUrl?per_page=30')
+        : [await _fetch<Map<String, dynamic>>('$_releasesUrl/latest')];
+    final current = ReleaseVersion.tryParse(await _currentVersionLoader());
+    if (current == null) return null;
+
+    UpdateInfo? best;
+    ReleaseVersion? bestVersion;
+    for (final data in releases) {
+      if (data is! Map<String, dynamic> || data['draft'] == true) continue;
+      final info = _parseRelease(data);
+      if (info == null) continue;
+      final version = ReleaseVersion.tryParse(info.tagName);
+      if (version == null || version.compareTo(current) <= 0) continue;
+      if (bestVersion == null || version.compareTo(bestVersion) > 0) {
+        best = info;
+        bestVersion = version;
+      }
+    }
+    return best;
+  }
+
+  Future<T> _fetch<T>(String url) async {
+    final response = await _dio.get<T>(url);
+    final data = response.data;
+    if (response.statusCode != 200 || data == null) {
       throw StateError('Release API 回應異常：${response.statusCode}');
     }
-    final data = response.data!;
+    return data;
+  }
+
+  /// 把一筆 release 轉成 [UpdateInfo]；沒有 tag 或沒有可安裝的 APK 時回 `null`。
+  static UpdateInfo? _parseRelease(Map<String, dynamic> data) {
     final tagName = data['tag_name'] as String?;
     final body = (data['body'] as String?) ?? '';
     final assets = (data['assets'] as List?) ?? const [];
@@ -57,44 +88,14 @@ class AppUpdateService {
     }
     if (apkAsset == null) return null;
 
-    final current = await _currentVersionLoader();
-    if (!_isNewer(tagName, current)) return null;
-
     return UpdateInfo(
-      versionName: _stripV(tagName),
+      versionName: tagName.replaceFirst(RegExp('^[vV]'), ''),
       tagName: tagName,
       updateLog: body,
       downloadUrl: apkDownloadUrl!,
       assetSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
       releasePageUrl: htmlUrl,
     );
-  }
-
-  /// 版本比對 — 拆 semver 逐段比，無法解析的視為非新版。
-  static bool _isNewer(String tagName, String current) {
-    final newParts = _parseSemver(_stripV(tagName));
-    final curParts = _parseSemver(_stripV(current));
-    if (newParts == null || curParts == null) return false;
-    for (var i = 0; i < 3; i++) {
-      if (newParts[i] > curParts[i]) return true;
-      if (newParts[i] < curParts[i]) return false;
-    }
-    return false;
-  }
-
-  static String _stripV(String v) =>
-      v.startsWith('v') || v.startsWith('V') ? v.substring(1) : v;
-
-  static List<int>? _parseSemver(String s) {
-    final parts = s.split('.');
-    if (parts.length < 3) return null;
-    final ints = <int>[];
-    for (var i = 0; i < 3; i++) {
-      final n = int.tryParse(parts[i]);
-      if (n == null) return null;
-      ints.add(n);
-    }
-    return ints;
   }
 
   static bool _isHttpUrl(String value) {
@@ -125,6 +126,52 @@ String releaseNotesForDisplay(String markdown) {
   return lines.join('\n');
 }
 
+/// 發布版號：正式版 `0.3.3`，或 CI 每次合併到 `main` 發的測試版 `0.3.4-beta.2`。
+///
+/// 同一個 `x.y.z` 的測試版排在正式版之前，測試版之間依序號比。
+class ReleaseVersion implements Comparable<ReleaseVersion> {
+  const ReleaseVersion(this.major, this.minor, this.patch, {this.beta});
+
+  static final _pattern = RegExp(
+    r'^[vV]?(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$',
+  );
+
+  final int major;
+  final int minor;
+  final int patch;
+
+  /// 測試版序號；正式版為 `null`。
+  final int? beta;
+
+  /// 解析 tag 或 App 版號；認不得的格式（含其他預發布標記）回 `null`。
+  static ReleaseVersion? tryParse(String value) {
+    final match = _pattern.firstMatch(value.trim());
+    if (match == null) return null;
+    final beta = match.group(4);
+    return ReleaseVersion(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+      beta: beta == null ? null : int.parse(beta),
+    );
+  }
+
+  @override
+  int compareTo(ReleaseVersion other) {
+    for (final (a, b) in [
+      (major, other.major),
+      (minor, other.minor),
+      (patch, other.patch),
+    ]) {
+      if (a != b) return a.compareTo(b);
+    }
+    if (beta == other.beta) return 0;
+    if (beta == null) return 1;
+    if (other.beta == null) return -1;
+    return beta!.compareTo(other.beta!);
+  }
+}
+
 /// UpdateInfo - GitHub Release 的精簡視圖。
 class UpdateInfo {
   const UpdateInfo({
@@ -136,10 +183,10 @@ class UpdateInfo {
     required this.releasePageUrl,
   });
 
-  /// 去掉 `v` 前綴的版本字串，例如 `0.2.72`。
+  /// 去掉 `v` 前綴的版本字串，例如 `0.2.72` 或 `0.3.4-beta.2`。
   final String versionName;
 
-  /// 原始 tag，例如 `v0.2.72`。用於 `UpdateIgnoreStore` 的 key。
+  /// 原始 tag，例如 `v0.2.72`。用於 `UpdatePreferences` 記住忽略的版本。
   final String tagName;
 
   /// Release body（純文字 / Markdown，UI 直接顯示文字）。
