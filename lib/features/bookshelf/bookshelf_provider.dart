@@ -83,11 +83,20 @@ class BookshelfProvider extends BookshelfProviderBase
     return book.lastCheckTime;
   }
 
-  Future<void> deleteBook(String url) async {
-    final book = await bookDao.getByUrl(url);
-    if (book == null) return;
-    await _bookStorageService.discardBook(book);
-    await loadBooks();
+  Future<void> deleteBook(String url) => deleteBooks({url});
+
+  /// 刪除多本書（正文、目錄、封面、下載任務一起清掉），最後只重新載入一次
+  /// 書架；中途失敗時已刪掉的照樣反映在書架上，再把錯誤往外丟。
+  Future<void> deleteBooks(Set<String> urls) async {
+    try {
+      for (final url in urls) {
+        final book = await bookDao.getByUrl(url);
+        if (book == null) continue;
+        await _bookStorageService.discardBook(book);
+      }
+    } finally {
+      await loadBooks();
+    }
   }
 
   @override

@@ -22,7 +22,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
-enum _BookshelfBatchAction { download, ensureComplete, checkUpdate }
+enum _BookshelfBatchAction { download, ensureComplete, checkUpdate, delete }
 
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
@@ -571,6 +571,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         provider.updatingCount > 0
             ? '正在檢查更新（剩 ${provider.updatingCount} 本）'
             : '正在整理更新結果…',
+      _BookshelfBatchAction.delete => '正在刪除…',
       null => '已選擇 ${_selectedUrls.length} 本',
     };
   }
@@ -776,13 +777,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
   }
 
+  /// 正在單獨檢查更新或加入下載的書；同一本進行中時忽略重複觸發。
+  final Set<String> _singleBookBusy = <String>{};
+
   Future<void> _checkUpdateOne(BookshelfProvider provider, Book book) async {
-    if (_batchAction != null) return;
+    if (_batchAction != null || !_singleBookBusy.add(book.bookUrl)) return;
     final messenger = ScaffoldMessenger.of(context);
     final name = context.zh(book.name);
+    // 書源慢時要好幾秒才有結果，先告訴使用者已經開始。
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('正在檢查《$name》…')));
     try {
       final results = await provider.batchCheckUpdate({book.bookUrl});
       final result = results.isEmpty ? null : results.first;
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -795,12 +804,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ),
       );
     } catch (e) {
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('檢查更新失敗: $e')));
+    } finally {
+      _singleBookBusy.remove(book.bookUrl);
     }
   }
 
   Future<void> _downloadOne(BookshelfProvider provider, Book book) async {
-    if (_batchAction != null) return;
+    if (_batchAction != null || !_singleBookBusy.add(book.bookUrl)) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final result = await provider.batchDownload({book.bookUrl});
@@ -815,6 +827,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('下載失敗: $e')));
+    } finally {
+      _singleBookBusy.remove(book.bookUrl);
     }
   }
 
@@ -883,9 +897,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
     if (!confirmed || !mounted) return;
     final messenger = ScaffoldMessenger.of(this.context);
     try {
-      for (final url in selectedUrls) {
-        await p.deleteBook(url);
-      }
+      // 走批次作業：工具列顯示進度、期間停用，不能再按刪除或下載。
+      await _runBatchAction(_BookshelfBatchAction.delete, p.deleteBooks);
       if (!mounted) return;
       _exitEditMode();
       messenger.showSnackBar(
@@ -893,6 +906,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
       );
     } catch (e) {
       if (!mounted) return;
+      // 中途失敗時，已刪掉的書不再留在選取裡。
+      final remaining = p.books.map((book) => book.bookUrl).toSet();
+      setState(() => _selectedUrls.retainAll(remaining));
       messenger.showSnackBar(SnackBar(content: Text('刪除失敗: $e')));
     }
   }

@@ -111,6 +111,7 @@ class ExploreShowProvider extends ChangeNotifier {
 
       // 分類網址沒有分頁參數的書源每頁都回傳同一批書；去重後沒有新書就
       // 當作到底，不再無限追加同一頁。
+      if (_page == 1) _books = [];
       final known = {for (final book in _books) book.bookUrl};
       final fresh = results.where((book) => known.add(book.bookUrl)).toList();
       if (fresh.isEmpty) {
@@ -147,8 +148,9 @@ class ExploreShowProvider extends ChangeNotifier {
   Future<void> refresh() async {
     _cancelToken?.cancel('refresh');
     _requestSerial++;
+    // 舊列表先留著，第一頁回來時才整批替換（見 _loadData）：下拉指示器留在
+    // 畫面上完成動畫，刷新失敗也不會把原本的內容清掉。
     _page = 1;
-    _books = [];
     _hasMore = true;
     _errorMessage = null;
     if (_bookSource == null) {

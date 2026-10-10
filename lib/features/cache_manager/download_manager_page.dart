@@ -482,14 +482,21 @@ class _TaskControlButton extends StatelessWidget {
         excludeSemantics: true,
         child: PressScale(
           onTap: onPressed,
-          child: Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: scheme.primary.withValues(alpha: 0.12),
+          // 命中區放大到 44（設計系統的圓形按鈕尺寸），圓鈕維持 34 置中；
+          // 點偏一點不會打開整列的選單。
+          child: SizedBox.square(
+            dimension: AppGlass.buttonSize,
+            child: Center(
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.primary.withValues(alpha: 0.12),
+                ),
+                child: Icon(icon, size: 20, color: scheme.primary),
+              ),
             ),
-            child: Icon(icon, size: 20, color: scheme.primary),
           ),
         ),
       ),
