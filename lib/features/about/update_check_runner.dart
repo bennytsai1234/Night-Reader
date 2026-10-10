@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_update_installer.dart';
 import 'package:night_reader/core/services/update_ignore_store.dart';
 import 'package:night_reader/core/services/update_service.dart';
 import 'package:night_reader/features/about/update_dialog.dart';
@@ -9,12 +10,17 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 
 /// 自動 / 手動 更新檢查的入口。集中處理「呼叫 service → 看忽略 → 顯示 Dialog → 寫忽略」。
 class UpdateCheckRunner {
-  UpdateCheckRunner({AppUpdateService? service, UpdateIgnoreStore? ignoreStore})
-    : _service = service ?? AppUpdateService(),
-      _ignoreStore = ignoreStore ?? UpdateIgnoreStore();
+  UpdateCheckRunner({
+    AppUpdateService? service,
+    UpdateIgnoreStore? ignoreStore,
+    AppUpdateInstaller? installer,
+  }) : _service = service ?? AppUpdateService(),
+       _ignoreStore = ignoreStore ?? UpdateIgnoreStore(),
+       _installer = installer ?? AppUpdateInstaller();
 
   final AppUpdateService _service;
   final UpdateIgnoreStore _ignoreStore;
+  final AppUpdateInstaller _installer;
 
   /// 啟動時的背景檢查。對忽略過的版本會直接 return；非 Android 直接 return。
   ///
@@ -33,7 +39,10 @@ class UpdateCheckRunner {
       );
       return;
     }
-    if (info == null) return;
+    if (info == null) {
+      await _clearDownloads();
+      return;
+    }
     if (await _ignoreStore.isIgnored(info.tagName)) return;
     final context = contextProvider();
     if (context == null || !context.mounted) return;
@@ -47,7 +56,10 @@ class UpdateCheckRunner {
     }
     try {
       final info = await _service.checkLatest();
-      if (info == null) return UpdateCheckOutcome.upToDate;
+      if (info == null) {
+        await _clearDownloads();
+        return UpdateCheckOutcome.upToDate;
+      }
       if (!context.mounted) return UpdateCheckOutcome.dismissed;
       await _showDialog(context, info);
       return UpdateCheckOutcome.shown;
@@ -62,10 +74,23 @@ class UpdateCheckRunner {
       context: context,
       barrierDismissible: false,
       barrierColor: AppChrome.of(context).barrier,
-      builder: (_) => UpdateDialog(info: info),
+      builder: (_) => UpdateDialog(info: info, installer: _installer),
     );
     if (result == UpdateDialogResult.ignored) {
       await _ignoreStore.ignore(info.tagName);
+    }
+  }
+
+  /// 已是最新版時，清掉更新後留下的安裝檔；清不掉不影響檢查結果。
+  Future<void> _clearDownloads() async {
+    try {
+      await _installer.clearDownloads();
+    } catch (e, stack) {
+      AppLog.e(
+        'Clearing update downloads failed: $e',
+        error: e,
+        stackTrace: stack,
+      );
     }
   }
 }

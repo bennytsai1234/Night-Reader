@@ -148,7 +148,7 @@ class UpdateInfo {
   /// APK 下載 URL。
   final String downloadUrl;
 
-  /// APK 預期大小（bytes），用於同版本下載快取比對。
+  /// APK 預期大小（bytes），用於確認下載完整；0 表示 Release 沒標示。
   final int assetSize;
 
   /// GitHub Release 頁 URL，下載失敗時 fallback 到瀏覽器。
