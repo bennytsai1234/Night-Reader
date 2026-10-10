@@ -119,6 +119,17 @@ void main() {
     }
   });
 
+  test('列首圖示方塊的紙白圖示在每個顏料色上對比達標', () {
+    // GroupedIconTile 一律在顏料色底上畫 paper50 圖示；圖形元件至少 3:1。
+    for (final tint in AppTint.values) {
+      expect(
+        _contrast(AppPalette.paper50, tint.color),
+        greaterThanOrEqualTo(3),
+        reason: tint.name,
+      );
+    }
+  });
+
   testWidgets('App、閱讀正文、閱讀選單與高亮取自同一個風格與深淺', (tester) async {
     late BuildContext context;
     Future<void> pump(AppStyle style, ThemeMode mode) async {

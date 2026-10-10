@@ -390,67 +390,75 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           }
           final color = entry.destructive ? danger : scheme.onSurface;
           widgets.add(
-            InkWell(
-              onTap: entry.enabled
-                  ? () => Navigator.of(context).pop(entry.value)
-                  : null,
-              child: Opacity(
-                opacity: entry.enabled ? 1 : 0.4,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: entry.subtitle == null
-                        ? AppGlass.menuRowHeight
-                        : AppGrouped.rowTallMinHeight,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppGrouped.rowPadding,
+            // 讀屏要知道哪一項已勾選（單選群組）、哪一項停用；畫面上只靠勾號
+            // 與透明度表示。
+            Semantics(
+              button: true,
+              enabled: entry.enabled,
+              checked: hasChecks ? entry.checked : null,
+              inMutuallyExclusiveGroup: hasChecks,
+              child: InkWell(
+                onTap: entry.enabled
+                    ? () => Navigator.of(context).pop(entry.value)
+                    : null,
+                child: Opacity(
+                  opacity: entry.enabled ? 1 : 0.4,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: entry.subtitle == null
+                          ? AppGlass.menuRowHeight
+                          : AppGrouped.rowTallMinHeight,
                     ),
-                    child: Row(
-                      children: [
-                        if (hasChecks)
-                          SizedBox(
-                            width: 26,
-                            child: entry.checked
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    size: 18,
-                                    color: color,
-                                  )
-                                : null,
-                          ),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                entry.label,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.bodyBase.copyWith(
-                                  height: 1.25,
-                                  color: color,
-                                ),
-                              ),
-                              if (entry.subtitle != null)
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppGrouped.rowPadding,
+                      ),
+                      child: Row(
+                        children: [
+                          if (hasChecks)
+                            SizedBox(
+                              width: 26,
+                              child: entry.checked
+                                  ? Icon(
+                                      Icons.check_rounded,
+                                      size: 18,
+                                      color: color,
+                                    )
+                                  : null,
+                            ),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  entry.subtitle!,
-                                  maxLines: 1,
+                                  entry.label,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodySm.copyWith(
+                                  style: AppTextStyles.bodyBase.copyWith(
                                     height: 1.25,
-                                    color: chrome.sectionText,
+                                    color: color,
                                   ),
                                 ),
-                            ],
+                                if (entry.subtitle != null)
+                                  Text(
+                                    entry.subtitle!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.bodySm.copyWith(
+                                      height: 1.25,
+                                      color: chrome.sectionText,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (entry.icon != null) ...[
-                          const SizedBox(width: AppSpacing.md),
-                          Icon(entry.icon, size: 20, color: color),
+                          if (entry.icon != null) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            Icon(entry.icon, size: 20, color: color),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),

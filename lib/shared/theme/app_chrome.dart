@@ -239,7 +239,8 @@ enum AppTint {
   azurite(AppPalette.azurite),
   moss(AppPalette.moss),
   tea(AppPalette.tea),
-  gold(AppPalette.gold),
+  // 點金 gold 對紙白圖示只有 2.85:1；顏料色方塊用深一階的金，達 3:1 以上。
+  gold(Color(0xFF9A7A3C)),
   aubergine(AppPalette.aubergine),
   rust(AppPalette.rust),
   ink(AppPalette.ink300);

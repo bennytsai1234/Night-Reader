@@ -42,10 +42,9 @@ class SearchField extends StatelessWidget {
     final muted = chrome.sectionText;
     final content = Row(
       children: [
-        const SizedBox(width: AppSpacing.md),
-        Icon(Icons.search_rounded, size: 19, color: muted),
-        const SizedBox(width: AppSpacing.xs),
         Expanded(
+          // 輸入區撐滿整個膠囊高度、放大鏡放在前綴：點膠囊任何地方（清除鈕
+          // 以外）都會聚焦，不只中間一條字高。
           child: TextField(
             controller: controller,
             focusNode: focusNode,
@@ -53,6 +52,9 @@ class SearchField extends StatelessWidget {
             textInputAction: textInputAction,
             onChanged: onChanged,
             onSubmitted: onSubmitted,
+            expands: true,
+            maxLines: null,
+            textAlignVertical: TextAlignVertical.center,
             style: AppTextStyles.bodyBase.copyWith(
               height: 1.25,
               color: scheme.onSurface,
@@ -63,6 +65,14 @@ class SearchField extends StatelessWidget {
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.md,
+                  right: AppSpacing.xs,
+                ),
+                child: Icon(Icons.search_rounded, size: 19, color: muted),
+              ),
+              prefixIconConstraints: const BoxConstraints(),
               hintText: hintText,
               hintStyle: AppTextStyles.bodyBase.copyWith(
                 height: 1.25,

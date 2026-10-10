@@ -525,6 +525,8 @@ Future<T?> showAppActionSheet<T>({
   required List<AppSheetAction<T>> actions,
   String cancelLabel = '取消',
 }) {
+  // 面板裡的 MediaQuery 已被移除頂端內距，狀態列高度要先從外層取。
+  final topInset = MediaQuery.paddingOf(context).top;
   return showModalBottomSheet<T>(
     context: context,
     useRootNavigator: true,
@@ -537,6 +539,7 @@ Future<T?> showAppActionSheet<T>({
       message: message,
       actions: actions,
       cancelLabel: cancelLabel,
+      topInset: topInset,
     ),
   );
 }
@@ -547,12 +550,16 @@ class _AppActionSheet<T> extends StatelessWidget {
     required this.message,
     required this.actions,
     required this.cancelLabel,
+    required this.topInset,
   });
 
   final String? title;
   final String? message;
   final List<AppSheetAction<T>> actions;
   final String cancelLabel;
+
+  /// 外層的狀態列高度；項目很多時卡片頂端才不會頂到狀態列。
+  final double topInset;
 
   @override
   Widget build(BuildContext context) {
@@ -565,7 +572,7 @@ class _AppActionSheet<T> extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.md,
-        media.padding.top + AppSpacing.xxxl,
+        topInset + AppSpacing.xxxl,
         AppSpacing.md,
         media.padding.bottom + AppSpacing.md,
       ),
@@ -632,8 +639,12 @@ class _AppActionSheet<T> extends StatelessWidget {
                             : Icon(
                                 actions[i].icon,
                                 size: 22,
+                                // 危險項目的圖示和文字同為危險色。
                                 color: actions[i].destructive
-                                    ? null
+                                    ? (Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? AppPalette.rustDark
+                                          : AppPalette.rust)
                                     : scheme.onSurface.withValues(alpha: 0.8),
                               ),
                         trailing: anySelected

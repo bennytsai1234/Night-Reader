@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -29,7 +31,10 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
 }
 
 class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
-  static const double _tileExtent = 56.0;
+  /// 列高：1 倍字級時固定 56，字級放大到放不下（GroupedRow 上下內距 20
+  /// 加一行 15×1.3 的標題）時跟著長高。捲動定位用同一個值。
+  double get _tileExtent =>
+      math.max(56.0, 20 + MediaQuery.textScalerOf(context).scale(15) * 1.3 + 2);
 
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;

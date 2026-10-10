@@ -2226,16 +2226,20 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
             visualContent,
             if (highlight != null && highlight.isValid)
               Positioned.fill(
-                child: ListenableBuilder(
-                  listenable: controller,
-                  builder: (context, _) => HybridTtsHighlightOverlay(
-                    sentence: _lineBoxes(
-                      highlight.chapterIndex,
-                      highlight.sentenceStart,
-                      highlight.sentenceEnd,
-                    ),
-                    color: widget.highlightColor.withValues(
-                      alpha: widget.highlightStrength,
+                // 朗讀高亮只畫在正文可視區內，捲到邊緣的句子不會在邊距與
+                // 頁尾區留下沒有字的色帶。
+                child: ClipRect(
+                  child: ListenableBuilder(
+                    listenable: controller,
+                    builder: (context, _) => HybridTtsHighlightOverlay(
+                      sentence: _lineBoxes(
+                        highlight.chapterIndex,
+                        highlight.sentenceStart,
+                        highlight.sentenceEnd,
+                      ),
+                      color: widget.highlightColor.withValues(
+                        alpha: widget.highlightStrength,
+                      ),
                     ),
                   ),
                 ),

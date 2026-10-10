@@ -5,10 +5,12 @@ import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
@@ -44,24 +46,35 @@ class ReaderV2TtsPanel extends StatelessWidget {
         return ReaderV2SheetScaffold(
           title: '朗讀',
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(tts.isPlaying ? Icons.pause : Icons.play_arrow),
-              title: Text(
-                tts.isPlaying
-                    ? '暫停朗讀'
-                    : tts.isPaused
-                    ? '繼續朗讀'
-                    : '從目前位置朗讀',
-                style: AppTextStyles.uiMd,
-              ),
-              onTap: () => unawaited(tts.toggle()),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.stop),
-              title: const Text('停止', style: AppTextStyles.uiMd),
-              onTap: () => unawaited(tts.stop()),
+            // 分組卡片，和閱讀器其他面板一致（DESIGN 不再使用 ListTile）。
+            GroupedSection(
+              margin: EdgeInsets.zero,
+              children: [
+                GroupedRow(
+                  leading: GroupedIconTile(
+                    tts.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    tint: AppTint.azurite,
+                  ),
+                  title: tts.isPlaying
+                      ? '暫停朗讀'
+                      : tts.isPaused
+                      ? '繼續朗讀'
+                      : '從目前位置朗讀',
+                  showChevron: false,
+                  onTap: () => unawaited(tts.toggle()),
+                ),
+                GroupedRow(
+                  leading: const GroupedIconTile(
+                    Icons.stop_rounded,
+                    tint: AppTint.rust,
+                  ),
+                  title: '停止',
+                  showChevron: false,
+                  onTap: () => unawaited(tts.stop()),
+                ),
+              ],
             ),
             const SheetSection(title: '朗讀參數'),
             NumberStepperRow(
@@ -86,22 +99,7 @@ class ReaderV2TtsPanel extends StatelessWidget {
                   _reportSaveFailure(context, tts.setPitch(value)),
             ),
             const SheetSection(title: '朗讀高亮'),
-            _HighlightPreview(settings: settings),
-            const SizedBox(height: AppSpacing.md),
-            _HighlightColorRow(settings: settings),
-            Row(
-              children: [
-                const Text('深淺', style: AppTextStyles.uiMd),
-                Expanded(
-                  child: Slider(
-                    value: settings.highlightStrength,
-                    min: ReaderV2HighlightStrength.min,
-                    max: ReaderV2HighlightStrength.max,
-                    onChanged: settings.setHighlightStrength,
-                  ),
-                ),
-              ],
-            ),
+            _HighlightSection(settings: settings),
           ],
         );
       },
@@ -109,12 +107,66 @@ class ReaderV2TtsPanel extends StatelessWidget {
   }
 }
 
+/// 高亮預覽、色票與深淺。拖動深淺時只更新面板內的暫存值與預覽，放開才
+/// 寫入偏好：每一格都寫入會連帶整個閱讀器重建。
+class _HighlightSection extends StatefulWidget {
+  const _HighlightSection({required this.settings});
+
+  final ReaderV2SettingsController settings;
+
+  @override
+  State<_HighlightSection> createState() => _HighlightSectionState();
+}
+
+class _HighlightSectionState extends State<_HighlightSection> {
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = widget.settings;
+    final strength = _dragging ?? settings.highlightStrength;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _HighlightPreview(settings: settings, strength: strength),
+        const SizedBox(height: AppSpacing.md),
+        _HighlightColorRow(settings: settings),
+        Row(
+          children: [
+            const ExcludeSemantics(
+              child: Text('深淺', style: AppTextStyles.uiMd),
+            ),
+            Expanded(
+              child: Semantics(
+                label: '高亮深淺',
+                child: Slider(
+                  value: strength,
+                  min: ReaderV2HighlightStrength.min,
+                  max: ReaderV2HighlightStrength.max,
+                  onChanged: (value) => setState(() => _dragging = value),
+                  onChangeEnd: (value) {
+                    setState(() => _dragging = null);
+                    settings.setHighlightStrength(value);
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// 一段以目前閱讀配色呈現的範例文字，中間一句套用高亮；調整顏色與
 /// 深淺時即時反映。
 class _HighlightPreview extends StatelessWidget {
-  const _HighlightPreview({required this.settings});
+  const _HighlightPreview({required this.settings, required this.strength});
 
   final ReaderV2SettingsController settings;
+
+  /// 預覽用的深淺；拖動中是尚未寫入的暫存值。
+  final double strength;
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +194,7 @@ class _HighlightPreview extends StatelessWidget {
                 background: Paint()
                   ..color = settings.highlightColor
                       .resolve(palette)
-                      .withValues(alpha: settings.highlightStrength),
+                      .withValues(alpha: strength),
               ),
             ),
             const TextSpan(text: '遠處傳來幾聲犬吠。'),
@@ -172,6 +224,10 @@ class _HighlightColorRow extends StatelessWidget {
             button: true,
             selected: option == settings.highlightColor,
             label: option.label,
+            // 色票下方的文字和這個標籤相同，排除子樹才不會念兩次；點擊動作
+            // 也跟著被排除，要在這裡補上。
+            excludeSemantics: true,
+            onTap: () => settings.setHighlightColor(option),
             child: InkResponse(
               onTap: () => settings.setHighlightColor(option),
               radius: _swatchSize,
