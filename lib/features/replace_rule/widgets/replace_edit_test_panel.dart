@@ -4,7 +4,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
-/// 規則調試：輸入測試文字，即時顯示替換結果。
+/// 規則除錯：輸入測試文字，即時顯示替換結果。
 class ReplaceEditTestPanel extends StatelessWidget {
   final TextEditingController testInputCtrl;
   final String testResult;
@@ -29,7 +29,7 @@ class ReplaceEditTestPanel extends StatelessWidget {
       children: [
         GroupedSection(
           margin: margin,
-          header: '規則調試',
+          header: '規則除錯',
           children: [
             GroupedTextFieldRow(
               controller: testInputCtrl,

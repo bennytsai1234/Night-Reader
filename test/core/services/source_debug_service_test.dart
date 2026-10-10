@@ -23,7 +23,7 @@ void main() {
     await Future.wait([first, second]);
 
     await Future<void>.delayed(Duration.zero);
-    final secondStart = messages.indexOf('⇒開始調試書源: 乙');
+    final secondStart = messages.indexOf('⇒開始除錯書源: 乙');
     expect(secondStart, isNonNegative);
     // 第一輪取消後才回來的錯誤不會混進第二輪。
     expect(

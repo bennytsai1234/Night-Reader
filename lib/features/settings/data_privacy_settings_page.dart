@@ -80,14 +80,14 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage>
                 ),
               ),
               GroupedRow(
-                title: '清除 WebView cache',
+                title: '清除 WebView 快取',
                 destructive: true,
                 showChevron: false,
                 enabled: !_busy,
                 onTap: () => _confirmAndRun(
-                  title: '清除 WebView cache',
+                  title: '清除 WebView 快取',
                   message: '這只會清除 WebView 快取，不會刪除書籍資料。',
-                  successMessage: '已清除 WebView cache',
+                  successMessage: '已清除 WebView 快取',
                   action: _dataService.clearWebViewCache,
                 ),
               ),
@@ -170,7 +170,10 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage>
     return FutureBuilder<AppPermissionSnapshot>(
       future: _permissionSnapshot,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+        // 重新整理時 FutureBuilder 保留上一次的資料：先照舊顯示，只有第一次
+        // 還沒有任何資料時才轉圈，區塊才不會塌下去再撐開。
+        if (snapshot.connectionState != ConnectionState.done &&
+            !snapshot.hasData) {
           return const GroupedSection(
             header: '權限狀態',
             children: [
@@ -341,7 +344,7 @@ class PermissionNoticePage extends StatelessWidget {
         ),
         _NoticeSection(
           title: '網路',
-          body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、WebView 驗證與書源調試。',
+          body: '網路權限用於搜尋書籍、載入章節、下載封面、同步 Cookie、WebView 驗證與書源除錯。',
         ),
         _NoticeSection(
           title: '通知與背景任務',

@@ -68,7 +68,7 @@ class SourceDebugService {
   }
 
   Future<void> _runDebug(BookSource source, String key) async {
-    log('⇒開始調試書源: ${source.bookSourceName}');
+    log('⇒開始除錯書源: ${source.bookSourceName}');
 
     try {
       if (key.startsWith('http')) {
@@ -198,7 +198,7 @@ class SourceDebugService {
     final targetBook = book ?? Book(origin: source.bookSourceUrl);
     final targetChapter =
         chapter ??
-        BookChapter(title: '調試', url: url, bookUrl: targetBook.bookUrl);
+        BookChapter(title: '除錯', url: url, bookUrl: targetBook.bookUrl);
 
     log('︾開始解析正文頁: ${targetChapter.title}', state: 40);
     log('  正文 URL: $url');

@@ -200,6 +200,8 @@ class SourceManagerDialogs {
                 controller: keywordController,
                 labelText: '預設關鍵字',
                 hintText: '未設置書源校驗關鍵字時使用',
+                // 底部的設定摘要含關鍵字，輸入時跟著更新。
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: AppSpacing.md),
               AlertTextField(
@@ -367,7 +369,7 @@ class SourceManagerDialogs {
       context: context,
       fieldTexts: const ['我的世界'],
       builder: (dialogContext, setDialogState, fields) => AppAlert<bool>(
-        title: '輸入調試關鍵字',
+        title: '輸入除錯關鍵字',
         onAction: (confirmed) {
           if (!confirmed) {
             Navigator.pop(dialogContext);
@@ -375,7 +377,7 @@ class SourceManagerDialogs {
           }
           final debugKey = fields.single.text.trim();
           if (debugKey.isEmpty) {
-            setDialogState(() => inputError = '請輸入調試關鍵字或 URL');
+            setDialogState(() => inputError = '請輸入除錯關鍵字或 URL');
             return;
           }
           Navigator.pop(dialogContext);
@@ -400,7 +402,7 @@ class SourceManagerDialogs {
         ),
         actions: const [
           AppAlertAction(label: '取消', value: false),
-          AppAlertAction(label: '開始調試', value: true, isDefault: true),
+          AppAlertAction(label: '開始除錯', value: true, isDefault: true),
         ],
       ),
     );

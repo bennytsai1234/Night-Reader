@@ -131,11 +131,14 @@ class _MainPageState extends State<MainPage> {
                 ),
               ),
             ),
+            // 啟動載入遮罩只蓋書架分頁；顯示時擋住點擊，不讓點擊穿到底下
+            // 看不見的按鈕。
             Positioned.fill(
               child: IgnorePointer(
+                ignoring: !(_showStartupLoadingOverlay && _currentIndex == 0),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
-                  child: _showStartupLoadingOverlay
+                  child: _showStartupLoadingOverlay && _currentIndex == 0
                       ? ColoredBox(
                           key: const ValueKey('startup-loading-overlay'),
                           color: Theme.of(context).scaffoldBackgroundColor
@@ -178,12 +181,7 @@ class _MainPageState extends State<MainPage> {
                 label: destination.label,
               ),
           ],
-          onSearch: widget.destinations == null
-              ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SearchPage()),
-                )
-              : null,
+          onSearch: widget.destinations == null ? _openSearch : null,
           onTap: (index) {
             if (_currentIndex == index) {
               if (DateTime.now().difference(_lastTapTime).inMilliseconds <
@@ -303,6 +301,22 @@ class _MainPageState extends State<MainPage> {
       await UpdateCheckRunner().runAutomatic(() => mounted ? context : null);
     } catch (e, stack) {
       AppLog.e('Update check failed: $e', error: e, stackTrace: stack);
+    }
+  }
+
+  bool _openingSearch = false;
+
+  /// 換頁動畫期間舊頁面還能點，連點兩下會疊兩個搜尋頁；開啟中就忽略。
+  Future<void> _openSearch() async {
+    if (_openingSearch) return;
+    _openingSearch = true;
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SearchPage()),
+      );
+    } finally {
+      _openingSearch = false;
     }
   }
 

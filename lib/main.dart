@@ -16,6 +16,7 @@ import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
 import 'app_providers.dart';
+import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
@@ -75,6 +76,8 @@ Stream<LicenseEntry> _punctFontLicense() async* {
   ], await rootBundle.loadString('assets/fonts/OFL.txt'));
 }
 
+bool _punctLicenseRegistered = false;
+
 void main() {
   runZonedGuarded(_startApp, (error, stack) {
     AppLog.e('Uncaught Error: $error', error: error, stackTrace: stack);
@@ -87,7 +90,11 @@ Future<void> _startApp() async {
   GestureBinding.instance.resamplingEnabled = true;
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
-  LicenseRegistry.addLicense(_punctFontLicense);
+  // 啟動失敗後的重試會再跑一次 _startApp；授權只註冊一次，授權頁才不會重複。
+  if (!_punctLicenseRegistered) {
+    LicenseRegistry.addLicense(_punctFontLicense);
+    _punctLicenseRegistered = true;
+  }
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
@@ -194,11 +201,13 @@ class _StartupFailureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = '$error\n\n$stackTrace';
+    // 偏好設定可能也讀不到：用預設風格跟隨系統深淺，不要落回 Material 預設紫。
     return MaterialApp(
       title: kAppDisplayName,
       debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(AppStyle.paper, Brightness.light),
+      darkTheme: buildAppTheme(AppStyle.paper, Brightness.dark),
       home: Scaffold(
-        backgroundColor: Colors.black,
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
