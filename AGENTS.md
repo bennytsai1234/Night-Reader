@@ -59,3 +59,17 @@ gh pr merge --squash --auto --delete-branch
 ## 保持 repo 整潔
 
 - 測試素材放 `test/fixtures/`。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 放在本 repo 的 GitHub Issues，用 `gh` 操作。見 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用預設的五個 triage 標籤（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`）。見 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+單一 context：根目錄 `GLOSSARY.md` 加 `docs/adr/`。見 `docs/agents/domain.md`。
