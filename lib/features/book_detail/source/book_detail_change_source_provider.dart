@@ -23,6 +23,9 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
        searchBookDao = searchBookDao ?? getIt<SearchBookDao>() {
     if (autoStart) {
+      // 一建立就算搜尋中：startSearch 要先等資料庫查詢才會標記，這段空檔
+      // 不能讓面板閃出「未找到其他來源」。
+      isSearching = true;
       unawaited(loadGroups());
       unawaited(startSearch());
     }

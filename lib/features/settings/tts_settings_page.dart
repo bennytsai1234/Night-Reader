@@ -21,9 +21,7 @@ class TtsSettingsPage extends StatelessWidget {
         listenable: tts,
         builder: (context, child) {
           final engines = tts.engines;
-          final voices = [
-            ...tts.voices,
-          ]..sort((a, b) => tts.voiceLabelOf(a).compareTo(tts.voiceLabelOf(b)));
+          final voices = tts.sortedVoices;
           final selectedEngine = engines.contains(tts.selectedEngine)
               ? tts.selectedEngine ?? ''
               : '';
@@ -40,7 +38,8 @@ class TtsSettingsPage extends StatelessWidget {
           ];
           final engineOptions = <_Choice>[
             const _Choice('', _systemDefault),
-            for (final engine in engines) _Choice(engine, engine),
+            for (final engine in engines)
+              _Choice(engine, tts.engineLabelOf(engine)),
           ];
 
           return GroupedListView(

@@ -43,3 +43,9 @@ compatible with AGP 9's default built-in Kotlin and new public DSL.
 ## Maintenance
 
 Night Reader maintains this package in-tree and no longer tracks upstream.
+
+## Patch `nightreader.3`: engine display names
+
+- `getEngines` returns `{name, label}` maps instead of bare package names, so
+  the app can show 「Google 語音服務」 instead of `com.google.android.tts`
+  while still passing `name` to `setEngine`.
