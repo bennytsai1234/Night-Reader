@@ -9,13 +9,13 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 
 ## 工具鏈
 
-- Flutter `3.47.0`，固定在 `.github/workflows/ci.yml` 與 `android-release.yml`；升級時兩處一起改。
+- Flutter `3.47.0`，固定在 `.github/workflows/ci.yml` 與 `android-release.yml`；升級時兩處一起改（CI 會檢查兩處一致）。
 - `third_party/` 的三個 fork 各自的修補紀錄在套件內的 `PATCHES.md`。測試在桌面上跑 QuickJS 用的橋接函式庫放在 `test/fixtures/quickjs/`。
 
 ## 驗證
 
 - 自動化驗證就是 `.github/workflows/ci.yml`，PR 合併前必須通過。本機先跑受影響的測試，推送前跑全套。
-- 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build --delete-conflicting-outputs`，產生的 `.g.dart` 一起提交。
+- 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。
 - Android 實機與模擬器驗證（UI、手勢、滾動、動畫、生命週期、原生外掛、執行效能）是使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，回報中也不列出實機行為相關的未驗證項目。
 
