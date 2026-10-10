@@ -80,6 +80,15 @@ class AppStoragePaths {
     );
   }
 
+  /// App 內更新下載的 APK；Android 端的 FileProvider 只開放這個目錄。
+  static Future<Directory> appUpdateDir({bool ensureExists = false}) async {
+    return _subdirectory(
+      await temporaryDir(),
+      'updates',
+      ensureExists: ensureExists,
+    );
+  }
+
   static Future<Directory> jsCacheDir({bool ensureExists = false}) async {
     return _subdirectory(
       await temporaryDir(),

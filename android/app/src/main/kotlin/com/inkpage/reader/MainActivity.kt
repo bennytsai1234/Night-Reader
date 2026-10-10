@@ -9,10 +9,12 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
+import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.util.Locale
 
 class MainActivity : AudioServiceActivity() {
@@ -36,6 +38,23 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(messenger, "night_reader/app_installer").setMethodCallHandler { call, result ->
+            if (call.method != "installApk") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val path = call.argument<String>("path")
+            if (path == null) {
+                result.error("bad_args", "path is required", null)
+                return@setMethodCallHandler
+            }
+            try {
+                installApk(File(path))
+                result.success(null)
+            } catch (e: Exception) {
+                result.error("install_failed", e.message, null)
+            }
+        }
         EventChannel(messenger, "night_reader/battery")
             .setStreamHandler(BatteryStreamHandler(applicationContext))
         MethodChannel(messenger, "com.inkpage.reader/word_segmenter").setMethodCallHandler { call, result ->
@@ -49,6 +68,18 @@ class MainActivity : AudioServiceActivity() {
                 if (text == null || offset == null) null else wordAt(text, offset),
             )
         }
+    }
+
+    // App 內更新：開系統安裝程式安裝 APK。Android 一律要使用者在系統畫面
+    // 確認；還沒允許本 App「安裝不明應用程式」時，系統會先引導到設定開啟。
+    private fun installApk(apk: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.update_provider", apk)
+        startActivity(
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            },
+        )
     }
 
     // Flutter 引擎的 ICU 不含中文詞典，系統 ICU 有；長按選詞靠這裡斷詞。
