@@ -2,5 +2,16 @@
 # 推送前跑和 CI 相同的 analyze 與全套測試。
 # 啟用：git config core.hooksPath .githooks
 set -e
+
+# Git 從標準輸入每行給一個要推的 ref：<local ref> <local sha> <remote ref> <remote sha>。
+# 刪除遠端分支時 local sha 全是 0；這次只有刪除、沒有推任何提交時不必跑檢查。
+has_update=0
+while read -r _ local_sha _ _; do
+  case "$local_sha" in
+    *[!0]*) has_update=1 ;;
+  esac
+done
+[ "$has_update" -eq 0 ] && exit 0
+
 flutter analyze --no-pub
 flutter test --no-pub --reporter compact
