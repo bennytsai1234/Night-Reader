@@ -101,10 +101,10 @@ class BackupService {
       encoder.create(tmpZipPath);
       await for (var entity in backupFolder.list(recursive: true)) {
         if (entity is File) {
-          encoder.addFile(entity);
+          await encoder.addFile(entity);
         }
       }
-      encoder.close();
+      await encoder.close();
 
       // 原子重新命名：確保不會寫到一半產生殘缺 ZIP
       final tmpFile = File(tmpZipPath);
