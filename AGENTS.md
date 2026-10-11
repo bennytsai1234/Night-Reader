@@ -21,14 +21,14 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 
 ## Git 流程
 
-- 直接推上 `main`，不開 PR。`main` 的分支保護只禁止強制推送與刪除：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
-- 每次推送只要改到 App 內容就會發一個測試版，所以一次對話的改動整理好再一起推。commit message 用 Conventional Commits 格式（`fix(reader): …`）。
+- 不開 PR，合併在本機做完再推上 `main`。`main` 的分支保護只禁止強制推送與刪除：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
+- 每次推上 `main` 只要改到 App 內容就會發一個測試版，所以 App 的改動在分支上累積，使用者說合併才進 `main`。commit message 用 Conventional Commits 格式（`fix(reader): …`）。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程
 
 - 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取 `main` 的提交數。
-- 測試版：每次推上 `main` 的改動只要改到 App 內容，CI 就發一個 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數）。日常改進直接推上去即可，不用另外升版號。
+- 測試版：每次推上 `main` 的改動只要改到 App 內容，CI 就發一個 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數）。日常改進合併進 `main` 即可，不用另外升版號。
 - 正式版：推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本；CI 會建置簽章 APK、建立 `vX.Y.Z` tag 並發布 GitHub Release。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
 - 推送後檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
