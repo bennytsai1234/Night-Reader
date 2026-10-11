@@ -142,7 +142,7 @@ jobs:
             notes_start_tag="$latest_tag"
           fi
 
-          # Android versionCode 取 main 的提交數：squash merge 讓它只增不減，
+          # Android versionCode 取 main 的提交數：main 禁止強制推送、歷史不改寫，所以它只增不減（ADR 0004），
           # 正式版與測試版共用同一條序列，裝了測試版也能直接更新到之後的正式版。
           build_number="$(git rev-list --count "$target_sha")"
 
