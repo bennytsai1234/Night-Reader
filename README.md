@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/app_icon/inkpage_reader_icon.png" width="100" alt="夜讀">
+  <img src="assets/app-icon.png" width="100" alt="夜讀">
 </p>
 
 <h1 align="center">夜讀 · Night Reader</h1>
