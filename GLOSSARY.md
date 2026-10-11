@@ -9,7 +9,7 @@ Android 小說閱讀器：從使用者自行匯入的書源搜尋、閱讀、下
 _Avoid_: InkPage、inkpage reader
 
 **測試版**：
-CI 在每次合併到 `main` 後發的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
+CI 在每次推上 `main` 後發的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
 _Avoid_: beta 分支、預覽版、nightly
 
 **書源**：
