@@ -1,12 +1,6 @@
 name: Android Release
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - pubspec.yaml
-      - .github/workflows/android-release.yml
   # main 上每次會改到 App 內容的合併都要發版（正式版或測試版），
   # 只排除不進 APK 的文件、網站與測試。
   push:
@@ -84,11 +78,7 @@ jobs:
           build_name="$app_version"
           artifact_label="$stable_tag"
 
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            # PR 只驗證 release metadata / workflow 本身可以執行，不 build、不發布。
-            mode=pr-check
-            artifact_label=pr-check
-          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
             # 手動執行與 internal-test branch 永遠只做 signed APK 驗證，不發布。
             mode=manual-test
             should_build=true
