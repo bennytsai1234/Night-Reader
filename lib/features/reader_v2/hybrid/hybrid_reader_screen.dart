@@ -517,7 +517,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
     while (pending.isNotEmpty) {
       final outcome = await Future.any(pending.values);
-      pending.remove(outcome.chapter);
+      unawaited(pending.remove(outcome.chapter));
       if (!isCurrent()) return _MaterializationWait.cancelled;
       if (!outcome.unavailable) return _MaterializationWait.progressed;
     }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -29,11 +30,13 @@ mixin FileAssociationHandler on AssociationBase {
         if (!context.mounted) {
           return;
         }
-        _handleSharedFile(
-          context,
-          file.path,
-          showImportDialog,
-          showForceImportDialog,
+        unawaited(
+          _handleSharedFile(
+            context,
+            file.path,
+            showImportDialog,
+            showForceImportDialog,
+          ),
         );
       } else if (isSupportedLocalBookExtension(ext)) {
         if (!context.mounted) {

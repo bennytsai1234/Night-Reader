@@ -62,18 +62,17 @@ class BackstageWebView {
 
     final controller = WebViewController.fromPlatformCreationParams(params);
 
-    controller
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000));
+    await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    await controller.setBackgroundColor(const Color(0x00000000));
 
     if (headerMap != null && headerMap!.containsKey('User-Agent')) {
-      controller.setUserAgent(headerMap!['User-Agent']);
+      await controller.setUserAgent(headerMap!['User-Agent']);
     }
 
     // Android specific settings
     if (controller.platform is AndroidWebViewController) {
-      AndroidWebViewController.enableDebugging(false);
-      (controller.platform as AndroidWebViewController)
+      await AndroidWebViewController.enableDebugging(false);
+      await (controller.platform as AndroidWebViewController)
           .setMediaPlaybackRequiresUserGesture(false);
     }
 
@@ -99,7 +98,7 @@ class BackstageWebView {
       }
     }
 
-    controller.setNavigationDelegate(
+    await controller.setNavigationDelegate(
       NavigationDelegate(
         onPageFinished: (String currentUrl) async {
           if (isCompleted) return;

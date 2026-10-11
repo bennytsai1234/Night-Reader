@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -431,7 +432,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
             .showSnackBar(const SnackBar(content: Text('未找到可匯入的書架資料')));
         return;
       }
-      context.read<BookshelfProvider>().loadBooks();
+      unawaited(context.read<BookshelfProvider>().loadBooks());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

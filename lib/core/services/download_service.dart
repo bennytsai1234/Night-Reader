@@ -96,7 +96,7 @@ class DownloadService extends DownloadBase
     tasks.addAll(storedTasks);
     update();
     if (tasks.any((t) => t.isWaiting || t.isDownloading) && !isDownloading) {
-      startDownloads();
+      unawaited(startDownloads());
     }
   }
 

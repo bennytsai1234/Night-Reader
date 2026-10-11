@@ -187,54 +187,56 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
 
         poolCount++;
-        _downloadChapter(
-              contentStorage: contentStorage,
-              source: source,
-              chapter: chapter,
-            )
-            .then((result) {
-              if (result.success) {
-                task.successCount++;
-              } else {
+        unawaited(
+          _downloadChapter(
+                contentStorage: contentStorage,
+                source: source,
+                chapter: chapter,
+              )
+              .then((result) {
+                if (result.success) {
+                  task.successCount++;
+                } else {
+                  task.errorCount++;
+                  final message = result.failureMessage ?? '下載失敗';
+                  task.setFailure(
+                    reason: classifyDownloadFailureReason(message),
+                    message: message,
+                    chapterIndex: chapter.index,
+                  );
+                }
+                poolCount--;
+                task.currentChapterIndex = chapter.index;
+                task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+                downloadDao.updateProgress(
+                  task.bookUrl,
+                  currentChapterIndex: chapter.index,
+                  successCount: task.successCount,
+                  errorCount: task.errorCount,
+                );
+                update();
+              })
+              .catchError((Object error, StackTrace stack) {
+                AppLog.w('Download chapter failed ${chapter.title}: $error');
                 task.errorCount++;
-                final message = result.failureMessage ?? '下載失敗';
+                final message = error.toString();
                 task.setFailure(
                   reason: classifyDownloadFailureReason(message),
                   message: message,
                   chapterIndex: chapter.index,
                 );
-              }
-              poolCount--;
-              task.currentChapterIndex = chapter.index;
-              task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-              downloadDao.updateProgress(
-                task.bookUrl,
-                currentChapterIndex: chapter.index,
-                successCount: task.successCount,
-                errorCount: task.errorCount,
-              );
-              update();
-            })
-            .catchError((Object error, StackTrace stack) {
-              AppLog.w('Download chapter failed ${chapter.title}: $error');
-              task.errorCount++;
-              final message = error.toString();
-              task.setFailure(
-                reason: classifyDownloadFailureReason(message),
-                message: message,
-                chapterIndex: chapter.index,
-              );
-              poolCount--;
-              task.currentChapterIndex = chapter.index;
-              task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-              downloadDao.updateProgress(
-                task.bookUrl,
-                currentChapterIndex: chapter.index,
-                successCount: task.successCount,
-                errorCount: task.errorCount,
-              );
-              update();
-            });
+                poolCount--;
+                task.currentChapterIndex = chapter.index;
+                task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+                downloadDao.updateProgress(
+                  task.bookUrl,
+                  currentChapterIndex: chapter.index,
+                  successCount: task.successCount,
+                  errorCount: task.errorCount,
+                );
+                update();
+              }),
+        );
       }
 
       while (poolCount > 0) {

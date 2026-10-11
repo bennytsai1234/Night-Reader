@@ -63,7 +63,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
     await Future.wait(updateTasks);
     updatingCount = 0;
-    loadBooks();
+    await loadBooks();
     AppEventBus().fire(AppEvent('bookshelfRefreshEnd'));
   }
 

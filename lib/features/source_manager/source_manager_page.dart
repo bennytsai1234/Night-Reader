@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -616,7 +617,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       case 'debug':
         final full = await p.getFullSource(s.bookSourceUrl);
         if (full != null && mounted) {
-          SourceManagerDialogs.showDebugInput(context, full);
+          unawaited(SourceManagerDialogs.showDebugInput(context, full));
         }
       case 'explore':
         await _runAction(

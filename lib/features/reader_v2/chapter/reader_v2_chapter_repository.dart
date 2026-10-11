@@ -165,7 +165,7 @@ class ReaderV2ChapterRepository {
       return await task;
     } finally {
       if (identical(_contentInFlight[safeIndex], task)) {
-        _contentInFlight.remove(safeIndex);
+        unawaited(_contentInFlight.remove(safeIndex));
       }
     }
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -72,7 +73,7 @@ final class MetricsDiskCache {
       await current;
     } finally {
       if (identical(_writeTails[path], current)) {
-        _writeTails.remove(path);
+        unawaited(_writeTails.remove(path));
       }
     }
     return metrics.length;

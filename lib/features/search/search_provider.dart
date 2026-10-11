@@ -294,7 +294,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     await p.setBool('precision_search', _precisionSearch);
     notifyListeners();
     if (_lastSearchKey.isNotEmpty) {
-      search(_lastSearchKey);
+      unawaited(search(_lastSearchKey));
     }
   }
 

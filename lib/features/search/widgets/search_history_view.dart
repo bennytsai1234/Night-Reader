@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -114,7 +116,7 @@ class SearchHistoryView extends StatelessWidget {
       confirmLabel: '刪除',
       destructive: true,
     );
-    if (confirmed) provider.deleteHistoryKeyword(keyword);
+    if (confirmed) unawaited(provider.deleteHistoryKeyword(keyword));
   }
 
   Future<void> _confirmClearHistory(BuildContext context) async {
@@ -125,6 +127,6 @@ class SearchHistoryView extends StatelessWidget {
       confirmLabel: '清空',
       destructive: true,
     );
-    if (confirmed) provider.clearHistory();
+    if (confirmed) unawaited(provider.clearHistory());
   }
 }

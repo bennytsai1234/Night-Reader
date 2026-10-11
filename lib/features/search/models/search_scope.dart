@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -126,7 +128,7 @@ class SearchScope {
     // 清理無效分組
     if (validGroups.length != groups.length) {
       _scope = validGroups.join(',');
-      save();
+      unawaited(save());
     }
 
     // 去重

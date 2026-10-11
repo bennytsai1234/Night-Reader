@@ -133,7 +133,7 @@ mixin DownloadScheduler on DownloadBase {
       }
       update();
       if (!isTaskRetiring(book.bookUrl) && !isDownloading) {
-        startDownloads();
+        unawaited(startDownloads());
       }
       return true;
     } finally {
@@ -161,7 +161,7 @@ mixin DownloadScheduler on DownloadBase {
                 !isTaskRetiring(t.bookUrl);
           }, orElse: () => null);
           if (nextTask != null) {
-            processTask(nextTask);
+            unawaited(processTask(nextTask));
           } else if (activeTasks.isEmpty) {
             break;
           }

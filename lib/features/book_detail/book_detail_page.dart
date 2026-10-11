@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -326,7 +327,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       case _MenuAction.checkUpdate:
         await _handleCheckUpdate(context, provider);
       case _MenuAction.download:
-        _showDownloadSheet(context, provider);
+        unawaited(_showDownloadSheet(context, provider));
       case _MenuAction.export:
         await _handleExport(context, provider);
       case _MenuAction.edit:
@@ -500,15 +501,15 @@ class _BookDetailPageState extends State<BookDetailPage> {
     if (choice == null || !context.mounted) return;
     switch (choice) {
       case 'from_current':
-        _queueDownload(context, provider.queueDownloadFromCurrent());
+        unawaited(_queueDownload(context, provider.queueDownloadFromCurrent()));
       case 'next_10':
-        _queueDownload(context, provider.queueDownloadNext(10));
+        unawaited(_queueDownload(context, provider.queueDownloadNext(10)));
       case 'next_50':
-        _queueDownload(context, provider.queueDownloadNext(50));
+        unawaited(_queueDownload(context, provider.queueDownloadNext(50)));
       case 'all':
-        _queueDownload(context, provider.queueDownloadAll());
+        unawaited(_queueDownload(context, provider.queueDownloadAll()));
       case 'missing':
-        _queueDownload(context, provider.queueDownloadMissing());
+        unawaited(_queueDownload(context, provider.queueDownloadMissing()));
       case 'range':
         _showDownloadRangeDialog(context, provider);
     }

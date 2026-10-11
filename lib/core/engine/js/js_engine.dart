@@ -292,7 +292,7 @@ class JsEngine {
       }
       return resolved;
     } finally {
-      _pendingJsLibCache.remove(jsLib);
+      unawaited(_pendingJsLibCache.remove(jsLib));
     }
   }
 
