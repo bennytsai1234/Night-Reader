@@ -1,0 +1,6 @@
+#!/bin/sh
+# 推送前跑和 CI 相同的 analyze 與全套測試。
+# 啟用：git config core.hooksPath .githooks
+set -e
+flutter analyze --no-pub
+flutter test --no-pub --reporter compact

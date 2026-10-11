@@ -296,6 +296,7 @@ APK 透過 GitHub Actions 建置並發布至 GitHub Releases。
 
 ```bash
 flutter pub get
+git config core.hooksPath .githooks  # commit 前檢查格式，push 前跑 analyze 與測試
 flutter analyze
 flutter test
 ```

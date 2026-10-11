@@ -1,0 +1,13 @@
+#!/bin/sh
+# 檢查這次 commit 暫存的 Dart 檔是否已經 dart format；*.g.dart 由 build_runner 產生，不檢查。
+# 啟用：git config core.hooksPath .githooks
+files() {
+  git diff --cached --name-only -z --diff-filter=ACMR -- '*.dart' ':!:*.g.dart'
+}
+[ -z "$(files | tr -d '\0')" ] && exit 0
+
+# 分批呼叫，避開 Windows 的命令列長度上限。
+if ! files | xargs -0 -n 50 dart format --output=none --set-exit-if-changed; then
+  echo "pre-commit: 上面列出的檔案格式不符，執行 dart format 後重新 git add。" >&2
+  exit 1
+fi
