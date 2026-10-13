@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # 每條分支都跑：不走 PR 之後，合併前要在分支上看到 Linux 的結果（AGENTS.md「Git 流程」）。
+  # 本機 pre-push 在 Windows 上跑，只有 Linux 會出的錯要靠這裡在進 main 之前擋下。
   push:
-    branches: [main]
+    branches: ["**"]
   workflow_dispatch:
   workflow_call:
     inputs:
