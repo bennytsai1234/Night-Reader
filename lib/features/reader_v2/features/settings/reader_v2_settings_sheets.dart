@@ -50,17 +50,11 @@ class _ReaderInterfaceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hintStyle = AppTextStyles.uiXs.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
     return ReaderV2SheetScaffold(
       title: '外觀與排版',
       maxHeightFactor: 0.6,
       children: [
-        SheetSection(
-          title: '風格',
-          trailing: Text('月亮鈕切換深淺', style: hintStyle),
-        ),
+        const SheetSection(title: '風格'),
         const _ReaderStyleSelector(),
         ReaderV2TypographySection(
           settings: settings,

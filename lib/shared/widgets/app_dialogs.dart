@@ -422,7 +422,7 @@ class AlertTextField extends StatelessWidget {
   }
 }
 
-/// 提示框內的多選列：標題、說明與右側勾選圈。
+/// 提示框內的多選列：標題、附註（只放勾選後的後果，例如會覆蓋本機資料）與右側勾選圈。
 class AlertCheckRow extends StatelessWidget {
   const AlertCheckRow({
     super.key,

@@ -6,7 +6,7 @@ import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'swipe_actions.dart';
 
-/// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方說明文字。
+/// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
 ///
 /// 列與列之間自動插入髮絲分隔線；有任一列（[GroupedRowLike]，可包在
 /// [SwipeActions]、[KeyedSubtree] 或單子元件的外框內）帶列首圖示時，分隔線
@@ -17,7 +17,6 @@ class GroupedSection extends StatelessWidget {
     this.header,
     this.headerTrailing,
     this.footer,
-    this.footerWidget,
     required this.children,
     this.separatorIndent,
     this.margin,
@@ -29,9 +28,8 @@ class GroupedSection extends StatelessWidget {
   /// 組標題右側的動作（例如「全部清除」）。
   final Widget? headerTrailing;
 
-  /// 卡片下方的說明文字。
+  /// 卡片下方的附註，只放狀態或數值（例如最近更新時間），不放功能說明（ADR 0008）。
   final String? footer;
-  final Widget? footerWidget;
   final List<Widget> children;
 
   /// 覆寫分隔線左縮排（列首不是 [GroupedIconTile] 寬度時使用）。
@@ -97,7 +95,7 @@ class GroupedSection extends StatelessWidget {
               ),
             ),
           ),
-          if (footer != null || footerWidget != null)
+          if (footer case final footer?)
             Padding(
               padding: effectiveMargin.add(
                 const EdgeInsets.fromLTRB(
@@ -107,14 +105,10 @@ class GroupedSection extends StatelessWidget {
                   0,
                 ),
               ),
-              child:
-                  footerWidget ??
-                  Text(
-                    footer!,
-                    style: AppTextStyles.bodySm.copyWith(
-                      color: chrome.sectionText,
-                    ),
-                  ),
+              child: Text(
+                footer,
+                style: AppTextStyles.bodySm.copyWith(color: chrome.sectionText),
+              ),
             ),
         ],
       ),
@@ -308,6 +302,8 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
 
   /// 覆寫標題（例如帶徽章）；[title] 仍作為語意標籤。
   final Widget? titleWidget;
+
+  /// 標題下方的值（網址、最新章節、錯誤訊息），不放功能說明（ADR 0008）。
   final String? subtitle;
 
   /// 通常是 [GroupedIconTile]。
@@ -471,7 +467,6 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
   const GroupedSwitchRow({
     super.key,
     required this.title,
-    this.subtitle,
     this.leading,
     required this.value,
     required this.onChanged,
@@ -479,7 +474,6 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
   });
 
   final String title;
-  final String? subtitle;
   final Widget? leading;
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -494,7 +488,6 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
     return MergeSemantics(
       child: GroupedRow(
         title: title,
-        subtitle: subtitle,
         leading: leading,
         enabled: enabled,
         showChevron: false,

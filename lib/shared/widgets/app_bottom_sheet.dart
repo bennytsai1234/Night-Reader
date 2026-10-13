@@ -245,19 +245,15 @@ class SheetHeader extends StatelessWidget {
 /// 閱讀器面板內的區塊標題，字階與色彩同分組清單的組標題。
 class SheetSection extends StatelessWidget {
   final String title;
-  final Widget? trailing;
-  const SheetSection({super.key, required this.title, this.trailing});
+  const SheetSection({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.xl, bottom: AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(child: GroupedSectionHeader(title)),
-          ?trailing,
-        ],
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: GroupedSectionHeader(title),
       ),
     );
   }

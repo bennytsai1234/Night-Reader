@@ -31,7 +31,6 @@ class SourceEditBasic extends StatelessWidget {
           children: [
             GroupedTextFieldRow(
               controller: controllers['comment']!,
-              hintText: '自定義備註資訊',
               maxLines: 3,
             ),
           ],
