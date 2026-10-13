@@ -14,7 +14,6 @@ StyleFingerprint _style(double fontSize) => StyleFingerprint(
   paragraphSpacing: 1,
   textIndent: 2,
   bold: false,
-  justify: false,
   textScaleFactor: 1,
   fontFamilySignature: 'system',
   platformFontSignature: 'test',

@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -285,7 +284,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   StyleFingerprint _fingerprintFor(ReaderV2LayoutSpec spec) {
     return StyleFingerprint.fromLayoutSpec(
       spec,
-      justify: AppConfig.readerV2ContentJustify,
       platformFontSignature:
           '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
     );
@@ -599,14 +597,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       final blocks = await binding.planChapterVisualLines(
         rough,
         maxBlockChars: maxBlockChars,
-        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
-          spec.style,
-          justify: AppConfig.readerV2ContentJustify,
-        ),
+        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(spec.style),
         titleStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: true,
-          justify: false,
         ),
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
@@ -1352,7 +1346,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: head.isTitle,
-          justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,

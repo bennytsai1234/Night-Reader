@@ -469,7 +469,6 @@ final class LayoutPump implements HybridLayoutPump {
   }
 
   ui.Paragraph _buildParagraphFor(LayoutTask task) {
-    final textAlignOverride = task.textStyle.textAlign;
     if (task.readerOwnedLinePlan) {
       final textMap = ParagraphTextMap.forBlocks(
         task.groupBlocks,
@@ -482,12 +481,10 @@ final class LayoutPump implements HybridLayoutPump {
         contentWidth: task.contentWidth,
         cellWidth: task.cellWidth,
         textColor: task.textColor,
-        textAlign: textAlignOverride,
       );
     }
 
     final paragraphStyle = ui.ParagraphStyle(
-      textAlign: textAlignOverride,
       textDirection: ui.TextDirection.ltr,
       fontSize: task.textStyle.fontSize,
       height: task.textStyle.lineHeight,

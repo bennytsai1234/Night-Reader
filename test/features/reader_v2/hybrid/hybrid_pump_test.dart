@@ -207,7 +207,6 @@ void main() {
             fontSize: 18,
             lineHeight: 1.5,
             letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
           ),
           contentWidth: 240,
           textColor: const ui.Color(0xFFEEEEEE),
@@ -229,65 +228,6 @@ void main() {
       );
       final metrics = store.get(namespace, key)!;
       expect(metrics.lineCount, greaterThan(0));
-      pump.dispose();
-      cache.dispose();
-    });
-
-    test('justify 下段首縮排以 placeholder 保留原寬，字距不吸收縮排寬度', () async {
-      final store = MeasurementStore();
-      final cache = ParagraphCache();
-      final namespace = MeasurementNamespace(
-        epoch: LayoutEpoch.initial,
-        fingerprint: _fingerprint(),
-      );
-      final pump = LayoutPump(
-        paragraphCache: cache,
-        measurementStore: store,
-        namespace: namespace,
-      );
-      const key = BlockKey(chapterIndex: 0, blockIndex: 0);
-      const fontSize = 20.0;
-      // 16 字正文 + 縮排 2 = 18 units；寬 16.4 units 讓首行 soft-wrap 且
-      // 留 0.4 字寬殘餘空隙給 justify 分配。
-      const contentWidth = fontSize * 16.4;
-      pump.submit(
-        LayoutTask(
-          block: const ChapterBlock(
-            key: key,
-            text: '衝在最前面的妖怪頭顱便滾落在地。',
-            charRange: HybridTextRange(0, 16),
-            sourceParagraphIndex: 0,
-          ),
-          epoch: LayoutEpoch.initial,
-          fingerprint: namespace.fingerprint,
-          textStyle: const HybridBlockTextStyle(
-            fontSize: fontSize,
-            lineHeight: 1.5,
-            letterSpacing: 0,
-            textAlign: ui.TextAlign.justify,
-          ),
-          contentWidth: contentWidth,
-          indentChars: 2,
-        ),
-      );
-
-      expect(await pump.pumpPending(), 1);
-      final paragraph = cache.acquire(key, LayoutEpoch.initial)!;
-      final lines = paragraph.computeLineMetrics();
-      expect(lines.length, 2, reason: '斷行位置須與 U+3000 前綴時相同');
-
-      // 縮排 placeholder 不能被 justify 折疊成 0 寬。
-      final placeholders = paragraph.getBoxesForPlaceholders();
-      expect(placeholders.length, 2);
-      expect(placeholders[0].left, 0);
-      expect(placeholders[0].right, closeTo(fontSize, 0.01));
-      expect(placeholders[1].right, closeTo(fontSize * 2, 0.01));
-
-      // 首個正文字元緊接縮排之後，且字寬只吸收真正殘餘空隙
-      // （縮排寬度被平攤時每字會膨脹到 ~23.4px）。
-      final firstGlyph = paragraph.getBoxesForRange(2, 3).single;
-      expect(firstGlyph.left, closeTo(fontSize * 2, 0.01));
-      expect(firstGlyph.right - firstGlyph.left, lessThan(fontSize + 1.5));
       pump.dispose();
       cache.dispose();
     });
@@ -612,7 +552,6 @@ void main() {
     fontSize: fontSize,
     lineHeight: 1.5,
     letterSpacing: 0,
-    textAlign: ui.TextAlign.start,
   );
 
   StyleFingerprint fingerprint() => StyleFingerprint(
@@ -623,7 +562,6 @@ void main() {
     paragraphSpacing: 1,
     textIndent: 0,
     bold: false,
-    justify: false,
     textScaleFactor: 1,
     fontFamilySignature: 'system',
     platformFontSignature: 'test',
@@ -2039,7 +1977,6 @@ StyleFingerprint _fingerprint({double width = 320}) {
     paragraphSpacing: 1,
     textIndent: 2,
     bold: false,
-    justify: true,
     textScaleFactor: 1,
     fontFamilySignature: 'system',
     platformFontSignature: 'test',

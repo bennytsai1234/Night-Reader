@@ -97,7 +97,6 @@ final class StyleFingerprint {
     this.chapterSpacing = 1.0,
     required this.textIndent,
     required this.bold,
-    required this.justify,
     required this.textScaleFactor,
     required this.fontFamilySignature,
     required this.platformFontSignature,
@@ -108,7 +107,6 @@ final class StyleFingerprint {
 
   factory StyleFingerprint.fromLayoutSpec(
     ReaderV2LayoutSpec spec, {
-    bool justify = true,
     double textScaleFactor = 1.0,
     String fontFamilySignature = 'system',
     String platformFontSignature = 'unknown',
@@ -124,7 +122,6 @@ final class StyleFingerprint {
       chapterSpacing: style.chapterSpacing,
       textIndent: style.textIndent,
       bold: style.bold,
-      justify: justify,
       textScaleFactor: textScaleFactor,
       fontFamilySignature: fontFamilySignature,
       platformFontSignature: platformFontSignature,
@@ -147,7 +144,6 @@ final class StyleFingerprint {
   final double chapterSpacing;
   final int textIndent;
   final bool bold;
-  final bool justify;
   final double textScaleFactor;
   final String fontFamilySignature;
   final String platformFontSignature;
@@ -166,7 +162,6 @@ final class StyleFingerprint {
     chapterSpacing,
     textIndent,
     bold,
-    justify,
     textScaleFactor,
     fontFamilySignature,
     platformFontSignature,
@@ -184,7 +179,6 @@ final class StyleFingerprint {
     chapterSpacing,
     textIndent,
     bold,
-    justify,
     textScaleFactor,
     fontFamilySignature,
     platformFontSignature,
@@ -204,7 +198,6 @@ final class StyleFingerprint {
         other.chapterSpacing == chapterSpacing &&
         other.textIndent == textIndent &&
         other.bold == bold &&
-        other.justify == justify &&
         other.textScaleFactor == textScaleFactor &&
         other.fontFamilySignature == fontFamilySignature &&
         other.platformFontSignature == platformFontSignature &&
@@ -648,20 +641,17 @@ final class HybridBlockTextStyle {
     required this.lineHeight,
     required this.letterSpacing,
     this.bold = false,
-    this.textAlign = ui.TextAlign.start,
   });
 
   factory HybridBlockTextStyle.fromLayoutStyle(
     ReaderV2LayoutStyle style, {
     bool isTitle = false,
-    bool justify = true,
   }) {
     return HybridBlockTextStyle(
       fontSize: isTitle ? style.titleFontSize : style.fontSize,
       lineHeight: style.effectiveLineHeight,
       letterSpacing: style.letterSpacing,
       bold: isTitle || style.bold,
-      textAlign: justify ? ui.TextAlign.justify : ui.TextAlign.start,
     );
   }
 
@@ -669,7 +659,6 @@ final class HybridBlockTextStyle {
   final double lineHeight;
   final double letterSpacing;
   final bool bold;
-  final ui.TextAlign textAlign;
 }
 
 final class LayoutTask {

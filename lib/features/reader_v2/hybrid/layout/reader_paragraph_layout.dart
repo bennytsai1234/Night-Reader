@@ -154,14 +154,12 @@ final class ReaderParagraphLayout {
     required double contentWidth,
     required double? cellWidth,
     required ui.Color textColor,
-    required ui.TextAlign textAlign,
   }) {
     if (!contentWidth.isFinite || contentWidth <= 0) {
       throw StateError('Paragraph width must be finite and positive.');
     }
     final body = textMap.layoutBody(sourceText);
     final paragraphStyle = ui.ParagraphStyle(
-      textAlign: textAlign,
       textDirection: ui.TextDirection.ltr,
       fontSize: textStyle.fontSize,
       height: textStyle.lineHeight,
