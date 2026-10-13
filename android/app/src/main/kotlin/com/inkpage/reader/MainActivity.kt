@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.icu.text.BreakIterator
+import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -39,6 +40,10 @@ class MainActivity : AudioServiceActivity() {
             }
         }
         MethodChannel(messenger, "night_reader/app_installer").setMethodCallHandler { call, result ->
+            if (call.method == "isActiveNetworkMetered") {
+                result.success(isActiveNetworkMetered())
+                return@setMethodCallHandler
+            }
             if (call.method != "installApk") {
                 result.notImplemented()
                 return@setMethodCallHandler
@@ -80,6 +85,13 @@ class MainActivity : AudioServiceActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             },
         )
+    }
+
+    // App 內更新：只在不計流量的網路（多半是 Wi-Fi）先在背景下載新版。
+    // 沒有網路時系統也回 true；拿不到 ConnectivityManager 時一律當成計流量。
+    private fun isActiveNetworkMetered(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return true
+        return manager.isActiveNetworkMetered
     }
 
     // Flutter 引擎的 ICU 不含中文詞典，系統 ICU 有；長按選詞靠這裡斷詞。

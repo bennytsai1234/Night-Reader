@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/app_update_installer.dart';
 import 'package:night_reader/core/services/update_service.dart';
@@ -44,6 +44,8 @@ UpdateInfo _info({String tag = 'v0.4.0', int size = 4}) => UpdateInfo(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory root;
   late Directory updates;
   late _FakeAdapter adapter;
@@ -106,5 +108,31 @@ void main() {
     await installer.clearDownloads();
 
     expect(await updates.exists(), isFalse);
+  });
+
+  group('isOnUnmeteredNetwork', () {
+    const channel = MethodChannel('night_reader/app_installer');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+    tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    test('follows the native metered flag', () async {
+      var metered = false;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'isActiveNetworkMetered');
+        return metered;
+      });
+
+      expect(await installer.isOnUnmeteredNetwork(), isTrue);
+      metered = true;
+      expect(await installer.isOnUnmeteredNetwork(), isFalse);
+    });
+
+    test('a missing answer counts as metered', () async {
+      messenger.setMockMethodCallHandler(channel, (call) async => null);
+
+      expect(await installer.isOnUnmeteredNetwork(), isFalse);
+    });
   });
 }

@@ -63,6 +63,13 @@ class AppUpdateInstaller {
     return _channel.invokeMethod<void>('installApk', {'path': apk.path});
   }
 
+  /// 目前的網路是否不計流量（例如 Wi-Fi）。沒有網路、或系統認定計流量時回 false；
+  /// 查詢失敗會丟出例外，由呼叫端決定怎麼處理。
+  Future<bool> isOnUnmeteredNetwork() async {
+    final metered = await _channel.invokeMethod<bool>('isActiveNetworkMetered');
+    return metered == false;
+  }
+
   /// 刪除下載過的 APK；已是最新版時呼叫，清掉裝完留下的安裝檔。
   Future<void> clearDownloads() async {
     final dir = await _directoryLoader();
