@@ -119,7 +119,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           throw Exception('章節目錄為空');
         }
         await chapterDao.insertChapters(chapters);
-        // 任務改成整本的範圍，也寫回資料庫：App 中途被關掉，重開後照整本跑。
+      }
+      // 沒有範圍的任務（排進來時還沒有目錄）改成整本，也寫回資料庫：
+      // App 中途被關掉，重開後照整本跑。排隊期間目錄可能已被別處抓好。
+      if (task.totalCount == 0) {
         final newTask = task.copyWith(
           startChapterIndex: chapters.first.index,
           totalCount: chapters.length,

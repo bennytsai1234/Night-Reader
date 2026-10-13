@@ -170,6 +170,54 @@ void main() {
     expect(finished.errorCount, inInclusiveRange(10, 15));
   });
 
+  test(
+    'a task queued before the book had a TOC covers the whole book',
+    () async {
+      const origin = 'https://late-toc.example';
+      final book = Book(
+        bookUrl: '$origin/book/1',
+        origin: origin,
+        name: '晚到的目錄',
+        isInBookshelf: true,
+      );
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource.fromJson({'bookSourceName': '晚', 'bookSourceUrl': origin}),
+      );
+      await GetIt.instance<BookDao>().upsert(book);
+      // 任務排進來時還沒有目錄；開跑前目錄已被別處（例如閱讀器）抓好。
+      await GetIt.instance<ChapterDao>().insertChapters([
+        for (var i = 0; i < 3; i++)
+          BookChapter(
+            url: 'unsupported://late/$i',
+            title: '第 $i 章',
+            index: i,
+            bookUrl: book.bookUrl,
+          ),
+      ]);
+      final service = DownloadService();
+      final task = DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        startChapterIndex: 0,
+        endChapterIndex: 0,
+      );
+      service.tasks.add(task);
+      service.isDownloading = true;
+      addTearDown(() {
+        service.isDownloading = false;
+        service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+      });
+
+      await service.processTask(task);
+
+      final finished = service.tasks.firstWhere(
+        (t) => t.bookUrl == book.bookUrl,
+      );
+      expect(finished.totalCount, 3);
+      expect(finished.errorCount, 3);
+    },
+  );
+
   group('keepShelfBookDownloaded', () {
     const origin = 'https://shelf.example';
 
