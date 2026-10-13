@@ -19,8 +19,9 @@ const Locale kReaderV2TextLocale = Locale.fromSubtags(
 /// 正文與資訊列的標點字型（`assets/fonts/NightReaderPunct-*.ttf`，由同目錄
 /// `generate_punct_font.py` 從 Noto Sans CJK TC 產生）。
 ///
-/// 只收「，。、；：！？」的繁中置中字形，以及改為教育部位置的「」『』
-/// （直筆外緣貼字格中線，各佔四分之一格）。放在字型清單首位，標點不受
+/// 只收「，。、；：！？」的繁中置中字形、改為教育部位置的「」『』
+/// （直筆外緣貼字格中線，各佔四分之一格），以及置中的刪節號「…」與拉滿
+/// 整格的破折號「—」（系統回退會落到 Roboto 的西文窄字形）。放在字型清單首位，標點不受
 /// 手機系統字型的語系與廠商設定影響；其餘字元交給
 /// [kReaderV2FontFamilyFallback] 與平台回退，與未指定字型時相同。
 const String kReaderV2PunctFontFamily = 'NightReaderPunct';
@@ -45,8 +46,9 @@ const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
 // chapter-gap-v2：章末留白改為使用者設定的章節間距，不再疊加在段距之上。
 // twpunct-v1：標點改由 NightReaderPunct 繪製，字形與 run 切分改變，
 // 舊 metrics 不可沿用。
+// twpunct-v2：刪節號與破折號也改由 NightReaderPunct 繪製，各佔一格。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v1';
+    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v2';
 
 /// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
 const double kReaderV2DefaultTitleSizeDelta = 4.0;

@@ -10,6 +10,8 @@ void main() {
   const punctuation = '，。、；：！？';
   const opening = '「『';
   const closing = '」』';
+  const ellipsis = '…';
+  const dash = '—';
 
   test('pubspec registers both weights under the reader family name', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
@@ -36,7 +38,7 @@ void main() {
       test('covers only the reader punctuation set', () {
         expect(
           font.codePoints,
-          (punctuation + opening + closing).runes.toSet(),
+          (punctuation + opening + closing + ellipsis + dash).runes.toSet(),
         );
       });
 
@@ -58,6 +60,21 @@ void main() {
             reason: String.fromCharCode(rune),
           );
         }
+      });
+
+      // 兩個「……」「——」各佔兩格：刪節號的點置中，破折號拉滿整格才能
+      // 前後相接成一條線。
+      test('ellipsis dots sit on the cell centre line', () {
+        final box = font.bounds(ellipsis.runes.single);
+        expect((box.xMin + box.xMax) / 2, closeTo(500, 10));
+        expect((box.yMin + box.yMax) / 2, closeTo(380, 10));
+      });
+
+      test('dash spans the whole cell on the centre line', () {
+        final box = font.bounds(dash.runes.single);
+        expect(box.xMin, 0);
+        expect(box.xMax, 1000);
+        expect((box.yMin + box.yMax) / 2, closeTo(380, 10));
       });
 
       // Noto 的表意字框中心是 (500, 380)；教育部位置以直筆外緣貼中線，
