@@ -188,13 +188,10 @@ final class HybridSliverChildDelegate extends SliverChildDelegate {
   }
 }
 
-/// Clamping 基底的閱讀器捲動物理。
+/// Clamping 基底的閱讀器捲動物理：不回彈，捲到已排版正文的盡頭就停。
 ///
-/// [admission] 供**即時**查詢領先量狀態——`Scrollable` 只有 physics
-/// runtimeType 鏈改變才會重建 position，用建構參數傳布林旗標的話，
-/// position 永遠抱著第一顆實例、旗標永不更新（死代碼）。因此這裡持
-/// controller 參考，於 [applyPhysicsToUserOffset] / [createBallisticSimulation]
-/// 呼叫當下讀取現值。
+/// 不依排版進度縮放手指位移或改變慣性軌跡；正文來不及排時由排版排程
+/// 補上，而不是讓捲動變慢。
 final class HybridScrollPhysics extends ClampingScrollPhysics {
   const HybridScrollPhysics({super.parent});
   @override

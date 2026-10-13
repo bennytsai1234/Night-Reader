@@ -9,13 +9,4 @@ class AppConfig {
 
   /// 開 App 時在背景檢查書架更新（對應 SettingsProvider.autoRefresh）
   static bool autoRefresh = true;
-
-  /// 閱讀器翻頁動畫預設（對應 ReaderSettingsMixin.pageTurnMode）
-  /// 0 = 滑動, 1 = 滾動
-  static int readerPageAnim = 0;
-
-  /// Reader V2 內文 justify 對照開關（無 UI）。
-  /// visual-line boundary 由 Reader 自己決定；justify 只能影響既定行內
-  /// 的字距呈現，不能取得換行 ownership。正式預設 false（start）。
-  static bool readerV2ContentJustify = false;
 }

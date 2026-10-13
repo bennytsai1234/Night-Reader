@@ -154,7 +154,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       var consecutiveFailures = 0;
       for (var chapter in toDownload) {
         // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
-        // 章節一章章打完（書架自動下載何時再試見 ADR 0007）。
+        // 章節一章章打完（書架自動下載何時再試見 ADR 0008）。
         if (consecutiveFailures >= _maxConsecutiveFailures) break;
         if (!isDownloading ||
             task.status == DownloadTask.statusPaused ||

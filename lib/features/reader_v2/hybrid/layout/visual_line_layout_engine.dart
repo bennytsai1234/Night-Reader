@@ -8,16 +8,21 @@ final class VisualLineBlockPlan {
   const VisualLineBlockPlan({
     required this.end,
     required this.visualLineBreakOffsets,
+    this.spacers = const <LineSpacer>[],
   });
 
   final int end;
   final List<int> visualLineBreakOffsets;
+
+  /// 英數字段補到半格的補白，offset 相對於這一塊的開頭。
+  final List<LineSpacer> spacers;
 }
 
 final class _LineRange {
-  const _LineRange(this.start, this.end);
+  const _LineRange(this.start, this.end, this.spacers);
   final int start;
   final int end;
+  final List<LineSpacer> spacers;
 }
 
 /// Product policy for choosing a visual-line break from native shaping facts.
@@ -106,9 +111,18 @@ final class VisualLineBreakPolicy {
 
 /// Sole owner of visual-line breaking in Hybrid B.
 ///
-/// A grapheme stays on the current line whenever its shaped geometry fits the
-/// physical content width. Punctuation has no special veto. This class never
-/// reads SkParagraph soft-wrap line boundaries.
+/// 每個字佔整數個字格：寬度剛好一格的字（漢字、全形標點、emoji）照實際
+/// 字寬排；其餘連續的字（英文、數字、半形符號）合成一段，寬度補到半格的
+/// 整數倍，補白平分在兩側，所以一段英數字之後的字仍落在半格上。補白
+/// 規則：
+/// - 鄰接漢字或 emoji 的一側至少留 1/8 格（W3C《中文排版需求》的中西文
+///   間隙）；鄰接全形標點的一側不另外留，標點字形本身已有空白。
+/// - 行首的一段不補左側、補白全放右側，貼齊左邊界（段首縮排之後也算
+///   行首）；行尾的一段不補右側。
+///
+/// A glyph stays on the current line whenever it fits the physical content
+/// width. Punctuation has no special veto (ADR 0005). This class never reads
+/// SkParagraph soft-wrap line boundaries.
 final class VisualLineLayoutEngine {
   const VisualLineLayoutEngine({
     this.paragraphLayout = const ReaderParagraphLayout(),
@@ -120,6 +134,10 @@ final class VisualLineLayoutEngine {
 
   static const int _probeLookaheadCodeUnits = 256;
   static const double _fitEpsilon = 0.01;
+
+  /// 字寬與一格相差在這之內就算佔一格；同一字型同一字級的漢字與字格
+  /// 量出來只有浮點誤差。
+  static const double _cellTolerance = 0.05;
 
   VisualLineBlockPlan planBlock({
     required String text,
@@ -148,6 +166,13 @@ final class VisualLineLayoutEngine {
       math.min(text.length, start + math.max(1, maxBlockChars)),
     );
     final targetRelative = math.max(1, targetEnd - start);
+    final cell =
+        paragraphLayout.measureCellWidth(
+          fontSize: textStyle.fontSize,
+          letterSpacing: textStyle.letterSpacing,
+          bold: textStyle.bold,
+        ) ??
+        textStyle.fontSize;
     var lookahead = _probeLookaheadCodeUnits;
 
     while (true) {
@@ -188,15 +213,11 @@ final class VisualLineLayoutEngine {
         windowLength: window.length,
         contentWidth: contentWidth,
         firstLineIndent: indent,
+        cell: cell,
       );
 
       if (probeEnd == text.length && window.length <= targetRelative) {
-        return VisualLineBlockPlan(
-          end: text.length,
-          visualLineBreakOffsets: <int>[
-            for (final line in lines.skip(1)) line.start,
-          ],
-        );
+        return _planFor(lines, end: text.length - start, start: start);
       }
 
       final complete = probeEnd == text.length
@@ -214,18 +235,32 @@ final class VisualLineLayoutEngine {
       }
       chosen ??= complete.isEmpty ? null : complete.first;
       if (chosen != null) {
-        final blockEnd = chosen.end;
-        return VisualLineBlockPlan(
-          end: start + blockEnd,
-          visualLineBreakOffsets: <int>[
-            for (final line in complete.skip(1))
-              if (line.start < blockEnd) line.start,
+        return _planFor(
+          [
+            for (final line in complete)
+              if (line.start < chosen.end) line,
           ],
+          end: chosen.end,
+          start: start,
         );
       }
 
       lookahead *= 2;
     }
+  }
+
+  VisualLineBlockPlan _planFor(
+    List<_LineRange> lines, {
+    required int end,
+    required int start,
+  }) {
+    return VisualLineBlockPlan(
+      end: start + end,
+      visualLineBreakOffsets: <int>[
+        for (final line in lines.skip(1)) line.start,
+      ],
+      spacers: <LineSpacer>[for (final line in lines) ...line.spacers],
+    );
   }
 
   List<_LineRange> _breakLines(
@@ -234,56 +269,203 @@ final class VisualLineLayoutEngine {
     required int windowLength,
     required double contentWidth,
     required double firstLineIndent,
+    required double cell,
   }) {
-    final lines = <_LineRange>[];
     final graphemeIndexByStart = <int, int>{
       for (var i = 0; i < shaped.length; i += 1) shaped[i].start: i,
     };
     final graphemeStarts = graphemeIndexByStart.keys.toSet();
+    final half = cell / 2;
+    final minimumGap = cell / 8;
+    bool isCell(int index) {
+      final advance = shaped[index].right - shaped[index].left;
+      return (advance - cell).abs() <= _cellTolerance;
+    }
+
+    double gapBeside(int? index) {
+      if (index == null || index < 0 || index >= shaped.length) return 0;
+      if (!isCell(index)) return 0;
+      return _isCjkPunctuation(text, shaped[index]) ? 0 : minimumGap;
+    }
+
+    double snap(double width) {
+      if (width <= 0) return 0;
+      return ((width - _fitEpsilon) / half).ceil() * half;
+    }
+
+    // 一段寬 width 的字補到半格後，左側該補多少：補白平分兩側，但每側
+    // 不少於該側的最小間隙，不足的從另一側讓出（總補白至少是兩側間隙
+    // 之和，所以讓得出來）。
+    double leftPadding(double width, double gapLeft, double gapRight) {
+      final padding = snap(width + gapLeft + gapRight) - width;
+      return (padding / 2).clamp(gapLeft, padding - gapRight).toDouble();
+    }
+
+    final lines = <_LineRange>[];
     var lineStart = shaped.first.start;
-    var lineOrigin = shaped.first.left;
+    var lineStartIndex = 0;
+    var spacers = <LineSpacer>[];
+    var x = 0.0;
     var available = contentWidth - firstLineIndent;
+    // 本行最後一段英數字補在右側的補白；行在它後面結束時拿掉。
+    LineSpacer? trailingSpacer;
     var index = 0;
+
+    void endLine(int breakOffset, int nextIndex) {
+      if (trailingSpacer != null && trailingSpacer!.offset == breakOffset) {
+        spacers.remove(trailingSpacer);
+      }
+      lines.add(_LineRange(lineStart, breakOffset, spacers));
+      lineStart = breakOffset;
+      lineStartIndex = nextIndex;
+      spacers = <LineSpacer>[];
+      trailingSpacer = null;
+      x = 0;
+      available = contentWidth;
+    }
 
     while (index < shaped.length) {
       final grapheme = shaped[index];
-      final occupied = grapheme.right - lineOrigin;
-      final hasContent = grapheme.start > lineStart;
-      if (hasContent && occupied > available + _fitEpsilon) {
-        // A separator belongs to the preceding line. Do not create a visual
-        // line whose only content is the whitespace between two words; the
-        // following token will choose the real boundary.
-        if (breakPolicy.isSeparator(text, grapheme)) {
-          index += 1;
+      if (isCell(index)) {
+        final advance = grapheme.right - grapheme.left;
+        final hasContent = index > lineStartIndex;
+        if (hasContent && x + advance > available + _fitEpsilon) {
+          // A separator belongs to the preceding line. Do not create a
+          // visual line whose only content is the space before a token.
+          if (breakPolicy.isSeparator(text, grapheme)) {
+            index += 1;
+            continue;
+          }
+          endLine(grapheme.start, index);
           continue;
         }
-        final wordBreak = breakPolicy.preferredWordBreak(
-          text: text,
-          overflowing: grapheme,
-          lineStart: lineStart,
-          graphemeStarts: graphemeStarts,
-        );
-        final breakOffset = wordBreak ?? grapheme.start;
-        final breakIndex = graphemeIndexByStart[breakOffset];
-        if (breakIndex == null || breakOffset <= lineStart) {
-          throw StateError(
-            'Reader line policy produced an invalid break at $breakOffset.',
-          );
-        }
-        lines.add(_LineRange(lineStart, breakOffset));
-        lineStart = breakOffset;
-        lineOrigin = shaped[breakIndex].left;
-        available = contentWidth;
-        index = breakIndex;
+        x += advance;
+        trailingSpacer = null;
+        index += 1;
         continue;
       }
-      index += 1;
+
+      // 一段連續的非整格字：[index, runEnd)。
+      var runEnd = index;
+      while (runEnd < shaped.length && !isCell(runEnd)) {
+        runEnd += 1;
+      }
+      final atLineStart = index == lineStartIndex;
+      final gapLeft = atLineStart ? 0.0 : gapBeside(index - 1);
+      final gapRight = gapBeside(runEnd);
+      final runStart = shaped[index].start;
+
+      // 整段放得下：左右補白照規則補，右側補白在行就此結束時拿掉。
+      final width = _segmentWidth(shaped, text, index, runEnd);
+      final left = atLineStart ? 0.0 : leftPadding(width, gapLeft, gapRight);
+      if (x + left + width <= available + _fitEpsilon) {
+        final right = atLineStart
+            ? snap(width + gapRight) - width
+            : snap(width + gapLeft + gapRight) - width - left;
+        if (left > _fitEpsilon) spacers.add(LineSpacer(runStart, left));
+        x += left + width;
+        trailingSpacer = null;
+        if (right > _fitEpsilon && runEnd < shaped.length) {
+          final spacer = LineSpacer(shaped[runEnd].start, right);
+          spacers.add(spacer);
+          trailingSpacer = spacer;
+          x += right;
+        }
+        index = runEnd;
+        continue;
+      }
+
+      // 放不下：這段在本行結束。找出能放進本行的最長前段（行尾空白不
+      // 算寬度），再依斷詞規則決定斷點。
+      double leftFor(double w) =>
+          atLineStart ? 0.0 : leftPadding(w, gapLeft, 0);
+      var fits = index;
+      while (fits < runEnd) {
+        final w = _segmentWidth(
+          shaped,
+          text,
+          index,
+          fits + 1,
+          trimTrailingSeparators: true,
+        );
+        if (x + leftFor(w) + w > available + _fitEpsilon) break;
+        fits += 1;
+      }
+      int breakOffset;
+      if (fits == runEnd) {
+        // 整段當行尾放得下（不需要右側間隙）。
+        breakOffset = runEnd < shaped.length ? shaped[runEnd].start : -1;
+      } else {
+        final overflowing = shaped[fits];
+        breakOffset =
+            breakPolicy.preferredWordBreak(
+              text: text,
+              overflowing: overflowing,
+              lineStart: lineStart,
+              graphemeStarts: graphemeStarts,
+            ) ??
+            overflowing.start;
+        if (breakOffset <= runStart) {
+          if (!atLineStart) {
+            // 第一個字就放不下，而本行已有內容：整段移到下一行。
+            endLine(runStart, index);
+            continue;
+          }
+          // 行首的一個英文字比整行還寬：只能從字中間斷，至少放一個字。
+          final forced = math.max(fits, index + 1);
+          breakOffset = forced < shaped.length ? shaped[forced].start : -1;
+        }
+      }
+      final segmentEnd = breakOffset < 0
+          ? runEnd
+          : graphemeIndexByStart[breakOffset]!;
+      final segmentWidth = _segmentWidth(
+        shaped,
+        text,
+        index,
+        segmentEnd,
+        trimTrailingSeparators: true,
+      );
+      final segmentLeft = leftFor(segmentWidth);
+      if (segmentLeft > _fitEpsilon) {
+        spacers.add(LineSpacer(runStart, segmentLeft));
+      }
+      trailingSpacer = null;
+      if (breakOffset < 0) {
+        // 視窗在這段之後就結束了。
+        index = runEnd;
+        continue;
+      }
+      endLine(breakOffset, segmentEnd);
+      index = segmentEnd;
+      continue;
     }
 
     if (lineStart < windowLength) {
-      lines.add(_LineRange(lineStart, windowLength));
+      if (trailingSpacer != null && trailingSpacer!.offset >= windowLength) {
+        spacers.remove(trailingSpacer);
+      }
+      lines.add(_LineRange(lineStart, windowLength, spacers));
     }
     return lines;
+  }
+
+  /// [from, to) 這段字的寬度；行尾的空白不算。
+  double _segmentWidth(
+    List<ShapedGrapheme> shaped,
+    String text,
+    int from,
+    int to, {
+    bool trimTrailingSeparators = false,
+  }) {
+    var last = to - 1;
+    if (trimTrailingSeparators) {
+      while (last >= from && breakPolicy.isSeparator(text, shaped[last])) {
+        last -= 1;
+      }
+    }
+    if (last < from) return 0;
+    return shaped[last].right - shaped[from].left;
   }
 
   int _safeBoundary(String text, int offset) {
@@ -298,4 +480,18 @@ final class VisualLineLayoutEngine {
         next <= 0xDFFF;
     return splitsSurrogate ? safe - 1 : safe;
   }
+}
+
+/// 全形標點：字形本身已帶空白，旁邊的英數字不另外留間隙。
+bool _isCjkPunctuation(String text, ShapedGrapheme grapheme) {
+  final rune = text.substring(grapheme.start, grapheme.end).runes.first;
+  return (rune >= 0x3000 && rune <= 0x303F) ||
+      (rune >= 0xFE30 && rune <= 0xFE4F) ||
+      (rune >= 0xFF01 && rune <= 0xFF0F) ||
+      (rune >= 0xFF1A && rune <= 0xFF20) ||
+      (rune >= 0xFF3B && rune <= 0xFF40) ||
+      (rune >= 0xFF5B && rune <= 0xFF65) ||
+      (rune >= 0x2010 && rune <= 0x2027) ||
+      rune == 0x22EF ||
+      rune == 0x30FB;
 }

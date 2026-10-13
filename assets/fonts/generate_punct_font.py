@@ -7,6 +7,9 @@
 - 「」『』：Noto 的字形又長又貼字格邊緣（日文／簡中畫法），且各語系版本相同。
   這裡保留 Noto 的筆畫，改成教育部標準位置：直筆外緣貼字格中線，
   「『 佔右上四分之一格、」』 佔左下四分之一格，直筆截短到半格。
+- …（刪節號）：沿用 Noto 繁中的全形置中字形，兩個「……」佔兩格。
+- —（破折號）：取 Noto 的全形置中橫線（U+2015 的字形），左右拉滿整格，
+  兩個「——」接成一條佔兩格的線。不收的話會回退到 Roboto 的西文窄字形。
 
 其餘字元不收錄，排版時回退到系統字型。授權為 SIL OFL 1.1（見 OFL.txt）。
 
@@ -27,6 +30,10 @@ FAMILY = "NightReaderPunct"
 CENTERED = "，。、；：！？"
 OPENING = "「『"
 CLOSING = "」』"
+ELLIPSIS = "…"
+DASH = "—"
+# 破折號取這個碼位的全形置中橫線；Noto 的 U+2014 是西文比例寬度、位置偏低。
+DASH_SOURCE = "―"
 
 # Noto Sans CJK 的表意字框：上緣 880、下緣 -120，中心 (500, 380)。
 EM_CENTER_X = 500
@@ -73,6 +80,15 @@ def _bracket(glyph_set, name, opening_bottom_offset, opening):
     )
 
 
+def _full_cell_dash(glyph_set, name):
+    """橫線左右拉滿 0–1000，相鄰兩個破折號接成一條。"""
+    recording = RecordingPen()
+    glyph_set[name].draw(recording)
+    x_min, _, x_max, _ = _bounds(glyph_set, name)
+    scale = 1000 / (x_max - x_min)
+    return _map_points(recording, lambda x, y: ((x - x_min) * scale, y))
+
+
 def _to_tt_glyph(recording):
     pen = TTGlyphPen(None)
     recording.replay(Cu2QuPen(pen, max_err=1.0, reverse_direction=True))
@@ -96,10 +112,12 @@ def build(source_path, bold, out_path):
     order = [".notdef"]
     char_map = {}
     glyphs = {".notdef": TTGlyphPen(None).glyph()}
-    for char in CENTERED + OPENING + CLOSING:
+    for char in CENTERED + OPENING + CLOSING + ELLIPSIS + DASH:
         name = f"uni{ord(char):04X}"
         source_name = cmap[ord(char)]
-        if char in CENTERED:
+        if char == DASH:
+            recording = _full_cell_dash(glyph_set, cmap[ord(DASH_SOURCE)])
+        elif char in CENTERED or char == ELLIPSIS:
             recording = RecordingPen()
             glyph_set[source_name].draw(recording)
         else:
@@ -131,7 +149,8 @@ def build(source_path, bold, out_path):
         {
             "copyright": "© 2014-2021 Adobe (http://www.adobe.com/). "
             "Modified for Night Reader: subset to CJK punctuation; "
-            "corner brackets moved to Taiwan MOE positions.",
+            "corner brackets moved to Taiwan MOE positions; "
+            "em dash widened to the full cell.",
             "familyName": FAMILY,
             "styleName": style,
             "uniqueFontIdentifier": f"{FAMILY}-{style};1.000",

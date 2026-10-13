@@ -17,7 +17,7 @@ export 'download/download_base.dart';
 export 'download/download_scheduler.dart';
 export 'download/download_executor.dart';
 
-/// 失敗的書架自動下載，要隔多久才在開 App 時自動再試（ADR 0007）。
+/// 失敗的書架自動下載，要隔多久才在開 App 時自動再試（ADR 0008）。
 const Duration shelfDownloadRetryInterval = Duration(hours: 24);
 
 enum ShelfDownloadDecision {
@@ -31,7 +31,7 @@ enum ShelfDownloadDecision {
   leave,
 }
 
-/// 書架自動下載對一本還有章節沒下載的書該怎麼做（ADR 0007）。
+/// 書架自動下載對一本還有章節沒下載的書該怎麼做（ADR 0008）。
 ShelfDownloadDecision decideShelfDownload({
   required DownloadTask? task,
   required bool running,
@@ -202,7 +202,7 @@ class DownloadService extends DownloadBase
   /// 在加入時就固定了，新章節要等這輪結束再排。
   final Set<String> _keepAfterRun = <String>{};
 
-  /// 書架上的網路書整本下載好（ADR 0007）：把目錄裡還沒有正文的章節排進
+  /// 書架上的網路書整本下載好（ADR 0008）：把目錄裡還沒有正文的章節排進
   /// 背景下載。[hasNewChapters] 表示剛從書源抓到新章節，書源此刻是好的，
   /// 失敗過的任務可以馬上再試。
   Future<void> keepShelfBookDownloaded(

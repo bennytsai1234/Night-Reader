@@ -78,14 +78,6 @@ extension BookExtensions on BookBase {
   }
 
   bool getReSegment() => readConfig?.reSegment ?? false;
-
-  int getPageAnim() {
-    int? pageAnim = readConfig?.pageAnim;
-    if (pageAnim != null && pageAnim >= 0) return pageAnim;
-    // 圖片類預設滾動翻頁 (PageAnim.scrollPageAnim = 3)
-    if (isImage) return 3;
-    return AppConfig.readerPageAnim;
-  }
 }
 
 /// Book 位元運算擴展

@@ -21,27 +21,13 @@ class _FakeChapterDao extends Fake implements ChapterDao {}
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 
-class _FakeTimer implements Timer {
-  _FakeTimer(this.onTick);
-
-  final void Function(Timer timer) onTick;
-  bool cancelled = false;
-
-  @override
-  void cancel() => cancelled = true;
-
-  @override
-  bool get isActive => !cancelled;
-
-  @override
-  int get tick => 0;
-}
-
 void main() {
   late ReaderV2Runtime runtime;
   late ReaderV2ViewportController viewport;
   late ReaderV2AutoPageController autoPage;
-  late List<_FakeTimer> timers;
+  ReaderV2FrameCallback? onFrame;
+  var elapsed = Duration.zero;
+  var primed = false;
 
   setUp(() {
     final book = Book(
@@ -91,15 +77,18 @@ void main() {
       initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
     );
     viewport = ReaderV2ViewportController()..settleScroll = () async {};
-    timers = <_FakeTimer>[];
+    onFrame = null;
+    elapsed = Duration.zero;
     autoPage = ReaderV2AutoPageController(
       runtime: runtime,
       viewportController: viewport,
       viewportExtent: () => 600,
-      timerFactory: (_, onTick) {
-        final timer = _FakeTimer(onTick);
-        timers.add(timer);
-        return timer;
+      frameSource: (callback) {
+        onFrame = callback;
+        primed = false;
+        return () {
+          if (identical(onFrame, callback)) onFrame = null;
+        };
       },
     );
   });
@@ -109,7 +98,17 @@ void main() {
     runtime.dispose();
   });
 
-  void tick() => timers.last.onTick(timers.last);
+  /// 推進一幀（120Hz）；幀來源剛開始時先送一幀建立時鐘。
+  void tick() {
+    final callback = onFrame;
+    if (callback == null) return;
+    if (!primed) {
+      primed = true;
+      callback(elapsed);
+    }
+    elapsed += const Duration(microseconds: 8333);
+    callback(elapsed);
+  }
 
   test(
     'a step still waiting when auto-scroll stops cannot move later',
@@ -165,6 +164,7 @@ void main() {
     autoPage
       ..start()
       ..setPaused(true);
+    expect(onFrame, isNull, reason: '暫停時不要求新的幀');
     tick();
     await pumpEventQueue();
     expect(moves, 0);
@@ -190,5 +190,31 @@ void main() {
     await pumpEventQueue();
 
     expect(autoPage.isRunning, isTrue);
+  });
+
+  test('each display frame moves by the time that frame took', () async {
+    final deltas = <double>[];
+    viewport.continuousScrollBy = (delta) async {
+      deltas.add(delta);
+      return true;
+    };
+    autoPage.start();
+    for (var frame = 0; frame < 3; frame++) {
+      tick();
+      await pumpEventQueue();
+    }
+
+    // 預設速度每秒捲 0.16 個視窗高：120Hz 每幀 600 × 0.16 × 8.333ms。
+    expect(deltas, hasLength(3));
+    for (final delta in deltas) {
+      expect(delta, closeTo(600 * 0.16 * 0.008333, 1e-6));
+    }
+  });
+
+  test('stopping releases the frame source', () {
+    autoPage.start();
+    expect(onFrame, isNotNull);
+    autoPage.stop();
+    expect(onFrame, isNull);
   });
 }

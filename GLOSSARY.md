@@ -17,7 +17,7 @@ _Avoid_: beta 分支、預覽版、nightly
 _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什麼
 
 **更新說明**：
-每一版寫給一般讀者看的中文改動說明，維護在 `CHANGELOG.md`：`## 未發布` 是測試版的說明，`## X.Y.Z` 是正式版的說明（ADR 0009）。CI 發版時拿來當 GitHub Release 說明，更新視窗與更新紀錄顯示的就是它。
+每一版寫給一般讀者看的中文改動說明，維護在 `CHANGELOG.md`：`## 未發布` 是測試版的說明，`## X.Y.Z` 是正式版的說明（ADR 0010）。CI 發版時拿來當 GitHub Release 說明，更新視窗與更新紀錄顯示的就是它。
 _Avoid_: 更新日誌、commit 標題
 
 **書源**：
@@ -25,12 +25,16 @@ _Avoid_: 更新日誌、commit 標題
 _Avoid_: 來源、站點、source（不指明時）
 
 **書架自動下載**：
-書架上的網路書自動整本下載，新章節也跟著下載；不限網路、沒有開關（ADR 0007，`DownloadService.keepShelfBookDownloaded`）。和使用者在書籍詳情或多選工具列手動加入的下載不同：自動下載不會排回使用者暫停的任務，失敗後依重試規則再試。
+書架上的網路書自動整本下載，新章節也跟著下載；不限網路、沒有開關（ADR 0008，`DownloadService.keepShelfBookDownloaded`）。和使用者在書籍詳情或多選工具列手動加入的下載不同：自動下載不會排回使用者暫停的任務，失敗後依重試規則再試。
 _Avoid_: 預下載（那是手動選範圍的下載）、自動快取
 
 **Reader V2**：
 現行的閱讀器（`lib/features/reader_v2/`），負責分頁、排版、閱讀進度與閱讀選單。
 _Avoid_: 新閱讀器、reader
+
+**字格**：
+正文排版的寬度單位，一個漢字（含字距）的寬度。漢字、全形標點與 emoji 各佔一格；連續的英文、數字與半形符號合成一段，佔半格的整數倍（ADR 0007）。
+_Avoid_: em 網格
 
 **Layout signature**：
 由段落寬度與排版樣式（字級、行高、字距、段距、縮排、粗體等）算出的雜湊（`ReaderV2LayoutSpec.layoutSignature`）。兩次排版的 signature 相同，就代表可以沿用同一份排版與量測快取。

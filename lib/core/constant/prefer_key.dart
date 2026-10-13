@@ -32,7 +32,6 @@ class PreferKey {
   static const String clickActionBC = 'clickActionBottomCenter';
   static const String clickActionBR = 'clickActionBottomRight';
 
-  static const String hideNavigationBar = 'hideNavigationBar';
   static const String precisionSearch = 'precisionSearch';
   static const String readAloudByPage = 'readAloudByPage';
   static const String ttsEngine = 'appTtsEngine';
@@ -74,8 +73,6 @@ class PreferKey {
   static const String comicStyleSelect = 'comicStyleSelect';
   static const String readStyleSelect = 'readStyleSelect';
   static const String systemTypefaces = 'system_typefaces';
-  static const String readBodyToLh = 'readBodyToLh';
-  static const String textBottomJustify = 'textBottomJustify';
   static const String autoReadSpeed = 'autoReadSpeed';
   static const String barElevation = 'barElevation';
   static const String transparentStatusBar = 'transparentStatusBar';
@@ -83,7 +80,6 @@ class PreferKey {
   static const String defaultCover = 'defaultCover';
   static const String defaultCoverDark = 'defaultCoverDark';
   static const String replaceEnableDefault = 'replaceEnableDefault';
-  static const String showBrightnessView = 'showBrightnessView';
   static const String autoClearExpired = 'autoClearExpired';
   static const String importKeepName = 'importKeepName';
   static const String importKeepGroup = 'importKeepGroup';
@@ -111,9 +107,7 @@ class PreferKey {
   static const String defaultToRead = 'defaultToRead';
   static const String exportCharset = 'exportCharset';
   static const String exportUseReplace = 'exportUseReplace';
-  static const String useZhLayout = 'useZhLayout';
   static const String nightBrightness = 'nightBrightness';
-  static const String expandTextMenu = 'expandTextMenu';
   static const String doublePageHorizontal = 'doubleHorizontalPage';
   static const String readUrlOpenInBrowser = 'readUrlInBrowser';
   static const String defaultBookTreeUri = 'defaultBookTreeUri';
@@ -137,7 +131,6 @@ class PreferKey {
   static const String progressBarBehavior = 'progressBarBehavior';
   static const String sourceEditMaxLine = 'sourceEditMaxLine';
   static const String ttsTimer = 'ttsTimer';
-  static const String noAnimScrollPage = 'noAnimScrollPage';
   static const String audioPlayWakeLock = 'audioPlayWakeLock';
   static const String readAloudWakeLock = 'readAloudWakeLock';
   static const String showLastUpdateTime = 'showLastUpdateTime';
@@ -150,11 +143,7 @@ class PreferKey {
   static const String defaultHomePage = 'defaultHomePage';
   static const String showBookshelfFastScroller = 'showBookshelfFastScroller';
   static const String importKeepEnable = 'importKeepEnable';
-  static const String previewImageByClick = 'previewImageByClick';
-  static const String keyPageOnLongPress = 'keyPageOnLongPress';
-  static const String mouseWheelPage = 'mouseWheelPage';
   static const String recordHeapDump = 'recordHeapDump';
-  static const String optimizeRender = 'optimizeRender';
   static const String updateToVariant = 'updateToVariant';
   static const String streamReadAloudAudio = 'streamReadAloudAudio';
   static const String pauseReadAloudWhilePhoneCalls =
@@ -163,7 +152,6 @@ class PreferKey {
   static const String showMangaUi = 'showMangaUi';
   static const String disableMangaScale = 'disableMangaScale';
   static const String disableMangaPageAnim = 'disableMangaPageAnim';
-  static const String paddingDisplayCutouts = 'paddingDisplayCutouts';
 
   static const String contentSelectSpeakMod = 'contentReadAloudMod';
 
@@ -224,7 +212,6 @@ class PreferKey {
   // 介面與其他
   static const String privacyAgreed = 'privacy_agreed';
   static const String bookStorageDir = 'book_storage_dir';
-  static const String disableReturnKey = 'disable_return_key';
 
   // 封面進階
   static const String coverSearchPriority = 'cover_search_priority';

@@ -1,5 +1,5 @@
 #!/bin/sh
-# 推送前檢查：推上 main 時確認 CHANGELOG.md 寫了更新說明（ADR 0009），再跑和 CI 相同的 analyze 與全套測試。
+# 推送前檢查：推上 main 時確認 CHANGELOG.md 寫了更新說明（ADR 0010），再跑和 CI 相同的 analyze 與全套測試。
 # 啟用：git config core.hooksPath .githooks
 set -e
 

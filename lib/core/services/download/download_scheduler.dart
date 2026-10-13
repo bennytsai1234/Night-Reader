@@ -43,7 +43,7 @@ mixin DownloadScheduler on DownloadBase {
     );
   }
 
-  /// 書架自動下載（ADR 0007）加入的任務：不會把使用者暫停的任務排回去；
+  /// 書架自動下載（ADR 0008）加入的任務：不會把使用者暫停的任務排回去；
   /// 失敗的任務要不要再試由呼叫端依重試規則決定。
   ///
   /// Returns true only when a new waiting task was actually admitted.

@@ -5,12 +5,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/core/config/app_config.dart';
-import 'package:night_reader/core/services/app_version.dart';
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
@@ -41,9 +39,18 @@ import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
+import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
 enum _MaterializationWait { progressed, frontierUnavailable, cancelled }
+
+typedef _LineBoxMemo = ({
+  ChapterBlocks blocks,
+  HybridTextRange range,
+  LayoutEpoch epoch,
+  int revision,
+  List<HybridLineBox> boxes,
+});
 
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
@@ -130,7 +137,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   _warmedChapters = {};
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
   StreamSubscription<BlockReady>? _pumpEventsSub;
-  ScrollController? _scrollController;
+  HybridScrollController? _scrollController;
+  _PageTurn? _pageTurn;
   MetricsDiskCache? _metricsDiskCache;
   ChapterPlanDiskCache? _planDiskCache;
   Size _viewportSize = Size.zero;
@@ -276,7 +284,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   StyleFingerprint _fingerprintFor(ReaderV2LayoutSpec spec) {
     return StyleFingerprint.fromLayoutSpec(
       spec,
-      justify: AppConfig.readerV2ContentJustify,
       platformFontSignature:
           '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
     );
@@ -315,6 +322,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
+    // 開書、跳章與重新定位都是使用者的動作：之前取不到的章節都再試一次。
+    _chapterRepo.forgetFailures();
     final binding = _pump;
     final chapter = location.chapterIndex
         .clamp(0, widget.runtime.chapterCount - 1)
@@ -588,14 +597,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       final blocks = await binding.planChapterVisualLines(
         rough,
         maxBlockChars: maxBlockChars,
-        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(
-          spec.style,
-          justify: AppConfig.readerV2ContentJustify,
-        ),
+        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(spec.style),
         titleStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: true,
-          justify: false,
         ),
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
@@ -856,14 +861,63 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _pump.onScrollStateChanged(PumpState.ballistic);
       }
       _scheduleMotionCapture();
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      // 停在可捲範圍盡頭再往外拖，正文不動、只有 overscroll；手勢結束時
+      // 一樣要檢查那個邊緣是不是取不到的章節。
+      _sawUserScroll = true;
     } else if (notification is ScrollEndNotification) {
       final wasUser = _sawUserScroll;
       _dragging = false;
       _sawUserScroll = false;
       _pump.onScrollStateChanged(PumpState.idle);
-      if (wasUser) unawaited(_handleScrollSettled());
+      if (wasUser) {
+        _retryUnavailableFrontierAtExtent();
+        unawaited(_handleScrollSettled());
+      }
     }
     return false;
+  }
+
+  /// 使用者把正文捲到可捲範圍的盡頭時，若那裡是取不到的章節，說明原因
+  /// 並重試。
+  void _retryUnavailableFrontierAtExtent() {
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    if (position.pixels >=
+        position.maxScrollExtent - _minimumViewportMovement) {
+      _retryUnavailableFrontier(forward: true);
+    }
+    if (position.pixels <=
+        position.minScrollExtent + _minimumViewportMovement) {
+      _retryUnavailableFrontier(forward: false);
+    }
+  }
+
+  /// 已排好的正文在章節邊緣結束、而相鄰章節取不到時：把取不到的原因
+  /// 告訴使用者，並重試一次那一章。只在使用者捲到或翻到這個邊緣時呼叫，
+  /// 不會在背景反覆請求。
+  void _retryUnavailableFrontier({required bool forward}) {
+    final edge = forward
+        ? _documentIndex.forwardEdgeKey
+        : _documentIndex.backwardEdgeKey;
+    if (edge == null) return;
+    final blocks = _blocks[edge.chapterIndex];
+    if (blocks == null || blocks.blocks.isEmpty) return;
+    final atChapterEdge = forward
+        ? edge == blocks.blocks.last.key
+        : edge.blockIndex == 0;
+    if (!atChapterEdge) return;
+    final chapter = edge.chapterIndex + (forward ? 1 : -1);
+    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
+    final failure = _chapterRepo.failureOf(chapter);
+    if (failure == null) return;
+    widget.runtime.emitUserNotice(failure.message);
+    _chapterRepo.forgetFailure(chapter);
+    // 還在進行中的那次取得讀的是記下來的失敗，一定會失敗；不要讓重試併進去。
+    _blocksInFlight.remove(chapter);
+    _requestChapter(chapter, priority: LayoutTaskPriority.visible);
   }
 
   void _scheduleMotionCapture() {
@@ -1292,7 +1346,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
           isTitle: head.isTitle,
-          justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
         contentWidth: spec.textLayoutFrame.width,
         cellWidth: spec.cellWidth,
@@ -1435,13 +1488,27 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<bool> _continuousScrollBy(double delta) =>
       _enqueueCommand((current) => _continuousScrollByNow(delta, current));
 
-  Future<bool> _moveToNextPage() => _enqueueCommand(
-    (current) => _movePageNow(forward: true, isCurrent: current),
-  );
+  Future<bool> _moveToNextPage() => _movePage(forward: true);
 
-  Future<bool> _moveToPrevPage() => _enqueueCommand(
-    (current) => _movePageNow(forward: false, isCurrent: current),
-  );
+  Future<bool> _moveToPrevPage() => _movePage(forward: false);
+
+  /// 同方向的翻頁動畫還在跑時，這一下直接把目標再往後推一頁、從目前
+  /// 位置接著捲，不等前一下停下來；推不了（正文還沒排好）才排隊。
+  /// 翻頁後面已經有排隊的命令（例如反方向的一下）時也排隊，照點擊順序
+  /// 執行。
+  Future<bool> _movePage({required bool forward}) {
+    final turn = _pageTurn;
+    if (turn != null &&
+        turn.forward == forward &&
+        _commands.queued <= 1 &&
+        turn.isCurrent() &&
+        _extendPageTurn(turn)) {
+      return turn.finished.future;
+    }
+    return _enqueueCommand(
+      (current) => _movePageNow(forward: forward, isCurrent: current),
+    );
+  }
 
   Future<void> _settleScroll() async {
     // 使用者正在拖動或甩動時捲動歸使用者：停在這裡會打斷手勢，
@@ -1488,40 +1555,43 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     return isCurrent();
   }
 
-  Future<bool> _animatePageByNow(
-    double delta,
-    bool Function() isCurrent,
-  ) async {
+  /// 一次翻頁的距離：一屏減一行，保留一行重疊（ADR 0006）。
+  double? _pageTurnDistance() {
+    final height = _viewportSize.height;
+    if (height <= 0) return null;
+    final style = widget.runtime.state.layoutSpec.style;
+    final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
+    return math.max(height * 0.5, height - overlap - 8.0);
+  }
+
+  /// 把進行中的翻頁再推一頁。只在新目標之前的正文已經排好、而且在目前
+  /// 捲動範圍內時才推，否則回傳 false 讓這一下排隊。
+  bool _extendPageTurn(_PageTurn turn) {
     final controller = _scrollController;
-    if (!isCurrent() ||
-        controller == null ||
-        !controller.hasClients ||
-        delta == 0) {
+    final distance = _pageTurnDistance();
+    if (controller == null || !controller.hasClients || distance == null) {
       return false;
     }
     final position = controller.position;
-    final before = position.pixels;
-    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target = (before + delta)
-        .clamp(position.minScrollExtent, max)
-        .toDouble();
-    if ((target - before).abs() < _minimumViewportMovement) return false;
-    await position.animateTo(
-      target,
-      duration: _viewportMotionDuration,
-      curve: Curves.easeOutCubic,
-    );
-    if (!isCurrent()) return false;
-    // 動畫被下一次觸碰打斷時直接翻完：連點翻頁每一下都翻滿一頁。
-    if ((position.pixels - target).abs() >= _minimumViewportMovement) {
-      position.jumpTo(
-        target
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble(),
-      );
+    if (!position.isPageTurning) return false;
+    final target = turn.target + (turn.forward ? distance : -distance);
+    if (target < position.minScrollExtent ||
+        target > position.maxScrollExtent) {
+      return false;
     }
-    await _handleScrollSettled();
-    return isCurrent();
+    final top = math.min(position.pixels, target);
+    final bottom = math.max(position.pixels, target) + _viewportSize.height;
+    _requestWindow(top, bottom);
+    if (!_windowReady(top, bottom)) return false;
+    turn
+      ..target = target
+      ..requestedDistance += distance
+      ..animation = position.animatePageTo(
+        target,
+        duration: _viewportMotionDuration,
+        curve: Curves.easeOutCubic,
+      );
+    return true;
   }
 
   Future<bool> _movePageNow({
@@ -1529,39 +1599,77 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     required bool Function() isCurrent,
   }) async {
     if (!isCurrent()) return false;
-    final height = _viewportSize.height;
-    if (height <= 0) return false;
+    final distance = _pageTurnDistance();
+    if (distance == null) return false;
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
-    final style = widget.runtime.state.layoutSpec.style;
-    final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
-    final magnitude = math.max(height * 0.5, height - overlap - 8.0);
 
     final reachable = await _ensurePageDistanceAvailable(
       forward: forward,
-      distance: magnitude,
+      distance: distance,
       isCurrent: isCurrent,
     );
-    if (!reachable || !isCurrent() || !controller.hasClients) return false;
+    if (!isCurrent() || !controller.hasClients) return false;
+    if (!reachable) {
+      _retryUnavailableFrontier(forward: forward);
+      return false;
+    }
 
-    final before = controller.position.pixels;
-    final moved = await _animatePageByNow(
-      forward ? magnitude : -magnitude,
-      isCurrent,
-    );
-    if (!isCurrent()) return false;
-    if (!moved) _emitBookBoundaryNotice(forward: forward);
-    if (!moved || !controller.hasClients) return false;
+    final position = controller.position;
+    final before = position.pixels;
+    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
+    final target = (before + (forward ? distance : -distance))
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
+    if ((target - before).abs() < _minimumViewportMovement) {
+      _emitBookBoundaryNotice(forward: forward);
+      return false;
+    }
 
-    final after = controller.position.pixels;
-    final atBookBoundary = forward
-        ? _admission.atForwardBookBoundary
-        : _admission.atBackwardBookBoundary;
-    return isHybridPageMoveComplete(
-      requestedDistance: magnitude,
-      actualDistance: (after - before).abs(),
-      atBookBoundary: atBookBoundary,
+    final turn = _PageTurn(
+      forward: forward,
+      target: target,
+      requestedDistance: distance,
+      isCurrent: isCurrent,
     );
+    _pageTurn = turn;
+    try {
+      turn.animation = position.animatePageTo(
+        target,
+        duration: _viewportMotionDuration,
+        curve: Curves.easeOutCubic,
+      );
+      // 連點會換掉 turn.animation；等到最後一段動畫結束才算翻完。
+      while (true) {
+        final animation = turn.animation;
+        await animation;
+        if (!isCurrent()) return turn.finish(false);
+        if (identical(animation, turn.animation)) break;
+      }
+      _pageTurn = null;
+      // 沒停在目標上代表手指拖動接手了；位置歸使用者，由拖動結束時儲存。
+      if (!controller.hasClients ||
+          (position.pixels - turn.target).abs() >= _minimumViewportMovement) {
+        return turn.finish(false);
+      }
+      await _handleScrollSettled();
+      if (!isCurrent() || !controller.hasClients) return turn.finish(false);
+      final atBookBoundary = forward
+          ? _admission.atForwardBookBoundary
+          : _admission.atBackwardBookBoundary;
+      return turn.finish(
+        isHybridPageMoveComplete(
+          requestedDistance: turn.requestedDistance,
+          actualDistance: (position.pixels - before).abs(),
+          atBookBoundary: atBookBoundary,
+        ),
+      );
+    } catch (_) {
+      turn.finish(false);
+      rethrow;
+    } finally {
+      if (identical(_pageTurn, turn)) _pageTurn = null;
+    }
   }
 
   void _emitBookBoundaryNotice({required bool forward}) {
@@ -1838,14 +1946,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     final candidate = position.affinity == TextAffinity.downstream
         ? position.offset
         : position.offset - 1;
-    if (candidate < at.textMap.indentLength ||
-        candidate >= at.textMap.paragraphLength) {
+    // 縮排、插入的換行與補白都不是字。
+    if (candidate >= at.textMap.paragraphLength ||
+        at.textMap.isInsertedParagraphOffset(candidate)) {
       return null;
     }
     final onGlyph = at.paragraph
         .getBoxesForRange(candidate, candidate + 1)
         .any((box) => box.toRect().inflate(4).contains(at.local));
-    // 插入的換行沒有字形框，在這裡一併排除。
     if (!onGlyph) return null;
     final offset =
         at.groupStart + at.textMap.sourceOffsetForParagraphOffset(candidate);
@@ -1954,15 +2062,44 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   /// [start, end) 在畫面上的字形範圍，每條視覺行一個框。
   ///
   /// 框的左右取自 Paragraph 的 glyph boxes，而不是整行寬：句段從行中間
-  /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。
+  /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。朗讀高亮
+  /// 與選字反白在捲動時每幀都要畫，所以字形框以正文座標算一次記下來，
+  /// 每幀只扣掉捲動位置。
   List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
+    if (offset == null) return const <HybridLineBox>[];
+    final world = _worldLineBoxes(chapterIndex, start, end);
+    return <HybridLineBox>[
+      for (final box in world)
+        HybridLineBox(
+          left: box.left,
+          top: box.top - offset,
+          right: box.right,
+          bottom: box.bottom - offset,
+        ),
+    ];
+  }
+
+  _LineBoxMemo? _lineBoxMemo;
+
+  /// [_lineBoxes] 的正文座標版本。排版世代、文件索引與這段文字都沒變時
+  /// 沿用上次的結果；有 block 還沒排好時不記，下次再算。
+  List<HybridLineBox> _worldLineBoxes(int chapterIndex, int start, int end) {
     final blocks = _blocks[chapterIndex];
-    if (offset == null || blocks == null) return const <HybridLineBox>[];
+    if (blocks == null) return const <HybridLineBox>[];
     final range = HybridTextRange(math.max(0, start), math.max(0, end));
     if (range.isEmpty) return const <HybridLineBox>[];
+    final memo = _lineBoxMemo;
+    if (memo != null &&
+        identical(memo.blocks, blocks) &&
+        memo.range == range &&
+        memo.epoch == _epoch &&
+        memo.revision == _documentIndex.revisionNumber) {
+      return memo.boxes;
+    }
     final paintLeft = widget.runtime.state.layoutSpec.textPaddingLeft;
     final result = <HybridLineBox>[];
+    var complete = true;
     final blockList = blocks.blocks;
     var low = 0;
     var high = blockList.length;
@@ -1979,15 +2116,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       if (block.charRange.start >= range.end) break;
       if (!block.charRange.intersects(range)) continue;
       final top = _documentIndex.topOf(block.key);
-      if (top == null) continue;
-      final boxes = _blockLocalBoxesForRange(blocks, block, range);
-      if (boxes == null || boxes.isEmpty) continue;
+      final boxes = top == null
+          ? null
+          : _blockLocalBoxesForRange(blocks, block, range);
+      if (top == null || boxes == null) {
+        complete = false;
+        continue;
+      }
       for (final box in boxes) {
         final lineBox = HybridLineBox(
           left: paintLeft + box.left,
-          top: top + box.top - offset,
+          top: top + box.top,
           right: paintLeft + box.right,
-          bottom: top + box.bottom - offset,
+          bottom: top + box.bottom,
         );
         // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
         // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
@@ -2008,6 +2149,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         }
       }
     }
+    _lineBoxMemo = complete
+        ? (
+            blocks: blocks,
+            range: range,
+            epoch: _epoch,
+            revision: _documentIndex.revisionNumber,
+            boxes: result,
+          )
+        : null;
     return result;
   }
 
@@ -2071,7 +2221,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<MetricsDiskCache> _obtainDiskCache() async {
     final existing = _metricsDiskCache;
     if (existing != null) return existing;
-    final directory = await getApplicationSupportDirectory();
+    final directory = await ReaderLayoutCache.baseDirectory();
     return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
   }
 
@@ -2115,11 +2265,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<ChapterPlanDiskCache> _obtainPlanCache() async {
     final existing = _planDiskCache;
     if (existing != null) return existing;
-    final directory = await getApplicationSupportDirectory();
-    final version = await AppVersion.current();
     return _planDiskCache = ChapterPlanDiskCache(
-      baseDirectory: directory,
-      buildSignature: '${version.versionName}+${version.buildNumber}',
+      baseDirectory: await ReaderLayoutCache.baseDirectory(),
+      buildSignature: await ReaderLayoutCache.currentBuild(),
     );
   }
 
@@ -2236,7 +2384,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
         if (!_initialRestoreCompleted) return _buildLoading(state);
-        final controller = _scrollController ??= ScrollController(
+        final controller = _scrollController ??= HybridScrollController(
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
           keepScrollOffset: false,
         );
@@ -2343,23 +2491,50 @@ final class _ChapterMaterialization {
   }
 }
 
+/// 進行中的一次翻頁；連點時目標與距離會一路累加。
+final class _PageTurn {
+  _PageTurn({
+    required this.forward,
+    required this.target,
+    required this.requestedDistance,
+    required this.isCurrent,
+  });
+
+  final bool forward;
+  final bool Function() isCurrent;
+  final Completer<bool> finished = Completer<bool>();
+  double target;
+  double requestedDistance;
+  late Future<void> animation;
+
+  bool finish(bool completed) {
+    if (!finished.isCompleted) finished.complete(completed);
+    return completed;
+  }
+}
+
 final class _HybridCommandQueue {
   Future<void>? _tail;
+  int _queued = 0;
   bool get isBusy => _tail != null;
+
+  /// 還沒完成的命令數，包含正在執行的那一個。
+  int get queued => _queued;
 
   Future<bool> enqueue({
     required bool Function() isCurrent,
     required Future<bool> Function() command,
   }) {
     if (!isCurrent()) return Future<bool>.value(false);
+    _queued += 1;
     final result = (_tail ?? Future<void>.value()).then((_) async {
       if (!isCurrent()) return false;
       final completed = await command();
       return isCurrent() && completed;
     });
     final drained = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
+      (_) => _queued -= 1,
+      onError: (Object _, StackTrace _) => _queued -= 1,
     );
     _tail = drained;
     unawaited(

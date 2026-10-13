@@ -1,12 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
+
+typedef _PlanSpan = ({
+  int start,
+  int end,
+  int paragraph,
+  int flags,
+  List<int> offsets,
+  List<LineSpacer> spacers,
+});
 
 /// 章節換行結果（不含正文的切分與換行位置）的磁碟快取。
 ///
@@ -20,49 +30,47 @@ final class ChapterPlanDiskCache {
     required this.buildSignature,
   });
 
-  static const int _version = 1;
+  // v2：每塊多記一組補白（英數字段補到半格）。
+  static const int _version = 2;
 
   final Directory baseDirectory;
   final String buildSignature;
 
+  /// 讀檔與 JSON 解析在背景 isolate 進行：讀取發生在捲動中下一章進來時，
+  /// 不受排版的每幀時間額度管，不能佔用 UI isolate。
   Future<ChapterBlocks?> read({
     required String bookUrl,
     required StyleFingerprint fingerprint,
     required ChapterText text,
   }) async {
-    final file = _fileFor(
+    final path = _fileFor(
       bookUrl: bookUrl,
       fingerprint: fingerprint,
       chapterIndex: text.id,
+    ).path;
+    final header = (
+      build: buildSignature,
+      chapter: text.id,
+      contentHash: text.contentHash,
+      textLength: text.displayText.length,
     );
-    final String raw;
-    try {
-      raw = await file.readAsString();
-    } on FileSystemException {
-      return null;
-    }
-    try {
-      return _decode(jsonDecode(raw), text);
-    } on FormatException {
-      return null;
-    } on TypeError {
-      return null;
-    } on RangeError {
-      return null;
-    }
+    final spans = await Isolate.run(() => _readSpans(path, header));
+    if (spans == null) return null;
+    return _decode(spans, text);
   }
 
+  /// JSON 編碼與寫檔在背景 isolate 進行，理由同 [read]。
   Future<void> write({
     required String bookUrl,
     required StyleFingerprint fingerprint,
     required ChapterBlocks blocks,
   }) async {
-    final file = _fileFor(
+    final path = _fileFor(
       bookUrl: bookUrl,
       fingerprint: fingerprint,
       chapterIndex: blocks.chapterIndex,
-    );
-    final payload = jsonEncode(<String, Object>{
+    ).path;
+    final payload = <String, Object>{
       'version': _version,
       'build': buildSignature,
       'chapter': blocks.chapterIndex,
@@ -78,30 +86,100 @@ final class ChapterPlanDiskCache {
                 (block.isContinuation ? 2 : 0) |
                 (block.layoutBreakBefore ? 4 : 0),
             block.visualLineBreakOffsets,
+            [
+              for (final spacer in block.visualLineSpacers) ...[
+                spacer.offset,
+                spacer.width,
+              ],
+            ],
           ],
       ],
-    });
-    await file.parent.create(recursive: true);
-    // 先寫暫存檔再改名：同一本書的新舊閱讀器可能同時寫同一章，
-    // 讀到的永遠是某一次完整的寫入。
-    final temp = File(
-      '${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-    );
-    await temp.writeAsString(payload, flush: true);
-    await temp.rename(file.path);
+    };
+    final bookDir = ReaderLayoutCache.plansBookDir(
+      baseDirectory,
+      buildSignature,
+      bookUrl,
+    ).path;
+    await Isolate.run(() => _writeAndPrune(path, payload, bookDir));
   }
 
-  ChapterBlocks? _decode(Object? json, ChapterText text) {
-    if (json is! Map<String, Object?>) return null;
-    if (json['version'] != _version ||
-        json['build'] != buildSignature ||
-        json['chapter'] != text.id ||
-        json['contentHash'] != text.contentHash ||
-        json['textLength'] != text.displayText.length) {
+  static Future<void> _writeAndPrune(
+    String path,
+    Map<String, Object> payload,
+    String bookDir,
+  ) async {
+    final file = File(path);
+    file.parent.createSync(recursive: true);
+    // 先寫暫存檔再改名：同一本書的新舊閱讀器可能同時寫同一章，
+    // 讀到的永遠是某一次完整的寫入。
+    final temp = File('$path.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    temp.writeAsStringSync(jsonEncode(payload), flush: true);
+    temp.renameSync(path);
+    await ReaderLayoutCache.pruneStyles(Directory(bookDir));
+  }
+
+  /// 檔頭不符、檔案不存在或損壞時回傳 null。
+  static List<_PlanSpan>? _readSpans(
+    String path,
+    ({String build, int chapter, String contentHash, int textLength}) header,
+  ) {
+    final String raw;
+    try {
+      raw = File(path).readAsStringSync();
+    } on FileSystemException {
       return null;
     }
-    final spans = json['spans'];
-    if (spans is! List<Object?>) return null;
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map<String, Object?>) return null;
+      if (json['version'] != _version ||
+          json['build'] != header.build ||
+          json['chapter'] != header.chapter ||
+          json['contentHash'] != header.contentHash ||
+          json['textLength'] != header.textLength) {
+        return null;
+      }
+      final spans = json['spans'];
+      if (spans is! List<Object?>) return null;
+      return [
+        for (final value in spans)
+          if (value case [
+            final int start,
+            final int end,
+            final int paragraph,
+            final int flags,
+            final List<Object?> offsets,
+            final List<Object?> spacers,
+          ])
+            (
+              start: start,
+              end: end,
+              paragraph: paragraph,
+              flags: flags,
+              offsets: [for (final offset in offsets) offset as int],
+              spacers: _spacersFrom(spacers),
+            )
+          else
+            throw const FormatException('Malformed line-break span.'),
+      ];
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  static List<LineSpacer> _spacersFrom(List<Object?> flat) {
+    if (flat.length.isOdd) {
+      throw const FormatException('Malformed line spacers.');
+    }
+    return [
+      for (var i = 0; i < flat.length; i += 2)
+        LineSpacer(flat[i] as int, (flat[i + 1] as num).toDouble()),
+    ];
+  }
+
+  ChapterBlocks? _decode(List<_PlanSpan> spans, ChapterText text) {
     final blocks = <ChapterBlock>[];
     var next = 0;
     // 換行切分必須完整覆蓋前處理產生的每一段：標題與正文段落依序出現，
@@ -110,11 +188,8 @@ final class ChapterPlanDiskCache {
       var cursor = segment.start;
       do {
         if (next >= spans.length) return null;
-        final span = spans[next] as List<Object?>;
-        final start = span[0] as int;
-        final end = span[1] as int;
-        final paragraph = span[2] as int;
-        final flags = span[3] as int;
+        final (:start, :end, :paragraph, :flags, :offsets, :spacers) =
+            spans[next];
         final isTitle = flags & 1 != 0;
         final isContinuation = flags & 2 != 0;
         final layoutBreakBefore = flags & 4 != 0;
@@ -129,13 +204,22 @@ final class ChapterPlanDiskCache {
           return null;
         }
         // 換行位置相對於這一塊的文字（見 ParagraphTextMap）。
-        final offsets = [
-          for (final offset in span[4] as List<Object?>) offset as int,
-        ];
         var previous = 0;
         for (final offset in offsets) {
           if (offset <= previous || offset >= end - start) return null;
           previous = offset;
+        }
+        // 補白同樣相對於這一塊，遞增、寬度為正，且不落在換行處。
+        previous = 0;
+        for (final spacer in spacers) {
+          if (spacer.offset <= previous ||
+              spacer.offset >= end - start ||
+              offsets.contains(spacer.offset) ||
+              !spacer.width.isFinite ||
+              spacer.width <= 0) {
+            return null;
+          }
+          previous = spacer.offset;
         }
         final source = isTitle ? text.title : text.displayText;
         blocks.add(
@@ -148,6 +232,7 @@ final class ChapterPlanDiskCache {
             isContinuation: isContinuation,
             layoutBreakBefore: layoutBreakBefore,
             visualLineBreakOffsets: List<int>.unmodifiable(offsets),
+            visualLineSpacers: List<LineSpacer>.unmodifiable(spacers),
           ),
         );
         next += 1;
@@ -168,19 +253,15 @@ final class ChapterPlanDiskCache {
     required String bookUrl,
     required StyleFingerprint fingerprint,
     required int chapterIndex,
-  }) {
-    final bookHash = sha1.convert(utf8.encode(bookUrl)).toString();
-    final fingerprintHash = sha1
-        .convert(utf8.encode(fingerprint.stableKey))
-        .toString();
-    return File(
-      p.join(
-        baseDirectory.path,
-        'hybrid_plans',
-        bookHash,
-        fingerprintHash,
-        '$chapterIndex.json',
-      ),
-    );
-  }
+  }) => File(
+    p.join(
+      ReaderLayoutCache.plansStyleDir(
+        baseDirectory,
+        buildSignature,
+        bookUrl,
+        fingerprint.stableKey,
+      ).path,
+      '$chapterIndex.json',
+    ),
+  );
 }

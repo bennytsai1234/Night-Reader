@@ -29,7 +29,7 @@ jobs:
         run: sh tool/changelog_test.sh
       - name: Require release notes for app changes pushed to main
         # 和 .githooks/pre-push 同一個檢查，沒裝 hook 的推送也擋得到；
-        # 這裡失敗時 Android Release 不會發版（ADR 0009）。
+        # 這裡失敗時 Android Release 不會發版（ADR 0010）。
         # Android Release 以 workflow_call 呼叫時，github.event 仍是那次推送。
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:

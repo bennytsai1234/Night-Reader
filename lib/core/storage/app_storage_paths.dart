@@ -14,6 +14,14 @@ class AppStoragePaths {
     }
   }
 
+  static Future<Directory> supportDir() async {
+    try {
+      return await getApplicationSupportDirectory();
+    } on MissingPluginException {
+      return _fallbackRoot();
+    }
+  }
+
   static Future<Directory> temporaryDir() async {
     try {
       return await getTemporaryDirectory();

@@ -27,7 +27,7 @@ class GroupedSection extends StatelessWidget {
   /// 組標題右側的動作（例如「全部清除」）。
   final Widget? headerTrailing;
 
-  /// 卡片下方的附註，只放狀態或數值（例如最近更新時間），不放功能說明（ADR 0008）。
+  /// 卡片下方的附註，只放狀態或數值（例如最近更新時間），不放功能說明（ADR 0009）。
   final String? footer;
   final List<Widget> children;
 
@@ -302,7 +302,7 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
   /// 覆寫標題（例如帶徽章）；[title] 仍作為語意標籤。
   final Widget? titleWidget;
 
-  /// 標題下方的值（網址、最新章節、錯誤訊息），不放功能說明（ADR 0008）。
+  /// 標題下方的值（網址、最新章節、錯誤訊息），不放功能說明（ADR 0009）。
   final String? subtitle;
 
   /// 通常是 [GroupedIconTile]。

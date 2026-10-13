@@ -132,7 +132,7 @@ jobs:
             publish=true
           fi
 
-          # Release 說明取 CHANGELOG.md 的段落（ADR 0009）：測試版取「未發布」，正式版取「X.Y.Z」。
+          # Release 說明取 CHANGELOG.md 的段落（ADR 0010）：測試版取「未發布」，正式版取「X.Y.Z」。
           # 先在這裡確認段落存在，免得建置完才在發布時失敗。
           notes_heading=""
           if [[ "$publish" == "true" ]]; then

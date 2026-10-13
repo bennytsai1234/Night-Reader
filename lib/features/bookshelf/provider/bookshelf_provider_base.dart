@@ -31,7 +31,7 @@ extension BookshelfSortModeLabel on BookshelfSortMode {
   }
 }
 
-/// 把書架上一本書還沒下載的章節排進背景下載（ADR 0007）。
+/// 把書架上一本書還沒下載的章節排進背景下載（ADR 0008）。
 typedef ShelfBookDownloader = Future<void> Function(
   String bookUrl, {
   bool hasNewChapters,

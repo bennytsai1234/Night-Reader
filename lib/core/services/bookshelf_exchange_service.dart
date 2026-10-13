@@ -198,7 +198,7 @@ class BookshelfExchangeService {
         await contentDao.upsertEntry(content);
       }
     }
-    // 匯入的書就是加入書架的書：整本下載（ADR 0007）。
+    // 匯入的書就是加入書架的書：整本下載（ADR 0008）。
     if (getIt.isRegistered<DownloadDao>()) {
       final downloads = DownloadService();
       for (final book in books) {

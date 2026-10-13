@@ -100,10 +100,7 @@ class ReaderV2ControllerHost {
     _onChanged();
   }
 
-  void _onSettingsChanged() {
-    autoPage?.refreshConfiguration();
-    _onChanged();
-  }
+  void _onSettingsChanged() => _onChanged();
 
   void _handleAppHidden() {
     autoPage?.stop();

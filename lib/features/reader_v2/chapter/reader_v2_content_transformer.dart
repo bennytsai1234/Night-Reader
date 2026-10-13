@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:night_reader/core/constant/app_pattern.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
@@ -594,21 +593,36 @@ bool _isEscaped(List<int> runes, int index) {
   return slashCount.isOdd;
 }
 
-/// 兩側皆 CJK 脈絡字元（漢字或全形標點）的半形空格是來源雜訊，直接刪。
-/// 半形空格不佔全形格，是格線錯位的主要來源之一；「他說 「你好」」這類
-/// 標點鄰接空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。
+/// 刪掉中文旁邊的半形空格：兩側都是 CJK 脈絡字元（漢字或全形標點），
+/// 或一側是 CJK 脈絡字元、另一側是英文字母或數字。
+///
+/// 半形空格不佔全形格，是格線錯位的來源；「他說 「你好」」這類標點鄰接
+/// 空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。中英文之間的間隙
+/// 由排版時英數字段補到半格的補白提供（`VisualLineLayoutEngine`），原文的
+/// 空格留著會讓間隙變成將近一個字寬、寬窄不一。連續多個空格視為一處。
 String _removeCjkSpaces(String input) {
   final runes = input.runes.toList(growable: false);
   final output = StringBuffer();
-  for (var index = 0; index < runes.length; index += 1) {
-    if (runes[index] == 0x20 &&
-        index > 0 &&
-        index + 1 < runes.length &&
-        _isCjkContextRune(runes[index - 1]) &&
-        _isCjkContextRune(runes[index + 1])) {
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != 0x20) {
+      output.write(String.fromCharCode(runes[index]));
+      index += 1;
       continue;
     }
-    output.write(String.fromCharCode(runes[index]));
+    var end = index;
+    while (end < runes.length && runes[end] == 0x20) {
+      end += 1;
+    }
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = end < runes.length ? runes[end] : null;
+    final cjkBefore = _isCjkContextRune(previous);
+    final cjkAfter = _isCjkContextRune(next);
+    final remove =
+        (cjkBefore && (cjkAfter || _isLatinLetterOrDigit(next))) ||
+        (cjkAfter && _isLatinLetterOrDigit(previous));
+    if (!remove) output.write(' ' * (end - index));
+    index = end;
   }
   return output.toString();
 }
@@ -661,29 +675,8 @@ class ReaderV2ContentTransformer {
       'chineseConvertType': chineseConvertType,
     };
 
-    final workerResult = await ReaderV2ContentTransformWorker.instance.process(
-      args,
-    );
-    if (workerResult != null) {
-      return _decodeProcessed(workerResult);
-    }
-
-    final result = await compute(_processInBackground, args);
-    final processed = _decodeProcessed(result);
-    if (chineseConvertType == 0) return processed;
-    const converter = ChineseTextConverter();
-    return ReaderV2ProcessedChapter(
-      displayTitle: converter.convert(
-        processed.displayTitle,
-        convertType: chineseConvertType,
-      ),
-      content: converter.convert(
-        processed.content,
-        convertType: chineseConvertType,
-      ),
-      effectiveReplaceRules: processed.effectiveReplaceRules,
-      sameTitleRemoved: processed.sameTitleRemoved,
-    );
+    final result = await ReaderV2ContentTransformWorker.instance.process(args);
+    return _decodeProcessed(result);
   }
 
   static ReaderV2ProcessedChapter _decodeProcessed(
@@ -908,28 +901,42 @@ class ReaderV2ContentTransformer {
   }
 }
 
-/// 常駐內容轉換 worker isolate。
+/// 內容轉換失敗：worker 啟動不了、處理時丟出錯誤，或處理途中意外結束。
+final class ReaderV2ContentTransformException implements Exception {
+  const ReaderV2ContentTransformException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// 常駐內容轉換 worker isolate；替換規則、重分段與簡繁轉換只在這裡做，
+/// 不在主 isolate 做。
 ///
 /// 為什麼不用 compute：fling 放開瞬間會連續預載最多 3 章，compute 每章現場
 /// spawn/銷毀一個 isolate；且簡繁字典只存在主 isolate 靜態區，轉換被迫留在
 /// 主執行緒對整章正文執行，成本正好落在減速動畫期間。常駐 worker 只 spawn
-/// 一次、字典初始化一次，之後替換規則＋重分段＋簡繁轉換全部離開主執行緒。
+/// 一次、字典初始化一次。
 ///
-/// worker 不可用（spawn 失敗、isolate 死亡）時 [process] 回傳 null，呼叫端
-/// 退回既有的 compute 路徑，行為不變。
+/// worker 意外結束時，等待中的請求以 [ReaderV2ContentTransformException]
+/// 結束，下一個請求重新啟動 worker。
 class ReaderV2ContentTransformWorker {
   ReaderV2ContentTransformWorker._();
 
   static final ReaderV2ContentTransformWorker instance =
       ReaderV2ContentTransformWorker._();
 
-  Future<SendPort?>? _starting;
+  Future<({SendPort commands, int generation})>? _starting;
+
+  /// 每次丟掉 worker 就加一；啟動中或已取得通訊埠的呼叫端靠它判斷那個
+  /// worker 是否還在。
+  int _generation = 0;
   ReceivePort? _responses;
   Isolate? _isolate;
-  bool _broken = false;
   int _nextRequestId = 0;
-  final Map<int, Completer<Map<String, Object?>?>> _pending =
-      <int, Completer<Map<String, Object?>?>>{};
+  final Map<int, Completer<Map<String, Object?>>> _pending =
+      <int, Completer<Map<String, Object?>>>{};
 
   static Future<List<String>?> _loadDictionaryDataFromBundle() async {
     try {
@@ -941,20 +948,16 @@ class ReaderV2ContentTransformWorker {
     }
   }
 
-  Future<Map<String, Object?>?> process(Map<String, Object?> args) async {
-    if (_broken) return null;
-    SendPort? commands;
-    try {
-      commands = await (_starting ??= _start());
-    } catch (_) {
-      commands = null;
+  Future<Map<String, Object?>> process(Map<String, Object?> args) async {
+    final worker = await (_starting ??= _start());
+    // 啟動完成後、送出請求前 worker 已結束：通訊埠已失效，送了也不會有
+    // 回覆。
+    if (worker.generation != _generation) {
+      throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
     }
-    if (commands == null) {
-      _markBroken();
-      return null;
-    }
+    final commands = worker.commands;
     final id = _nextRequestId++;
-    final completer = Completer<Map<String, Object?>?>();
+    final completer = Completer<Map<String, Object?>>();
     _pending[id] = completer;
     try {
       commands.send(<String, Object?>{
@@ -962,17 +965,18 @@ class ReaderV2ContentTransformWorker {
         'id': id,
         'args': args,
       });
-    } catch (_) {
+    } catch (error) {
       _pending.remove(id);
-      _markBroken();
-      return null;
+      throw ReaderV2ContentTransformException('章節內容處理失敗：$error');
     }
     return completer.future;
   }
 
-  Future<SendPort?> _start() async {
+  Future<({SendPort commands, int generation})> _start() async {
+    final generation = _generation;
     final responses = ReceivePort();
-    final handshake = Completer<SendPort?>();
+    final handshake = Completer<SendPort>();
+    _responses = responses;
     responses.listen((Object? message) {
       if (message is SendPort) {
         if (!handshake.isCompleted) handshake.complete(message);
@@ -983,17 +987,22 @@ class ReaderV2ContentTransformWorker {
         final completer = id == null ? null : _pending.remove(id);
         if (completer == null || completer.isCompleted) return;
         final result = message['result'];
-        completer.complete(
-          message['ok'] == true && result is Map
-              ? Map<String, Object?>.from(result)
-              : null,
-        );
+        if (message['ok'] == true && result is Map) {
+          completer.complete(Map<String, Object?>.from(result));
+        } else {
+          completer.completeError(
+            ReaderV2ContentTransformException(
+              '章節內容處理失敗：${message['error'] ?? '未知錯誤'}',
+            ),
+          );
+        }
         return;
       }
-      if (!handshake.isCompleted) handshake.complete(null);
-      _markBroken();
+      // onError 送來 [錯誤, 堆疊]、onExit 送來 null：worker 已經結束。
+      const failure = ReaderV2ContentTransformException('內容轉換程序意外結束');
+      if (!handshake.isCompleted) handshake.completeError(failure);
+      if (identical(_responses, responses)) _reset(failure);
     });
-    _responses = responses;
     try {
       _isolate = await Isolate.spawn(
         _workerMain,
@@ -1002,26 +1011,36 @@ class ReaderV2ContentTransformWorker {
         onExit: responses.sendPort,
         debugName: 'reader-v2-content-transform',
       );
-    } catch (_) {
-      responses.close();
-      _responses = null;
-      return null;
+      final commands = await handshake.future;
+      final dictionaryData = await _loadDictionaryDataFromBundle();
+      // 握手之後、字典載入期間 worker 就結束了。
+      if (generation != _generation) {
+        throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
+      }
+      if (dictionaryData != null && dictionaryData.length == 4) {
+        commands.send(<String, Object?>{
+          'type': 'dict',
+          'data': dictionaryData,
+        });
+      }
+      return (commands: commands, generation: generation);
+    } catch (error) {
+      final failure = error is ReaderV2ContentTransformException
+          ? error
+          : ReaderV2ContentTransformException('無法啟動內容轉換：$error');
+      if (identical(_responses, responses)) _reset(failure);
+      throw failure;
     }
-    final commands = await handshake.future;
-    if (commands == null) return null;
-    final dictionaryData = await _loadDictionaryDataFromBundle();
-    if (dictionaryData != null && dictionaryData.length == 4) {
-      commands.send(<String, Object?>{'type': 'dict', 'data': dictionaryData});
-    }
-    return commands;
   }
 
-  void _markBroken() {
-    _broken = true;
+  /// 丟掉目前的 worker；下一個請求會重新啟動。
+  void _reset(ReaderV2ContentTransformException failure) {
+    _generation += 1;
+    _starting = null;
     final waiters = _pending.values.toList(growable: false);
     _pending.clear();
     for (final waiter in waiters) {
-      if (!waiter.isCompleted) waiter.complete(null);
+      if (!waiter.isCompleted) waiter.completeError(failure);
     }
     _responses?.close();
     _responses = null;

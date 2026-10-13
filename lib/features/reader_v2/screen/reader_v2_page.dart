@@ -546,7 +546,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       bookDao: _host.dependencies.bookDao,
       chapterDao: _host.dependencies.chapterDao,
     );
-    // 加入書架的書整本下載（ADR 0007）。
+    // 加入書架的書整本下載（ADR 0008）。
     unawaited(DownloadService().keepShelfBookDownloaded(widget.book.bookUrl));
     if (mounted) setState(() {});
   }

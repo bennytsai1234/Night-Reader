@@ -1,5 +1,5 @@
 #!/bin/sh
-# 更新說明（CHANGELOG.md）的共用工具，見 ADR 0009。
+# 更新說明（CHANGELOG.md）的共用工具，見 ADR 0010。
 #
 #   sh tool/changelog.sh section <標題> [檔案]
 #     印出「## <標題>」段落的內容，去掉前後空行。檔案預設 CHANGELOG.md，「-」代表標準輸入。

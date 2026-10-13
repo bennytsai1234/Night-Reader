@@ -164,8 +164,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     return notice;
   }
 
+  /// 交給頁面顯示的提示；通知監聽者，頁面才會馬上取走並顯示。
   void emitUserNotice(String message) {
     _pendingUserNotice = message;
+    notifyListeners();
   }
 
   Future<void> openBook() async {

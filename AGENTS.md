@@ -1,6 +1,6 @@
 # 專案規則
 
-Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Android `arm64-v8a`（ADR 0003）。產品說明在 `README.md`，視覺與互動設計在 `DESIGN.md`。寫碼前查 `CODING_STANDARDS.md`（寫碼規範）、`GLOSSARY.md`（用語）與 `docs/adr/`（架構決定，例如為什麼自行維護 `third_party/`、只在 CI 建置發布）。
+Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Android `arm64-v8a`（ADR 0003）。產品說明在 `README.md`，視覺與互動設計在 `DESIGN.md`。寫碼前查 `CODING_STANDARDS.md`（寫碼規範）、`GLOSSARY.md`（用語）與 `docs/adr/`（架構決定，例如為什麼自行維護 `third_party/`、只在 CI 建置發布）。專案現況看 `HANDOFF.md`。
 
 ## 維護範圍
 
@@ -24,7 +24,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 
 - 不開 PR，合併在本機做完再推上 `main`。`main` 的分支保護只禁止強制推送與刪除：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
 - 每次推上 `main` 只要改到 App 內容就會發一個測試版，所以 App 的改動在分支上累積，使用者說合併才進 `main`。commit message 用 Conventional Commits 格式（`fix(reader): …`）。
-- 合併進 `main` 時，在 `CHANGELOG.md` 的 `## 未發布` 用一般讀者看得懂的中文寫這次的變化（一兩句介紹加條列，不寫內部實作與 commit 前綴）；功能分支上不用寫。沒寫時 pre-push hook 與 CI 會擋下（ADR 0009）。
+- 合併進 `main` 時，在 `CHANGELOG.md` 的 `## 未發布` 用一般讀者看得懂的中文寫這次的變化（一兩句介紹加條列，不寫內部實作與 commit 前綴）；功能分支上不用寫。沒寫時 pre-push hook 與 CI 會擋下（ADR 0010）。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程

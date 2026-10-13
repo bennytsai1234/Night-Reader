@@ -8,7 +8,10 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -123,6 +126,7 @@ void main() {
     WidgetTester tester, {
     ReaderV2Runtime? customRuntime,
     bool waitForOpen = true,
+    ReaderV2TtsHighlight? ttsHighlight,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -140,6 +144,7 @@ void main() {
           textColor: Colors.black,
           style: _style,
           viewportController: viewport,
+          ttsHighlight: ttsHighlight,
           enableDiskCache: false,
           preprocessor: const TextPreprocessor(useIsolate: false),
           onContentTapUp: (details) {
@@ -200,32 +205,128 @@ void main() {
     }
   }
 
-  testWidgets('a tap during a page turn finishes the page and still counts', (
+  Future<double> plainPageDistance(WidgetTester tester) async {
+    final position = scrollPosition(tester);
+    final before = position.pixels;
+    final turn = viewport.moveToNextPage!();
+    await settle(tester);
+    expect(await turn, isTrue);
+    final distance = position.pixels - before;
+    expect(distance, greaterThan(0));
+    return distance;
+  }
+
+  testWidgets('a tap during a page turn does not stop it and still counts', (
     tester,
   ) async {
     await pumpReader(tester);
     final position = scrollPosition(tester);
-
-    final before = position.pixels;
-    final plainTurn = viewport.moveToNextPage!();
-    await settle(tester);
-    expect(await plainTurn, isTrue);
-    final pageDistance = position.pixels - before;
-    expect(pageDistance, greaterThan(0));
+    final pageDistance = await plainPageDistance(tester);
 
     final start = position.pixels;
-    final interruptedTurn = viewport.moveToNextPage!();
-    for (var frame = 0; frame < 30 && position.pixels == start; frame++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(position.pixels, greaterThan(start));
-    expect(position.pixels, lessThan(start + pageDistance));
+    final turn = viewport.moveToNextPage!();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    final beforeTap = position.pixels;
+    expect(beforeTap, greaterThan(start));
     await tester.tapAt(const Offset(200, 300));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(position.pixels, greaterThan(beforeTap), reason: '按下不會停住翻頁動畫');
     await settle(tester);
-    await interruptedTurn;
 
+    expect(await turn, isTrue);
     expect(position.pixels - start, closeTo(pageDistance, 0.5));
     expect(taps, hasLength(1), reason: '翻頁動畫不是使用者甩動，點擊照常生效');
+  });
+
+  testWidgets('rapid page taps keep scrolling instead of snapping', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    final pageDistance = await plainPageDistance(tester);
+
+    final start = position.pixels;
+    final turns = <Future<bool>>[];
+    onTap = (_) => turns.add(viewport.moveToNextPage!());
+    final samples = <double>[start];
+    Future<void> frame() async {
+      await tester.pump(const Duration(milliseconds: 16));
+      samples.add(position.pixels);
+    }
+
+    await tester.tapAt(const Offset(200, 300));
+    await frame();
+    await frame();
+    await tester.tapAt(const Offset(200, 300));
+    for (var i = 0; i < 30; i++) {
+      await frame();
+    }
+
+    expect(turns, hasLength(2));
+    expect(await Future.wait(turns), [isTrue, isTrue]);
+    expect(position.pixels - start, closeTo(pageDistance * 2, 0.5));
+    for (var i = 1; i < samples.length; i++) {
+      final step = samples[i] - samples[i - 1];
+      expect(step, greaterThanOrEqualTo(0), reason: '第 $i 幀倒退');
+      expect(
+        step,
+        lessThan(pageDistance * 0.5),
+        reason: '第 $i 幀一次跳了 $step px，翻頁應連續捲動',
+      );
+    }
+  });
+
+  testWidgets('a reverse tap queued behind a turn keeps the tap order', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    final pageDistance = await plainPageDistance(tester);
+
+    final start = position.pixels;
+    final finished = <String>[];
+    final a = viewport.moveToNextPage!().then((_) => finished.add('A'));
+    await tester.pump(const Duration(milliseconds: 16));
+    final b = viewport.moveToPrevPage!().then((_) => finished.add('B'));
+    final c = viewport.moveToNextPage!().then((_) => finished.add('C'));
+    var highest = position.pixels;
+    for (var frame = 0; frame < 90; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (position.pixels > highest) highest = position.pixels;
+    }
+    await Future.wait([a, b, c]);
+
+    expect(finished, ['A', 'B', 'C']);
+    expect(
+      highest,
+      lessThanOrEqualTo(start + pageDistance + 0.5),
+      reason: '第三下不能先把第一下延長成兩頁',
+    );
+    expect(position.pixels - start, closeTo(pageDistance, 0.5));
+  });
+
+  testWidgets('dragging during a page turn hands the text to the finger', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    await plainPageDistance(tester);
+
+    final turn = viewport.moveToNextPage!();
+    await tester.pump(const Duration(milliseconds: 16));
+    final gesture = await tester.startGesture(const Offset(200, 400));
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+    final held = position.pixels;
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(position.pixels, held, reason: '手指拖動後翻頁動畫不再推動正文');
+    expect(await turn, isFalse);
+    await gesture.up();
+    await settle(tester);
   });
 
   testWidgets('a tap-zone page turn works while text selection is off', (
@@ -342,6 +443,91 @@ void main() {
       greaterThanOrEqualTo(3000),
       reason: 'The backward lead exists before the reader is interactive.',
     );
+  });
+
+  testWidgets('an unavailable next chapter is reported at the edge, not '
+      'requested every frame', (tester) async {
+    var requests = 0;
+    var available = false;
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        chapterCount: 2,
+        paragraphs: 20,
+        contentLoader: (index, chapter) async {
+          if (index != 1) return chapter.content;
+          requests += 1;
+          if (!available) {
+            throw const ReaderV2ContentUnavailableException('第 1 章暫時取不到');
+          }
+          return chapter.content;
+        },
+      ),
+    );
+    final position = scrollPosition(tester);
+    final afterOpen = requests;
+    expect(afterOpen, greaterThan(0));
+
+    final gesture = await tester.startGesture(const Offset(200, 500));
+    for (var step = 0; step < 40; step++) {
+      await gesture.moveBy(const Offset(0, -40));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(requests, afterOpen, reason: '捲動中不重複向書源要取不到的章節');
+    await gesture.up();
+    await settle(tester);
+
+    final edge = position.maxScrollExtent;
+    expect(position.pixels, closeTo(edge, 0.5));
+    expect(runtime.takeUserNotice(), '第 1 章暫時取不到');
+    expect(requests, afterOpen + 1, reason: '停在邊緣時重試一次');
+
+    available = true;
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -40));
+    await settle(tester);
+    expect(requests, afterOpen + 2);
+    for (var frame = 0; frame < 200; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.maxScrollExtent, greaterThan(edge), reason: '重試成功後正文接上');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+    await settle(tester);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
+  testWidgets('the speech highlight follows the text while scrolling', (
+    tester,
+  ) async {
+    await pumpReader(
+      tester,
+      ttsHighlight: const ReaderV2TtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: 10,
+        sentenceEnd: 40,
+      ),
+    );
+    List<HybridLineBox> boxes() => tester
+        .widget<HybridTtsHighlightOverlay>(
+          find.byType(HybridTtsHighlightOverlay),
+        )
+        .sentence;
+    final before = boxes();
+    expect(before, isNotEmpty);
+
+    final position = scrollPosition(tester);
+    for (final step in [50.0, 30.0]) {
+      final previous = boxes();
+      position.jumpTo(position.pixels + step);
+      await tester.pump();
+      final after = boxes();
+      expect(after, hasLength(previous.length));
+      for (var i = 0; i < after.length; i++) {
+        expect(after[i].top, closeTo(previous[i].top - step, 0.01));
+        expect(after[i].bottom, closeTo(previous[i].bottom - step, 0.01));
+        expect(after[i].left, previous[i].left);
+        expect(after[i].right, previous[i].right);
+      }
+    }
   });
 
   testWidgets('stopping auto-scroll does not cancel the finger on the text', (
