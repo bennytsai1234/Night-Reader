@@ -200,32 +200,99 @@ void main() {
     }
   }
 
-  testWidgets('a tap during a page turn finishes the page and still counts', (
+  Future<double> plainPageDistance(WidgetTester tester) async {
+    final position = scrollPosition(tester);
+    final before = position.pixels;
+    final turn = viewport.moveToNextPage!();
+    await settle(tester);
+    expect(await turn, isTrue);
+    final distance = position.pixels - before;
+    expect(distance, greaterThan(0));
+    return distance;
+  }
+
+  testWidgets('a tap during a page turn does not stop it and still counts', (
     tester,
   ) async {
     await pumpReader(tester);
     final position = scrollPosition(tester);
-
-    final before = position.pixels;
-    final plainTurn = viewport.moveToNextPage!();
-    await settle(tester);
-    expect(await plainTurn, isTrue);
-    final pageDistance = position.pixels - before;
-    expect(pageDistance, greaterThan(0));
+    final pageDistance = await plainPageDistance(tester);
 
     final start = position.pixels;
-    final interruptedTurn = viewport.moveToNextPage!();
-    for (var frame = 0; frame < 30 && position.pixels == start; frame++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(position.pixels, greaterThan(start));
-    expect(position.pixels, lessThan(start + pageDistance));
+    final turn = viewport.moveToNextPage!();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+    final beforeTap = position.pixels;
+    expect(beforeTap, greaterThan(start));
     await tester.tapAt(const Offset(200, 300));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(position.pixels, greaterThan(beforeTap), reason: '按下不會停住翻頁動畫');
     await settle(tester);
-    await interruptedTurn;
 
+    expect(await turn, isTrue);
     expect(position.pixels - start, closeTo(pageDistance, 0.5));
     expect(taps, hasLength(1), reason: '翻頁動畫不是使用者甩動，點擊照常生效');
+  });
+
+  testWidgets('rapid page taps keep scrolling instead of snapping', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    final pageDistance = await plainPageDistance(tester);
+
+    final start = position.pixels;
+    final turns = <Future<bool>>[];
+    onTap = (_) => turns.add(viewport.moveToNextPage!());
+    final samples = <double>[start];
+    Future<void> frame() async {
+      await tester.pump(const Duration(milliseconds: 16));
+      samples.add(position.pixels);
+    }
+
+    await tester.tapAt(const Offset(200, 300));
+    await frame();
+    await frame();
+    await tester.tapAt(const Offset(200, 300));
+    for (var i = 0; i < 30; i++) {
+      await frame();
+    }
+
+    expect(turns, hasLength(2));
+    expect(await Future.wait(turns), [isTrue, isTrue]);
+    expect(position.pixels - start, closeTo(pageDistance * 2, 0.5));
+    for (var i = 1; i < samples.length; i++) {
+      final step = samples[i] - samples[i - 1];
+      expect(step, greaterThanOrEqualTo(0), reason: '第 $i 幀倒退');
+      expect(
+        step,
+        lessThan(pageDistance * 0.5),
+        reason: '第 $i 幀一次跳了 $step px，翻頁應連續捲動',
+      );
+    }
+  });
+
+  testWidgets('dragging during a page turn hands the text to the finger', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    await plainPageDistance(tester);
+
+    final turn = viewport.moveToNextPage!();
+    await tester.pump(const Duration(milliseconds: 16));
+    final gesture = await tester.startGesture(const Offset(200, 400));
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+    final held = position.pixels;
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(position.pixels, held, reason: '手指拖動後翻頁動畫不再推動正文');
+    expect(await turn, isFalse);
+    await gesture.up();
+    await settle(tester);
   });
 
   testWidgets('a tap-zone page turn works while text selection is off', (

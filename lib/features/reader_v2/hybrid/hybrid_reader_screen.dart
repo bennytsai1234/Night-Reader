@@ -41,6 +41,7 @@ import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
+import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
 
 enum _MaterializationWait { progressed, frontierUnavailable, cancelled }
@@ -130,7 +131,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   _warmedChapters = {};
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
   StreamSubscription<BlockReady>? _pumpEventsSub;
-  ScrollController? _scrollController;
+  HybridScrollController? _scrollController;
+  _PageTurn? _pageTurn;
   MetricsDiskCache? _metricsDiskCache;
   ChapterPlanDiskCache? _planDiskCache;
   Size _viewportSize = Size.zero;
@@ -1435,13 +1437,24 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<bool> _continuousScrollBy(double delta) =>
       _enqueueCommand((current) => _continuousScrollByNow(delta, current));
 
-  Future<bool> _moveToNextPage() => _enqueueCommand(
-    (current) => _movePageNow(forward: true, isCurrent: current),
-  );
+  Future<bool> _moveToNextPage() => _movePage(forward: true);
 
-  Future<bool> _moveToPrevPage() => _enqueueCommand(
-    (current) => _movePageNow(forward: false, isCurrent: current),
-  );
+  Future<bool> _moveToPrevPage() => _movePage(forward: false);
+
+  /// 同方向的翻頁動畫還在跑時，這一下直接把目標再往後推一頁、從目前
+  /// 位置接著捲，不等前一下停下來；推不了（正文還沒排好）才排隊。
+  Future<bool> _movePage({required bool forward}) {
+    final turn = _pageTurn;
+    if (turn != null &&
+        turn.forward == forward &&
+        turn.isCurrent() &&
+        _extendPageTurn(turn)) {
+      return turn.finished.future;
+    }
+    return _enqueueCommand(
+      (current) => _movePageNow(forward: forward, isCurrent: current),
+    );
+  }
 
   Future<void> _settleScroll() async {
     // 使用者正在拖動或甩動時捲動歸使用者：停在這裡會打斷手勢，
@@ -1488,40 +1501,43 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     return isCurrent();
   }
 
-  Future<bool> _animatePageByNow(
-    double delta,
-    bool Function() isCurrent,
-  ) async {
+  /// 一次翻頁的距離：一屏減一行，保留一行重疊（ADR 0006）。
+  double? _pageTurnDistance() {
+    final height = _viewportSize.height;
+    if (height <= 0) return null;
+    final style = widget.runtime.state.layoutSpec.style;
+    final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
+    return math.max(height * 0.5, height - overlap - 8.0);
+  }
+
+  /// 把進行中的翻頁再推一頁。只在新目標之前的正文已經排好、而且在目前
+  /// 捲動範圍內時才推，否則回傳 false 讓這一下排隊。
+  bool _extendPageTurn(_PageTurn turn) {
     final controller = _scrollController;
-    if (!isCurrent() ||
-        controller == null ||
-        !controller.hasClients ||
-        delta == 0) {
+    final distance = _pageTurnDistance();
+    if (controller == null || !controller.hasClients || distance == null) {
       return false;
     }
     final position = controller.position;
-    final before = position.pixels;
-    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
-    final target = (before + delta)
-        .clamp(position.minScrollExtent, max)
-        .toDouble();
-    if ((target - before).abs() < _minimumViewportMovement) return false;
-    await position.animateTo(
-      target,
-      duration: _viewportMotionDuration,
-      curve: Curves.easeOutCubic,
-    );
-    if (!isCurrent()) return false;
-    // 動畫被下一次觸碰打斷時直接翻完：連點翻頁每一下都翻滿一頁。
-    if ((position.pixels - target).abs() >= _minimumViewportMovement) {
-      position.jumpTo(
-        target
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble(),
-      );
+    if (!position.isPageTurning) return false;
+    final target = turn.target + (turn.forward ? distance : -distance);
+    if (target < position.minScrollExtent ||
+        target > position.maxScrollExtent) {
+      return false;
     }
-    await _handleScrollSettled();
-    return isCurrent();
+    final top = math.min(position.pixels, target);
+    final bottom = math.max(position.pixels, target) + _viewportSize.height;
+    _requestWindow(top, bottom);
+    if (!_windowReady(top, bottom)) return false;
+    turn
+      ..target = target
+      ..requestedDistance += distance
+      ..animation = position.animatePageTo(
+        target,
+        duration: _viewportMotionDuration,
+        curve: Curves.easeOutCubic,
+      );
+    return true;
   }
 
   Future<bool> _movePageNow({
@@ -1529,39 +1545,73 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     required bool Function() isCurrent,
   }) async {
     if (!isCurrent()) return false;
-    final height = _viewportSize.height;
-    if (height <= 0) return false;
+    final distance = _pageTurnDistance();
+    if (distance == null) return false;
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return false;
-    final style = widget.runtime.state.layoutSpec.style;
-    final overlap = math.max(24.0, style.fontSize * style.effectiveLineHeight);
-    final magnitude = math.max(height * 0.5, height - overlap - 8.0);
 
     final reachable = await _ensurePageDistanceAvailable(
       forward: forward,
-      distance: magnitude,
+      distance: distance,
       isCurrent: isCurrent,
     );
     if (!reachable || !isCurrent() || !controller.hasClients) return false;
 
-    final before = controller.position.pixels;
-    final moved = await _animatePageByNow(
-      forward ? magnitude : -magnitude,
-      isCurrent,
-    );
-    if (!isCurrent()) return false;
-    if (!moved) _emitBookBoundaryNotice(forward: forward);
-    if (!moved || !controller.hasClients) return false;
+    final position = controller.position;
+    final before = position.pixels;
+    final max = math.max(position.minScrollExtent, position.maxScrollExtent);
+    final target = (before + (forward ? distance : -distance))
+        .clamp(position.minScrollExtent, max)
+        .toDouble();
+    if ((target - before).abs() < _minimumViewportMovement) {
+      _emitBookBoundaryNotice(forward: forward);
+      return false;
+    }
 
-    final after = controller.position.pixels;
-    final atBookBoundary = forward
-        ? _admission.atForwardBookBoundary
-        : _admission.atBackwardBookBoundary;
-    return isHybridPageMoveComplete(
-      requestedDistance: magnitude,
-      actualDistance: (after - before).abs(),
-      atBookBoundary: atBookBoundary,
+    final turn = _PageTurn(
+      forward: forward,
+      target: target,
+      requestedDistance: distance,
+      isCurrent: isCurrent,
     );
+    _pageTurn = turn;
+    try {
+      turn.animation = position.animatePageTo(
+        target,
+        duration: _viewportMotionDuration,
+        curve: Curves.easeOutCubic,
+      );
+      // 連點會換掉 turn.animation；等到最後一段動畫結束才算翻完。
+      while (true) {
+        final animation = turn.animation;
+        await animation;
+        if (!isCurrent()) return turn.finish(false);
+        if (identical(animation, turn.animation)) break;
+      }
+      _pageTurn = null;
+      // 沒停在目標上代表手指拖動接手了；位置歸使用者，由拖動結束時儲存。
+      if (!controller.hasClients ||
+          (position.pixels - turn.target).abs() >= _minimumViewportMovement) {
+        return turn.finish(false);
+      }
+      await _handleScrollSettled();
+      if (!isCurrent() || !controller.hasClients) return turn.finish(false);
+      final atBookBoundary = forward
+          ? _admission.atForwardBookBoundary
+          : _admission.atBackwardBookBoundary;
+      return turn.finish(
+        isHybridPageMoveComplete(
+          requestedDistance: turn.requestedDistance,
+          actualDistance: (position.pixels - before).abs(),
+          atBookBoundary: atBookBoundary,
+        ),
+      );
+    } catch (_) {
+      turn.finish(false);
+      rethrow;
+    } finally {
+      if (identical(_pageTurn, turn)) _pageTurn = null;
+    }
   }
 
   void _emitBookBoundaryNotice({required bool forward}) {
@@ -2236,7 +2286,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
         final state = widget.runtime.state;
         if (!_initialRestoreCompleted) return _buildLoading(state);
-        final controller = _scrollController ??= ScrollController(
+        final controller = _scrollController ??= HybridScrollController(
           initialScrollOffset: _pendingScrollOffset ?? 0.0,
           keepScrollOffset: false,
         );
@@ -2340,6 +2390,28 @@ final class _ChapterMaterialization {
 
   void promote(LayoutTaskPriority next) {
     if (next.index < priority.index) priority = next;
+  }
+}
+
+/// 進行中的一次翻頁；連點時目標與距離會一路累加。
+final class _PageTurn {
+  _PageTurn({
+    required this.forward,
+    required this.target,
+    required this.requestedDistance,
+    required this.isCurrent,
+  });
+
+  final bool forward;
+  final bool Function() isCurrent;
+  final Completer<bool> finished = Completer<bool>();
+  double target;
+  double requestedDistance;
+  late Future<void> animation;
+
+  bool finish(bool completed) {
+    if (!finished.isCompleted) finished.complete(completed);
+    return completed;
   }
 }
 
