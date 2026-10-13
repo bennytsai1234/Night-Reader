@@ -31,7 +31,7 @@ class _FakeInstaller extends AppUpdateInstaller {
 const _info = UpdateInfo(
   versionName: '0.4.0',
   tagName: 'v0.4.0',
-  updateLog: '* fix(reader): something by @someone in https://x/pull/1',
+  updateLog: '- 修正閱讀位置',
   downloadUrl: 'https://example.com/night-reader.apk',
   assetSize: 1024,
   releasePageUrl: 'https://example.com/release',
@@ -55,7 +55,7 @@ void main() {
     await _pumpDialog(tester, installer);
 
     expect(find.text('發現新版 0.4.0'), findsOneWidget);
-    expect(find.text('• fix(reader): something'), findsOneWidget);
+    expect(find.text('• 修正閱讀位置'), findsOneWidget);
 
     await tester.tap(find.text('立即更新'));
     await tester.pumpAndSettle();

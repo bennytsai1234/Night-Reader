@@ -140,25 +140,33 @@ class AppUpdateService {
   }
 }
 
-/// 把 GitHub 自動產生的發布說明（`--generate-notes`）整理成給使用者看的純文字：
-/// 每個「* 標題 by @作者 in 連結」只留標題、前面加「•」；去掉「What's
-/// Changed」標題、Full Changelog 連結、發版本身的提交與其他 Markdown 符號。
+/// 把 Release 說明（取自 `CHANGELOG.md` 的段落，見 ADR 0009）整理成給使用者看的純文字：
+/// 保留介紹段落與條列，條列前綴統一成「•」，去掉標題、粗體、行內程式碼與連結的
+/// Markdown 符號；段落之間最多留一個空行。
 String releaseNotesForDisplay(String markdown) {
   final lines = <String>[];
   for (final raw in markdown.split('\n')) {
     var line = raw.trim();
-    if (line.isEmpty || line.startsWith('#')) continue;
-    if (line.contains('Full Changelog')) continue;
-    if (line.startsWith('* ') || line.startsWith('- ')) {
-      line = line.substring(2);
-      line = line.replaceFirst(RegExp(r'\s+by @\S+\s+in\s+\S+$'), '');
-      if (line.startsWith('release:')) continue;
-      line = '• $line';
+    if (line.isEmpty) {
+      if (lines.isNotEmpty && lines.last.isNotEmpty) lines.add('');
+      continue;
     }
-    lines.add(line.replaceAll('**', '').replaceAll('`', ''));
+    line = line.replaceFirst(_markdownHeading, '');
+    final bullet = _markdownBullet.firstMatch(line);
+    if (bullet != null) line = '• ${line.substring(bullet.end)}';
+    line = line
+        .replaceAllMapped(_markdownLink, (match) => match[1]!)
+        .replaceAll('**', '')
+        .replaceAll('`', '');
+    lines.add(line);
   }
+  if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
   return lines.join('\n');
 }
+
+final _markdownHeading = RegExp(r'^#{1,6}\s+');
+final _markdownBullet = RegExp(r'^[-*+]\s+');
+final _markdownLink = RegExp(r'\[([^\]]*)\]\([^)]*\)');
 
 /// 發布版號：正式版 `0.3.3`，或 CI 每次合併到 `main` 發的測試版 `0.3.4-beta.2`。
 ///
@@ -206,7 +214,7 @@ class ReleaseVersion implements Comparable<ReleaseVersion> {
   }
 }
 
-/// 「更新紀錄」的一筆：一個已發布的版本與它的發布說明。
+/// 「更新紀錄」的一筆：一個已發布的版本與它的更新說明。
 class ReleaseNote {
   const ReleaseNote({
     required this.versionName,

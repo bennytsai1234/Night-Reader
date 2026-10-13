@@ -135,7 +135,7 @@ void main() {
         _release('v0.3.5-beta.9', draft: true),
         {
           ..._release('v0.3.4-beta.4', prerelease: true, apk: false),
-          'body': '## What\'s Changed\n* fix(reader): keep place by @a in x',
+          'body': '- 閱讀時記住位置',
           'published_at': '2026-10-01T08:00:00Z',
         },
         _release('v0.3.4-beta.3', prerelease: true),
@@ -170,10 +170,7 @@ void main() {
         '0.3.2',
       ]);
       expect(notes.first.isCurrent, isTrue);
-      expect(
-        releaseNotesForDisplay(notes.first.body),
-        '• fix(reader): keep place',
-      );
+      expect(releaseNotesForDisplay(notes.first.body), '• 閱讀時記住位置');
     });
   });
 }
