@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
@@ -843,6 +844,8 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<void> _clearStoredContent() async {
+    // 排版快取由正文算出，正文清掉就一起清。
+    await ReaderLayoutCache.deleteBook(_book.bookUrl);
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return;
     await ReaderChapterContentStore(

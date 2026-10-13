@@ -5,7 +5,8 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as p;
+
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
@@ -67,6 +68,7 @@ final class MetricsDiskCache {
     current = ready.then((_) async {
       await file.parent.create(recursive: true);
       await file.writeAsBytes(payload, flush: true);
+      await ReaderLayoutCache.pruneStyles(file.parent);
     });
     _writeTails[path] = current;
     try {
@@ -163,20 +165,11 @@ final class MetricsDiskCache {
   File _fileFor({
     required String bookUrl,
     required StyleFingerprint fingerprint,
-  }) {
-    final bookHash = sha1.convert(utf8.encode(bookUrl)).toString();
-    final fingerprintHash = sha1
-        .convert(utf8.encode(fingerprint.stableKey))
-        .toString();
-    return File(
-      p.join(
-        baseDirectory.path,
-        'hybrid_metrics',
-        bookHash,
-        '$fingerprintHash.bin',
-      ),
-    );
-  }
+  }) => ReaderLayoutCache.metricsFile(
+    baseDirectory,
+    bookUrl,
+    fingerprint.stableKey,
+  );
 }
 
 bool _bytesEqual(List<int> left, List<int> right) {

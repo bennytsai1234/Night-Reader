@@ -15,6 +15,7 @@ import 'core/services/chinese_display.dart';
 import 'core/di/injection.dart';
 import 'core/database/dao/book_dao.dart';
 import 'core/storage/app_storage_paths.dart';
+import 'core/storage/reader_layout_cache.dart';
 import 'app_providers.dart';
 import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
@@ -234,6 +235,24 @@ Future<void> _runPostFirstFrameStartupTasks() async {
   }
 
   unawaited(_cleanupLegacyCustomFontArtifacts());
+  unawaited(_pruneReaderLayoutCaches());
+}
+
+/// 刪掉資料庫裡已經沒有的書、以及其他 App 版本留下的閱讀排版快取。
+Future<void> _pruneReaderLayoutCaches() async {
+  try {
+    final books = await getIt<BookDao>().getAll();
+    await ReaderLayoutCache.retainOnly(
+      bookUrls: books.map((book) => book.bookUrl),
+      build: await ReaderLayoutCache.currentBuild(),
+    );
+  } catch (e, stack) {
+    AppLog.e(
+      'Prune reader layout caches failed: $e',
+      error: e,
+      stackTrace: stack,
+    );
+  }
 }
 
 Future<void> _cleanupLegacyCustomFontArtifacts() async {

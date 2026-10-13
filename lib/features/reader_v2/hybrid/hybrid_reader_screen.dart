@@ -5,12 +5,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
-import 'package:night_reader/core/services/app_version.dart';
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
@@ -2176,7 +2175,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<MetricsDiskCache> _obtainDiskCache() async {
     final existing = _metricsDiskCache;
     if (existing != null) return existing;
-    final directory = await getApplicationSupportDirectory();
+    final directory = await ReaderLayoutCache.baseDirectory();
     return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
   }
 
@@ -2220,11 +2219,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   Future<ChapterPlanDiskCache> _obtainPlanCache() async {
     final existing = _planDiskCache;
     if (existing != null) return existing;
-    final directory = await getApplicationSupportDirectory();
-    final version = await AppVersion.current();
     return _planDiskCache = ChapterPlanDiskCache(
-      baseDirectory: directory,
-      buildSignature: '${version.versionName}+${version.buildNumber}',
+      baseDirectory: await ReaderLayoutCache.baseDirectory(),
+      buildSignature: await ReaderLayoutCache.currentBuild(),
     );
   }
 

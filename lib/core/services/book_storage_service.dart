@@ -6,6 +6,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 
 class BookStorageService {
   BookStorageService({
@@ -47,5 +48,6 @@ class BookStorageService {
     await _chapterDao.deleteByBook(book.bookUrl);
     await _bookDao.deleteByUrl(book.bookUrl);
     await _coverStorage.deleteBookAssets(book);
+    await ReaderLayoutCache.deleteBook(book.bookUrl);
   }
 }

@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
@@ -87,10 +87,19 @@ final class ChapterPlanDiskCache {
           ],
       ],
     };
-    await Isolate.run(() => _writeSync(path, payload));
+    final bookDir = ReaderLayoutCache.plansBookDir(
+      baseDirectory,
+      buildSignature,
+      bookUrl,
+    ).path;
+    await Isolate.run(() => _writeAndPrune(path, payload, bookDir));
   }
 
-  static void _writeSync(String path, Map<String, Object> payload) {
+  static Future<void> _writeAndPrune(
+    String path,
+    Map<String, Object> payload,
+    String bookDir,
+  ) async {
     final file = File(path);
     file.parent.createSync(recursive: true);
     // 先寫暫存檔再改名：同一本書的新舊閱讀器可能同時寫同一章，
@@ -98,6 +107,7 @@ final class ChapterPlanDiskCache {
     final temp = File('$path.${DateTime.now().microsecondsSinceEpoch}.tmp');
     temp.writeAsStringSync(jsonEncode(payload), flush: true);
     temp.renameSync(path);
+    await ReaderLayoutCache.pruneStyles(Directory(bookDir));
   }
 
   /// 檔頭不符、檔案不存在或損壞時回傳 null。
@@ -209,19 +219,15 @@ final class ChapterPlanDiskCache {
     required String bookUrl,
     required StyleFingerprint fingerprint,
     required int chapterIndex,
-  }) {
-    final bookHash = sha1.convert(utf8.encode(bookUrl)).toString();
-    final fingerprintHash = sha1
-        .convert(utf8.encode(fingerprint.stableKey))
-        .toString();
-    return File(
-      p.join(
-        baseDirectory.path,
-        'hybrid_plans',
-        bookHash,
-        fingerprintHash,
-        '$chapterIndex.json',
-      ),
-    );
-  }
+  }) => File(
+    p.join(
+      ReaderLayoutCache.plansStyleDir(
+        baseDirectory,
+        buildSignature,
+        bookUrl,
+        fingerprint.stableKey,
+      ).path,
+      '$chapterIndex.json',
+    ),
+  );
 }
