@@ -36,7 +36,7 @@
 ## 字體與書卷排版
 
 `AppTextStyles` 為全域 App 介面的字階規範：
-- **標題階層**：`titleMd`（17）至 `titleXl`（24），一律採用 `FontWeight.w600`，避免過粗的 bold 破壞版面典雅感。App bar 標題固定 18、`FontWeight.w600`。
+- **標題階層**：`titleMd`（17）至 `titleXl`（24），一律採用 `FontWeight.w600`，避免過粗的 bold 破壞版面典雅感。App bar 標題固定 18、`FontWeight.w600`；根分頁的大標題為 `titleLarge`（30、`FontWeight.w600`）。
 - **UI 資訊與標籤**：`uiXs`（11）、`uiSm`（13）、`uiMd`（15），字距維持微量緊湊，字重以 `FontWeight.w500` 提供清晰指示。
 - **極小輔助文字**：`micro`（10）僅用於徽章、書源標記與網址等輔助資訊。元件內不寫死 `fontSize`，一律取用 `AppTextStyles`。
 - **設定頁區塊標題**：統一使用 `GroupedSection` 的組標題（單獨使用時為 `GroupedSectionHeader`）；閱讀器面板內使用 `SheetSection`。
@@ -64,12 +64,13 @@
 結構與幾何取自 Telegram iOS，色彩、字階與材質維持紙墨。新頁面與改版一律組合這些元件，不再直接使用 `AppBar`、`ListTile`、`PopupMenuButton`、`SegmentedButton`、`AlertDialog`。
 
 - **材質**：`GlassSurface` 為紙／墨色調加 0.5 髮絲亮邊與漫射陰影，強度由使用者在「外觀與主題 → 玻璃效果」選擇（`GlassStrength`）：實色（不模糊）、霧面（預設，約 84% 不透明、模糊 12）、通透（約 68%、模糊 20）、玻璃（約 50%、模糊 28）；App 介面與閱讀選單共用同一設定。頁面內的玻璃以 `BackdropFilter.grouped` 共用 App 根部 `BackdropGroup` 的取樣；疊在其他玻璃上的選單、提示框設 `grouped: false`。
-- **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。分頁進入整頁編輯（書架多選）時把 `FloatingTabBarScope` 的開關設為 true：分頁列沉下、左右換頁鎖住、返回鍵留給分頁，編輯工具列放在 `FloatingTabBar.slotOf` 的位置，底部永遠只有一條膠囊。
-- **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`，純文字動作用 `PlainTextAction`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。
+- **主框架**：`FloatingTabBar` 浮動膠囊分頁列（56 + 上下 4 內距，最寬 500），右側一顆圓形搜尋鈕；選取膠囊跟著頁面位置連續移動，可在列上拖曳選取。放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，清單底部讓出 `MediaQuery.paddingOf(context).bottom`。分頁列後方墊一條由下往上的顏色漸隱帶（`FloatingTabBarFade`，與頁首下緣對稱）：螢幕底緣到分頁島上緣再往上 6 是實色，再往上 14 漸隱成透明，內容捲到島之前就淡出；顏色是目前可見頁面的背景色，左右滑動換頁時跟著頁面位置在相鄰兩頁的背景色之間過渡。書架與發現往下捲（同方向超過觸控判定距離 18，且已捲過大標題的高度）時，分頁列與漸隱帶一起沉下讓出畫面；往上捲、回到頂端、捲到底或換分頁時浮回來。捲動讓出不鎖左右換頁，返回鍵照常。分頁進入整頁編輯（書架多選）時把 `FloatingTabBarScope` 的開關設為 true：分頁列沉下、左右換頁鎖住、返回鍵留給分頁，編輯工具列放在 `FloatingTabBar.slotOf` 的位置，漸隱帶改由分頁墊在工具列後面，底部永遠只有一條膠囊。
+- **導航頁首**：`GlassNavHeader` 置中標題（18／w600）、兩側 44 圓形玻璃按鈕（`GlassIconButton`／`GlassTextButton`／`GlassMenuButton`，純文字動作用 `PlainTextAction`），無實心底板與分隔線，下緣 14 漸隱；搭配 `extendBodyBehindAppBar: true` 讓內容捲入頁首下方。根分頁「書架」與「發現」用 iOS 大標題（`largeTitle`）：頂端時工具列下方是靠左的大字標題（`AppTextStyles.titleLarge`，30／w600，不隨系統字級放大），往下捲時大標題跟著內容捲進工具列底下、發現頁的分組篩選列與漸隱底板一起往上收，大標題整行收進去後置中小標題（`NavHeaderTitle`）淡入；頁首佔用的高度固定，捲動時內容不跳動。左右玻璃按鈕留在工具列上。書架編輯模式的「已選 N 本」是小標題，頁首高度不變。「我的」沒有標題。書籍詳情的封面區收合後也是同樣由頁首小標題淡入接手。
+- **背景作業的頁首提示**：書架在背景檢查更新（下拉與開 App 的自動檢查）時，「書架」字樣（大標題與小標題）上有一道淡墨流光從左掃到右循環（`InkSheen`，一輪 1.6 秒），檢查結束後這一輪掃完就停；系統關閉動畫時不播。不加文字或轉圈。
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方附註只放狀態或數值）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60（副標只放值，例如網址、最新章節；開關列沒有副標）；介面不放解釋性文案，依賴其他開關的列在上層關閉時隱藏（ADR 0009）；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關一律用 `GroupedSwitch`（不直接用 `Switch`／`CupertinoSwitch`）：40×24 膠囊軌道、20 紙色滑塊，不畫陰影或外框，開啟為主色、關閉為淡次要文字色。
 - **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排），帶輸入框或勾選的用 `showStatefulAppAlert`＋`AlertTextField`／`AlertCheckRow`，控制器由提示框擁有（`TextControllersScope`），呼叫端不自行釋放；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
 - **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`GroupFilterBar` 為書源分組篩選列（「全部」固定在左、分組膠囊可橫向捲動並附書源數、右側格狀鈕開出全部分組面板），發現頁與換源面板共用；`GlassCapsule` 為可點小膠囊（可附小字數量）；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
-- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。
+- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic），分頁列與漸隱帶沉下／浮回也用 `AppMotion.menu`。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。分頁列的搜尋鈕開搜尋頁用 `ExpandFromRectRoute`：一塊頁面底色的圓角矩形從按鈕範圍以 `AppMotion.spring` 放大到整頁，搜尋頁內容在中段淡入，返回時以 `AppMotion.fade` 縮回按鈕；只改裁切與底色遮罩的透明度，不做整頁 Opacity，這條路由沒有邊緣右滑返回。書架「加入 → 搜尋書籍」與空書架的按鈕沒有按鈕位置，照一般換頁。搜尋結果串流進來時每一列第一次出現短暫淡入並上移 10（`AppMotion.fade`）；同一列之後重建、捲出畫面再回來或重新排序都不再播。
 
 ## 元件質感與動態反饋
 
@@ -81,9 +82,9 @@
    - 「外觀與排版」面板最高 60% 螢幕、不加暗色遮罩，常用項（風格、字號、行高）在第一層，其餘收在「更多排版」，調整時正文保持可見。
    - 閱讀器面板與「閱讀偏好」設定頁共用 `reader_v2_settings_sections.dart` 的區塊，新增閱讀設定時只在該處實作一次。
 3. **書籍卡片與清單**：
-   - 書架頁首只有「書架」兩字；左鈕「整理」（網格／列表、排序、選取、匯出書架），右鈕「加入」（搜尋書籍、加入本地書籍、從網址或檔案匯入書架）。
+   - 書架頁首只有「書架」兩字（大標題，見「導航頁首」）；左鈕「整理」（網格／列表、排序、選取、匯出書架），右鈕「加入」（搜尋書籍、加入本地書籍、從網址或檔案匯入書架）。
    - 列表為一本一張小紙卡：封面、書名一行、作者、細進度線；網格為封面、書名最多 2 行、細進度線。閱讀進度只畫 2 高的線，不顯示百分比、章節或任何數字；封面右上角只在書架檢查後短暫出現角標（見下一條）。
-   - 下拉在背景檢查更新，不轉圈；開 App 時照同樣方式檢查一次（「我的 → 啟動時檢查書架更新」可關閉）。檢查結果不跳 SnackBar 或對話框，只在書卡（網格與列表）封面右上角掛角標：有新章節是淺綠小膠囊「+N」（N 為這次新增的章節數，`AppPalette.mossDark`），檢查失敗是淺紅小圓「!」（`AppPalette.rustDark`），兩者淺色與深色模式共用、配墨色字並帶淡墨髮絲邊；「!」只在手動下拉時出現，開 App 的自動檢查失敗不顯示。角標 5 秒後以 `AppMotion.fade` 淡出，不存檔，編輯模式時不顯示。長按選單與書籍詳情的「自動檢查更新」讓單本書不參與這兩種檢查，明確按「檢查更新」時照查。
+   - 下拉在背景檢查更新，不轉圈，只有「書架」字樣掃過淡墨流光（見「背景作業的頁首提示」）；開 App 時照同樣方式檢查一次（「我的 → 啟動時檢查書架更新」可關閉）。檢查結果不跳 SnackBar 或對話框，只在書卡（網格與列表）封面右上角掛角標：有新章節是淺綠小膠囊「+N」（N 為這次新增的章節數，`AppPalette.mossDark`），檢查失敗是淺紅小圓「!」（`AppPalette.rustDark`），兩者淺色與深色模式共用、配墨色字並帶淡墨髮絲邊；「!」只在手動下拉時出現，開 App 的自動檢查失敗不顯示。角標 5 秒後以 `AppMotion.fade` 淡出，不存檔，編輯模式時不顯示。長按選單與書籍詳情的「自動檢查更新」讓單本書不參與這兩種檢查，明確按「檢查更新」時照查。
    - 書架上的網路書自動整本下載，新章節也跟著下載（ADR 0008）。
    - 點擊回饋為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；玻璃按鈕按下時微縮回彈。
 4. **數值設定**：

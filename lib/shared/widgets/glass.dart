@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -480,10 +481,11 @@ class EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
+              // 以 base 自己的透明度為上限，呼叫端可以整條淡出。
               colors: [
                 base,
                 base,
-                base.withValues(alpha: 0.72),
+                base.withValues(alpha: base.a * 0.72),
                 base.withValues(alpha: 0),
               ],
               stops: [
@@ -507,6 +509,13 @@ class EdgeFade extends StatelessWidget {
 /// 內容會捲到頁首底下並在下緣淡出；此時清單需讓出
 /// `MediaQuery.paddingOf(context).top`（未指定 padding 的 ScrollView 會自動
 /// 處理）。不延伸時頁首就是一段與背景同色的平整區域。
+///
+/// [largeTitle] 為 true 時是根分頁的 iOS 大標題：工具列下方多一列靠左的
+/// 大字標題（[AppGlass.largeTitleHeight]）。頁面往下捲時大標題跟著內容捲進
+/// 工具列底下，[bottom] 與漸隱底板一起往上收；大標題整行收進去後，工具列
+/// 置中的小標題淡入（與書籍詳情頁首的收合同一套 [NavHeaderTitle]）。捲動
+/// 位移由 [collapse] 提供（通常是 [NavHeaderCollapse]）。頁首佔用的高度不隨
+/// 收合改變，內容的上方內距固定，收合時內容不會跳動。
 class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
   const GlassNavHeader({
     super.key,
@@ -520,7 +529,15 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.systemOverlayStyle,
-  });
+    this.largeTitle = false,
+    this.collapse,
+    this.titleSheen = false,
+  }) : assert(!largeTitle || title != null, '大標題需要 title');
+
+  /// 大標題一直收著：頁首換成小標題（例如書架編輯模式的「已選 N 本」），
+  /// 但高度與大標題頁首相同，內容不跳動。
+  static const ValueListenable<double> fullyCollapsed =
+      AlwaysStoppedAnimation<double>(AppGlass.largeTitleHeight);
 
   final String? title;
   final Widget? titleWidget;
@@ -539,9 +556,24 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
   final Color? foregroundColor;
   final SystemUiOverlayStyle? systemOverlayStyle;
 
+  /// 根分頁的大標題（見類別說明）。
+  final bool largeTitle;
+
+  /// 頁面主清單的捲動位移，夾在 0 到 [AppGlass.largeTitleHeight]；null 表示
+  /// 在頂端（例如頁面換成空狀態，沒有清單可捲）。
+  final ValueListenable<double>? collapse;
+
+  /// 標題字樣上掃過淡墨流光，表示背景作業進行中（見 [InkSheen]）。
+  final bool titleSheen;
+
+  double get _largeTitleExtent => largeTitle ? AppGlass.largeTitleHeight : 0;
+
   @override
   Size get preferredSize => Size.fromHeight(
-    AppGlass.headerToolbarHeight + bottomHeight + AppGlass.headerFadeHeight,
+    AppGlass.headerToolbarHeight +
+        _largeTitleExtent +
+        bottomHeight +
+        AppGlass.headerFadeHeight,
   );
 
   @override
@@ -565,10 +597,113 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 onPressed: () => Navigator.maybePop(context),
               )
             : null);
-    final solidHeight =
-        topPadding + AppGlass.headerToolbarHeight + bottomHeight;
-    final totalHeight = solidHeight + AppGlass.headerFadeHeight;
+    // 兩側按鈕在收合時不變，建一次給每次收合重建共用。
+    final leadingSlot = effectiveLeading == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(left: AppGrouped.margin),
+            child: IconTheme.merge(
+              data: IconThemeData(color: fg),
+              child: effectiveLeading,
+            ),
+          );
+    final trailingSlot = actions.isEmpty
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(right: AppGrouped.margin),
+            child: IconTheme.merge(
+              data: IconThemeData(color: fg),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < actions.length; i++) ...[
+                    if (i > 0) const SizedBox(width: AppSpacing.sm),
+                    actions[i],
+                  ],
+                ],
+              ),
+            ),
+          );
+    final totalHeight = topPadding + preferredSize.height;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
+
+    Widget frame(double collapsed) {
+      final largeTitleVisible = _largeTitleExtent - collapsed;
+      final solidHeight =
+          topPadding +
+          AppGlass.headerToolbarHeight +
+          largeTitleVisible +
+          bottomHeight;
+      final fadeHeight = solidHeight + AppGlass.headerFadeHeight;
+      // 大標題整行收進工具列底下後，才由置中小標題接手。
+      final titleCollapsed =
+          collapsed >= AppGlass.largeTitleHeight - AppSpacing.sm;
+      return Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: fadeHeight,
+            child: EdgeFade(
+              edge: AxisDirection.up,
+              height: fadeHeight,
+              color: bg,
+              solidFraction: (solidHeight - AppSpacing.xs) / fadeHeight,
+            ),
+          ),
+          Positioned(
+            top: topPadding,
+            left: 0,
+            right: 0,
+            height: AppGlass.headerToolbarHeight,
+            child: NavigationToolbar(
+              middleSpacing: AppSpacing.md,
+              leading: leadingSlot,
+              middle:
+                  titleWidget ??
+                  (title == null
+                      ? null
+                      : NavHeaderTitle(
+                          title!,
+                          color: fg,
+                          visible: !largeTitle || titleCollapsed,
+                          sheen: titleSheen,
+                        )),
+              trailing: trailingSlot,
+            ),
+          ),
+          if (largeTitle)
+            Positioned(
+              top: topPadding + AppGlass.headerToolbarHeight,
+              left: 0,
+              right: 0,
+              height: largeTitleVisible,
+              // 大標題跟著內容往上捲，在工具列下緣被裁掉。
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.bottomLeft,
+                  minHeight: AppGlass.largeTitleHeight,
+                  maxHeight: AppGlass.largeTitleHeight,
+                  child: ExcludeSemantics(
+                    excluding: titleCollapsed,
+                    child: _LargeTitle(title!, color: fg, sheen: titleSheen),
+                  ),
+                ),
+              ),
+            ),
+          if (bottom != null)
+            Positioned(
+              top:
+                  topPadding + AppGlass.headerToolbarHeight + largeTitleVisible,
+              left: 0,
+              right: 0,
+              height: bottomHeight,
+              child: bottom!,
+            ),
+        ],
+      );
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
@@ -578,80 +713,224 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
               : SystemUiOverlayStyle.dark),
       child: SizedBox(
         height: totalHeight,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: EdgeFade(
-                edge: AxisDirection.up,
-                height: totalHeight,
-                color: bg,
-                solidFraction: (solidHeight - AppSpacing.xs) / totalHeight,
+        child: largeTitle && collapse != null
+            ? ValueListenableBuilder<double>(
+                valueListenable: collapse!,
+                builder: (context, offset, _) =>
+                    frame(offset.clamp(0.0, AppGlass.largeTitleHeight)),
+              )
+            : frame(0),
+      ),
+    );
+  }
+}
+
+/// 根分頁頂端靠左的大標題（[AppTextStyles.titleLarge]）。
+///
+/// 已經是 30 的大字，系統字級放大時不再跟著放大：頁首高度是固定的
+/// [AppGlass.largeTitleHeight]，放大會被裁掉；收合後的小標題照常跟隨字級。
+class _LargeTitle extends StatelessWidget {
+  const _LargeTitle(this.title, {required this.color, required this.sheen});
+
+  final String title;
+  final Color color;
+  final bool sheen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppGrouped.margin,
+        0,
+        AppGrouped.margin,
+        AppSpacing.sm,
+      ),
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: MediaQuery.withNoTextScaling(
+          child: Semantics(
+            header: true,
+            child: InkSheen(
+              active: sheen,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.titleLarge.copyWith(color: color),
               ),
             ),
-            Positioned(
-              top: topPadding,
-              left: 0,
-              right: 0,
-              height: AppGlass.headerToolbarHeight,
-              child: NavigationToolbar(
-                middleSpacing: AppSpacing.md,
-                leading: effectiveLeading == null
-                    ? null
-                    : Padding(
-                        padding: const EdgeInsets.only(left: AppGrouped.margin),
-                        child: IconTheme.merge(
-                          data: IconThemeData(color: fg),
-                          child: effectiveLeading,
-                        ),
-                      ),
-                middle:
-                    titleWidget ??
-                    (title == null
-                        ? null
-                        : Semantics(
-                            header: true,
-                            child: Text(
-                              title!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.titleSm.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: fg,
-                              ),
-                            ),
-                          )),
-                trailing: actions.isEmpty
-                    ? null
-                    : Padding(
-                        padding: const EdgeInsets.only(
-                          right: AppGrouped.margin,
-                        ),
-                        child: IconTheme.merge(
-                          data: IconThemeData(color: fg),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (var i = 0; i < actions.length; i++) ...[
-                                if (i > 0) const SizedBox(width: AppSpacing.sm),
-                                actions[i],
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-              ),
-            ),
-            if (bottom != null)
-              Positioned(
-                top: topPadding + AppGlass.headerToolbarHeight,
-                left: 0,
-                right: 0,
-                height: bottomHeight,
-                child: bottom!,
-              ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// 頁首置中的小標題（18／w600）。
+///
+/// [visible] 為 false 時透明且讀屏略過，切換時以 [AppMotion.fade] 淡入淡出：
+/// 頁面頂端有更大的標題（書籍詳情的封面區、根分頁的大標題）時先藏起來，
+/// 那一區捲進頁首底下後才由它接手。
+class NavHeaderTitle extends StatelessWidget {
+  const NavHeaderTitle(
+    this.title, {
+    super.key,
+    this.visible = true,
+    this.color,
+    this.sheen = false,
+  });
+
+  final String title;
+  final bool visible;
+
+  /// 預設為主要文字色。
+  final Color? color;
+
+  /// 見 [InkSheen]。
+  final bool sheen;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      excluding: !visible,
+      child: Semantics(
+        header: true,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: AppMotion.fade,
+          curve: AppMotion.fadeCurve,
+          child: InkSheen(
+            active: sheen,
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.titleSm.copyWith(
+                fontWeight: FontWeight.w600,
+                color: color ?? Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 把頁面主清單的垂直捲動位移交給 [GlassNavHeader.collapse]。
+///
+/// 把 [handle] 當成包住頁面內容的 `NotificationListener<Notification>` 回呼。
+/// 位移夾在 0 到 [AppGlass.largeTitleHeight]，收合完之後不再通知，捲動中
+/// 頁首不會每幀重建。清單換掉（例如網格切列表）時，新清單第一次排版發出的
+/// [ScrollMetricsNotification] 會把位移歸位。
+class NavHeaderCollapse extends ValueNotifier<double> {
+  NavHeaderCollapse() : super(0);
+
+  bool handle(Notification notification) {
+    final (metrics, depth) = switch (notification) {
+      ScrollNotification n => (n.metrics, n.depth),
+      ScrollMetricsNotification n => (n.metrics, n.depth),
+      _ => (null, -1),
+    };
+    // 只看頁面本身的直向清單，不看列內的橫向捲動或巢狀清單。
+    if (metrics == null || depth != 0 || metrics.axis != Axis.vertical) {
+      return false;
+    }
+    value = (metrics.pixels - metrics.minScrollExtent).clamp(
+      0.0,
+      AppGlass.largeTitleHeight,
+    );
+    return false;
+  }
+}
+
+/// 背景作業進行中時，從左到右反覆掃過文字的一道淡墨流光（書架檢查更新時
+/// 的「書架」字樣）。
+///
+/// [active] 轉為 false 後把正在掃的這一輪掃完才停；系統關閉動畫時不播。
+/// 只在掃動時包一層 [ShaderMask]（範圍只有這段文字），平時就是原本的文字。
+class InkSheen extends StatefulWidget {
+  const InkSheen({super.key, required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<InkSheen> createState() => _InkSheenState();
+}
+
+class _InkSheenState extends State<InkSheen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.sheen,
+  )..addStatusListener(_onStatus);
+
+  bool _animationsDisabled = false;
+
+  bool get _shouldRun => widget.active && !_animationsDisabled;
+
+  void _onStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && _shouldRun) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  void _sync() {
+    if (_animationsDisabled) {
+      _controller.stop();
+      return;
+    }
+    // 停用時不打斷：這一輪掃完後 [_onStatus] 不再重新開始。
+    if (_shouldRun && !_controller.isAnimating) _controller.forward(from: 0);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _animationsDisabled = MediaQuery.disableAnimationsOf(context);
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(InkSheen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _sync();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sheen = Theme.of(context).colorScheme.onSurfaceVariant
+        .withValues(alpha: 0.7);
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        if (!_controller.isAnimating) return child!;
+        // 光帶寬約字樣的一半，中心從左緣外掃到右緣外，頭尾都看不到光帶。
+        const halfBand = 0.5;
+        final center =
+            -1 - halfBand * 2 + _controller.value * (2 + halfBand * 4);
+        return ShaderMask(
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment(center - halfBand * 2, 0),
+            end: Alignment(center + halfBand * 2, 0),
+            colors: [
+              sheen.withValues(alpha: 0),
+              sheen,
+              sheen.withValues(alpha: 0),
+            ],
+          ).createShader(bounds),
+          child: child,
+        );
+      },
     );
   }
 }

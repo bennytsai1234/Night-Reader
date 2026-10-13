@@ -132,6 +132,14 @@ class AppGlass {
   static const double headerToolbarHeight = 52.0;
   static const double headerFadeHeight = 14.0;
 
+  /// 根分頁大標題列：`AppTextStyles.titleLarge` 一行（30 × 1.2 = 36）加下方
+  /// 留白 [AppSpacing.sm]，再補 2 湊成與圓形按鈕同高的 44。頁面往下捲這段
+  /// 距離時大標題完全收進工具列底下。
+  static const double largeTitleHeight = 44.0;
+
+  /// 浮動分頁列後方的由下往上漸隱，與頁首下緣的漸隱對稱。
+  static const double tabBarFadeHeight = headerFadeHeight;
+
   /// 模糊與色調透明度由使用者選擇的 `GlassStrength`（app_chrome.dart）決定。
   static const double hairline = 0.5;
 
@@ -155,6 +163,10 @@ class AppMotion {
   /// 分頁選取指示、按壓回彈等彈簧動畫（Telegram spring 0.4s）。
   static const Duration spring = Duration(milliseconds: 400);
   static const Curve springCurve = AppSpringCurve();
+
+  /// 頁首字樣的淡墨流光掃過一次。標題只有兩個字，掃太快像在閃爍警示；
+  /// 1.6 秒約是 [fade] 的六倍，看得出在動又不搶眼。
+  static const Duration sheen = Duration(milliseconds: 1600);
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

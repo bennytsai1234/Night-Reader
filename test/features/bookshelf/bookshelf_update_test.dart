@@ -141,6 +141,20 @@ void main() {
       expect(identical(first, second), isTrue);
       await first;
     });
+
+    test('tells listeners while a shelf check is running', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      final states = <bool>[];
+      provider.addListener(() => states.add(provider.isCheckingShelf));
+
+      final refresh = provider.refreshBookshelf();
+      expect(provider.isCheckingShelf, isTrue);
+      await refresh;
+
+      expect(provider.isCheckingShelf, isFalse);
+      expect(states.first, isTrue);
+      expect(states.last, isFalse);
+    });
   });
 
   group('App launch', () {

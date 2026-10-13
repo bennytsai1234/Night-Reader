@@ -7,6 +7,7 @@ import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
+import 'glass_menu.dart' show globalRectOf;
 
 class FloatingTabItem {
   const FloatingTabItem({
@@ -41,6 +42,55 @@ class FloatingTabBarScope extends InheritedWidget {
       !identical(hidden, oldWidget.hidden);
 }
 
+/// 墊在浮動分頁列（或佔用它位置的編輯工具列）後方、由下往上的顏色漸隱帶，
+/// 與頁首下緣的漸隱對稱：從螢幕底緣到分頁島上緣再往上 [AppSpacing.sm]
+/// （分頁列自己的上內距）是實色，再往上 [AppGlass.tabBarFadeHeight] 漸隱成
+/// 透明。內容捲到分頁島之前就淡出，不會從島底下透出。只畫一段漸層，不模糊。
+///
+/// 貼齊底部放在延伸到分頁列底下（`extendBody: true`）的內容上方；高度取
+/// `MediaQuery.paddingOf(context).bottom`，那段已含分頁列與系統手勢區。
+/// [hidden] 時跟分頁列一樣沉下並淡出。
+class FloatingTabBarFade extends StatelessWidget {
+  const FloatingTabBarFade({
+    super.key,
+    required this.color,
+    this.hidden = false,
+  });
+
+  /// 目前可見頁面的背景色。
+  final Color color;
+  final bool hidden;
+
+  @override
+  Widget build(BuildContext context) {
+    final solid = MediaQuery.paddingOf(context).bottom;
+    final height = solid + AppGlass.tabBarFadeHeight;
+    return IgnorePointer(
+      child: SizedBox(
+        height: height,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: hidden ? 0 : 1),
+          duration: AppMotion.menu,
+          curve: hidden ? Curves.easeInCubic : AppMotion.menuCurve,
+          builder: (context, shown, _) {
+            if (shown <= 0) return const SizedBox.shrink();
+            // 以顏色透明度淡出，不用 Opacity 另開圖層。
+            return FractionalTranslation(
+              translation: Offset(0, 1 - shown),
+              child: EdgeFade(
+                edge: AxisDirection.down,
+                height: height,
+                color: color.withValues(alpha: color.a * shown),
+                solidFraction: solid / height,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// Telegram iOS 26 式浮動膠囊分頁列，右側可附一顆圓形搜尋鈕。
 ///
 /// 選取膠囊跟著 [controller] 的頁面位置連續移動（滑動切頁時同步）；手指
@@ -65,7 +115,9 @@ class FloatingTabBar extends StatefulWidget {
 
   /// 主頁的 [PageController]；提供時選取膠囊跟著頁面捲動位置。
   final PageController? controller;
-  final VoidCallback? onSearch;
+
+  /// 點右側搜尋鈕；參數是按鈕在螢幕上的範圍，給搜尋頁從按鈕展開用。
+  final ValueChanged<Rect>? onSearch;
   final String searchTooltip;
 
   /// 沉到畫面外並停止接收點擊；佔用的高度不變，內容不會跟著跳動。
@@ -130,16 +182,19 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             Semantics(
               button: true,
               label: widget.searchTooltip,
-              child: PressScale(
-                onTap: widget.onSearch,
-                child: SizedBox.square(
-                  dimension: AppGlass.tabBarHeight,
-                  child: GlassSurface(
-                    shape: BoxShape.circle,
-                    child: Icon(
-                      Icons.search_rounded,
-                      size: 26,
-                      color: Theme.of(context).colorScheme.onSurface,
+              // 在按壓縮放之外量範圍，量到的是按鈕原本的大小。
+              child: Builder(
+                builder: (buttonContext) => PressScale(
+                  onTap: () => widget.onSearch!(globalRectOf(buttonContext)),
+                  child: SizedBox.square(
+                    dimension: AppGlass.tabBarHeight,
+                    child: GlassSurface(
+                      shape: BoxShape.circle,
+                      child: Icon(
+                        Icons.search_rounded,
+                        size: 26,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                   ),
                 ),

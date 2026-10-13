@@ -52,11 +52,21 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   /// Scaffold 內容區的系統內距（含玻璃頁首與底部浮動分頁列）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
 
+  /// 書源清單的捲動位移，給頁首大標題收合用。
+  final NavHeaderCollapse _titleCollapse = NavHeaderCollapse();
+
   @override
   void dispose() {
+    _titleCollapse.dispose();
     _scrollController.dispose();
     super.dispose();
   }
+
+  /// 有書源清單可捲；載入中、錯誤與空狀態時大標題停在頂端。
+  bool _showsList(ExploreProvider provider) =>
+      !provider.isLoadingSources &&
+      provider.sourceLoadError == null &&
+      !provider.isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +81,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       backgroundColor: AppChrome.of(context).groupedBackground,
       appBar: GlassNavHeader(
         title: '發現',
+        largeTitle: true,
+        collapse: _showsList(provider) ? _titleCollapse : null,
         backgroundColor: AppChrome.of(context).groupedBackground,
         bottom: showTabs
             ? Padding(
@@ -107,7 +119,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       body: Builder(
         builder: (bodyContext) {
           _bodyPadding = MediaQuery.paddingOf(bodyContext);
-          return _buildSourceList(provider);
+          return NotificationListener<Notification>(
+            onNotification: _titleCollapse.handle,
+            child: _buildSourceList(provider),
+          );
         },
       ),
     );
@@ -472,11 +487,17 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     if (target == null) return;
     final viewport = RenderAbstractViewport.maybeOf(target);
     if (viewport == null) return;
-    // 展開的書源捲到玻璃頁首與資料夾分頁下方，而不是被頁首蓋住。
+    // 展開的書源捲到玻璃頁首與分組篩選列下方，而不是被頁首蓋住。捲過大標題
+    // 的高度後頁首已收合，可見的頁首矮了一個大標題。
     final headerExtent = _bodyPadding.top;
     final position = _scrollController.position;
-    final offset = (viewport.getOffsetToReveal(target, 0).offset - headerExtent)
-        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    final reveal = viewport.getOffsetToReveal(target, 0).offset;
+    final collapsedOffset = reveal - headerExtent + AppGlass.largeTitleHeight;
+    final offset =
+        (collapsedOffset >= AppGlass.largeTitleHeight
+                ? collapsedOffset
+                : reveal - headerExtent)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
     await _scrollController.animateTo(
       offset,
       duration: AppMotion.fade,

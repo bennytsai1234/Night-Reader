@@ -24,6 +24,13 @@ class AppTextStyles {
     height: 1.25,
     fontWeight: FontWeight.bold,
   );
+
+  /// 根分頁（書架、發現）頂端的大標題，往下捲時收合成頁首的 [titleSm]。
+  static const TextStyle titleLarge = TextStyle(
+    fontSize: 30,
+    height: 1.2,
+    fontWeight: FontWeight.w600,
+  );
   static const TextStyle titleXl = TextStyle(
     fontSize: 24,
     height: 1.3,

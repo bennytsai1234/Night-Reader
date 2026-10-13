@@ -60,6 +60,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
+  /// 書架清單的捲動位移，給頁首大標題收合用。
+  final NavHeaderCollapse _titleCollapse = NavHeaderCollapse();
+
+  @override
+  void dispose() {
+    _titleCollapse.dispose();
+    super.dispose();
+  }
+
   /// 編輯中由底部工具列取代浮動分頁列，主頁同時鎖住左右換頁。
   void _enterEditMode([Book? first]) {
     setState(() {
@@ -103,7 +112,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
             final slot = FloatingTabBar.slotOf(context);
             return Stack(
               children: [
-                Positioned.fill(child: _buildContent(context, provider)),
+                Positioned.fill(
+                  child: NotificationListener<Notification>(
+                    onNotification: _titleCollapse.handle,
+                    child: _buildContent(context, provider),
+                  ),
+                ),
+                // 編輯工具列佔用分頁列的位置時，漸隱帶改由這裡墊在它後面。
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: FloatingTabBarFade(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    hidden: !_isMultiSelect,
+                  ),
+                ),
                 Positioned(
                   left: slot.left,
                   right: slot.right,
@@ -140,8 +164,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
       final allSelected =
           provider.books.isNotEmpty &&
           _selectedUrls.length == provider.books.length;
+      // 編輯時是小標題，但頁首高度與大標題相同，清單不會跳動。
       return GlassNavHeader(
         title: '已選 ${_selectedUrls.length} 本',
+        largeTitle: true,
+        collapse: GlassNavHeader.fullyCollapsed,
         leading: GlassTextButton(
           label: '完成',
           emphasized: true,
@@ -167,6 +194,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     return GlassNavHeader(
       title: '書架',
+      largeTitle: true,
+      // 空書架、載入中或錯誤頁沒有清單可捲，大標題停在頂端。
+      collapse: provider.books.isEmpty ? null : _titleCollapse,
+      titleSheen: provider.isCheckingShelf,
       leading: GlassMenuButton<Object>(
         icon: Icons.swap_vert_rounded,
         tooltip: '整理書架',

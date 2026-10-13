@@ -6,6 +6,7 @@ import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:provider/provider.dart';
@@ -53,15 +54,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final headerBottom = tester.getBottomLeft(find.byType(GlassNavHeader)).dy;
+    // 頁首佔用的高度固定，捲動後大標題收合，看得到的頁首是漸隱底板那一段。
+    final headerBackdrop = find.descendant(
+      of: find.byType(GlassNavHeader),
+      matching: find.byType(EdgeFade),
+    );
     Future<void> expectRowBelowHeader(String name) async {
+      final headerBottom = tester.getBottomLeft(headerBackdrop).dy;
       final top = tester.getTopLeft(find.text(name)).dy;
       expect(top, greaterThanOrEqualTo(headerBottom - 1), reason: name);
+      // 貼著收合後的頁首，不留下一個大標題高的空白。
       expect(
         top,
-        lessThan(
-          tester.view.physicalSize.height / tester.view.devicePixelRatio,
-        ),
+        lessThan(headerBottom + AppGlass.largeTitleHeight),
         reason: name,
       );
     }

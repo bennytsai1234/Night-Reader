@@ -64,6 +64,37 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   /// Scaffold 內容區的系統內距（含玻璃頁首）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
 
+  /// 這一輪搜尋已經出現過的結果；新一輪搜尋開始時清空。
+  final Set<String> _knownResultKeys = {};
+
+  /// 這一幀才串流進來的結果。只有這一幀就畫出來的列播淡入，落在畫面外、
+  /// 之後才捲進來的列不播；幀結束時清空。
+  final Set<String> _arrivingResultKeys = {};
+  bool _wasSearching = false;
+
+  /// 結果會隨書源回傳重新排序；以書名＋作者辨認同一本書。
+  static String _resultKey(SearchBook book) =>
+      '${book.name}\u0000${book.author ?? ''}';
+
+  void _trackArrivals(SearchProvider provider) {
+    final searching = provider.isSearching;
+    if (searching && !_wasSearching) _knownResultKeys.clear();
+    _wasSearching = searching;
+    var arrived = false;
+    for (final book in provider.results) {
+      final key = _resultKey(book);
+      if (_knownResultKeys.add(key) && searching) {
+        _arrivingResultKeys.add(key);
+        arrived = true;
+      }
+    }
+    if (arrived) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _arrivingResultKeys.clear(),
+      );
+    }
+  }
+
   bool get _opensBlank =>
       widget.initialQuery == null && widget.initialSource == null;
 
@@ -112,6 +143,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   Widget build(BuildContext context) {
     return Consumer<SearchProvider>(
       builder: (context, provider, child) {
+        _trackArrivals(provider);
         final showResults =
             !(provider.results.isEmpty && !provider.isSearching);
         return Scaffold(
@@ -691,27 +723,107 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         if (i < panels.length) return panels[i];
         final index = i - panels.length;
         final book = results[index];
-        return Column(
-          // 結果會隨書源回傳重新排序；以書名＋作者當 key，「展開來源」等列內
-          // 狀態才會跟著那本書，不會留在原本的位置。
-          key: ValueKey('${book.name}\u0000${book.author ?? ''}'),
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (index > 0)
-              const InsetSeparator(indent: ExploreBookItem.textIndent),
-            SearchResultItem(
-              result: AggregatedSearchBook(
-                book: book,
-                sources: book.sourceLabels.isNotEmpty
-                    ? book.sourceLabels
-                    : [book.originName ?? '未知來源'],
+        final key = _resultKey(book);
+        return _ResultEntrance(
+          // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
+          // 留在原本的位置。
+          key: ValueKey(key),
+          animate: _arrivingResultKeys.contains(key),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (index > 0)
+                const InsetSeparator(indent: ExploreBookItem.textIndent),
+              SearchResultItem(
+                result: AggregatedSearchBook(
+                  book: book,
+                  sources: book.sourceLabels.isNotEmpty
+                      ? book.sourceLabels
+                      : [book.originName ?? '未知來源'],
+                ),
+                isInBookshelf: p.isInBookshelf(book),
               ),
-              isInBookshelf: p.isInBookshelf(book),
-            ),
-          ],
+            ],
+          ),
         );
       },
+    );
+  }
+}
+
+/// 串流進來的搜尋結果第一次出現時，短暫淡入並微微上移。
+///
+/// 要不要播在建立時就決定：同一列之後重建、或捲出畫面回收後再出現，都不再
+/// 播。播完後透明度為 1、位移為 0，不再多出圖層。
+class _ResultEntrance extends StatefulWidget {
+  const _ResultEntrance({
+    super.key,
+    required this.animate,
+    required this.child,
+  });
+
+  final bool animate;
+  final Widget child;
+
+  @override
+  State<_ResultEntrance> createState() => _ResultEntranceState();
+}
+
+class _ResultEntranceState extends State<_ResultEntrance>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  late final Animation<double> _opacity;
+  late final Animation<double> _rise;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.animate) return;
+    final controller = AnimationController(
+      vsync: this,
+      duration: AppMotion.fade,
+    );
+    _controller = controller;
+    _opacity = CurvedAnimation(parent: controller, curve: AppMotion.fadeCurve);
+    _rise = CurvedAnimation(parent: controller, curve: AppMotion.menuCurve);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = _controller;
+    if (controller == null ||
+        controller.isAnimating ||
+        controller.isCompleted) {
+      return;
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      controller.value = 1;
+    } else {
+      controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller == null) return widget.child;
+    return FadeTransition(
+      opacity: _opacity,
+      child: AnimatedBuilder(
+        animation: _rise,
+        child: widget.child,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, AppSpacing.md * (1 - _rise.value)),
+          child: child,
+        ),
+      ),
     );
   }
 }

@@ -106,11 +106,21 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複發請求。
   Future<void> refreshBookshelf({bool userInitiated = false}) {
     if (userInitiated) _userRefreshed = true;
-    return _refreshing ??= _refreshAll().whenComplete(() {
+    final running = _refreshing;
+    if (running != null) return running;
+    final refresh = _refreshAll().whenComplete(() {
       _refreshing = null;
       _userRefreshed = false;
+      notifyListeners();
     });
+    _refreshing = refresh;
+    notifyListeners();
+    return refresh;
   }
+
+  /// 下拉或開 App 的書架檢查正在進行；書架頁首的「書架」字樣這時掃過淡墨
+  /// 流光。多選的「檢查更新」看 [updatingCount]，不算在這裡。
+  bool get isCheckingShelf => _refreshing != null;
 
   Future<void> _refreshAll() async {
     // 從資料庫讀：啟動時書架可能還沒載入完，記憶體裡的清單也可能是舊的。
