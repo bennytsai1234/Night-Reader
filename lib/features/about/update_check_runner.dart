@@ -52,13 +52,18 @@ class UpdateCheckRunner {
       await _clearDownloads();
       return;
     }
-    if (await _preferences.isIgnored(info.tagName)) return;
-    if (await _preferences.inRemindLaterCooldown()) return;
+    if (!await _shouldPrompt(info)) return;
     final apk = await _downloadInBackground(info);
+    // 下載期間使用者可能已從手動檢查的視窗按了忽略或稍後提醒。
+    if (!await _shouldPrompt(info)) return;
     final context = contextProvider();
     if (context == null || !context.mounted) return;
     await _showDialog(context, info, downloadedApk: apk);
   }
+
+  Future<bool> _shouldPrompt(UpdateInfo info) async =>
+      !await _preferences.isIgnored(info.tagName) &&
+      !await _preferences.inRemindLaterCooldown();
 
   /// 手動觸發。會回 `UpdateCheckOutcome`，呼叫端可顯示 SnackBar 告知結果。
   Future<UpdateCheckOutcome> runManual(BuildContext context) async {
@@ -100,21 +105,33 @@ class UpdateCheckRunner {
     }
   }
 
+  /// 已經開著更新視窗的 Navigator。背景檢查與手動檢查各自建立 runner，
+  /// 兩邊同時找到新版時靠這裡只跳一個視窗。
+  static final _dialogOpen = Expando<bool>();
+
   Future<void> _showDialog(
     BuildContext context,
     UpdateInfo info, {
     File? downloadedApk,
   }) async {
-    final result = await showDialog<UpdateDialogResult>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: AppChrome.of(context).barrier,
-      builder: (_) => UpdateDialog(
-        info: info,
-        installer: _installer,
-        downloadedApk: downloadedApk,
-      ),
-    );
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (_dialogOpen[navigator] ?? false) return;
+    _dialogOpen[navigator] = true;
+    final UpdateDialogResult? result;
+    try {
+      result = await showDialog<UpdateDialogResult>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: AppChrome.of(context).barrier,
+        builder: (_) => UpdateDialog(
+          info: info,
+          installer: _installer,
+          downloadedApk: downloadedApk,
+        ),
+      );
+    } finally {
+      _dialogOpen[navigator] = null;
+    }
     switch (result) {
       case UpdateDialogResult.ignored:
         await _preferences.ignore(info.tagName);

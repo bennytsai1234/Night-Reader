@@ -32,11 +32,14 @@ class _FakeService extends AppUpdateService {
 }
 
 class _FakeInstaller extends AppUpdateInstaller {
-  _FakeInstaller({this.unmetered = true, this.failDownload = false})
+  _FakeInstaller({this.unmetered = true, this.failDownload = false, this.gate})
     : super(dio: Dio());
 
   final bool unmetered;
   final bool failDownload;
+
+  /// 設定時，下載會停在這裡直到完成，模擬下載進行中。
+  final Completer<void>? gate;
   final downloaded = <String>[];
   int clears = 0;
 
@@ -50,6 +53,7 @@ class _FakeInstaller extends AppUpdateInstaller {
     CancelToken? cancelToken,
   }) async {
     downloaded.add(info.tagName);
+    await gate?.future;
     if (failDownload) throw StateError('offline');
     return File('night-reader-${info.tagName}.apk');
   }
@@ -73,11 +77,7 @@ void main() {
     service = _FakeService();
   });
 
-  /// 跑一次自動檢查並停在跳出的視窗（若有）；`done` 在視窗關閉、檢查結束時完成。
-  Future<({Future<void> done})> startAutomatic(
-    WidgetTester tester,
-    AppUpdateInstaller installer,
-  ) async {
+  Future<BuildContext> pumpHost(WidgetTester tester) async {
     late BuildContext context;
     await tester.pumpWidget(
       MaterialApp(
@@ -89,13 +89,24 @@ void main() {
         ),
       ),
     );
-    final runner = UpdateCheckRunner(
-      service: service,
-      preferences: preferences,
-      installer: installer,
-      isAndroid: () => true,
-    );
-    final run = runner.runAutomatic(() => context);
+    return context;
+  }
+
+  UpdateCheckRunner runnerWith(AppUpdateInstaller installer) =>
+      UpdateCheckRunner(
+        service: service,
+        preferences: preferences,
+        installer: installer,
+        isAndroid: () => true,
+      );
+
+  /// 跑一次自動檢查並停在跳出的視窗（若有）；`done` 在視窗關閉、檢查結束時完成。
+  Future<({Future<void> done})> startAutomatic(
+    WidgetTester tester,
+    AppUpdateInstaller installer,
+  ) async {
+    final context = await pumpHost(tester);
+    final run = runnerWith(installer).runAutomatic(() => context);
     await tester.pumpAndSettle();
     return (done: run);
   }
@@ -202,27 +213,52 @@ void main() {
     tester,
   ) async {
     await preferences.remindLater();
-    late BuildContext context;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (c) {
-            context = c;
-            return const SizedBox.shrink();
-          },
-        ),
-      ),
-    );
-    final runner = UpdateCheckRunner(
-      service: service,
-      preferences: preferences,
-      installer: _FakeInstaller(),
-      isAndroid: () => true,
-    );
+    final context = await pumpHost(tester);
 
-    unawaited(runner.runManual(context));
+    unawaited(runnerWith(_FakeInstaller()).runManual(context));
     await tester.pumpAndSettle();
 
     expect(find.text('發現新版 0.4.0'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a manual check during the background download shows one dialog',
+    (tester) async {
+      final gate = Completer<void>();
+      final installer = _FakeInstaller(gate: gate);
+      final context = await pumpHost(tester);
+      final automatic = runnerWith(installer).runAutomatic(() => context);
+      await tester.pumpAndSettle();
+      expect(installer.downloaded, ['v0.4.0']);
+      expect(find.text('發現新版 0.4.0'), findsNothing);
+
+      unawaited(runnerWith(installer).runManual(context));
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      await automatic;
+
+      expect(find.text('發現新版 0.4.0'), findsOneWidget);
+    },
+  );
+
+  testWidgets('remind later pressed during the background download sticks', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final installer = _FakeInstaller(gate: gate);
+    final context = await pumpHost(tester);
+    final automatic = runnerWith(installer).runAutomatic(() => context);
+    await tester.pumpAndSettle();
+
+    unawaited(runnerWith(installer).runManual(context));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('稍後提醒'));
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+    await automatic;
+
+    expect(find.text('發現新版 0.4.0'), findsNothing);
   });
 }
