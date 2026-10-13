@@ -33,6 +33,15 @@ VisualLineBlockPlan _plan(String text, double width, {int indent = 0}) =>
       indentChars: indent,
     );
 
+/// 補白寬度來自字型量測，各平台差在浮點誤差內（CI 的 Linux 把 5 量成
+/// 5.0000076），所以位置照比、寬度比到 0.001px。
+Matcher _spacers(List<LineSpacer> expected) =>
+    pairwiseCompare<LineSpacer, LineSpacer>(
+      expected,
+      (e, a) => e.offset == a.offset && (e.width - a.width).abs() < 0.001,
+      'spacers within 0.001px of',
+    );
+
 /// 依 [plan] 畫出的 Paragraph 與換算表。
 ({ui.Paragraph paragraph, ParagraphTextMap map}) _draw(
   String text,
@@ -87,7 +96,7 @@ void main() {
     const text = '一二abc三四';
     final plan = _plan(text, 200);
     // abc 寬 30，加上兩側最小間隙 5 是 35，補到 40：每側 5。
-    expect(plan.spacers, const [LineSpacer(2, 5), LineSpacer(5, 5)]);
+    expect(plan.spacers, _spacers(const [LineSpacer(2, 5), LineSpacer(5, 5)]));
     final drawn = _draw(text, plan, 200);
     expect(_box(drawn, 2).left, closeTo(45, 0.01));
     expect(_box(drawn, 5).left, closeTo(80, 0.01), reason: '「三」回到字格上');
@@ -97,23 +106,26 @@ void main() {
     const text = '一3二';
     final plan = _plan(text, 200);
     // 3 寬 12，加間隙 17，補到 20：每側 4。
-    expect(plan.spacers, const [LineSpacer(1, 4), LineSpacer(2, 4)]);
+    expect(plan.spacers, _spacers(const [LineSpacer(1, 4), LineSpacer(2, 4)]));
     expect(_box(_draw(text, plan, 200), 2).left, closeTo(40, 0.01));
   });
 
   test('另一側不需要間隙時，漢字側仍至少 1/8 格', () {
     // 123 寬 36：補到 40 共 4，平分是每側 2，低於漢字側的 2.5。
-    expect(_plan('一123', 200).spacers, const [LineSpacer(1, 2.5)]);
+    expect(_plan('一123', 200).spacers, _spacers(const [LineSpacer(1, 2.5)]));
     const text = '「123一';
     final plan = _plan(text, 200);
-    expect(plan.spacers, const [LineSpacer(1, 1.5), LineSpacer(4, 2.5)]);
+    expect(
+      plan.spacers,
+      _spacers(const [LineSpacer(1, 1.5), LineSpacer(4, 2.5)]),
+    );
     expect(_box(_draw(text, plan, 200), 4).left, closeTo(60, 0.01));
   });
 
   test('行首的英數字段貼齊左邊界，補白全放右側', () {
     const text = 'abc一二';
     final plan = _plan(text, 200);
-    expect(plan.spacers, const [LineSpacer(3, 10)]);
+    expect(plan.spacers, _spacers(const [LineSpacer(3, 10)]));
     final drawn = _draw(text, plan, 200);
     expect(_box(drawn, 0).left, closeTo(0, 0.01));
     expect(_box(drawn, 3).left, closeTo(40, 0.01));
@@ -122,7 +134,7 @@ void main() {
   test('段首縮排之後也算行首', () {
     const text = 'abc一';
     final plan = _plan(text, 200, indent: 2);
-    expect(plan.spacers, const [LineSpacer(3, 10)]);
+    expect(plan.spacers, _spacers(const [LineSpacer(3, 10)]));
     final drawn = _draw(text, plan, 200, indent: 2);
     expect(_box(drawn, 0).left, closeTo(40, 0.01), reason: '緊貼兩格縮排');
     expect(_box(drawn, 3).left, closeTo(80, 0.01));
@@ -132,7 +144,7 @@ void main() {
     const text = '一二三abc四';
     final plan = _plan(text, 100);
     expect(plan.visualLineBreakOffsets, const [6]);
-    expect(plan.spacers, const [LineSpacer(3, 5)]);
+    expect(plan.spacers, _spacers(const [LineSpacer(3, 5)]));
     final drawn = _draw(text, plan, 100);
     expect(_box(drawn, 6).left, closeTo(0, 0.01));
   });
@@ -151,7 +163,10 @@ void main() {
     expect(plan.visualLineBreakOffsets, const [10], reason: '從 ijklmn 開頭換行');
     // 第一行：abcdefgh（+空格）左側補 5；第二行 ijklmn 在行首，寬 50，
     // 右側補到 60。
-    expect(plan.spacers, const [LineSpacer(1, 5), LineSpacer(16, 10)]);
+    expect(
+      plan.spacers,
+      _spacers(const [LineSpacer(1, 5), LineSpacer(16, 10)]),
+    );
     final drawn = _draw(text, plan, 120);
     expect(_box(drawn, 10).left, closeTo(0, 0.01));
     expect(_box(drawn, 16).left, closeTo(60, 0.01));
@@ -163,8 +178,9 @@ void main() {
     expect(plan.spacers, isEmpty, reason: 'emoji 佔一格，不當成英數字段');
     final drawn = _draw(text, plan, 200);
     final emoji = _box(drawn, 1, length: 2);
-    expect(emoji.right - emoji.left, closeTo(_cell, 0.01));
-    expect(_box(drawn, 3).left, closeTo(40, 0.01));
+    // 縮小後的字級在 Linux 上量出 19.987；0.05px 仍遠小於沒縮時的 24px。
+    expect(emoji.right - emoji.left, closeTo(_cell, 0.05));
+    expect(_box(drawn, 3).left, closeTo(40, 0.05));
   });
 
   test('夾著英數字或 emoji 的行，行高與純中文行相同', () {
