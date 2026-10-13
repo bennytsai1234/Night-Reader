@@ -199,8 +199,9 @@ class DownloadService extends DownloadBase
   }
 
   /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，任務的章節範圍
-  /// 在加入時就固定了，新章節要等這輪結束再排。
-  final Set<String> _keepAfterRun = <String>{};
+  /// 在加入時就固定了，新章節要等這輪結束再排。值是這段期間有沒有從書源
+  /// 抓到新章節，結束後照樣交給重試規則判斷。
+  final Map<String, bool> _keepAfterRun = <String, bool>{};
 
   /// 書架上的網路書整本下載好（ADR 0008）：把目錄裡還沒有正文的章節排進
   /// 背景下載。[hasNewChapters] 表示剛從書源抓到新章節，書源此刻是好的，
@@ -237,7 +238,8 @@ class DownloadService extends DownloadBase
         case ShelfDownloadDecision.queue:
           await queueShelfDownload(book, missing);
         case ShelfDownloadDecision.afterCurrentRun:
-          _keepAfterRun.add(bookUrl);
+          _keepAfterRun[bookUrl] =
+              (_keepAfterRun[bookUrl] ?? false) || hasNewChapters;
         case ShelfDownloadDecision.leave:
           break;
       }
@@ -252,10 +254,14 @@ class DownloadService extends DownloadBase
 
   @override
   void onTaskFinished(DownloadTask task) {
-    if (!_keepAfterRun.remove(task.bookUrl)) return;
-    // 失敗或被暫停就不接著排，交給重試規則；完成了才補這輪之後的新章節。
-    if (task.isCompleted) {
-      unawaited(keepShelfBookDownloaded(task.bookUrl));
+    final hasNewChapters = _keepAfterRun.remove(task.bookUrl);
+    if (hasNewChapters == null) return;
+    // 完成了就補這輪之後的新章節；失敗了照重試規則，期間抓到新章節就馬上
+    // 再試。被暫停或中途停下的不接著排。
+    if (task.isCompleted || task.isFailed) {
+      unawaited(
+        keepShelfBookDownloaded(task.bookUrl, hasNewChapters: hasNewChapters),
+      );
     }
   }
 

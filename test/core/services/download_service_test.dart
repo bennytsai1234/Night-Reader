@@ -215,6 +215,49 @@ void main() {
       expect(task.totalCount, 3);
     });
 
+    test(
+      'new chapters found during a failed run retry right after it',
+      () async {
+        final book = await seed('book/failed-run', inShelf: true);
+        final service = DownloadService();
+        final running = DownloadTask(
+          bookUrl: book.bookUrl,
+          bookName: book.name,
+          startChapterIndex: 0,
+          endChapterIndex: 1,
+          status: DownloadTask.statusDownloading,
+          lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
+        );
+        service.tasks.add(running);
+        service.activeTaskUrls.add(book.bookUrl);
+        addTearDown(() async {
+          await settle(service);
+          service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+        });
+
+        // 這輪還在跑時，書架檢查抓到新章節。
+        await service.keepShelfBookDownloaded(
+          book.bookUrl,
+          hasNewChapters: true,
+        );
+        // 這輪剛失敗：照一般規則要等一天，但書源剛剛還抓得到新章節。
+        running
+          ..status = DownloadTask.statusFailed
+          ..lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+        service.activeTaskUrls.remove(book.bookUrl);
+        service.onTaskFinished(running);
+        for (var i = 0; i < 20; i++) {
+          final stored = await GetIt.instance<DownloadDao>().getAll();
+          if (stored.any((t) => t.bookUrl == book.bookUrl)) break;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+
+        final stored = await GetIt.instance<DownloadDao>().getAll();
+        final task = stored.firstWhere((t) => t.bookUrl == book.bookUrl);
+        expect(task.totalCount, 3);
+      },
+    );
+
     test('leaves a book that is not on the shelf alone', () async {
       final book = await seed('book/off-shelf', inShelf: false);
 
