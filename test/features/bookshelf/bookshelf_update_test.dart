@@ -21,6 +21,9 @@ void main() {
   late BookDao bookDao;
   late BookshelfProvider provider;
 
+  /// 排進書架自動下載的書：(bookUrl, hasNewChapters)。
+  final downloads = <(String, bool)>[];
+
   // 這個書源不在資料庫裡：檢查會失敗，但仍會記下檢查時間，用來看出
   // 哪些書被檢查過，不必連網。
   const missingOrigin = 'https://missing.example';
@@ -90,7 +93,11 @@ void main() {
   setUp(() async {
     AppConfig.autoRefresh = true;
     await db.delete(db.books).go();
-    provider = BookshelfProvider();
+    downloads.clear();
+    provider = BookshelfProvider(
+      keepBookDownloaded: (url, {hasNewChapters = false}) async =>
+          downloads.add((url, hasNewChapters)),
+    );
   });
 
   tearDown(() => provider.dispose());
@@ -130,12 +137,12 @@ void main() {
     });
   });
 
-  group('launch refresh', () {
-    test('does nothing when the setting is off', () async {
+  group('App launch', () {
+    test('does not check for updates when the setting is off', () async {
       await bookDao.upsert(shelfBook('https://a.example/1'));
       AppConfig.autoRefresh = false;
 
-      await provider.refreshBookshelfOnLaunch();
+      await provider.onAppLaunch();
 
       expect(await lastCheckTimeOf('https://a.example/1'), 0);
     });
@@ -143,9 +150,26 @@ void main() {
     test('checks the shelf when the setting is on', () async {
       await bookDao.upsert(shelfBook('https://a.example/1'));
 
-      await provider.refreshBookshelfOnLaunch();
+      await provider.onAppLaunch();
 
       expect(await lastCheckTimeOf('https://a.example/1'), greaterThan(0));
+    });
+
+    test('queues every online shelf book for download, even with checks '
+        'off', () async {
+      await bookDao.upsertAll([
+        shelfBook('https://a.example/1'),
+        shelfBook('https://a.example/2', canUpdate: false),
+        shelfBook('/local/book.txt', origin: BookType.localTag),
+      ]);
+      AppConfig.autoRefresh = false;
+
+      await provider.onAppLaunch();
+
+      expect(downloads.map((d) => d.$1).toSet(), {
+        'https://a.example/1',
+        'https://a.example/2',
+      });
     });
   });
 
@@ -163,6 +187,25 @@ void main() {
     Book onlineBook() =>
         shelfBook('https://source.example/book/1', origin: sourceUrl)
           ..infoHtml = detailHtml;
+
+    test('a check that finds new chapters queues them for download', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+
+      final result = await provider.checkBookUpdate(book);
+
+      expect(result.newChapterCount, 1);
+      expect(downloads, [(book.bookUrl, true)]);
+    });
+
+    test('a failed check queues no download', () async {
+      final book = shelfBook('https://a.example/1');
+      await bookDao.upsert(book);
+
+      await provider.checkBookUpdate(book);
+
+      expect(downloads, isEmpty);
+    });
 
     test('keeps progress saved after the book was read', () async {
       final stale = onlineBook();

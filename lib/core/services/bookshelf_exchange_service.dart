@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,12 +6,14 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:share_plus/share_plus.dart';
@@ -193,6 +196,14 @@ class BookshelfExchangeService {
     if (contentDao != null) {
       for (final content in chapterContents) {
         await contentDao.upsertEntry(content);
+      }
+    }
+    // 匯入的書就是加入書架的書：整本下載（ADR 0007）。
+    if (getIt.isRegistered<DownloadDao>()) {
+      final downloads = DownloadService();
+      for (final book in books) {
+        if (book.isLocal) continue;
+        unawaited(downloads.keepShelfBookDownloaded(book.bookUrl));
       }
     }
 

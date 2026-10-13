@@ -24,7 +24,6 @@ class ReaderV2ControllerHost {
     required this.initialChapters,
     required this.openTarget,
     required this._onChanged,
-    required this._onProgressPersisted,
     required this._isMounted,
   }) {
     settings.addListener(_onSettingsChanged);
@@ -53,7 +52,6 @@ class ReaderV2ControllerHost {
   final List<BookChapter> initialChapters;
   final ReaderV2OpenTarget? openTarget;
   final VoidCallback _onChanged;
-  final VoidCallback _onProgressPersisted;
   final bool Function() _isMounted;
 
   final ReaderV2SettingsController settings = ReaderV2SettingsController();
@@ -126,7 +124,6 @@ class ReaderV2ControllerHost {
       book: book,
       repository: repository,
       bookDao: dependencies.bookDao,
-      onProgressPersisted: _onProgressPersisted,
     );
     final initialLocation = _initialLocationFor(spec);
     final nextRuntime = ReaderV2Runtime(

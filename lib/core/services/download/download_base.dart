@@ -101,4 +101,7 @@ abstract class DownloadBase extends ChangeNotifier {
   }
 
   Future<void> processTask(DownloadTask task);
+
+  /// 一個任務跑完（完成、失敗或中途停下）後呼叫。
+  void onTaskFinished(DownloadTask task) {}
 }

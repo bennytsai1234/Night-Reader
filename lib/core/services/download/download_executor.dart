@@ -151,7 +151,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         getSource: () => source,
       );
       var poolCount = 0;
+      var consecutiveFailures = 0;
       for (var chapter in toDownload) {
+        // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
+        // 章節一章章打完（書架自動下載何時再試見 ADR 0007）。
+        if (consecutiveFailures >= _maxConsecutiveFailures) break;
         if (!isDownloading ||
             task.status == DownloadTask.statusPaused ||
             isTaskRetiring(task.bookUrl)) {
@@ -198,8 +202,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
               .then((result) {
                 if (result.success) {
                   task.successCount++;
+                  consecutiveFailures = 0;
                 } else {
                   task.errorCount++;
+                  consecutiveFailures++;
                   final message = result.failureMessage ?? '下載失敗';
                   task.setFailure(
                     reason: classifyDownloadFailureReason(message),
@@ -221,6 +227,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
               .catchError((Object error, StackTrace stack) {
                 AppLog.w('Download chapter failed ${chapter.title}: $error');
                 task.errorCount++;
+                consecutiveFailures++;
                 final message = error.toString();
                 task.setFailure(
                   reason: classifyDownloadFailureReason(message),
@@ -249,6 +256,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         task.status = task.errorCount > 0
             ? DownloadTask.statusFailed
             : DownloadTask.statusCompleted;
+        task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
         await downloadDao.updateProgress(task.bookUrl, status: task.status);
         AppEventBus().fire(AppEventBus.upBookshelf, data: task.bookUrl);
       }
@@ -265,6 +273,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           message: message,
         );
         task.status = DownloadTask.statusFailed;
+        task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
         await downloadDao.updateProgress(
           task.bookUrl,
           status: DownloadTask.statusFailed,
@@ -275,9 +284,14 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       completeTaskActivity(task.bookUrl);
     }
     update();
+    onTaskFinished(task);
   }
 
   static const int _maxRetries = 3;
+
+  /// 連續失敗幾章就停下整個任務：同時最多抓 [maxChapterConcurrent]（5）章，
+  /// 10 章是連續兩輪全部失敗（每章已各自重試 [_maxRetries] 次）。
+  static const int _maxConsecutiveFailures = 10;
 
   Future<DownloadChapterResult> _downloadChapter({
     required ReaderChapterContentStorage contentStorage,

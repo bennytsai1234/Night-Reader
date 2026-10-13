@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/di/injection.dart';
 
 enum BookshelfSortMode {
@@ -28,6 +29,20 @@ extension BookshelfSortModeLabel on BookshelfSortMode {
   }
 }
 
+/// 把書架上一本書還沒下載的章節排進背景下載（ADR 0007）。
+typedef ShelfBookDownloader = Future<void> Function(
+  String bookUrl, {
+  bool hasNewChapters,
+});
+
+Future<void> _keepWithDownloadService(
+  String bookUrl, {
+  bool hasNewChapters = false,
+}) => DownloadService().keepShelfBookDownloaded(
+  bookUrl,
+  hasNewChapters: hasNewChapters,
+);
+
 /// BookshelfProvider 的基礎狀態與 DAO 定義
 abstract class BookshelfProviderBase extends ChangeNotifier {
   Future<void> loadBooks();
@@ -46,5 +61,9 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   BookshelfSortMode sortMode = BookshelfSortMode.recentRead;
   int updatingCount = 0;
 
-  BookshelfProviderBase();
+  /// 書架自動下載，預設交給 [DownloadService]。
+  final ShelfBookDownloader keepBookDownloaded;
+
+  BookshelfProviderBase({ShelfBookDownloader? keepBookDownloaded})
+    : keepBookDownloaded = keepBookDownloaded ?? _keepWithDownloadService;
 }

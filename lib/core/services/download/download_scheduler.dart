@@ -43,15 +43,15 @@ mixin DownloadScheduler on DownloadBase {
     );
   }
 
-  /// Passive content availability may create missing work, but it never owns
-  /// the decision to resume a task the user paused or retry a failed task.
+  /// 書架自動下載（ADR 0007）加入的任務：不會把使用者暫停的任務排回去；
+  /// 失敗的任務要不要再試由呼叫端依重試規則決定。
   ///
   /// Returns true only when a new waiting task was actually admitted.
-  Future<bool> ensureDownloadTask(Book book, List<BookChapter> chapters) {
+  Future<bool> queueShelfDownload(Book book, List<BookChapter> chapters) {
     return _admitDownloadTask(
       book,
       chapters,
-      intent: _DownloadTaskAdmissionIntent.backgroundEnsure,
+      intent: _DownloadTaskAdmissionIntent.shelfAuto,
     );
   }
 
@@ -75,8 +75,8 @@ mixin DownloadScheduler on DownloadBase {
         if (existing.isWaiting || existing.isDownloading) {
           return false;
         }
-        if (intent == _DownloadTaskAdmissionIntent.backgroundEnsure &&
-            (existing.isPaused || existing.isFailed)) {
+        if (intent == _DownloadTaskAdmissionIntent.shelfAuto &&
+            existing.isPaused) {
           return false;
         }
       }
@@ -149,4 +149,4 @@ mixin DownloadScheduler on DownloadBase {
   }
 }
 
-enum _DownloadTaskAdmissionIntent { userRequested, backgroundEnsure }
+enum _DownloadTaskAdmissionIntent { userRequested, shelfAuto }

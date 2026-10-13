@@ -604,6 +604,12 @@ class BookDetailProvider extends ChangeNotifier {
 
     AppEventBus().fire(AppEventBus.upBookshelf);
     notifyListeners();
+    if (value && supportsBackgroundDownload) {
+      // 加入書架的書整本下載（ADR 0007）。
+      unawaited(
+        _resolvedDownloadService.keepShelfBookDownloaded(_book.bookUrl),
+      );
+    }
     return BookDetailOperationResult.success(value ? '已加入書架' : '已移出書架');
   }
 
@@ -808,6 +814,14 @@ class BookDetailProvider extends ChangeNotifier {
       await _refreshCacheStatus(notify: false);
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
+      if (_isInBookshelf) {
+        unawaited(
+          _resolvedDownloadService.keepShelfBookDownloaded(
+            _book.bookUrl,
+            hasNewChapters: newCount > 0,
+          ),
+        );
+      }
       return BookDetailUpdateResult(
         success: true,
         newChapterCount: newCount,

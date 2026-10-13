@@ -276,8 +276,8 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  /// 啟動畫面收起、書架露出後才在背景檢查書架更新，不和首幀與書架載入搶
-  /// 時間；跟下拉一樣不轉圈、不提示。
+  /// 啟動畫面收起、書架露出後才在背景補排下載、檢查書架更新，不和首幀與
+  /// 書架載入搶時間。
   void _onShelfShown() {
     FlutterNativeSplash.remove();
     if (!mounted) return;
@@ -288,7 +288,7 @@ class _MainPageState extends State<MainPage> {
 
   Future<void> _runAutomaticShelfRefresh(BookshelfProvider shelf) async {
     try {
-      await shelf.refreshBookshelfOnLaunch();
+      await shelf.onAppLaunch();
     } catch (e, stack) {
       AppLog.e('Bookshelf refresh failed: $e', error: e, stackTrace: stack);
     }

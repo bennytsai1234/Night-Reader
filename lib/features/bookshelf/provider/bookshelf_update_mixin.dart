@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -47,10 +49,39 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
   Future<void>? _refreshing;
 
-  /// 開 App 後的背景檢查；「啟動時檢查書架更新」關掉時不跑。
-  Future<void> refreshBookshelfOnLaunch() async {
+  /// 開 App 後在背景做的事：先把書架上還沒下載完整的書排進下載（ADR
+  /// 0007），再檢查更新（「啟動時檢查書架更新」關掉時不檢查）。
+  Future<void> onAppLaunch() async {
+    await keepShelfDownloaded();
     if (!AppConfig.autoRefresh) return;
     await refreshBookshelf();
+  }
+
+  /// 書架上每本網路書都排一次自動下載；不看 [Book.canUpdate]，那只管要不要
+  /// 檢查新章節，目錄裡已有的章節照樣下載。
+  Future<void> keepShelfDownloaded() async {
+    final List<Book> shelf;
+    try {
+      shelf = await bookDao.getInBookshelf();
+    } catch (error) {
+      AppLog.w('書架自動下載讀取書架失敗: $error');
+      return;
+    }
+    for (final book in shelf) {
+      if (book.isLocal) continue;
+      await _keepDownloaded(book.bookUrl);
+    }
+  }
+
+  Future<void> _keepDownloaded(
+    String bookUrl, {
+    bool hasNewChapters = false,
+  }) async {
+    try {
+      await keepBookDownloaded(bookUrl, hasNewChapters: hasNewChapters);
+    } catch (error) {
+      AppLog.w('書架自動下載排程失敗 $bookUrl: $error');
+    }
   }
 
   /// 下拉與啟動時的書架更新：只在背景檢查，不改 [updatingCount]（那是多選
@@ -110,13 +141,13 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         chapters[i].bookUrl = book.bookUrl;
       }
 
-      final newCount = await bookDao.transaction(() async {
+      final newCount = await bookDao.transaction<int?>(() async {
         final current = await bookDao.getByUrl(book.bookUrl);
         // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。
         if (current == null ||
             !current.isInBookshelf ||
             current.origin != book.origin) {
-          return 0;
+          return null;
         }
         final oldTotal = current.totalChapterNum > 0
             ? current.totalChapterNum
@@ -155,6 +186,11 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         }
         return newCount;
       });
+      if (newCount == null) {
+        return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
+      }
+      // 目錄寫好了：新章節（或之前沒排到的章節）接著下載。
+      await _keepDownloaded(book.bookUrl, hasNewChapters: newCount > 0);
       return BookUpdateCheckResult(
         bookUrl: book.bookUrl,
         newChapterCount: newCount,
