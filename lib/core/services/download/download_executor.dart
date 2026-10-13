@@ -126,9 +126,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         task = newTask;
       }
 
+      // 分卷標題沒有正文，不下載；否則整本永遠「有章節失敗」。
       final toDownload = chapters
           .where(
             (c) =>
+                chapterHasContent(c) &&
                 c.index >= task.startChapterIndex &&
                 c.index <= task.endChapterIndex,
           )

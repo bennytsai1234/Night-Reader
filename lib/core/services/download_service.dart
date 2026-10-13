@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
 
 import 'download/download_base.dart';
@@ -168,13 +169,11 @@ class DownloadService extends DownloadBase
     List<BookChapter> chapters,
   ) async {
     if (book.isLocal || !book.isInBookshelf || chapters.isEmpty) return 0;
-    final stored = await chapterContentDao.getStoredChapterIndices(
+    final stored = await chapterContentDao.getStoredChapterUrls(
       origin: book.origin,
       bookUrl: book.bookUrl,
     );
-    final missing = chapters
-        .where((chapter) => !stored.contains(chapter.index))
-        .toList();
+    final missing = chaptersMissingContent(chapters, stored);
     if (missing.isEmpty) return 0;
     final admitted = await ensureDownloadTask(book, missing);
     return admitted ? missing.length : 0;

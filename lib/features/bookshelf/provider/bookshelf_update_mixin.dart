@@ -249,15 +249,12 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters;
+      var toDownload = chapters.where(chapterHasContent).toList();
       if (contentDao != null) {
-        final stored = await ReaderChapterContentStore(
+        toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
           contentDao: contentDao,
-        ).storedChapterIndices(book: book);
-        toDownload = chapters
-            .where((chapter) => !stored.contains(chapter.index))
-            .toList();
+        ).missingChapters(book: book, chapters: chapters);
       }
       if (toDownload.isEmpty) {
         skippedBooks++;
@@ -320,15 +317,12 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters;
+      var toDownload = chapters.where(chapterHasContent).toList();
       if (contentDao != null) {
-        final stored = await ReaderChapterContentStore(
+        toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
           contentDao: contentDao,
-        ).storedChapterIndices(book: book);
-        toDownload = chapters
-            .where((chapter) => !stored.contains(chapter.index))
-            .toList();
+        ).missingChapters(book: book, chapters: chapters);
       }
       if (toDownload.isEmpty) {
         skippedBooks++;

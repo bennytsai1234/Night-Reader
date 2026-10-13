@@ -131,20 +131,21 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     return row != null;
   }
 
-  Future<Set<int>> getStoredChapterIndices({
+  /// 已下載好正文的章節網址。用網址而不是章節序號：目錄中間插入章節時
+  /// 序號會位移，網址（也是 [contentKey] 的一部分）不會。
+  Future<Set<String>> getStoredChapterUrls({
     required String origin,
     required String bookUrl,
   }) async {
     final rows = await customSelect(
       '''
-          SELECT chapterIndex
+          SELECT chapterUrl
           FROM reader_chapter_contents
           WHERE origin = ?
             AND bookUrl = ?
             AND status = ?
             AND content IS NOT NULL
             AND content != ''
-          ORDER BY chapterIndex
           ''',
       variables: [
         Variable.withString(origin),
@@ -153,7 +154,7 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
       ],
       readsFrom: {readerChapterContents},
     ).get();
-    return rows.map((row) => row.read<int>('chapterIndex')).toSet();
+    return rows.map((row) => row.read<String>('chapterUrl')).toSet();
   }
 
   Future<void> saveContent({
