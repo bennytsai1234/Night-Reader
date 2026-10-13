@@ -1789,6 +1789,8 @@ void main() {
         'duplicated block': (spans) => spans.insert(3, spans[2]),
         'continuation flag on a first block': (spans) =>
             (spans[2] as List<Object?>)[3] = 6,
+        'non-integer break': (spans) => (spans[1] as List<Object?>)[4] = ['4'],
+        'short span': (spans) => spans[1] = [5, 12],
       };
       for (final entry in cases.entries) {
         expect(await readMutated(entry.value), isNull, reason: entry.key);
