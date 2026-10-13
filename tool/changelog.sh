@@ -16,8 +16,8 @@ set -eu
 
 UNRELEASED='未發布'
 
-# 不算 App 內容的路徑：android-release.yml 的 paths-ignore（文件、網站、測試），
-# 加上不進 APK 的 CI 設定、Git hook 與這類工具腳本。改 paths-ignore 時這裡一起改。
+# 不算 App 內容的路徑：android-release.yml 的 release_ignored（文件、網站、測試），
+# 加上不進 APK 的 CI 設定、Git hook 與這類工具腳本。改 release_ignored 時這裡一起改。
 is_app_path() {
   case $1 in
     *.md | docs/* | website/* | test/* | .github/* | .githooks/* | tool/*) return 1 ;;
