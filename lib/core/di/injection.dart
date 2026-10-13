@@ -15,7 +15,6 @@ import '../database/dao/cookie_dao.dart';
 import '../database/dao/download_dao.dart';
 import '../database/dao/read_record_dao.dart';
 import '../database/dao/replace_rule_dao.dart';
-import '../database/dao/rule_sub_dao.dart';
 import '../database/dao/search_book_dao.dart';
 import '../database/dao/search_history_dao.dart';
 import '../database/dao/search_keyword_dao.dart';
@@ -71,9 +70,6 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<ReplaceRuleDao>(
     () => ReplaceRuleDao(getIt<AppDatabase>()),
-  );
-  getIt.registerLazySingleton<RuleSubDao>(
-    () => RuleSubDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<SearchBookDao>(
     () => SearchBookDao(getIt<AppDatabase>()),

@@ -15,7 +15,6 @@ import '../../models/server.dart';
 import '../../models/txt_toc_rule.dart';
 import '../../models/cache.dart';
 import '../../models/keyboard_assist.dart';
-import '../../models/rule_sub.dart';
 import '../../models/search_book.dart';
 import '../../models/download_task.dart';
 import '../../models/search_keyword.dart';
@@ -485,18 +484,6 @@ class KeyboardAssists extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
-}
-
-// ───────────── RuleSubs ─────────────
-@UseRowClass(RuleSub, generateInsertable: true)
-class RuleSubs extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text()();
-  TextColumn get url => text()();
-  IntColumn get type => integer().withDefault(const Constant(0))();
-  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
-  IntColumn get order =>
-      integer().named('order').withDefault(const Constant(0))();
 }
 
 // ───────────── SearchBooks ─────────────

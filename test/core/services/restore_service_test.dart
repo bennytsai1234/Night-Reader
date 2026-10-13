@@ -69,6 +69,25 @@ void main() {
     expect(await BookSourceDao(db).getByUrl('https://a.example'), isNotNull);
   });
 
+  test('subscription data in an old backup is skipped silently', () async {
+    final zip = await writeZip('with_subscriptions.zip', {
+      'manifest.json': jsonEncode({'schemaVersion': 4}),
+      'ruleSubs.json': jsonEncode([
+        {'id': 1, 'name': '訂閱', 'url': 'https://sub.example'},
+      ]),
+      'bookSources.json': jsonEncode([
+        {'bookSourceUrl': 'https://b.example', 'bookSourceName': '乙'},
+      ]),
+    });
+
+    final result = await RestoreService().restoreFromZip(zip);
+
+    expect(result.invalidArchive, isFalse);
+    expect(result.restoredAny, isTrue);
+    expect(result.failedFiles, isEmpty);
+    expect(await BookSourceDao(db).getByUrl('https://b.example'), isNotNull);
+  });
+
   test('a file that is not a backup is reported as invalid', () async {
     final notZip = File('${tempDir.path}/notes.zip');
     await notZip.writeAsString('這不是壓縮檔');

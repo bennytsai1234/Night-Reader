@@ -20,7 +20,6 @@ import '../models/server.dart';
 import '../models/txt_toc_rule.dart';
 import '../models/cache.dart';
 import '../models/keyboard_assist.dart';
-import '../models/rule_sub.dart';
 import '../models/search_book.dart';
 import '../models/download_task.dart';
 import '../models/search_keyword.dart';
@@ -38,7 +37,6 @@ import 'dao/server_dao.dart';
 import 'dao/txt_toc_rule_dao.dart';
 import 'dao/cache_dao.dart';
 import 'dao/keyboard_assist_dao.dart';
-import 'dao/rule_sub_dao.dart';
 import 'dao/search_book_dao.dart';
 import 'dao/download_dao.dart';
 import 'dao/search_keyword_dao.dart';
@@ -63,7 +61,6 @@ part 'app_database.g.dart';
     TxtTocRules,
     CacheTable,
     KeyboardAssists,
-    RuleSubs,
     SearchBooks,
     DownloadTasks,
     SearchKeywords,
@@ -83,7 +80,6 @@ part 'app_database.g.dart';
     TxtTocRuleDao,
     CacheDao,
     KeyboardAssistDao,
-    RuleSubDao,
     SearchBookDao,
     DownloadDao,
     SearchKeywordDao,
@@ -97,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -118,6 +114,16 @@ class AppDatabase extends _$AppDatabase {
         // 下載佇列的順序改存資料庫；既有任務照加入的先後（rowid）排。
         await m.addColumn(downloadTasks, downloadTasks.sortOrder);
         await customStatement('UPDATE download_tasks SET sortOrder = rowid');
+      }
+      if (from < 5) {
+        // 書源訂閱功能已移除；rule_subs 與更早移除時沒清掉的
+        // source_subscriptions 一併刪除，不留無人使用的表。
+        await customStatement('DROP INDEX IF EXISTS idx_rule_subs_order');
+        await customStatement('DROP TABLE IF EXISTS rule_subs');
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_source_subscriptions_order',
+        );
+        await customStatement('DROP TABLE IF EXISTS source_subscriptions');
       }
     },
     beforeOpen: (_) async {
@@ -195,10 +201,6 @@ class AppDatabase extends _$AppDatabase {
     '''
     CREATE INDEX IF NOT EXISTS idx_keyboard_assists_serial
     ON keyboard_assists (serialNo)
-    ''',
-    '''
-    CREATE INDEX IF NOT EXISTS idx_rule_subs_order
-    ON rule_subs ("order")
     ''',
     '''
     CREATE INDEX IF NOT EXISTS idx_search_books_name_author_order
