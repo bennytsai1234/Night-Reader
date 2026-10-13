@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
@@ -38,8 +39,16 @@ class BookDetailPage extends StatefulWidget {
   final Book? book;
   final AggregatedSearchBook? searchBook;
 
-  const BookDetailPage({super.key, this.book, this.searchBook})
-    : assert(book != null || searchBook != null);
+  /// 開啟這頁的清單封面所用的 Hero tag（[BookCoverWidget.heroTag]），封面
+  /// 從清單飛進來；null 時用詳情頁自己的 tag。
+  final String? coverHeroTag;
+
+  const BookDetailPage({
+    super.key,
+    this.book,
+    this.searchBook,
+    this.coverHeroTag,
+  }) : assert(book != null || searchBook != null);
 
   @override
   State<BookDetailPage> createState() => _BookDetailPageState();
@@ -133,6 +142,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
           child: BookInfoHeader(
             book: currentBook,
             provider: provider,
+            coverHeroTag:
+                widget.coverHeroTag ??
+                BookCoverWidget.heroTag(
+                  BookCoverHeroScope.detail,
+                  currentBook.bookUrl,
+                ),
             showPhotoView: _showPhotoView,
             onRead: () => _navigateToReader(
               context,

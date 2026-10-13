@@ -663,7 +663,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 : provider.updateBadgeOf(book.bookUrl),
             selecting: selecting,
             selected: _selectedUrls.contains(book.bookUrl),
-            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+            onTap: (cover) =>
+                selecting ? _toggleSelected(book) : _openBook(book, cover),
             onLongPress: selecting || reorderable
                 ? null
                 : (rect) => _showBookMenu(provider, book, rect, grid: false),
@@ -708,7 +709,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
           updateBadge: provider.updateBadgeOf(book.bookUrl),
           selecting: _isMultiSelect,
           selected: _selectedUrls.contains(book.bookUrl),
-          onTap: () => _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+          onTap: (cover) =>
+              _isMultiSelect ? _toggleSelected(book) : _openBook(book, cover),
           onLongPress: _isMultiSelect
               ? null
               : (rect) => _showBookMenu(provider, book, rect, grid: true),
@@ -894,7 +896,15 @@ class _BookshelfPageState extends State<BookshelfPage> {
   void _openDetail(Book book) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
+      MaterialPageRoute(
+        builder: (_) => BookDetailPage(
+          book: book,
+          coverHeroTag: BookCoverWidget.heroTag(
+            BookCoverHeroScope.bookshelf,
+            book.bookUrl,
+          ),
+        ),
+      ),
     );
   }
 
@@ -905,7 +915,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
     );
   }
 
-  Future<void> _openBook(Book book) async {
+  /// 從書架開書：轉場從被點的封面 [cover] 放大翻開。
+  Future<void> _openBook(Book book, BookOpenCover cover) async {
     if (book.type == 2) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
@@ -914,7 +925,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final provider = context.read<BookshelfProvider>();
     await Navigator.push(
       context,
-      BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
+      BookOpenRoute(
+        book: book,
+        openTarget: ReaderV2OpenTarget.resume(book),
+        cover: cover,
+      ),
     );
     // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新進度線。
     if (mounted) await provider.loadBooks();

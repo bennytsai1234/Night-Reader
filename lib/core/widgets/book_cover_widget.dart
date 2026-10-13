@@ -7,6 +7,17 @@ import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 
+/// 封面 Hero 的來源範圍。書架與發現在主頁的同一個路由裡（分頁
+/// keep-alive），同一本書可能同時出現在兩處；tag 加上來源範圍才不會重複。
+enum BookCoverHeroScope {
+  bookshelf,
+  explore,
+  search,
+
+  /// 書籍詳情自己的封面：不是從清單飛進來時，長按看大圖用。
+  detail,
+}
+
 class BookCoverWidget extends StatelessWidget {
   final String? coverUrl;
   final String bookName;
@@ -25,7 +36,10 @@ class BookCoverWidget extends StatelessWidget {
     this.borderRadius,
   });
 
-  static String heroTag(String bookUrl) => 'book_cover_$bookUrl';
+  /// 從 [scope] 的清單飛到書籍詳情封面的 Hero tag；詳情頁接收開啟它的
+  /// 清單所用的 tag。
+  static String heroTag(BookCoverHeroScope scope, String bookUrl) =>
+      'book_cover_${scope.name}_$bookUrl';
 
   @override
   Widget build(BuildContext context) {

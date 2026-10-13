@@ -19,6 +19,9 @@ import 'package:night_reader/core/services/chinese_display.dart';
 class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
+
+  /// 封面的 Hero tag：開啟這頁的清單所用的 tag，長按看大圖也用它。
+  final String coverHeroTag;
   final void Function(BuildContext context, String url, String heroTag)
   showPhotoView;
   final VoidCallback onRead;
@@ -32,6 +35,7 @@ class BookInfoHeader extends StatelessWidget {
     super.key,
     required this.book,
     required this.provider,
+    required this.coverHeroTag,
     required this.showPhotoView,
     required this.onRead,
     required this.onToggleBookshelf,
@@ -60,15 +64,11 @@ class BookInfoHeader extends StatelessWidget {
         GestureDetector(
           onLongPress: () {
             if (coverUrl != null && coverUrl.isNotEmpty) {
-              showPhotoView(
-                context,
-                coverUrl,
-                BookCoverWidget.heroTag(book.bookUrl),
-              );
+              showPhotoView(context, coverUrl, coverHeroTag);
             }
           },
           child: Hero(
-            tag: BookCoverWidget.heroTag(book.bookUrl),
+            tag: coverHeroTag,
             child: BookCoverWidget(
               coverUrl: coverUrl,
               bookName: context.zh(book.name),

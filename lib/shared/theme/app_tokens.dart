@@ -155,6 +155,13 @@ class AppMotion {
   /// 分頁選取指示、按壓回彈等彈簧動畫（Telegram spring 0.4s）。
   static const Duration spring = Duration(milliseconds: 400);
   static const Curve springCurve = AppSpringCurve();
+
+  /// 書架開書的「封面放大翻開」：封面先花 [bookOpenExpand] 放大到整頁，
+  /// 最後 [fade] 淡出露出閱讀頁（兩段重疊 50ms，總長 500ms）。放大比
+  /// [spring] 短，淡出沿用 [fade]，兩段都看得出來又不拖慢開書。
+  static const Duration bookOpen = Duration(milliseconds: 500);
+  static const Duration bookOpenExpand = Duration(milliseconds: 300);
+  static const Curve bookOpenExpandCurve = Curves.easeInOutCubic;
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

@@ -4,6 +4,7 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/features/bookshelf/provider/bookshelf_update_mixin.dart';
+import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -205,7 +206,9 @@ class BookshelfListCard extends StatelessWidget {
   final Book book;
   final bool selecting;
   final bool selected;
-  final VoidCallback? onTap;
+
+  /// 點擊時附上量好的封面，開書轉場從它放大。
+  final ValueChanged<BookOpenCover>? onTap;
 
   /// 長按時回傳卡片在螢幕上的範圍，供情境預覽選單浮起。
   final ValueChanged<Rect>? onLongPress;
@@ -224,16 +227,29 @@ class BookshelfListCard extends StatelessWidget {
     final name = context.zh(book.name);
     final author = context.zh(book.author).trim();
 
-    Widget cover = BookCoverWidget(
+    Widget coverAt(Size size) => BookCoverWidget(
       bookName: name,
       author: book.author,
       coverUrl: book.getDisplayCover(),
-      width: coverWidth,
-      height: coverHeight,
+      width: size.width,
+      height: size.height,
       borderRadius: AppRadius.cardXs,
     );
+    late BuildContext coverContext;
+    Widget cover = Builder(
+      builder: (context) {
+        coverContext = context;
+        return coverAt(const Size(coverWidth, coverHeight));
+      },
+    );
     if (hero) {
-      cover = Hero(tag: BookCoverWidget.heroTag(book.bookUrl), child: cover);
+      cover = Hero(
+        tag: BookCoverWidget.heroTag(
+          BookCoverHeroScope.bookshelf,
+          book.bookUrl,
+        ),
+        child: cover,
+      );
     }
     cover = Stack(
       clipBehavior: Clip.none,
@@ -323,7 +339,9 @@ class BookshelfListCard extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onTap,
+          onTap: onTap == null
+              ? null
+              : () => onTap!(BookOpenCover.measure(coverContext, coverAt)),
           onLongPress: onLongPress == null
               ? null
               : () => onLongPress!(globalRectOf(context)),
@@ -367,7 +385,9 @@ class BookshelfGridTile extends StatelessWidget {
   final Book book;
   final bool selecting;
   final bool selected;
-  final VoidCallback? onTap;
+
+  /// 點擊時附上量好的封面，開書轉場從它放大。
+  final ValueChanged<BookOpenCover>? onTap;
 
   /// 長按時回傳封面在螢幕上的範圍。
   final ValueChanged<Rect>? onLongPress;
@@ -379,12 +399,24 @@ class BookshelfGridTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final name = context.zh(book.name);
+    // 網格的封面撐滿格子，放大轉場用量到的格子尺寸畫同一張封面。
+    Widget coverAt(Size size) => BookCoverWidget(
+      bookName: name,
+      author: book.author,
+      coverUrl: book.getDisplayCover(),
+      width: size.width,
+      height: size.height,
+      borderRadius: AppRadius.cardXs,
+    );
+    late BuildContext coverContext;
 
     return Semantics(
       selected: selecting ? selected : null,
       child: PressScale(
         scale: 0.96,
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () => onTap!(BookOpenCover.measure(coverContext, coverAt)),
         onLongPress: onLongPress == null
             ? null
             : () {
@@ -411,14 +443,22 @@ class BookshelfGridTile extends StatelessWidget {
                     duration: AppMotion.spring,
                     curve: AppMotion.springCurve,
                     child: Hero(
-                      tag: BookCoverWidget.heroTag(book.bookUrl),
-                      child: BookCoverWidget(
-                        bookName: name,
-                        author: book.author,
-                        coverUrl: book.getDisplayCover(),
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: AppRadius.cardXs,
+                      tag: BookCoverWidget.heroTag(
+                        BookCoverHeroScope.bookshelf,
+                        book.bookUrl,
+                      ),
+                      child: Builder(
+                        builder: (context) {
+                          coverContext = context;
+                          return BookCoverWidget(
+                            bookName: name,
+                            author: book.author,
+                            coverUrl: book.getDisplayCover(),
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: AppRadius.cardXs,
+                          );
+                        },
                       ),
                     ),
                   ),

@@ -56,13 +56,16 @@ class ExploreBookItem extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            BookCoverWidget(
-              coverUrl: book.coverUrl,
-              bookName: context.zh(book.name),
-              author: context.zh(book.author ?? ''),
-              width: coverWidth,
-              height: coverHeight,
-              borderRadius: AppRadius.cardXs,
+            Hero(
+              tag: _heroTag,
+              child: BookCoverWidget(
+                coverUrl: book.coverUrl,
+                bookName: context.zh(book.name),
+                author: context.zh(book.author ?? ''),
+                width: coverWidth,
+                height: coverHeight,
+                borderRadius: AppRadius.cardXs,
+              ),
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
@@ -138,6 +141,10 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
+  /// 分類書單已依 bookUrl 去重，同一頁裡不會有重複的 tag。
+  String get _heroTag =>
+      BookCoverWidget.heroTag(BookCoverHeroScope.explore, book.bookUrl);
+
   List<String> _kinds(BuildContext context) {
     if (book.kind == null || book.kind!.isEmpty) return const [];
     return context
@@ -158,6 +165,7 @@ class ExploreBookItem extends StatelessWidget {
             book: book,
             sources: [book.originName ?? sourceName ?? '發現'],
           ),
+          coverHeroTag: _heroTag,
         ),
       ),
     );
