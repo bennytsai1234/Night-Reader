@@ -399,13 +399,17 @@ class ReaderV2ChapterRepository {
       );
     }
     final enabledRules = await _ensureEnabledReplaceRules();
-    return _contentTransformer.process(
-      book: book,
-      chapter: chapter,
-      rawContent: prepared.content,
-      enabledRules: enabledRules,
-      chineseConvertType: currentChineseConvert(),
-    );
+    try {
+      return await _contentTransformer.process(
+        book: book,
+        chapter: chapter,
+        rawContent: prepared.content,
+        enabledRules: enabledRules,
+        chineseConvertType: currentChineseConvert(),
+      );
+    } on ReaderV2ContentTransformException catch (error) {
+      throw ReaderV2ContentUnavailableException(error.message);
+    }
   }
 
   bool _isValidChapterIndex(int chapterIndex) {
