@@ -76,7 +76,6 @@ Future<List<BookSource>?> showImportPreviewDialog(
             if (p.newSources.isNotEmpty)
               AlertCheckRow(
                 title: '新書源：${p.newSources.length} 個',
-                subtitle: '本地不存在，將新增',
                 value: importNew,
                 onChanged: (v) => setState(() => importNew = v),
               ),

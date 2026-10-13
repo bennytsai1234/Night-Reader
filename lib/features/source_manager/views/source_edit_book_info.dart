@@ -19,7 +19,6 @@ class SourceEditBookInfo extends StatelessWidget {
             RuleTextField(
               controller: controllers['ruleBookInfoInit']!,
               label: '預處理規則',
-              hint: '載入詳情頁前執行',
             ),
             RuleTextField(
               controller: controllers['ruleBookInfoName']!,

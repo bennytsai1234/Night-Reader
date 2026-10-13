@@ -69,7 +69,6 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
             children: [
               GroupedSection(
                 header: '累積閱讀時間',
-                footer: '點一本書即可搜尋該書。',
                 children: [
                   for (final record in records)
                     GroupedRow(

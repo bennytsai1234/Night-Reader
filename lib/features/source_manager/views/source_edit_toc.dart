@@ -19,7 +19,6 @@ class SourceEditToc extends StatelessWidget {
             RuleTextField(
               controller: controllers['ruleTocChapterList']!,
               label: '目錄列表規則',
-              hint: '解析出章節列表的容器',
             ),
             RuleTextField(
               controller: controllers['ruleTocChapterName']!,
@@ -32,7 +31,6 @@ class SourceEditToc extends StatelessWidget {
             RuleTextField(
               controller: controllers['ruleTocNextPage']!,
               label: '下一頁規則',
-              hint: '多頁目錄分頁',
             ),
           ],
         ),

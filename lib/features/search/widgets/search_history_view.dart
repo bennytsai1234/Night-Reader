@@ -62,7 +62,6 @@ class SearchHistoryView extends StatelessWidget {
               onPressed: () => _confirmClearHistory(context),
             ),
             separatorIndent: _separatorIndent,
-            footer: '長按單筆記錄可刪除。',
             children: [
               for (final keyword in provider.historyKeywords)
                 GroupedRow(

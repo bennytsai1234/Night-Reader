@@ -199,7 +199,6 @@ class SourceManagerDialogs {
               AlertTextField(
                 controller: keywordController,
                 labelText: '預設關鍵字',
-                hintText: '未設置書源校驗關鍵字時使用',
                 // 底部的設定摘要含關鍵字，輸入時跟著更新。
                 onChanged: (_) => setState(() {}),
               ),

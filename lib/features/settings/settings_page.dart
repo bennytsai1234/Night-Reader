@@ -84,7 +84,6 @@ class SettingsPage extends StatelessWidget {
                   tint: AppTint.azurite,
                 ),
                 title: '啟動時檢查書架更新',
-                subtitle: '開 App 時在背景檢查新章節',
                 value: context.select<SettingsProvider, bool>(
                   (settings) => settings.autoRefresh,
                 ),

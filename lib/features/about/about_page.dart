@@ -169,28 +169,26 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.azurite,
                 ),
                 title: '自動檢查更新',
-                subtitle: '開啟 App 時檢查是否有新版',
                 value: _autoCheck,
                 onChanged: _setAutoCheck,
               ),
-              GroupedSwitchRow(
-                leading: const GroupedIconTile(
-                  Icons.wifi_rounded,
-                  tint: AppTint.tea,
+              // 只在自動檢查開著時才有作用，關閉時整列收起。
+              if (_autoCheck)
+                GroupedSwitchRow(
+                  leading: const GroupedIconTile(
+                    Icons.wifi_rounded,
+                    tint: AppTint.tea,
+                  ),
+                  title: '在 Wi-Fi 下自動下載更新',
+                  value: _autoDownload,
+                  onChanged: _setAutoDownload,
                 ),
-                title: '在 Wi-Fi 下自動下載更新',
-                subtitle: _autoCheck ? '發現新版時先在背景下載好，再提醒安裝' : '需先開啟「自動檢查更新」',
-                value: _autoDownload,
-                enabled: _autoCheck,
-                onChanged: _setAutoDownload,
-              ),
               GroupedSwitchRow(
                 leading: const GroupedIconTile(
                   Icons.science_outlined,
                   tint: AppTint.aubergine,
                 ),
                 title: '接收測試版更新',
-                subtitle: '搶先使用還在測試的改進，可能不夠穩定',
                 value: _betaChannel,
                 onChanged: _setBetaChannel,
               ),
