@@ -49,6 +49,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
   CancelToken? _cancelToken;
   File? _apk;
 
+  /// 向 installer [AppUpdateInstaller.hold] 住、還沒放掉的 APK。
+  File? _heldApk;
+
   /// 是否已開過系統安裝程式；背景下載好、還沒按過「安裝」時仍可忽略此版。
   bool _installerOpened = false;
 
@@ -57,7 +60,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     super.initState();
     final apk = widget.downloadedApk;
     if (apk != null) {
-      _apk = apk;
+      _keepApk(apk);
       _phase = _Phase.ready;
     }
   }
@@ -65,7 +68,28 @@ class _UpdateDialogState extends State<UpdateDialog> {
   @override
   void dispose() {
     _cancelToken?.cancel();
+    _releaseApk();
     super.dispose();
+  }
+
+  /// 視窗開著時手上的 APK 要留著可安裝，不讓其他清理刪掉。
+  void _keepApk(File apk) {
+    _releaseApk();
+    _apk = _heldApk = apk;
+    widget.installer.hold(apk);
+  }
+
+  void _releaseApk() {
+    final apk = _heldApk;
+    if (apk == null) return;
+    _heldApk = null;
+    widget.installer.release(apk);
+  }
+
+  /// 關掉視窗前先放掉 APK，呼叫端接著清理（例如忽略此版）時才刪得掉。
+  void _close(UpdateDialogResult result) {
+    _releaseApk();
+    Navigator.of(context).pop(result);
   }
 
   Future<void> _download() async {
@@ -89,7 +113,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         },
       );
       if (!mounted) return;
-      setState(() => _apk = apk);
+      setState(() => _keepApk(apk));
       await _install();
     } catch (e, stack) {
       if (e is DioException && CancelToken.isCancel(e)) {
@@ -140,9 +164,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
       case _UpdateAction.openPage:
         _openReleasePage();
       case _UpdateAction.later:
-        Navigator.of(context).pop(UpdateDialogResult.later);
+        _close(UpdateDialogResult.later);
       case _UpdateAction.ignore:
-        Navigator.of(context).pop(UpdateDialogResult.ignored);
+        _close(UpdateDialogResult.ignored);
     }
   }
 
