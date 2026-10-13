@@ -7,7 +7,7 @@ App 的更新視窗與「更新紀錄」顯示的是 GitHub Release 說明。原
 - 測試版取 `## 未發布`，也就是上一個正式版之後累積的改動。這一段可以是空的（例如正式版之後只改了 CI），App 會顯示「沒有附更新說明」。
 - 正式版取 `## X.Y.Z`。版號 commit 要把 `## 未發布` 改名成 `## X.Y.Z`，並在上面留一個空的 `## 未發布`；段落不存在或是空的，workflow 在建置前就失敗。
 
-要寫的時機是合併進 `main` 的時候，功能分支上不用寫。`tool/changelog.sh check <base> <head>` 判斷一次推送的範圍有沒有改到 App 內容：沿用 `android-release.yml` 決定要不要發版的 `release_ignored`（文件、網站、測試），再加上不進 APK 的 `.github/`、`.githooks/` 與 `tool/`。有改到 App 內容時，`## 未發布` 要有變動而且不是空的（只把原本的內容刪光不算寫了說明），或者是新增了 pubspec 版號的 `## X.Y.Z` 段落（正式版的版號 commit）。`.githooks/pre-push` 在推往 `main` 時先跑這個檢查；`ci.yml` 在推上 `main` 時再跑一次當後盾，沒裝 hook 的推送也擋得到，失敗時 Android Release 不會發版。
+要寫的時機是合併進 `main` 的時候，功能分支上不用寫。`tool/changelog.sh check <base> <head>` 判斷一次推送的範圍有沒有改到 App 內容：沿用 `android-release.yml` 決定要不要發版的 `release_ignored`（文件、網站、測試），再加上不進 APK 的 `.github/`、`.githooks/` 與 `tool/`。有改到 App 內容時，`## 未發布` 要有變動而且不是空的（只把原本的內容刪光不算寫了說明），或者是新增了 pubspec 版號的 `## X.Y.Z` 段落（正式版的版號 commit）。App 行為沒變的提交（例如只改註解）在 commit message 結尾的 trailer 寫 `Release-Notes: none`，檢查就不算它改到的檔案；這種改動照樣發一個內容沒變的測試版，說明沿用 `## 未發布` 已有的內容（2026-10-13 起，使用者決定這類改動直接推，不必等下一次改 App）。`.githooks/pre-push` 在推往 `main` 時先跑這個檢查；`ci.yml` 在推上 `main` 時再跑一次當後盾，沒裝 hook 的推送也擋得到，失敗時 Android Release 不會發版。
 
 App 端的 `releaseNotesForDisplay` 只去掉 Markdown 符號、把條列前綴統一成「•」。原本專為 `--generate-notes` 格式寫的處理（去掉 `by @作者 in 連結`、`release:` 提交、Full Changelog 連結）一併拿掉，舊版 Release 的英文說明照原樣顯示。
 

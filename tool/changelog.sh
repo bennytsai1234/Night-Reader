@@ -9,6 +9,7 @@
 #   sh tool/changelog.sh check <base> <head>
 #     base..head 改到 App 內容時，確認 CHANGELOG.md 有跟著寫：「## 未發布」改過且不是空的，
 #     或新增了正式版的「## X.Y.Z」段落。沒寫時結束碼為 1。
+#     commit message 的 trailer 寫了 `Release-Notes: none` 的提交（App 行為沒變，例如只改註解）不算。
 #     .githooks/pre-push 與 ci.yml 在推上 main 時呼叫。
 #
 # 測試：sh tool/changelog_test.sh
@@ -72,6 +73,22 @@ check() {
     done)
   if [ -z "$app_files" ]; then
     echo "changelog: 這次沒有改到 App 內容，不需要更新說明。"
+    return 0
+  fi
+
+  # 不影響 App 行為的提交（例如只改註解）在 commit message 結尾的 trailer 寫
+  # `Release-Notes: none`，不需要更新說明；只看其他提交改到的 App 檔案。
+  app_files=$(git rev-list --no-merges "$base..$head" |
+    while IFS= read -r commit; do
+      notes=$(git log -1 --format='%(trailers:key=Release-Notes,valueonly)' "$commit" | tr -d '[:space:]')
+      [ "$notes" = none ] && continue
+      git -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$commit"
+    done | sort -u |
+    while IFS= read -r path; do
+      if is_app_path "$path"; then printf '%s\n' "$path"; fi
+    done)
+  if [ -z "$app_files" ]; then
+    echo "changelog: 改到 App 內容的提交都標了 Release-Notes: none，不需要更新說明。"
     return 0
   fi
 

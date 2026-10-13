@@ -25,6 +25,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 - 不開 PR，合併在本機做完再推上 `main`。快轉 `main` 之前，分支最新的提交要已推上 GitHub，而且它的 CI 通過（`gh run list --commit <sha> --workflow CI` 查結果，還在跑就 `gh run watch <id> --exit-status` 等）；沒通過就在分支上修好再合併。本機的 hook 在 Windows 上跑，有些錯誤只在 Linux 的 CI 出現。`main` 的分支保護只禁止強制推送與刪除：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
 - 每次推上 `main` 只要改到 App 內容就會發一個測試版，所以 App 的改動在分支上累積，使用者說合併才進 `main`。commit message 用 Conventional Commits 格式（`fix(reader): …`）。
 - 合併進 `main` 時，在 `CHANGELOG.md` 的 `## 未發布` 用一般讀者看得懂的中文寫這次的變化（一兩句介紹加條列，不寫內部實作與 commit 前綴）；功能分支上不用寫。沒寫時 pre-push hook 與 CI 會擋下（ADR 0010）。
+- App 行為沒變的小改動（例如只改註解）直接改、直接推上 `main`，不用等下一次 App 改動一起發；因此多發一個內容沒變的測試版沒關係。這種提交不寫 `CHANGELOG.md`，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程

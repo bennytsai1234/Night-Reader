@@ -144,6 +144,17 @@ broken=$(commit broken "lib/main.dart=v4" "CHANGELOG.md=# 更新說明
 ")
 expect_failure 'check: CHANGELOG.md 沒有「未發布」標題時擋下' check "$bare_bump" "$broken"
 
+# App 行為沒變的提交在 trailer 標 Release-Notes: none。
+g checkout -q -b exempt "$noted"
+comment=$(commit "$(printf 'docs: fix a comment\n\nRelease-Notes: none\nCo-Authored-By: x <x@example.com>')" "lib/main.dart=v2 // 註解")
+expect_success 'check: 標了 Release-Notes: none 的提交不需要寫' check "$noted" "$comment"
+in_body=$(commit "$(printf 'fix: change\n\nRelease-Notes: none 寫在內文不算\n\nCo-Authored-By: x <x@example.com>')" "lib/main.dart=v5")
+expect_failure 'check: 不在 trailer 的 Release-Notes 不算' check "$comment" "$in_body"
+g checkout -q -b mixed "$comment"
+mixed=$(commit fix "lib/other.dart=x")
+expect_failure 'check: 同一次推送裡還有沒標的 App 提交時擋下' check "$noted" "$mixed"
+g checkout -q -
+
 if [ "$failures" -ne 0 ]; then
   echo "changelog_test: $failures 項失敗" >&2
   exit 1
