@@ -8,6 +8,7 @@ import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
+import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
@@ -20,6 +21,7 @@ import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
@@ -55,7 +57,8 @@ class BookshelfPage extends StatefulWidget {
   State<BookshelfPage> createState() => _BookshelfPageState();
 }
 
-class _BookshelfPageState extends State<BookshelfPage> {
+class _BookshelfPageState extends State<BookshelfPage>
+    with SingleTickerProviderStateMixin {
   bool _isMultiSelect = false;
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
@@ -77,7 +80,17 @@ class _BookshelfPageState extends State<BookshelfPage> {
     FloatingTabBarScope.maybeOf(context)?.value = false;
   }
 
+  /// 換排序、書移到最前面時書卡平滑換位，新加入的書淡入。
+  late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(vsync: this);
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
   void _toggleSelected(Book book) {
+    AppHaptics.select();
     setState(() {
       if (!_selectedUrls.remove(book.bookUrl)) {
         _selectedUrls.add(book.bookUrl);
@@ -312,13 +325,41 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     // 編輯工具列佔用分頁列的位置，清單底部讓出的高度不變。
     final bottom = insets.bottom + AppSpacing.md;
+    final grid = provider.isGridView;
+    final animate = !MediaQuery.disableAnimationsOf(context);
+    _motion.update(
+      [for (final book in provider.books) book.bookUrl],
+      grid: grid,
+      animate: animate,
+    );
     // 下拉在背景檢查更新：不轉圈，檢查期間不會重複觸發；結果只在書卡角標
     // 上顯示 5 秒。
     return RefreshIndicator.noSpinner(
       onRefresh: () => provider.refreshBookshelf(userInitiated: true),
-      child: provider.isGridView
-          ? _buildGridView(provider, insets.top, bottom)
-          : _buildListView(provider, insets.top, bottom),
+      // 網格與列表互換時交叉淡化加輕微縮放。兩種檢視的封面大小、位置與
+      // 捲動位置都不同，逐本原地變形要同時排出兩份版面，畫面外的書也對
+      // 不上；整頁淡化較穩，也和 App 其他淡入淡出一致。
+      child: AnimatedSwitcher(
+        duration: animate ? AppMotion.fade : Duration.zero,
+        switchInCurve: AppMotion.fadeCurve,
+        switchOutCurve: AppMotion.fadeCurve,
+        layoutBuilder: (current, previous) =>
+            Stack(fit: StackFit.expand, children: [...previous, ?current]),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            // 和按壓書卡的微縮同一個幅度：看得出換了版面，又不像換頁。
+            scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(
+          key: ValueKey(grid),
+          child: grid
+              ? _buildGridView(provider, insets.top, bottom)
+              : _buildListView(provider, insets.top, bottom),
+        ),
+      ),
     );
   }
 
@@ -603,7 +644,14 @@ class _BookshelfPageState extends State<BookshelfPage> {
         child: ReorderableListView.builder(
           padding: padding,
           itemCount: books.length,
-          onReorderItem: provider.reorderBooks,
+          onReorderStart: (_) => AppHaptics.lift(),
+          onReorderEnd: (_) => AppHaptics.snap(),
+          onReorderItem: (oldIndex, newIndex) {
+            // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
+            // 書卡放到定位，採用新順序，不再播換位動畫。
+            unawaited(provider.reorderBooks(oldIndex, newIndex));
+            _motion.accept([for (final book in books) book.bookUrl]);
+          },
           // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
           proxyDecorator: (child, _, animation) => ScaleTransition(
             scale: Tween<double>(begin: 1, end: 1.03).animate(
@@ -633,7 +681,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     bool reorderable = false,
   }) {
     final selecting = _isMultiSelect;
-    return Padding(
+    final card = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       // 滑出的動作按鈕裁在卡片圓角內。
       child: ClipRRect(
@@ -671,6 +719,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ),
       ),
     );
+    return BookshelfMotionItem(id: book.bookUrl, motion: _motion, child: card);
   }
 
   Widget _buildGridView(
@@ -703,15 +752,20 @@ class _BookshelfPageState extends State<BookshelfPage> {
       itemCount: provider.books.length,
       itemBuilder: (context, index) {
         final book = provider.books[index];
-        return BookshelfGridTile(
-          book: book,
-          updateBadge: provider.updateBadgeOf(book.bookUrl),
-          selecting: _isMultiSelect,
-          selected: _selectedUrls.contains(book.bookUrl),
-          onTap: () => _isMultiSelect ? _toggleSelected(book) : _openBook(book),
-          onLongPress: _isMultiSelect
-              ? null
-              : (rect) => _showBookMenu(provider, book, rect, grid: true),
+        return BookshelfMotionItem(
+          id: book.bookUrl,
+          motion: _motion,
+          child: BookshelfGridTile(
+            book: book,
+            updateBadge: provider.updateBadgeOf(book.bookUrl),
+            selecting: _isMultiSelect,
+            selected: _selectedUrls.contains(book.bookUrl),
+            onTap: () =>
+                _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+            onLongPress: _isMultiSelect
+                ? null
+                : (rect) => _showBookMenu(provider, book, rect, grid: true),
+          ),
         );
       },
     );
