@@ -59,4 +59,44 @@ void main() {
     expect(find.text('搜尋頁'), findsNothing);
     expect(find.text('主頁'), findsOneWidget);
   });
+
+  testWidgets('dragging from the left edge follows the finger and goes back', (
+    tester,
+  ) async {
+    late BuildContext home;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) {
+            home = context;
+            return const Scaffold(body: Text('主頁'));
+          },
+        ),
+      ),
+    );
+    Navigator.push(
+      home,
+      ExpandFromRectRoute<void>(
+        sourceRect: button,
+        builder: (_) => const Scaffold(body: Center(child: Text('搜尋頁'))),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final settled = tester.getCenter(find.text('搜尋頁')).dx;
+
+    final gesture = await tester.startGesture(const Offset(5, 300));
+    await gesture.moveBy(const Offset(20, 0));
+    await gesture.moveBy(const Offset(200, 0));
+    await tester.pump();
+    // 頁面跟著手指往右，底下的主頁露出來。
+    expect(tester.getCenter(find.text('搜尋頁')).dx, greaterThan(settled + 100));
+    expect(find.text('主頁'), findsOneWidget);
+
+    await gesture.moveBy(const Offset(300, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.text('搜尋頁'), findsNothing);
+    expect(find.text('主頁'), findsOneWidget);
+  });
 }

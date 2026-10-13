@@ -132,11 +132,6 @@ class AppGlass {
   static const double headerToolbarHeight = 52.0;
   static const double headerFadeHeight = 14.0;
 
-  /// 根分頁大標題列：`AppTextStyles.titleLarge` 一行（30 × 1.2 = 36）加下方
-  /// 留白 [AppSpacing.sm]，再補 2 湊成與圓形按鈕同高的 44。頁面往下捲這段
-  /// 距離時大標題完全收進工具列底下。
-  static const double largeTitleHeight = 44.0;
-
   /// 浮動分頁列後方的由下往上漸隱，與頁首下緣的漸隱對稱。
   static const double tabBarFadeHeight = headerFadeHeight;
 
@@ -173,13 +168,6 @@ class AppMotion {
   /// 500ms 則換色後要等太久才看得到全貌。前後放緩，起點與收尾都不突兀。
   static const Duration themeReveal = Duration(milliseconds: 450);
   static const Curve themeRevealCurve = Curves.easeInOutCubic;
-
-  /// 書架開書的「封面放大翻開」：封面先花 [bookOpenExpand] 放大到整頁，
-  /// 最後 [fade] 淡出露出閱讀頁（兩段重疊 50ms，總長 500ms）。放大比
-  /// [spring] 短，淡出沿用 [fade]，兩段都看得出來又不拖慢開書。
-  static const Duration bookOpen = Duration(milliseconds: 500);
-  static const Duration bookOpenExpand = Duration(milliseconds: 300);
-  static const Curve bookOpenExpandCurve = Curves.easeInOutCubic;
 
   /// 骨架載入的呼吸脈動：一次由深到淺（往返一輪 1.6 秒）。比 [fade] 慢
   /// 六倍以上，讀起來是安靜的等待，不像閃爍。

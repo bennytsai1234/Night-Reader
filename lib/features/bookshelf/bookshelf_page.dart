@@ -65,15 +65,11 @@ class _BookshelfPageState extends State<BookshelfPage>
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
-  /// 書架清單的捲動位移，給頁首大標題收合用。
-  final NavHeaderCollapse _titleCollapse = NavHeaderCollapse();
-
   /// 換排序、書移到最前面時書卡平滑換位，新加入的書淡入。
   late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(vsync: this);
 
   @override
   void dispose() {
-    _titleCollapse.dispose();
     _motion.dispose();
     super.dispose();
   }
@@ -122,12 +118,7 @@ class _BookshelfPageState extends State<BookshelfPage>
             final slot = FloatingTabBar.slotOf(context);
             return Stack(
               children: [
-                Positioned.fill(
-                  child: NotificationListener<Notification>(
-                    onNotification: _titleCollapse.handle,
-                    child: _buildContent(context, provider),
-                  ),
-                ),
+                Positioned.fill(child: _buildContent(context, provider)),
                 // 編輯工具列佔用分頁列的位置時，漸隱帶改由這裡墊在它後面。
                 Positioned(
                   left: 0,
@@ -174,11 +165,8 @@ class _BookshelfPageState extends State<BookshelfPage>
       final allSelected =
           provider.books.isNotEmpty &&
           _selectedUrls.length == provider.books.length;
-      // 編輯時是小標題，但頁首高度與大標題相同，清單不會跳動。
       return GlassNavHeader(
         title: '已選 ${_selectedUrls.length} 本',
-        largeTitle: true,
-        collapse: GlassNavHeader.fullyCollapsed,
         leading: GlassTextButton(
           label: '完成',
           emphasized: true,
@@ -204,9 +192,6 @@ class _BookshelfPageState extends State<BookshelfPage>
     }
     return GlassNavHeader(
       title: '書架',
-      largeTitle: true,
-      // 空書架、載入中或錯誤頁沒有清單可捲，大標題停在頂端。
-      collapse: provider.books.isEmpty ? null : _titleCollapse,
       titleSheen: provider.isCheckingShelf,
       leading: GlassMenuButton<Object>(
         icon: Icons.swap_vert_rounded,
@@ -764,8 +749,7 @@ class _BookshelfPageState extends State<BookshelfPage>
                 : provider.updateBadgeOf(book.bookUrl),
             selecting: selecting,
             selected: _selectedUrls.contains(book.bookUrl),
-            onTap: (cover) =>
-                selecting ? _toggleSelected(book) : _openBook(book, cover),
+            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
             onLongPress: selecting || reorderable
                 ? null
                 : (rect) => _showBookMenu(provider, book, rect, grid: false),
@@ -814,8 +798,8 @@ class _BookshelfPageState extends State<BookshelfPage>
             updateBadge: provider.updateBadgeOf(book.bookUrl),
             selecting: _isMultiSelect,
             selected: _selectedUrls.contains(book.bookUrl),
-            onTap: (cover) =>
-                _isMultiSelect ? _toggleSelected(book) : _openBook(book, cover),
+            onTap: () =>
+                _isMultiSelect ? _toggleSelected(book) : _openBook(book),
             onLongPress: _isMultiSelect
                 ? null
                 : (rect) => _showBookMenu(provider, book, rect, grid: true),
@@ -1021,8 +1005,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     );
   }
 
-  /// 從書架開書：轉場從被點的封面 [cover] 放大翻開。
-  Future<void> _openBook(Book book, BookOpenCover cover) async {
+  Future<void> _openBook(Book book) async {
     if (book.type == 2) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
@@ -1031,11 +1014,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     final provider = context.read<BookshelfProvider>();
     await Navigator.push(
       context,
-      BookOpenRoute(
-        book: book,
-        openTarget: ReaderV2OpenTarget.resume(book),
-        cover: cover,
-      ),
+      BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
     // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新進度線。
     if (mounted) await provider.loadBooks();

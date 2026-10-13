@@ -35,8 +35,12 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      // 當「我的」分頁時是根路由，不會出現返回鈕；從閱讀器推入時才有。
-      appBar: const GlassNavHeader(),
+      // 當「我的」分頁時是根路由，頁首只留狀態列與漸隱，不留工具列的高度；
+      // 從閱讀器推入時才有返回鈕。
+      appBar: GlassNavHeader(
+        automaticallyImplyLeading:
+            ModalRoute.of(context)?.impliesAppBarDismissal ?? false,
+      ),
       body: GroupedListView(
         children: [
           const _ProfileHeader(),
