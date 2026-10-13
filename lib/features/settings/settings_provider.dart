@@ -50,19 +50,6 @@ class SettingsProvider extends SettingsProviderBase {
 
   // --- 閱讀設定 ---
   bool hideStatusBar = false;
-  bool hideNavigationBar = false;
-  bool readBodyToLh = true;
-  bool paddingDisplayCutouts = false;
-  bool useZhLayout = false;
-  bool textBottomJustify = true;
-  bool mouseWheelPage = true;
-  bool keyPageOnLongPress = false;
-  bool showBrightnessView = true;
-  bool noAnimScrollPage = false;
-  bool previewImageByClick = false;
-  bool optimizeRender = false;
-  bool disableReturnKey = false;
-  bool expandTextMenu = false;
 
   // --- 朗讀設定 ---
   bool ignoreAudioFocusAloud = false;
@@ -138,19 +125,6 @@ class SettingsProvider extends SettingsProviderBase {
 
     // --- 閱讀設定 ---
     hideStatusBar = prefs.getBool(PreferKey.hideStatusBar) ?? false;
-    hideNavigationBar = prefs.getBool(PreferKey.hideNavigationBar) ?? false;
-    readBodyToLh = prefs.getBool(PreferKey.readBodyToLh) ?? true;
-    paddingDisplayCutouts =
-        prefs.getBool(PreferKey.paddingDisplayCutouts) ?? false;
-    useZhLayout = prefs.getBool(PreferKey.useZhLayout) ?? false;
-    textBottomJustify = prefs.getBool(PreferKey.textBottomJustify) ?? true;
-    mouseWheelPage = prefs.getBool(PreferKey.mouseWheelPage) ?? true;
-    keyPageOnLongPress = prefs.getBool(PreferKey.keyPageOnLongPress) ?? false;
-    showBrightnessView = prefs.getBool(PreferKey.showBrightnessView) ?? true;
-    noAnimScrollPage = prefs.getBool(PreferKey.noAnimScrollPage) ?? false;
-    previewImageByClick = prefs.getBool(PreferKey.previewImageByClick) ?? false;
-    optimizeRender = prefs.getBool(PreferKey.optimizeRender) ?? false;
-    expandTextMenu = prefs.getBool(PreferKey.expandTextMenu) ?? false;
     autoRefresh = prefs.getBool(PreferKey.autoRefresh) ?? true;
     defaultToRead = prefs.getBool(PreferKey.defaultToRead) ?? false;
     replaceEnableDefault =
