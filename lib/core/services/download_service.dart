@@ -26,7 +26,6 @@ class DownloadService extends DownloadBase
   double get progress => totalProgress;
 
   DownloadService._internal() {
-    listenEvents();
     _initialization = _loadTasks();
   }
 

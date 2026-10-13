@@ -27,7 +27,6 @@ abstract class DownloadBase extends ChangeNotifier {
   bool isPaused = false;
   Completer<void>? pauseCompleter;
   bool isScheduling = false;
-  bool isBookshelfRefreshing = false;
   final Set<String> activeTaskUrls = <String>{};
   final Set<String> retiringTaskUrls = <String>{};
   final Map<String, int> _taskActivityCounts = <String, int>{};

@@ -5,40 +5,13 @@ import 'download_base.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
-import 'package:night_reader/core/engine/app_event_bus.dart';
 
 /// DownloadService 的調度與任務管理邏輯擴展
 mixin DownloadScheduler on DownloadBase {
-  StreamSubscription? _refreshStartSub;
-  StreamSubscription? _refreshEndSub;
   final Set<String> _addingTaskUrls = <String>{};
-
-  void listenEvents() {
-    _refreshStartSub?.cancel();
-    _refreshEndSub?.cancel();
-    _refreshStartSub = AppEventBus()
-        .onName(AppEventBus.bookshelfRefreshStart)
-        .listen((_) {
-          isBookshelfRefreshing = true;
-          update();
-        });
-    _refreshEndSub = AppEventBus()
-        .onName(AppEventBus.bookshelfRefreshEnd)
-        .listen((_) {
-          isBookshelfRefreshing = false;
-          update();
-        });
-  }
 
   Future<bool> waitUntilTaskRunnable(String bookUrl) async {
     final retireSignal = retirementSignal(bookUrl);
-    while (isBookshelfRefreshing) {
-      if (isTaskRetiring(bookUrl)) return false;
-      await Future.any<void>(<Future<void>>[
-        Future<void>.delayed(const Duration(milliseconds: 250)),
-        retireSignal,
-      ]);
-    }
     if (isTaskRetiring(bookUrl)) return false;
 
     if (isPaused) {

@@ -8,7 +8,6 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/event_bus.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 import 'bookshelf_provider_base.dart';
@@ -68,7 +67,6 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         .toList();
     if (targets.isEmpty) return;
 
-    AppEventBus().fire(AppEvent('bookshelfRefreshStart'));
     final pool = Pool(_refreshConcurrency);
     try {
       await Future.wait([
@@ -83,7 +81,6 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       await pool.close();
     }
     await loadBooks();
-    AppEventBus().fire(AppEvent('bookshelfRefreshEnd'));
   }
 
   /// 抓書源上的詳情與目錄寫回這本書。網路請求期間使用者可能在讀這本書、

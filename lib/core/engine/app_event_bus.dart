@@ -11,8 +11,6 @@ class AppEventBus {
 
   // Event Names
   static const String upBookshelf = 'upBookshelf';
-  static const String bookshelfRefreshStart = 'bookshelfRefreshStart';
-  static const String bookshelfRefreshEnd = 'bookshelfRefreshEnd';
   static const String mediaButton = 'mediaButton';
   static const String recreate = 'RECREATE';
   static const String aloudState = 'aloud_state';
