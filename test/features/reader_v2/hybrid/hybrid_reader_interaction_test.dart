@@ -277,6 +277,35 @@ void main() {
     }
   });
 
+  testWidgets('a reverse tap queued behind a turn keeps the tap order', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    final position = scrollPosition(tester);
+    final pageDistance = await plainPageDistance(tester);
+
+    final start = position.pixels;
+    final finished = <String>[];
+    final a = viewport.moveToNextPage!().then((_) => finished.add('A'));
+    await tester.pump(const Duration(milliseconds: 16));
+    final b = viewport.moveToPrevPage!().then((_) => finished.add('B'));
+    final c = viewport.moveToNextPage!().then((_) => finished.add('C'));
+    var highest = position.pixels;
+    for (var frame = 0; frame < 90; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (position.pixels > highest) highest = position.pixels;
+    }
+    await Future.wait([a, b, c]);
+
+    expect(finished, ['A', 'B', 'C']);
+    expect(
+      highest,
+      lessThanOrEqualTo(start + pageDistance + 0.5),
+      reason: '第三下不能先把第一下延長成兩頁',
+    );
+    expect(position.pixels - start, closeTo(pageDistance, 0.5));
+  });
+
   testWidgets('dragging during a page turn hands the text to the finger', (
     tester,
   ) async {

@@ -1494,10 +1494,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   /// 同方向的翻頁動畫還在跑時，這一下直接把目標再往後推一頁、從目前
   /// 位置接著捲，不等前一下停下來；推不了（正文還沒排好）才排隊。
+  /// 翻頁後面已經有排隊的命令（例如反方向的一下）時也排隊，照點擊順序
+  /// 執行。
   Future<bool> _movePage({required bool forward}) {
     final turn = _pageTurn;
     if (turn != null &&
         turn.forward == forward &&
+        _commands.queued <= 1 &&
         turn.isCurrent() &&
         _extendPageTurn(turn)) {
       return turn.finished.future;
@@ -2512,21 +2515,26 @@ final class _PageTurn {
 
 final class _HybridCommandQueue {
   Future<void>? _tail;
+  int _queued = 0;
   bool get isBusy => _tail != null;
+
+  /// 還沒完成的命令數，包含正在執行的那一個。
+  int get queued => _queued;
 
   Future<bool> enqueue({
     required bool Function() isCurrent,
     required Future<bool> Function() command,
   }) {
     if (!isCurrent()) return Future<bool>.value(false);
+    _queued += 1;
     final result = (_tail ?? Future<void>.value()).then((_) async {
       if (!isCurrent()) return false;
       final completed = await command();
       return isCurrent() && completed;
     });
     final drained = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
+      (_) => _queued -= 1,
+      onError: (Object _, StackTrace _) => _queued -= 1,
     );
     _tail = drained;
     unawaited(

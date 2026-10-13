@@ -293,6 +293,14 @@ final class VisualLineLayoutEngine {
       return ((width - _fitEpsilon) / half).ceil() * half;
     }
 
+    // 一段寬 width 的字補到半格後，左側該補多少：補白平分兩側，但每側
+    // 不少於該側的最小間隙，不足的從另一側讓出（總補白至少是兩側間隙
+    // 之和，所以讓得出來）。
+    double leftPadding(double width, double gapLeft, double gapRight) {
+      final padding = snap(width + gapLeft + gapRight) - width;
+      return (padding / 2).clamp(gapLeft, padding - gapRight).toDouble();
+    }
+
     final lines = <_LineRange>[];
     var lineStart = shaped.first.start;
     var lineStartIndex = 0;
@@ -349,11 +357,11 @@ final class VisualLineLayoutEngine {
 
       // 整段放得下：左右補白照規則補，右側補白在行就此結束時拿掉。
       final width = _segmentWidth(shaped, text, index, runEnd);
-      final left = atLineStart
-          ? 0.0
-          : (snap(width + gapLeft + gapRight) - width) / 2;
+      final left = atLineStart ? 0.0 : leftPadding(width, gapLeft, gapRight);
       if (x + left + width <= available + _fitEpsilon) {
-        final right = atLineStart ? snap(width + gapRight) - width : left;
+        final right = atLineStart
+            ? snap(width + gapRight) - width
+            : snap(width + gapLeft + gapRight) - width - left;
         if (left > _fitEpsilon) spacers.add(LineSpacer(runStart, left));
         x += left + width;
         trailingSpacer = null;
@@ -370,7 +378,7 @@ final class VisualLineLayoutEngine {
       // 放不下：這段在本行結束。找出能放進本行的最長前段（行尾空白不
       // 算寬度），再依斷詞規則決定斷點。
       double leftFor(double w) =>
-          atLineStart ? 0.0 : (snap(w + gapLeft) - w) / 2;
+          atLineStart ? 0.0 : leftPadding(w, gapLeft, 0);
       var fits = index;
       while (fits < runEnd) {
         final w = _segmentWidth(

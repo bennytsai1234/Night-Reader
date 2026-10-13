@@ -927,7 +927,11 @@ class ReaderV2ContentTransformWorker {
   static final ReaderV2ContentTransformWorker instance =
       ReaderV2ContentTransformWorker._();
 
-  Future<SendPort>? _starting;
+  Future<({SendPort commands, int generation})>? _starting;
+
+  /// 每次丟掉 worker 就加一；啟動中或已取得通訊埠的呼叫端靠它判斷那個
+  /// worker 是否還在。
+  int _generation = 0;
   ReceivePort? _responses;
   Isolate? _isolate;
   int _nextRequestId = 0;
@@ -945,7 +949,13 @@ class ReaderV2ContentTransformWorker {
   }
 
   Future<Map<String, Object?>> process(Map<String, Object?> args) async {
-    final commands = await (_starting ??= _start());
+    final worker = await (_starting ??= _start());
+    // 啟動完成後、送出請求前 worker 已結束：通訊埠已失效，送了也不會有
+    // 回覆。
+    if (worker.generation != _generation) {
+      throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
+    }
+    final commands = worker.commands;
     final id = _nextRequestId++;
     final completer = Completer<Map<String, Object?>>();
     _pending[id] = completer;
@@ -962,7 +972,8 @@ class ReaderV2ContentTransformWorker {
     return completer.future;
   }
 
-  Future<SendPort> _start() async {
+  Future<({SendPort commands, int generation})> _start() async {
+    final generation = _generation;
     final responses = ReceivePort();
     final handshake = Completer<SendPort>();
     _responses = responses;
@@ -1002,13 +1013,17 @@ class ReaderV2ContentTransformWorker {
       );
       final commands = await handshake.future;
       final dictionaryData = await _loadDictionaryDataFromBundle();
+      // 握手之後、字典載入期間 worker 就結束了。
+      if (generation != _generation) {
+        throw const ReaderV2ContentTransformException('內容轉換程序意外結束');
+      }
       if (dictionaryData != null && dictionaryData.length == 4) {
         commands.send(<String, Object?>{
           'type': 'dict',
           'data': dictionaryData,
         });
       }
-      return commands;
+      return (commands: commands, generation: generation);
     } catch (error) {
       final failure = error is ReaderV2ContentTransformException
           ? error
@@ -1020,6 +1035,7 @@ class ReaderV2ContentTransformWorker {
 
   /// 丟掉目前的 worker；下一個請求會重新啟動。
   void _reset(ReaderV2ContentTransformException failure) {
+    _generation += 1;
     _starting = null;
     final waiters = _pending.values.toList(growable: false);
     _pending.clear();

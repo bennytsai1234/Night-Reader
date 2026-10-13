@@ -101,6 +101,15 @@ void main() {
     expect(_box(_draw(text, plan, 200), 2).left, closeTo(40, 0.01));
   });
 
+  test('另一側不需要間隙時，漢字側仍至少 1/8 格', () {
+    // 123 寬 36：補到 40 共 4，平分是每側 2，低於漢字側的 2.5。
+    expect(_plan('一123', 200).spacers, const [LineSpacer(1, 2.5)]);
+    const text = '「123一';
+    final plan = _plan(text, 200);
+    expect(plan.spacers, const [LineSpacer(1, 1.5), LineSpacer(4, 2.5)]);
+    expect(_box(_draw(text, plan, 200), 4).left, closeTo(60, 0.01));
+  });
+
   test('行首的英數字段貼齊左邊界，補白全放右側', () {
     const text = 'abc一二';
     final plan = _plan(text, 200);
