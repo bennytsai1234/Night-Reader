@@ -52,12 +52,14 @@ jobs:
           fi
           stable_tag="v${app_version}"
 
-          # 不進 APK 的路徑：文件、網站與測試。改這份清單時，tool/changelog.sh 的 is_app_path 一起改。
+          # 不進 APK 的路徑：文件、網站、測試，以及只跑測試的 ci.yml（APK 用這份 workflow
+          # 自己固定的 Flutter 版本建置）。改這份清單時，tool/changelog.sh 的 is_app_path 一起改。
           release_ignored=(
             ':(exclude,glob)**/*.md'
             ':(exclude)docs'
             ':(exclude)website'
             ':(exclude)test'
+            ':(exclude).github/workflows/ci.yml'
             ':(exclude).github/workflows/website-deploy.yml'
           )
           # 上一個發布（正式版或測試版的 tag）之後，有沒有改到會進 APK 的檔案。
