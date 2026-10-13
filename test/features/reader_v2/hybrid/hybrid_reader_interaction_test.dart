@@ -411,6 +411,56 @@ void main() {
     );
   });
 
+  testWidgets('an unavailable next chapter is reported at the edge, not '
+      'requested every frame', (tester) async {
+    var requests = 0;
+    var available = false;
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        chapterCount: 2,
+        paragraphs: 20,
+        contentLoader: (index, chapter) async {
+          if (index != 1) return chapter.content;
+          requests += 1;
+          if (!available) {
+            throw const ReaderV2ContentUnavailableException('第 1 章暫時取不到');
+          }
+          return chapter.content;
+        },
+      ),
+    );
+    final position = scrollPosition(tester);
+    final afterOpen = requests;
+    expect(afterOpen, greaterThan(0));
+
+    final gesture = await tester.startGesture(const Offset(200, 500));
+    for (var step = 0; step < 40; step++) {
+      await gesture.moveBy(const Offset(0, -40));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(requests, afterOpen, reason: '捲動中不重複向書源要取不到的章節');
+    await gesture.up();
+    await settle(tester);
+
+    final edge = position.maxScrollExtent;
+    expect(position.pixels, closeTo(edge, 0.5));
+    expect(runtime.takeUserNotice(), '第 1 章暫時取不到');
+    expect(requests, afterOpen + 1, reason: '停在邊緣時重試一次');
+
+    available = true;
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -40));
+    await settle(tester);
+    expect(requests, afterOpen + 2);
+    for (var frame = 0; frame < 200; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.maxScrollExtent, greaterThan(edge), reason: '重試成功後正文接上');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+    await settle(tester);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
   testWidgets('stopping auto-scroll does not cancel the finger on the text', (
     tester,
   ) async {

@@ -317,6 +317,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
+    // 開書、跳章與重新定位都是使用者的動作：之前取不到的章節都再試一次。
+    _chapterRepo.forgetFailures();
     final binding = _pump;
     final chapter = location.chapterIndex
         .clamp(0, widget.runtime.chapterCount - 1)
@@ -858,14 +860,63 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _pump.onScrollStateChanged(PumpState.ballistic);
       }
       _scheduleMotionCapture();
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      // 停在可捲範圍盡頭再往外拖，正文不動、只有 overscroll；手勢結束時
+      // 一樣要檢查那個邊緣是不是取不到的章節。
+      _sawUserScroll = true;
     } else if (notification is ScrollEndNotification) {
       final wasUser = _sawUserScroll;
       _dragging = false;
       _sawUserScroll = false;
       _pump.onScrollStateChanged(PumpState.idle);
-      if (wasUser) unawaited(_handleScrollSettled());
+      if (wasUser) {
+        _retryUnavailableFrontierAtExtent();
+        unawaited(_handleScrollSettled());
+      }
     }
     return false;
+  }
+
+  /// 使用者把正文捲到可捲範圍的盡頭時，若那裡是取不到的章節，說明原因
+  /// 並重試。
+  void _retryUnavailableFrontierAtExtent() {
+    final controller = _scrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    if (position.pixels >=
+        position.maxScrollExtent - _minimumViewportMovement) {
+      _retryUnavailableFrontier(forward: true);
+    }
+    if (position.pixels <=
+        position.minScrollExtent + _minimumViewportMovement) {
+      _retryUnavailableFrontier(forward: false);
+    }
+  }
+
+  /// 已排好的正文在章節邊緣結束、而相鄰章節取不到時：把取不到的原因
+  /// 告訴使用者，並重試一次那一章。只在使用者捲到或翻到這個邊緣時呼叫，
+  /// 不會在背景反覆請求。
+  void _retryUnavailableFrontier({required bool forward}) {
+    final edge = forward
+        ? _documentIndex.forwardEdgeKey
+        : _documentIndex.backwardEdgeKey;
+    if (edge == null) return;
+    final blocks = _blocks[edge.chapterIndex];
+    if (blocks == null || blocks.blocks.isEmpty) return;
+    final atChapterEdge = forward
+        ? edge == blocks.blocks.last.key
+        : edge.blockIndex == 0;
+    if (!atChapterEdge) return;
+    final chapter = edge.chapterIndex + (forward ? 1 : -1);
+    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
+    final failure = _chapterRepo.failureOf(chapter);
+    if (failure == null) return;
+    widget.runtime.emitUserNotice(failure.message);
+    _chapterRepo.forgetFailure(chapter);
+    // 還在進行中的那次取得讀的是記下來的失敗，一定會失敗；不要讓重試併進去。
+    _blocksInFlight.remove(chapter);
+    _requestChapter(chapter, priority: LayoutTaskPriority.visible);
   }
 
   void _scheduleMotionCapture() {
@@ -1555,7 +1606,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       distance: distance,
       isCurrent: isCurrent,
     );
-    if (!reachable || !isCurrent() || !controller.hasClients) return false;
+    if (!isCurrent() || !controller.hasClients) return false;
+    if (!reachable) {
+      _retryUnavailableFrontier(forward: forward);
+      return false;
+    }
 
     final position = controller.position;
     final before = position.pixels;

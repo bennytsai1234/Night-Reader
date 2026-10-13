@@ -29,6 +29,12 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
   final LinkedHashMap<int, ChapterText> _window =
       LinkedHashMap<int, ChapterText>();
   final Map<int, Future<ChapterText>> _inFlight = <int, Future<ChapterText>>{};
+
+  /// 取不到的章節。之後的 [load] 直接回報同一個失敗，不再對書源發請求；
+  /// 使用者的動作（開書、跳章、捲到或翻到這一章的邊緣）才透過
+  /// [forgetFailure]／[forgetFailures] 重試。
+  final Map<int, ReaderV2ContentUnavailableException> _failures =
+      <int, ReaderV2ContentUnavailableException>{};
   int? _residentFirst;
   int? _residentLast;
   int _generation = 0;
@@ -60,10 +66,18 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     }
     final inFlight = _inFlight[id];
     if (inFlight != null) return inFlight;
+    final failure = _failures[id];
+    if (failure != null) return Future<ChapterText>.error(failure);
     final generation = _generation;
     late final Future<ChapterText> task;
     task = () async {
-      final content = await _loadContent(id);
+      final ReaderV2Content content;
+      try {
+        content = await _loadContent(id);
+      } on ReaderV2ContentUnavailableException catch (error) {
+        if (!_disposed && generation == _generation) _failures[id] = error;
+        rethrow;
+      }
       final text = _adapt(content);
       if (_disposed || generation != _generation) return text;
       // A late semantic read is still returned to its caller, but cannot
@@ -123,11 +137,18 @@ final class HybridChapterRepository implements HybridChapterTextRepository {
     }
   }
 
+  ReaderV2ContentUnavailableException? failureOf(ChapterId id) => _failures[id];
+
+  void forgetFailure(ChapterId id) => _failures.remove(id);
+
+  void forgetFailures() => _failures.clear();
+
   void invalidateLoaded({bool emitEvents = true}) {
     _generation += 1;
     final ids = _window.keys.toList(growable: false);
     _window.clear();
     _inFlight.clear();
+    _failures.clear();
     if (!emitEvents || _disposed) return;
     for (final id in ids) {
       _events.add(ChapterEvent.invalidated(chapterId: id));
