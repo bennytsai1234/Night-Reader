@@ -15,6 +15,12 @@ on:
 permissions:
   contents: write
 
+# 同一個 ref 的發版一次跑一個、不取消：後到的那次等前一次打完 tag 才判斷，
+# 看得到前一次已經發出去的改動，不會連著推兩次就發兩個內容相同的測試版。
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   plan-release:
     name: Plan release
