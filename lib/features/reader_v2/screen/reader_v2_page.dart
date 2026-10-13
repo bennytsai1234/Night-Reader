@@ -31,6 +31,7 @@ import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
@@ -220,8 +221,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           ),
           onAutoPage: _coordinator.toggleAutoPage,
           // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
-          onToggleDayNight: () => context.read<SettingsProvider>().setThemeMode(
-            isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+          onToggleDayNight: () => ThemeRevealScope.of(context).run(
+            change: () => context.read<SettingsProvider>().setThemeMode(
+              isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+            ),
           ),
           onReplaceRule: () => _coordinator.openReplaceRule(context),
           onShowControls: menu.showControls,

@@ -22,6 +22,7 @@ import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
+import 'shared/widgets/theme_reveal_scope.dart';
 import 'features/association/association_handler_service.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
@@ -307,12 +308,18 @@ class ReaderApp extends StatelessWidget {
             glassStrength: themeSettings.glassStrength,
           ),
           themeMode: settings.themeMode,
+          // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
+          // 底下的主題要一次到位；預設 200ms 的漸變會讓暈開的圓裡先露出
+          // 半新半舊的顏色。系統自己切換深淺時也直接換。
+          themeAnimationStyle: AnimationStyle.noAnimation,
           locale: settings.locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => StatusBarStableInset(
-            child: BackdropGroup(
-              child: ChineseDisplayScope(
-                child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => ThemeRevealScope(
+            child: StatusBarStableInset(
+              child: BackdropGroup(
+                child: ChineseDisplayScope(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             ),
           ),

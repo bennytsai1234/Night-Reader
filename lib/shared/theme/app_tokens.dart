@@ -155,6 +155,12 @@ class AppMotion {
   /// 分頁選取指示、按壓回彈等彈簧動畫（Telegram spring 0.4s）。
   static const Duration spring = Duration(milliseconds: 400);
   static const Curve springCurve = AppSpringCurve();
+
+  /// 切換深淺或風格時新配色從觸發點暈開（`ThemeRevealScope`）。比 [spring]
+  /// 長一點：圓要從一點擴到螢幕最遠的角，400ms 以內在大螢幕上顯得急；超過
+  /// 500ms 則換色後要等太久才看得到全貌。前後放緩，起點與收尾都不突兀。
+  static const Duration themeReveal = Duration(milliseconds: 450);
+  static const Curve themeRevealCurve = Curves.easeInOutCubic;
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

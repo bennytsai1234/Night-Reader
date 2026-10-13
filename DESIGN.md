@@ -69,7 +69,17 @@
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方附註只放狀態或數值）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60（副標只放值，例如網址、最新章節；開關列沒有副標）；介面不放解釋性文案，依賴其他開關的列在上層關閉時隱藏（ADR 0009）；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關一律用 `GroupedSwitch`（不直接用 `Switch`／`CupertinoSwitch`）：40×24 膠囊軌道、20 紙色滑塊，不畫陰影或外框，開啟為主色、關閉為淡次要文字色。
 - **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排），帶輸入框或勾選的用 `showStatefulAppAlert`＋`AlertTextField`／`AlertCheckRow`，控制器由提示框擁有（`TextControllersScope`），呼叫端不自行釋放；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
 - **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`GroupFilterBar` 為書源分組篩選列（「全部」固定在左、分組膠囊可橫向捲動並附書源數、右側格狀鈕開出全部分組面板），發現頁與換源面板共用；`GlassCapsule` 為可點小膠囊（可附小字數量）；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
-- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。
+- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。系統關閉動畫（`MediaQuery.disableAnimations`）時，下面這些版面與換色動畫直接到位。
+  - 書架版面：網格與列表互換時整頁交叉淡化加 0.96 輕微縮放（`AppMotion.fade`）；換排序、或書因閱讀移到最前面時，書卡從舊位置滑到新位置（`AppMotion.spring`，`BookshelfLayoutMotion`，只動繪製位移、不重新排版），新加入的書淡入，移出的書直接消失、其他書卡移過去補位。拖曳排序放下時清單本身已經到位，不再播一次。
+  - 深淺與風格切換：新配色從點擊位置像墨水一樣暈開（`ThemeRevealScope`，掛在 App 根部，`AppMotion.themeReveal` 450ms easeInOutCubic），切換的那一下擷取一次舊畫面蓋在上面、挖出邊緣柔和的圓，結束即釋放。外觀設定頁的風格與深淺、閱讀器的月亮鈕都經 `ThemeRevealScope.of(context).run(...)` 切換；系統自己切換深淺時直接換。App 主題本身不做漸變（`themeAnimationStyle: AnimationStyle.noAnimation`），暈開的圓裡一開始就是最終配色。
+- **按壓回饋**：每個可點的地方都有回饋，依元件種類只用一種：
+  - 卡片、封面、玻璃按鈕與小圖示鈕（例如搜尋框的清除鈕、規則小幫手鈕）：`PressScale` 微縮回彈（按鈕約 0.92，卡片、封面與膠囊約 0.95–0.96）。
+  - 清單列，以及列內可點的子區（例如搜尋結果的「來源」展開）：`InkWell` 淡墨高亮（`AppChrome.pressedHighlight`），不畫水波紋。書架列表檢視的書卡可左滑出動作，屬於清單列。
+  - 點遮罩關閉選單這類「點空白處取消」不需要回饋。
+- **觸感**：閱讀器以外一律經 `AppHaptics`（`lib/shared/theme/app_haptics.dart`），依時機選強度，一般點擊與開頁不震：
+  - `select`（selectionClick）：選項或數值改變：`GroupedSwitch` 切換、`GlassSegmented` 選項改變、書架多選勾選與取消、`NumberStepperRow` 步進。長按連續步進只在開始與碰到上下限時各一次，每步都震會變成連續的嗡嗡聲。
+  - `snap`（lightImpact）：越過門檻或放到定位：`SwipeActions` 滑過完整觸發距離、拖曳排序放下。
+  - `lift`（mediumImpact）：長按拿起：`showContextPreviewMenu` 開啟、拖曳排序開始。
 
 ## 元件質感與動態反饋
 
@@ -85,7 +95,7 @@
    - 列表為一本一張小紙卡：封面、書名一行、作者、細進度線；網格為封面、書名最多 2 行、細進度線。閱讀進度只畫 2 高的線，不顯示百分比、章節或任何數字；封面右上角只在書架檢查後短暫出現角標（見下一條）。
    - 下拉在背景檢查更新，不轉圈；開 App 時照同樣方式檢查一次（「我的 → 啟動時檢查書架更新」可關閉）。檢查結果不跳 SnackBar 或對話框，只在書卡（網格與列表）封面右上角掛角標：有新章節是淺綠小膠囊「+N」（N 為這次新增的章節數，`AppPalette.mossDark`），檢查失敗是淺紅小圓「!」（`AppPalette.rustDark`），兩者淺色與深色模式共用、配墨色字並帶淡墨髮絲邊；「!」只在手動下拉時出現，開 App 的自動檢查失敗不顯示。角標 5 秒後以 `AppMotion.fade` 淡出，不存檔，編輯模式時不顯示。長按選單與書籍詳情的「自動檢查更新」讓單本書不參與這兩種檢查，明確按「檢查更新」時照查。
    - 書架上的網路書自動整本下載，新章節也跟著下載（ADR 0008）。
-   - 點擊回饋為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；玻璃按鈕按下時微縮回彈。
+   - 列表書卡點擊為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；網格封面按下時微縮回彈（見「按壓回饋」）。
 4. **數值設定**：
    - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。
    - 每個設定宣告明確的 `min`／`max`／`step`，輸出值對齊步進格點，不產生拖動條式的任意小數。
