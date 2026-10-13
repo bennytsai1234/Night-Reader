@@ -12,6 +12,10 @@ _Avoid_: InkPage、inkpage reader
 CI 在每次推上 `main` 後發的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
 _Avoid_: beta 分支、預覽版、nightly
 
+**更新紀錄**：
+「關於夜讀」裡列出各版發布說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
+_Avoid_: 更新日誌、changelog、這次更新了什麼
+
 **書源**：
 一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得書籍詳情、目錄與正文（`BookSource`）。格式相容 Legado 3.0，App 不內建任何書源。
 _Avoid_: 來源、站點、source（不指明時）

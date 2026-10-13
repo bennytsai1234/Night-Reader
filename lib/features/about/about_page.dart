@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
+import 'release_notes_page.dart';
 import 'update_check_runner.dart';
 
 class AboutPage extends StatefulWidget {
@@ -27,22 +28,41 @@ class _AboutPageState extends State<AboutPage> {
   bool _checkingUpdate = false;
   final _updatePreferences = UpdatePreferences();
   bool _betaChannel = false;
+  bool _autoCheck = true;
+  bool _autoDownload = UpdatePreferences.defaultAutoDownload;
 
   @override
   void initState() {
     super.initState();
     _loadPackageInfo();
-    _loadBetaChannel();
+    _loadUpdatePreferences();
   }
 
-  Future<void> _loadBetaChannel() async {
-    final enabled = await _updatePreferences.betaChannel();
-    if (mounted) setState(() => _betaChannel = enabled);
+  Future<void> _loadUpdatePreferences() async {
+    final betaChannel = await _updatePreferences.betaChannel();
+    final autoCheck = await _updatePreferences.autoCheck();
+    final autoDownload = await _updatePreferences.autoDownload();
+    if (!mounted) return;
+    setState(() {
+      _betaChannel = betaChannel;
+      _autoCheck = autoCheck;
+      _autoDownload = autoDownload;
+    });
   }
 
   Future<void> _setBetaChannel(bool enabled) async {
     setState(() => _betaChannel = enabled);
     await _updatePreferences.setBetaChannel(enabled);
+  }
+
+  Future<void> _setAutoCheck(bool enabled) async {
+    setState(() => _autoCheck = enabled);
+    await _updatePreferences.setAutoCheck(enabled);
+  }
+
+  Future<void> _setAutoDownload(bool enabled) async {
+    setState(() => _autoDownload = enabled);
+    await _updatePreferences.setAutoDownload(enabled);
   }
 
   Future<void> _loadPackageInfo() async {
@@ -131,6 +151,38 @@ class _AboutPageState extends State<AboutPage> {
                     : null,
                 showChevron: !_checkingUpdate,
                 onTap: _checkUpdate,
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.history_rounded,
+                  tint: AppTint.ink,
+                ),
+                title: '更新紀錄',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
+                ),
+              ),
+              GroupedSwitchRow(
+                leading: const GroupedIconTile(
+                  Icons.update_rounded,
+                  tint: AppTint.azurite,
+                ),
+                title: '自動檢查更新',
+                subtitle: '開啟 App 時檢查是否有新版',
+                value: _autoCheck,
+                onChanged: _setAutoCheck,
+              ),
+              GroupedSwitchRow(
+                leading: const GroupedIconTile(
+                  Icons.wifi_rounded,
+                  tint: AppTint.tea,
+                ),
+                title: '在 Wi-Fi 下自動下載更新',
+                subtitle: _autoCheck ? '發現新版時先在背景下載好，再提醒安裝' : '需先開啟「自動檢查更新」',
+                value: _autoDownload,
+                enabled: _autoCheck,
+                onChanged: _setAutoDownload,
               ),
               GroupedSwitchRow(
                 leading: const GroupedIconTile(

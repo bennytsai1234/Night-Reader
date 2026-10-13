@@ -50,6 +50,40 @@ class AppUpdateService {
     return best;
   }
 
+  /// 「更新紀錄」用的發布清單：最近的 release，新的在前，跳過 draft。
+  ///
+  /// [includeBeta] 為 false 時不含測試版。不要求附 APK，只看版號與說明。
+  Future<List<ReleaseNote>> fetchReleaseNotes({
+    bool includeBeta = false,
+  }) async {
+    final releases = await _fetch<List<dynamic>>('$_releasesUrl?per_page=100');
+    final current = ReleaseVersion.tryParse(await _currentVersionLoader());
+    final notes = <ReleaseNote>[];
+    for (final data in releases) {
+      if (data is! Map<String, dynamic> || data['draft'] == true) continue;
+      final tagName = data['tag_name'] as String?;
+      if (tagName == null || tagName.isEmpty) continue;
+      final version = ReleaseVersion.tryParse(tagName);
+      final beta = data['prerelease'] == true || version?.beta != null;
+      if (beta && !includeBeta) continue;
+      final publishedAt = data['published_at'] as String?;
+      notes.add(
+        ReleaseNote(
+          versionName: tagName.replaceFirst(RegExp('^[vV]'), ''),
+          publishedAt: publishedAt == null
+              ? null
+              : DateTime.tryParse(publishedAt)?.toLocal(),
+          body: (data['body'] as String?) ?? '',
+          isCurrent:
+              version != null &&
+              current != null &&
+              version.compareTo(current) == 0,
+        ),
+      );
+    }
+    return notes;
+  }
+
   Future<T> _fetch<T>(String url) async {
     final response = await _dio.get<T>(url);
     final data = response.data;
@@ -170,6 +204,28 @@ class ReleaseVersion implements Comparable<ReleaseVersion> {
     if (other.beta == null) return -1;
     return beta!.compareTo(other.beta!);
   }
+}
+
+/// 「更新紀錄」的一筆：一個已發布的版本與它的發布說明。
+class ReleaseNote {
+  const ReleaseNote({
+    required this.versionName,
+    required this.publishedAt,
+    required this.body,
+    required this.isCurrent,
+  });
+
+  /// 去掉 `v` 前綴的版本字串，例如 `0.2.72` 或 `0.3.4-beta.2`。
+  final String versionName;
+
+  /// 發布時間（本地時區）；Release 沒標示時為 `null`。
+  final DateTime? publishedAt;
+
+  /// Release body 原文，顯示前經 [releaseNotesForDisplay] 整理。
+  final String body;
+
+  /// 是否為目前安裝的版本。
+  final bool isCurrent;
 }
 
 /// UpdateInfo - GitHub Release 的精簡視圖。

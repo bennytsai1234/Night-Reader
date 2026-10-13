@@ -12,7 +12,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 
 import 'external_url_launcher.dart';
 
-/// 結果類型：呼叫端用來決定是否寫入「忽略此版」。
+/// 結果類型：呼叫端用來決定寫入「忽略此版」或「稍後提醒」。
 enum UpdateDialogResult { ignored, later }
 
 enum _UpdateAction { update, cancel, install, retry, openPage, later, ignore }
@@ -24,11 +24,19 @@ enum _Phase { idle, downloading, ready, failed }
 ///
 /// 下載中關閉對話框（返回鍵）會取消下載。使用者在系統安裝畫面按取消，
 /// 回到 App 時對話框仍在，可再按「安裝」。
+///
+/// 已在背景下載好時傳入 [downloadedApk]，對話框直接停在可安裝的狀態。
 class UpdateDialog extends StatefulWidget {
-  const UpdateDialog({super.key, required this.info, required this.installer});
+  const UpdateDialog({
+    super.key,
+    required this.info,
+    required this.installer,
+    this.downloadedApk,
+  });
 
   final UpdateInfo info;
   final AppUpdateInstaller installer;
+  final File? downloadedApk;
 
   @override
   State<UpdateDialog> createState() => _UpdateDialogState();
@@ -40,6 +48,19 @@ class _UpdateDialogState extends State<UpdateDialog> {
   int _total = 0;
   CancelToken? _cancelToken;
   File? _apk;
+
+  /// 是否已開過系統安裝程式；背景下載好、還沒按過「安裝」時仍可忽略此版。
+  bool _installerOpened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final apk = widget.downloadedApk;
+    if (apk != null) {
+      _apk = apk;
+      _phase = _Phase.ready;
+    }
+  }
 
   @override
   void dispose() {
@@ -85,7 +106,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
   Future<void> _install() async {
     final apk = _apk;
     if (apk == null) return;
-    setState(() => _phase = _Phase.ready);
+    setState(() {
+      _phase = _Phase.ready;
+      _installerOpened = true;
+    });
     try {
       await widget.installer.install(apk);
     } catch (e, stack) {
@@ -134,6 +158,15 @@ class _UpdateDialogState extends State<UpdateDialog> {
     ],
     _Phase.downloading => const [
       AppAlertAction(label: '取消下載', value: _UpdateAction.cancel),
+    ],
+    _Phase.ready when !_installerOpened => const [
+      AppAlertAction(
+        label: '安裝',
+        value: _UpdateAction.install,
+        isDefault: true,
+      ),
+      AppAlertAction(label: '稍後提醒', value: _UpdateAction.later),
+      AppAlertAction(label: '忽略此版', value: _UpdateAction.ignore),
     ],
     _Phase.ready => const [
       AppAlertAction(label: '稍後提醒', value: _UpdateAction.later),
@@ -215,7 +248,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
         );
       case _Phase.ready:
         return Text(
-          '下載完成，請在系統畫面確認安裝。',
+          _installerOpened ? '下載完成，請在系統畫面確認安裝。' : '新版已下載完成，可直接安裝。',
           textAlign: TextAlign.center,
           style: style,
         );
