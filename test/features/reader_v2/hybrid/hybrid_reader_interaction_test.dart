@@ -47,19 +47,24 @@ const ReaderV2Style _style = ReaderV2Style(
   textIndent: 2,
 );
 
-BookChapter _chapter(int index) => BookChapter(
+BookChapter _chapter(int index, {int paragraphs = 80}) => BookChapter(
   url: 'chapter_$index',
   title: '第 $index 章',
   bookUrl: 'http://interaction.test',
   index: index,
   content: List<String>.generate(
-    80,
+    paragraphs,
     (paragraph) => '第 $index 章第 $paragraph 段，夜深人靜時翻開書頁，字句在燈下慢慢展開。',
   ).join('\n'),
 );
 
 ReaderV2Runtime _makeRuntime({
   int chapterCount = 3,
+  int paragraphs = 80,
+  ReaderV2Location initialLocation = const ReaderV2Location(
+    chapterIndex: 0,
+    charOffset: 0,
+  ),
   ReaderV2TestContentLoader? contentLoader,
 }) {
   final book = Book(
@@ -72,7 +77,10 @@ ReaderV2Runtime _makeRuntime({
   final bookDao = _FakeBookDao();
   final repository = ReaderV2ChapterRepository(
     book: book,
-    initialChapters: List<BookChapter>.generate(chapterCount, _chapter),
+    initialChapters: List<BookChapter>.generate(
+      chapterCount,
+      (index) => _chapter(index, paragraphs: paragraphs),
+    ),
     contentLoader:
         contentLoader ?? (_, chapter) => Future<String?>.value(chapter.content),
     bookDao: bookDao,
@@ -101,7 +109,7 @@ ReaderV2Runtime _makeRuntime({
         textIndent: _style.textIndent,
       ),
     ),
-    initialLocation: const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+    initialLocation: initialLocation,
   );
 }
 
@@ -114,6 +122,7 @@ void main() {
   Future<void> pumpReader(
     WidgetTester tester, {
     ReaderV2Runtime? customRuntime,
+    bool waitForOpen = true,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -141,6 +150,7 @@ void main() {
       ),
     );
     unawaited(runtime.openBook());
+    if (!waitForOpen) return;
     for (
       var frame = 0;
       frame < 2000 &&
@@ -263,6 +273,75 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(runtime.state.visibleLocation.chapterIndex, 0);
     expect(position.pixels, draggedTo);
+  });
+
+  testWidgets('opening mid-chapter does not wait for adjacent chapters', (
+    tester,
+  ) async {
+    final neverLoaded = Completer<String?>();
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        // Long enough that both 3000px leads stay inside chapter 1.
+        paragraphs: 400,
+        initialLocation: const ReaderV2Location(
+          chapterIndex: 1,
+          charOffset: 6000,
+        ),
+        contentLoader: (index, chapter) =>
+            index == 1 ? Future.value(chapter.content) : neverLoaded.future,
+      ),
+    );
+
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+    expect(runtime.pendingLocation, isNull);
+  });
+
+  testWidgets('opening at a chapter start still waits for the previous one', (
+    tester,
+  ) async {
+    final previous = Completer<String?>();
+    final neverLoaded = Completer<String?>();
+    await pumpReader(
+      tester,
+      waitForOpen: false,
+      customRuntime: _makeRuntime(
+        paragraphs: 400,
+        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        contentLoader: (index, chapter) => switch (index) {
+          0 => previous.future,
+          1 => Future.value(chapter.content),
+          _ => neverLoaded.future,
+        },
+      ),
+    );
+    for (var frame = 0; frame < 60; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(
+      runtime.state.hasStableWorld,
+      isFalse,
+      reason: 'The backward lead crosses into chapter 0.',
+    );
+
+    previous.complete(_chapter(0, paragraphs: 400).content);
+    for (
+      var frame = 0;
+      frame < 2000 &&
+          !(runtime.state.hasStableWorld &&
+              find.byType(CustomScrollView).evaluate().isNotEmpty);
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(runtime.state.hasStableWorld, isTrue);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+    final position = scrollPosition(tester);
+    expect(
+      position.pixels - position.minScrollExtent,
+      greaterThanOrEqualTo(3000),
+      reason: 'The backward lead exists before the reader is interactive.',
+    );
   });
 
   testWidgets('stopping auto-scroll does not cancel the finger on the text', (

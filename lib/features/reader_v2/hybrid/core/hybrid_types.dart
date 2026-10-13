@@ -9,7 +9,8 @@ typedef ChapterId = int;
 
 enum HybridScrollDirection { forward, backward }
 
-enum PumpState { idle, dragging, ballistic, rebuilding }
+/// [loading]：視口只顯示載入畫面、沒有正文可掉幀，排版可用滿整幀。
+enum PumpState { idle, dragging, ballistic, rebuilding, loading }
 
 enum ChapterEventKind { loaded, evicted, invalidated }
 

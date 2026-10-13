@@ -321,7 +321,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       ),
     );
     binding.clearPendingLayouts();
-    binding.onScrollStateChanged(PumpState.rebuilding);
+    binding.onScrollStateChanged(
+      _initialRestoreCompleted ? PumpState.rebuilding : PumpState.loading,
+    );
     try {
       final blocks = await _ensureChapterBlocks(
         chapter,
@@ -329,16 +331,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       );
       if (blocks == null || !isCurrent()) return false;
 
+      // Open and jump wait for the steady-state lead in both directions, but
+      // only as far as that distance reaches: the window loop below pulls in
+      // an adjacent chapter exactly when the lead crosses into it.
       final operationOwnsReadyWorld =
           operationKind == ReaderV2OperationKind.open ||
           operationKind == ReaderV2OperationKind.jump;
-      if (operationOwnsReadyWorld) {
-        final neighborhoodReady = await _prepareReadyWorldNeighbors(
-          chapter,
-          isCurrent: isCurrent,
-        );
-        if (!neighborhoodReady || !isCurrent()) return false;
-      }
 
       final normalized = location.normalized(
         chapterCount: widget.runtime.chapterCount,
@@ -346,6 +344,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       );
       final anchor = HybridAnchor.fromLocation(normalized, blocks);
       _initialRestoreCompleted = false;
+      binding.onScrollStateChanged(PumpState.loading);
       _scheduleRebuild();
       _releaseViewportLeases();
       _documentIndex.reset(centerKey: anchor.blockKey);
@@ -412,6 +411,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       _pendingScrollOffset = target;
       _lastReportedLocation = normalized;
       _initialRestoreCompleted = true;
+      binding.onScrollStateChanged(PumpState.rebuilding);
       _scheduleRebuild();
       // Return only after the native viewport exists and has applied the
       // position. This is a Flutter frame transaction, not a prefetch barrier.
@@ -438,32 +438,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         );
       }
     }
-  }
-
-  Future<bool> _prepareReadyWorldNeighbors(
-    int chapter, {
-    required bool Function() isCurrent,
-  }) async {
-    final neighbors = <int>[
-      if (chapter > 0) chapter - 1,
-      if (chapter + 1 < widget.runtime.chapterCount) chapter + 1,
-    ];
-    if (neighbors.isEmpty) return isCurrent();
-
-    Future<void> prepare(int neighbor) async {
-      try {
-        await _ensureChapterBlocks(
-          neighbor,
-          priority: LayoutTaskPriority.visible,
-        );
-      } on ReaderV2ContentUnavailableException {
-        // A broken adjacent chapter is an external frontier, not a reason to
-        // invalidate an otherwise readable jump target.
-      }
-    }
-
-    await Future.wait<void>(neighbors.map(prepare));
-    return isCurrent();
   }
 
   double _readyWorldTop({
