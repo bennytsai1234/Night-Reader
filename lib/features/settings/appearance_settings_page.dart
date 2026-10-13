@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
 /// 外觀與主題：風格、深淺與玻璃效果。風格與深淺同時決定 App 介面、
@@ -32,7 +33,11 @@ class AppearanceSettingsPage extends StatelessWidget {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _StyleGrid(
                   selected: themeSettings.style,
-                  onSelected: themeSettings.setStyle,
+                  onSelected: (style) {
+                    if (style == themeSettings.style) return;
+                    ThemeRevealScope.of(context)
+                        .run(change: () => themeSettings.setStyle(style));
+                  },
                 ),
               ),
             ],
@@ -48,7 +53,11 @@ class AppearanceSettingsPage extends StatelessWidget {
                 GroupedCheckRow(
                   title: label,
                   selected: appSettings.themeMode == mode,
-                  onTap: () => appSettings.setThemeMode(mode),
+                  onTap: () {
+                    if (appSettings.themeMode == mode) return;
+                    ThemeRevealScope.of(context)
+                        .run(change: () => appSettings.setThemeMode(mode));
+                  },
                 ),
             ],
           ),

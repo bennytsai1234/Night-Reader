@@ -127,8 +127,9 @@ class _SearchResultItemState extends State<SearchResultItem> {
 
   Widget _buildSources(BuildContext context, int sourceCount, Color color) {
     final style = AppTextStyles.labelSm.copyWith(height: 1.35, color: color);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    // 和整列一樣用淡墨高亮；只有一個來源時不能展開，點擊交給整列開詳情。
+    return InkWell(
+      borderRadius: AppRadius.cardXs,
       onTap: sourceCount > 1
           ? () => setState(() => _sourcesExpanded = !_sourcesExpanded)
           : null,

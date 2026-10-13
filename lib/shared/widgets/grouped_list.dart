@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'swipe_actions.dart';
@@ -457,6 +458,12 @@ class GroupedSwitch extends StatelessWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
+  /// 切換開關並給一聲選擇回饋；[GroupedSwitchRow] 點整列時也走這裡。
+  static void toggle(bool value, ValueChanged<bool> onChanged) {
+    AppHaptics.select();
+    onChanged(!value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -498,7 +505,7 @@ class GroupedSwitch extends StatelessWidget {
       enabled: enabled,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: enabled ? () => onChanged!(!value) : null,
+        onTap: enabled ? () => toggle(value, onChanged!) : null,
         child: Opacity(opacity: enabled ? 1 : 0.38, child: track),
       ),
     );
@@ -534,7 +541,7 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
         leading: leading,
         enabled: enabled,
         showChevron: false,
-        onTap: active ? () => onChanged!(!value) : null,
+        onTap: active ? () => GroupedSwitch.toggle(value, onChanged!) : null,
         trailing: GroupedSwitch(
           value: value,
           onChanged: active ? onChanged : null,

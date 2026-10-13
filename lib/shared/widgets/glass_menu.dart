@@ -2,9 +2,9 @@ import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
@@ -70,7 +70,7 @@ Future<T?> showContextPreviewMenu<T>({
   required List<GlassMenuEntry<T>> entries,
   BorderRadius previewRadius = AppRadius.cardLg,
 }) {
-  HapticFeedback.mediumImpact();
+  AppHaptics.lift();
   return Navigator.of(context, rootNavigator: true).push<T>(
     _GlassMenuRoute<T>(
       anchor: sourceRect,

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -127,11 +128,28 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
     return _value != before;
   }
 
+  /// 點一下步進；數值真的變了才給選擇回饋。
+  void _tapStep(int direction) {
+    if (_stepBy(direction)) AppHaptics.select();
+  }
+
+  bool _atLimit(int direction) => direction > 0 ? !_canIncrease : !_canDecrease;
+
+  /// 長按連續步進只在開始與碰到上下限時各回饋一次：每 90ms 一步時每步都震，
+  /// 手上是連續的嗡嗡聲，分不出哪一下是重點；碰到上下限那一下告訴使用者
+  /// 可以放手了。
   void _startRepeat(int direction) {
     _repeatTimer?.cancel();
     if (!_stepBy(direction)) return;
+    AppHaptics.select();
+    if (_atLimit(direction)) return;
     _repeatTimer = Timer.periodic(_repeatInterval, (_) {
-      if (!mounted || !_stepBy(direction)) _stopRepeat();
+      if (!mounted || !_stepBy(direction)) {
+        _stopRepeat();
+      } else if (_atLimit(direction)) {
+        AppHaptics.select();
+        _stopRepeat();
+      }
     });
   }
 
@@ -193,7 +211,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
               icon: Icons.remove_rounded,
               tooltip: '減少${widget.label}',
               enabled: _canDecrease,
-              onTap: () => _stepBy(-1),
+              onTap: () => _tapStep(-1),
               onLongPressStart: () => _startRepeat(-1),
               onLongPressEnd: _stopRepeat,
             ),
@@ -204,7 +222,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
               icon: Icons.add_rounded,
               tooltip: '增加${widget.label}',
               enabled: _canIncrease,
-              onTap: () => _stepBy(1),
+              onTap: () => _tapStep(1),
               onLongPressStart: () => _startRepeat(1),
               onLongPressEnd: _stopRepeat,
             ),
