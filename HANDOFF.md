@@ -36,6 +36,7 @@ worktree：`Night-Reader-updates`（`feat/update-features`）、`Night-Reader-fi
 
 ### 注意
 
+- **另一個對話同時在改**：它在主工作區 `D:/Migrated/Desktop/Folder/product/Night-Reader`（目前分支 `docs/rasterization-research`）做閱讀器第 2 項，也會改 `HANDOFF.md` 並推 `main`。不要動主工作區；推 `main` 前一定先 `git fetch` 再把 `origin/main` 併進 `feat/update-features`，`HANDOFF.md` 衝突時下半段以 `main` 的版本為準、上半段保留本節。本節在合併進 `main` 時一起推上去，收尾後刪掉本節。
 - 子代理 fixc 自行決定：換到另一版 APK 下載時會先取消舊版下載；使用者沒表示意見，回報時提一下即可。
 - 渲染畫面給使用者看的方法：寫臨時 widget 測試用 `matchesGoldenFile(Uri.file(絕對路徑))` 加 `--update-goldens` 輸出 PNG，字型用 `FontLoader` 把 `C:/Windows/Fonts/msjh.ttc` 載成 `Roboto`、`D:/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf` 載成 `MaterialIcons`；測試檔放 repo 外（`night-reader-render/src`），跑時才複製進 `test/_render/`，跑完刪掉，避免 pre-push 跑到。
 - 使用者這次定下的介面偏好已寫進 ADR 0009 與 DESIGN.md：不放解釋性文案、開關不撐點擊範圍、依賴的開關直接隱藏。
