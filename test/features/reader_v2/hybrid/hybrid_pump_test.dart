@@ -1473,6 +1473,7 @@ void main() {
       bool isTitle = false,
       bool continuation = false,
       List<int> breaks = const <int>[],
+      List<LineSpacer> spacers = const <LineSpacer>[],
     }) => ChapterBlock(
       key: BlockKey(chapterIndex: 3, blockIndex: index),
       text: (isTitle ? text.title : text.displayText).substring(start, end),
@@ -1482,6 +1483,7 @@ void main() {
       isContinuation: continuation,
       layoutBreakBefore: continuation,
       visualLineBreakOffsets: breaks,
+      visualLineSpacers: spacers,
     );
     // Line breaks are relative to each block's own text, and the later
     // blocks start well past offset 0 of the chapter.
@@ -1492,7 +1494,14 @@ void main() {
       contentHash: text.contentHash,
       blocks: [
         block(0, 0, 3, paragraph: -1, isTitle: true),
-        block(1, 5, 12, paragraph: 0, breaks: const [4]),
+        block(
+          1,
+          5,
+          12,
+          paragraph: 0,
+          breaks: const [4],
+          spacers: const [LineSpacer(2, 5), LineSpacer(5, 2.5)],
+        ),
         block(2, 14, 20, paragraph: 1, breaks: const [3]),
         block(3, 20, 25, paragraph: 1, continuation: true, breaks: const [2]),
       ],
@@ -1727,6 +1736,9 @@ void main() {
         'duplicated block': (spans) => spans.insert(3, spans[2]),
         'continuation flag on a first block': (spans) =>
             (spans[2] as List<Object?>)[3] = 6,
+        'spacer on a line break': (spans) =>
+            (spans[1] as List<Object?>)[5] = [4, 5.0],
+        'spacer without width': (spans) => (spans[1] as List<Object?>)[5] = [2],
         'non-integer break': (spans) => (spans[1] as List<Object?>)[4] = ['4'],
         'short span': (spans) => spans[1] = [5, 12],
       };

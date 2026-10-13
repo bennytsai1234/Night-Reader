@@ -593,21 +593,36 @@ bool _isEscaped(List<int> runes, int index) {
   return slashCount.isOdd;
 }
 
-/// 兩側皆 CJK 脈絡字元（漢字或全形標點）的半形空格是來源雜訊，直接刪。
-/// 半形空格不佔全形格，是格線錯位的主要來源之一；「他說 「你好」」這類
-/// 標點鄰接空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。
+/// 刪掉中文旁邊的半形空格：兩側都是 CJK 脈絡字元（漢字或全形標點），
+/// 或一側是 CJK 脈絡字元、另一側是英文字母或數字。
+///
+/// 半形空格不佔全形格，是格線錯位的來源；「他說 「你好」」這類標點鄰接
+/// 空格也要涵蓋，故用 [_isCjkContextRune] 而非僅漢字。中英文之間的間隙
+/// 由排版時英數字段補到半格的補白提供（`VisualLineLayoutEngine`），原文的
+/// 空格留著會讓間隙變成將近一個字寬、寬窄不一。連續多個空格視為一處。
 String _removeCjkSpaces(String input) {
   final runes = input.runes.toList(growable: false);
   final output = StringBuffer();
-  for (var index = 0; index < runes.length; index += 1) {
-    if (runes[index] == 0x20 &&
-        index > 0 &&
-        index + 1 < runes.length &&
-        _isCjkContextRune(runes[index - 1]) &&
-        _isCjkContextRune(runes[index + 1])) {
+  var index = 0;
+  while (index < runes.length) {
+    if (runes[index] != 0x20) {
+      output.write(String.fromCharCode(runes[index]));
+      index += 1;
       continue;
     }
-    output.write(String.fromCharCode(runes[index]));
+    var end = index;
+    while (end < runes.length && runes[end] == 0x20) {
+      end += 1;
+    }
+    final previous = index > 0 ? runes[index - 1] : null;
+    final next = end < runes.length ? runes[end] : null;
+    final cjkBefore = _isCjkContextRune(previous);
+    final cjkAfter = _isCjkContextRune(next);
+    final remove =
+        (cjkBefore && (cjkAfter || _isLatinLetterOrDigit(next))) ||
+        (cjkAfter && _isLatinLetterOrDigit(previous));
+    if (!remove) output.write(' ' * (end - index));
+    index = end;
   }
   return output.toString();
 }

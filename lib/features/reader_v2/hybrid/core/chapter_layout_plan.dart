@@ -20,6 +20,9 @@ final class ChapterLayoutPlan {
             visualLineBreakOffsets: List<int>.unmodifiable(
               block.visualLineBreakOffsets,
             ),
+            visualLineSpacers: List<LineSpacer>.unmodifiable(
+              block.visualLineSpacers,
+            ),
           ),
       ];
 
@@ -35,6 +38,7 @@ final class ChapterLayoutPlan {
       bool isContinuation,
       bool layoutBreakBefore,
       List<int> visualLineBreakOffsets,
+      List<LineSpacer> visualLineSpacers,
     })
   >
   _spans;
@@ -74,6 +78,7 @@ final class ChapterLayoutPlan {
             isContinuation: _spans[i].isContinuation,
             layoutBreakBefore: _spans[i].layoutBreakBefore,
             visualLineBreakOffsets: _spans[i].visualLineBreakOffsets,
+            visualLineSpacers: _spans[i].visualLineSpacers,
           ),
       ],
     );

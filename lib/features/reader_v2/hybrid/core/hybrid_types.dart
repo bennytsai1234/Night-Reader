@@ -283,6 +283,26 @@ final class BlockRange {
   bool contains(BlockKey key) => first <= key && key <= last;
 }
 
+/// 視覺行內的補白：英數字段補到半格時，插在 [offset] 那個字之前、寬
+/// [width] 的空白。[offset] 是來源文字內的 UTF-16 位置，不會落在行首或
+/// 行尾（行首不補左側、行尾不補右側）。
+final class LineSpacer {
+  const LineSpacer(this.offset, this.width);
+
+  final int offset;
+  final double width;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LineSpacer && other.offset == offset && other.width == width;
+
+  @override
+  int get hashCode => Object.hash(offset, width);
+
+  @override
+  String toString() => 'LineSpacer($offset, $width)';
+}
+
 final class ChapterBlock {
   const ChapterBlock({
     required this.key,
@@ -293,6 +313,7 @@ final class ChapterBlock {
     this.isContinuation = false,
     this.layoutBreakBefore = false,
     this.visualLineBreakOffsets = const <int>[],
+    this.visualLineSpacers = const <LineSpacer>[],
   });
 
   final BlockKey key;
@@ -314,6 +335,9 @@ final class ChapterBlock {
   /// begins inside this block. These are layout metadata only; source text is
   /// never modified with synthetic newlines.
   final List<int> visualLineBreakOffsets;
+
+  /// 視覺行內的補白（見 [LineSpacer]），offset 相對於本塊文字，遞增排列。
+  final List<LineSpacer> visualLineSpacers;
 
   int get chapterIndex => key.chapterIndex;
   int get blockIndex => key.blockIndex;
@@ -356,6 +380,10 @@ final class ChapterBlocks {
         block.isContinuation,
         block.layoutBreakBefore,
         block.visualLineBreakOffsets,
+        [
+          for (final spacer in block.visualLineSpacers)
+            [spacer.offset, spacer.width],
+        ],
       ],
   ]);
 
@@ -449,12 +477,19 @@ final class ChapterBlocks {
   }
 }
 
+/// 來源文字與 Paragraph 文字之間的位置換算。
+///
+/// Paragraph 文字 = 縮排 placeholder + 來源文字，再在視覺行邊界插入換行、
+/// 在補白處插入寬度固定的 placeholder。插入的換行與補白都屬於它後面那個
+/// 字，各佔一個 UTF-16 位置。
 final class ParagraphTextMap {
   ParagraphTextMap({
     required this.sourceLength,
     required this.indentLength,
     List<int> visualLineBreakOffsets = const <int>[],
-  }) : visualLineBreakOffsets = List<int>.unmodifiable(visualLineBreakOffsets) {
+    List<LineSpacer> spacers = const <LineSpacer>[],
+  }) : visualLineBreakOffsets = List<int>.unmodifiable(visualLineBreakOffsets),
+       spacers = List<LineSpacer>.unmodifiable(spacers) {
     var previous = 0;
     for (final offset in this.visualLineBreakOffsets) {
       if (offset <= previous || offset >= sourceLength) {
@@ -465,6 +500,25 @@ final class ParagraphTextMap {
       }
       previous = offset;
     }
+    final breaks = this.visualLineBreakOffsets.toSet();
+    previous = 0;
+    for (final spacer in this.spacers) {
+      if (spacer.offset <= previous ||
+          spacer.offset >= sourceLength ||
+          breaks.contains(spacer.offset) ||
+          !spacer.width.isFinite ||
+          spacer.width <= 0) {
+        throw StateError(
+          'Line spacers must be strictly increasing, positive-width and '
+          'never on a line boundary: $spacer sourceLength=$sourceLength.',
+        );
+      }
+      previous = spacer.offset;
+    }
+    _inserted = <int>[
+      ...this.visualLineBreakOffsets,
+      for (final spacer in this.spacers) spacer.offset,
+    ]..sort();
   }
 
   factory ParagraphTextMap.forBlocks(
@@ -473,9 +527,13 @@ final class ParagraphTextMap {
   }) {
     var sourceLength = 0;
     final breaks = <int>[];
+    final spacers = <LineSpacer>[];
     for (final block in blocks) {
       for (final offset in block.visualLineBreakOffsets) {
         breaks.add(sourceLength + offset);
+      }
+      for (final spacer in block.visualLineSpacers) {
+        spacers.add(LineSpacer(sourceLength + spacer.offset, spacer.width));
       }
       sourceLength += block.text.length;
     }
@@ -483,28 +541,32 @@ final class ParagraphTextMap {
       sourceLength: sourceLength,
       indentLength: indentLength,
       visualLineBreakOffsets: breaks,
+      spacers: spacers,
     );
   }
 
   final int sourceLength;
   final int indentLength;
   final List<int> visualLineBreakOffsets;
+  final List<LineSpacer> spacers;
 
-  int get paragraphLength =>
-      indentLength + sourceLength + visualLineBreakOffsets.length;
+  /// 換行與補白的來源位置，遞增排列。
+  late final List<int> _inserted;
+
+  int get paragraphLength => indentLength + sourceLength + _inserted.length;
 
   int paragraphOffsetForSourceOffset(int sourceOffset) {
     final safe = sourceOffset.clamp(0, sourceLength).toInt();
     var inserted = 0;
-    for (final offset in visualLineBreakOffsets) {
+    for (final offset in _inserted) {
       if (offset > safe) break;
       inserted += 1;
     }
     return indentLength + safe + inserted;
   }
 
-  /// 來源範圍 [start, end) 在 Paragraph 內的範圍。插入的換行屬於它後面
-  /// 那個字；範圍恰好結束在換行處時，換行不包進來。
+  /// 來源範圍 [start, end) 在 Paragraph 內的範圍。插入的換行與補白屬於它
+  /// 後面那個字；範圍恰好結束在插入處時，插入的那一格不包進來。
   ({int start, int end}) paragraphRangeForSourceRange(int start, int end) {
     final paragraphStart = paragraphOffsetForSourceOffset(start);
     if (end <= start) return (start: paragraphStart, end: paragraphStart);
@@ -519,33 +581,66 @@ final class ParagraphTextMap {
     if (safe <= indentLength) return 0;
     final bodyOffset = safe - indentLength;
     var insertedBefore = 0;
-    for (var i = 0; i < visualLineBreakOffsets.length; i += 1) {
-      final newlineOffset = visualLineBreakOffsets[i] + i;
-      if (newlineOffset >= bodyOffset) break;
+    for (var i = 0; i < _inserted.length; i += 1) {
+      final insertedOffset = _inserted[i] + i;
+      if (insertedOffset >= bodyOffset) break;
       insertedBefore += 1;
     }
     return (bodyOffset - insertedBefore).clamp(0, sourceLength).toInt();
   }
 
-  String layoutBody(String sourceText) {
+  /// [paragraphOffset] 是縮排、插入的換行或補白，不是來源文字。
+  bool isInsertedParagraphOffset(int paragraphOffset) {
+    if (paragraphOffset < indentLength) return true;
+    final bodyOffset = paragraphOffset - indentLength;
+    for (var i = 0; i < _inserted.length; i += 1) {
+      final insertedOffset = _inserted[i] + i;
+      if (insertedOffset == bodyOffset) return true;
+      if (insertedOffset > bodyOffset) break;
+    }
+    return false;
+  }
+
+  /// 依序列出 Paragraph 本文（縮排之後）的各段：來源文字、換行與補白
+  /// （[ParagraphPiece.spacerWidth]）。
+  List<ParagraphPiece> pieces(String sourceText) {
     if (sourceText.length != sourceLength) {
       throw StateError(
         'ParagraphTextMap source length mismatch: expected=$sourceLength '
         'actual=${sourceText.length}.',
       );
     }
-    if (visualLineBreakOffsets.isEmpty) return sourceText;
-    final buffer = StringBuffer();
+    final spacerWidths = {
+      for (final spacer in spacers) spacer.offset: spacer.width,
+    };
+    final result = <ParagraphPiece>[];
     var cursor = 0;
-    for (final offset in visualLineBreakOffsets) {
-      buffer
-        ..write(sourceText.substring(cursor, offset))
-        ..write('\n');
+    for (final offset in _inserted) {
+      if (offset > cursor) {
+        result.add(ParagraphPiece.text(sourceText.substring(cursor, offset)));
+      }
+      final width = spacerWidths[offset];
+      result.add(
+        width == null
+            ? const ParagraphPiece.text('\n')
+            : ParagraphPiece.spacer(width),
+      );
       cursor = offset;
     }
-    buffer.write(sourceText.substring(cursor));
-    return buffer.toString();
+    if (cursor < sourceText.length) {
+      result.add(ParagraphPiece.text(sourceText.substring(cursor)));
+    }
+    return result;
   }
+}
+
+/// [ParagraphTextMap.pieces] 的一段：文字或補白其中之一。
+final class ParagraphPiece {
+  const ParagraphPiece.text(String this.text) : spacerWidth = null;
+  const ParagraphPiece.spacer(double this.spacerWidth) : text = null;
+
+  final String? text;
+  final double? spacerWidth;
 }
 
 final class HybridAnchor {

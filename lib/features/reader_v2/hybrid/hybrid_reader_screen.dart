@@ -1943,14 +1943,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     final candidate = position.affinity == TextAffinity.downstream
         ? position.offset
         : position.offset - 1;
-    if (candidate < at.textMap.indentLength ||
-        candidate >= at.textMap.paragraphLength) {
+    // 縮排、插入的換行與補白都不是字。
+    if (candidate >= at.textMap.paragraphLength ||
+        at.textMap.isInsertedParagraphOffset(candidate)) {
       return null;
     }
     final onGlyph = at.paragraph
         .getBoxesForRange(candidate, candidate + 1)
         .any((box) => box.toRect().inflate(4).contains(at.local));
-    // 插入的換行沒有字形框，在這裡一併排除。
     if (!onGlyph) return null;
     final offset =
         at.groupStart + at.textMap.sourceOffsetForParagraphOffset(candidate);

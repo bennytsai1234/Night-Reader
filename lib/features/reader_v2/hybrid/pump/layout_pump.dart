@@ -349,6 +349,7 @@ final class LayoutPump implements HybridLayoutPump {
             isContinuation: head.isContinuation || transactionIndex > 0,
             layoutBreakBefore: head.layoutBreakBefore || transactionIndex > 0,
             visualLineBreakOffsets: plan.visualLineBreakOffsets,
+            visualLineSpacers: plan.spacers,
           ),
         );
         cursor = plan.end;

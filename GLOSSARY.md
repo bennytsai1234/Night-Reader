@@ -20,6 +20,10 @@ _Avoid_: 來源、站點、source（不指明時）
 現行的閱讀器（`lib/features/reader_v2/`），負責分頁、排版、閱讀進度與閱讀選單。
 _Avoid_: 新閱讀器、reader
 
+**字格**：
+正文排版的寬度單位，一個漢字（含字距）的寬度。漢字、全形標點與 emoji 各佔一格；連續的英文、數字與半形符號合成一段，佔半格的整數倍（ADR 0007）。
+_Avoid_: em 網格
+
 **Layout signature**：
 由段落寬度與排版樣式（字級、行高、字距、段距、縮排、粗體等）算出的雜湊（`ReaderV2LayoutSpec.layoutSignature`）。兩次排版的 signature 相同，就代表可以沿用同一份排版與量測快取。
 _Avoid_: layout key、排版版本

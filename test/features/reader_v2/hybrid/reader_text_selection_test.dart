@@ -55,34 +55,80 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ParagraphTextMap.paragraphRangeForSourceRange', () {
+    const source = '一二三四五六七八九十';
+    final map = ParagraphTextMap(
+      sourceLength: source.length,
+      indentLength: 2,
+      visualLineBreakOffsets: const <int>[3, 7],
+      spacers: const <LineSpacer>[LineSpacer(5, 4), LineSpacer(8, 2.5)],
+    );
+    // 插入的換行照樣是換行，縮排與補白寫成 placeholder 的 U+FFFC。
+    const placeholder = '￼';
+    bool isInsertedUnit(String unit) => unit == '\n' || unit == placeholder;
+    final laidOut = [
+      placeholder * map.indentLength,
+      for (final piece in map.pieces(source)) piece.text ?? placeholder,
+    ].join();
+
+    test('排版文字的長度與換算表一致', () {
+      expect(laidOut.length, map.paragraphLength);
+    });
+
     test('任何來源範圍換算後，在排版文字中取到的都是同一段字', () {
-      const source = '一二三四五六七八九十';
-      final map = ParagraphTextMap(
-        sourceLength: source.length,
-        indentLength: 2,
-        visualLineBreakOffsets: const <int>[3, 7],
-      );
-      final laidOut = '${'￼' * map.indentLength}${map.layoutBody(source)}';
       for (var start = 0; start < source.length; start += 1) {
         for (var end = start + 1; end <= source.length; end += 1) {
           final range = map.paragraphRangeForSourceRange(start, end);
+          final slice = laidOut.substring(range.start, range.end);
           expect(
-            laidOut.substring(range.start, range.end).replaceAll('\n', ''),
+            slice.replaceAll('\n', '').replaceAll(placeholder, ''),
             source.substring(start, end),
             reason: '[$start, $end)',
           );
           expect(
-            laidOut.substring(range.start, range.end).startsWith('\n'),
+            isInsertedUnit(slice[0]),
             isFalse,
-            reason: '範圍開頭不得是插入的換行 [$start, $end)',
+            reason: '範圍開頭不得是插入的換行或補白 [$start, $end)',
           );
           expect(
-            laidOut.substring(range.start, range.end).endsWith('\n'),
+            isInsertedUnit(slice[slice.length - 1]),
             isFalse,
-            reason: '範圍結尾不得包進插入的換行 [$start, $end)',
+            reason: '範圍結尾不得包進插入的換行或補白 [$start, $end)',
           );
         }
       }
+    });
+
+    test('每個來源字換回來都是自己，插入的位置都認得出來', () {
+      for (var offset = 0; offset < source.length; offset += 1) {
+        final paragraphOffset = map.paragraphOffsetForSourceOffset(offset);
+        expect(laidOut[paragraphOffset], source[offset]);
+        expect(map.sourceOffsetForParagraphOffset(paragraphOffset), offset);
+        expect(map.isInsertedParagraphOffset(paragraphOffset), isFalse);
+      }
+      for (var p = 0; p < laidOut.length; p += 1) {
+        final isInserted = isInsertedUnit(laidOut[p]);
+        expect(map.isInsertedParagraphOffset(p), isInserted, reason: '$p');
+      }
+    });
+
+    test('補白不能落在換行處或行首行尾', () {
+      expect(
+        () => ParagraphTextMap(
+          sourceLength: source.length,
+          indentLength: 0,
+          visualLineBreakOffsets: const <int>[3],
+          spacers: const <LineSpacer>[LineSpacer(3, 4)],
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => ParagraphTextMap(
+          sourceLength: source.length,
+          indentLength: 0,
+          spacers: const <LineSpacer>[LineSpacer(0, 4)],
+        ),
+        throwsStateError,
+      );
     });
   });
 

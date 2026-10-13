@@ -15,6 +15,7 @@ typedef _PlanSpan = ({
   int paragraph,
   int flags,
   List<int> offsets,
+  List<LineSpacer> spacers,
 });
 
 /// 章節換行結果（不含正文的切分與換行位置）的磁碟快取。
@@ -29,7 +30,8 @@ final class ChapterPlanDiskCache {
     required this.buildSignature,
   });
 
-  static const int _version = 1;
+  // v2：每塊多記一組補白（英數字段補到半格）。
+  static const int _version = 2;
 
   final Directory baseDirectory;
   final String buildSignature;
@@ -84,6 +86,12 @@ final class ChapterPlanDiskCache {
                 (block.isContinuation ? 2 : 0) |
                 (block.layoutBreakBefore ? 4 : 0),
             block.visualLineBreakOffsets,
+            [
+              for (final spacer in block.visualLineSpacers) ...[
+                spacer.offset,
+                spacer.width,
+              ],
+            ],
           ],
       ],
     };
@@ -141,6 +149,7 @@ final class ChapterPlanDiskCache {
             final int paragraph,
             final int flags,
             final List<Object?> offsets,
+            final List<Object?> spacers,
           ])
             (
               start: start,
@@ -148,6 +157,7 @@ final class ChapterPlanDiskCache {
               paragraph: paragraph,
               flags: flags,
               offsets: [for (final offset in offsets) offset as int],
+              spacers: _spacersFrom(spacers),
             )
           else
             throw const FormatException('Malformed line-break span.'),
@@ -159,6 +169,16 @@ final class ChapterPlanDiskCache {
     }
   }
 
+  static List<LineSpacer> _spacersFrom(List<Object?> flat) {
+    if (flat.length.isOdd) {
+      throw const FormatException('Malformed line spacers.');
+    }
+    return [
+      for (var i = 0; i < flat.length; i += 2)
+        LineSpacer(flat[i] as int, (flat[i + 1] as num).toDouble()),
+    ];
+  }
+
   ChapterBlocks? _decode(List<_PlanSpan> spans, ChapterText text) {
     final blocks = <ChapterBlock>[];
     var next = 0;
@@ -168,7 +188,8 @@ final class ChapterPlanDiskCache {
       var cursor = segment.start;
       do {
         if (next >= spans.length) return null;
-        final (:start, :end, :paragraph, :flags, :offsets) = spans[next];
+        final (:start, :end, :paragraph, :flags, :offsets, :spacers) =
+            spans[next];
         final isTitle = flags & 1 != 0;
         final isContinuation = flags & 2 != 0;
         final layoutBreakBefore = flags & 4 != 0;
@@ -188,6 +209,18 @@ final class ChapterPlanDiskCache {
           if (offset <= previous || offset >= end - start) return null;
           previous = offset;
         }
+        // 補白同樣相對於這一塊，遞增、寬度為正，且不落在換行處。
+        previous = 0;
+        for (final spacer in spacers) {
+          if (spacer.offset <= previous ||
+              spacer.offset >= end - start ||
+              offsets.contains(spacer.offset) ||
+              !spacer.width.isFinite ||
+              spacer.width <= 0) {
+            return null;
+          }
+          previous = spacer.offset;
+        }
         final source = isTitle ? text.title : text.displayText;
         blocks.add(
           ChapterBlock(
@@ -199,6 +232,7 @@ final class ChapterPlanDiskCache {
             isContinuation: isContinuation,
             layoutBreakBefore: layoutBreakBefore,
             visualLineBreakOffsets: List<int>.unmodifiable(offsets),
+            visualLineSpacers: List<LineSpacer>.unmodifiable(spacers),
           ),
         );
         next += 1;
