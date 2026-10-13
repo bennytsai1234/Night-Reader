@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -23,6 +25,9 @@ void main() {
 
   /// 排進書架自動下載的書：(bookUrl, hasNewChapters)。
   final downloads = <(String, bool)>[];
+
+  /// 角標計時：記下時長與到時要做的事，由測試決定何時「到時」。
+  final timers = <(Duration, void Function())>[];
 
   // 這個書源不在資料庫裡：檢查會失敗，但仍會記下檢查時間，用來看出
   // 哪些書被檢查過，不必連網。
@@ -94,6 +99,7 @@ void main() {
     AppConfig.autoRefresh = true;
     await db.delete(db.books).go();
     downloads.clear();
+    timers.clear();
     provider = BookshelfProvider(
       keepBookDownloaded: (url, {hasNewChapters = false}) async =>
           downloads.add((url, hasNewChapters)),
@@ -173,6 +179,74 @@ void main() {
     });
   });
 
+  group('update badges', () {
+    late _ScriptedShelf shelf;
+
+    setUp(() {
+      shelf = _ScriptedShelf(
+        startTimer: (duration, callback) {
+          timers.add((duration, callback));
+          return Timer(const Duration(days: 1), () {});
+        },
+      );
+    });
+
+    tearDown(() => shelf.dispose());
+
+    test('show new chapters and failures, then clear after 5 s', () async {
+      await bookDao.upsertAll([
+        shelfBook('https://a.example/new'),
+        shelfBook('https://a.example/broken'),
+        shelfBook('https://a.example/same'),
+      ]);
+      shelf.results = {
+        'https://a.example/new': const BookUpdateCheckResult(
+          bookUrl: 'https://a.example/new',
+          newChapterCount: 3,
+        ),
+        'https://a.example/broken': BookUpdateCheckResult(
+          bookUrl: 'https://a.example/broken',
+          newChapterCount: 0,
+          error: StateError('書源壞了'),
+        ),
+        'https://a.example/same': const BookUpdateCheckResult(
+          bookUrl: 'https://a.example/same',
+          newChapterCount: 0,
+        ),
+      };
+
+      await shelf.refreshBookshelf();
+
+      expect(shelf.updateBadgeOf('https://a.example/new')?.newChapterCount, 3);
+      expect(shelf.updateBadgeOf('https://a.example/broken')?.failed, isTrue);
+      expect(shelf.updateBadgeOf('https://a.example/same'), isNull);
+      expect(timers.single.$1, const Duration(seconds: 5));
+
+      var notified = false;
+      shelf.addListener(() => notified = true);
+      timers.single.$2();
+
+      expect(notified, isTrue);
+      expect(shelf.updateBadgeOf('https://a.example/new'), isNull);
+      expect(shelf.updateBadgeOf('https://a.example/broken'), isNull);
+    });
+
+    test('a check with nothing to show starts no timer', () async {
+      await bookDao.upsert(shelfBook('https://a.example/same'));
+      shelf.results = {
+        'https://a.example/same': const BookUpdateCheckResult(
+          bookUrl: 'https://a.example/same',
+          newChapterCount: 0,
+        ),
+      };
+
+      await shelf.refreshBookshelf();
+
+      expect(shelf.updateBadgeOf('https://a.example/same'), isNull);
+      expect(timers, isEmpty);
+    });
+  });
+
   test('turning updates off for one book is saved', () async {
     final book = shelfBook('https://a.example/1');
     await bookDao.upsert(book);
@@ -247,4 +321,16 @@ void main() {
       expect(saved.lastCheckTime, greaterThan(0));
     });
   });
+}
+
+/// 檢查結果照劇本回傳，不連網。
+class _ScriptedShelf extends BookshelfProvider {
+  _ScriptedShelf({super.startTimer})
+    : super(keepBookDownloaded: (_, {hasNewChapters = false}) async {});
+
+  Map<String, BookUpdateCheckResult> results = {};
+
+  @override
+  Future<BookUpdateCheckResult> checkBookUpdate(Book book) async =>
+      results[book.bookUrl]!;
 }

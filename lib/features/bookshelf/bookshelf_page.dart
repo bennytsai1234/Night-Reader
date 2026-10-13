@@ -312,7 +312,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
     // 編輯工具列佔用分頁列的位置，清單底部讓出的高度不變。
     final bottom = insets.bottom + AppSpacing.md;
-    // 下拉只在背景檢查更新：不轉圈、不提示，檢查期間不會重複觸發。
+    // 下拉在背景檢查更新：不轉圈，檢查期間不會重複觸發；結果只在書卡角標
+    // 上顯示 5 秒。
     return RefreshIndicator.noSpinner(
       onRefresh: provider.refreshBookshelf,
       child: provider.isGridView
@@ -657,6 +658,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
           ],
           child: BookshelfListCard(
             book: book,
+            updateBadge: selecting
+                ? null
+                : provider.updateBadgeOf(book.bookUrl),
             selecting: selecting,
             selected: _selectedUrls.contains(book.bookUrl),
             onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
@@ -701,6 +705,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         final book = provider.books[index];
         return BookshelfGridTile(
           book: book,
+          updateBadge: provider.updateBadgeOf(book.bookUrl),
           selecting: _isMultiSelect,
           selected: _selectedUrls.contains(book.bookUrl),
           onTap: () => _isMultiSelect ? _toggleSelected(book) : _openBook(book),

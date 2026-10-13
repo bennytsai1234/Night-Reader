@@ -20,6 +20,7 @@ class BookshelfProvider extends BookshelfProviderBase
   BookshelfProvider({
     BookStorageService? bookStorageService,
     super.keepBookDownloaded,
+    super.startTimer,
   }) : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
     loadBooks();

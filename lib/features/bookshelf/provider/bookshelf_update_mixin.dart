@@ -49,6 +49,18 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
   Future<void>? _refreshing;
 
+  /// 書架檢查後角標掛多久（DESIGN.md「書籍卡片與清單」）。
+  static const Duration updateBadgeDuration = Duration(seconds: 5);
+
+  /// 上一次書架檢查的結果，只留有新章節或檢查失敗的書；不存檔，
+  /// [updateBadgeDuration] 後一起清掉。
+  Map<String, BookUpdateCheckResult> _updateBadges = const {};
+  Timer? _updateBadgeTimer;
+
+  /// 書卡角標：有新章節（+N）或檢查失敗（!）；沒有就是 null。
+  BookUpdateCheckResult? updateBadgeOf(String bookUrl) =>
+      _updateBadges[bookUrl];
+
   /// 開 App 後在背景做的事：先把書架上還沒下載完整的書排進下載（ADR
   /// 0007），再檢查更新（「啟動時檢查書架更新」關掉時不檢查）。
   Future<void> onAppLaunch() async {
@@ -84,9 +96,10 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     }
   }
 
-  /// 下拉與啟動時的書架更新：只在背景檢查，不改 [updatingCount]（那是多選
-  /// 檢查的進度）。略過本地書與使用者關掉「自動檢查更新」的書；已在檢查時
-  /// 沿用同一次，不重複發請求。
+  /// 下拉與啟動時的書架更新：在背景檢查，不轉圈，不改 [updatingCount]（那是
+  /// 多選檢查的進度）；檢查完在書卡上掛 [updateBadgeDuration] 的角標。略過
+  /// 本地書與使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複
+  /// 發請求。
   Future<void> refreshBookshelf() {
     return _refreshing ??= _refreshAll().whenComplete(() => _refreshing = null);
   }
@@ -99,19 +112,39 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     if (targets.isEmpty) return;
 
     final pool = Pool(_refreshConcurrency);
+    final List<BookUpdateCheckResult?> results;
     try {
-      await Future.wait([
+      results = await Future.wait([
         for (final book in targets)
           pool.withResource(() async {
             try {
-              await checkBookUpdate(book);
-            } catch (_) {}
+              return await checkBookUpdate(book);
+            } catch (_) {
+              return null;
+            }
           }),
       ]);
     } finally {
       await pool.close();
     }
+    _updateBadgeTimer?.cancel();
+    _updateBadges = {
+      for (final result in results.nonNulls)
+        if (result.hasUpdate || result.failed) result.bookUrl: result,
+    };
     await loadBooks();
+    if (_updateBadges.isEmpty) return;
+    _updateBadgeTimer = startTimer(updateBadgeDuration, () {
+      _updateBadgeTimer = null;
+      _updateBadges = const {};
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateBadgeTimer?.cancel();
+    super.dispose();
   }
 
   /// 抓書源上的詳情與目錄寫回這本書。網路請求期間使用者可能在讀這本書、

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -64,6 +66,12 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   /// 書架自動下載，預設交給 [DownloadService]。
   final ShelfBookDownloader keepBookDownloaded;
 
-  BookshelfProviderBase({ShelfBookDownloader? keepBookDownloaded})
-    : keepBookDownloaded = keepBookDownloaded ?? _keepWithDownloadService;
+  /// 排定書卡角標消失的計時，預設 [Timer.new]。
+  final Timer Function(Duration duration, void Function() callback) startTimer;
+
+  BookshelfProviderBase({
+    ShelfBookDownloader? keepBookDownloaded,
+    Timer Function(Duration duration, void Function() callback)? startTimer,
+  }) : keepBookDownloaded = keepBookDownloaded ?? _keepWithDownloadService,
+       startTimer = startTimer ?? Timer.new;
 }
