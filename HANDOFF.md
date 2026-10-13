@@ -1,8 +1,8 @@
-# 交接（2026-10-13 17:40）
+# 交接（2026-10-13 19:40）
 
 ## 正在做
 
-分支 `docs/rasterization-research`（已推上 GitHub），只多一份研究文件 `docs/research/flutter-rasterization.md`：Flutter 一幀的流程、Impeller 光柵化做什麼、`isRepaintBoundary` 對兩條執行緒的影響、`FrameTiming` 怎麼讀、模擬器數字為什麼不準，以及 `false` 時正文空白的三個推測。全部以 Flutter 3.47.0 的官方文件與原始碼為據，附行號連結。文件只有 agent 粗看過摘要與模擬器段落，**還沒向使用者講解**；使用者要回家看文件再討論。
+沒有進行中的分支。研究文件 `docs/research/flutter-rasterization.md` 已併進 `main`（原分支 `docs/rasterization-research` 已刪除），內容是：Flutter 一幀的流程、Impeller 光柵化做什麼、`isRepaintBoundary` 對兩條執行緒的影響、`FrameTiming` 怎麼讀、模擬器數字為什麼不準，以及 `false` 時正文空白的三個推測。全部以 Flutter 3.47.0 的官方文件與原始碼為據，附行號連結。文件只有 agent 粗看過摘要與模擬器段落，**還沒向使用者講解**；使用者要回家看文件再討論。
 
 題目是審查清單的「第 2 項」：正文段落要不要各自成一層圖層（`RenderCachedBlock.isRepaintBoundary`），也就是光柵化效能那一項。使用者還沒決定要不要動手。
 
@@ -19,7 +19,7 @@
 ## 下一步
 
 1. **等使用者看完 `docs/research/flutter-rasterization.md` 回來討論**，回答使用者的問題；使用者要口頭講解時，照文件用白話講，並對到夜讀。
-2. 講完後，把下面的事實講清楚，再請使用者決定（見「等使用者決定」）。研究文件要不要併進 `main`、還是只留在分支上，也一起問（文件改動不會觸發測試版發布）。
+2. 講完後，把下面的事實講清楚，再請使用者決定（見「等使用者決定」）。
 3. 使用者若決定追查：照 `diagnosing-bugs` 先在本機 widget 測試重現「`isRepaintBoundary => false` 時朗讀中正文變空白」，找到根因再談要不要改。實機與模擬器量測是使用者的工作（`AGENTS.md`），agent 不跑、也不要求。
 4. 不論結論，`lib/features/reader_v2/hybrid/view/hybrid_scroll_view.dart:126` 的註解寫「不建立獨立 repaint boundary」，和 `cached_block_widget.dart:201` 的 `true` 相反，要依結論改掉其中一邊。
 
