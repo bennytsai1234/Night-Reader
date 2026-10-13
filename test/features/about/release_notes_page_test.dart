@@ -29,7 +29,7 @@ final _notes = [
   ReleaseNote(
     versionName: '0.3.4-beta.1',
     publishedAt: DateTime(2026, 10, 1),
-    body: '* fix(reader): keep place by @a in https://x/pull/2',
+    body: '- 閱讀時記住位置',
     isCurrent: false,
   ),
   const ReleaseNote(
@@ -62,7 +62,7 @@ void main() {
 
     expect(find.text('v0.3.4-beta.1'), findsOneWidget);
     expect(find.text('2026-10-01'), findsOneWidget);
-    expect(find.text('• fix(reader): keep place'), findsOneWidget);
+    expect(find.text('• 閱讀時記住位置'), findsOneWidget);
     expect(find.text('v0.3.3（目前版本）'), findsOneWidget);
     expect(find.text('這個版本沒有附更新說明。'), findsOneWidget);
   });

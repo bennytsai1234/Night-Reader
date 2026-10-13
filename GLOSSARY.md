@@ -13,8 +13,12 @@ CI 在每次推上 `main` 後發的 GitHub 預發布版，tag 形如 `v0.3.4-bet
 _Avoid_: beta 分支、預覽版、nightly
 
 **更新紀錄**：
-「關於夜讀」裡列出各版發布說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
-_Avoid_: 更新日誌、changelog、這次更新了什麼
+「關於夜讀」裡列出各版更新說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
+_Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什麼
+
+**更新說明**：
+每一版寫給一般讀者看的中文改動說明，維護在 `CHANGELOG.md`：`## 未發布` 是測試版的說明，`## X.Y.Z` 是正式版的說明（ADR 0009）。CI 發版時拿來當 GitHub Release 說明，更新視窗與更新紀錄顯示的就是它。
+_Avoid_: 更新日誌、commit 標題
 
 **書源**：
 一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得書籍詳情、目錄與正文（`BookSource`）。格式相容 Legado 3.0，App 不內建任何書源。

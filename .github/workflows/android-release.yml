@@ -2,7 +2,7 @@ name: Android Release
 
 on:
   # main 上每次會改到 App 內容的合併都要發版（正式版或測試版），
-  # 只排除不進 APK 的文件、網站與測試。
+  # 只排除不進 APK 的文件、網站與測試。改這份清單時，tool/changelog.sh 的 is_app_path 一起改。
   push:
     branches:
       - main
@@ -29,7 +29,7 @@ jobs:
       publish: ${{ steps.plan.outputs.publish }}
       prerelease: ${{ steps.plan.outputs.prerelease }}
       tag_name: ${{ steps.plan.outputs.tag_name }}
-      notes_start_tag: ${{ steps.plan.outputs.notes_start_tag }}
+      notes_heading: ${{ steps.plan.outputs.notes_heading }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
       build_name: ${{ steps.plan.outputs.build_name }}
       build_number: ${{ steps.plan.outputs.build_number }}
@@ -62,18 +62,11 @@ jobs:
             git tag --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
           }
 
-          # 比 $1 舊的最近一個正式版，作為正式版發布說明的起點，
-          # 讓說明涵蓋上一個正式版以來的所有改動，而不是只從上一個測試版算起。
-          previous_stable_tag() {
-            { stable_tags; echo "$1"; } | sort -V -u | grep -x -F -B1 "$1" | grep -v -x -F "$1" || true
-          }
-
           mode=""
           should_build=false
           publish=false
           prerelease=false
           tag_name="$stable_tag"
-          notes_start_tag=""
           target_sha="$GITHUB_SHA"
           build_name="$app_version"
           artifact_label="$stable_tag"
@@ -93,7 +86,6 @@ jobs:
             should_build=true
             publish=true
             target_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
-            notes_start_tag="$(previous_stable_tag "$stable_tag")"
           elif [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "::error::Unsupported release ref: $GITHUB_REF"
             exit 1
@@ -124,7 +116,6 @@ jobs:
             should_build=true
             publish=true
             target_sha="$(git rev-list -n 1 "$stable_tag")"
-            notes_start_tag="$(previous_stable_tag "$stable_tag")"
           else
             # main 上把 pubspec 的 app version 升到尚未發布的版本，就發正式版；
             # 這個 workflow 是 tag / Release 的唯一發布 owner。
@@ -139,7 +130,26 @@ jobs:
             mode=version-push
             should_build=true
             publish=true
-            notes_start_tag="$latest_tag"
+          fi
+
+          # Release 說明取 CHANGELOG.md 的段落（ADR 0009）：測試版取「未發布」，正式版取「X.Y.Z」。
+          # 先在這裡確認段落存在，免得建置完才在發布時失敗。
+          notes_heading=""
+          if [[ "$publish" == "true" ]]; then
+            if [[ "$prerelease" == "true" ]]; then
+              notes_heading="未發布"
+            else
+              notes_heading="$app_version"
+            fi
+            if ! notes="$(git show "$target_sha:CHANGELOG.md" | sh tool/changelog.sh section "$notes_heading" -)"; then
+              echo "::error::CHANGELOG.md 找不到「## $notes_heading」段落。正式版的版號 commit 要把「## 未發布」改成「## $notes_heading」，並在上面留一個空的「## 未發布」。"
+              exit 1
+            fi
+            # 測試版的「未發布」可以是空的（例如正式版之後只改了 CI），App 會顯示「沒有附更新說明」；正式版一定要有說明。
+            if [[ "$prerelease" != "true" && -z "$notes" ]]; then
+              echo "::error::CHANGELOG.md 的「## $notes_heading」段落是空的，請寫上這個正式版的更新說明。"
+              exit 1
+            fi
           fi
 
           # Android versionCode 取 main 的提交數：main 禁止強制推送、歷史不改寫，所以它只增不減（ADR 0004），
@@ -152,7 +162,7 @@ jobs:
             echo "publish=$publish"
             echo "prerelease=$prerelease"
             echo "tag_name=$tag_name"
-            echo "notes_start_tag=$notes_start_tag"
+            echo "notes_heading=$notes_heading"
             echo "target_sha=$target_sha"
             echo "build_name=$build_name"
             echo "build_number=$build_number"
@@ -256,20 +266,19 @@ jobs:
           TAG_NAME: ${{ needs.plan-release.outputs.tag_name }}
           TARGET_SHA: ${{ needs.plan-release.outputs.target_sha }}
           PRERELEASE: ${{ needs.plan-release.outputs.prerelease }}
-          NOTES_START_TAG: ${{ needs.plan-release.outputs.notes_start_tag }}
+          NOTES_HEADING: ${{ needs.plan-release.outputs.notes_heading }}
         run: |
           set -euo pipefail
           apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
+          notes_path="$RUNNER_TEMP/release-notes.md"
+          sh tool/changelog.sh section "$NOTES_HEADING" > "$notes_path"
 
           # 測試版標成預發布版：不會成為 Latest，網站與只收正式版的 App 都看不到。
           if [[ "$PRERELEASE" == "true" ]]; then
             release_args=(--prerelease)
           else
             release_args=(--latest)
-            if [[ -n "$NOTES_START_TAG" ]]; then
-              release_args+=(--notes-start-tag "$NOTES_START_TAG")
-            fi
           fi
 
           if ! git show-ref --verify --quiet "refs/tags/$TAG_NAME"; then
@@ -282,7 +291,7 @@ jobs:
           else
             gh release create "$TAG_NAME" "$apk_path#$asset_name" \
               --title "$TAG_NAME" \
-              --generate-notes \
+              --notes-file "$notes_path" \
               "${release_args[@]}"
           fi
 

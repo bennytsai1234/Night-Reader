@@ -15,6 +15,28 @@ permissions:
   contents: read
 
 jobs:
+  changelog:
+    name: Release notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test changelog tool
+        run: sh tool/changelog_test.sh
+      - name: Require release notes for app changes pushed to main
+        # 和 .githooks/pre-push 同一個檢查，沒裝 hook 的推送也擋得到；
+        # 這裡失敗時 Android Release 不會發版（ADR 0009）。
+        # Android Release 以 workflow_call 呼叫時，github.event 仍是那次推送。
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ inputs.ref || github.sha }}
+        run: sh tool/changelog.sh check "$BEFORE_SHA" "$HEAD_SHA"
+
   verify:
     name: Analyze and test
     runs-on: ubuntu-latest
