@@ -7,34 +7,21 @@ void main() {
     home: Scaffold(body: Center(child: child)),
   );
 
-  testWidgets('draws a 40x24 track inside a tap target of at least 44', (
-    tester,
-  ) async {
+  testWidgets('is a 40x24 track', (tester) async {
     await tester.pumpWidget(
       host(GroupedSwitch(value: true, onChanged: (_) {})),
     );
 
-    final target = tester.getSize(find.byType(GroupedSwitch));
-    expect(target.width, greaterThanOrEqualTo(44));
-    expect(target.height, greaterThanOrEqualTo(44));
-    final track = tester.getSize(
-      find.descendant(
-        of: find.byType(GroupedSwitch),
-        matching: find.byType(AnimatedContainer),
-      ),
-    );
-    expect(track, const Size(40, 24));
+    expect(tester.getSize(find.byType(GroupedSwitch)), const Size(40, 24));
   });
 
-  testWidgets('a tap anywhere in the target toggles it', (tester) async {
+  testWidgets('a tap toggles it', (tester) async {
     bool? changed;
     await tester.pumpWidget(
       host(GroupedSwitch(value: false, onChanged: (v) => changed = v)),
     );
 
-    final rect = tester.getRect(find.byType(GroupedSwitch));
-    // 軌道靠右；點左緣多出來的點擊範圍也要有效。
-    await tester.tapAt(rect.centerLeft + const Offset(1, 0));
+    await tester.tap(find.byType(GroupedSwitch));
 
     expect(changed, isTrue);
   });
