@@ -1,22 +1,25 @@
-# 交接（2026-10-13 16:50）
+# 交接（2026-10-13 17:40）
 
 ## 正在做
 
-沒有進行中的修改。閱讀器審查的後續工作已全部合併進 `main`（`25ed851`），分支 `fix/reader-review-followups` 已刪除；`git log 4e16616..25ed851` 是那一批（ADR 0005–0007 也在裡面）。
+分支 `docs/rasterization-research`（已推上 GitHub），只多一份研究文件 `docs/research/flutter-rasterization.md`：Flutter 一幀的流程、Impeller 光柵化做什麼、`isRepaintBoundary` 對兩條執行緒的影響、`FrameTiming` 怎麼讀、模擬器數字為什麼不準，以及 `false` 時正文空白的三個推測。全部以 Flutter 3.47.0 的官方文件與原始碼為據，附行號連結。文件只有 agent 粗看過摘要與模擬器段落，**還沒向使用者講解**；使用者要回家看文件再討論。
 
-下一個題目是審查清單的「第 2 項」：正文段落要不要各自成一層圖層（`RenderCachedBlock.isRepaintBoundary`），也就是光柵化效能那一項。使用者還沒決定要不要動手，下一個對話先做研究。
+題目是審查清單的「第 2 項」：正文段落要不要各自成一層圖層（`RenderCachedBlock.isRepaintBoundary`），也就是光柵化效能那一項。使用者還沒決定要不要動手。
 
-上一個對話已經跟使用者更正過：先前說「光柵化 P99 從 118.5ms 降到約 21ms」說過頭了，同一份紀錄裡後來把兩種做法放在一起比的那次量測，兩者都在 120ms 上下，沒有重現這個改善（細節見下方「第 2 項的事實」）。
+先前說「光柵化 P99 從 118.5ms 降到約 21ms」說過頭了，已跟使用者更正：同一份紀錄裡後來把兩種做法放在一起比的那次量測，兩者都在 120ms 上下，沒有重現這個改善（細節見下方「第 2 項的事實」）。
+
+### 研究文件的重點（細節與來源看文件本身）
+
+- Android 上 Impeller 每幀從頭畫整個畫面，沒有 raster cache，也沒有局部重繪；所以 `true`／`false` 在 raster 執行緒上要畫的文字量一樣，`true` 省的主要是 UI 執行緒（捲動時段落不重跑 `paint`）。從原始碼推論，切換不該讓光柵化時間差好幾倍，跟配對量測沒差別一致；118.5→21ms 那次找不到對應機制。
+- 引擎看到模擬器特徵就不用 Vulkan，模擬器一律走 Impeller OpenGL ES，多數手機走 Vulkan；過去在模擬器量的全是另一套後端。
+- 過去「Skia 與 Impeller A/B 沒差別」用的關閉設定從未生效，夜讀其實從沒量過 Skia。
+- `false` 時空白的三個推測（都未驗證，文件 6.3 節）：`paint` 出錯時 `save`／`clipRect` 沒還原，殘留的裁切範圍蓋掉後面的段落（只在 debug 建置）；`true` 沿用舊圖層，把段落當下沒內容的狀態藏起來；重畫請求在往上層節點傳的時候被吞掉。
+- 文件「沒查到定論、或文件與程式碼不一致的地方」一節列了官方文件與程式碼互相矛盾、或沒查到定論的地方。
 
 ## 下一步
 
-1. **先研究並向使用者說明「光柵化是在幹嘛的」**，這是使用者指定的下一個題目。用使用者聽得懂的話講清楚，並對到這個 App：
-   - Flutter 一幀從 build、layout、paint 到 raster（光柵化）各在做什麼，哪些在 UI 執行緒、哪些在 raster 執行緒；Impeller 下光柵化實際做了什麼（把圖層樹轉成 GPU 指令、文字字形、裁切與 saveLayer 的代價）。
-   - 圖層（layer）、`RepaintBoundary`／`isRepaintBoundary` 和光柵化成本的關係：每個段落一層、捲動時只是位移圖層，跟全部畫在同一層、捲動時重畫，各自省了什麼、花了什麼。
-   - `FrameTiming` 的 build／raster 時間怎麼讀；120Hz 下一幀只有 8.3ms，UI 和 raster 兩條執行緒各自要在期限內完成。
-   - 為什麼模擬器上的光柵化數字不能代表手機（同一台模擬器上最簡單的 `ListView` 光柵化 P99 也有 56.5ms）。
-   以 Flutter 官方文件與 engine 原始碼等一手資料為準，可以照 `research` 技能把結果寫成 repo 內的文件；講完再進入第 2 步。
-2. 研究講完後，把下面的事實講清楚，再請使用者決定（見「等使用者決定」）。
+1. **等使用者看完 `docs/research/flutter-rasterization.md` 回來討論**，回答使用者的問題；使用者要口頭講解時，照文件用白話講，並對到夜讀。
+2. 講完後，把下面的事實講清楚，再請使用者決定（見「等使用者決定」）。研究文件要不要併進 `main`、還是只留在分支上，也一起問（文件改動不會觸發測試版發布）。
 3. 使用者若決定追查：照 `diagnosing-bugs` 先在本機 widget 測試重現「`isRepaintBoundary => false` 時朗讀中正文變空白」，找到根因再談要不要改。實機與模擬器量測是使用者的工作（`AGENTS.md`），agent 不跑、也不要求。
 4. 不論結論，`lib/features/reader_v2/hybrid/view/hybrid_scroll_view.dart:126` 的註解寫「不建立獨立 repaint boundary」，和 `cached_block_widget.dart:201` 的 `true` 相反，要依結論改掉其中一邊。
 
@@ -44,7 +47,6 @@
 
 ## 建議技能
 
-- `research`：查一手資料說明光柵化，結果寫成 repo 內的文件。
 - `diagnosing-bugs`：重現並追查 `false` 時的空白正文。
 - `domain-modeling`：結論若是刻意保留 `true`，照它判斷要不要寫成 ADR。
 - `codex-review`：之後若改了程式，合併前審整條分支。
