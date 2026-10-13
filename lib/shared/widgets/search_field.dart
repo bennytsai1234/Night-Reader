@@ -90,8 +90,7 @@ class SearchField extends StatelessWidget {
             return Semantics(
               button: true,
               label: '清除',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
+              child: PressScale(
                 onTap: () {
                   controller.clear();
                   onChanged?.call('');

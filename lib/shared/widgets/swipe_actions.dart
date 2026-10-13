@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 
+import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 
@@ -218,7 +218,7 @@ class _SwipeActionsState extends State<SwipeActions>
     if (_armed == armed) return;
     _armed = armed;
     if (armed) {
-      if (haptic) HapticFeedback.lightImpact();
+      if (haptic) AppHaptics.snap();
       _expand.forward();
     } else {
       _expand.reverse();

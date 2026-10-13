@@ -3,6 +3,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 /// 書源規則輸入列（Telegram ItemListMultilineInputItem 的紙墨版）：放在
 /// [GroupedSection] 內，上方小字標籤與小幫手按鈕，下方等寬字輸入框。
@@ -86,8 +87,7 @@ class RuleTextField extends StatelessWidget {
       child: ExcludeSemantics(
         child: Tooltip(
           message: semanticsLabel,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          child: PressScale(
             onTap: () => _showHelperMenu(context),
             child: SizedBox(
               width: AppGrouped.rowMinHeight,

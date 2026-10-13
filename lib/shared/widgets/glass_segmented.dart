@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 
@@ -123,7 +124,10 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
 
   void _select(int index) {
     final value = widget.segments[index].value;
-    if (value != widget.selected) widget.onChanged(value);
+    if (value != widget.selected) {
+      AppHaptics.select();
+      widget.onChanged(value);
+    }
     // 呼叫端沒有採用新值時，選取塊回到 [selected] 的位置。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
