@@ -140,7 +140,7 @@ void main() {
           textColor: Colors.black,
           style: _style,
           viewportController: viewport,
-          enableDiskMetrics: false,
+          enableDiskCache: false,
           preprocessor: const TextPreprocessor(useIsolate: false),
           onContentTapUp: (details) {
             taps.add(details);

@@ -1,9 +1,11 @@
 import 'package:night_reader/features/reader_v2/hybrid/view/admission_controller.dart';
+import 'package:night_reader/features/reader_v2/hybrid/measure/chapter_plan_disk_cache.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/metrics_disk_cache.dart';
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -1583,6 +1585,170 @@ void main() {
           chapterLayoutIdentities: const <int, String>{2: 'content-v2'},
         ),
         isEmpty,
+      );
+    });
+  });
+
+  group('ChapterPlanDiskCache', () {
+    final text = ChapterText(
+      id: 3,
+      title: '第三章',
+      paragraphs: const ['第一段文字', '第二段文字'],
+      displayText: '第三章\n\n第一段文字\n\n第二段文字',
+      contentHash: 'content-3',
+    );
+    final blocks = ChapterBlocks(
+      chapterIndex: 3,
+      title: text.title,
+      displayText: text.displayText,
+      contentHash: text.contentHash,
+      blocks: const [
+        ChapterBlock(
+          key: BlockKey(chapterIndex: 3, blockIndex: 0),
+          text: '第三章',
+          charRange: HybridTextRange(0, 3),
+          sourceParagraphIndex: 0,
+          isTitle: true,
+        ),
+        ChapterBlock(
+          key: BlockKey(chapterIndex: 3, blockIndex: 1),
+          text: '第一段文字\n\n第',
+          charRange: HybridTextRange(5, 13),
+          sourceParagraphIndex: 1,
+          visualLineBreakOffsets: [8],
+        ),
+        ChapterBlock(
+          key: BlockKey(chapterIndex: 3, blockIndex: 2),
+          text: '二段文字',
+          charRange: HybridTextRange(13, 17),
+          sourceParagraphIndex: 1,
+          isContinuation: true,
+          layoutBreakBefore: true,
+        ),
+      ],
+    );
+
+    Future<Directory> tempDir() async {
+      final temp = await Directory.systemTemp.createTemp('reader_plans_');
+      addTearDown(() => temp.delete(recursive: true));
+      return temp;
+    }
+
+    test('round-trips the exact segmentation for identical content', () async {
+      final cache = ChapterPlanDiskCache(
+        baseDirectory: await tempDir(),
+        buildSignature: '1.0.0+1',
+      );
+      final fingerprint = _fingerprint();
+      await cache.write(
+        bookUrl: 'book://plans',
+        fingerprint: fingerprint,
+        blocks: blocks,
+      );
+      final restored = await cache.read(
+        bookUrl: 'book://plans',
+        fingerprint: fingerprint,
+        text: text,
+      );
+      expect(restored, isNotNull);
+      expect(restored!.layoutIdentity, blocks.layoutIdentity);
+      expect(restored.blocks.map((block) => block.text), [
+        for (final block in blocks.blocks) block.text,
+      ]);
+    });
+
+    test('another build, style or content never reuses the plan', () async {
+      final directory = await tempDir();
+      final fingerprint = _fingerprint();
+      await ChapterPlanDiskCache(
+        baseDirectory: directory,
+        buildSignature: '1.0.0+1',
+      ).write(
+        bookUrl: 'book://plans',
+        fingerprint: fingerprint,
+        blocks: blocks,
+      );
+
+      final nextBuild = ChapterPlanDiskCache(
+        baseDirectory: directory,
+        buildSignature: '1.0.0+2',
+      );
+      expect(
+        await nextBuild.read(
+          bookUrl: 'book://plans',
+          fingerprint: fingerprint,
+          text: text,
+        ),
+        isNull,
+      );
+      final sameBuild = ChapterPlanDiskCache(
+        baseDirectory: directory,
+        buildSignature: '1.0.0+1',
+      );
+      expect(
+        await sameBuild.read(
+          bookUrl: 'book://plans',
+          fingerprint: _fingerprint(width: 400),
+          text: text,
+        ),
+        isNull,
+      );
+      expect(
+        await sameBuild.read(
+          bookUrl: 'book://plans',
+          fingerprint: fingerprint,
+          text: ChapterText(
+            id: 3,
+            title: text.title,
+            paragraphs: text.paragraphs,
+            displayText: text.displayText,
+            contentHash: 'content-3-edited',
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('a corrupt or out-of-range file is treated as a miss', () async {
+      final directory = await tempDir();
+      final cache = ChapterPlanDiskCache(
+        baseDirectory: directory,
+        buildSignature: '1.0.0+1',
+      );
+      final fingerprint = _fingerprint();
+      await cache.write(
+        bookUrl: 'book://plans',
+        fingerprint: fingerprint,
+        blocks: blocks,
+      );
+      final file = directory.listSync(recursive: true).whereType<File>().single;
+
+      await file.writeAsString('{not json');
+      expect(
+        await cache.read(
+          bookUrl: 'book://plans',
+          fingerprint: fingerprint,
+          text: text,
+        ),
+        isNull,
+      );
+
+      await cache.write(
+        bookUrl: 'book://plans',
+        fingerprint: fingerprint,
+        blocks: blocks,
+      );
+      final json =
+          jsonDecode(await file.readAsString()) as Map<String, Object?>;
+      ((json['spans'] as List<Object?>)[1] as List<Object?>)[1] = 999;
+      await file.writeAsString(jsonEncode(json));
+      expect(
+        await cache.read(
+          bookUrl: 'book://plans',
+          fingerprint: fingerprint,
+          text: text,
+        ),
+        isNull,
       );
     });
   });

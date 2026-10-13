@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/config/app_config.dart';
+import 'package:night_reader/core/services/app_version.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
@@ -25,6 +26,7 @@ import 'anchor/anchor_manager.dart';
 import 'core/hybrid_contracts.dart';
 import 'core/chapter_layout_plan.dart';
 import 'core/hybrid_types.dart';
+import 'measure/chapter_plan_disk_cache.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'measure/metrics_disk_cache.dart';
@@ -59,7 +61,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.progressListenable,
     this.bookUrl,
     this.preprocessor = const TextPreprocessor(),
-    this.enableDiskMetrics = true,
+    this.enableDiskCache = true,
     this.paragraphCacheCapacity = 512,
   });
 
@@ -82,7 +84,7 @@ class HybridReaderScreen extends StatefulWidget {
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
   final String? bookUrl;
   final HybridTextPreprocessor preprocessor;
-  final bool enableDiskMetrics;
+  final bool enableDiskCache;
   final int paragraphCacheCapacity;
 
   @override
@@ -130,6 +132,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   StreamSubscription<BlockReady>? _pumpEventsSub;
   ScrollController? _scrollController;
   MetricsDiskCache? _metricsDiskCache;
+  ChapterPlanDiskCache? _planDiskCache;
   Size _viewportSize = Size.zero;
   double? _pendingScrollOffset;
   ReaderV2OperationToken? _demandOwner;
@@ -253,12 +256,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       state.layoutGeneration,
       contentGeneration: state.contentGeneration,
     );
-    _fingerprint = StyleFingerprint.fromLayoutSpec(
-      widget.runtime.state.layoutSpec,
-      justify: AppConfig.readerV2ContentJustify,
-      platformFontSignature:
-          '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
-    );
+    _fingerprint = _fingerprintFor(widget.runtime.state.layoutSpec);
     _namespace = MeasurementNamespace(epoch: _epoch, fingerprint: _fingerprint);
     _pump = LayoutPump(
       paragraphCache: _paragraphCache,
@@ -273,6 +271,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       // measured frontier blocks can therefore supply the same native frame.
       _reconcileVisibleWindow();
     });
+  }
+
+  StyleFingerprint _fingerprintFor(ReaderV2LayoutSpec spec) {
+    return StyleFingerprint.fromLayoutSpec(
+      spec,
+      justify: AppConfig.readerV2ContentJustify,
+      platformFontSignature:
+          '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
+    );
   }
 
   void _handleEpochRebuild(String? previousBookUrl) {
@@ -562,12 +569,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         _admission.registerChapter(restored);
         return restored;
       }
+      final spec = widget.runtime.state.layoutSpec;
+      final fingerprint = _fingerprintFor(spec);
+      final stored = await _readDiskPlan(text, fingerprint);
+      if (!current()) return null;
+      if (stored != null) {
+        _layoutPlans[chapter] = ChapterLayoutPlan(stored);
+        _blocks[chapter] = stored;
+        _admission.registerChapter(stored);
+        unawaited(_warmDiskMetricsForChapter(stored));
+        return stored;
+      }
       final rough = await preprocessor.process(
         text,
         maxBlockChars: maxBlockChars,
       );
       if (!current()) return null;
-      final spec = widget.runtime.state.layoutSpec;
       final blocks = await binding.planChapterVisualLines(
         rough,
         maxBlockChars: maxBlockChars,
@@ -592,6 +609,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       // Disk reads may improve later reuse; neither first paint nor command
       // completion waits for this optional cache.
       unawaited(_warmDiskMetricsForChapter(blocks));
+      unawaited(_writeDiskPlan(blocks, fingerprint));
       return blocks;
     }();
     materialization.attach(task);
@@ -1995,7 +2013,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
 
   Future<void> _warmDiskMetricsForChapter(ChapterBlocks blocks) async {
     final bookUrl = widget.bookUrl;
-    if (!widget.enableDiskMetrics || bookUrl == null) return;
+    if (!widget.enableDiskCache || bookUrl == null) return;
     final namespace = _namespace;
     final binding = _pump;
     final warmKey = (
@@ -2029,7 +2047,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     required String? bookUrl,
     StyleFingerprint? fingerprint,
   }) async {
-    if (!widget.enableDiskMetrics || bookUrl == null || snapshot.isEmpty) {
+    if (!widget.enableDiskCache || bookUrl == null || snapshot.isEmpty) {
       return;
     }
     final targetFingerprint = fingerprint ?? _fingerprint;
@@ -2055,6 +2073,54 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     if (existing != null) return existing;
     final directory = await getApplicationSupportDirectory();
     return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
+  }
+
+  Future<ChapterBlocks?> _readDiskPlan(
+    ChapterText text,
+    StyleFingerprint fingerprint,
+  ) async {
+    final bookUrl = widget.bookUrl;
+    if (!widget.enableDiskCache || bookUrl == null) return null;
+    try {
+      final cache = await _obtainPlanCache();
+      return await cache.read(
+        bookUrl: bookUrl,
+        fingerprint: fingerprint,
+        text: text,
+      );
+    } on Exception {
+      // 快取只用來省掉換行計算；取不到就照常排版，不能讓章節載入失敗。
+      return null;
+    }
+  }
+
+  Future<void> _writeDiskPlan(
+    ChapterBlocks blocks,
+    StyleFingerprint fingerprint,
+  ) async {
+    final bookUrl = widget.bookUrl;
+    if (!widget.enableDiskCache || bookUrl == null) return;
+    try {
+      final cache = await _obtainPlanCache();
+      await cache.write(
+        bookUrl: bookUrl,
+        fingerprint: fingerprint,
+        blocks: blocks,
+      );
+    } on Exception {
+      // 寫不進去只是下次要重算換行，不影響這次排版。
+    }
+  }
+
+  Future<ChapterPlanDiskCache> _obtainPlanCache() async {
+    final existing = _planDiskCache;
+    if (existing != null) return existing;
+    final directory = await getApplicationSupportDirectory();
+    final version = await AppVersion.current();
+    return _planDiskCache = ChapterPlanDiskCache(
+      baseDirectory: directory,
+      buildSignature: '${version.versionName}+${version.buildNumber}',
+    );
   }
 
   void _scheduleRebuild() {
