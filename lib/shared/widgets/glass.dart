@@ -481,7 +481,9 @@ class EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
-              // 以 base 自己的透明度為上限，呼叫端可以整條淡出。
+              // 中段的透明度以底色本身的透明度為準：呼叫端可以整條淡出，
+              // 半透明的底色（例如書籍詳情頁頂透出封面氛圍時）漸隱時也不會
+              // 比實色段更深。
               colors: [
                 base,
                 base,

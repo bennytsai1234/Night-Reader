@@ -173,6 +173,17 @@ class AppMotion {
   /// 500ms 則換色後要等太久才看得到全貌。前後放緩，起點與收尾都不突兀。
   static const Duration themeReveal = Duration(milliseconds: 450);
   static const Curve themeRevealCurve = Curves.easeInOutCubic;
+
+  /// 書架開書的「封面放大翻開」：封面先花 [bookOpenExpand] 放大到整頁，
+  /// 最後 [fade] 淡出露出閱讀頁（兩段重疊 50ms，總長 500ms）。放大比
+  /// [spring] 短，淡出沿用 [fade]，兩段都看得出來又不拖慢開書。
+  static const Duration bookOpen = Duration(milliseconds: 500);
+  static const Duration bookOpenExpand = Duration(milliseconds: 300);
+  static const Curve bookOpenExpandCurve = Curves.easeInOutCubic;
+
+  /// 骨架載入的呼吸脈動：一次由深到淺（往返一輪 1.6 秒）。比 [fade] 慢
+  /// 六倍以上，讀起來是安靜的等待，不像閃爍。
+  static const Duration skeletonPulse = Duration(milliseconds: 800);
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

@@ -6,9 +6,11 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
+import 'widgets/explore_skeletons.dart';
 
 /// ExploreShowPage - 探索結果列表頁面
 /// (對標 Android ExploreShowActivity)
@@ -58,16 +60,30 @@ class _ExploreShowContent extends StatelessWidget {
     );
   }
 
+  /// 書單讓出頁首與底部系統區。
+  EdgeInsets _listPadding(BuildContext context) {
+    final padding = MediaQuery.paddingOf(context);
+    return EdgeInsets.only(
+      top: padding.top,
+      bottom: padding.bottom + AppSpacing.xl,
+    );
+  }
+
+  /// 第一頁載入時顯示書單骨架，書到了以淡入取代。
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
+    return SkeletonSwitcher(
+      loading: provider.isLoading && provider.books.isEmpty,
+      skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
+      builder: (_) => _buildLoaded(context, provider),
+    );
+  }
+
+  Widget _buildLoaded(BuildContext context, ExploreShowProvider provider) {
     final padding = MediaQuery.paddingOf(context);
     Widget padState(Widget child) => Padding(
       padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
       child: child,
     );
-
-    if (provider.isLoading && provider.books.isEmpty) {
-      return padState(const Center(child: CircularProgressIndicator()));
-    }
 
     if (provider.errorMessage != null && provider.books.isEmpty) {
       return padState(
@@ -110,10 +126,7 @@ class _ExploreShowContent extends StatelessWidget {
       edgeOffset: padding.top,
       onRefresh: () => provider.refresh(),
       child: ListView.separated(
-        padding: EdgeInsets.only(
-          top: padding.top,
-          bottom: padding.bottom + AppSpacing.xl,
-        ),
+        padding: _listPadding(context),
         itemCount: provider.books.length + (provider.hasMore ? 1 : 0),
         separatorBuilder: (_, _) =>
             const InsetSeparator(indent: ExploreBookItem.textIndent),

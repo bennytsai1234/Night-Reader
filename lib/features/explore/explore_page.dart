@@ -20,7 +20,9 @@ import 'explore_provider.dart';
 import 'explore_show_page.dart';
 
 import 'package:night_reader/shared/widgets/group_filter_bar.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import 'widgets/explore_skeletons.dart';
 import 'widgets/legado_explore_kind_flow.dart';
 
 class ExplorePage extends StatelessWidget {
@@ -121,7 +123,11 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
           _bodyPadding = MediaQuery.paddingOf(bodyContext);
           return NotificationListener<Notification>(
             onNotification: _titleCollapse.handle,
-            child: _buildSourceList(provider),
+            child: SkeletonSwitcher(
+              loading: provider.isLoadingSources,
+              skeleton: ExploreSourceListSkeleton(padding: _listPadding),
+              builder: (_) => _buildSourceList(provider),
+            ),
           );
         },
       ),
@@ -137,11 +143,13 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     );
   }
 
-  Widget _buildSourceList(ExploreProvider provider) {
-    if (provider.isLoadingSources) {
-      return _padState(const Center(child: CircularProgressIndicator()));
-    }
+  /// 書源清單讓出頁首與底部浮動分頁列。
+  EdgeInsets get _listPadding => EdgeInsets.only(
+    top: _bodyPadding.top + AppSpacing.sm,
+    bottom: _bodyPadding.bottom + AppSpacing.xl,
+  );
 
+  Widget _buildSourceList(ExploreProvider provider) {
     if (provider.sourceLoadError != null) {
       return _padState(
         AppStateView(
@@ -209,14 +217,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       );
     }
 
-    final padding = _bodyPadding;
     final count = provider.sources.length;
     return ListView.builder(
       controller: _scrollController,
-      padding: EdgeInsets.only(
-        top: padding.top + AppSpacing.sm,
-        bottom: padding.bottom + AppSpacing.xl,
-      ),
+      padding: _listPadding,
       itemCount: count,
       itemBuilder: (context, index) {
         final source = provider.sources[index];

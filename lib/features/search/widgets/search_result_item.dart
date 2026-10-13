@@ -42,13 +42,21 @@ class _SearchResultItemState extends State<SearchResultItem> {
       height: 1.35,
       color: secondary,
     );
+    // 每張合併卡代表不同的書，代表書的 bookUrl 在結果裡不會重複。
+    final heroTag = BookCoverWidget.heroTag(
+      BookCoverHeroScope.search,
+      book.bookUrl,
+    );
     return InkWell(
       onTap: () {
         // 搜尋在背景繼續，回來時結果已經補齊。
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => BookDetailPage(searchBook: widget.result),
+            builder: (context) => BookDetailPage(
+              searchBook: widget.result,
+              coverHeroTag: heroTag,
+            ),
           ),
         );
       },
@@ -62,13 +70,16 @@ class _SearchResultItemState extends State<SearchResultItem> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            BookCoverWidget(
-              coverUrl: book.coverUrl,
-              bookName: context.zh(book.name),
-              author: context.zh(book.author),
-              width: ExploreBookItem.coverWidth,
-              height: ExploreBookItem.coverHeight,
-              borderRadius: AppRadius.cardXs,
+            Hero(
+              tag: heroTag,
+              child: BookCoverWidget(
+                coverUrl: book.coverUrl,
+                bookName: context.zh(book.name),
+                author: context.zh(book.author),
+                width: ExploreBookItem.coverWidth,
+                height: ExploreBookItem.coverHeight,
+                borderRadius: AppRadius.cardXs,
+              ),
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
