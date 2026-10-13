@@ -28,68 +28,68 @@ final class _PreprocessRequest {
   final int maxBlockChars;
 }
 
-ChapterBlocks _processSync(_PreprocessRequest request) {
-  final chapter = request.chapter;
-  final maxBlockChars = request.maxBlockChars <= 0
-      ? 1 << 30
-      : request.maxBlockChars;
-  final blocks = <ChapterBlock>[];
-  var blockIndex = 0;
-  if (chapter.title.isNotEmpty) {
-    blocks.add(
-      ChapterBlock(
-        key: BlockKey(chapterIndex: chapter.id, blockIndex: blockIndex),
-        text: chapter.title,
-        charRange: HybridTextRange(0, chapter.title.length),
-        sourceParagraphIndex: -1,
-        isTitle: true,
-      ),
-    );
-    blockIndex += 1;
-  }
+/// 一章的語義段落：標題（`paragraph == -1`，範圍在標題內）與各正文段落
+/// （範圍在 displayText 內）。沒有標題也沒有正文時是一個空段落。
+typedef ChapterSegment = ({int start, int end, int paragraph, bool isTitle});
 
+List<ChapterSegment> chapterSegmentsOf(ChapterText chapter) {
+  final segments = <ChapterSegment>[
+    if (chapter.title.isNotEmpty)
+      (start: 0, end: chapter.title.length, paragraph: -1, isTitle: true),
+  ];
   final bodyStartOffset = chapter.title.isEmpty
       ? 0
       : chapter.paragraphs.isEmpty
       ? chapter.title.length
       : chapter.title.length + 2;
   var paragraphOffset = bodyStartOffset;
-  for (
-    var paragraphIndex = 0;
-    paragraphIndex < chapter.paragraphs.length;
-    paragraphIndex += 1
-  ) {
-    final paragraph = chapter.paragraphs[paragraphIndex];
-    final chunks = _splitParagraph(paragraph, maxBlockChars);
-    var localOffset = 0;
+  for (var i = 0; i < chapter.paragraphs.length; i += 1) {
+    final length = chapter.paragraphs[i].length;
+    segments.add((
+      start: paragraphOffset,
+      end: paragraphOffset + length,
+      paragraph: i,
+      isTitle: false,
+    ));
+    paragraphOffset += length + 2;
+  }
+  if (segments.isEmpty) {
+    segments.add((start: 0, end: 0, paragraph: 0, isTitle: false));
+  }
+  return segments;
+}
+
+ChapterBlocks _processSync(_PreprocessRequest request) {
+  final chapter = request.chapter;
+  final maxBlockChars = request.maxBlockChars <= 0
+      ? 1 << 30
+      : request.maxBlockChars;
+  final blocks = <ChapterBlock>[];
+  for (final segment in chapterSegmentsOf(chapter)) {
+    final source = segment.isTitle
+        ? chapter.title
+        : chapter.paragraphs.isEmpty
+        ? ''
+        : chapter.paragraphs[segment.paragraph];
+    // 標題不切塊；正文段落依預算切成首尾相接的 continuation。
+    final chunks = segment.isTitle || source.isEmpty
+        ? <String>[source]
+        : _splitParagraph(source, maxBlockChars);
+    var start = segment.start;
     for (var i = 0; i < chunks.length; i += 1) {
-      final chunk = chunks[i];
-      final start = paragraphOffset + localOffset;
-      final end = start + chunk.length;
+      final end = start + chunks[i].length;
       blocks.add(
         ChapterBlock(
-          key: BlockKey(chapterIndex: chapter.id, blockIndex: blockIndex),
-          text: chunk,
+          key: BlockKey(chapterIndex: chapter.id, blockIndex: blocks.length),
+          text: chunks[i],
           charRange: HybridTextRange(start, end),
-          sourceParagraphIndex: paragraphIndex,
+          sourceParagraphIndex: segment.paragraph,
+          isTitle: segment.isTitle,
           isContinuation: i > 0,
         ),
       );
-      blockIndex += 1;
-      localOffset += chunk.length;
+      start = end;
     }
-    paragraphOffset += paragraph.length + 2;
-  }
-
-  if (blocks.isEmpty) {
-    blocks.add(
-      ChapterBlock(
-        key: BlockKey(chapterIndex: chapter.id, blockIndex: 0),
-        text: '',
-        charRange: const HybridTextRange(0, 0),
-        sourceParagraphIndex: 0,
-      ),
-    );
   }
 
   return ChapterBlocks(

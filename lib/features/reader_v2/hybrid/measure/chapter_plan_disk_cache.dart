@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
+import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
 /// 章節換行結果（不含正文的切分與換行位置）的磁碟快取。
 ///
@@ -100,37 +101,60 @@ final class ChapterPlanDiskCache {
       return null;
     }
     final spans = json['spans'];
-    if (spans is! List<Object?> || spans.isEmpty) return null;
+    if (spans is! List<Object?>) return null;
     final blocks = <ChapterBlock>[];
-    for (var i = 0; i < spans.length; i += 1) {
-      final span = spans[i] as List<Object?>;
-      final start = span[0] as int;
-      final end = span[1] as int;
-      final flags = span[3] as int;
-      final isTitle = flags & 1 != 0;
-      final source = isTitle ? text.title : text.displayText;
-      if (start < 0 || end < start || end > source.length) return null;
-      final offsets = [
-        for (final offset in span[4] as List<Object?>) offset as int,
-      ];
-      var previous = start;
-      for (final offset in offsets) {
-        if (offset <= previous || offset >= end) return null;
-        previous = offset;
-      }
-      blocks.add(
-        ChapterBlock(
-          key: BlockKey(chapterIndex: text.id, blockIndex: i),
-          text: source.substring(start, end),
-          charRange: HybridTextRange(start, end),
-          sourceParagraphIndex: span[2] as int,
-          isTitle: isTitle,
-          isContinuation: flags & 2 != 0,
-          layoutBreakBefore: flags & 4 != 0,
-          visualLineBreakOffsets: List<int>.unmodifiable(offsets),
-        ),
-      );
+    var next = 0;
+    // 換行切分必須完整覆蓋前處理產生的每一段：標題與正文段落依序出現，
+    // 段內各塊首尾相接、不缺不重疊；只有段落的第一塊不是 continuation。
+    for (final segment in chapterSegmentsOf(text)) {
+      var cursor = segment.start;
+      do {
+        if (next >= spans.length) return null;
+        final span = spans[next] as List<Object?>;
+        final start = span[0] as int;
+        final end = span[1] as int;
+        final paragraph = span[2] as int;
+        final flags = span[3] as int;
+        final isTitle = flags & 1 != 0;
+        final isContinuation = flags & 2 != 0;
+        final layoutBreakBefore = flags & 4 != 0;
+        final first = cursor == segment.start;
+        if (isTitle != segment.isTitle ||
+            paragraph != segment.paragraph ||
+            start != cursor ||
+            end > segment.end ||
+            (end == start && segment.end != segment.start) ||
+            isContinuation == first ||
+            layoutBreakBefore == first) {
+          return null;
+        }
+        // 換行位置相對於這一塊的文字（見 ParagraphTextMap）。
+        final offsets = [
+          for (final offset in span[4] as List<Object?>) offset as int,
+        ];
+        var previous = 0;
+        for (final offset in offsets) {
+          if (offset <= previous || offset >= end - start) return null;
+          previous = offset;
+        }
+        final source = isTitle ? text.title : text.displayText;
+        blocks.add(
+          ChapterBlock(
+            key: BlockKey(chapterIndex: text.id, blockIndex: next),
+            text: source.substring(start, end),
+            charRange: HybridTextRange(start, end),
+            sourceParagraphIndex: paragraph,
+            isTitle: isTitle,
+            isContinuation: isContinuation,
+            layoutBreakBefore: layoutBreakBefore,
+            visualLineBreakOffsets: List<int>.unmodifiable(offsets),
+          ),
+        );
+        next += 1;
+        cursor = end;
+      } while (cursor < segment.end);
     }
+    if (next != spans.length) return null;
     return ChapterBlocks(
       chapterIndex: text.id,
       title: text.title,

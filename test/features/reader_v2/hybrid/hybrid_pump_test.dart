@@ -4,6 +4,7 @@ import 'package:night_reader/features/reader_v2/hybrid/measure/metrics_disk_cach
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
@@ -1522,38 +1523,40 @@ void main() {
     final text = ChapterText(
       id: 3,
       title: '第三章',
-      paragraphs: const ['第一段文字', '第二段文字'],
-      displayText: '第三章\n\n第一段文字\n\n第二段文字',
+      paragraphs: const ['第一段文字很長', '第二段文字也很長的內容'],
+      displayText: '第三章\n\n第一段文字很長\n\n第二段文字也很長的內容',
       contentHash: 'content-3',
     );
+    ChapterBlock block(
+      int index,
+      int start,
+      int end, {
+      required int paragraph,
+      bool isTitle = false,
+      bool continuation = false,
+      List<int> breaks = const <int>[],
+    }) => ChapterBlock(
+      key: BlockKey(chapterIndex: 3, blockIndex: index),
+      text: (isTitle ? text.title : text.displayText).substring(start, end),
+      charRange: HybridTextRange(start, end),
+      sourceParagraphIndex: paragraph,
+      isTitle: isTitle,
+      isContinuation: continuation,
+      layoutBreakBefore: continuation,
+      visualLineBreakOffsets: breaks,
+    );
+    // Line breaks are relative to each block's own text, and the later
+    // blocks start well past offset 0 of the chapter.
     final blocks = ChapterBlocks(
       chapterIndex: 3,
       title: text.title,
       displayText: text.displayText,
       contentHash: text.contentHash,
-      blocks: const [
-        ChapterBlock(
-          key: BlockKey(chapterIndex: 3, blockIndex: 0),
-          text: '第三章',
-          charRange: HybridTextRange(0, 3),
-          sourceParagraphIndex: 0,
-          isTitle: true,
-        ),
-        ChapterBlock(
-          key: BlockKey(chapterIndex: 3, blockIndex: 1),
-          text: '第一段文字\n\n第',
-          charRange: HybridTextRange(5, 13),
-          sourceParagraphIndex: 1,
-          visualLineBreakOffsets: [8],
-        ),
-        ChapterBlock(
-          key: BlockKey(chapterIndex: 3, blockIndex: 2),
-          text: '二段文字',
-          charRange: HybridTextRange(13, 17),
-          sourceParagraphIndex: 1,
-          isContinuation: true,
-          layoutBreakBefore: true,
-        ),
+      blocks: [
+        block(0, 0, 3, paragraph: -1, isTitle: true),
+        block(1, 5, 12, paragraph: 0, breaks: const [4]),
+        block(2, 14, 20, paragraph: 1, breaks: const [3]),
+        block(3, 20, 25, paragraph: 1, continuation: true, breaks: const [2]),
       ],
     );
 
@@ -1584,6 +1587,99 @@ void main() {
       expect(restored.blocks.map((block) => block.text), [
         for (final block in blocks.blocks) block.text,
       ]);
+      // The drawable paragraph accepts the restored line breaks.
+      for (final group in restored.paragraphGroups()) {
+        ParagraphTextMap.forBlocks(group, indentLength: 0);
+      }
+    });
+
+    testWidgets('round-trips a plan produced by the real line planner', (
+      tester,
+    ) async {
+      final paragraphs = [
+        for (var i = 0; i < 3; i += 1) '第$i段，夜深人靜時翻開書頁，字句在燈下慢慢展開，' * 3,
+      ];
+      final chapter = ChapterText(
+        id: 3,
+        title: '第三章',
+        paragraphs: paragraphs,
+        displayText: ['第三章', ...paragraphs].join('\n\n'),
+        contentHash: 'content-long',
+      );
+      final cache = ParagraphCache();
+      final ns = MeasurementNamespace(
+        epoch: LayoutEpoch.initial,
+        fingerprint: _fingerprint(),
+      );
+      final pump = LayoutPump(
+        paragraphCache: cache,
+        measurementStore: MeasurementStore(),
+        namespace: ns,
+      );
+      addTearDown(() {
+        pump.dispose();
+        cache.dispose();
+      });
+      final rough = await const TextPreprocessor(useIsolate: false)
+          .process(chapter, maxBlockChars: 20);
+      ChapterBlocks? planned;
+      unawaited(
+        pump
+            .planChapterVisualLines(
+              rough,
+              maxBlockChars: 20,
+              bodyStyle: const HybridBlockTextStyle(
+                fontSize: 18,
+                lineHeight: 1.5,
+                letterSpacing: 0,
+              ),
+              titleStyle: const HybridBlockTextStyle(
+                fontSize: 22,
+                lineHeight: 1.5,
+                letterSpacing: 0,
+                bold: true,
+              ),
+              contentWidth: 120,
+              cellWidth: null,
+              textIndent: 2,
+            )
+            .then((value) => planned = value),
+      );
+      for (var frame = 0; frame < 500 && planned == null; frame += 1) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final source = planned!;
+      expect(
+        source.blocks.any(
+          (block) =>
+              block.charRange.start > 0 &&
+              block.visualLineBreakOffsets.isNotEmpty,
+        ),
+        isTrue,
+      );
+
+      final restored = await tester.runAsync(() async {
+        final temp = await Directory.systemTemp.createTemp('reader_plans_');
+        try {
+          final diskCache = ChapterPlanDiskCache(
+            baseDirectory: temp,
+            buildSignature: '1.0.0+1',
+          );
+          await diskCache.write(
+            bookUrl: 'book://plans',
+            fingerprint: _fingerprint(),
+            blocks: source,
+          );
+          return await diskCache.read(
+            bookUrl: 'book://plans',
+            fingerprint: _fingerprint(),
+            text: chapter,
+          );
+        } finally {
+          await temp.delete(recursive: true);
+        }
+      });
+      expect(restored?.layoutIdentity, source.layoutIdentity);
     });
 
     test('another build, style or content never reuses the plan', () async {
@@ -1662,23 +1758,41 @@ void main() {
         isNull,
       );
 
-      await cache.write(
-        bookUrl: 'book://plans',
-        fingerprint: fingerprint,
-        blocks: blocks,
-      );
-      final json =
-          jsonDecode(await file.readAsString()) as Map<String, Object?>;
-      ((json['spans'] as List<Object?>)[1] as List<Object?>)[1] = 999;
-      await file.writeAsString(jsonEncode(json));
-      expect(
-        await cache.read(
+      Future<ChapterBlocks?> readMutated(
+        void Function(List<Object?> spans) mutate,
+      ) async {
+        await cache.write(
+          bookUrl: 'book://plans',
+          fingerprint: fingerprint,
+          blocks: blocks,
+        );
+        final json =
+            jsonDecode(await file.readAsString()) as Map<String, Object?>;
+        mutate(json['spans'] as List<Object?>);
+        await file.writeAsString(jsonEncode(json));
+        return cache.read(
           bookUrl: 'book://plans',
           fingerprint: fingerprint,
           text: text,
-        ),
-        isNull,
-      );
+        );
+      }
+
+      expect(await readMutated((_) {}), isNotNull);
+      final cases = <String, void Function(List<Object?> spans)>{
+        'range past the text': (spans) => (spans[1] as List<Object?>)[1] = 999,
+        'break at the block end': (spans) =>
+            (spans[1] as List<Object?>)[4] = [7],
+        'break in chapter coordinates': (spans) =>
+            (spans[1] as List<Object?>)[4] = [9],
+        'title only': (spans) => spans.removeRange(1, spans.length),
+        'missing middle block': (spans) => spans.removeAt(2),
+        'duplicated block': (spans) => spans.insert(3, spans[2]),
+        'continuation flag on a first block': (spans) =>
+            (spans[2] as List<Object?>)[3] = 6,
+      };
+      for (final entry in cases.entries) {
+        expect(await readMutated(entry.value), isNull, reason: entry.key);
+      }
     });
   });
 
