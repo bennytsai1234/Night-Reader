@@ -480,10 +480,12 @@ class EdgeFade extends StatelessWidget {
             gradient: LinearGradient(
               begin: top ? Alignment.topCenter : Alignment.bottomCenter,
               end: top ? Alignment.bottomCenter : Alignment.topCenter,
+              // 中段的透明度以底色本身的透明度為準：半透明的底色（例如
+              // 書籍詳情頁頂透出封面氛圍時）漸隱時才不會比實色段更深。
               colors: [
                 base,
                 base,
-                base.withValues(alpha: 0.72),
+                base.withValues(alpha: base.a * 0.72),
                 base.withValues(alpha: 0),
               ],
               stops: [

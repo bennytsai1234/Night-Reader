@@ -10,6 +10,7 @@ import 'package:night_reader/features/book_detail/book_detail_provider.dart';
 import 'package:night_reader/features/book_detail/change_cover_sheet.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
@@ -27,10 +28,14 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import 'widgets/book_cover_ambience.dart';
+import 'widgets/book_detail_skeleton.dart';
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
+import 'widgets/book_read_capsule.dart';
 import 'widgets/change_source_sheet.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -75,25 +80,31 @@ class _BookDetailPageState extends State<BookDetailPage> {
   /// 大頁首捲進玻璃頁首底下後，頁首標題淡入顯示書名。
   final ValueNotifier<bool> _titleCollapsed = ValueNotifier(false);
 
+  /// 有封面氛圍時，玻璃頁首在頁頂是透明的，讓氛圍鋪到頁首後面；往下捲
+  /// 到氛圍離開頁首時變回實色底（0 透明、1 實色）。
+  final ValueNotifier<double> _headerSolidity = ValueNotifier(0);
+
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_syncCollapsedTitle);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_syncCollapsedTitle);
+    _scrollController.removeListener(_onScroll);
     _titleCollapsed.dispose();
+    _headerSolidity.dispose();
     _chapterListController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _syncCollapsedTitle() {
+  void _onScroll() {
     if (!_scrollController.hasClients) return;
-    _titleCollapsed.value =
-        _scrollController.offset > BookInfoHeader.collapseOffset;
+    final offset = _scrollController.offset;
+    _titleCollapsed.value = offset > BookInfoHeader.collapseOffset;
+    _headerSolidity.value = (offset / BookInfoHeader.titleTop).clamp(0.0, 1.0);
   }
 
   /// 玻璃頁首（狀態列＋工具列＋漸隱）佔用的高度。
@@ -114,15 +125,25 @@ class _BookDetailPageState extends State<BookDetailPage> {
           final chrome = AppChrome.of(context);
           return Scaffold(
             extendBodyBehindAppBar: true,
+            extendBody: true,
             backgroundColor: chrome.groupedBackground,
             appBar: _buildHeader(context, provider),
-            // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
+            // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度，
+            // bottom 才包含底部的浮動閱讀鈕。
             body: Builder(
-              builder: (bodyContext) => provider.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : provider.loadErrorMessage != null
+              builder: (bodyContext) => provider.loadErrorMessage != null
                   ? _buildLoadError(bodyContext, provider)
                   : _buildContent(bodyContext, provider),
+            ),
+            bottomNavigationBar: BookReadCapsule(
+              started: provider.book.hasStartedReading,
+              visible: provider.hasReadyWorld,
+              onPressed: () => _navigateToReader(
+                context,
+                provider.book,
+                ReaderV2OpenTarget.resume(provider.book),
+                provider.allChapters,
+              ),
             ),
           );
         },
@@ -130,39 +151,81 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
+  /// 封面氛圍的圖；沒有封面時為 null，頁首也就維持實色。
+  ImageProvider? _ambienceOf(BookDetailProvider provider) =>
+      BookCoverAmbience.imageOf(provider.book.getDisplayCover());
+
+  /// 書名、作者與封面一進頁就畫出（封面 Hero 才有落點），載入中只有
+  /// 動作按鈕與頁首以下顯示骨架；資料到了以淡入取代。
   Widget _buildContent(BuildContext context, BookDetailProvider provider) {
     final currentBook = provider.book;
     final padding = MediaQuery.paddingOf(context);
-    final chapters = provider.filteredChapters;
+    final ambience = _ambienceOf(provider);
+    final loading = provider.isLoading;
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        SliverPadding(padding: EdgeInsets.only(top: padding.top)),
         SliverToBoxAdapter(
-          child: BookInfoHeader(
-            book: currentBook,
-            provider: provider,
-            coverHeroTag:
-                widget.coverHeroTag ??
-                BookCoverWidget.heroTag(
-                  BookCoverHeroScope.detail,
-                  currentBook.bookUrl,
+          child: Stack(
+            children: [
+              if (ambience != null)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  right: 0,
+                  // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
+                  height: padding.top + BookInfoHeader.titleTop,
+                  child: BookCoverAmbience(image: ambience),
                 ),
-            showPhotoView: _showPhotoView,
-            onRead: () => _navigateToReader(
-              context,
-              currentBook,
-              ReaderV2OpenTarget.resume(currentBook),
-              provider.allChapters,
-            ),
-            onToggleBookshelf: () => _handleBookshelfToggle(context, provider),
-            onChangeSource: currentBook.isLocal
-                ? null
-                : () => _showChangeSourceDialog(context, provider),
-            onShowToc: _scrollToToc,
+              Padding(
+                padding: EdgeInsets.only(top: padding.top),
+                child: BookInfoHeader(
+                  book: currentBook,
+                  provider: provider,
+                  loading: loading,
+                  coverHeroTag:
+                      widget.coverHeroTag ??
+                      BookCoverWidget.heroTag(
+                        BookCoverHeroScope.detail,
+                        currentBook.bookUrl,
+                      ),
+                  showPhotoView: _showPhotoView,
+                  onToggleBookshelf: () =>
+                      _handleBookshelfToggle(context, provider),
+                  onChangeSource: currentBook.isLocal
+                      ? null
+                      : () => _showChangeSourceDialog(context, provider),
+                  onShowToc: _scrollToToc,
+                ),
+              ),
+            ],
           ),
         ),
-        if ((provider.sourceIssueMessage ?? '').isNotEmpty)
+        if (loading)
+          const SliverToBoxAdapter(child: Skeleton(child: BookDetailSkeleton()))
+        else
+          ..._buildLoadedSlivers(context, provider),
+        // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
+        SliverPadding(
+          padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
+        ),
+      ],
+    );
+  }
+
+  /// 載入完成後頁首以下的內容；各區塊第一次出現時淡入。
+  List<Widget> _buildLoadedSlivers(
+    BuildContext context,
+    BookDetailProvider provider,
+  ) {
+    final currentBook = provider.book;
+    final chapters = provider.filteredChapters;
+    Widget fadeIn(String key, Widget sliver) =>
+        SliverFadeIn(key: ValueKey(key), sliver: sliver);
+    return [
+      if ((provider.sourceIssueMessage ?? '').isNotEmpty)
+        fadeIn(
+          'source-issue',
           SliverToBoxAdapter(
             child: GroupedSection(
               topGap: AppSpacing.xl,
@@ -177,6 +240,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
               ],
             ),
           ),
+        ),
+      fadeIn(
+        'details',
         SliverToBoxAdapter(
           child: BookInfoDetails(
             book: currentBook,
@@ -184,14 +250,23 @@ class _BookDetailPageState extends State<BookDetailPage> {
             onShowSourceOptions: () => _showSourceOptions(context, currentBook),
           ),
         ),
+      ),
+      fadeIn(
+        'intro',
         SliverToBoxAdapter(child: BookInfoIntro(book: currentBook)),
-        SliverToBoxAdapter(child: SizedBox(key: _tocKey)),
+      ),
+      SliverToBoxAdapter(child: SizedBox(key: _tocKey)),
+      fadeIn(
+        'toc-bar',
         BookInfoTocBar(
           provider: provider,
           onSearch: () => _showSearchTocDialog(context, provider),
           onLocateCurrent: () => _locateCurrentChapter(context, provider),
         ),
-        if (provider.hasActiveTocSearch && chapters.isEmpty)
+      ),
+      if (provider.hasActiveTocSearch && chapters.isEmpty)
+        fadeIn(
+          'toc-empty',
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -220,8 +295,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 ],
               ),
             ),
-          )
-        else
+          ),
+        )
+      else
+        fadeIn(
+          'toc',
           super_list.SuperSliverList(
             listController: _chapterListController,
             delegate: SliverChildBuilderDelegate((ctx, i) {
@@ -243,11 +321,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
               );
             }, childCount: chapters.length),
           ),
-        SliverPadding(
-          padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.xxl),
         ),
-      ],
-    );
+    ];
   }
 
   Widget _buildLoadError(BuildContext context, BookDetailProvider provider) {
@@ -272,15 +347,36 @@ class _BookDetailPageState extends State<BookDetailPage> {
     BuildContext context,
     BookDetailProvider provider,
   ) {
-    final actionsEnabled =
-        !provider.isLoading && provider.loadErrorMessage == null;
-    final ready = actionsEnabled;
+    final failed = provider.loadErrorMessage != null;
+    final background = AppChrome.of(context).groupedBackground;
+    GlassNavHeader header(Color background) =>
+        _buildNavHeader(context, provider, background, failed: failed);
+    // 沒有封面氛圍時頁首維持實色；有的話跟著捲動由透明轉實色。
+    if (failed || _ambienceOf(provider) == null) return header(background);
+    return PreferredSize(
+      preferredSize: header(background).preferredSize,
+      child: ValueListenableBuilder<double>(
+        valueListenable: _headerSolidity,
+        builder: (context, solidity, _) =>
+            header(background.withValues(alpha: solidity)),
+      ),
+    );
+  }
+
+  GlassNavHeader _buildNavHeader(
+    BuildContext context,
+    BookDetailProvider provider,
+    Color background, {
+    required bool failed,
+  }) {
+    final actionsEnabled = !provider.isLoading && !failed;
     return GlassNavHeader(
-      backgroundColor: AppChrome.of(context).groupedBackground,
+      backgroundColor: background,
       titleWidget: ValueListenableBuilder<bool>(
         valueListenable: _titleCollapsed,
+        // 書名一進頁就畫在大頁首裡，捲上去之後才由頁首標題接手。
         builder: (context, collapsed, child) => AnimatedOpacity(
-          opacity: collapsed || !ready ? 1 : 0,
+          opacity: collapsed || failed ? 1 : 0,
           duration: AppMotion.fade,
           curve: AppMotion.fadeCurve,
           child: child,
@@ -288,7 +384,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
         child: Semantics(
           header: true,
           child: Text(
-            ready ? context.zh(provider.book.name) : '書籍詳情',
+            failed ? '書籍詳情' : context.zh(provider.book.name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.titleSm.copyWith(
