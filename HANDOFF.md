@@ -1,5 +1,49 @@
 # 交接（2026-10-13 16:41）
 
+## 更新功能（`feat/update-features`，2026-10-13 18:00 更新）
+
+使用者已說「合併」，正在做合併前審查的修正，修完就推上 `main`。
+
+### 分支內容（都已推上 `origin/feat/update-features`）
+
+- App 更新：自動檢查開關、「稍後提醒」一週、Wi-Fi 下自動下載更新、「關於夜讀 → 更新紀錄」。
+- 書架：開 App 自動檢查（`autoRefresh`）、單本「自動檢查更新」開關、檢查後封面角標 `+N`（淺綠）／`!`（淺紅，只在手動下拉），5 秒淡出。
+- 書架書自動整本下載與新章節（ADR 0008）、介面不放解釋性文案（ADR 0009）、中文 `CHANGELOG.md` 當 Release 說明並由 hook／CI 強制（ADR 0010）、移除書源訂閱（schema 5）、開關重做為 40×24。
+- 已併入最新 `main`（`6d379f7`）；主線新增 ADR 0007，所以這條分支的 ADR 改號為 0008–0010。
+
+### 合併前審查（Codex，7 項全部核對屬實）
+
+報告：`C:\Users\045650\AppData\Local\Temp\night-reader-codex-out\review-report.md`（暫存，收尾時移到資源回收筒）。
+
+| 發現 | 內容 | 狀態 |
+|---|---|---|
+| 1 高 | 正文下載用舊章節快照 upsert 章節表，把插章後的序號寫回舊值 | `review/fixa` 已提交 `bb74f71`，未合併 |
+| 3 中 | `_keepAfterRun` 丟掉 `hasNewChapters`，失敗後不會立即重試 | `review/fixa` 已提交 `63c680b`，未合併 |
+| 4 中 | 自動與手動檢查同一本書沒共用進行中請求 | `review/fixb` 已提交 `232c4ce`，未合併 |
+| 2 中 | 匯入沒有目錄的書不會自動下載 | `review/fixb` 改到一半、未提交（`download_service.dart`、`bookshelf_exchange_service.dart`、新測試 `shelf_download_missing_toc_test.dart` 等） |
+| 7 低 | 殘留「輸入書架 JSON 網址」「輸入分組名稱」「輸入封面 URL」等用途 placeholder | `review/fixb` 尚未開始 |
+| 5 中 | 跨版本 APK 下載互刪檔案 | 已修並合併（`review/fixc`） |
+| 6 中 | 清空「未發布」可繞過說明檢查 | 已修並合併（`review/fixc`） |
+
+worktree：`Night-Reader-updates`（`feat/update-features`）、`Night-Reader-fixa`、`Night-Reader-fixb`、`Night-Reader-fixc`（都在 `D:/Migrated/Desktop/Folder/product/`）。
+
+### 下一步
+
+1. `review/fixa`：看兩個 commit 與測試，確認發現 1 的根因修法（閱讀器 `reader_v2_chapter_repository.dart` 的同一路徑也要涵蓋），全套 `flutter test` 通過後合進 `feat/update-features`。
+2. `review/fixb`：把發現 2 做完（空目錄先取得目錄再排下載，取得失敗要套 ADR 0008 的重試節奏）、做發現 7（全專案掃 `hintText` 一類的「輸入 XX」），各自 commit，全套測試後合併。兩條修正分支都動到 `download_service.dart`，合併時注意衝突。
+3. `feat/update-features` 全套測試、推上分支；再 `git push origin feat/update-features:main`（快轉）。pre-push 會檢查 `CHANGELOG.md` 的「未發布」。推完看一次 GitHub Actions 的 Android Release 有開始建置即可。
+4. 收尾：刪除 `feat/update-features`、`review/fixa|fixb|fixc` 分支（本機與遠端）與四個 worktree；把 `C:\Users\045650\AppData\Local\Temp\night-reader-codex-out`、`night-reader-render` 移到資源回收筒。
+
+### 注意
+
+- 子代理 fixc 自行決定：換到另一版 APK 下載時會先取消舊版下載；使用者沒表示意見，回報時提一下即可。
+- 渲染畫面給使用者看的方法：寫臨時 widget 測試用 `matchesGoldenFile(Uri.file(絕對路徑))` 加 `--update-goldens` 輸出 PNG，字型用 `FontLoader` 把 `C:/Windows/Fonts/msjh.ttc` 載成 `Roboto`、`D:/flutter/bin/cache/artifacts/material_fonts/materialicons-regular.otf` 載成 `MaterialIcons`；測試檔放 repo 外（`night-reader-render/src`），跑時才複製進 `test/_render/`，跑完刪掉，避免 pre-push 跑到。
+- 使用者這次定下的介面偏好已寫進 ADR 0009 與 DESIGN.md：不放解釋性文案、開關不撐點擊範圍、依賴的開關直接隱藏。
+
+---
+
+以下是閱讀器「第 2 項」的交接（另一個對話）。
+
 ## 正在做
 
 沒有進行中的修改。閱讀器審查的後續工作已全部合併進 `main`（`25ed851`），分支 `fix/reader-review-followups` 已刪除；`git log 4e16616..25ed851` 是那一批（ADR 0005–0007 也在裡面）。
