@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../theme/app_chrome.dart';
@@ -448,8 +447,19 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
 }
 
 /// iOS 樣式開關，開啟色為主色。
+/// 分組清單的開關：40×24 的膠囊軌道、20 的紙色滑塊，不畫陰影或外框。
+///
+/// 尺寸與 44 高的列、17 號字相稱：軌道高約是列高的一半、比 17 號字的行高
+/// 略高，寬高比沿用 iOS 開關（51×31）的 5:3。點擊範圍至少 44×44（專案的
+/// 最小點擊尺寸，見 DESIGN.md），單獨放在列外也點得到。
 class GroupedSwitch extends StatelessWidget {
   const GroupedSwitch({super.key, required this.value, this.onChanged});
+
+  static const double trackWidth = 40;
+  static const double trackHeight = 24;
+  static const double _thumbInset = 2;
+  static const double _thumbSize = trackHeight - _thumbInset * 2;
+  static const double _minTapExtent = 44;
 
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -457,11 +467,58 @@ class GroupedSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CupertinoSwitch(
-      value: value,
-      onChanged: onChanged,
-      activeTrackColor: scheme.primary,
-      inactiveTrackColor: AppChrome.of(context).separator,
+    final chrome = AppChrome.of(context);
+    final light = Theme.of(context).brightness == Brightness.light;
+    final enabled = onChanged != null;
+    // 關閉時的軌道取次要文字色的淡色：淺色約 1.6:1、深色約 1.9:1，
+    // 看得出軌道但不搶眼。
+    final offTrack = chrome.sectionText.withValues(alpha: light ? 0.3 : 0.4);
+
+    final track = AnimatedContainer(
+      duration: AppMotion.menu,
+      curve: AppMotion.menuCurve,
+      width: trackWidth,
+      height: trackHeight,
+      padding: const EdgeInsets.all(_thumbInset),
+      decoration: BoxDecoration(
+        color: value ? scheme.primary : offTrack,
+        borderRadius: AppRadius.pillShape,
+      ),
+      child: AnimatedAlign(
+        duration: AppMotion.spring,
+        curve: AppMotion.springCurve,
+        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+        child: const SizedBox.square(
+          dimension: _thumbSize,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppPalette.paper50,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Semantics(
+      toggled: value,
+      enabled: enabled,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? () => onChanged!(!value) : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: _minTapExtent,
+            minHeight: _minTapExtent,
+          ),
+          child: Align(
+            alignment: Alignment.centerRight,
+            widthFactor: 1,
+            heightFactor: 1,
+            child: Opacity(opacity: enabled ? 1 : 0.38, child: track),
+          ),
+        ),
+      ),
     );
   }
 }
