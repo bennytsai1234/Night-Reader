@@ -191,14 +191,10 @@ final class LayoutPump implements HybridLayoutPump {
       final budget = _governor.frameBudgetMicros(_state);
       while (!_disposed && _queue.isNotEmpty && _spentThisFrame < budget) {
         final work = _queue.reduce((a, b) => a.priority <= b.priority ? a : b);
-        // 預估成本只防捲動掉幀。載入畫面沒有正文，最多超出一個步驟的
-        // 時間也只讓轉圈慢一幀，不必為保守預估空出剩下的預算。
-        if (_state != PumpState.loading && _spentThisFrame > 0) {
-          final predicted = work is _LayoutWork
-              ? _costModel.predict(work.task).inMicroseconds
-              : _governor.ballisticSliceBudget.inMicroseconds;
-          if (_spentThisFrame + predicted > budget) break;
-        }
+        final predicted = work is _LayoutWork
+            ? _costModel.predict(work.task).inMicroseconds
+            : _governor.ballisticSliceBudget.inMicroseconds;
+        if (_spentThisFrame > 0 && _spentThisFrame + predicted > budget) break;
         _queue.remove(work);
         final watch = Stopwatch()..start();
         bool done;

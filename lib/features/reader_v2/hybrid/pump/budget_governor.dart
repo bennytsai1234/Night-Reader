@@ -32,10 +32,6 @@ final class BudgetGovernor {
   static const int _rebuildingCapMicros = 6000;
   static const double _periodTolerance = 0.15;
 
-  /// 載入畫面期間的幀週期下限（60Hz）。畫面上只有轉圈，120Hz 裝置讓
-  /// 轉圈降到 60fps 仍然順，換來一倍的排版時間。
-  static const int _loadingFramePeriodFloorMicros = 16667;
-
   double _framePeriodMicros = 0;
   double _averageWorkMicros = 0;
   double _averagePumpMicros = 0;
@@ -95,25 +91,20 @@ final class BudgetGovernor {
   /// frame still permits one bounded transaction rather than stopping supply.
   int frameBudgetMicros(PumpState state) {
     final slice = ballisticSliceBudget.inMicroseconds;
-    final period = state == PumpState.loading
-        ? math.max(framePeriodMicros, _loadingFramePeriodFloorMicros.toDouble())
-        : framePeriodMicros;
-    // 上限是為了捲動不掉幀；載入畫面沒有正文，只扣安全邊際與非 pump 工作。
+    // 上限是為了捲動不掉幀；載入畫面沒有正文，只扣安全邊際與非 pump 工作，
+    // 仍不超過一幀，轉圈維持裝置原本的更新率。
     final cap = switch (state) {
       PumpState.dragging => slice,
       PumpState.ballistic => _ballisticCapMicros,
       PumpState.rebuilding || PumpState.idle => _rebuildingCapMicros,
-      PumpState.loading => period.round(),
+      PumpState.loading => framePeriodMicros.round(),
     };
-    return math.max(
-      slice,
-      _headroomMicros(periodMicros: period, capMicros: cap),
-    );
+    return math.max(slice, _headroomMicros(capMicros: cap));
   }
 
-  int _headroomMicros({required double periodMicros, required int capMicros}) {
+  int _headroomMicros({required int capMicros}) {
     final nonPumpWork = math.max(0.0, _averageWorkMicros - _averagePumpMicros);
-    final headroom = periodMicros - safetyMarginMicros - nonPumpWork;
+    final headroom = framePeriodMicros - safetyMarginMicros - nonPumpWork;
     if (!headroom.isFinite || headroom <= 0) return 0;
     return math.min(headroom, capMicros.toDouble()).round();
   }

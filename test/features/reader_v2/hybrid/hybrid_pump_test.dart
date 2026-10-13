@@ -4,7 +4,6 @@ import 'package:night_reader/features/reader_v2/hybrid/measure/metrics_disk_cach
 import 'package:night_reader/features/reader_v2/hybrid/measure/document_index.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
@@ -482,82 +481,12 @@ void main() {
       },
     );
 
-    test(
-      'loading screen budget fills a 60Hz frame instead of the scroll cap',
-      () {
-        final governor = BudgetGovernor();
-        // No vsync samples yet: the period defaults to 120Hz (8333us).
-        expect(governor.frameBudgetMicros(PumpState.rebuilding), 6000);
-        expect(governor.frameBudgetMicros(PumpState.loading), 16667 - 1200);
-      },
-    );
-
-    test(
-      'loading screen runs chapter planning past the conservative estimate',
-      () async {
-        ChapterBlocks source() => ChapterBlocks(
-          chapterIndex: 0,
-          title: 'Chapter 0',
-          displayText: 'abcdefgh',
-          contentHash: 'source-0',
-          blocks: [
-            for (var i = 0; i < 4; i += 1)
-              ChapterBlock(
-                key: BlockKey(chapterIndex: 0, blockIndex: i),
-                text: 'ab',
-                charRange: HybridTextRange(i * 2, i * 2 + 2),
-                sourceParagraphIndex: i,
-              ),
-          ],
-        );
-
-        Future<int> stepsInOneFrame(PumpState state) async {
-          final cache = ParagraphCache();
-          final store = MeasurementStore();
-          final pump = LayoutPump(
-            paragraphCache: cache,
-            measurementStore: store,
-            namespace: MeasurementNamespace(
-              epoch: LayoutEpoch.initial,
-              fingerprint: _fingerprint(),
-            ),
-            // Each ChapterWork step is predicted to cost the whole budget.
-            governor: BudgetGovernor(
-              ballisticSliceBudget: const Duration(milliseconds: 20),
-            ),
-          )..onScrollStateChanged(state);
-          addTearDown(() {
-            pump.dispose();
-            cache.dispose();
-          });
-          pump.setDemandRange(0, 0);
-          unawaited(
-            pump.planChapterVisualLines(
-              source(),
-              maxBlockChars: 40,
-              bodyStyle: const HybridBlockTextStyle(
-                fontSize: 18,
-                lineHeight: 1.5,
-                letterSpacing: 0,
-              ),
-              titleStyle: const HybridBlockTextStyle(
-                fontSize: 22,
-                lineHeight: 1.5,
-                letterSpacing: 0,
-                bold: true,
-              ),
-              contentWidth: 1000,
-              cellWidth: null,
-              textIndent: 0,
-            ),
-          );
-          return pump.pumpPending();
-        }
-
-        expect(await stepsInOneFrame(PumpState.rebuilding), 0);
-        expect(await stepsInOneFrame(PumpState.loading), 1);
-      },
-    );
+    test('loading screen budget fills the frame instead of the scroll cap', () {
+      final governor = BudgetGovernor();
+      // No vsync samples yet: the period defaults to 120Hz (8333us).
+      expect(governor.frameBudgetMicros(PumpState.rebuilding), 6000);
+      expect(governor.frameBudgetMicros(PumpState.loading), 8333 - 1200);
+    });
 
     testWidgets('repeated awaits cannot mint a second frame budget', (
       tester,
