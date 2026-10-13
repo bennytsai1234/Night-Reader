@@ -442,14 +442,19 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
   }
 }
 
-/// iOS 樣式開關，開啟色為主色。
 /// 分組清單的開關：40×24 的膠囊軌道、20 的紙色滑塊，不畫陰影或外框。
 ///
 /// 尺寸與 44 高的列、17 號字相稱：軌道高約是列高的一半、比 17 號字的行高
 /// 略高，寬高比沿用 iOS 開關（51×31）的 5:3。點擊範圍至少 44×44（專案的
-/// 最小點擊尺寸，見 DESIGN.md），單獨放在列外也點得到。
+/// 最小點擊尺寸，見 DESIGN.md），單獨放在列外也點得到。放在整列可點的
+/// [GroupedSwitchRow] 裡時不撐點擊範圍，列高才會跟一般列一致。
 class GroupedSwitch extends StatelessWidget {
-  const GroupedSwitch({super.key, required this.value, this.onChanged});
+  const GroupedSwitch({
+    super.key,
+    required this.value,
+    this.onChanged,
+    this.padTapTarget = true,
+  });
 
   static const double trackWidth = 40;
   static const double trackHeight = 24;
@@ -459,6 +464,9 @@ class GroupedSwitch extends StatelessWidget {
 
   final bool value;
   final ValueChanged<bool>? onChanged;
+
+  /// 把點擊範圍撐到至少 44×44；所在的列本身可點時設 false。
+  final bool padTapTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -503,10 +511,12 @@ class GroupedSwitch extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!value) : null,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            minWidth: _minTapExtent,
-            minHeight: _minTapExtent,
-          ),
+          constraints: padTapTarget
+              ? const BoxConstraints(
+                  minWidth: _minTapExtent,
+                  minHeight: _minTapExtent,
+                )
+              : const BoxConstraints(),
           child: Align(
             alignment: Alignment.centerRight,
             widthFactor: 1,
@@ -552,6 +562,7 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
         trailing: GroupedSwitch(
           value: value,
           onChanged: active ? onChanged : null,
+          padTapTarget: false,
         ),
       ),
     );

@@ -47,4 +47,23 @@ void main() {
       matchesSemantics(hasToggledState: true, hasEnabledState: true),
     );
   });
+
+  testWidgets('a switch row is as tall as a plain row', (tester) async {
+    await tester.pumpWidget(
+      host(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const GroupedRow(title: '一般列'),
+            GroupedSwitchRow(title: '開關列', value: true, onChanged: (_) {}),
+          ],
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byType(GroupedSwitchRow)).height,
+      tester.getSize(find.byType(GroupedRow).first).height,
+    );
+  });
 }
