@@ -113,12 +113,19 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           throw Exception('章節目錄不存在');
         }
         chapters = await sourceService.getChapterList(source, book);
+        // 抓不到目錄就記為失敗，書架自動下載照重試規則隔一天再試，不會
+        // 每次開 App 都打一次書源（ADR 0008）。
+        if (chapters.isEmpty) {
+          throw Exception('章節目錄為空');
+        }
         await chapterDao.insertChapters(chapters);
-        // 更新任務實例
+        // 任務改成整本的範圍，也寫回資料庫：App 中途被關掉，重開後照整本跑。
         final newTask = task.copyWith(
+          startChapterIndex: chapters.first.index,
           totalCount: chapters.length,
-          endChapterIndex: chapters.isNotEmpty ? chapters.last.index : 0,
+          endChapterIndex: chapters.last.index,
         );
+        await downloadDao.upsert(newTask);
         final idx = tasks.indexOf(task);
         if (idx != -1) {
           tasks[idx] = newTask;

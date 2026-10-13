@@ -258,6 +258,42 @@ void main() {
       },
     );
 
+    test('a shelf book without a TOC is queued, and a failed TOC fetch '
+        'waits for the retry interval', () async {
+      final book = Book(
+        bookUrl: '$origin/book/no-toc',
+        origin: origin,
+        name: '沒有目錄',
+        isInBookshelf: true,
+      );
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource.fromJson({'bookSourceName': '架', 'bookSourceUrl': origin}),
+      );
+      await GetIt.instance<BookDao>().upsert(book);
+      final service = DownloadService();
+      addTearDown(() async {
+        await settle(service);
+        service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+      });
+
+      await service.keepShelfBookDownloaded(book.bookUrl);
+      // 測試沒有網路服務：抓目錄立刻失敗。
+      await settle(service);
+
+      Future<DownloadTask> stored() async =>
+          (await GetIt.instance<DownloadDao>().getAll()).firstWhere(
+            (t) => t.bookUrl == book.bookUrl,
+          );
+      final failed = await stored();
+      expect(failed.isFailed, isTrue);
+
+      await service.keepShelfBookDownloaded(book.bookUrl);
+
+      final after = await stored();
+      expect(after.isFailed, isTrue);
+      expect(after.lastUpdateTime, failed.lastUpdateTime);
+    });
+
     test('leaves a book that is not on the shelf alone', () async {
       final book = await seed('book/off-shelf', inShelf: false);
 

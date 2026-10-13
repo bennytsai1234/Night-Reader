@@ -4,6 +4,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -217,12 +218,19 @@ class DownloadService extends DownloadBase
       final source = await sourceDao.getByUrl(book.origin);
       if (source == null || !source.isReadingEnabledByRuntime) return;
       final chapters = await chapterDao.getByBook(bookUrl);
-      final stored = await chapterContentDao.getStoredChapterUrls(
-        origin: book.origin,
-        bookUrl: bookUrl,
-      );
-      final missing = chaptersMissingContent(chapters, stored);
-      if (missing.isEmpty) return;
+      // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
+      // 記為失敗，照重試規則再試。
+      final List<BookChapter> missing;
+      if (chapters.isEmpty) {
+        missing = const <BookChapter>[];
+      } else {
+        final stored = await chapterContentDao.getStoredChapterUrls(
+          origin: book.origin,
+          bookUrl: bookUrl,
+        );
+        missing = chaptersMissingContent(chapters, stored);
+        if (missing.isEmpty) return;
+      }
 
       final task = tasks.cast<DownloadTask?>().firstWhere(
         (candidate) => candidate?.bookUrl == bookUrl,

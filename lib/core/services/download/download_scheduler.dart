@@ -44,7 +44,8 @@ mixin DownloadScheduler on DownloadBase {
   }
 
   /// 書架自動下載（ADR 0008）加入的任務：不會把使用者暫停的任務排回去；
-  /// 失敗的任務要不要再試由呼叫端依重試規則決定。
+  /// 失敗的任務要不要再試由呼叫端依重試規則決定。[chapters] 是空的表示
+  /// 這本書還沒有目錄（例如匯入時沒附），整本交給任務開跑時先抓目錄。
   ///
   /// Returns true only when a new waiting task was actually admitted.
   Future<bool> queueShelfDownload(Book book, List<BookChapter> chapters) {
@@ -60,7 +61,8 @@ mixin DownloadScheduler on DownloadBase {
     List<BookChapter> chapters, {
     required _DownloadTaskAdmissionIntent intent,
   }) async {
-    if (chapters.isEmpty ||
+    if (chapters.isEmpty &&
+            intent == _DownloadTaskAdmissionIntent.userRequested ||
         isTaskRetiring(book.bookUrl) ||
         !_addingTaskUrls.add(book.bookUrl)) {
       return false;
@@ -89,8 +91,8 @@ mixin DownloadScheduler on DownloadBase {
       final task = DownloadTask(
         bookUrl: book.bookUrl,
         bookName: book.name,
-        startChapterIndex: chapters.first.index,
-        endChapterIndex: chapters.last.index,
+        startChapterIndex: chapters.isEmpty ? 0 : chapters.first.index,
+        endChapterIndex: chapters.isEmpty ? 0 : chapters.last.index,
         totalCount: chapters.length,
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
