@@ -49,6 +49,10 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
   Future<void>? _refreshing;
 
+  /// 這次檢查有沒有使用者手動下拉（包括下拉時接上已在跑的那次）；只有手動
+  /// 時才標出檢查失敗的書。
+  bool _userRefreshed = false;
+
   /// 書架檢查後角標掛多久（DESIGN.md「書籍卡片與清單」）。
   static const Duration updateBadgeDuration = Duration(seconds: 5);
 
@@ -97,11 +101,15 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   }
 
   /// 下拉與啟動時的書架更新：在背景檢查，不轉圈，不改 [updatingCount]（那是
-  /// 多選檢查的進度）；檢查完在書卡上掛 [updateBadgeDuration] 的角標。略過
-  /// 本地書與使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複
-  /// 發請求。
-  Future<void> refreshBookshelf() {
-    return _refreshing ??= _refreshAll().whenComplete(() => _refreshing = null);
+  /// 多選檢查的進度）；檢查完在書卡上掛 [updateBadgeDuration] 的角標，有新
+  /// 章節一律標，檢查失敗只在 [userInitiated]（手動下拉）時標。略過本地書與
+  /// 使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複發請求。
+  Future<void> refreshBookshelf({bool userInitiated = false}) {
+    if (userInitiated) _userRefreshed = true;
+    return _refreshing ??= _refreshAll().whenComplete(() {
+      _refreshing = null;
+      _userRefreshed = false;
+    });
   }
 
   Future<void> _refreshAll() async {
@@ -130,7 +138,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     _updateBadgeTimer?.cancel();
     _updateBadges = {
       for (final result in results.nonNulls)
-        if (result.hasUpdate || result.failed) result.bookUrl: result,
+        if (result.hasUpdate || (result.failed && _userRefreshed))
+          result.bookUrl: result,
     };
     await loadBooks();
     if (_updateBadges.isEmpty) return;

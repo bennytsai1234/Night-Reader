@@ -193,7 +193,53 @@ void main() {
 
     tearDown(() => shelf.dispose());
 
-    test('show new chapters and failures, then clear after 5 s', () async {
+    void scriptNewAndBroken() {
+      shelf.results = {
+        'https://a.example/new': const BookUpdateCheckResult(
+          bookUrl: 'https://a.example/new',
+          newChapterCount: 2,
+        ),
+        'https://a.example/broken': BookUpdateCheckResult(
+          bookUrl: 'https://a.example/broken',
+          newChapterCount: 0,
+          error: StateError('書源壞了'),
+        ),
+      };
+    }
+
+    test('the launch check shows new chapters but hides failures', () async {
+      await bookDao.upsertAll([
+        shelfBook('https://a.example/new'),
+        shelfBook('https://a.example/broken'),
+      ]);
+      scriptNewAndBroken();
+
+      await shelf.refreshBookshelf();
+
+      expect(shelf.updateBadgeOf('https://a.example/new')?.newChapterCount, 2);
+      expect(shelf.updateBadgeOf('https://a.example/broken'), isNull);
+    });
+
+    test('pulling down during the launch check shows failures too', () async {
+      await bookDao.upsertAll([
+        shelfBook('https://a.example/new'),
+        shelfBook('https://a.example/broken'),
+      ]);
+      scriptNewAndBroken();
+
+      final launch = shelf.refreshBookshelf();
+      final pull = shelf.refreshBookshelf(userInitiated: true);
+      await Future.wait([launch, pull]);
+
+      expect(shelf.updateBadgeOf('https://a.example/broken')?.failed, isTrue);
+
+      // 下一次自動檢查不再沿用這次的手動標記。
+      await shelf.refreshBookshelf();
+      expect(shelf.updateBadgeOf('https://a.example/broken'), isNull);
+    });
+
+    test('a pull-down shows new chapters and failures, then clears after '
+        '5 s', () async {
       await bookDao.upsertAll([
         shelfBook('https://a.example/new'),
         shelfBook('https://a.example/broken'),
@@ -215,7 +261,7 @@ void main() {
         ),
       };
 
-      await shelf.refreshBookshelf();
+      await shelf.refreshBookshelf(userInitiated: true);
 
       expect(shelf.updateBadgeOf('https://a.example/new')?.newChapterCount, 3);
       expect(shelf.updateBadgeOf('https://a.example/broken')?.failed, isTrue);
