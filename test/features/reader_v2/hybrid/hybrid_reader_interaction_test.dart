@@ -8,7 +8,10 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -123,6 +126,7 @@ void main() {
     WidgetTester tester, {
     ReaderV2Runtime? customRuntime,
     bool waitForOpen = true,
+    ReaderV2TtsHighlight? ttsHighlight,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -140,6 +144,7 @@ void main() {
           textColor: Colors.black,
           style: _style,
           viewportController: viewport,
+          ttsHighlight: ttsHighlight,
           enableDiskCache: false,
           preprocessor: const TextPreprocessor(useIsolate: false),
           onContentTapUp: (details) {
@@ -459,6 +464,41 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await settle(tester);
     expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
+  testWidgets('the speech highlight follows the text while scrolling', (
+    tester,
+  ) async {
+    await pumpReader(
+      tester,
+      ttsHighlight: const ReaderV2TtsHighlight(
+        chapterIndex: 0,
+        sentenceStart: 10,
+        sentenceEnd: 40,
+      ),
+    );
+    List<HybridLineBox> boxes() => tester
+        .widget<HybridTtsHighlightOverlay>(
+          find.byType(HybridTtsHighlightOverlay),
+        )
+        .sentence;
+    final before = boxes();
+    expect(before, isNotEmpty);
+
+    final position = scrollPosition(tester);
+    for (final step in [50.0, 30.0]) {
+      final previous = boxes();
+      position.jumpTo(position.pixels + step);
+      await tester.pump();
+      final after = boxes();
+      expect(after, hasLength(previous.length));
+      for (var i = 0; i < after.length; i++) {
+        expect(after[i].top, closeTo(previous[i].top - step, 0.01));
+        expect(after[i].bottom, closeTo(previous[i].bottom - step, 0.01));
+        expect(after[i].left, previous[i].left);
+        expect(after[i].right, previous[i].right);
+      }
+    }
   });
 
   testWidgets('stopping auto-scroll does not cancel the finger on the text', (

@@ -45,6 +45,14 @@ import 'view/hybrid_scroll_view.dart';
 
 enum _MaterializationWait { progressed, frontierUnavailable, cancelled }
 
+typedef _LineBoxMemo = ({
+  ChapterBlocks blocks,
+  HybridTextRange range,
+  LayoutEpoch epoch,
+  int revision,
+  List<HybridLineBox> boxes,
+});
+
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
     super.key,
@@ -2058,15 +2066,44 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   /// [start, end) 在畫面上的字形範圍，每條視覺行一個框。
   ///
   /// 框的左右取自 Paragraph 的 glyph boxes，而不是整行寬：句段從行中間
-  /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。
+  /// 開始或結束時，只標出屬於它的字，不波及同一行的其他句子。朗讀高亮
+  /// 與選字反白在捲動時每幀都要畫，所以字形框以正文座標算一次記下來，
+  /// 每幀只扣掉捲動位置。
   List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
+    if (offset == null) return const <HybridLineBox>[];
+    final world = _worldLineBoxes(chapterIndex, start, end);
+    return <HybridLineBox>[
+      for (final box in world)
+        HybridLineBox(
+          left: box.left,
+          top: box.top - offset,
+          right: box.right,
+          bottom: box.bottom - offset,
+        ),
+    ];
+  }
+
+  _LineBoxMemo? _lineBoxMemo;
+
+  /// [_lineBoxes] 的正文座標版本。排版世代、文件索引與這段文字都沒變時
+  /// 沿用上次的結果；有 block 還沒排好時不記，下次再算。
+  List<HybridLineBox> _worldLineBoxes(int chapterIndex, int start, int end) {
     final blocks = _blocks[chapterIndex];
-    if (offset == null || blocks == null) return const <HybridLineBox>[];
+    if (blocks == null) return const <HybridLineBox>[];
     final range = HybridTextRange(math.max(0, start), math.max(0, end));
     if (range.isEmpty) return const <HybridLineBox>[];
+    final memo = _lineBoxMemo;
+    if (memo != null &&
+        identical(memo.blocks, blocks) &&
+        memo.range == range &&
+        memo.epoch == _epoch &&
+        memo.revision == _documentIndex.revisionNumber) {
+      return memo.boxes;
+    }
     final paintLeft = widget.runtime.state.layoutSpec.textPaddingLeft;
     final result = <HybridLineBox>[];
+    var complete = true;
     final blockList = blocks.blocks;
     var low = 0;
     var high = blockList.length;
@@ -2083,15 +2120,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       if (block.charRange.start >= range.end) break;
       if (!block.charRange.intersects(range)) continue;
       final top = _documentIndex.topOf(block.key);
-      if (top == null) continue;
-      final boxes = _blockLocalBoxesForRange(blocks, block, range);
-      if (boxes == null || boxes.isEmpty) continue;
+      final boxes = top == null
+          ? null
+          : _blockLocalBoxesForRange(blocks, block, range);
+      if (top == null || boxes == null) {
+        complete = false;
+        continue;
+      }
       for (final box in boxes) {
         final lineBox = HybridLineBox(
           left: paintLeft + box.left,
-          top: top + box.top - offset,
+          top: top + box.top,
           right: paintLeft + box.right,
-          bottom: top + box.bottom - offset,
+          bottom: top + box.bottom,
         );
         // block 可以切在行中，同一條視覺行會由前後兩個 block 各給一段；
         // 框已夾在各自的行格內、不同行不會重疊，所以垂直有交集就是同
@@ -2112,6 +2153,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         }
       }
     }
+    _lineBoxMemo = complete
+        ? (
+            blocks: blocks,
+            range: range,
+            epoch: _epoch,
+            revision: _documentIndex.revisionNumber,
+            boxes: result,
+          )
+        : null;
     return result;
   }
 
