@@ -69,7 +69,9 @@
 - **分組清單**：`GroupedSection`（組標題 13、卡片圓角 14、下方附註只放狀態或數值）＋ `GroupedRow`／`GroupedSwitchRow`／`GroupedCheckRow`／`GroupedTextFieldRow`／`GroupedContent`；卡片左右距 16、組間 28、單行列最小 44、帶副標 60（副標只放值，例如網址、最新章節；開關列沒有副標）；介面不放解釋性文案，依賴其他開關的列在上層關閉時隱藏（ADR 0009）；列首有圖示時分隔線自動從文字起點開始（穿過 `SwipeActions` 等外框，自訂列實作 `GroupedRowLike`）。上百列的惰性清單用 `GroupedSliceItem` 逐列畫出同樣的卡片，平鋪清單列間用 `InsetSeparator`。列首圖示用 `GroupedIconTile`（29 方塊、圓角 7、顏料色 `AppTint` 底紙白圖示）。單選一律打勾列，不用 Radio；開關一律用 `GroupedSwitch`（不直接用 `Switch`／`CupertinoSwitch`）：40×24 膠囊軌道、20 紙色滑塊，不畫陰影或外框，開啟為主色、關閉為淡次要文字色。
 - **選單與提示**：`GlassMenuButton`／`showGlassMenu` 取代彈出選單（寬 250、列高 44、圖示在右）；長按項目用 `showContextPreviewMenu`，項目本身浮起預覽、背景模糊暗化。`showAppAlert`／`showAppConfirm` 為置中提示框（按鈕以髮絲線分隔，兩個以內橫排），帶輸入框或勾選的用 `showStatefulAppAlert`＋`AlertTextField`／`AlertCheckRow`，控制器由提示框擁有（`TextControllersScope`），呼叫端不自行釋放；`showAppActionSheet` 為底部動作表加獨立「取消」卡。SnackBar 由主題統一為浮動墨色圓角提示。
 - **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`GroupFilterBar` 為書源分組篩選列（「全部」固定在左、分組膠囊可橫向捲動並附書源數、右側格狀鈕開出全部分組面板），發現頁與換源面板共用；`GlassCapsule` 為可點小膠囊（可附小字數量）；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
-- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；開書轉場 `BookOpenRoute` 自帶，閱讀器不觸發右滑返回。
+- **載入骨架**：載入中以 `Skeleton`＋`SkeletonBox`（封面、按鈕）／`SkeletonLine`（一行文字，跟著系統字級）畫出內容將出現的形狀，不放置中轉圈；形狀照真實版面的幾何，內容到了版面不跳動。底色為主要文字色疊 7%（淺色）／9%（深色），各風格深淺都看得出但很淡；整塊共用一個很輕的呼吸脈動（`AppMotion.skeletonPulse`，只改底色、不做整塊透明度），減少動態時靜止。整區切換用 `SkeletonSwitcher`，清單（sliver）用 `SliverFadeIn`，內容以 `AppMotion.fade` 淡入取代骨架。分頁「載入更多」與列內的小狀態仍用小轉圈，主頁啟動遮罩不變。
+- **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁為 iOS 平移並支援邊緣右滑返回；閱讀器不觸發右滑返回。
+- **封面轉場**：書架、發現分類與搜尋結果的封面以 Hero 飛到書籍詳情的封面；tag 依來源分範圍（`BookCoverHeroScope`），書架與發現在同一路由也不會重複，長按預覽裡的複本不帶 Hero。從書架點書開閱讀器是「封面放大翻開」（`BookOpenRoute` 帶 `BookOpenCover`，`AppMotion.bookOpen` 500ms）：封面從書卡的位置等比放大到整頁，再淡出露出閱讀頁；閱讀頁只被裁在封面範圍裡，淡出只作用在封面那一層。拿不到封面位置的入口（書籍詳情、換源）用淡入加輕微上滑；返回一律淡出加輕微下滑（書架回來會依最近閱讀重排，原位置不一定還是那本書）。
 
 ## 元件質感與動態反饋
 
@@ -85,13 +87,16 @@
    - 列表為一本一張小紙卡：封面、書名一行、作者、細進度線；網格為封面、書名最多 2 行、細進度線。閱讀進度只畫 2 高的線，不顯示百分比、章節或任何數字；封面右上角只在書架檢查後短暫出現角標（見下一條）。
    - 下拉在背景檢查更新，不轉圈；開 App 時照同樣方式檢查一次（「我的 → 啟動時檢查書架更新」可關閉）。檢查結果不跳 SnackBar 或對話框，只在書卡（網格與列表）封面右上角掛角標：有新章節是淺綠小膠囊「+N」（N 為這次新增的章節數，`AppPalette.mossDark`），檢查失敗是淺紅小圓「!」（`AppPalette.rustDark`），兩者淺色與深色模式共用、配墨色字並帶淡墨髮絲邊；「!」只在手動下拉時出現，開 App 的自動檢查失敗不顯示。角標 5 秒後以 `AppMotion.fade` 淡出，不存檔，編輯模式時不顯示。長按選單與書籍詳情的「自動檢查更新」讓單本書不參與這兩種檢查，明確按「檢查更新」時照查。
    - 書架上的網路書自動整本下載，新章節也跟著下載（ADR 0008）。
+   - 書架初次載入時依目前的網格或列表畫出書卡骨架。
+   - 書籍詳情：置中封面、書名與作者一進頁就畫出（載入中也是，封面 Hero 才有落點），下方一排動作（加入書架、換源、目錄）載入中是骨架，資訊、簡介與目錄在資料到了之後淡入。有封面時頁頂鋪一層封面氛圍：封面圖小尺寸解碼、大幅模糊（`ImageFiltered`，包 `RepaintBoundary`，捲動不重畫），頂端最多透出 32%，在書名之前完全漸隱成 `groupedBackground`，書名與作者畫在純底色上；此時玻璃頁首在頁頂透明，捲到氛圍離開頁首時變回實色。「開始閱讀／繼續閱讀」是底部浮動玻璃膠囊（`BookReadCapsule`，位置與寬度同 `FloatingTabBar.slotOf`：左右 16、避開底部系統區、最寬 500），放在 `Scaffold.bottomNavigationBar` 並 `extendBody: true`，目錄捲到哪都按得到，清單底部讓出它的高度。
    - 點擊回饋為整列淡墨高亮（`AppChrome.pressedHighlight`，6–8%），不畫水波紋；玻璃按鈕按下時微縮回彈。
 4. **數值設定**：
    - 字號、行高、字距、段距、自動翻頁速度與朗讀參數一律使用 `NumberStepperRow`（`lib/shared/widgets/number_stepper_row.dart`）：`標籤 [−] 數值 [+]`，點擊步進、長按連續步進、點擊數值直接輸入。
    - 每個設定宣告明確的 `min`／`max`／`step`，輸出值對齊步進格點，不產生拖動條式的任意小數。
    - 拖動條只保留給「位置型」操作（章節進度）與連續的視覺強度調整（朗讀高亮深淺），不用於需要精確數值的設定。
-5. **狀態視圖（Empty / Error State）**：
+5. **狀態視圖（Empty / Error / Loading）**：
    - 採用柔和描邊圖示（Outline Icons）搭配暖灰文案，傳遞平靜、沉穩的空狀態氛圍。
+   - 整頁或整區的載入用骨架（見「紙墨玻璃元件 → 載入骨架」），不放置中轉圈。
 
 ## 變更檢查
 
