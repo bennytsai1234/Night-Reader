@@ -154,7 +154,32 @@ void main() {
     await installer.download(_info());
     await installer.clearDownloads();
 
-    expect(await updates.exists(), isFalse);
+    expect(updates.listSync(), isEmpty);
+  });
+
+  test('a held APK survives clearing until it is released', () async {
+    final apk = await installer.download(_info());
+    installer.hold(apk);
+
+    await installer.clearDownloads();
+    expect(await apk.exists(), isTrue);
+
+    installer.release(apk);
+    await installer.clearDownloads();
+    expect(await apk.exists(), isFalse);
+  });
+
+  test('a new version keeps the APK a dialog still holds', () async {
+    final held = await installer.download(_info(tag: 'v0.4.0'));
+    installer.hold(held);
+    addTearDown(() => installer.release(held));
+
+    await installer.download(_info(tag: 'v0.4.1'));
+
+    expect(updates.listSync().map((e) => p.basename(e.path)).toSet(), {
+      'night-reader-v0.4.0.apk',
+      'night-reader-v0.4.1.apk',
+    });
   });
 
   group('a download already in flight', () {
@@ -219,6 +244,51 @@ void main() {
       expect(await (await retried).readAsBytes(), [1, 2, 3, 4]);
       expect(gated.requests, 2);
     });
+
+    test('is left alone by clearDownloads', () async {
+      final running = installer.download(_info());
+      await gated.untilRequests(1);
+      // 讓 Dio 拿到回應、建立 .part。
+      await pumpEventQueue();
+      final partial = File(
+        p.join(updates.path, 'night-reader-v0.4.0.apk.part'),
+      );
+      expect(await partial.exists(), isTrue);
+
+      await installer.clearDownloads();
+      expect(await partial.exists(), isTrue);
+      gated.open();
+
+      expect(await (await running).readAsBytes(), [1, 2, 3, 4]);
+    });
+
+    test(
+      'of another version is stopped before its files are removed',
+      () async {
+        // 例如背景在抓正式版時，使用者切到測試版按了立即更新。
+        final stable = installer.download(_info(tag: 'v0.4.0'));
+        await gated.untilRequests(1);
+        await pumpEventQueue();
+
+        final beta = AppUpdateInstaller(
+          dio: Dio()..httpClientAdapter = gated,
+          directoryLoader: () async => updates,
+        ).download(_info(tag: 'v0.5.0-beta.1'));
+        await expectLater(
+          stable,
+          throwsA(
+            isA<DioException>().having(CancelToken.isCancel, 'isCancel', true),
+          ),
+        );
+        await gated.untilRequests(2);
+        gated.open();
+
+        expect(await (await beta).readAsBytes(), [1, 2, 3, 4]);
+        expect(updates.listSync().map((e) => p.basename(e.path)), [
+          'night-reader-v0.5.0-beta.1.apk',
+        ]);
+      },
+    );
   });
 
   group('isOnUnmeteredNetwork', () {
