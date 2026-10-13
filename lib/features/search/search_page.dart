@@ -10,6 +10,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
+import 'search_model.dart';
 import 'search_provider.dart';
 import 'models/search_scope.dart';
 
@@ -70,20 +71,23 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   /// 這一幀才串流進來的結果。只有這一幀就畫出來的列播淡入，落在畫面外、
   /// 之後才捲進來的列不播；幀結束時清空。
   final Set<String> _arrivingResultKeys = {};
-  bool _wasSearching = false;
 
-  /// 結果會隨書源回傳重新排序；以書名＋作者辨認同一本書。
-  static String _resultKey(SearchBook book) =>
-      '${book.name}\u0000${book.author ?? ''}';
+  /// 頁面第一次建出來時已經在的結果（例如回到頁面）直接到位，不播淡入。
+  bool _arrivalsPrimed = false;
+
+  /// 結果會隨書源回傳重新排序、更換代表書；以合併卡的身分辨認同一本書。
+  static String _resultKey(SearchBook book) => searchResultIdentity(book);
 
   void _trackArrivals(SearchProvider provider) {
-    final searching = provider.isSearching;
-    if (searching && !_wasSearching) _knownResultKeys.clear();
-    _wasSearching = searching;
+    // 新一輪搜尋開始時會先清空結果。不看「是否搜尋中」：最後一批結果可能和
+    // 搜尋完成在同一幀到，那一批也要淡入。
+    if (provider.results.isEmpty) _knownResultKeys.clear();
+    final animate = _arrivalsPrimed;
+    _arrivalsPrimed = true;
     var arrived = false;
     for (final book in provider.results) {
       final key = _resultKey(book);
-      if (_knownResultKeys.add(key) && searching) {
+      if (_knownResultKeys.add(key) && animate) {
         _arrivingResultKeys.add(key);
         arrived = true;
       }

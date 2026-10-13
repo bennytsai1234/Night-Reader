@@ -63,11 +63,13 @@ class BookshelfLayoutMotion {
     final previousGrid = _lastGrid;
     _lastUrls = urls;
     _lastGrid = grid;
-    if (!animate ||
-        previous == null ||
-        previous.isEmpty ||
-        previousGrid != grid ||
-        listEquals(previous, urls)) {
+    if (!animate || previousGrid != grid) {
+      // 換檢視或關掉動畫時，進行中這一輪的起點已經不適用：停在終點，
+      // 不讓新檢視的書卡從舊檢視的位置飛過來。
+      _stop();
+      return;
+    }
+    if (previous == null || previous.isEmpty || listEquals(previous, urls)) {
       return;
     }
     final before = <String, Offset>{};
@@ -96,6 +98,12 @@ class BookshelfLayoutMotion {
     for (final item in _items) {
       if (item._animated) item.markNeedsPaint();
     }
+  }
+
+  void _stop() {
+    if (!_running) return;
+    _controller.stop();
+    _finish();
   }
 
   void dispose() => _controller.dispose();
@@ -241,6 +249,15 @@ class _RenderBookshelfMotionItem extends RenderProxyBox {
       (context, offset) => context.paintChild(child, offset),
       oldLayer: layer as OpacityLayer?,
     );
+  }
+
+  /// 換位中的書卡不接點擊：清單依版面位置分派點擊，畫在別格的書卡收不到
+  /// 自己的點擊，點它所在的格子反而會點到排在那裡的另一本書。換位只有
+  /// [AppMotion.spring] 這麼久，停住點擊比點錯書好。
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (_from != null && motion._running) return false;
+    return super.hitTest(result, position: position);
   }
 
   @override

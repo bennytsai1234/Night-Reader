@@ -95,4 +95,27 @@ void main() {
     provider.onSearchFinish(isEmpty: false);
     await tester.pumpAndSettle();
   });
+
+  testWidgets('results that arrive in the same frame as the finish still fade '
+      'in', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書')]);
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(fadingIn(tester, '甲書'), isTrue);
+    await tester.pumpAndSettle();
+  });
 }

@@ -155,7 +155,7 @@ class _MainPageState extends State<MainPage> {
               children: List.generate(
                 _destinations.length,
                 (index) => _KeepAliveWrapper(
-                  child: NotificationListener<ScrollNotification>(
+                  child: NotificationListener<Notification>(
                     onNotification: _destinations[index].hidesTabBarOnScroll
                         ? (notification) => _onPageScroll(index, notification)
                         : null,
@@ -266,11 +266,22 @@ class _MainPageState extends State<MainPage> {
   /// 往下捲（同一方向累計超過 [kTouchSlop]，也就是 Flutter 判定手指真的在
   /// 拖、不是手抖的距離）且已捲過 [_scrollHideStart] 時讓出；往上捲同樣距離、
   /// 回到頂端或捲到底時浮回來。只看目前分頁本身的直向清單。
-  bool _onPageScroll(int index, ScrollNotification notification) {
-    final metrics = notification.metrics;
-    if (index != _currentIndex ||
+  ///
+  /// 清單換掉（例如書架網格換列表）或內容變短時沒有捲動，只會發出
+  /// [ScrollMetricsNotification]；它只用來檢查是否已在頂端或底端。
+  bool _onPageScroll(int index, Notification notification) {
+    final (ScrollMetrics? metrics, int depth) = switch (notification) {
+      ScrollNotification(:final metrics, :final depth) => (metrics, depth),
+      ScrollMetricsNotification(:final metrics, :final depth) => (
+        metrics,
+        depth,
+      ),
+      _ => (null, -1),
+    };
+    if (metrics == null ||
+        index != _currentIndex ||
         _tabBarHidden.value ||
-        notification.depth != 0 ||
+        depth != 0 ||
         metrics.axis != Axis.vertical) {
       return false;
     }

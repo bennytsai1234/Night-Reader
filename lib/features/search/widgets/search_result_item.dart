@@ -7,6 +7,7 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
+import '../search_model.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
 
@@ -42,10 +43,11 @@ class _SearchResultItemState extends State<SearchResultItem> {
       height: 1.35,
       color: secondary,
     );
-    // 每張合併卡代表不同的書，代表書的 bookUrl 在結果裡不會重複。
+    // 以合併卡的身分當 tag：開著詳情時搜尋仍在繼續，代表書可能換成別的
+    // 書源，用 bookUrl 的話返回時封面飛不回來。
     final heroTag = BookCoverWidget.heroTag(
       BookCoverHeroScope.search,
-      book.bookUrl,
+      searchResultIdentity(book),
     );
     return InkWell(
       onTap: () {

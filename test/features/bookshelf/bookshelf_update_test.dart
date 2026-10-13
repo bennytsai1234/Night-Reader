@@ -155,6 +155,18 @@ void main() {
       expect(states.first, isTrue);
       expect(states.last, isFalse);
     });
+
+    test('a check that ends after the provider is disposed stays '
+        'quiet', () async {
+      final shelf = BookshelfProvider(
+        keepBookDownloaded: (url, {hasNewChapters = false}) async {},
+      );
+
+      final refresh = shelf.refreshBookshelf();
+      shelf.dispose();
+
+      await expectLater(refresh, completes);
+    });
   });
 
   group('App launch', () {

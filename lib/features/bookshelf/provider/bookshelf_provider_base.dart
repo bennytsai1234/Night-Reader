@@ -74,4 +74,19 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
     Timer Function(Duration duration, void Function() callback)? startTimer,
   }) : keepBookDownloaded = keepBookDownloaded ?? _keepWithDownloadService,
        startTimer = startTimer ?? Timer.new;
+
+  bool _disposed = false;
+
+  /// 背景檢查、載入等非同步工作可能在 provider 釋放後才結束，結束時的通知
+  /// 不再送出。
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }

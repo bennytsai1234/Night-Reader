@@ -81,7 +81,7 @@
   - `select`（selectionClick）：選項或數值改變：`GroupedSwitch` 切換、`GlassSegmented` 選項改變、書架多選勾選與取消、`NumberStepperRow` 步進。長按連續步進只在開始與碰到上下限時各一次，每步都震會變成連續的嗡嗡聲。
   - `snap`（lightImpact）：越過門檻或放到定位：`SwipeActions` 滑過完整觸發距離、拖曳排序放下。
   - `lift`（mediumImpact）：長按拿起：`showContextPreviewMenu` 開啟、拖曳排序開始。
-- **載入骨架**：載入中以 `Skeleton`＋`SkeletonBox`（封面、按鈕）／`SkeletonLine`（一行文字，跟著系統字級）畫出內容將出現的形狀，不放置中轉圈；形狀照真實版面的幾何，內容到了版面不跳動。底色為主要文字色疊 7%（淺色）／9%（深色），各風格深淺都看得出但很淡；整塊共用一個很輕的呼吸脈動（`AppMotion.skeletonPulse`，只改底色、不做整塊透明度），減少動態時靜止。整區切換用 `SkeletonSwitcher`，清單（sliver）用 `SliverFadeIn`，內容以 `AppMotion.fade` 淡入取代骨架。分頁「載入更多」與列內的小狀態仍用小轉圈，主頁啟動遮罩不變。
+- **載入骨架**：載入中以 `Skeleton`＋`SkeletonBox`（封面、按鈕）／`SkeletonLine`（一行文字，跟著系統字級）畫出內容將出現的形狀，不放置中轉圈；形狀照真實版面的幾何，內容到了版面不跳動；唯一例外是發現頁的分組篩選列，要等書源載入完才知道有沒有分組，有分組時篩選列在內容到了才插入頁首，清單起點下移一列。底色為主要文字色疊 7%（淺色）／9%（深色），各風格深淺都看得出但很淡；整塊共用一個很輕的呼吸脈動（`AppMotion.skeletonPulse`，只改底色、不做整塊透明度），減少動態時靜止。整區切換用 `SkeletonSwitcher`，清單（sliver）用 `SliverFadeIn`，內容以 `AppMotion.fade` 淡入取代骨架。分頁「載入更多」與列內的小狀態仍用小轉圈，主頁啟動遮罩不變。
 - **封面轉場**：書架、發現分類與搜尋結果的封面以 Hero 飛到書籍詳情的封面；tag 依來源分範圍（`BookCoverHeroScope`），書架與發現在同一路由也不會重複，長按預覽裡的複本不帶 Hero。從書架點書開閱讀器是「封面放大翻開」（`BookOpenRoute` 帶 `BookOpenCover`，`AppMotion.bookOpen` 500ms）：封面從書卡的位置等比放大到整頁，再淡出露出閱讀頁；閱讀頁只被裁在封面範圍裡，淡出只作用在封面那一層。拿不到封面位置的入口（書籍詳情、換源）用淡入加輕微上滑；返回一律淡出加輕微下滑（書架回來會依最近閱讀重排，原位置不一定還是那本書）。
 
 ## 元件質感與動態反饋

@@ -20,6 +20,11 @@ String normalizeSearchText(String? value) {
       .toLowerCase();
 }
 
+/// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（正規化書名＋
+/// 作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
+String searchResultIdentity(SearchBook book) =>
+    '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
+
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
   if (keyword.isEmpty) return false;

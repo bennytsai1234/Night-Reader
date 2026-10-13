@@ -11,6 +11,9 @@ const _secondBackground = Color(0xFF223344);
 Color _first(BuildContext _) => _firstBackground;
 Color _second(BuildContext _) => _secondBackground;
 
+/// 換掉第一頁的清單（像書架網格換列表）：新清單從頂端開始，不會有捲動。
+final _firstListGeneration = ValueNotifier<int>(0);
+
 class _ListPage extends StatelessWidget {
   const _ListPage(this.name, this.background);
 
@@ -21,9 +24,13 @@ class _ListPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: background,
-      body: ListView.builder(
-        itemCount: 80,
-        itemBuilder: (_, i) => SizedBox(height: 60, child: Text('$name$i')),
+      body: ValueListenableBuilder<int>(
+        valueListenable: _firstListGeneration,
+        builder: (context, generation, _) => ListView.builder(
+          key: ValueKey(generation),
+          itemCount: 80,
+          itemBuilder: (_, i) => SizedBox(height: 60, child: Text('$name$i')),
+        ),
       ),
     );
   }
@@ -74,6 +81,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(tabBarHidden(tester), isFalse);
     expect(fade(tester).hidden, isFalse);
+  });
+
+  testWidgets('replacing the list with one at the top brings the tab bar '
+      'back', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.drag(find.text('甲3'), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(tabBarHidden(tester), isTrue);
+
+    _firstListGeneration.value++;
+    await tester.pumpAndSettle();
+    expect(find.text('甲0'), findsOneWidget);
+    expect(tabBarHidden(tester), isFalse);
   });
 
   testWidgets('a short scroll near the top keeps the tab bar', (tester) async {

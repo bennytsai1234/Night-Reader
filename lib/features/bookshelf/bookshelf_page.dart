@@ -385,8 +385,19 @@ class _BookshelfPageState extends State<BookshelfPage>
         duration: animate ? AppMotion.fade : Duration.zero,
         switchInCurve: AppMotion.fadeCurve,
         switchOutCurve: AppMotion.fadeCurve,
-        layoutBuilder: (current, previous) =>
-            Stack(fit: StackFit.expand, children: [...previous, ?current]),
+        // 淡出中的舊版面和新版面帶著同一批封面 Hero tag，換頁時會重複；
+        // 舊版面也不該再接點擊或被讀屏念到。
+        layoutBuilder: (current, previous) => Stack(
+          fit: StackFit.expand,
+          children: [
+            for (final child in previous)
+              HeroMode(
+                enabled: false,
+                child: IgnorePointer(child: ExcludeSemantics(child: child)),
+              ),
+            ?current,
+          ],
+        ),
         transitionBuilder: (child, animation) => FadeTransition(
           opacity: animation,
           child: ScaleTransition(

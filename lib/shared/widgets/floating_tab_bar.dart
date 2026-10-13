@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
@@ -241,7 +241,7 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
       if (position == null) return;
       final index = position.round();
       setState(() => _dragPosition = null);
-      if (index != widget.currentIndex) HapticFeedback.selectionClick();
+      if (index != widget.currentIndex) AppHaptics.select();
       widget.onTap(index);
     }
 
