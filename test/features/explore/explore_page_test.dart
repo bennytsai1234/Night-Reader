@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -8,15 +10,18 @@ import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:provider/provider.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
-  _FakeSourceDao(this.sources);
+  _FakeSourceDao(List<BookSource> sources) : _sources = Stream.value(sources);
 
-  final List<BookSource> sources;
+  _FakeSourceDao.stream(this._sources);
+
+  final Stream<List<BookSource>> _sources;
 
   @override
-  Stream<List<BookSource>> watchDiscoveryPart() => Stream.value(sources);
+  Stream<List<BookSource>> watchDiscoveryPart() => _sources;
 }
 
 void main() {
@@ -75,5 +80,41 @@ void main() {
     await tester.pumpAndSettle();
     await expectRowBelowHeader('書源3');
     expect(find.text('分類0'), findsOneWidget);
+  });
+
+  testWidgets('sources show a skeleton while loading and fade in after', (
+    tester,
+  ) async {
+    final sources = StreamController<List<BookSource>>();
+    addTearDown(sources.close);
+    final provider = ExploreProvider(
+      sourceDao: _FakeSourceDao.stream(sources.stream),
+      kindsLoader: (_, {source}) async => const [],
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ExploreProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const ExplorePage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(SkeletonLine), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    sources.add([
+      BookSource(
+        bookSourceUrl: 'https://s.example',
+        bookSourceName: '書源甲',
+        exploreUrl: 'https://s.example/explore',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.text('書源甲'), findsOneWidget);
+    expect(find.byType(SkeletonLine), findsNothing);
   });
 }

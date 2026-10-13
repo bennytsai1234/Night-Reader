@@ -162,6 +162,10 @@ class AppMotion {
   static const Duration bookOpen = Duration(milliseconds: 500);
   static const Duration bookOpenExpand = Duration(milliseconds: 300);
   static const Curve bookOpenExpandCurve = Curves.easeInOutCubic;
+
+  /// 骨架載入的呼吸脈動：一次由深到淺（往返一輪 1.6 秒）。比 [fade] 慢
+  /// 六倍以上，讀起來是安靜的等待，不像閃爍。
+  static const Duration skeletonPulse = Duration(milliseconds: 800);
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

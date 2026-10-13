@@ -8,6 +8,7 @@ import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
+import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
@@ -16,6 +17,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
@@ -273,11 +275,25 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
   }
 
+  /// 初次載入時顯示與目前檢視同形的骨架，書到了以淡入取代。
   Widget _buildContent(BuildContext context, BookshelfProvider provider) {
     final insets = MediaQuery.paddingOf(context);
-    if (provider.isLoading && provider.books.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return SkeletonSwitcher(
+      loading: provider.isLoading && provider.books.isEmpty,
+      skeleton: BookshelfSkeleton(
+        grid: provider.isGridView,
+        padding: EdgeInsets.fromLTRB(
+          AppGrouped.margin,
+          insets.top + AppSpacing.xs,
+          AppGrouped.margin,
+          insets.bottom + AppSpacing.md,
+        ),
+      ),
+      builder: (_) => _buildLoadedContent(provider, insets),
+    );
+  }
+
+  Widget _buildLoadedContent(BookshelfProvider provider, EdgeInsets insets) {
     // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
     if (provider.books.isEmpty && provider.loadErrorMessage != null) {
       return Padding(
