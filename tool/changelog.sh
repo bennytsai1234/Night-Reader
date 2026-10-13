@@ -7,7 +7,8 @@
 #     android-release.yml 用它取 GitHub Release 說明：測試版取「未發布」，正式版取「X.Y.Z」。
 #
 #   sh tool/changelog.sh check <base> <head>
-#     base..head 改到 App 內容時，確認 CHANGELOG.md 有跟著寫，沒寫時結束碼為 1。
+#     base..head 改到 App 內容時，確認 CHANGELOG.md 有跟著寫：「## 未發布」改過且不是空的，
+#     或新增了正式版的「## X.Y.Z」段落。沒寫時結束碼為 1。
 #     .githooks/pre-push 與 ci.yml 在推上 main 時呼叫。
 #
 # 測試：sh tool/changelog_test.sh
@@ -79,12 +80,13 @@ check() {
     return 1
   fi
   old=$(section_at "$base" "$UNRELEASED") || old=''
-  if [ "$new" != "$old" ]; then
+  # 清空也算變化，但清空後測試版就沒有這次改動的說明，所以只有寫了內容才放行。
+  if [ "$new" != "$old" ] && [ -n "$new" ]; then
     echo "changelog: 「## $UNRELEASED」已更新。"
     return 0
   fi
 
-  # 正式版的版號 commit 把「未發布」改名成「X.Y.Z」，留下的「未發布」可能和推送前一樣是空的。
+  # 正式版的版號 commit 把「未發布」改名成「X.Y.Z」，留下的「未發布」是空的。
   version=$(git show "$head:pubspec.yaml" | awk '$1 == "version:" { print $2; exit }')
   if [ -n "$version" ] &&
     notes=$(section_at "$head" "$version") && [ -n "$notes" ] &&
@@ -94,7 +96,11 @@ check() {
   fi
 
   {
-    echo "changelog: 這次推上 main 的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
+    if [ -z "$new" ] && [ -n "$old" ]; then
+      echo "changelog: 這次推上 main 的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」被清空了，也沒有新增正式版的段落。"
+    else
+      echo "changelog: 這次推上 main 的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
+    fi
     echo
     echo "  測試版與正式版的 GitHub Release 說明都取自 CHANGELOG.md，App 的更新視窗與「更新紀錄」會顯示它。"
     echo "  請在「## $UNRELEASED」下面用一般讀者看得懂的中文寫這次的變化："

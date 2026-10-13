@@ -124,6 +124,12 @@ noted=$(commit notes "CHANGELOG.md=$(changelog '- 新功能
 ')")
 expect_success 'check: 寫進「未發布」後放行' check "$base" "$noted"
 
+# 從 noted 分出去：改 App 又把非空的「未發布」刪光，版號沒升。
+g checkout -q -b emptied "$noted"
+emptied=$(commit emptied "lib/main.dart=v2b" "CHANGELOG.md=$(changelog '')")
+expect_failure 'check: 改到 App 內容卻把「未發布」清空時擋下' check "$noted" "$emptied"
+g checkout -q -
+
 # 正式版：版號 commit 把「未發布」改名成「0.3.4」，上面留空的「未發布」。
 bump=$(commit 'release: bump version to 0.3.4' "pubspec.yaml=version: 0.3.4
 " "CHANGELOG.md=$(printf '# 更新說明\n\n## 未發布\n\n## 0.3.4\n\n- 新功能\n\n## 0.3.3\n\n- 上一版\n')")
