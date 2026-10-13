@@ -616,7 +616,6 @@ void main() {
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
         onChanged: () {},
-        onProgressPersisted: () {},
         isMounted: () => true,
       );
       addTearDown(() async {
@@ -741,7 +740,6 @@ void main() {
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
         onChanged: () {},
-        onProgressPersisted: () {},
         isMounted: () => true,
       );
       addTearDown(() async {

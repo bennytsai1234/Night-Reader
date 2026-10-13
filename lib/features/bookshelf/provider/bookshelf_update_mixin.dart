@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -8,7 +10,6 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/event_bus.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 import 'bookshelf_provider_base.dart';
@@ -48,15 +49,57 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
 
   Future<void>? _refreshing;
 
-  /// 開 App 後的背景檢查；「啟動時檢查書架更新」關掉時不跑。
-  Future<void> refreshBookshelfOnLaunch() async {
+  /// 書架檢查後角標掛多久（DESIGN.md「書籍卡片與清單」）。
+  static const Duration updateBadgeDuration = Duration(seconds: 5);
+
+  /// 上一次書架檢查的結果，只留有新章節或檢查失敗的書；不存檔，
+  /// [updateBadgeDuration] 後一起清掉。
+  Map<String, BookUpdateCheckResult> _updateBadges = const {};
+  Timer? _updateBadgeTimer;
+
+  /// 書卡角標：有新章節（+N）或檢查失敗（!）；沒有就是 null。
+  BookUpdateCheckResult? updateBadgeOf(String bookUrl) =>
+      _updateBadges[bookUrl];
+
+  /// 開 App 後在背景做的事：先把書架上還沒下載完整的書排進下載（ADR
+  /// 0007），再檢查更新（「啟動時檢查書架更新」關掉時不檢查）。
+  Future<void> onAppLaunch() async {
+    await keepShelfDownloaded();
     if (!AppConfig.autoRefresh) return;
     await refreshBookshelf();
   }
 
-  /// 下拉與啟動時的書架更新：只在背景檢查，不改 [updatingCount]（那是多選
-  /// 檢查的進度）。略過本地書與使用者關掉「自動檢查更新」的書；已在檢查時
-  /// 沿用同一次，不重複發請求。
+  /// 書架上每本網路書都排一次自動下載；不看 [Book.canUpdate]，那只管要不要
+  /// 檢查新章節，目錄裡已有的章節照樣下載。
+  Future<void> keepShelfDownloaded() async {
+    final List<Book> shelf;
+    try {
+      shelf = await bookDao.getInBookshelf();
+    } catch (error) {
+      AppLog.w('書架自動下載讀取書架失敗: $error');
+      return;
+    }
+    for (final book in shelf) {
+      if (book.isLocal) continue;
+      await _keepDownloaded(book.bookUrl);
+    }
+  }
+
+  Future<void> _keepDownloaded(
+    String bookUrl, {
+    bool hasNewChapters = false,
+  }) async {
+    try {
+      await keepBookDownloaded(bookUrl, hasNewChapters: hasNewChapters);
+    } catch (error) {
+      AppLog.w('書架自動下載排程失敗 $bookUrl: $error');
+    }
+  }
+
+  /// 下拉與啟動時的書架更新：在背景檢查，不轉圈，不改 [updatingCount]（那是
+  /// 多選檢查的進度）；檢查完在書卡上掛 [updateBadgeDuration] 的角標。略過
+  /// 本地書與使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複
+  /// 發請求。
   Future<void> refreshBookshelf() {
     return _refreshing ??= _refreshAll().whenComplete(() => _refreshing = null);
   }
@@ -68,22 +111,40 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         .toList();
     if (targets.isEmpty) return;
 
-    AppEventBus().fire(AppEvent('bookshelfRefreshStart'));
     final pool = Pool(_refreshConcurrency);
+    final List<BookUpdateCheckResult?> results;
     try {
-      await Future.wait([
+      results = await Future.wait([
         for (final book in targets)
           pool.withResource(() async {
             try {
-              await checkBookUpdate(book);
-            } catch (_) {}
+              return await checkBookUpdate(book);
+            } catch (_) {
+              return null;
+            }
           }),
       ]);
     } finally {
       await pool.close();
     }
+    _updateBadgeTimer?.cancel();
+    _updateBadges = {
+      for (final result in results.nonNulls)
+        if (result.hasUpdate || result.failed) result.bookUrl: result,
+    };
     await loadBooks();
-    AppEventBus().fire(AppEvent('bookshelfRefreshEnd'));
+    if (_updateBadges.isEmpty) return;
+    _updateBadgeTimer = startTimer(updateBadgeDuration, () {
+      _updateBadgeTimer = null;
+      _updateBadges = const {};
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateBadgeTimer?.cancel();
+    super.dispose();
   }
 
   /// 抓書源上的詳情與目錄寫回這本書。網路請求期間使用者可能在讀這本書、
@@ -113,13 +174,13 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         chapters[i].bookUrl = book.bookUrl;
       }
 
-      final newCount = await bookDao.transaction(() async {
+      final newCount = await bookDao.transaction<int?>(() async {
         final current = await bookDao.getByUrl(book.bookUrl);
         // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。
         if (current == null ||
             !current.isInBookshelf ||
             current.origin != book.origin) {
-          return 0;
+          return null;
         }
         final oldTotal = current.totalChapterNum > 0
             ? current.totalChapterNum
@@ -158,6 +219,11 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         }
         return newCount;
       });
+      if (newCount == null) {
+        return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
+      }
+      // 目錄寫好了：新章節（或之前沒排到的章節）接著下載。
+      await _keepDownloaded(book.bookUrl, hasNewChapters: newCount > 0);
       return BookUpdateCheckResult(
         bookUrl: book.bookUrl,
         newChapterCount: newCount,
@@ -252,15 +318,12 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters;
+      var toDownload = chapters.where(chapterHasContent).toList();
       if (contentDao != null) {
-        final stored = await ReaderChapterContentStore(
+        toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
           contentDao: contentDao,
-        ).storedChapterIndices(book: book);
-        toDownload = chapters
-            .where((chapter) => !stored.contains(chapter.index))
-            .toList();
+        ).missingChapters(book: book, chapters: chapters);
       }
       if (toDownload.isEmpty) {
         skippedBooks++;
@@ -323,15 +386,12 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters;
+      var toDownload = chapters.where(chapterHasContent).toList();
       if (contentDao != null) {
-        final stored = await ReaderChapterContentStore(
+        toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
           contentDao: contentDao,
-        ).storedChapterIndices(book: book);
-        toDownload = chapters
-            .where((chapter) => !stored.contains(chapter.index))
-            .toList();
+        ).missingChapters(book: book, chapters: chapters);
       }
       if (toDownload.isEmpty) {
         skippedBooks++;

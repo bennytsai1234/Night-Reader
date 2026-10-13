@@ -111,9 +111,7 @@ class DownloadManagerPage extends StatelessWidget {
 
     return GroupedSection(
       topGap: AppSpacing.sm,
-      footer: service.isBookshelfRefreshing
-          ? '書架正在檢查更新，下載會等檢查完成後繼續'
-          : '最近任務更新：${_formatTimestamp(latestUpdate)}',
+      footer: '最近任務更新：${_formatTimestamp(latestUpdate)}',
       children: [
         GroupedContent(
           child: Row(

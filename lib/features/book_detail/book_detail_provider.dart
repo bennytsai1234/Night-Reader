@@ -395,15 +395,14 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<StorageDownloadQueueResult> queueDownloadMissing() async {
     return _queueStorageDownload(
-      resolveChapters: (storedIndices) => _allChapters
-          .where((chapter) => !storedIndices.contains(chapter.index))
-          .toList(),
+      resolveChapters: (storedUrls) =>
+          chaptersMissingContent(_allChapters, storedUrls),
       emptyMessage: '目前沒有新的章節需要下載',
     );
   }
 
   Future<StorageDownloadQueueResult> _queueStorageDownload({
-    required List<BookChapter> Function(Set<int> storedIndices) resolveChapters,
+    required List<BookChapter> Function(Set<String> storedUrls) resolveChapters,
     required String emptyMessage,
   }) async {
     final blockedReason = await _prepareStorageDownloadQueue();
@@ -411,8 +410,8 @@ class BookDetailProvider extends ChangeNotifier {
       return StorageDownloadQueueResult.blocked(blockedReason);
     }
 
-    final storedIndices = await _storedChapterIndices();
-    final chapters = resolveChapters(storedIndices);
+    final storedUrls = await _storedChapterUrls();
+    final chapters = resolveChapters(storedUrls);
     if (chapters.isEmpty) {
       return StorageDownloadQueueResult.blocked(emptyMessage);
     }
@@ -605,6 +604,12 @@ class BookDetailProvider extends ChangeNotifier {
 
     AppEventBus().fire(AppEventBus.upBookshelf);
     notifyListeners();
+    if (value && supportsBackgroundDownload) {
+      // 加入書架的書整本下載（ADR 0007）。
+      unawaited(
+        _resolvedDownloadService.keepShelfBookDownloaded(_book.bookUrl),
+      );
+    }
     return BookDetailOperationResult.success(value ? '已加入書架' : '已移出書架');
   }
 
@@ -809,6 +814,14 @@ class BookDetailProvider extends ChangeNotifier {
       await _refreshCacheStatus(notify: false);
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
+      if (_isInBookshelf) {
+        unawaited(
+          _resolvedDownloadService.keepShelfBookDownloaded(
+            _book.bookUrl,
+            hasNewChapters: newCount > 0,
+          ),
+        );
+      }
       return BookDetailUpdateResult(
         success: true,
         newChapterCount: newCount,
@@ -849,13 +862,13 @@ class BookDetailProvider extends ChangeNotifier {
     ).saveChapterMetadata(_allChapters);
   }
 
-  Future<Set<int>> _storedChapterIndices() async {
+  Future<Set<String>> _storedChapterUrls() async {
     final chapterContentDao = _chapterContentDao;
-    if (chapterContentDao == null) return <int>{};
-    return ReaderChapterContentStore(
-      chapterDao: _chapterDao,
-      contentDao: chapterContentDao,
-    ).storedChapterIndices(book: _book);
+    if (chapterContentDao == null) return <String>{};
+    return chapterContentDao.getStoredChapterUrls(
+      origin: _book.origin,
+      bookUrl: _book.bookUrl,
+    );
   }
 
   Future<void> _clearStoredContent() async {
@@ -877,7 +890,12 @@ class BookDetailProvider extends ChangeNotifier {
           : await chapterContentDao.getEntriesByBookUrls(<String>[
               _book.bookUrl,
             ]);
-      final storedIndices = <int>{};
+      // 只算目前目錄裡的章節（依網址）；舊目錄留下的正文不算進進度。
+      final readableUrls = {
+        for (final chapter in _allChapters)
+          if (chapterHasContent(chapter)) chapter.url,
+      };
+      final storedUrls = <String>{};
       var contentBytes = 0;
       var latestUpdatedAt = 0;
       for (final entry in entries) {
@@ -886,7 +904,9 @@ class BookDetailProvider extends ChangeNotifier {
             !entry.hasDisplayContent) {
           continue;
         }
-        storedIndices.add(entry.chapterIndex);
+        if (readableUrls.contains(entry.chapterUrl)) {
+          storedUrls.add(entry.chapterUrl);
+        }
         final content = entry.content;
         if (content != null && content.isNotEmpty) {
           contentBytes += utf8.encode(content).length;
@@ -896,8 +916,8 @@ class BookDetailProvider extends ChangeNotifier {
 
       final coverBytes = await _coverStorage.getBookAssetSize(_book);
       _cacheStatus = BookDetailCacheStatus(
-        storedChapterCount: storedIndices.length,
-        totalChapterCount: _allChapters.length,
+        storedChapterCount: storedUrls.length,
+        totalChapterCount: readableUrls.length,
         contentBytes: contentBytes,
         coverBytes: coverBytes,
         latestContentUpdatedAt: latestUpdatedAt,

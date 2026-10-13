@@ -5,6 +5,18 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/reader_chapter_content.dart';
 
+/// 有正文可下載的章節：分卷標題與沒有網址的章節沒有正文。
+bool chapterHasContent(BookChapter chapter) =>
+    !chapter.isVolume && chapter.url.isNotEmpty;
+
+/// [chapters] 中有正文、但網址不在 [storedUrls] 裡的章節。
+List<BookChapter> chaptersMissingContent(
+  List<BookChapter> chapters,
+  Set<String> storedUrls,
+) => chapters
+    .where((c) => chapterHasContent(c) && !storedUrls.contains(c.url))
+    .toList();
+
 class ReaderChapterContentStore {
   ReaderChapterContentStore({
     required this.chapterDao,
@@ -103,11 +115,16 @@ class ReaderChapterContentStore {
     await chapterDao.insertChapters(chapters);
   }
 
-  Future<Set<int>> storedChapterIndices({required Book book}) async {
-    return contentDao.getStoredChapterIndices(
+  /// [chapters] 裡還沒有正文的章節（依章節網址比對，分卷標題不算）。
+  Future<List<BookChapter>> missingChapters({
+    required Book book,
+    required List<BookChapter> chapters,
+  }) async {
+    final stored = await contentDao.getStoredChapterUrls(
       origin: book.origin,
       bookUrl: book.bookUrl,
     );
+    return chaptersMissingContent(chapters, stored);
   }
 
   Future<void> deleteStoredContentForBook({required Book book}) async {

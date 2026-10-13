@@ -17,8 +17,11 @@ export 'provider/bookshelf_update_mixin.dart'
 
 class BookshelfProvider extends BookshelfProviderBase
     with BookshelfLogicMixin, BookshelfUpdateMixin, BookshelfImportMixin {
-  BookshelfProvider({BookStorageService? bookStorageService})
-    : _bookStorageService = bookStorageService ?? BookStorageService() {
+  BookshelfProvider({
+    BookStorageService? bookStorageService,
+    super.keepBookDownloaded,
+    super.startTimer,
+  }) : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
     loadBooks();
     _bookshelfSub = AppEventBus()

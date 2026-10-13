@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
+import 'package:night_reader/features/bookshelf/provider/bookshelf_update_mixin.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -56,6 +57,87 @@ class BookshelfCheckMark extends StatelessWidget {
   }
 }
 
+/// 書架檢查後封面右上角的結果：有新章節是主色小膠囊「+N」，檢查失敗是
+/// 紅色小圓「!」。結果清掉時淡出。
+class BookshelfUpdateBadge extends StatelessWidget {
+  const BookshelfUpdateBadge({super.key, required this.result});
+
+  static const double height = 16;
+
+  final BookUpdateCheckResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = this.result;
+    return AnimatedSwitcher(
+      duration: AppMotion.fade,
+      switchInCurve: AppMotion.fadeCurve,
+      switchOutCurve: AppMotion.fadeCurve,
+      child: result == null
+          ? const SizedBox.shrink(key: ValueKey('no-badge'))
+          : result.failed
+          ? _failed(context)
+          : _newChapters(context, result.newChapterCount),
+    );
+  }
+
+  Widget _newChapters(BuildContext context, int count) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      key: ValueKey('new-$count'),
+      label: '有 $count 個新章節',
+      child: ExcludeSemantics(
+        child: Container(
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: AppRadius.pillShape,
+            border: Border.all(color: AppPalette.paper50, width: 1),
+          ),
+          child: Text(
+            '+$count',
+            style: AppTextStyles.micro.copyWith(
+              height: 1,
+              fontWeight: FontWeight.w600,
+              color: scheme.onPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _failed(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Semantics(
+      key: const ValueKey('failed'),
+      label: '檢查更新失敗',
+      child: ExcludeSemantics(
+        child: Container(
+          width: height,
+          height: height,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: dark ? AppPalette.rustDark : AppPalette.rust,
+            border: Border.all(color: AppPalette.paper50, width: 1),
+          ),
+          child: Text(
+            '!',
+            style: AppTextStyles.micro.copyWith(
+              height: 1,
+              fontWeight: FontWeight.w700,
+              color: dark ? AppPalette.ink700 : AppPalette.paper50,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 書名下方的細進度線：只畫已讀比例，不顯示數字。
 class BookshelfProgressLine extends StatelessWidget {
   const BookshelfProgressLine({super.key, required this.book});
@@ -101,6 +183,7 @@ class BookshelfListCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.hero = true,
+    this.updateBadge,
   });
 
   static const double coverWidth = 52;
@@ -119,6 +202,9 @@ class BookshelfListCard extends StatelessWidget {
 
   /// 長按預覽裡的複本不能帶 Hero，否則與清單本身的 tag 重複。
   final bool hero;
+
+  /// 書架檢查後暫時顯示在封面右上角的結果。
+  final BookUpdateCheckResult? updateBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -139,6 +225,17 @@ class BookshelfListCard extends StatelessWidget {
     if (hero) {
       cover = Hero(tag: BookCoverWidget.heroTag(book.bookUrl), child: cover);
     }
+    cover = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        cover,
+        Positioned(
+          top: -AppSpacing.xs,
+          right: -AppSpacing.xs,
+          child: BookshelfUpdateBadge(result: updateBadge),
+        ),
+      ],
+    );
 
     final content = Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -237,6 +334,7 @@ class BookshelfGridTile extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.onLongPress,
+    this.updateBadge,
   });
 
   static const double coverAspectRatio = 0.72;
@@ -263,6 +361,9 @@ class BookshelfGridTile extends StatelessWidget {
 
   /// 長按時回傳封面在螢幕上的範圍。
   final ValueChanged<Rect>? onLongPress;
+
+  /// 書架檢查後暫時顯示在封面右上角的結果；編輯模式時讓位給勾選圓圈。
+  final BookUpdateCheckResult? updateBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +410,13 @@ class BookshelfGridTile extends StatelessWidget {
                         height: double.infinity,
                         borderRadius: AppRadius.cardXs,
                       ),
+                    ),
+                  ),
+                  Positioned(
+                    top: AppSpacing.xs,
+                    right: AppSpacing.xs,
+                    child: BookshelfUpdateBadge(
+                      result: selecting ? null : updateBadge,
                     ),
                   ),
                   Positioned(

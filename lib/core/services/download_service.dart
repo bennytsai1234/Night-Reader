@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/source_switch_handoff.dart';
 
 import 'download/download_base.dart';
@@ -14,6 +16,39 @@ import 'download/download_executor.dart';
 export 'download/download_base.dart';
 export 'download/download_scheduler.dart';
 export 'download/download_executor.dart';
+
+/// 失敗的書架自動下載，要隔多久才在開 App 時自動再試（ADR 0007）。
+const Duration shelfDownloadRetryInterval = Duration(hours: 24);
+
+enum ShelfDownloadDecision {
+  /// 排進佇列。
+  queue,
+
+  /// 這本書的任務正在跑，等這輪結束再排。
+  afterCurrentRun,
+
+  /// 不動：使用者暫停的，或剛失敗、還沒到重試時間的。
+  leave,
+}
+
+/// 書架自動下載對一本還有章節沒下載的書該怎麼做（ADR 0007）。
+ShelfDownloadDecision decideShelfDownload({
+  required DownloadTask? task,
+  required bool running,
+  required bool hasNewChapters,
+  required int now,
+}) {
+  if (running || task != null && (task.isWaiting || task.isDownloading)) {
+    return ShelfDownloadDecision.afterCurrentRun;
+  }
+  if (task == null || task.isCompleted) return ShelfDownloadDecision.queue;
+  if (task.isPaused) return ShelfDownloadDecision.leave;
+  // 失敗過：剛抓到新章節（書源此刻能用）就再試；否則至少隔一段時間。
+  final waited = now - task.lastUpdateTime;
+  return hasNewChapters || waited >= shelfDownloadRetryInterval.inMilliseconds
+      ? ShelfDownloadDecision.queue
+      : ShelfDownloadDecision.leave;
+}
 
 /// DownloadService - 書籍章節背景下載服務
 class DownloadService extends DownloadBase
@@ -26,7 +61,6 @@ class DownloadService extends DownloadBase
   double get progress => totalProgress;
 
   DownloadService._internal() {
-    listenEvents();
     _initialization = _loadTasks();
   }
 
@@ -164,21 +198,65 @@ class DownloadService extends DownloadBase
     update();
   }
 
-  Future<int> queueMissingForLibraryReading(
-    Book book,
-    List<BookChapter> chapters,
-  ) async {
-    if (book.isLocal || !book.isInBookshelf || chapters.isEmpty) return 0;
-    final stored = await chapterContentDao.getStoredChapterIndices(
-      origin: book.origin,
-      bookUrl: book.bookUrl,
-    );
-    final missing = chapters
-        .where((chapter) => !stored.contains(chapter.index))
-        .toList();
-    if (missing.isEmpty) return 0;
-    final admitted = await ensureDownloadTask(book, missing);
-    return admitted ? missing.length : 0;
+  /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，任務的章節範圍
+  /// 在加入時就固定了，新章節要等這輪結束再排。
+  final Set<String> _keepAfterRun = <String>{};
+
+  /// 書架上的網路書整本下載好（ADR 0007）：把目錄裡還沒有正文的章節排進
+  /// 背景下載。[hasNewChapters] 表示剛從書源抓到新章節，書源此刻是好的，
+  /// 失敗過的任務可以馬上再試。
+  Future<void> keepShelfBookDownloaded(
+    String bookUrl, {
+    bool hasNewChapters = false,
+  }) async {
+    try {
+      await _initialization;
+      final book = await bookDao.getByUrl(bookUrl);
+      if (book == null || book.isLocal || !book.isInBookshelf) return;
+      final source = await sourceDao.getByUrl(book.origin);
+      if (source == null || !source.isReadingEnabledByRuntime) return;
+      final chapters = await chapterDao.getByBook(bookUrl);
+      final stored = await chapterContentDao.getStoredChapterUrls(
+        origin: book.origin,
+        bookUrl: bookUrl,
+      );
+      final missing = chaptersMissingContent(chapters, stored);
+      if (missing.isEmpty) return;
+
+      final task = tasks.cast<DownloadTask?>().firstWhere(
+        (candidate) => candidate?.bookUrl == bookUrl,
+        orElse: () => null,
+      );
+      final decision = decideShelfDownload(
+        task: task,
+        running: activeTaskUrls.contains(bookUrl),
+        hasNewChapters: hasNewChapters,
+        now: DateTime.now().millisecondsSinceEpoch,
+      );
+      switch (decision) {
+        case ShelfDownloadDecision.queue:
+          await queueShelfDownload(book, missing);
+        case ShelfDownloadDecision.afterCurrentRun:
+          _keepAfterRun.add(bookUrl);
+        case ShelfDownloadDecision.leave:
+          break;
+      }
+    } catch (error, stackTrace) {
+      AppLog.e(
+        '書架自動下載排程失敗 $bookUrl: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  @override
+  void onTaskFinished(DownloadTask task) {
+    if (!_keepAfterRun.remove(task.bookUrl)) return;
+    // 失敗或被暫停就不接著排，交給重試規則；完成了才補這輪之後的新章節。
+    if (task.isCompleted) {
+      unawaited(keepShelfBookDownloaded(task.bookUrl));
+    }
   }
 
   Future<void> retireBook(String bookUrl) async {

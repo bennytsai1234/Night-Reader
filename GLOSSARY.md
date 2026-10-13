@@ -20,6 +20,10 @@ _Avoid_: 更新日誌、changelog、這次更新了什麼
 一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得書籍詳情、目錄與正文（`BookSource`）。格式相容 Legado 3.0，App 不內建任何書源。
 _Avoid_: 來源、站點、source（不指明時）
 
+**書架自動下載**：
+書架上的網路書自動整本下載，新章節也跟著下載；不限網路、沒有開關（ADR 0007，`DownloadService.keepShelfBookDownloaded`）。和使用者在書籍詳情或多選工具列手動加入的下載不同：自動下載不會排回使用者暫停的任務，失敗後依重試規則再試。
+_Avoid_: 預下載（那是手動選範圍的下載）、自動快取
+
 **Reader V2**：
 現行的閱讀器（`lib/features/reader_v2/`），負責分頁、排版、閱讀進度與閱讀選單。
 _Avoid_: 新閱讀器、reader

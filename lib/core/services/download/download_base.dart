@@ -27,7 +27,6 @@ abstract class DownloadBase extends ChangeNotifier {
   bool isPaused = false;
   Completer<void>? pauseCompleter;
   bool isScheduling = false;
-  bool isBookshelfRefreshing = false;
   final Set<String> activeTaskUrls = <String>{};
   final Set<String> retiringTaskUrls = <String>{};
   final Map<String, int> _taskActivityCounts = <String, int>{};
@@ -102,4 +101,7 @@ abstract class DownloadBase extends ChangeNotifier {
   }
 
   Future<void> processTask(DownloadTask task);
+
+  /// 一個任務跑完（完成、失敗或中途停下）後呼叫。
+  void onTaskFinished(DownloadTask task) {}
 }
