@@ -395,7 +395,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
             autofocus: true,
             keyboardType: TextInputType.url,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
+            decoration: const InputDecoration(hintText: 'https://'),
             onSubmitted: (_) => submit(),
           ),
           actions: const [

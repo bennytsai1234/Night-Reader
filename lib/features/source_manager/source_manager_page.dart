@@ -881,7 +881,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         },
         content: AlertTextField(
           controller: fields.single,
-          hintText: isUrl ? '請輸入 URL' : '請貼上 JSON',
+          hintText: isUrl ? 'https://' : null,
           errorText: inputError,
           maxLines: 5,
           onChanged: (_) {

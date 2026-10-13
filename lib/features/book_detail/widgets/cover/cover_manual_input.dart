@@ -41,7 +41,7 @@ class CoverManualInput extends StatelessWidget {
                 color: AppChrome.of(context).groupedSurface,
                 child: GroupedTextFieldRow(
                   controller: urlController,
-                  hintText: '輸入封面 URL',
+                  hintText: 'https://',
                   keyboardType: TextInputType.url,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(context),

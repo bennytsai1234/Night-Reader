@@ -219,7 +219,6 @@ class SourceGroupManagePage extends StatelessWidget {
         content: AlertTextField(
           controller: fields.single,
           autofocus: true,
-          hintText: '輸入分組名稱',
           errorText: inputError,
           onChanged: (_) {
             if (inputError != null) {
