@@ -57,14 +57,26 @@ class BookshelfCheckMark extends StatelessWidget {
   }
 }
 
-/// 書架檢查後封面右上角的結果：有新章節是主色小膠囊「+N」，檢查失敗是
-/// 紅色小圓「!」。結果清掉時淡出。
+/// 書架檢查後封面右上角的結果：有新章節是淺綠小膠囊「+N」，檢查失敗是
+/// 淺紅小圓「!」。結果清掉時淡出。
+///
+/// 兩色取現有色票裡的淺綠 [AppPalette.mossDark] 與淺紅
+/// [AppPalette.rustDark]，淺色與深色模式共用，配墨色字（8.6:1、7.3:1）。
+/// 封面可能很淺，所以加一圈淡墨髮絲線分出邊緣。
 class BookshelfUpdateBadge extends StatelessWidget {
   const BookshelfUpdateBadge({super.key, required this.result});
 
   static const double height = 16;
+  static const Color newChaptersColor = AppPalette.mossDark;
+  static const Color failedColor = AppPalette.rustDark;
+  static const Color _textColor = AppPalette.ink700;
 
   final BookUpdateCheckResult? result;
+
+  static final Border _edge = Border.all(
+    color: AppPalette.ink700.withValues(alpha: 0.25),
+    width: 0.5,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -76,13 +88,12 @@ class BookshelfUpdateBadge extends StatelessWidget {
       child: result == null
           ? const SizedBox.shrink(key: ValueKey('no-badge'))
           : result.failed
-          ? _failed(context)
-          : _newChapters(context, result.newChapterCount),
+          ? _failed()
+          : _newChapters(result.newChapterCount),
     );
   }
 
-  Widget _newChapters(BuildContext context, int count) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget _newChapters(int count) {
     return Semantics(
       key: ValueKey('new-$count'),
       label: '有 $count 個新章節',
@@ -92,16 +103,16 @@ class BookshelfUpdateBadge extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: scheme.primary,
+            color: newChaptersColor,
             borderRadius: AppRadius.pillShape,
-            border: Border.all(color: AppPalette.paper50, width: 1),
+            border: _edge,
           ),
           child: Text(
             '+$count',
             style: AppTextStyles.micro.copyWith(
               height: 1,
               fontWeight: FontWeight.w600,
-              color: scheme.onPrimary,
+              color: _textColor,
             ),
           ),
         ),
@@ -109,8 +120,7 @@ class BookshelfUpdateBadge extends StatelessWidget {
     );
   }
 
-  Widget _failed(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+  Widget _failed() {
     return Semantics(
       key: const ValueKey('failed'),
       label: '檢查更新失敗',
@@ -121,15 +131,15 @@ class BookshelfUpdateBadge extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: dark ? AppPalette.rustDark : AppPalette.rust,
-            border: Border.all(color: AppPalette.paper50, width: 1),
+            color: failedColor,
+            border: _edge,
           ),
           child: Text(
             '!',
             style: AppTextStyles.micro.copyWith(
               height: 1,
               fontWeight: FontWeight.w700,
-              color: dark ? AppPalette.ink700 : AppPalette.paper50,
+              color: _textColor,
             ),
           ),
         ),

@@ -69,4 +69,23 @@ void main() {
     );
     expect(find.text('+3'), findsNothing);
   });
+
+  testWidgets('+N is light green and ! is light red, both with ink text', (
+    tester,
+  ) async {
+    Color fillOf(String text) {
+      final box = tester.widget<Container>(
+        find.ancestor(of: find.text(text), matching: find.byType(Container)),
+      );
+      return (box.decoration! as BoxDecoration).color!;
+    }
+
+    await tester.pumpWidget(host(BookshelfUpdateBadge(result: newChapters)));
+    expect(fillOf('+3'), AppPalette.mossDark);
+
+    await tester.pumpWidget(host(BookshelfUpdateBadge(result: failed)));
+    await tester.pumpAndSettle();
+    expect(fillOf('!'), AppPalette.rustDark);
+    expect(tester.widget<Text>(find.text('!')).style?.color, AppPalette.ink700);
+  });
 }

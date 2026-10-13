@@ -315,7 +315,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     // 下拉在背景檢查更新：不轉圈，檢查期間不會重複觸發；結果只在書卡角標
     // 上顯示 5 秒。
     return RefreshIndicator.noSpinner(
-      onRefresh: provider.refreshBookshelf,
+      onRefresh: () => provider.refreshBookshelf(userInitiated: true),
       child: provider.isGridView
           ? _buildGridView(provider, insets.top, bottom)
           : _buildListView(provider, insets.top, bottom),
