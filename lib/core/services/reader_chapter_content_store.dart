@@ -65,7 +65,7 @@ class ReaderChapterContentStore {
   }) async {
     if (content.isEmpty) return;
     if (saveChapterMetadata) {
-      await chapterDao.insertChapters(<BookChapter>[chapter]);
+      await chapterDao.updateFetchedChapter(chapter);
     }
 
     await contentDao.saveContent(
@@ -87,7 +87,7 @@ class ReaderChapterContentStore {
   }) async {
     if (message.isEmpty) return;
     if (saveChapterMetadata) {
-      await chapterDao.insertChapters(<BookChapter>[chapter]);
+      await chapterDao.updateFetchedChapter(chapter);
     }
 
     await contentDao.saveFailure(
