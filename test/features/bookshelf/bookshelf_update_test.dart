@@ -318,6 +318,20 @@ void main() {
       expect(downloads, [(book.bookUrl, true)]);
     });
 
+    test('checks of the same book at the same time share one run', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+
+      // 例如開 App 的檢查還在跑，使用者又對這本按了「檢查更新」。
+      final results = await Future.wait([
+        provider.checkBookUpdate(book),
+        provider.checkBookUpdate(book),
+      ]);
+
+      expect(results.map((r) => r.newChapterCount), [1, 1]);
+      expect(downloads, [(book.bookUrl, true)]);
+    });
+
     test('a failed check queues no download', () async {
       final book = shelfBook('https://a.example/1');
       await bookDao.upsert(book);

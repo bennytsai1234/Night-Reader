@@ -156,10 +156,23 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     super.dispose();
   }
 
+  /// 正在檢查的書。下拉、開 App 的檢查和明確按「檢查更新」可能同時查到
+  /// 同一本：後到的接上同一次，不重發請求，也不會因為先到的那次已寫入新
+  /// 目錄，就把新章節數算成 0。
+  final Map<String, Future<BookUpdateCheckResult>> _checking = {};
+
   /// 抓書源上的詳情與目錄寫回這本書。網路請求期間使用者可能在讀這本書、
   /// 改了設定或把它移出書架，所以寫回時以資料庫裡最新的一筆為準，只換掉
   /// 書源給的欄位。
-  Future<BookUpdateCheckResult> checkBookUpdate(Book book) async {
+  Future<BookUpdateCheckResult> checkBookUpdate(Book book) {
+    // 不能寫成 `=> _checking.remove(...)`：remove 回傳的就是這個 Future，
+    // whenComplete 會等它，變成自己等自己。
+    return _checking[book.bookUrl] ??= _checkBookUpdate(book).whenComplete(() {
+      _checking.remove(book.bookUrl);
+    });
+  }
+
+  Future<BookUpdateCheckResult> _checkBookUpdate(Book book) async {
     if (book.isLocal) {
       return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
     }
