@@ -45,7 +45,14 @@ class BookDetailPage extends StatefulWidget {
   State<BookDetailPage> createState() => _BookDetailPageState();
 }
 
-enum _MenuAction { checkUpdate, download, changeCover, export, edit }
+enum _MenuAction {
+  checkUpdate,
+  autoUpdate,
+  download,
+  changeCover,
+  export,
+  edit,
+}
 
 class _BookDetailPageState extends State<BookDetailPage> {
   final ScrollController _scrollController = ScrollController();
@@ -288,6 +295,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 icon: Icons.update_rounded,
                 enabled: !provider.isCheckingUpdate,
               ),
+            if (!provider.book.isLocal && provider.isInBookshelf)
+              GlassMenuItem(
+                value: _MenuAction.autoUpdate,
+                label: '自動檢查更新',
+                icon: Icons.autorenew_rounded,
+                checked: provider.book.canUpdate,
+              ),
             if (!provider.book.isLocal)
               const GlassMenuItem(
                 value: _MenuAction.download,
@@ -326,6 +340,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
     switch (action) {
       case _MenuAction.checkUpdate:
         await _handleCheckUpdate(context, provider);
+      case _MenuAction.autoUpdate:
+        final result = await provider.setCanUpdate(!provider.book.canUpdate);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(result.message)));
       case _MenuAction.download:
         unawaited(_showDownloadSheet(context, provider));
       case _MenuAction.export:

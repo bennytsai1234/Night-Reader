@@ -656,6 +656,22 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 這本書是否參與下拉與啟動時的書架更新；明確按「檢查更新」時照查。
+  Future<BookDetailOperationResult> setCanUpdate(bool value) async {
+    try {
+      await _bookDao.updateCanUpdate(_book.bookUrl, value);
+      _book.canUpdate = value;
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      notifyListeners();
+      return BookDetailOperationResult.success(
+        value ? '這本書恢復自動檢查更新' : '這本書不再自動檢查更新',
+      );
+    } catch (error) {
+      AppLog.e('設定自動檢查更新失敗: $error', error: error);
+      return BookDetailOperationResult.failure('設定失敗: $error');
+    }
+  }
+
   Future<BookDetailOperationResult> updateCover(String url) async {
     final next = Book.fromJson(Map<String, dynamic>.from(_book.toJson()));
     next.customCoverUrl = url.trim();

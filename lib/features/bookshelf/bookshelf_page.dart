@@ -39,7 +39,14 @@ enum _ShelfMenuAction {
 }
 
 /// 長按書籍的情境選單項目。
-enum _BookMenuAction { detail, select, checkUpdate, download, remove }
+enum _BookMenuAction {
+  detail,
+  select,
+  checkUpdate,
+  autoUpdate,
+  download,
+  remove,
+}
 
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
@@ -748,6 +755,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
             enabled: !busy,
           ),
           GlassMenuItem(
+            value: _BookMenuAction.autoUpdate,
+            label: '自動檢查更新',
+            icon: Icons.autorenew_rounded,
+            checked: book.canUpdate,
+          ),
+          GlassMenuItem(
             value: _BookMenuAction.download,
             label: '下載',
             icon: Icons.download_outlined,
@@ -771,6 +784,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
         _enterEditMode(book);
       case _BookMenuAction.checkUpdate:
         await _checkUpdateOne(provider, book);
+      case _BookMenuAction.autoUpdate:
+        await _toggleAutoUpdate(provider, book);
       case _BookMenuAction.download:
         await _downloadOne(provider, book);
       case _BookMenuAction.remove:
@@ -809,6 +824,24 @@ class _BookshelfPageState extends State<BookshelfPage> {
       messenger.showSnackBar(SnackBar(content: Text('檢查更新失敗: $e')));
     } finally {
       _singleBookBusy.remove(book.bookUrl);
+    }
+  }
+
+  Future<void> _toggleAutoUpdate(BookshelfProvider provider, Book book) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final name = context.zh(book.name);
+    final enable = !book.canUpdate;
+    try {
+      await provider.setBookCanUpdate(book, enable);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(enable ? '《$name》恢復自動檢查更新' : '《$name》不再自動檢查更新'),
+          ),
+        );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('設定失敗: $e')));
     }
   }
 

@@ -98,6 +98,20 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     );
   }
 
+  /// 只改「是否參與書架更新」；其他欄位（閱讀進度等）不跟著被舊資料覆寫。
+  Future<void> updateCanUpdate(String bookUrl, bool canUpdate) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(canUpdate: Value(canUpdate)),
+    );
+  }
+
+  /// 只記下檢查時間；書已不在資料庫時不會再寫回一筆。
+  Future<void> updateLastCheckTime(String bookUrl, int lastCheckTime) {
+    return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
+      BooksCompanion(lastCheckTime: Value(lastCheckTime)),
+    );
+  }
+
   double _normalizeVisualOffsetPx(double value) {
     if (!value.isFinite || value.isNaN) return 0.0;
     return value.clamp(-120.0, 120.0).toDouble();

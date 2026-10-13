@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -10,6 +11,7 @@ import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 
 import 'tts_settings_page.dart';
 import 'data_privacy_settings_page.dart';
@@ -75,6 +77,18 @@ class SettingsPage extends StatelessWidget {
                 ),
                 title: '背景下載佇列',
                 onTap: () => _push(context, const DownloadManagerPage()),
+              ),
+              GroupedSwitchRow(
+                leading: const GroupedIconTile(
+                  Icons.update_rounded,
+                  tint: AppTint.azurite,
+                ),
+                title: '啟動時檢查書架更新',
+                subtitle: '開 App 時在背景檢查新章節',
+                value: context.select<SettingsProvider, bool>(
+                  (settings) => settings.autoRefresh,
+                ),
+                onChanged: context.read<SettingsProvider>().setAutoRefresh,
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

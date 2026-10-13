@@ -7,6 +7,9 @@ class AppConfig {
   /// 淨化替換規則預設開關（對應 SettingsProvider.replaceEnableDefault）
   static bool replaceEnableDefault = true;
 
+  /// 開 App 時在背景檢查書架更新（對應 SettingsProvider.autoRefresh）
+  static bool autoRefresh = true;
+
   /// 閱讀器翻頁動畫預設（對應 ReaderSettingsMixin.pageTurnMode）
   /// 0 = 滑動, 1 = 滾動
   static int readerPageAnim = 0;
