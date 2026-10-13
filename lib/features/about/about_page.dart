@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
+import 'release_notes_page.dart';
 import 'update_check_runner.dart';
 
 class AboutPage extends StatefulWidget {
@@ -150,6 +151,17 @@ class _AboutPageState extends State<AboutPage> {
                     : null,
                 showChevron: !_checkingUpdate,
                 onTap: _checkUpdate,
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.history_rounded,
+                  tint: AppTint.ink,
+                ),
+                title: '更新紀錄',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
+                ),
               ),
               GroupedSwitchRow(
                 leading: const GroupedIconTile(

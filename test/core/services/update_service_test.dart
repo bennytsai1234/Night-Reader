@@ -127,4 +127,53 @@ void main() {
       expect(info, isNull);
     });
   });
+
+  group('fetchReleaseNotes', () {
+    final api = _ReleaseApi(
+      latest: _release('v0.3.3'),
+      list: [
+        _release('v0.3.5-beta.9', draft: true),
+        {
+          ..._release('v0.3.4-beta.4', prerelease: true, apk: false),
+          'body': '## What\'s Changed\n* fix(reader): keep place by @a in x',
+          'published_at': '2026-10-01T08:00:00Z',
+        },
+        _release('v0.3.4-beta.3', prerelease: true),
+        {..._release('v0.3.3'), 'published_at': '2026-09-20T08:00:00Z'},
+        _release('v0.3.2'),
+      ],
+    );
+
+    setUp(api.paths.clear);
+
+    test('stable channel lists releases only, newest first', () async {
+      final notes = await _service(api, '0.3.3').fetchReleaseNotes();
+
+      expect(notes.map((note) => note.versionName), ['0.3.3', '0.3.2']);
+      expect(notes.map((note) => note.isCurrent), [true, false]);
+      expect(notes.first.publishedAt, DateTime.utc(2026, 9, 20, 8).toLocal());
+      expect(notes.last.publishedAt, isNull);
+      expect(api.paths.single, endsWith('/releases'));
+    });
+
+    test('beta channel adds betas but never drafts', () async {
+      final notes = await _service(
+        api,
+        '0.3.4-beta.4',
+      ).fetchReleaseNotes(includeBeta: true);
+
+      // 沒附 APK 的版本也列出：更新紀錄只看說明，不看能不能安裝。
+      expect(notes.map((note) => note.versionName), [
+        '0.3.4-beta.4',
+        '0.3.4-beta.3',
+        '0.3.3',
+        '0.3.2',
+      ]);
+      expect(notes.first.isCurrent, isTrue);
+      expect(
+        releaseNotesForDisplay(notes.first.body),
+        '• fix(reader): keep place',
+      );
+    });
+  });
 }
