@@ -124,8 +124,7 @@ final class HybridScrollView extends StatelessWidget {
 /// 新放行 block 由 [DocumentIndex.revision] → render 層 markNeedsLayout
 /// 直接材料化，不需要 setState 重建整棵滾動子樹（fling 幀 build 歸零）。
 /// [RenderCachedBlock] 自己就是 repaint boundary（每個段落一層，滾動時只移動
-/// 圖層、不重跑 paint；見 `docs/research/flutter-rasterization.md`），所以不再
-/// 額外包 RepaintBoundary / AutomaticKeepAlive。
+/// 圖層、不重跑 paint），所以不再額外包 RepaintBoundary / AutomaticKeepAlive。
 final class HybridSliverChildDelegate extends SliverChildDelegate {
   const HybridSliverChildDelegate({
     required this.documentIndex,
