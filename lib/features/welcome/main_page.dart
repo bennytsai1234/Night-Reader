@@ -270,9 +270,27 @@ class _MainPageState extends State<MainPage> {
         ? Duration.zero
         : _splashMinDisplay - DateTime.now().difference(heldAt);
     if (remaining > Duration.zero) {
-      Future<void>.delayed(remaining, FlutterNativeSplash.remove);
+      Future<void>.delayed(remaining, _onShelfShown);
     } else {
-      FlutterNativeSplash.remove();
+      _onShelfShown();
+    }
+  }
+
+  /// 啟動畫面收起、書架露出後才在背景檢查書架更新，不和首幀與書架載入搶
+  /// 時間；跟下拉一樣不轉圈、不提示。
+  void _onShelfShown() {
+    FlutterNativeSplash.remove();
+    if (!mounted) return;
+    final shelf = context.read<BookshelfProvider?>();
+    if (shelf == null) return;
+    unawaited(_runAutomaticShelfRefresh(shelf));
+  }
+
+  Future<void> _runAutomaticShelfRefresh(BookshelfProvider shelf) async {
+    try {
+      await shelf.refreshBookshelfOnLaunch();
+    } catch (e, stack) {
+      AppLog.e('Bookshelf refresh failed: $e', error: e, stackTrace: stack);
     }
   }
 

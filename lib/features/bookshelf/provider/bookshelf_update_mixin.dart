@@ -1,3 +1,5 @@
+import 'package:pool/pool.dart';
+import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -40,33 +42,53 @@ class BookUpdateCheckResult {
 
 /// BookshelfProvider 的更新與網絡同步邏輯擴展
 mixin BookshelfUpdateMixin on BookshelfProviderBase {
-  Future<void> refreshBookshelf() async {
-    final onlineBooks = books.where((b) => !b.isLocal).toList();
-    if (onlineBooks.isEmpty) return;
+  /// 書架更新同時檢查的書數，與目錄多頁抓取的並行數（4）相同：書架上
+  /// 幾十本書不會一起發請求、一起在 UI isolate 上解析目錄。
+  static const int _refreshConcurrency = 4;
+
+  Future<void>? _refreshing;
+
+  /// 開 App 後的背景檢查；「啟動時檢查書架更新」關掉時不跑。
+  Future<void> refreshBookshelfOnLaunch() async {
+    if (!AppConfig.autoRefresh) return;
+    await refreshBookshelf();
+  }
+
+  /// 下拉與啟動時的書架更新：只在背景檢查，不改 [updatingCount]（那是多選
+  /// 檢查的進度）。略過本地書與使用者關掉「自動檢查更新」的書；已在檢查時
+  /// 沿用同一次，不重複發請求。
+  Future<void> refreshBookshelf() {
+    return _refreshing ??= _refreshAll().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _refreshAll() async {
+    // 從資料庫讀：啟動時書架可能還沒載入完，記憶體裡的清單也可能是舊的。
+    final targets = (await bookDao.getInBookshelf())
+        .where((book) => !book.isLocal && book.canUpdate)
+        .toList();
+    if (targets.isEmpty) return;
 
     AppEventBus().fire(AppEvent('bookshelfRefreshStart'));
-    var completed = 0;
-    final updateTasks = <Future<void>>[];
-
-    for (var book in onlineBooks) {
-      updateTasks.add(
-        Future(() async {
-          try {
-            await checkBookUpdate(book);
-          } catch (_) {}
-          completed++;
-          updatingCount = onlineBooks.length - completed;
-          notifyListeners();
-        }),
-      );
+    final pool = Pool(_refreshConcurrency);
+    try {
+      await Future.wait([
+        for (final book in targets)
+          pool.withResource(() async {
+            try {
+              await checkBookUpdate(book);
+            } catch (_) {}
+          }),
+      ]);
+    } finally {
+      await pool.close();
     }
-
-    await Future.wait(updateTasks);
-    updatingCount = 0;
     await loadBooks();
     AppEventBus().fire(AppEvent('bookshelfRefreshEnd'));
   }
 
+  /// 抓書源上的詳情與目錄寫回這本書。網路請求期間使用者可能在讀這本書、
+  /// 改了設定或把它移出書架，所以寫回時以資料庫裡最新的一筆為準，只換掉
+  /// 書源給的欄位。
   Future<BookUpdateCheckResult> checkBookUpdate(Book book) async {
     if (book.isLocal) {
       return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
@@ -91,44 +113,58 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         chapters[i].bookUrl = book.bookUrl;
       }
 
-      final oldTotal = book.totalChapterNum > 0
-          ? book.totalChapterNum
-          : chapters.length;
-      final newCount = chapters.length > oldTotal
-          ? chapters.length - oldTotal
-          : 0;
-      info.isInBookshelf = true;
-      info.group = book.group;
-      info.order = book.order;
-      info.syncTime = book.syncTime;
-      info.chapterIndex = book.chapterIndex;
-      info.charOffset = book.charOffset;
-      info.visualOffsetPx = book.visualOffsetPx;
-      info.durChapterTitle = book.durChapterTitle;
-      info.durChapterTime = book.durChapterTime;
-      info.readerAnchorJson = book.readerAnchorJson;
-      info.canUpdate = book.canUpdate;
-      info.lastCheckTime = checkedAt;
-      info.lastCheckCount = newCount;
-      info.totalChapterNum = chapters.length;
-      if (chapters.isNotEmpty) {
-        info.latestChapterTitle = chapters.last.title;
-        if (newCount > 0) {
-          info.latestChapterTime = checkedAt;
+      final newCount = await bookDao.transaction(() async {
+        final current = await bookDao.getByUrl(book.bookUrl);
+        // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。
+        if (current == null ||
+            !current.isInBookshelf ||
+            current.origin != book.origin) {
+          return 0;
         }
-      }
-      await bookDao.upsert(info);
-      if (chapters.isNotEmpty) {
-        await chapterDao.insertChapters(chapters);
-      }
+        final oldTotal = current.totalChapterNum > 0
+            ? current.totalChapterNum
+            : chapters.length;
+        final newCount = chapters.length > oldTotal
+            ? chapters.length - oldTotal
+            : 0;
+        info.isInBookshelf = true;
+        info.group = current.group;
+        info.order = current.order;
+        info.syncTime = current.syncTime;
+        info.chapterIndex = current.chapterIndex;
+        info.charOffset = current.charOffset;
+        info.visualOffsetPx = current.visualOffsetPx;
+        info.durChapterTitle = current.durChapterTitle;
+        info.durChapterTime = current.durChapterTime;
+        info.readerAnchorJson = current.readerAnchorJson;
+        info.canUpdate = current.canUpdate;
+        info.customCoverUrl = current.customCoverUrl;
+        info.customCoverLocalPath = current.customCoverLocalPath;
+        info.customIntro = current.customIntro;
+        info.customTag = current.customTag;
+        info.readConfig = current.readConfig;
+        info.lastCheckTime = checkedAt;
+        info.lastCheckCount = newCount;
+        info.totalChapterNum = chapters.length;
+        if (chapters.isNotEmpty) {
+          info.latestChapterTitle = chapters.last.title;
+          if (newCount > 0) {
+            info.latestChapterTime = checkedAt;
+          }
+        }
+        await bookDao.upsert(info);
+        if (chapters.isNotEmpty) {
+          await chapterDao.insertChapters(chapters);
+        }
+        return newCount;
+      });
       return BookUpdateCheckResult(
         bookUrl: book.bookUrl,
         newChapterCount: newCount,
       );
     } catch (e) {
       AppLog.w('檢查書籍更新失敗 ${book.name}: $e');
-      book.lastCheckTime = checkedAt;
-      await bookDao.upsert(book);
+      await bookDao.updateLastCheckTime(book.bookUrl, checkedAt);
       return BookUpdateCheckResult(
         bookUrl: book.bookUrl,
         newChapterCount: 0,
@@ -137,6 +173,14 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
     }
   }
 
+  /// 這本書是否參與下拉與啟動時的書架更新；明確對它按「檢查更新」時照查。
+  Future<void> setBookCanUpdate(Book book, bool value) async {
+    await bookDao.updateCanUpdate(book.bookUrl, value);
+    book.canUpdate = value;
+    notifyListeners();
+  }
+
+  /// 明確選了這些書才檢查，所以不看 [Book.canUpdate]。
   Future<List<BookUpdateCheckResult>> batchCheckUpdate(Set<String> urls) async {
     final selected = await _booksForUrls(urls);
     final results = <BookUpdateCheckResult>[];

@@ -105,6 +105,13 @@ class SettingsProvider extends SettingsProviderBase {
     update();
   }
 
+  void setAutoRefresh(bool v) {
+    autoRefresh = v;
+    AppConfig.autoRefresh = v;
+    save(PreferKey.autoRefresh, v);
+    update();
+  }
+
   SettingsProvider() {
     _loadFromPrefs(getIt<SharedPreferences>());
     unawaited(_migrateLegacySettings());
@@ -152,6 +159,7 @@ class SettingsProvider extends SettingsProviderBase {
     optimizeRender = prefs.getBool(PreferKey.optimizeRender) ?? false;
     expandTextMenu = prefs.getBool(PreferKey.expandTextMenu) ?? false;
     autoRefresh = prefs.getBool(PreferKey.autoRefresh) ?? true;
+    AppConfig.autoRefresh = autoRefresh;
     defaultToRead = prefs.getBool(PreferKey.defaultToRead) ?? false;
     replaceEnableDefault =
         prefs.getBool(PreferKey.replaceEnableDefault) ?? true;
