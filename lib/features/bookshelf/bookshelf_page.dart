@@ -370,16 +370,12 @@ class _BookshelfPageState extends State<BookshelfPage>
         duration: animate ? AppMotion.fade : Duration.zero,
         switchInCurve: AppMotion.fadeCurve,
         switchOutCurve: AppMotion.fadeCurve,
-        // 淡出中的舊版面和新版面帶著同一批封面 Hero tag，換頁時會重複；
-        // 舊版面也不該再接點擊或被讀屏念到。
+        // 淡出中的舊版面不該再接點擊或被讀屏念到。
         layoutBuilder: (current, previous) => Stack(
           fit: StackFit.expand,
           children: [
             for (final child in previous)
-              HeroMode(
-                enabled: false,
-                child: IgnorePointer(child: ExcludeSemantics(child: child)),
-              ),
+              IgnorePointer(child: ExcludeSemantics(child: child)),
             ?current,
           ],
         ),
@@ -826,7 +822,7 @@ class _BookshelfPageState extends State<BookshelfPage>
             height: sourceRect.height,
             borderRadius: AppRadius.cardXs,
           )
-        : BookshelfListCard(book: book, hero: false);
+        : BookshelfListCard(book: book);
     final action = await showContextPreviewMenu<_BookMenuAction>(
       context: context,
       sourceRect: sourceRect,
@@ -986,15 +982,7 @@ class _BookshelfPageState extends State<BookshelfPage>
   void _openDetail(Book book) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => BookDetailPage(
-          book: book,
-          coverHeroTag: BookCoverWidget.heroTag(
-            BookCoverHeroScope.bookshelf,
-            book.bookUrl,
-          ),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
     );
   }
 
