@@ -148,28 +148,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
           return searchPool.withResource(() async {
             if (!_isSearchActive(searchId)) return;
 
-            final cancelToken = CancelToken();
-            _activeSearchTokens.add(cancelToken);
             try {
               final shouldCheckAuthor =
                   checkAuthor && book.author.trim().isNotEmpty;
-              final results =
-                  await _searchNames(
-                    source,
-                    names,
-                    (name, author) => _isSameBook(
-                      name,
-                      author,
-                      checkAuthor: shouldCheckAuthor,
-                    ),
-                    cancelToken,
-                  ).timeout(
-                    _sourceSearchTimeout,
-                    onTimeout: () {
-                      cancelToken.cancel('換源搜尋逾時');
-                      throw TimeoutException('換源搜尋逾時');
-                    },
-                  );
+              final results = await _searchNames(
+                source,
+                names,
+                (name, author) =>
+                    _isSameBook(name, author, checkAuthor: shouldCheckAuthor),
+              );
               if (!_isSearchActive(searchId)) return;
               _replaceSourceResults(source.bookSourceUrl, results);
             } catch (_) {
@@ -181,7 +168,6 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
                 );
               }
             } finally {
-              _activeSearchTokens.remove(cancelToken);
               if (_isSearchActive(searchId)) {
                 completedSources++;
                 _updateSearchingStatus(completedSources, enabledSources.length);
@@ -215,17 +201,19 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     }
   }
 
-  /// 每種書名各搜一次，合起來；全部失敗才算這個書源失敗。
+  /// 每種書名各搜一次、各自計時，合起來；全部失敗或逾時才算這個書源失敗，
+  /// 一種寫法卡住不會丟掉另一種已經找到的結果。
   Future<List<SearchBook>> _searchNames(
     BookSource source,
     List<String> names,
     bool Function(String name, String author) filter,
-    CancelToken cancelToken,
   ) async {
     (Object, StackTrace)? firstError;
-    final found = await Future.wait([
-      for (final name in names)
-        service
+    Future<List<SearchBook>?> searchName(String name) async {
+      final cancelToken = CancelToken();
+      _activeSearchTokens.add(cancelToken);
+      try {
+        return await service
             .searchBooks(
               source,
               name,
@@ -233,13 +221,23 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               shouldBreak: (size) => size >= 1,
               cancelToken: cancelToken,
             )
-            .then<List<SearchBook>?>(
-              (books) => books,
-              onError: (Object error, StackTrace stackTrace) {
-                firstError ??= (error, stackTrace);
-                return null;
+            .timeout(
+              _sourceSearchTimeout,
+              onTimeout: () {
+                cancelToken.cancel('換源搜尋逾時');
+                throw TimeoutException('換源搜尋逾時');
               },
-            ),
+            );
+      } catch (error, stackTrace) {
+        firstError ??= (error, stackTrace);
+        return null;
+      } finally {
+        _activeSearchTokens.remove(cancelToken);
+      }
+    }
+
+    final found = await Future.wait([
+      for (final name in names) searchName(name),
     ]);
     final succeeded = found.nonNulls;
     if (succeeded.isEmpty) {

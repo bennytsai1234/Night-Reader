@@ -82,11 +82,8 @@ extension BookLogic on Book {
       oldTotalCount: oldToc.length,
       newChapters: toc,
     );
-    // 只是換了網址（例如書源搬家），同一個位置還是同名的章。
-    if (alignedIndex == chapterIndex &&
-        toc[alignedIndex].title == oldChapter.title) {
-      return false;
-    }
+    // 同名不代表正文相同（例如書源搬家後改了內容），所以即使落在同一個
+    // 序號，章內位置也照錨點決定。
     final anchor = _migratedReaderAnchor(alignedIndex);
     if (anchor == null) {
       charOffset = 0;

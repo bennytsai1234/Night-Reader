@@ -538,6 +538,54 @@ void main() {
       expect(saved.totalChapterNum, 5);
     });
 
+    test('progress follows a kept chapter that moved down', () async {
+      final book = onlineBook()..totalChapterNum = 3;
+      await bookDao.upsert(book);
+      await storeToc(book, [
+        ('/c/2.html', '第二章'),
+        ('/c/extra.html', '番外'),
+        ('/c/3.html', '第三章'),
+      ]);
+      await bookDao.updateProgress(book.bookUrl, 1, '番外', 50);
+
+      await provider.checkBookUpdate(book);
+
+      final toc = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(toc.map((c) => c.title), ['第一章', '第二章', '番外', '第三章']);
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 2);
+      expect(saved.charOffset, 50);
+    });
+
+    test('a chapter at a new address with the same title and place starts '
+        'over unless the anchor binds its text', () async {
+      final book = onlineBook()..totalChapterNum = 3;
+      await bookDao.upsert(book);
+      await storeToc(book, [
+        ('/c/1.html', '第一章'),
+        ('/old/2.html', '第二章'),
+        ('/c/3.html', '第三章'),
+      ]);
+      await bookDao.updateProgress(book.bookUrl, 1, '第二章', 30);
+
+      await provider.checkBookUpdate(book);
+
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 1);
+      expect(saved.charOffset, 0);
+    });
+
+    test('the first chapter at a new address is found by title', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+      await storeToc(book, [('/old/2.html', '第二章'), ('/c/3.html', '第三章')]);
+      await bookDao.updateProgress(book.bookUrl, 0, '第二章', 0);
+
+      await provider.checkBookUpdate(book);
+
+      expect((await bookDao.getByUrl(book.bookUrl))!.chapterIndex, 1);
+    });
+
     test('a downloaded chapter that only moved to a new address is not '
         'listed twice', () async {
       final book = onlineBook();

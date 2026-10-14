@@ -71,8 +71,11 @@ List<BookChapter> keepDroppedChapters({
         fetchedTitles.contains(ChineseUtils.t2s(chapter.title))) {
       continue;
     }
+    // 複製一份：呼叫端會重編序號，[oldToc] 要留著對進度。
     final anchor = lastKeptUrl;
-    (anchor == null ? front : after.putIfAbsent(anchor, () => [])).add(chapter);
+    (anchor == null ? front : after.putIfAbsent(anchor, () => [])).add(
+      chapter.copyWith(),
+    );
   }
   if (front.isEmpty && after.isEmpty) return fetched;
   return [

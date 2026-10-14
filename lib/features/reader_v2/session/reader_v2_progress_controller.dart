@@ -81,29 +81,32 @@ class ReaderV2ProgressController {
     // 閱讀器開著時，檢查更新可能已換上新目錄、章節重新編號（書源在中間
     // 插入或刪除章節）；閱讀器手上仍是開書時的目錄。寫進資料庫的序號依
     // 章節網址換成目前目錄的，下次開書才落在同一章。目錄裡已經沒有這一章
-    // 時照閱讀器的序號寫。
+    // 時照閱讀器的序號寫。查序號與寫進度在同一個交易裡，中間不會被換目錄。
     final chapter = repository.chapterAt(normalized.chapterIndex);
-    final storedIndex = chapter == null
-        ? null
-        : await repository.chapterDao.indexOfUrl(book.bookUrl, chapter.url);
-    final persistedIndex = storedIndex ?? normalized.chapterIndex;
     book.chapterIndex = normalized.chapterIndex;
     book.charOffset = normalized.charOffset;
     book.visualOffsetPx = normalized.visualOffsetPx;
     book.durChapterTitle = title;
     book.readerAnchorJson = anchorJson;
-    await bookDao.updateProgress(
-      book.bookUrl,
-      persistedIndex,
-      title,
-      normalized.charOffset,
-      visualOffsetPx: normalized.visualOffsetPx,
-      readerAnchorJson: persistedIndex == normalized.chapterIndex
-          ? anchorJson
-          : jsonEncode(
-              persisted.copyWith(chapterIndex: persistedIndex).toJson(),
-            ),
-    );
+    final chapterDao = repository.chapterDao;
+    await chapterDao.transaction(() async {
+      final storedIndex = chapter == null
+          ? null
+          : await chapterDao.indexOfUrl(book.bookUrl, chapter.url);
+      final persistedIndex = storedIndex ?? normalized.chapterIndex;
+      await bookDao.updateProgress(
+        book.bookUrl,
+        persistedIndex,
+        title,
+        normalized.charOffset,
+        visualOffsetPx: normalized.visualOffsetPx,
+        readerAnchorJson: persistedIndex == normalized.chapterIndex
+            ? anchorJson
+            : jsonEncode(
+                persisted.copyWith(chapterIndex: persistedIndex).toJson(),
+              ),
+      );
+    });
     // The DAO write is the commit point for "started reading". Keep the
     // in-memory model behind that boundary so a failed persistence cannot
     // create a second, contradictory truth.

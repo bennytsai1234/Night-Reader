@@ -68,19 +68,20 @@ class ReaderChapterContentStore {
     bool saveChapterMetadata = true,
   }) async {
     if (content.isEmpty) return;
-    if (saveChapterMetadata) {
-      await chapterDao.updateFetchedChapter(chapter);
-    }
-
-    await contentDao.saveContent(
-      contentKey: contentKeyFor(book: book, chapter: chapter),
-      origin: book.origin,
-      bookUrl: book.bookUrl,
-      chapterUrl: chapter.url,
-      chapterIndex: chapter.index,
-      content: content,
-      updatedAt: _now().millisecondsSinceEpoch,
-    );
+    await _unlessLocked(chapter, () async {
+      if (saveChapterMetadata) {
+        await chapterDao.updateFetchedChapter(chapter);
+      }
+      await contentDao.saveContent(
+        contentKey: contentKeyFor(book: book, chapter: chapter),
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: chapter.url,
+        chapterIndex: chapter.index,
+        content: content,
+        updatedAt: _now().millisecondsSinceEpoch,
+      );
+    });
   }
 
   Future<void> saveFailure({
@@ -90,19 +91,35 @@ class ReaderChapterContentStore {
     bool saveChapterMetadata = true,
   }) async {
     if (message.isEmpty) return;
-    if (saveChapterMetadata) {
-      await chapterDao.updateFetchedChapter(chapter);
-    }
+    await _unlessLocked(chapter, () async {
+      if (saveChapterMetadata) {
+        await chapterDao.updateFetchedChapter(chapter);
+      }
+      await contentDao.saveFailure(
+        contentKey: contentKeyFor(book: book, chapter: chapter),
+        origin: book.origin,
+        bookUrl: book.bookUrl,
+        chapterUrl: chapter.url,
+        chapterIndex: chapter.index,
+        message: message,
+        updatedAt: _now().millisecondsSinceEpoch,
+      );
+    });
+  }
 
-    await contentDao.saveFailure(
-      contentKey: contentKeyFor(book: book, chapter: chapter),
-      origin: book.origin,
-      bookUrl: book.bookUrl,
-      chapterUrl: chapter.url,
-      chapterIndex: chapter.index,
-      message: message,
-      updatedAt: _now().millisecondsSinceEpoch,
-    );
+  /// 付費還沒買的章節不存：網站回的是付費提示，買了之後還會重抓；之前
+  /// 免費時存的正文也不被它蓋掉。以資料庫目前的目錄為準，閱讀器與下載手上
+  /// 的章節可能是改付費之前的快照；判斷與寫入在同一個交易裡，中間不會被
+  /// 換目錄。
+  Future<void> _unlessLocked(
+    BookChapter chapter,
+    Future<void> Function() save,
+  ) {
+    return chapterDao.transaction(() async {
+      final current = await chapterDao.getByUrl(chapter.url);
+      if ((current ?? chapter).isLocked) return;
+      await save();
+    });
   }
 
   Future<void> clearChapter({

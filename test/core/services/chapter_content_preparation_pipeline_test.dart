@@ -76,9 +76,40 @@ void main() {
     );
   });
 
+  test('a snapshot from before the chapter turned paid neither stores the '
+      'notice nor unlocks the chapter', () async {
+    // 閱讀器或下載拿到的是免費時的快照；之後檢查更新把它標成付費。
+    final snapshot = lockedChapter()..isVip = false;
+    final chapterDao = ChapterDao(db);
+    await chapterDao.insertChapters([snapshot.copyWith()]);
+    await store.saveRawContent(
+      book: book,
+      chapter: snapshot,
+      content: '免費時的正文',
+    );
+    await chapterDao.insertChapters([lockedChapter()]);
+
+    final result = await pipeline.prepare(
+      chapterIndex: 0,
+      chapter: snapshot,
+      forceRefresh: true,
+    );
+
+    expect(result.content, '本章為付費章節，請訂閱後閱讀');
+    expect(
+      (await store.getContentEntry(book: book, chapter: snapshot))!.content,
+      '免費時的正文',
+    );
+    expect((await chapterDao.getByUrl(snapshot.url))!.isLocked, isTrue);
+  });
+
   test('content stored while the chapter was free is kept', () async {
     final chapter = lockedChapter();
-    await store.saveRawContent(book: book, chapter: chapter, content: '免費時的正文');
+    await store.saveRawContent(
+      book: book,
+      chapter: chapter.copyWith(isVip: false),
+      content: '免費時的正文',
+    );
 
     final reread = await pipeline.prepare(chapterIndex: 0, chapter: chapter);
     final refreshed = await pipeline.prepare(

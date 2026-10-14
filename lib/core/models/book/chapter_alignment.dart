@@ -7,7 +7,6 @@ int alignChapterIndex({
   required int oldTotalCount,
   required List<BookChapter> newChapters,
 }) {
-  if (oldIndex <= 0) return 0;
   if (newChapters.isEmpty) return oldIndex;
 
   final newSize = newChapters.length;

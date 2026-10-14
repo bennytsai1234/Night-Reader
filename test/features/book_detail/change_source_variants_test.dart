@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -43,6 +44,28 @@ class _SingleScriptSites extends BookSourceService {
         originName: origin,
       ),
     ];
+  }
+}
+
+/// 簡體站用簡體書名馬上找到，用繁體書名卻一直沒回應。
+class _HangsOnTraditionalName extends _SingleScriptSites {
+  @override
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) {
+    if (key == '劍來') return Completer<List<SearchBook>>().future;
+    return super.searchBooks(
+      source,
+      key,
+      filter: filter,
+      shouldBreak: shouldBreak,
+      cancelToken: cancelToken,
+    );
   }
 }
 
@@ -120,6 +143,27 @@ void main() {
     );
 
     expect(provider.allResults.map((r) => r.origin), [_twSite]);
+  });
+
+  test('one name timing out keeps what the other name found', () async {
+    final provider = BookDetailChangeSourceProvider(
+      Book(
+        bookUrl: '$_twSite/book',
+        origin: _twSite,
+        name: '劍來',
+        author: '烽火戲諸侯',
+      ),
+      service: _HangsOnTraditionalName(),
+      sourceDao: sourceDao,
+      searchBookDao: searchBookDao,
+      sourceSearchTimeout: const Duration(milliseconds: 30),
+      autoStart: false,
+    );
+    addTearDown(provider.dispose);
+
+    await provider.startSearch();
+
+    expect(provider.allResults.map((r) => r.origin), [_cnSite]);
   });
 
   test('switching to the other script keeps the chapter being read', () {
