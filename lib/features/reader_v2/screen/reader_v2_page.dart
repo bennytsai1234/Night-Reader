@@ -189,7 +189,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           controlsVisible: menu.controlsVisible,
           showReadTitleAddition: settings.showReadTitleAddition,
           hasVisibleContent: runtime != null && runtime.state.hasStableWorld,
-          isLoading: runtime == null || !runtime.state.hasStableWorld,
+          // 跳到別章時頁首頁尾跟正文一起收起，正文排好再淡入。
+          isLoading:
+              runtime == null ||
+              !runtime.state.hasStableWorld ||
+              runtime.isJumpingToAnotherChapter,
           chapterTitle: _chapterTitleAt(chapterIndex),
           chapterUrl: _chapterUrlAt(chapterIndex),
           originName: widget.book.originName,

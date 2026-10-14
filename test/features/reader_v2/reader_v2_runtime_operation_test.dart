@@ -287,6 +287,33 @@ void main() {
     },
   );
 
+  test('only a jump to another chapter counts as jumping chapters', () async {
+    final target = Completer<String?>();
+    final runtime = makeRuntime(
+      [chapter(0), chapter(1)],
+      contentLoader: (index, chapter) async =>
+          index == 1 ? target.future : chapter.content,
+    );
+    addTearDown(runtime.dispose);
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    await runtime.openBook();
+    expect(runtime.isJumpingToAnotherChapter, isFalse);
+
+    final sameChapter = runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 2),
+    );
+    expect(runtime.stateMachine.currentOperation, isNotNull);
+    expect(runtime.isJumpingToAnotherChapter, isFalse);
+    await sameChapter;
+
+    final jump = runtime.jumpToChapter(1);
+    expect(runtime.isJumpingToAnotherChapter, isTrue);
+    target.complete(chapter(1).content);
+    await jump;
+    expect(runtime.isJumpingToAnotherChapter, isFalse);
+    expect(runtime.state.visibleLocation.chapterIndex, 1);
+  });
+
   test(
     'target content unavailable leaves the existing Reader world intact',
     () async {
