@@ -62,6 +62,9 @@ class SearchBook implements RuleDataInterface {
     final card = representative._cloneForCard();
     for (final book in group) {
       card.addOrigin(book.origin, name: book.originName);
+      // 缺作者的來源被選成代表時，作者也從其他來源補：卡片的身分（書名＋
+      // 作者，見 searchResultIdentity）跟著分組，不會因為換代表就變成另一本。
+      card.author = _filled(card.author) ?? book.author;
       card.coverUrl = _filled(card.coverUrl) ?? book.coverUrl;
       card.intro = _filled(card.intro) ?? book.intro;
       card.kind = _filled(card.kind) ?? book.kind;

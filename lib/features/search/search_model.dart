@@ -19,14 +19,12 @@ import 'models/search_scope.dart';
 /// 繁體站與簡體站回傳的同一本書才會併成一張、照同樣的相關度排。
 String normalizeSearchText(String? value) {
   if (value == null || value.isEmpty) return '';
-  return _normalizedText.putIfAbsent(
-    value,
-    () => ChineseUtils.t2s(
-      StringUtils.fullToHalf(value)
-          .replaceAll(RegExp(r'\s+'), '')
-          .toLowerCase(),
-    ),
+  String normalize() => ChineseUtils.t2s(
+    StringUtils.fullToHalf(value).replaceAll(RegExp(r'\s+'), '').toLowerCase(),
   );
+  // 繁簡字典還沒載入時 t2s 原樣返回，這時的結果不記下來，載入後重算。
+  if (!ChineseUtils.isInitialized) return normalize();
+  return _normalizedText.putIfAbsent(value, normalize);
 }
 
 /// 繁簡轉換一個書名要十幾微秒，合併每次重算都會對整份結果再做一次，所以把
@@ -150,6 +148,16 @@ class SearchModel {
     cancelSearch();
 
     final generation = _generation;
+    // 繁簡兩種寫法都要搜、比對時也要轉換；字典還在背景載入時先等它。載入
+    // 失敗就照原文搜（轉換會原樣返回），不擋住搜尋。
+    if (!ChineseUtils.isInitialized) {
+      try {
+        await ChineseUtils.initialize();
+      } catch (error) {
+        AppLog.w('繁簡字典載入失敗，這次搜尋只用原文: $error');
+      }
+      if (generation != _generation) return;
+    }
     final cancelToken = CancelToken();
     _cancelToken = cancelToken;
     _normalizedText.clear();
