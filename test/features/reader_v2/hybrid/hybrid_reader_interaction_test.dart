@@ -357,7 +357,7 @@ void main() {
     expect(position.pixels, greaterThan(start));
   });
 
-  testWidgets('dragging while a jump is loading cancels the jump cleanly', (
+  testWidgets('a jump covers the text with paper until its chapter arrives', (
     tester,
   ) async {
     final target = Completer<String?>();
@@ -370,21 +370,70 @@ void main() {
       ),
     );
     final position = scrollPosition(tester);
+    final start = position.pixels;
 
     final jump = runtime.jumpToChapter(7);
     await tester.pump();
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
+    expect(find.byType(LoadingVeil), findsOneWidget, reason: '正文還在取得就蓋紙');
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -120),
+      warnIfMissed: false,
+    );
     await tester.pump();
-    final draggedTo = position.pixels;
-    expect(runtime.stateMachine.currentOperation, isNull);
+    expect(position.pixels, start, reason: '紙蓋著時不能捲動');
+    expect(runtime.stateMachine.currentOperation, isNotNull);
 
     target.complete(_chapter(7).content);
+    for (
+      var frame = 0;
+      frame < 2000 && runtime.stateMachine.currentOperation != null;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await jump;
+    await settle(tester);
+    await tester.pump(AppMotion.fade);
+
+    expect(tester.takeException(), isNull);
+    expect(runtime.state.visibleLocation.chapterIndex, 7);
+    expect(find.byType(LoadingVeil), findsNothing);
+  });
+
+  testWidgets('a jump that cannot load lifts the paper off the old text', (
+    tester,
+  ) async {
+    final target = Completer<String?>();
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        chapterCount: 8,
+        contentLoader: (index, chapter) =>
+            index == 7 ? target.future : Future.value(chapter.content),
+      ),
+    );
+    final position = scrollPosition(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
+    await settle(tester);
+    final start = position.pixels;
+
+    final jump = runtime.jumpToChapter(7);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(LoadingVeil), findsOneWidget);
+
+    target.completeError(
+      const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+    );
     await jump;
     await settle(tester);
 
-    expect(tester.takeException(), isNull);
+    expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+    expect(find.byType(LoadingVeil), findsNothing);
+    expect(identical(scrollPosition(tester), position), isTrue);
+    expect(position.pixels, start);
     expect(runtime.state.visibleLocation.chapterIndex, 0);
-    expect(position.pixels, draggedTo);
   });
 
   testWidgets('opening fades the text in from paper without a spinner', (

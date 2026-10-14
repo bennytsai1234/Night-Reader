@@ -157,6 +157,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   int _restoreRevision = 0;
   ReaderV2Location? _lastReportedLocation;
   bool _initialRestoreCompleted = false;
+
+  /// 正在等正文的跳章：一開始就蓋紙、攔下觸控，排版開始後交給
+  /// [_restoreCore]（見 [_syncJumpVeil]）。
+  ReaderV2OperationToken? _jumpVeil;
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
     onHidden: () {
@@ -276,6 +280,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   /// 正文是否已排好可以顯示；切換時蓋上或掀開 [_veil]。
   void _setRestoreCompleted(bool completed) {
+    // 排版流程接手這張紙，等正文的跳章不再另外管它。
+    _jumpVeil = null;
     if (_initialRestoreCompleted == completed) return;
     _initialRestoreCompleted = completed;
     if (completed) {
@@ -1092,6 +1098,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final runtime = widget.runtime;
     final state = runtime.state;
     final operation = runtime.stateMachine.currentOperation;
+    _syncJumpVeil(operation);
     final layoutChanged = _lastLayoutGeneration != state.layoutGeneration;
     final contentChanged = _lastContentGeneration != state.contentGeneration;
     if (layoutChanged || contentChanged) {
@@ -1129,6 +1136,26 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _publishProgress();
     }
     _scheduleRebuild();
+  }
+
+  /// 跳章一開始就蓋紙：正文還在取得時，舊正文不留在畫面上，紙也攔下捲動。
+  /// 排版開始後由 [_restoreCore] 接手；跳章在那之前就結束（取不到正文、被
+  /// 別的操作取代）時掀開紙，舊正文原封不動。
+  void _syncJumpVeil(ReaderV2OperationToken? operation) {
+    final jump = operation?.kind == ReaderV2OperationKind.jump
+        ? operation
+        : null;
+    if (identical(jump, _jumpVeil)) return;
+    final wasVeiled = _jumpVeil != null;
+    _jumpVeil = null;
+    if (!_initialRestoreCompleted) return;
+    if (jump != null) {
+      _jumpVeil = jump;
+      _clearSelection();
+      _veil.cover();
+    } else if (wasVeiled) {
+      _veil.reveal();
+    }
   }
 
   void _restorePublishedContentGeneration(
@@ -2449,9 +2476,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                   ),
                 ),
               ),
-            // 正文剛排好時，蓋著的紙在上面淡出。
+            // 正文剛排好時，蓋著的紙在上面淡出；等跳章的正文時紙攔下捲動。
             if (_veil.isVisible)
-              Positioned.fill(child: IgnorePointer(child: _buildVeil(state))),
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: _jumpVeil == null,
+                  child: _buildVeil(state),
+                ),
+              ),
           ],
         );
         // 長按與捲動在同一個手勢競技場：先拖動就是捲動，按住不動才選字。
@@ -2470,7 +2502,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                   : _handleContentTapUp,
               suppressTapAtPointerDown: _isUserFlingInProgress,
               child: GestureDetector(
-                onLongPressStart: widget.textSelectionEnabled
+                onLongPressStart:
+                    widget.textSelectionEnabled && _jumpVeil == null
                     ? (details) => unawaited(_handleLongPressStart(details))
                     : null,
                 child: readerStack,
