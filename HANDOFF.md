@@ -1,14 +1,17 @@
-# 交接（2026-10-14 22:25）
+# 交接（2026-10-14 23:10）
 
-## 進行中：PR #61（`feat/shelf-check-in-system-tools`，已併入 `refactor/split-hybrid-reader-screen`）
+## 最近合併：#61（兩條分支併成一個 PR：`feat/shelf-check-in-system-tools` + `refactor/split-hybrid-reader-screen`），已發 beta（run 38586531139）
 
-使用者 2026-10-14 說兩條併成一個 PR 合併。內容：
+內容：
 
 - **設定搬移**：「啟動時檢查書架更新」從「我的」移到「關於夜讀 → 系統工具」；ADR 0015 記下「我的」第一層只放入口、不放開關。
 - **掉幀修正（兩個 perf 提交）**：使用者回報開 App 後切頁卡頓，在使用者手機上逐情境量測後修。commit message 有每項的成因與改前改後數字。摘要（超過 16.7 ms 的幀／最慢一幀）：冷啟動切頁 8／36.8 ms → 1／16.9 ms；從備份還原 94／242 ms → 1／17 ms；發現書單 6／28 ms → 3／19 ms；搜尋 29／88 ms → 18／27 ms。主因不是書架重畫，而是背景書架檢查的解析與資料庫工作、書源分類掃整段 JS、繁簡轉換、搜尋合併與 JS 在主 isolate。
 - 搜尋剩下的成本主要是搜尋頁本身的重建與 TLS 握手；仍在主 isolate 的 JS 是用到網路、`java.put`、Cookie、快取這類的書源（見 `docs/research/source-engine-off-main-isolate.md` 最後一節）。最後一個建置（顯示文字的繁簡轉換快取）裝上手機了但沒量。
 - **拆 `HybridReaderScreen`**（原 `refactor/split-hybrid-reader-screen`）：2651 → 1540 行，行為不變、閱讀器測試全過。拆出 `geometry/text_geometry.dart`（`HybridTextGeometry`：字元 offset 與正文座標互換，選字、反白、朗讀高亮框、閱讀位置）與 `pipeline/`（`HybridLayoutPipeline`：一個排版世代一份，換代就整份 dispose 換新；`HybridLayoutDiskCache`：一本書的磁碟快取）。還原、跳章蓋紙、捲動與翻頁命令、build 刻意留在畫面：它們直接操作捲動控制器與 widget 狀態，再拆只會多一層全是回呼的薄殼。
+- **審查後補的修正**：背景解析的 JS 改由 `JsBridgeGuard` 在橋接層把關（worker isolate 只放行純計算頻道，其他改回原地；`ParseWorker.fit` 的字面比對只是預先篩選）；背景組網址帶回已預取的回應；停止搜尋先送出 100 ms 視窗內的結果；刪書源時放掉分類快取。同一網址各段 JS 共用引擎、jsLib 變數延續是刻意的，不必再改。
+- **書架書卡移除左滑**（使用者 2026-10-14 決定）：書架在可左右換分頁的主畫面裡，`SwipeActions` 用 Flutter 預設觸控門檻 18、`PageView` 用裝置門檻（Android 約 8），偶爾書卡贏而誤觸「移出書架」。單本操作改走長按選單，自訂排序時走「選取」。其他頁面的滑動按鈕保留。順手修了 `SwipeActions` 的 `onCancel`（每次點擊都會觸發，收合中再點會彈回展開）與備份讀版本號時多開一個資料庫的 drift 警告。
 - 閃退回報（`glass_menu.dart:250` 的 `clamp`）在 #56 已修，beta.103 起就有，這次不用改。
+- 測試輸出裡 `download_service_test` 有一批「`_dio` 尚未初始化」的下載失敗日誌（測試沒準備網路層，只檢查排隊與範圍），不是警告；使用者要的話再補假的網路層。
 
 ## 手機量測（使用者 2026-10-14 說之後別再用他的手機量）
 
@@ -16,7 +19,7 @@
 
 ## 今天的 beta
 
-`gh workflow run android-release.yml --ref main -f channel=beta` 發了兩次：run 38536504376（#57、#58）、run 38551518474（#59）。使用者 2026-10-14 說這次先只發測試版，正式版（下一版是 0.3.4，目前正式版 v0.3.3）等使用者再說。
+`gh workflow run android-release.yml --ref main -f channel=beta` 發了三次：run 38536504376（#57、#58）、run 38551518474（#59）、run 38586531139（#60、#61）。使用者 2026-10-14 說這次先只發測試版，正式版（下一版是 0.3.4，目前正式版 v0.3.3）等使用者再說。
 
 ## 最近合併
 
