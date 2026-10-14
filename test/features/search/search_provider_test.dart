@@ -145,7 +145,7 @@ void main() {
     provider.dispose();
     await pumpEventQueue();
 
-    expect(await dao.getSearchBooks('夜讀', '作者'), isEmpty);
+    expect(await dao.getByNames(['夜讀']), isEmpty);
   });
 
   test('the chosen search scope is remembered', () async {

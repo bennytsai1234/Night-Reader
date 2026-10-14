@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/book_toc_replacer.dart';
 
 /// 把書架上一本書還沒下載的章節排進背景下載（ADR 0008）。
 typedef ShelfBookDownloader = Future<void> Function(
@@ -43,14 +45,22 @@ class BookUpdateService {
     ChapterDao? chapterDao,
     BookSourceDao? sourceDao,
     BookSourceService? sourceService,
+    ReaderChapterContentDao? contentDao,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
-       _chapterDao = chapterDao ?? getIt<ChapterDao>(),
+       _tocReplacer = BookTocReplacer(
+         chapterDao: chapterDao ?? getIt<ChapterDao>(),
+         contentDao:
+             contentDao ??
+             (getIt.isRegistered<ReaderChapterContentDao>()
+                 ? getIt<ReaderChapterContentDao>()
+                 : null),
+       ),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
        _sourceService = sourceService ?? BookSourceService();
 
   final ShelfBookDownloader _keepDownloaded;
   final BookDao _bookDao;
-  final ChapterDao _chapterDao;
+  final BookTocReplacer _tocReplacer;
   final BookSourceDao _sourceDao;
   final BookSourceService _sourceService;
 
@@ -82,8 +92,8 @@ class BookUpdateService {
         throw StateError('找不到可閱讀書源');
       }
       final info = await _sourceService.getBookInfo(source, book);
-      // 下面會用它整份換掉已存的目錄，所以目錄分頁要全部抓到；漏一頁就當
-      // 這次檢查失敗，舊目錄不動。
+      // 下面會用它換掉已存的目錄，所以目錄分頁要全部抓到；漏一頁或抓到空
+      // 目錄就當這次檢查失敗，舊目錄不動。
       final chapters = await _sourceService.getChapterList(
         source,
         info,
@@ -95,11 +105,6 @@ class BookUpdateService {
       if (info.tocUrl.isEmpty) {
         info.tocUrl = book.tocUrl;
       }
-      for (var i = 0; i < chapters.length; i++) {
-        chapters[i].index = i;
-        chapters[i].bookUrl = book.bookUrl;
-      }
-
       final newCount = await _bookDao.transaction<int?>(() async {
         final stored = await _bookDao.getByUrl(book.bookUrl);
         // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。不在
@@ -109,12 +114,6 @@ class BookUpdateService {
           return null;
         }
         final current = stored ?? book;
-        final oldTotal = current.totalChapterNum > 0
-            ? current.totalChapterNum
-            : chapters.length;
-        final newCount = chapters.length > oldTotal
-            ? chapters.length - oldTotal
-            : 0;
         info.isInBookshelf = current.isInBookshelf;
         info.group = current.group;
         info.order = current.order;
@@ -131,21 +130,19 @@ class BookUpdateService {
         info.customIntro = current.customIntro;
         info.customTag = current.customTag;
         info.readConfig = current.readConfig;
+        final toc = (await _tocReplacer.replace(info, chapters)).chapters;
+        final oldTotal = current.totalChapterNum > 0
+            ? current.totalChapterNum
+            : toc.length;
+        final newCount = toc.length > oldTotal ? toc.length - oldTotal : 0;
         info.lastCheckTime = checkedAt;
         info.lastCheckCount = newCount;
-        info.totalChapterNum = chapters.length;
-        if (chapters.isNotEmpty) {
-          info.latestChapterTitle = chapters.last.title;
-          if (newCount > 0) {
-            info.latestChapterTime = checkedAt;
-          }
+        info.totalChapterNum = toc.length;
+        info.latestChapterTitle = toc.last.title;
+        if (newCount > 0) {
+          info.latestChapterTime = checkedAt;
         }
         await _bookDao.upsert(info);
-        if (chapters.isNotEmpty) {
-          // 整份換成書源目前的目錄：書源拿掉的章節不留下來佔著序號。
-          await _chapterDao.deleteByBook(book.bookUrl);
-          await _chapterDao.insertChapters(chapters);
-        }
         return newCount;
       });
       if (newCount == null) {

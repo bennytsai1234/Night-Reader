@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 
 class ReaderV2ChaptersDrawer extends StatefulWidget {
   const ReaderV2ChaptersDrawer({
@@ -110,7 +111,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   }
 
   /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
-  /// 目前章節以主色加粗並在右側打勾，列間以髮絲線分隔。
+  /// 目前章節以主色加粗並在右側打勾，付費還沒買的章節右側鎖頭，列間以
+  /// 髮絲線分隔。
   Widget _buildChapterTile(BuildContext context, int index) {
     final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
@@ -120,6 +122,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
         ? _buildPendingIndicator(chapterTitle)
         : isCurrentChapter
         ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
+        : index < widget.chapters.length && widget.chapters[index].isLocked
+        ? const LockedChapterIcon()
         : null;
     return Column(
       children: [

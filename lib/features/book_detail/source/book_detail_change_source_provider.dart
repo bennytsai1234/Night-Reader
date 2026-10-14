@@ -8,7 +8,10 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
 
 class BookDetailChangeSourceProvider extends ChangeNotifier {
@@ -89,14 +92,33 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     final enabledSources = await _loadEnabledSources();
     if (!_isSearchActive(searchId)) return;
 
-    final cached = await searchBookDao.getSearchBooks(book.name, book.author);
+    // 搜尋把繁簡兩種寫法的同一本書併成一張卡，這本書可能是任一種寫法：
+    // 兩種書名都要搜，比對時繁簡視為相同。字典還在背景載入時先等它，載入
+    // 失敗就只用原文。
+    if (!ChineseUtils.isInitialized) {
+      try {
+        await ChineseUtils.initialize();
+      } catch (error) {
+        AppLog.w('繁簡字典載入失敗，這次換源只用原文書名: $error');
+      }
+      if (!_isSearchActive(searchId)) return;
+    }
+    final names = searchKeyVariants(book.name);
+
+    final cached = await searchBookDao.getByNames(names);
     if (!_isSearchActive(searchId)) return;
 
     final allowedOrigins = enabledSources
         .map((source) => source.bookSourceUrl)
         .toSet();
     final cachedResults = _sortResults(
-      cached.where((result) => allowedOrigins.contains(result.origin)).toList(),
+      cached
+          .where(
+            (result) =>
+                allowedOrigins.contains(result.origin) &&
+                _isSameBook(result.name, result.author, checkAuthor: true),
+          )
+          .toList(),
     );
     allResults = cachedResults;
     _rebuildFilteredResults();
@@ -126,29 +148,15 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
           return searchPool.withResource(() async {
             if (!_isSearchActive(searchId)) return;
 
-            final cancelToken = CancelToken();
-            _activeSearchTokens.add(cancelToken);
             try {
-              final author = book.author.trim();
-              final shouldCheckAuthor = checkAuthor && author.isNotEmpty;
-              final results = await service
-                  .searchBooks(
-                    source,
-                    book.name,
-                    filter: shouldCheckAuthor
-                        ? (name, candidateAuthor) =>
-                              name == book.name && candidateAuthor == author
-                        : (name, _) => name == book.name,
-                    shouldBreak: (size) => size >= 1,
-                    cancelToken: cancelToken,
-                  )
-                  .timeout(
-                    _sourceSearchTimeout,
-                    onTimeout: () {
-                      cancelToken.cancel('換源搜尋逾時');
-                      throw TimeoutException('換源搜尋逾時');
-                    },
-                  );
+              final shouldCheckAuthor =
+                  checkAuthor && book.author.trim().isNotEmpty;
+              final results = await _searchNames(
+                source,
+                names,
+                (name, author) =>
+                    _isSameBook(name, author, checkAuthor: shouldCheckAuthor),
+              );
               if (!_isSearchActive(searchId)) return;
               _replaceSourceResults(source.bookSourceUrl, results);
             } catch (_) {
@@ -160,7 +168,6 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
                 );
               }
             } finally {
-              _activeSearchTokens.remove(cancelToken);
               if (_isSearchActive(searchId)) {
                 completedSources++;
                 _updateSearchingStatus(completedSources, enabledSources.length);
@@ -192,6 +199,60 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
       status = '搜尋出錯: $e';
       _notifySafely();
     }
+  }
+
+  /// 每種書名各搜一次、各自計時，合起來；全部失敗或逾時才算這個書源失敗，
+  /// 一種寫法卡住不會丟掉另一種已經找到的結果。
+  Future<List<SearchBook>> _searchNames(
+    BookSource source,
+    List<String> names,
+    bool Function(String name, String author) filter,
+  ) async {
+    (Object, StackTrace)? firstError;
+    Future<List<SearchBook>?> searchName(String name) async {
+      final cancelToken = CancelToken();
+      _activeSearchTokens.add(cancelToken);
+      try {
+        return await service
+            .searchBooks(
+              source,
+              name,
+              filter: filter,
+              shouldBreak: (size) => size >= 1,
+              cancelToken: cancelToken,
+            )
+            .timeout(
+              _sourceSearchTimeout,
+              onTimeout: () {
+                cancelToken.cancel('換源搜尋逾時');
+                throw TimeoutException('換源搜尋逾時');
+              },
+            );
+      } catch (error, stackTrace) {
+        firstError ??= (error, stackTrace);
+        return null;
+      } finally {
+        _activeSearchTokens.remove(cancelToken);
+      }
+    }
+
+    final found = await Future.wait([
+      for (final name in names) searchName(name),
+    ]);
+    final succeeded = found.nonNulls;
+    if (succeeded.isEmpty) {
+      final (error, stackTrace) = firstError!;
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    return [for (final books in succeeded) ...books];
+  }
+
+  bool _isSameBook(String name, String? author, {required bool checkAuthor}) {
+    if (normalizeSearchText(name) != normalizeSearchText(book.name)) {
+      return false;
+    }
+    return !checkAuthor ||
+        normalizeSearchText(author) == normalizeSearchText(book.author);
   }
 
   Future<BookSource?> findSourceByUrl(String url) => _sourceDao.getByUrl(url);
@@ -245,7 +306,10 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
         if (result.origin != sourceUrl) _resultKey(result): result,
     };
     for (final result in results) {
-      if (result.origin == book.origin || result.name != book.name) continue;
+      if (result.origin == book.origin ||
+          !_isSameBook(result.name, result.author, checkAuthor: false)) {
+        continue;
+      }
       merged[_resultKey(result)] = result;
     }
     allResults = _sortResults(merged.values.toList());

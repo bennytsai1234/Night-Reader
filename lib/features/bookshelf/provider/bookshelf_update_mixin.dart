@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_toc_replacer.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
@@ -236,7 +237,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters.where(chapterHasContent).toList();
+      var toDownload = chapters.where(chapterIsDownloadable).toList();
       if (contentDao != null) {
         toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
@@ -282,18 +283,16 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取
+      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取。抓到的目錄會換掉
+      // 舊的，所以目錄分頁要全部抓到。
       List<BookChapter> chapters;
       try {
-        final fetched = await service.getChapterList(source, book);
-        for (var i = 0; i < fetched.length; i++) {
-          fetched[i].index = i;
-          fetched[i].bookUrl = book.bookUrl;
-        }
-        if (fetched.isNotEmpty) {
-          await chapterDao.insertChapters(fetched);
-        }
-        chapters = fetched;
+        final fetched = await service.getChapterList(
+          source,
+          book,
+          requireComplete: true,
+        );
+        chapters = await _replaceToc(book, fetched, contentDao);
       } catch (e) {
         AppLog.w('整本書補下載：取得章節目錄失敗 ${book.name}: $e');
         chapters = await chapterDao.getByBook(book.bookUrl);
@@ -304,7 +303,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      var toDownload = chapters.where(chapterHasContent).toList();
+      var toDownload = chapters.where(chapterIsDownloadable).toList();
       if (contentDao != null) {
         toDownload = await ReaderChapterContentStore(
           chapterDao: chapterDao,
@@ -326,6 +325,27 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       queuedChapters: queuedChapters,
       skippedBooks: skippedBooks,
     );
+  }
+
+  /// 換上新目錄並回傳寫入的目錄。閱讀進度以資料庫裡最新的一筆為準，抓目錄
+  /// 期間閱讀器可能寫了新進度。
+  Future<List<BookChapter>> _replaceToc(
+    Book book,
+    List<BookChapter> fetched,
+    ReaderChapterContentDao? contentDao,
+  ) {
+    return bookDao.transaction(() async {
+      final stored = await bookDao.getByUrl(book.bookUrl);
+      if (stored == null || stored.origin != book.origin) {
+        throw StateError('抓目錄期間這本書已換源或移除');
+      }
+      final result = await BookTocReplacer(
+        chapterDao: chapterDao,
+        contentDao: contentDao,
+      ).replace(stored, fetched);
+      if (result.progressMoved) await bookDao.upsert(stored);
+      return result.chapters;
+    });
   }
 
   Future<List<Book>> _booksForUrls(Set<String> urls) async {

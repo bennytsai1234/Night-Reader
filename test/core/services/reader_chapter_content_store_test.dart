@@ -97,4 +97,16 @@ void main() {
 
     expect(missing.map((c) => c.url), ['/c/1.html']);
   });
+
+  test('chapters the source marks paid and not bought are not downloaded', () {
+    final missing = chaptersMissingContent([
+      chapter(0, '/c/free.html'),
+      chapter(1, '/c/vip.html')..isVip = true,
+      chapter(2, '/c/bought.html')
+        ..isVip = true
+        ..isPay = true,
+    ], const <String>{});
+
+    expect(missing.map((c) => c.url), ['/c/free.html', '/c/bought.html']);
+  });
 }

@@ -28,6 +28,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'widgets/book_cover_ambience.dart';
@@ -311,6 +312,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                 child: _ChapterRow(
                   title: ctx.zh(chapter.title),
                   isCurrent: isCurrent,
+                  isLocked: chapter.isLocked,
                   onTap: () => _navigateToReader(
                     context,
                     currentBook,
@@ -976,16 +978,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
       );
 }
 
-/// 目錄的一列：目前閱讀章節以主色標示，右側「目前」。
+/// 目錄的一列：目前閱讀章節以主色標示，右側「目前」；付費還沒買的章節
+/// 右側鎖頭。
 class _ChapterRow extends StatelessWidget {
   const _ChapterRow({
     required this.title,
     required this.isCurrent,
+    required this.isLocked,
     required this.onTap,
   });
 
   final String title;
   final bool isCurrent;
+  final bool isLocked;
   final VoidCallback onTap;
 
   @override
@@ -1009,6 +1014,8 @@ class _ChapterRow extends StatelessWidget {
               '目前',
               style: AppTextStyles.labelSm.copyWith(color: scheme.primary),
             )
+          : isLocked
+          ? const LockedChapterIcon()
           : null,
       onTap: onTap,
     );

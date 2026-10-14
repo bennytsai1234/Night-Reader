@@ -51,29 +51,87 @@ extension BookLogic on Book {
     );
   }
 
+  /// 已存的目錄 [oldToc] 整份換成 [toc] 時呼叫：把閱讀進度對到新目錄裡的
+  /// 同一章。
+  ///
+  /// 書源在中間插入或刪除章節後序號會位移，所以依章節網址找回那一章，章內
+  /// 位置照舊。那一章已不在新目錄裡，才照標題、章號與比例估計（同換源），
+  /// 章內位置只在綁得住原文時保留。舊目錄沒有這一章時無從對應，進度不動。
+  /// 回傳進度有沒有變。
+  bool realignProgress(
+    List<BookChapter> toc, {
+    required List<BookChapter> oldToc,
+  }) {
+    BookChapter? oldChapter;
+    for (final chapter in oldToc) {
+      if (chapter.index == chapterIndex) oldChapter = chapter;
+    }
+    if (toc.isEmpty || oldChapter == null) return false;
+    final oldUrl = oldChapter.url;
+    final sameChapter = toc.indexWhere((c) => c.url == oldUrl);
+    if (sameChapter >= 0) {
+      if (sameChapter == chapterIndex) return false;
+      readerAnchorJson = _reindexedReaderAnchor(sameChapter);
+      chapterIndex = sameChapter;
+      durChapterTitle = toc[sameChapter].title;
+      return true;
+    }
+    final alignedIndex = alignChapterIndex(
+      oldIndex: chapterIndex,
+      oldTitle: oldChapter.title,
+      oldTotalCount: oldToc.length,
+      newChapters: toc,
+    );
+    // 同名不代表正文相同（例如書源搬家後改了內容），所以即使落在同一個
+    // 序號，章內位置也照錨點決定。
+    final anchor = _migratedReaderAnchor(alignedIndex);
+    if (anchor == null) {
+      charOffset = 0;
+      visualOffsetPx = 0.0;
+    }
+    readerAnchorJson = anchor;
+    chapterIndex = alignedIndex;
+    durChapterTitle = toc[alignedIndex].title;
+    return true;
+  }
+
+  /// 同一章換了序號：錨點跟著換序號，章內位置不變。錨點不屬於目前進度時
+  /// 本來就不會被採用，直接丟掉。
+  String? _reindexedReaderAnchor(int newIndex) {
+    final anchor = _ownedReaderAnchor();
+    if (anchor == null) return null;
+    anchor['chapterIndex'] = newIndex;
+    return jsonEncode(anchor);
+  }
+
   String? _migratedReaderAnchor(int alignedIndex) {
+    final anchor = _ownedReaderAnchor();
+    if (anchor == null) return null;
+    final hash = anchor['contentHash'];
+    final contentLength = anchor['contentLength'];
+    if (hash is! String ||
+        hash.isEmpty ||
+        contentLength is! num ||
+        contentLength < 0) {
+      return null;
+    }
+    anchor['chapterIndex'] = alignedIndex;
+    anchor['charOffset'] = charOffset;
+    anchor['visualOffsetPx'] = visualOffsetPx;
+    return jsonEncode(anchor);
+  }
+
+  Map<String, dynamic>? _ownedReaderAnchor() {
     final encoded = readerAnchorJson;
     if (encoded == null || encoded.isEmpty) return null;
     try {
       final decoded = jsonDecode(encoded);
       if (decoded is! Map) return null;
       final anchor = Map<String, dynamic>.from(decoded);
-      final hash = anchor['contentHash'];
-      final contentLength = anchor['contentLength'];
       final ownsCurrentScalar =
           anchor['chapterIndex'] == chapterIndex &&
           anchor['charOffset'] == charOffset;
-      if (!ownsCurrentScalar ||
-          hash is! String ||
-          hash.isEmpty ||
-          contentLength is! num ||
-          contentLength < 0) {
-        return null;
-      }
-      anchor['chapterIndex'] = alignedIndex;
-      anchor['charOffset'] = charOffset;
-      anchor['visualOffsetPx'] = visualOffsetPx;
-      return jsonEncode(anchor);
+      return ownsCurrentScalar ? anchor : null;
     } catch (_) {
       return null;
     }

@@ -32,7 +32,16 @@ class _FakeBookDao extends Fake implements BookDao {
   }) async {}
 }
 
-class _FakeChapterDao extends Fake implements ChapterDao {}
+class _FakeChapterDao extends Fake implements ChapterDao {
+  @override
+  Future<int?> indexOfUrl(String bookUrl, String url) async => null;
+
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function() action, {
+    bool requireNew = false,
+  }) => action();
+}
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 

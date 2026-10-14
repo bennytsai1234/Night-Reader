@@ -17,7 +17,16 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 
 class _FakeBookDao extends Fake implements BookDao {}
 
-class _FakeChapterDao extends Fake implements ChapterDao {}
+class _FakeChapterDao extends Fake implements ChapterDao {
+  @override
+  Future<int?> indexOfUrl(String bookUrl, String url) async => null;
+
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function() action, {
+    bool requireNew = false,
+  }) => action();
+}
 
 class _FakeSourceDao extends Fake implements BookSourceDao {}
 

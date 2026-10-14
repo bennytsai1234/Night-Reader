@@ -220,6 +220,7 @@ class ChapterContentPreparationPipeline {
     required bool saveChapterMetadata,
   }) async {
     final store = contentStore;
+    // 付費還沒買的章節照樣回傳顯示，由 store 決定不存。
     if (store == null || result.content.trim().isEmpty) return;
     if (result.isReady) {
       await store.saveRawContent(

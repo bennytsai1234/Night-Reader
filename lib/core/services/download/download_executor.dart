@@ -136,11 +136,12 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         task = newTask;
       }
 
-      // 分卷標題沒有正文，不下載；否則整本永遠「有章節失敗」。
+      // 分卷標題沒有正文、付費還沒買的只會抓到付費提示，都不下載；否則整本
+      // 永遠「有章節失敗」或存進付費提示。
       final toDownload = chapters
           .where(
             (c) =>
-                chapterHasContent(c) &&
+                chapterIsDownloadable(c) &&
                 c.index >= task.startChapterIndex &&
                 c.index <= task.endChapterIndex,
           )
