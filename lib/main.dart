@@ -20,6 +20,7 @@ import 'app_providers.dart';
 import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
+import 'shared/navigation/app_page_transition.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
 import 'shared/widgets/theme_reveal_scope.dart';
@@ -301,11 +302,13 @@ class ReaderApp extends StatelessWidget {
             themeSettings.style,
             Brightness.light,
             glassStrength: themeSettings.glassStrength,
+            pageTransition: themeSettings.pageTransition,
           ),
           darkTheme: buildAppTheme(
             themeSettings.style,
             Brightness.dark,
             glassStrength: themeSettings.glassStrength,
+            pageTransition: themeSettings.pageTransition,
           ),
           themeMode: settings.themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
@@ -314,11 +317,13 @@ class ReaderApp extends StatelessWidget {
           themeAnimationStyle: AnimationStyle.noAnimation,
           locale: settings.locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => ThemeRevealScope(
-            child: StatusBarStableInset(
-              child: BackdropGroup(
-                child: ChineseDisplayScope(
-                  child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => TransitionOriginRecorder(
+            child: ThemeRevealScope(
+              child: StatusBarStableInset(
+                child: BackdropGroup(
+                  child: ChineseDisplayScope(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

@@ -12,6 +12,10 @@ _Avoid_: InkPage、inkpage reader
 維護者手動觸發時，把 `main` 上一個發布之後累積的改動發成的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004、0014）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
 _Avoid_: beta 分支、預覽版、nightly
 
+**換頁動畫**：
+App 裡所有換頁共用的轉場，使用者在「外觀與主題」從上浮、平移、淡入、展開四種選一種（`AppPageTransition`）；返回一律是開啟倒著播。
+_Avoid_: 轉場效果、頁面動畫、Hero（封面共享元素轉場已移除）
+
 **更新紀錄**：
 「關於夜讀」裡列出各版更新說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
 _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什麼
