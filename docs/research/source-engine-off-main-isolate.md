@@ -108,3 +108,13 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 只搬解析、不搬抓取：`ParseWorker` 是一個常駐的背景 isolate，`BookListParser.parse` 與 `ChapterListParser.parse` 在這次解析可能用到的規則都不帶 `@js:`、`<js>`、`{{`、`@put`、`@get`、`java.` 時，把整頁交給它解析，主 isolate 只收結果。這類規則只讀傳進去的 HTML 與書源，不碰網路、資料庫、Cookie，也不改變數，所以上面五個阻礙都碰不到；帶 JS 的規則、精確搜尋（帶回呼）與背景開不起來時照舊原地解析。書源校驗與 Workmanager 本來就在背景，不再多開一層。
 
 同一組 3000 章目錄（另加 300 個廣告區塊），桌機量主 isolate 的最長停頓：原地解析約 120 ms（整段解析都卡住），交給背景後 3–5 ms（收結果）。帶 JS 的書源仍在主 isolate 解析，要再往下就得照上面的阻礙一到五處理。
+
+## 後續：只做計算的 JS 也搬到背景 isolate（2026-10-14）
+
+在使用者手機上量（profile 建置、vivo V2417A／天璣 9300、120 Hz、使用者的 192 個書源，搜尋「系統」15 秒）：剩下的長停頓幾乎都是 QuickJS——每個書源組搜尋網址時建一個新引擎並注入擴充腳本，以及帶 JS 的結果列表規則。背景 isolate 也有自己的 QuickJS，所以 JS 只做計算的規則照樣交給 `ParseWorker`（`ParseWorker.fit`）：
+
+- 交出去：字串、編碼、加解密、`java.getString`／`getElement` 這類只讀傳進去的頁面；書源的 jsLib 是內嵌腳本。搜尋與發現列表另外允許 `@put`／`@get`，因為寫讀的是每一筆結果或規則自己的暫存，都跟著結果傳回。
+- 留在原地：`java.ajax`／`connect`／`get`／`put`、檔案、WebView、紀錄、`cookie`／`cache`／`source` 物件、繁簡字典（背景沒載）、改動 `book`／`chapter`（背景改到複本）、`fetch`／XHR、以 JSON 列網址的 jsLib。判斷寧可多擋，誤擋只是照舊原地解析。
+- 背景失敗、JS 引擎沒起來（引擎沒起來時 `JsEngine` 會回模擬值，所以背景先確認一次）或 30 秒沒回覆，都回到原地解析。
+
+結果：主 isolate 上的 JS 532 → 67 ms，書源解析 354 → 73 ms，最長一幀 88 → 27 ms。仍在主 isolate 的有：用到上面「留在原地」那些 API 的書源、TLS 握手（`dart:io` 在主 isolate），要再往下仍得照阻礙一到五整套搬。
