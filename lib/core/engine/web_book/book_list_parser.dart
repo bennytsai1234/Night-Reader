@@ -144,7 +144,7 @@ class BookListParser {
         final itemRule = AnalyzeRule(
           ruleData: searchBook,
           source: source,
-        ).setContent(element, baseUrl: baseUrl);
+        ).setContent(element, baseUrl: baseUrl)..jsEngineOwner = rule;
 
         try {
           final name = BookHelp.formatBookName(

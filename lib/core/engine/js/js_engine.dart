@@ -31,7 +31,16 @@ class JsEngine {
   bool _isAvailable = false;
   JsExtensions? _extensions;
   final dynamic source;
-  final dynamic ruleContext;
+
+  /// 規則 JS 裡 `java` 代表的 AnalyzeRule。同一次解析的逐項規則共用一個
+  /// 引擎（見 `AnalyzeRuleBase.jsEngineOwner`），每次執行前換成當下那一項。
+  dynamic get ruleContext => _ruleContext;
+  set ruleContext(dynamic value) {
+    _ruleContext = value;
+    _extensions?.ruleContext = value;
+  }
+
+  dynamic _ruleContext;
   final Map<int, dom.Element> _bridgedElements = <int, dom.Element>{};
   int _nextBridgeElementId = 0;
   String? _loadedSourceJsLibKey;
@@ -47,7 +56,7 @@ class JsEngine {
     _pendingJsLibCache.clear();
   }
 
-  JsEngine({this.source, this.ruleContext}) {
+  JsEngine({this.source, dynamic ruleContext}) : _ruleContext = ruleContext {
     try {
       // 背景 isolate（書源批量校驗）沒有 ServicesBinding，flutter_js 的
       // enableFetch() 會用 rootBundle 載入 fetch.js polyfill，存取
@@ -391,10 +400,18 @@ class JsEngine {
     return _runtime!.evaluate(fallbackWrapped);
   }
 
+  /// 這個引擎的 JS 全域已經有 `source`。引擎只服務一個書源（[source]），
+  /// 注入一次之後呼叫端可以省略，見 `AnalyzeRuleScript`。
+  bool get sourceInjected => _sourceInjected;
+  bool _sourceInjected = false;
+
+  /// 每次執行前把脈絡寫進 JS 全域。全部合成一段腳本一次執行：逐項分開執行
+  /// 時，每次都要多付十幾次跨 FFI 的解析與執行。
   void _injectContext(Map<String, dynamic>? context) {
     if (context == null) return;
     _bridgedElements.clear();
     _nextBridgeElementId = 0;
+    final script = StringBuffer();
     context.forEach((key, value) {
       switch (key) {
         case 'java':
@@ -403,22 +420,24 @@ class JsEngine {
           return;
         case 'source':
           final jsLiteral = _encodeContextValue(value);
-          _runtime!.evaluate(
+          script.writeln(
             'if (typeof source === "object" && source !== null) { '
             'Object.assign(source, $jsLiteral); '
             '} else { var source = $jsLiteral; }',
           );
+          _sourceInjected = true;
           return;
         case 'book':
         case 'chapter':
           final jsLiteral = _encodeScopedObject(key, value);
-          _runtime!.evaluate('var $key = $jsLiteral;');
+          script.writeln('var $key = $jsLiteral;');
           return;
         default:
           final jsLiteral = _encodeContextValue(value);
-          _runtime!.evaluate('var $key = $jsLiteral;');
+          script.writeln('var $key = $jsLiteral;');
       }
     });
+    if (script.isNotEmpty) _runtime!.evaluate(script.toString());
   }
 
   String _encodeContextValue(dynamic value) {
@@ -471,12 +490,11 @@ class JsEngine {
     }
   }
 
-  String _encodeScopedObject(String scopeName, dynamic value) {
-    final payload = _encodeJsonContextValue(value);
-    final scopeLiteral = jsonEncode(scopeName);
-    return '''
-(function() {
-  var seed = $payload;
+  /// `book`、`chapter` 的包裝：欄位寫入時通知 Dart，另附 `getVariable` 等
+  /// 方法。建構函式每個引擎只定義一次，之後每次執行只傳資料；整段建構程式
+  /// 每次重新送進引擎解析，逐章執行時佔了大半時間。
+  static const String _scopedObjectFactory = '''
+var __lrScopedObject = function(scope, seed) {
   if (seed == null || typeof seed !== 'object') {
     return seed;
   }
@@ -489,55 +507,65 @@ class JsEngine {
       get: function() { return current; },
       set: function(value) {
         current = value;
-        sendMessage('scopedObjectSetField', JSON.stringify([$scopeLiteral, prop, value]));
+        sendMessage('scopedObjectSetField', JSON.stringify([scope, prop, value]));
       }
     });
   });
   obj.getVariable = function(key) {
     var value = sendMessage(
       'scopedObjectGetVariable',
-      JSON.stringify([$scopeLiteral, key])
+      JSON.stringify([scope, key])
     );
     return value == null ? '' : value;
   };
   obj.putVariable = function(key, value) {
     sendMessage(
       'scopedObjectPutVariable',
-      JSON.stringify([$scopeLiteral, key, value])
+      JSON.stringify([scope, key, value])
     );
     return null;
   };
-  if ($scopeLiteral === "book") {
+  if (scope === "book") {
     obj.setReverseToc = function(value) {
       sendMessage(
         'scopedObjectSetField',
-        JSON.stringify([$scopeLiteral, 'reverseToc', !!value])
+        JSON.stringify([scope, 'reverseToc', !!value])
       );
       return null;
     };
     obj.getReverseToc = function() {
       return !!sendMessage(
         'scopedObjectGetField',
-        JSON.stringify([$scopeLiteral, 'reverseToc'])
+        JSON.stringify([scope, 'reverseToc'])
       );
     };
     obj.setUseReplaceRule = function(value) {
       sendMessage(
         'scopedObjectSetField',
-        JSON.stringify([$scopeLiteral, 'useReplaceRule', !!value])
+        JSON.stringify([scope, 'useReplaceRule', !!value])
       );
       return null;
     };
     obj.getUseReplaceRule = function() {
       return !!sendMessage(
         'scopedObjectGetField',
-        JSON.stringify([$scopeLiteral, 'useReplaceRule'])
+        JSON.stringify([scope, 'useReplaceRule'])
       );
     };
   }
   return obj;
-})()
+};
 ''';
+
+  bool _scopedObjectFactoryInstalled = false;
+
+  String _encodeScopedObject(String scopeName, dynamic value) {
+    if (!_scopedObjectFactoryInstalled) {
+      _runtime!.evaluate(_scopedObjectFactory);
+      _scopedObjectFactoryInstalled = true;
+    }
+    final payload = _encodeJsonContextValue(value);
+    return '__lrScopedObject(${jsonEncode(scopeName)}, $payload)';
   }
 
   String _encodeElement(dom.Element element) {

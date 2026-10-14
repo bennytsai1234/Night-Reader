@@ -14,9 +14,15 @@ import 'package:night_reader/core/utils/ttf_parser.dart';
 /// AnalyzeRule 的腳本執行與異步擴展 (原 Android AnalyzeRule.kt & JsExtensions.kt)
 extension AnalyzeRuleScript on AnalyzeRuleBase {
   dynamic evalJS(String jsStr, dynamic result) {
-    jsEngine ??= JsEngine(source: source, ruleContext: this);
-    final context = _buildJsContext(result);
-    return jsEngine!.evaluate(jsStr, context: context);
+    final engine = _jsEngineForEval();
+    final context = _buildJsContext(result, engine);
+    final previous = engine.ruleContext;
+    engine.ruleContext = this;
+    try {
+      return engine.evaluate(jsStr, context: context);
+    } finally {
+      engine.ruleContext = previous;
+    }
   }
 
   /// Promise bridge 版本的 evalJS — 支援 rule JS 中的 `java.ajax` 等 async 呼叫。
@@ -24,12 +30,40 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
   /// JS 結果取決於 source / book / chapter / page / baseUrl 與外部狀態，
   /// 因此同步與非同步路徑都不快取執行結果。
   Future<dynamic> evalJSAsync(String jsStr, dynamic result) async {
-    jsEngine ??= JsEngine(source: source, ruleContext: this);
-    final context = _buildJsContext(result);
-    return jsEngine!.evaluateAsync(jsStr, context: context);
+    final engine = _jsEngineForEval();
+    final context = _buildJsContext(result, engine);
+    final previous = engine.ruleContext;
+    engine.ruleContext = this;
+    try {
+      return await engine.evaluateAsync(jsStr, context: context);
+    } finally {
+      engine.ruleContext = previous;
+    }
   }
 
-  Map<String, dynamic> _buildJsContext(dynamic result) {
+  /// 自己的引擎，或借用 [jsEngineOwner] 的（見該欄位說明）。
+  JsEngine _jsEngineForEval() {
+    final owner = jsEngineOwner;
+    if (owner == null) {
+      return jsEngine ??= JsEngine(source: source, ruleContext: this);
+    }
+    return owner.jsEngine ??= JsEngine(
+      source: owner.source,
+      ruleContext: owner,
+    );
+  }
+
+  Map<String, dynamic> _buildJsContext(dynamic result, JsEngine engine) {
+    // 引擎只服務一個書源；已經注入過就不再每次把整個書源（含全部規則）
+    // 轉成 JSON 重寫一次。逐章共用引擎時，這是每次執行裡最貴的一段。
+    final includeSource =
+        !engine.sourceInjected || !identical(engine.source, source);
+    final context = _baseJsContext(result);
+    if (includeSource) context['source'] = _sourceForJs();
+    return context;
+  }
+
+  dynamic _sourceForJs() {
     dynamic sourceMap;
     try {
       sourceMap = source?.toJson();
@@ -48,6 +82,10 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       mergedSource.putIfAbsent('tag', () => baseSource.getTag());
       sourceMap = mergedSource;
     }
+    return sourceMap;
+  }
+
+  Map<String, dynamic> _baseJsContext(dynamic result) {
     return {
       'java': this,
       'cookie': CookieStore(),
@@ -55,7 +93,6 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'result': result,
       'baseUrl': baseUrl,
       'redirectUrl': redirectUrl,
-      'source': sourceMap,
       'book': ruleData,
       'chapter': chapter,
       'title': chapter?.title,
