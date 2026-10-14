@@ -11,11 +11,23 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 
-bool downloadTaskCountsPreStoredChapters({
-  required DownloadTask task,
-  required int chapterCountInRange,
-}) {
-  return task.totalCount >= chapterCountInRange;
+/// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
+/// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
+/// 已經不在目錄裡時回傳 null。
+List<BookChapter>? chaptersInDownloadScope(
+  List<BookChapter> chapters,
+  DownloadTask task,
+) {
+  int find(String url) => chapters.indexWhere((c) => c.url == url);
+  final startUrl = task.startChapterUrl;
+  final endUrl = task.endChapterUrl;
+  final start = startUrl == null ? 0 : find(startUrl);
+  final end = endUrl == null ? chapters.length - 1 : find(endUrl);
+  if (start < 0 || end < 0) return null;
+  return [
+    for (var i = start; i <= end; i++)
+      if (chapterIsDownloadable(chapters[i])) chapters[i],
+  ];
 }
 
 class DownloadChapterResult {
@@ -120,36 +132,18 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
         await chapterDao.insertChapters(chapters);
       }
-      // 沒有範圍的任務（排進來時還沒有目錄）改成整本，也寫回資料庫：
-      // App 中途被關掉，重開後照整本跑。排隊期間目錄可能已被別處抓好。
-      if (task.totalCount == 0) {
-        final newTask = task.copyWith(
-          startChapterIndex: chapters.first.index,
-          totalCount: chapters.length,
-          endChapterIndex: chapters.last.index,
-        );
-        await downloadDao.upsert(newTask);
-        final idx = tasks.indexOf(task);
-        if (idx != -1) {
-          tasks[idx] = newTask;
-        }
-        task = newTask;
+      // 範圍用章節網址記，這時才對照目前的目錄換算（ADR 0008），排隊或
+      // 暫停期間書源插章、刪章都不會選到別章。
+      final toDownload = chaptersInDownloadScope(chapters, task);
+      if (toDownload == null) {
+        throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
       }
-
-      // 分卷標題沒有正文、付費還沒買的只會抓到付費提示，都不下載；否則整本
-      // 永遠「有章節失敗」或存進付費提示。
-      final toDownload = chapters
-          .where(
-            (c) =>
-                chapterIsDownloadable(c) &&
-                c.index >= task.startChapterIndex &&
-                c.index <= task.endChapterIndex,
-          )
-          .toList();
-      final countsPreStoredChapters = downloadTaskCountsPreStoredChapters(
-        task: task,
-        chapterCountInRange: toDownload.length,
-      );
+      // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
+      // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
+      if (toDownload.length != task.totalCount) {
+        task.totalCount = toDownload.length;
+        await downloadDao.upsert(task);
+      }
       final contentStore = ReaderChapterContentStore(
         chapterDao: chapterDao,
         contentDao: chapterContentDao,
@@ -179,9 +173,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
 
         if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
-          if (countsPreStoredChapters) {
-            task.successCount++;
-          }
+          task.successCount++;
           task.currentChapterIndex = chapter.index;
           task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
           await downloadDao.updateProgress(

@@ -373,6 +373,7 @@ class BookDetailProvider extends ChangeNotifier {
             .toList();
       },
       emptyMessage: '目前進度之後沒有可下載的章節',
+      fromFirstResolved: true,
     );
   }
 
@@ -389,6 +390,8 @@ class BookDetailProvider extends ChangeNotifier {
             .toList();
       },
       emptyMessage: '目前進度之後沒有可下載的章節',
+      fromFirstResolved: true,
+      toLastResolved: true,
     );
   }
 
@@ -407,6 +410,8 @@ class BookDetailProvider extends ChangeNotifier {
             .toList();
       },
       emptyMessage: '指定範圍沒有可下載的章節',
+      fromFirstResolved: true,
+      toLastResolved: true,
     );
   }
 
@@ -418,9 +423,14 @@ class BookDetailProvider extends ChangeNotifier {
     );
   }
 
+  /// [fromFirstResolved]／[toLastResolved]：任務的範圍從解析出的第一章開始
+  /// ／到最後一章為止；否則從目錄第一章／到開跑時目錄的最後一章。兩端都
+  /// 不固定的是整本任務（「下載全部」「下載缺少的」），進度算整本。
   Future<StorageDownloadQueueResult> _queueStorageDownload({
     required List<BookChapter> Function(Set<String> storedUrls) resolveChapters,
     required String emptyMessage,
+    bool fromFirstResolved = false,
+    bool toLastResolved = false,
   }) async {
     final blockedReason = await _prepareStorageDownloadQueue();
     if (blockedReason != null) {
@@ -433,7 +443,12 @@ class BookDetailProvider extends ChangeNotifier {
       return StorageDownloadQueueResult.blocked(emptyMessage);
     }
 
-    await _resolvedDownloadService.addDownloadTask(_book, chapters);
+    await _resolvedDownloadService.addDownloadTask(
+      _book,
+      fromFirstResolved || toLastResolved ? chapters : _allChapters,
+      from: fromFirstResolved ? chapters.first : null,
+      to: toLastResolved ? chapters.last : null,
+    );
     return StorageDownloadQueueResult.queued(chapters.length);
   }
 

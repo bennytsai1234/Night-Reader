@@ -5,6 +5,7 @@ import 'download_base.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 /// DownloadService 的調度與任務管理邏輯擴展
 mixin DownloadScheduler on DownloadBase {
@@ -35,17 +36,29 @@ mixin DownloadScheduler on DownloadBase {
     update();
   }
 
-  Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
+  /// 使用者明確要下載的章節。[chapters] 是範圍裡的章節（已下載的也算），
+  /// 決定排隊時顯示的總數，開跑時照當下的目錄重算；[from]／[to] 是範圍的
+  /// 起訖章節，不給表示從第一章／到目錄最後一章，整本與「缺少的」兩端都
+  /// 不給。
+  Future<void> addDownloadTask(
+    Book book,
+    List<BookChapter> chapters, {
+    BookChapter? from,
+    BookChapter? to,
+  }) async {
     await _admitDownloadTask(
       book,
       chapters,
+      from: from,
+      to: to,
       intent: _DownloadTaskAdmissionIntent.userRequested,
     );
   }
 
-  /// 書架自動下載（ADR 0008）加入的任務：不會把使用者暫停的任務排回去；
-  /// 失敗的任務要不要再試由呼叫端依重試規則決定。[chapters] 是空的表示
-  /// 這本書還沒有目錄（例如匯入時沒附），整本交給任務開跑時先抓目錄。
+  /// 書架自動下載（ADR 0008）加入的整本任務：不會把使用者暫停的任務排
+  /// 回去；失敗的任務要不要再試由呼叫端依重試規則決定。[chapters] 是目前
+  /// 的目錄，空的表示這本書還沒有目錄（例如匯入時沒附），任務開跑時先抓
+  /// 目錄。
   ///
   /// Returns true only when a new waiting task was actually admitted.
   Future<bool> queueShelfDownload(Book book, List<BookChapter> chapters) {
@@ -59,6 +72,8 @@ mixin DownloadScheduler on DownloadBase {
   Future<bool> _admitDownloadTask(
     Book book,
     List<BookChapter> chapters, {
+    BookChapter? from,
+    BookChapter? to,
     required _DownloadTaskAdmissionIntent intent,
   }) async {
     if (chapters.isEmpty &&
@@ -91,9 +106,9 @@ mixin DownloadScheduler on DownloadBase {
       final task = DownloadTask(
         bookUrl: book.bookUrl,
         bookName: book.name,
-        startChapterIndex: chapters.isEmpty ? 0 : chapters.first.index,
-        endChapterIndex: chapters.isEmpty ? 0 : chapters.last.index,
-        totalCount: chapters.length,
+        startChapterUrl: from?.url,
+        endChapterUrl: to?.url,
+        totalCount: chapters.where(chapterIsDownloadable).length,
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
         sortOrder: sortOrder,

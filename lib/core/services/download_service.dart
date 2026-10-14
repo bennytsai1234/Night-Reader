@@ -4,7 +4,6 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -173,14 +172,14 @@ class DownloadService extends DownloadBase
 
     task
       ..status = DownloadTask.statusWaiting
-      ..currentChapterIndex = task.startChapterIndex
+      ..currentChapterIndex = 0
       ..successCount = 0
       ..errorCount = 0
       ..clearFailure();
     downloadDao.updateProgress(
       bookUrl,
       status: DownloadTask.statusWaiting,
-      currentChapterIndex: task.startChapterIndex,
+      currentChapterIndex: 0,
       successCount: 0,
       errorCount: 0,
     );
@@ -199,8 +198,8 @@ class DownloadService extends DownloadBase
     update();
   }
 
-  /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，任務的章節範圍
-  /// 在加入時就固定了，新章節要等這輪結束再排。值是這段期間有沒有從書源
+  /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，這一輪要下載的
+  /// 章節在開跑時就定了，新章節要等這輪結束再排。值是這段期間有沒有從書源
   /// 抓到新章節，結束後照樣交給重試規則判斷。
   final Map<String, bool> _keepAfterRun = <String, bool>{};
 
@@ -219,17 +218,13 @@ class DownloadService extends DownloadBase
       if (source == null || !source.isReadingEnabledByRuntime) return;
       final chapters = await chapterDao.getByBook(bookUrl);
       // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
-      // 記為失敗，照重試規則再試。
-      final List<BookChapter> missing;
-      if (chapters.isEmpty) {
-        missing = const <BookChapter>[];
-      } else {
+      // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
+      if (chapters.isNotEmpty) {
         final stored = await chapterContentDao.getStoredChapterUrls(
           origin: book.origin,
           bookUrl: bookUrl,
         );
-        missing = chaptersMissingContent(chapters, stored);
-        if (missing.isEmpty) return;
+        if (chaptersMissingContent(chapters, stored).isEmpty) return;
       }
 
       final task = tasks.cast<DownloadTask?>().firstWhere(
@@ -244,7 +239,7 @@ class DownloadService extends DownloadBase
       );
       switch (decision) {
         case ShelfDownloadDecision.queue:
-          await queueShelfDownload(book, missing);
+          await queueShelfDownload(book, chapters);
         case ShelfDownloadDecision.afterCurrentRun:
           _keepAfterRun[bookUrl] =
               (_keepAfterRun[bookUrl] ?? false) || hasNewChapters;

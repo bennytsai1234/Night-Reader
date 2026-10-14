@@ -518,10 +518,11 @@ class SearchBooks extends Table {
 class DownloadTasks extends Table {
   TextColumn get bookUrl => text().named('bookUrl')();
   TextColumn get bookName => text().named('bookName')();
-  IntColumn get startChapterIndex =>
-      integer().named('startChapterIndex').withDefault(const Constant(0))();
-  IntColumn get endChapterIndex =>
-      integer().named('endChapterIndex').withDefault(const Constant(0))();
+
+  /// schema 6 起取代序號範圍；null 表示從第一章／到最後一章。
+  TextColumn get startChapterUrl =>
+      text().named('startChapterUrl').nullable()();
+  TextColumn get endChapterUrl => text().named('endChapterUrl').nullable()();
   IntColumn get currentChapterIndex =>
       integer().named('currentChapterIndex').withDefault(const Constant(0))();
   IntColumn get totalCount =>

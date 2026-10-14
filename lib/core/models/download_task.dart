@@ -9,8 +9,12 @@ class DownloadTask {
 
   final String bookUrl;
   final String bookName;
-  final int startChapterIndex;
-  final int endChapterIndex;
+
+  /// 要下載的範圍，起訖用章節網址記：書源在中間插章或刪章時序號會位移，
+  /// 網址不會（ADR 0008）。null 表示從第一章／到目錄最後一章，整本的任務
+  /// 兩端都是 null。開始下載時才對照當下的目錄換算成章節。
+  final String? startChapterUrl;
+  final String? endChapterUrl;
   int currentChapterIndex;
   int status; // 0: 等待中, 1: 下載中, 2: 已暫停, 3: 已完成, 4: 失敗
   int totalCount;
@@ -27,8 +31,8 @@ class DownloadTask {
   DownloadTask({
     required this.bookUrl,
     required this.bookName,
-    required this.startChapterIndex,
-    required this.endChapterIndex,
+    this.startChapterUrl,
+    this.endChapterUrl,
     this.currentChapterIndex = 0,
     this.status = 0,
     this.totalCount = 0,
@@ -81,8 +85,9 @@ class DownloadTask {
     return DownloadTask(
       bookUrl: json['bookUrl'],
       bookName: json['bookName'],
-      startChapterIndex: json['startChapterIndex'],
-      endChapterIndex: json['endChapterIndex'],
+      // 舊版備份只有序號範圍，沒有網址：還原成整本。
+      startChapterUrl: json['startChapterUrl'],
+      endChapterUrl: json['endChapterUrl'],
       currentChapterIndex: json['currentChapterIndex'] ?? 0,
       status: json['status'] ?? 0,
       totalCount: json['totalCount'] ?? 0,
@@ -100,8 +105,8 @@ class DownloadTask {
     return {
       'bookUrl': bookUrl,
       'bookName': bookName,
-      'startChapterIndex': startChapterIndex,
-      'endChapterIndex': endChapterIndex,
+      'startChapterUrl': startChapterUrl,
+      'endChapterUrl': endChapterUrl,
       'currentChapterIndex': currentChapterIndex,
       'status': status,
       'totalCount': totalCount,
@@ -113,38 +118,5 @@ class DownloadTask {
       'lastErrorMessage': lastErrorMessage,
       'lastErrorChapterIndex': lastErrorChapterIndex,
     };
-  }
-
-  DownloadTask copyWith({
-    String? bookUrl,
-    String? bookName,
-    int? startChapterIndex,
-    int? endChapterIndex,
-    int? currentChapterIndex,
-    int? status,
-    int? totalCount,
-    int? successCount,
-    int? errorCount,
-    int? lastUpdateTime,
-    String? lastErrorReason,
-    String? lastErrorMessage,
-    int? lastErrorChapterIndex,
-  }) {
-    return DownloadTask(
-      bookUrl: bookUrl ?? this.bookUrl,
-      bookName: bookName ?? this.bookName,
-      startChapterIndex: startChapterIndex ?? this.startChapterIndex,
-      endChapterIndex: endChapterIndex ?? this.endChapterIndex,
-      currentChapterIndex: currentChapterIndex ?? this.currentChapterIndex,
-      status: status ?? this.status,
-      totalCount: totalCount ?? this.totalCount,
-      successCount: successCount ?? this.successCount,
-      errorCount: errorCount ?? this.errorCount,
-      lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
-      lastErrorReason: lastErrorReason ?? this.lastErrorReason,
-      lastErrorMessage: lastErrorMessage ?? this.lastErrorMessage,
-      lastErrorChapterIndex:
-          lastErrorChapterIndex ?? this.lastErrorChapterIndex,
-    );
   }
 }
