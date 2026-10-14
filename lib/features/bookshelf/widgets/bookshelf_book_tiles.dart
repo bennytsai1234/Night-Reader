@@ -4,6 +4,7 @@ import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -306,21 +307,27 @@ class BookshelfListCard extends StatelessWidget {
     final surface = chrome.groupedSurface;
     return Semantics(
       selected: selecting ? selected : null,
-      child: Material(
-        color: selecting && selected
-            ? Color.alphaBlend(scheme.primary.withValues(alpha: 0.06), surface)
-            : surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppGrouped.cardRadius,
-          side: BorderSide(color: chrome.separator, width: AppGlass.hairline),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress == null
-              ? null
-              : () => onLongPress!(globalRectOf(context)),
-          child: content,
+      child: TransitionSource(
+        radius: AppGrouped.radius,
+        child: Material(
+          color: selecting && selected
+              ? Color.alphaBlend(
+                  scheme.primary.withValues(alpha: 0.06),
+                  surface,
+                )
+              : surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppGrouped.cardRadius,
+            side: BorderSide(color: chrome.separator, width: AppGlass.hairline),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress == null
+                ? null
+                : () => onLongPress!(globalRectOf(context)),
+            child: content,
+          ),
         ),
       ),
     );
@@ -399,44 +406,47 @@ class BookshelfGridTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AspectRatio(
-              aspectRatio: coverAspectRatio,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  AnimatedScale(
-                    scale: selected ? 0.92 : 1,
-                    duration: AppMotion.spring,
-                    curve: AppMotion.springCurve,
-                    child: BookCoverWidget(
-                      bookName: name,
-                      author: book.author,
-                      coverUrl: book.getDisplayCover(),
-                      width: double.infinity,
-                      height: double.infinity,
-                      borderRadius: AppRadius.cardXs,
-                    ),
-                  ),
-                  Positioned(
-                    top: AppSpacing.xs,
-                    right: AppSpacing.xs,
-                    child: BookshelfUpdateBadge(
-                      result: selecting ? null : updateBadge,
-                    ),
-                  ),
-                  Positioned(
-                    top: AppSpacing.sm,
-                    right: AppSpacing.sm,
-                    child: AnimatedOpacity(
-                      duration: AppMotion.menu,
-                      opacity: selecting ? 1 : 0,
-                      child: BookshelfCheckMark(
-                        selected: selected,
-                        onCover: true,
+            TransitionSource(
+              radius: AppRadius.xs,
+              child: AspectRatio(
+                aspectRatio: coverAspectRatio,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedScale(
+                      scale: selected ? 0.92 : 1,
+                      duration: AppMotion.spring,
+                      curve: AppMotion.springCurve,
+                      child: BookCoverWidget(
+                        bookName: name,
+                        author: book.author,
+                        coverUrl: book.getDisplayCover(),
+                        width: double.infinity,
+                        height: double.infinity,
+                        borderRadius: AppRadius.cardXs,
                       ),
                     ),
-                  ),
-                ],
+                    Positioned(
+                      top: AppSpacing.xs,
+                      right: AppSpacing.xs,
+                      child: BookshelfUpdateBadge(
+                        result: selecting ? null : updateBadge,
+                      ),
+                    ),
+                    Positioned(
+                      top: AppSpacing.sm,
+                      right: AppSpacing.sm,
+                      child: AnimatedOpacity(
+                        duration: AppMotion.menu,
+                        opacity: selecting ? 1 : 0,
+                        child: BookshelfCheckMark(
+                          selected: selected,
+                          onCover: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.sm),

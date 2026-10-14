@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -42,84 +43,86 @@ class _SearchResultItemState extends State<SearchResultItem> {
       height: 1.35,
       color: secondary,
     );
-    return InkWell(
-      onTap: () {
-        // 詳情蓋住搜尋頁時，還沒送出的書源先暫停，回來再接著搜。
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => BookDetailPage(searchBook: widget.result),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          AppSpacing.md,
-          AppGrouped.margin,
-          AppSpacing.md,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BookCoverWidget(
-              coverUrl: book.coverUrl,
-              bookName: context.zh(book.name),
-              author: context.zh(book.author),
-              width: ExploreBookItem.coverWidth,
-              height: ExploreBookItem.coverHeight,
-              borderRadius: AppRadius.cardXs,
+    return TransitionSource(
+      child: InkWell(
+        onTap: () {
+          // 詳情蓋住搜尋頁時，還沒送出的書源先暫停，回來再接著搜。
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => BookDetailPage(searchBook: widget.result),
             ),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          context.zh(book.name),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.md,
+            AppGrouped.margin,
+            AppSpacing.md,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BookCoverWidget(
+                coverUrl: book.coverUrl,
+                bookName: context.zh(book.name),
+                author: context.zh(book.author),
+                width: ExploreBookItem.coverWidth,
+                height: ExploreBookItem.coverHeight,
+                borderRadius: AppRadius.cardXs,
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.zh(book.name),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodyBase.copyWith(
+                              height: 1.3,
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      if (widget.isInBookshelf) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        const InfoBadge(),
+                        if (widget.isInBookshelf) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          const InfoBadge(),
+                        ],
+                        if (sourceCount > 1) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          InfoBadge(label: '$sourceCount 個書源'),
+                        ],
                       ],
-                      if (sourceCount > 1) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        InfoBadge(label: '$sourceCount 個書源'),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    metadata,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: secondaryStyle,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: secondaryStyle,
-                  ),
-                  const SizedBox(height: 2),
-                  _buildSources(context, sourceCount, secondary),
-                ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      metadata,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: secondaryStyle,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: secondaryStyle,
+                    ),
+                    const SizedBox(height: 2),
+                    _buildSources(context, sourceCount, secondary),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
