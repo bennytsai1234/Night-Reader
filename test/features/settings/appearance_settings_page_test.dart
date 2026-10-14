@@ -11,14 +11,18 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
+  late SharedPreferences prefs;
+  late ThemeSettingsProvider themeSettings;
+
+  /// 一般手機的大小（393×852）。
+  Future<void> pumpPage(WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final prefs = await SharedPreferences.getInstance();
+    prefs = await SharedPreferences.getInstance();
     GetIt.instance.registerSingleton<SharedPreferences>(prefs);
     addTearDown(GetIt.instance.reset);
-    final themeSettings = ThemeSettingsProvider()..setStyle(AppStyle.plain);
+    themeSettings = ThemeSettingsProvider();
     final settings = SettingsProvider();
-    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.physicalSize = const Size(393 * 3, 852 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
@@ -40,6 +44,24 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('風格卡兩列、每列五張，一頁放得下到玻璃效果', (tester) async {
+    await pumpPage(tester);
+    final tops = <double>[];
+    for (final style in AppStyle.values) {
+      tops.add(tester.getTopLeft(find.bySemanticsLabel(style.label)).dy);
+    }
+    expect(tops.toSet(), hasLength(2), reason: '十張排成兩列');
+    expect(tops.where((top) => top == tops.first), hasLength(5));
+    final glass = tester.getBottomLeft(find.text('玻璃'));
+    expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
+  });
+
+  testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
+    await pumpPage(tester);
+    themeSettings.setStyle(AppStyle.plain);
     await tester.pumpAndSettle();
     expect(find.text('跟隨主題'), findsOneWidget);
 
