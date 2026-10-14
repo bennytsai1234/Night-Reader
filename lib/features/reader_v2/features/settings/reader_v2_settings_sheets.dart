@@ -9,6 +9,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
 class ReaderV2SettingsSheets {
@@ -94,7 +95,12 @@ class _ReaderStyleSelector extends StatelessWidget {
                   style.of(brightness),
                   selected: style == themeSettings.style,
                   scheme: scheme,
-                  onTap: () => themeSettings.setStyle(style),
+                  // 和外觀設定頁一樣，新配色從點擊處像墨水一樣暈開。
+                  onTap: () {
+                    if (style == themeSettings.style) return;
+                    ThemeRevealScope.of(context)
+                        .run(change: () => themeSettings.setStyle(style));
+                  },
                 ),
             ],
           ),

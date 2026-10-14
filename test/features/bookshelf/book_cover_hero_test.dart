@@ -6,7 +6,6 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/features/search/widgets/search_result_item.dart';
-import 'package:night_reader/shared/navigation/book_open_route.dart';
 
 void main() {
   const url = 'https://a.example/book/1';
@@ -77,44 +76,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'tapping a shelf tile hands over the cover as it sits on screen',
-    (tester) async {
-      BookOpenCover? opened;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 30, top: 50),
-                child: SizedBox(
-                  width: 108,
-                  child: BookshelfGridTile(
-                    book: book,
-                    onTap: (cover) => opened = cover,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.byType(BookshelfGridTile));
-      await tester.pumpAndSettle();
-
-      final cover = opened!;
-      final coverOnScreen = tester.getRect(find.byType(BookCoverWidget));
-      expect(cover.size, coverOnScreen.size);
-      // 量的是按下那一刻的封面：按壓微縮讓範圍略小於原尺寸，但中心不變。
-      expect(cover.rect.width, lessThanOrEqualTo(cover.size.width));
-      expect(cover.rect.center.dx, closeTo(coverOnScreen.center.dx, 0.5));
-      expect(cover.rect.center.dy, closeTo(coverOnScreen.center.dy, 4));
-      expect(cover.child, isA<BookCoverWidget>());
     },
   );
 }

@@ -25,7 +25,10 @@ import 'query_ttf.dart';
 abstract class JsExtensionsBase {
   final JavascriptRuntime runtime;
   final BaseSource? source;
-  final dynamic ruleContext;
+
+  /// 規則 JS 裡 `java` 代表的 AnalyzeRule；共用引擎時由 [JsEngine] 每次執行前
+  /// 換成當下的規則。
+  dynamic ruleContext;
   final CookieStore cookieStore = CookieStore();
   final CacheManager cacheManager = CacheManager();
 

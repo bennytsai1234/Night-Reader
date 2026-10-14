@@ -31,7 +31,16 @@ class JsEngine {
   bool _isAvailable = false;
   JsExtensions? _extensions;
   final dynamic source;
-  final dynamic ruleContext;
+
+  /// 規則 JS 裡 `java` 代表的 AnalyzeRule。同一次解析的逐項規則共用一個
+  /// 引擎（見 `AnalyzeRuleBase.jsEngineOwner`），每次執行前換成當下那一項。
+  dynamic get ruleContext => _ruleContext;
+  set ruleContext(dynamic value) {
+    _ruleContext = value;
+    _extensions?.ruleContext = value;
+  }
+
+  dynamic _ruleContext;
   final Map<int, dom.Element> _bridgedElements = <int, dom.Element>{};
   int _nextBridgeElementId = 0;
   String? _loadedSourceJsLibKey;
@@ -47,7 +56,7 @@ class JsEngine {
     _pendingJsLibCache.clear();
   }
 
-  JsEngine({this.source, this.ruleContext}) {
+  JsEngine({this.source, dynamic ruleContext}) : _ruleContext = ruleContext {
     try {
       // 背景 isolate（書源批量校驗）沒有 ServicesBinding，flutter_js 的
       // enableFetch() 會用 rootBundle 載入 fetch.js polyfill，存取
@@ -64,6 +73,7 @@ class JsEngine {
         ruleContext: ruleContext,
       );
       _extensions!.inject();
+      _runtime!.evaluate(_ruleGlobalsHelpers);
     } catch (e) {
       // Library not available in some test environments
       AppLog.e('JS Engine init error: $e', error: e);
@@ -131,7 +141,9 @@ class JsEngine {
     final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
     final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
     final (callId, future) = _extensions!.registerRuleCall();
-    final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+    // 非同步規則在 await 之後才跑完，進入在這段腳本開頭、清除等它結束。
+    final wrapped =
+        '__lrEnterRule();\n${JsRuleAsyncWrapper.wrap(rewritten, callId)}';
 
     try {
       final res = _runtime!.evaluate(wrapped);
@@ -167,7 +179,10 @@ class JsEngine {
               const Duration(seconds: 20),
             );
           },
-        );
+        )
+        .whenComplete(() {
+          if (!_isDisposed) _runtime?.evaluate('__lrExitRule()');
+        });
   }
 
   String _normalizeLegacySyncIifeForAsync(String jsCode) {
@@ -371,11 +386,37 @@ class JsEngine {
     return trimmed;
   }
 
+  /// 規則執行時新掛上全域的名稱（沒宣告就賦值的變數，例如 `seen = result`），
+  /// 在規則結束後刪掉，下一次執行（下一章、下一筆結果）看不到；Legado 每次
+  /// 執行都是新的作用域。規則的 JS 可能經 `java.getString` 再執行一段規則，
+  /// 所以只在最外層記下與清除。脈絡、書源 jsLib 都在進入規則前寫好，不受影響。
+  static const String _ruleGlobalsHelpers = '''
+globalThis.__lrRuleDepth = 0;
+globalThis.__lrEnterRule = function () {
+  if (__lrRuleDepth++ === 0) globalThis.__lrGlobalsBefore = Object.keys(globalThis);
+};
+globalThis.__lrExitRule = function () {
+  if (__lrRuleDepth === 0 || --__lrRuleDepth > 0) return;
+  var keep = new Set(globalThis.__lrGlobalsBefore);
+  Object.keys(globalThis).forEach(function (name) {
+    if (!keep.has(name)) delete globalThis[name];
+  });
+};
+globalThis.__lrRunRule = function (run) {
+  __lrEnterRule();
+  try { return run(); } finally { __lrExitRule(); }
+};
+''';
+
+  /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
+  /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
+  /// 執行一個新作用域相同；非同步規則的 async IIFE 本來就是這樣。沒宣告就
+  /// 賦值的變數由 `__lrRunRule` 在結束後清掉（見 [_ruleGlobalsHelpers]）。
   JsEvalResult _evaluateRuleScript(String jsCode) {
     final wrapped =
-        'typeof __lrNormalizeRuleResult === "function" '
+        '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
-        ': eval(${jsonEncode(jsCode)})';
+        ': eval(${jsonEncode(jsCode)}); })';
     final result = _runtime!.evaluate(wrapped);
     if (!result.isError) {
       return result;
@@ -385,16 +426,24 @@ class JsEngine {
     // 邏輯繼續生效。
     final fallbackBody = JsRuleAsyncWrapper.injectFinalReturn(jsCode);
     final fallbackWrapped =
-        'typeof __lrNormalizeRuleResult === "function" '
+        '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult((function() {\n$fallbackBody\n})()) '
-        ': (function() {\n$fallbackBody\n})()';
+        ': (function() {\n$fallbackBody\n})(); })';
     return _runtime!.evaluate(fallbackWrapped);
   }
 
+  /// 這個引擎的 JS 全域已經有 `source`。引擎只服務一個書源（[source]），
+  /// 注入一次之後呼叫端可以省略，見 `AnalyzeRuleScript`。
+  bool get sourceInjected => _sourceInjected;
+  bool _sourceInjected = false;
+
+  /// 每次執行前把脈絡寫進 JS 全域。全部合成一段腳本一次執行：逐項分開執行
+  /// 時，每次都要多付十幾次跨 FFI 的解析與執行。
   void _injectContext(Map<String, dynamic>? context) {
     if (context == null) return;
     _bridgedElements.clear();
     _nextBridgeElementId = 0;
+    final statements = <String>[];
     context.forEach((key, value) {
       switch (key) {
         case 'java':
@@ -403,22 +452,32 @@ class JsEngine {
           return;
         case 'source':
           final jsLiteral = _encodeContextValue(value);
-          _runtime!.evaluate(
+          statements.add(
             'if (typeof source === "object" && source !== null) { '
             'Object.assign(source, $jsLiteral); '
             '} else { var source = $jsLiteral; }',
           );
+          _sourceInjected = true;
           return;
         case 'book':
         case 'chapter':
           final jsLiteral = _encodeScopedObject(key, value);
-          _runtime!.evaluate('var $key = $jsLiteral;');
+          statements.add('var $key = $jsLiteral;');
           return;
         default:
           final jsLiteral = _encodeContextValue(value);
-          _runtime!.evaluate('var $key = $jsLiteral;');
+          statements.add('var $key = $jsLiteral;');
       }
     });
+    if (statements.isEmpty) return;
+    final batch = _runtime!.evaluate(statements.join('\n'));
+    if (!batch.isError) return;
+    // 合成的腳本中途出錯時，後面的變數會停在上一次執行的值；共用引擎時
+    // 那是上一章的。逐句再寫一次，壞掉的那句不影響其他。
+    AppLog.w('JS 脈絡注入失敗，改逐項寫入：${batch.stringResult}');
+    for (final statement in statements) {
+      _runtime!.evaluate(statement);
+    }
   }
 
   String _encodeContextValue(dynamic value) {
@@ -471,12 +530,11 @@ class JsEngine {
     }
   }
 
-  String _encodeScopedObject(String scopeName, dynamic value) {
-    final payload = _encodeJsonContextValue(value);
-    final scopeLiteral = jsonEncode(scopeName);
-    return '''
-(function() {
-  var seed = $payload;
+  /// `book`、`chapter` 的包裝：欄位寫入時通知 Dart，另附 `getVariable` 等
+  /// 方法。建構函式每個引擎只定義一次，之後每次執行只傳資料；整段建構程式
+  /// 每次重新送進引擎解析，逐章執行時佔了大半時間。
+  static const String _scopedObjectFactory = '''
+var __lrScopedObject = function(scope, seed) {
   if (seed == null || typeof seed !== 'object') {
     return seed;
   }
@@ -489,55 +547,65 @@ class JsEngine {
       get: function() { return current; },
       set: function(value) {
         current = value;
-        sendMessage('scopedObjectSetField', JSON.stringify([$scopeLiteral, prop, value]));
+        sendMessage('scopedObjectSetField', JSON.stringify([scope, prop, value]));
       }
     });
   });
   obj.getVariable = function(key) {
     var value = sendMessage(
       'scopedObjectGetVariable',
-      JSON.stringify([$scopeLiteral, key])
+      JSON.stringify([scope, key])
     );
     return value == null ? '' : value;
   };
   obj.putVariable = function(key, value) {
     sendMessage(
       'scopedObjectPutVariable',
-      JSON.stringify([$scopeLiteral, key, value])
+      JSON.stringify([scope, key, value])
     );
     return null;
   };
-  if ($scopeLiteral === "book") {
+  if (scope === "book") {
     obj.setReverseToc = function(value) {
       sendMessage(
         'scopedObjectSetField',
-        JSON.stringify([$scopeLiteral, 'reverseToc', !!value])
+        JSON.stringify([scope, 'reverseToc', !!value])
       );
       return null;
     };
     obj.getReverseToc = function() {
       return !!sendMessage(
         'scopedObjectGetField',
-        JSON.stringify([$scopeLiteral, 'reverseToc'])
+        JSON.stringify([scope, 'reverseToc'])
       );
     };
     obj.setUseReplaceRule = function(value) {
       sendMessage(
         'scopedObjectSetField',
-        JSON.stringify([$scopeLiteral, 'useReplaceRule', !!value])
+        JSON.stringify([scope, 'useReplaceRule', !!value])
       );
       return null;
     };
     obj.getUseReplaceRule = function() {
       return !!sendMessage(
         'scopedObjectGetField',
-        JSON.stringify([$scopeLiteral, 'useReplaceRule'])
+        JSON.stringify([scope, 'useReplaceRule'])
       );
     };
   }
   return obj;
-})()
+};
 ''';
+
+  bool _scopedObjectFactoryInstalled = false;
+
+  String _encodeScopedObject(String scopeName, dynamic value) {
+    if (!_scopedObjectFactoryInstalled) {
+      _runtime!.evaluate(_scopedObjectFactory);
+      _scopedObjectFactoryInstalled = true;
+    }
+    final payload = _encodeJsonContextValue(value);
+    return '__lrScopedObject(${jsonEncode(scopeName)}, $payload)';
   }
 
   String _encodeElement(dom.Element element) {

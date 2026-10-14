@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
@@ -28,7 +26,6 @@ const List<MainDestination> _defaultDestinations = [
     selectedIcon: Icons.auto_stories,
     label: '書架',
     page: BookshelfPage(),
-    hidesTabBarOnScroll: true,
   ),
   MainDestination(
     icon: Icons.explore_outlined,
@@ -36,7 +33,6 @@ const List<MainDestination> _defaultDestinations = [
     label: '發現',
     page: ExplorePage(),
     background: _groupedBackground,
-    hidesTabBarOnScroll: true,
   ),
   MainDestination(
     icon: Icons.person_outline,
@@ -87,21 +83,6 @@ class _MainPageState extends State<MainPage> {
   /// 分頁進入整頁編輯時由分頁設為 true（見 [FloatingTabBarScope]）。
   final ValueNotifier<bool> _tabBarHidden = ValueNotifier(false);
 
-  /// 往下捲時分頁列與漸隱帶沉下讓出畫面。和 [_tabBarHidden] 不同：不鎖
-  /// 左右換頁，返回鍵也照常。
-  bool _scrollHidden = false;
-
-  /// 手指拖曳或拖曳後的慣性捲動中；程式捲動（例如展開書源後自動捲到它）
-  /// 不算方向。
-  bool _userScrolling = false;
-
-  /// 同一方向累計的捲動距離，正值往下。
-  double _scrollIntent = 0;
-
-  /// 捲過這段距離後才會因往下捲而讓出：根分頁的大標題正好收完，不會在頁首
-  /// 還在收合時分頁列也跟著動。
-  static const double _scrollHideStart = AppGlass.largeTitleHeight;
-
   @override
   void dispose() {
     _splashTimeoutTimer?.cancel();
@@ -114,8 +95,7 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
-    // 整頁編輯時由編輯工具列佔用分頁列的位置，捲動讓出的狀態歸零。
-    _tabBarHidden.addListener(() => setState(_resetScrollHidden));
+    _tabBarHidden.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_initDeferredStartupData());
@@ -147,22 +127,14 @@ class _MainPageState extends State<MainPage> {
                   ? const NeverScrollableScrollPhysics()
                   : null,
               onPageChanged: (idx) {
-                setState(() {
-                  _currentIndex = idx;
-                  _resetScrollHidden();
-                });
+                setState(() => _currentIndex = idx);
               },
               children: List.generate(
                 _destinations.length,
                 (index) => _KeepAliveWrapper(
-                  child: NotificationListener<Notification>(
-                    onNotification: _destinations[index].hidesTabBarOnScroll
-                        ? (notification) => _onPageScroll(index, notification)
-                        : null,
-                    child: FloatingTabBarScope(
-                      hidden: _tabBarHidden,
-                      child: _destinations[index].page,
-                    ),
+                  child: FloatingTabBarScope(
+                    hidden: _tabBarHidden,
+                    child: _destinations[index].page,
                   ),
                 ),
               ),
@@ -177,7 +149,7 @@ class _MainPageState extends State<MainPage> {
                 animation: _pageController,
                 builder: (context, _) => FloatingTabBarFade(
                   color: _fadeColor(context),
-                  hidden: _tabBarHidden.value || _scrollHidden,
+                  hidden: _tabBarHidden.value,
                 ),
               ),
             ),
@@ -222,7 +194,7 @@ class _MainPageState extends State<MainPage> {
         bottomNavigationBar: FloatingTabBar(
           controller: _pageController,
           currentIndex: _currentIndex,
-          hidden: _tabBarHidden.value || _scrollHidden,
+          hidden: _tabBarHidden.value,
           items: [
             for (final destination in _destinations)
               FloatingTabItem(
@@ -250,61 +222,6 @@ class _MainPageState extends State<MainPage> {
         ),
       ),
     );
-  }
-
-  void _resetScrollHidden() {
-    _scrollHidden = false;
-    _userScrolling = false;
-    _scrollIntent = 0;
-  }
-
-  void _setScrollHidden(bool value) {
-    if (_scrollHidden == value) return;
-    setState(() => _scrollHidden = value);
-  }
-
-  /// 往下捲（同一方向累計超過 [kTouchSlop]，也就是 Flutter 判定手指真的在
-  /// 拖、不是手抖的距離）且已捲過 [_scrollHideStart] 時讓出；往上捲同樣距離、
-  /// 回到頂端或捲到底時浮回來。只看目前分頁本身的直向清單。
-  ///
-  /// 清單換掉（例如書架網格換列表）或內容變短時沒有捲動，只會發出
-  /// [ScrollMetricsNotification]；它只用來檢查是否已在頂端或底端。
-  bool _onPageScroll(int index, Notification notification) {
-    final (ScrollMetrics? metrics, int depth) = switch (notification) {
-      ScrollNotification(:final metrics, :final depth) => (metrics, depth),
-      ScrollMetricsNotification(:final metrics, :final depth) => (
-        metrics,
-        depth,
-      ),
-      _ => (null, -1),
-    };
-    if (metrics == null ||
-        index != _currentIndex ||
-        _tabBarHidden.value ||
-        depth != 0 ||
-        metrics.axis != Axis.vertical) {
-      return false;
-    }
-    switch (notification) {
-      case UserScrollNotification(:final direction):
-        _userScrolling = direction != ScrollDirection.idle;
-        _scrollIntent = 0;
-      case ScrollUpdateNotification(:final scrollDelta?) when _userScrolling:
-        // 換方向就重新累計。
-        if (scrollDelta.sign != _scrollIntent.sign) _scrollIntent = 0;
-        _scrollIntent += scrollDelta;
-        if (_scrollIntent > kTouchSlop && metrics.pixels > _scrollHideStart) {
-          _setScrollHidden(true);
-        } else if (_scrollIntent < -kTouchSlop) {
-          _setScrollHidden(false);
-        }
-      default:
-        break;
-    }
-    if (metrics.extentBefore <= 0 || metrics.extentAfter <= 0) {
-      _setScrollHidden(false);
-    }
-    return false;
   }
 
   /// 頁面位置（以分頁索引為單位，滑動中是小數）。
@@ -510,7 +427,6 @@ class MainDestination {
     required this.label,
     required this.page,
     this.background,
-    this.hidesTabBarOnScroll = false,
   });
 
   final IconData icon;
@@ -520,9 +436,6 @@ class MainDestination {
 
   /// 分頁的背景色，給分頁列後方的漸隱帶用；預設為 scaffold 背景色。
   final Color Function(BuildContext context)? background;
-
-  /// 往下捲時分頁列與漸隱帶沉下讓出畫面（見 [_MainPageState._onPageScroll]）。
-  final bool hidesTabBarOnScroll;
 
   Color backgroundOf(BuildContext context) =>
       background?.call(context) ?? Theme.of(context).scaffoldBackgroundColor;

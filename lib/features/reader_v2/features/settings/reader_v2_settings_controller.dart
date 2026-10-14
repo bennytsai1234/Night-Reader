@@ -70,16 +70,29 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int get contentSettingsGeneration => _contentSettingsGeneration;
   bool get showReadTitleAddition => true;
 
+  /// 第一次 [loadSettings] 已結束（成功或失敗）。在這之前的值是上次載入的
+  /// 快取，App 啟動後第一次開書時則是預設值；閱讀器要等它才開書，否則會
+  /// 先用預設值排出正文，設定到了再重排、重載一次。
+  bool get isLoaded => _loaded;
+  bool _loaded = false;
+
   Future<void> loadSettings() async {
-    final snapshot = await _prefsRepository.load();
-    _persisted = snapshot;
-    // 別處（例如「閱讀偏好」頁）改了繁簡轉換時，重新載入也必須讓正文重轉。
-    if (snapshot.chineseConvert != chineseConvert) {
-      _contentSettingsGeneration += 1;
+    try {
+      final snapshot = await _prefsRepository.load();
+      _persisted = snapshot;
+      // 別處（例如「閱讀偏好」頁）改了繁簡轉換時，重新載入也必須讓正文重轉。
+      if (snapshot.chineseConvert != chineseConvert) {
+        _contentSettingsGeneration += 1;
+      }
+      _initFromCache(snapshot);
+      ChineseDisplay.mode.value = chineseConvert;
+    } catch (error, stackTrace) {
+      // 讀不到就用目前的值開書，不讓閱讀器卡在載入中。
+      AppLog.e('閱讀設定載入失敗: $error', error: error, stackTrace: stackTrace);
+    } finally {
+      _loaded = true;
+      if (!_disposed) notifyListeners();
     }
-    _initFromCache(snapshot);
-    ChineseDisplay.mode.value = chineseConvert;
-    notifyListeners();
   }
 
   void _initFromCache(ReaderV2PrefsSnapshot snapshot) {
