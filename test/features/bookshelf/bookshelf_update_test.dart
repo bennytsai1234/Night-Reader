@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -23,6 +24,7 @@ void main() {
 
   late AppDatabase db;
   late BookDao bookDao;
+  late ReaderChapterContentDao contentDao;
   late BookshelfProvider provider;
 
   /// 排進書架自動下載的書：(bookUrl, hasNewChapters)。
@@ -77,7 +79,10 @@ void main() {
       )
       ..registerSingleton<BookDao>(bookDao)
       ..registerSingleton<BookSourceDao>(BookSourceDao(db))
-      ..registerSingleton<ChapterDao>(ChapterDao(db));
+      ..registerSingleton<ChapterDao>(ChapterDao(db))
+      ..registerSingleton<ReaderChapterContentDao>(
+        contentDao = ReaderChapterContentDao(db),
+      );
     await BookSourceDao(db).upsert(
       BookSource.fromJson({
         'bookSourceName': '測試',
@@ -101,6 +106,7 @@ void main() {
     AppConfig.autoRefresh = true;
     await db.delete(db.books).go();
     await db.delete(db.chapters).go();
+    await db.delete(db.readerChapterContents).go();
     downloads.clear();
     timers.clear();
     provider = BookshelfProvider(
@@ -479,6 +485,78 @@ void main() {
       expect(saved.durChapterTitle, '第三章');
       // 網址不同，不能確定是同一份正文，從章首開始。
       expect(saved.charOffset, 0);
+    });
+
+    test('an empty TOC from the source changes nothing', () async {
+      // 網站壞了：詳情頁還在，目錄卻一章都抓不到。
+      final book = onlineBook()
+        ..totalChapterNum = 2
+        ..infoHtml = '<html><body><h1>書源上的書名</h1></body></html>';
+      await bookDao.upsert(book);
+      await storeToc(book, [('/c/1.html', '第一章'), ('/c/2.html', '第二章')]);
+
+      final result = await provider.checkBookUpdate(book);
+
+      expect(result.failed, isTrue);
+      expect(downloads, isEmpty);
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.totalChapterNum, 2);
+      expect(await ChapterDao(db).getByBook(book.bookUrl), hasLength(2));
+    });
+
+    test('chapters the source dropped stay when downloaded or being read, '
+        'in their old place', () async {
+      final book = onlineBook()..totalChapterNum = 6;
+      await bookDao.upsert(book);
+      await storeToc(book, [
+        ('/c/1.html', '第一章'),
+        ('/c/notice.html', '公告'),
+        ('/c/2.html', '第二章'),
+        ('/c/extra.html', '番外'),
+        ('/c/gone.html', '刪掉的章'),
+        ('/c/3.html', '第三章'),
+      ]);
+      await contentDao.saveContent(
+        contentKey: 'notice',
+        origin: sourceUrl,
+        bookUrl: book.bookUrl,
+        chapterUrl: 'https://source.example/c/notice.html',
+        chapterIndex: 1,
+        content: '公告內容',
+        updatedAt: 1,
+      );
+      await bookDao.updateProgress(book.bookUrl, 3, '番外', 50);
+
+      await provider.checkBookUpdate(book);
+
+      final toc = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(toc.map((c) => c.title), ['第一章', '公告', '第二章', '番外', '第三章']);
+      expect(toc.map((c) => c.index), [0, 1, 2, 3, 4]);
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 3);
+      expect(saved.charOffset, 50);
+      expect(saved.totalChapterNum, 5);
+    });
+
+    test('a downloaded chapter that only moved to a new address is not '
+        'listed twice', () async {
+      final book = onlineBook();
+      await bookDao.upsert(book);
+      await storeToc(book, [('/old/1.html', '第一章')]);
+      await contentDao.saveContent(
+        contentKey: 'old-1',
+        origin: sourceUrl,
+        bookUrl: book.bookUrl,
+        chapterUrl: 'https://source.example/old/1.html',
+        chapterIndex: 0,
+        content: '正文',
+        updatedAt: 1,
+      );
+
+      await provider.checkBookUpdate(book);
+
+      final toc = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(toc.map((c) => c.title), ['第一章', '第二章', '第三章']);
     });
 
     test('a failed check queues no download', () async {

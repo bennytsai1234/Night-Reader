@@ -9,12 +9,16 @@ import 'package:night_reader/core/models/reader_chapter_content.dart';
 bool chapterHasContent(BookChapter chapter) =>
     !chapter.isVolume && chapter.url.isNotEmpty;
 
-/// [chapters] 中有正文、但網址不在 [storedUrls] 裡的章節。
+/// 要下載的章節：有正文，而且不是付費還沒買的（網站只會回付費提示）。
+bool chapterIsDownloadable(BookChapter chapter) =>
+    chapterHasContent(chapter) && !chapter.isLocked;
+
+/// [chapters] 中要下載、但網址不在 [storedUrls] 裡的章節。
 List<BookChapter> chaptersMissingContent(
   List<BookChapter> chapters,
   Set<String> storedUrls,
 ) => chapters
-    .where((c) => chapterHasContent(c) && !storedUrls.contains(c.url))
+    .where((c) => chapterIsDownloadable(c) && !storedUrls.contains(c.url))
     .toList();
 
 class ReaderChapterContentStore {

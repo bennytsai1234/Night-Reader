@@ -221,6 +221,9 @@ class ChapterContentPreparationPipeline {
   }) async {
     final store = contentStore;
     if (store == null || result.content.trim().isEmpty) return;
+    // 付費還沒買的章節，網站回的是付費提示：照樣顯示，但不存成正文，買了
+    // 之後還會重抓；之前免費時存下的正文也不被它蓋掉。
+    if (chapter.isLocked) return;
     if (result.isReady) {
       await store.saveRawContent(
         book: book,

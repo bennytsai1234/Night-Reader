@@ -51,16 +51,24 @@ extension BookLogic on Book {
     );
   }
 
-  /// 已存的目錄整份換成 [toc] 之前呼叫：把閱讀進度對到新目錄裡的同一章。
-  /// [oldChapter] 是舊目錄在目前序號上的那一章。
+  /// 已存的目錄 [oldToc] 整份換成 [toc] 時呼叫：把閱讀進度對到新目錄裡的
+  /// 同一章。
   ///
   /// 書源在中間插入或刪除章節後序號會位移，所以依章節網址找回那一章，章內
   /// 位置照舊。那一章已不在新目錄裡，才照標題、章號與比例估計（同換源），
   /// 章內位置只在綁得住原文時保留。舊目錄沒有這一章時無從對應，進度不動。
   /// 回傳進度有沒有變。
-  bool realignProgress(List<BookChapter> toc, {BookChapter? oldChapter}) {
+  bool realignProgress(
+    List<BookChapter> toc, {
+    required List<BookChapter> oldToc,
+  }) {
+    BookChapter? oldChapter;
+    for (final chapter in oldToc) {
+      if (chapter.index == chapterIndex) oldChapter = chapter;
+    }
     if (toc.isEmpty || oldChapter == null) return false;
-    final sameChapter = toc.indexWhere((c) => c.url == oldChapter.url);
+    final oldUrl = oldChapter.url;
+    final sameChapter = toc.indexWhere((c) => c.url == oldUrl);
     if (sameChapter >= 0) {
       if (sameChapter == chapterIndex) return false;
       readerAnchorJson = _reindexedReaderAnchor(sameChapter);
@@ -71,7 +79,7 @@ extension BookLogic on Book {
     final alignedIndex = alignChapterIndex(
       oldIndex: chapterIndex,
       oldTitle: oldChapter.title,
-      oldTotalCount: totalChapterNum,
+      oldTotalCount: oldToc.length,
       newChapters: toc,
     );
     // 只是換了網址（例如書源搬家），同一個位置還是同名的章。

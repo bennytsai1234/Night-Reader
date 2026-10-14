@@ -59,7 +59,16 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
         .getSingleOrNull();
   }
 
-  /// 整份換成書源目前的目錄：書源拿掉的章節不留下來佔著序號。
+  /// 這本書目前的目錄裡這個網址的章節序號；目錄裡沒有這一章時回傳 null。
+  Future<int?> indexOfUrl(String bookUrl, String url) async {
+    final row =
+        await (select(chapters)
+              ..where((t) => t.bookUrl.equals(bookUrl) & t.url.equals(url)))
+            .getSingleOrNull();
+    return row?.index;
+  }
+
+  /// 整份換掉這本書的目錄，不留舊目錄的章節佔著序號。
   Future<void> replaceByBook(String bookUrl, List<BookChapter> chapterList) {
     return transaction(() async {
       await deleteByBook(bookUrl);

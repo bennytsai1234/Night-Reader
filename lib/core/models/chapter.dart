@@ -47,6 +47,9 @@ class BookChapter implements RuleDataInterface {
     this.content,
   });
 
+  /// 書源標了付費、還沒買：網站只會回付費提示，不是正文。
+  bool get isLocked => isVip && !isPay;
+
   // 變量地圖 (原 Android variableMap)
   @override
   Map<String, String> get variableMap {
