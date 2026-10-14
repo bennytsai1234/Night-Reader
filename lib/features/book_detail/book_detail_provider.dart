@@ -424,7 +424,8 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   /// [fromFirstResolved]／[toLastResolved]：任務的範圍從解析出的第一章開始
-  /// ／到最後一章為止；否則從目錄第一章／到開跑時目錄的最後一章。
+  /// ／到最後一章為止；否則從目錄第一章／到開跑時目錄的最後一章。兩端都
+  /// 不固定的是整本任務（「下載全部」「下載缺少的」），進度算整本。
   Future<StorageDownloadQueueResult> _queueStorageDownload({
     required List<BookChapter> Function(Set<String> storedUrls) resolveChapters,
     required String emptyMessage,
@@ -444,7 +445,7 @@ class BookDetailProvider extends ChangeNotifier {
 
     await _resolvedDownloadService.addDownloadTask(
       _book,
-      chapters,
+      fromFirstResolved || toLastResolved ? chapters : _allChapters,
       from: fromFirstResolved ? chapters.first : null,
       to: toLastResolved ? chapters.last : null,
     );

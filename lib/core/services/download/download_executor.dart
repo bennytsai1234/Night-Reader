@@ -30,13 +30,6 @@ List<BookChapter>? chaptersInDownloadScope(
   ];
 }
 
-bool downloadTaskCountsPreStoredChapters({
-  required DownloadTask task,
-  required int chapterCountInRange,
-}) {
-  return task.totalCount >= chapterCountInRange;
-}
-
 class DownloadChapterResult {
   const DownloadChapterResult._({required this.success, this.failureMessage});
 
@@ -145,21 +138,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       if (toDownload == null) {
         throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
       }
-      final countsPreStoredChapters = downloadTaskCountsPreStoredChapters(
-        task: task,
-        chapterCountInRange: toDownload.length,
-      );
-      // 進度的總數照這次實際的範圍算：排進來時可能還沒有目錄，排隊期間
-      // 目錄也可能多了章節。
-      final storedUrls = await chapterContentDao.getStoredChapterUrls(
-        origin: book.origin,
-        bookUrl: book.bookUrl,
-      );
-      final totalCount = countsPreStoredChapters
-          ? toDownload.length
-          : toDownload.where((c) => !storedUrls.contains(c.url)).length;
-      if (totalCount != task.totalCount) {
-        task.totalCount = totalCount;
+      // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
+      // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
+      if (toDownload.length != task.totalCount) {
+        task.totalCount = toDownload.length;
         await downloadDao.upsert(task);
       }
       final contentStore = ReaderChapterContentStore(
@@ -191,9 +173,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
 
         if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
-          if (countsPreStoredChapters) {
-            task.successCount++;
-          }
+          task.successCount++;
           task.currentChapterIndex = chapter.index;
           task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
           await downloadDao.updateProgress(

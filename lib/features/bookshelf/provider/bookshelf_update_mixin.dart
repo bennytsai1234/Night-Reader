@@ -248,7 +248,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         skippedBooks++;
         continue;
       }
-      await downloadService.addDownloadTask(book, toDownload);
+      // 整本任務：總數算整本，已下載的章節開跑時直接算完成。
+      await downloadService.addDownloadTask(book, chapters);
       queuedBooks++;
       queuedChapters += toDownload.length;
     }
@@ -315,7 +316,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      await downloadService.addDownloadTask(book, toDownload);
+      // 整本任務：總數算整本，已下載的章節開跑時直接算完成。
+      await downloadService.addDownloadTask(book, chapters);
       queuedBooks++;
       queuedChapters += toDownload.length;
     }

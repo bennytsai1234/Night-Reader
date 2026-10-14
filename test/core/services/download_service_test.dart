@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 void main() {
   late AppDatabase db;
@@ -202,6 +203,59 @@ void main() {
 
       expect(chaptersInDownloadScope(now, range(from: 'b')), isNull);
       expect(chaptersInDownloadScope(now, range(to: 'b')), isNull);
+    });
+
+    test('counts every chapter in it once, downloaded ones as done, even '
+        'after a chapter was inserted while queued', () async {
+      const origin = 'https://count-range.example';
+      final book = Book(
+        bookUrl: '$origin/book/1',
+        origin: origin,
+        name: '插章後的整本',
+      );
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource.fromJson({'bookSourceName': '數', 'bookSourceUrl': origin}),
+      );
+      await GetIt.instance<BookDao>().upsert(book);
+      final store = ReaderChapterContentStore(
+        chapterDao: GetIt.instance<ChapterDao>(),
+        contentDao: GetIt.instance<ReaderChapterContentDao>(),
+      );
+      // 排進來時 a、b、c 都下載好了（「下載全部」，總數 3）；開跑前書源在
+      // 前面插了 x，x 抓不到。
+      final downloaded = [
+        for (final (i, path) in ['a', 'b', 'c'].indexed)
+          BookChapter(
+            url: '$origin/$path',
+            index: i + 1,
+            bookUrl: book.bookUrl,
+          ),
+      ];
+      for (final chapter in downloaded) {
+        await store.saveRawContent(book: book, chapter: chapter, content: '正文');
+      }
+      await GetIt.instance<ChapterDao>().insertChapters([
+        BookChapter(url: 'unsupported://x', index: 0, bookUrl: book.bookUrl),
+        ...downloaded,
+      ]);
+      final service = DownloadService();
+      final task = DownloadTask(
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+        totalCount: 3,
+      );
+      service.tasks.add(task);
+      service.isDownloading = true;
+      addTearDown(() {
+        service.isDownloading = false;
+        service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+      });
+
+      await service.processTask(task);
+
+      expect(task.totalCount, 4);
+      expect(task.successCount, 3);
+      expect(task.errorCount, 1);
     });
 
     test('whose first chapter was removed fails with a reason', () async {
