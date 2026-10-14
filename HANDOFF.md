@@ -1,7 +1,37 @@
-# 交接（2026-10-14 16:30）
+# 交接（2026-10-14 18:50）
+
+## 正在做：PR #59（分支 `fix/reader-jump-veil`，worktree `../Night-Reader-jump`）
+
+使用者 2026-10-14 決定：跳章時正文還在下載也先蓋紙，紙蓋著時「不能」捲動（不再一捲就取消跳章），只能等正文到或失敗（失敗照舊顯示提示，掀開紙回到舊正文與原位置）；跳到「別章」時頁首頁尾收起、正文排好再淡入，同一章內的跳轉（拖進度條預覽）與改字號不收。
+
+已完成並推上（`7701b6d`，CI 通過）：
+- `hybrid_reader_screen.dart`：`_jumpVeil` 記「正在等正文的跳章」，`_syncJumpVeil`（`_onRuntimeChanged` 呼叫）在 jump 操作開始時蓋紙，排版前就結束時掀紙；`_setRestoreCompleted` 會清掉 `_jumpVeil`（排版流程接手）。刻意不動 `_initialRestoreCompleted`（它變 false 會拆掉捲動視圖，跳章失敗時位置就丟了）。紙在等跳章時改成攔觸控（`IgnorePointer(ignoring: _jumpVeil == null)`），長按選字停用；點擊仍穿到外層 `ReaderV2PointerTapLayer` 叫出選單。
+- `ReaderV2Runtime.isJumpingToAnotherChapter` → `reader_v2_page.dart` 的 `isLoading`，資訊列靠既有 `_InfoFadeIn` 淡入。
+- 測試：`hybrid_reader_interaction_test` 的「a jump covers the text with paper until its chapter arrives」（取代原本「拖動取消跳章」）、「a jump that cannot load lifts the paper off the old text」；`reader_v2_runtime_operation_test` 的「only a jump to another chapter counts as jumping chapters」。DESIGN.md「閱讀器載入」、CHANGELOG 已更新。
+
+Codex（gpt-6.1-sol）審過整個 PR（暫存已清），兩項 P2 都屬實，已修好並補了回歸測試：
+1. 蓋紙只擋新的觸控，沒停住既有捲動：甩動中跳章，慣性在紙下繼續跑；先按下的手指在紙蓋好後才拖，仍會取消跳章；甩動中點紙會被 `_isUserFlingInProgress` 當成停住甩動而吞掉、不叫出選單。**已改**：`_holdScrollUnderJumpVeil`（蓋紙時記 `_jumpVeilOffset`、`position.jumpTo(pixels)` 結束捲動活動、清 `_dragging`／`_sawUserScroll`、pump 設 idle）；`_handleScrollNotification` 在 `_jumpVeil != null` 時一律 return false，遇到帶 dragDetails 的通知就 `scheduleMicrotask(_holdScrollUnderJumpVeilAgain)` 拉回 `_jumpVeilOffset`。
+2. 等跳章時自動翻頁（`continuousScrollBy`）與朗讀跟隨（`ensureCharRangeVisible` → `_restoreCore`）仍能移動正文，朗讀跟隨還會清掉 `_jumpVeil` 並提早掀紙。**已改**：`_captureCommandOwner` 的 admitted 與回傳的 closure 都加上 `_jumpVeil == null`。朗讀跟隨收到 false 會留著待辦（`ReaderV2TtsHighlightFollower`），跳章結束的 runtime 通知會重試，不用另外處理。
+
+3. 自動翻頁收到 false 會當成到書尾而停下：`ReaderV2AutoPageController._step` 在 jump 操作進行中直接跳過這一步、不停。
+4. 回歸測試：`hybrid_reader_interaction_test` 的「the jump paper stops a fling and still lets taps through」「a finger down before the paper falls cannot drag under it」「nothing moves the text under the jump paper」，`reader_v2_auto_page_controller_test` 的「a jump waiting for its text pauses steps without ending」；退回修正前四項都會失敗。審查摘要已貼在 PR #59 留言。
+
+接手要做（合併與發版等使用者確認）：
+1. 併最新 `main`、`gh pr checks 59 --watch`、`gh pr merge 59 --squash`（標題與說明取 PR 的），`git pull --ff-only`，刪本機分支與 worktree `../Night-Reader-jump`。
+2. **發正式版**（使用者已要求，等 #59 合併後一起發）：目前已發布的正式版看 `gh release list`；推一個只改版號的 commit `release: bump version to X.Y.Z`：`pubspec.yaml` 的 `version` 升到尚未發布的版本，`CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留空的 `## 未發布`。照 AGENTS.md 這也要走分支＋PR。推上後確認 Android Release 開始建置即可。
+
+## 也在進行中
+
+- **PR #60（分支 `feat/website-seo`，worktree `../Night-Reader-web`）**：網站加 `sitemap.xml`、簡體與 Legado 關鍵字、補齊 `SoftwareApplication` 結構化資料（別名繁簡、Android, iOS、`ReferenceApplication`、sameAs、isBasedOn）。沒加 `robots.txt`：專案網站在 `github.io/Night-Reader/` 子路徑，爬蟲只讀網域根目錄的 robots.txt，放這裡無效（已跟使用者說明）。提交帶 `Release-Notes: none`。使用者還沒說合併；合併時照一般流程（Codex 審查、CI、squash），合併後 `website-deploy.yml` 自動部署。刪 worktree `../Night-Reader-web`。
+- **已做完、不用 PR**：repo 描述改成「夜讀 Night Reader：開源小說閱讀器，相容 Legado（閱讀）書源…夜读 · 小说阅读器 · 书源 · Open-source novel reader…」，topics 加了 `legado`、`book-source`、`tts`、`chinese-novel`、`ios`。
+- **只能使用者做**（已告知）：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結（星數少，GitHub 搜尋排序吃虧；「夜讀」「Night Reader」是常見名字）。
+- 使用者說之後還有細節要優化，會再討論。
+
+## 今天的 beta
+
+`gh workflow run android-release.yml --ref main -f channel=beta` 已發（run 38536504376 成功），內容是 #57、#58。
 
 ## 最近合併
-
 **#58**（`merge/reader-open-and-accent`）：開書改成「一張紙接到底」，加上強調色、五種新風格與摺角書頁風格卡。
 
 - 開書、跳章與重新排版時正文區蓋一張閱讀底色的紙（`LoadingVeil`，`lib/features/reader_v2/hybrid/overlay/loading_veil.dart`），紙一蓋上就淡入正文骨架，正文排好後紙淡出；首次開書時頁首頁尾跟著淡入。原本排版超過 500ms 才出骨架，使用者 2026-10-14 改成一律先出骨架（`AppMotion.readerSkeletonDelay` 已移除）；淡出途中再蓋上時骨架不歸零，免得閃一下。
@@ -18,12 +48,9 @@ DESIGN.md 原本規定每個風格深淺都要過對比度門檻，測試會擋�
 
 ## 接下來
 
-- **#58 審查留下、要先問使用者的兩項**（都是原本的行為，不是 #58 造成的）：
-  - 跳章時「取得正文」那段沒有蓋紙：runtime 先等正文（`reader_v2_runtime.dart` 的 `_loadContentAt`），拿到後畫面才排版、才蓋紙（`_restoreCore` 裡 `_setRestoreCompleted(false)`）。網路慢時舊正文停在畫面上、沒有提示。保留舊正文是刻意的：等待中還能捲動，一捲就取消跳章（`hybrid_reader_interaction_test` 的「dragging while a jump is loading cancels the jump cleanly」）。若要改，在跳章操作被接收時就蓋紙，用操作識別判斷完成、取消、失敗，取消時掀開紙；要把「有可恢復的穩定正文」（`hasStableWorld`）和「正在顯示載入紙」分成兩個狀態，不能直接把 `hasStableWorld` 設成 false（`a4f96c1` 刻意把進行中的操作和 lifecycle 分開）。等待中還能不能捲動取消，先問使用者。
-  - 跳章與改字號重新排版時，頁首頁尾資訊列不會收掉再淡入：外框 `ReaderV2PageShell` 看的是 `runtime.state.hasStableWorld`，畫面自己的「正文排好了沒」（`_initialRestoreCompleted`）沒傳到外框。改法是跟上一項一起，讓正文、紙和資訊列共用同一個「正在載入」狀態；改字號時資訊列留著也合理，要改哪些情境先問使用者。
-- **拆 `HybridReaderScreen`**（約 2550 行；使用者已同意做）：#58 已合併，可以開分支了。先照 `codebase-design` 定切分點，候選是選字與反白（`_selection*`）、版面世代與還原（`_epoch*`、`_restore*`）、排版管線與磁碟快取（`_pump*`、`metricsDiskCache`、`planDiskCache`、`_measurementStore`）；逐段搬，每段跑全套測試。
-- 帶 JS 的書源若在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五（WebView、資料庫連線、Cookie 擁有者、全域狀態、16 個呼叫端）評估整套搬進背景。
-- 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者之後若在手機上覺得捲動掉幀再重新開題。
+- **拆 `HybridReaderScreen`**（約 2600 行；使用者已同意做）：#59 合併後再開分支（同檔案）。先照 `codebase-design` 定切分點，候選是選字與反白（`_selection*`）、版面世代與還原（`_epoch*`、`_restore*`、`_jumpVeil`）、排版管線與磁碟快取（`_pump*`、`metricsDiskCache`、`planDiskCache`、`_measurementStore`）；逐段搬，每段跑全套測試。
+- 帶 JS 的書源若在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。
+- 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者若在手機上覺得捲動掉幀再重新開題。
 
 ## 注意
 

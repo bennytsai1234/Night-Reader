@@ -11,11 +11,22 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_reposi
 import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 
-class _FakeBookDao extends Fake implements BookDao {}
+class _FakeBookDao extends Fake implements BookDao {
+  @override
+  Future<void> updateProgress(
+    String bookUrl,
+    int chapterIndex,
+    String chapterTitle,
+    int pos, {
+    double visualOffsetPx = 0.0,
+    String? readerAnchorJson,
+  }) async {}
+}
 
 class _FakeChapterDao extends Fake implements ChapterDao {
   @override
@@ -198,6 +209,47 @@ void main() {
     pending.complete(false);
     await pumpEventQueue();
 
+    expect(autoPage.isRunning, isTrue);
+  });
+
+  test('a jump waiting for its text pauses steps without ending', () async {
+    Completer<bool>? restoring;
+    runtime.registerViewportRestore(
+      Object(),
+      (_) => restoring?.future ?? Future.value(true),
+    );
+    await runtime.openBook();
+    var moves = 0;
+    // 跟閱讀畫面一樣：跳章進行中時正文不給捲。
+    viewport
+      ..continuousScrollBy = (_) async {
+        if (runtime.stateMachine.currentOperation != null) return false;
+        moves += 1;
+        return true;
+      }
+      ..scrollBy = ((_) async => false)
+      ..moveToNextPage = (() async => false);
+
+    restoring = Completer<bool>();
+    final jump = runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 1),
+    );
+    await pumpEventQueue();
+    expect(
+      runtime.stateMachine.currentOperation?.kind,
+      ReaderV2OperationKind.jump,
+    );
+    autoPage.start();
+    tick();
+    await pumpEventQueue();
+    expect(moves, 0);
+    expect(autoPage.isRunning, isTrue, reason: '跳章中不當成到了書尾');
+
+    restoring.complete(true);
+    await jump;
+    tick();
+    await pumpEventQueue();
+    expect(moves, 1);
     expect(autoPage.isRunning, isTrue);
   });
 

@@ -76,6 +76,16 @@ class ReaderV2Runtime extends ChangeNotifier {
   String? _pendingUserNotice;
   ReaderV2Location? get pendingLocation => stateMachine.pendingLocation;
 
+  /// 正在跳到別章、還沒排好。同一章內的跳轉（例如拖進度條預覽）不算。
+  bool get isJumpingToAnotherChapter {
+    final operation = stateMachine.currentOperation;
+    final target = pendingLocation;
+    return operation != null &&
+        operation.kind == ReaderV2OperationKind.jump &&
+        target != null &&
+        target.chapterIndex != state.visibleLocation.chapterIndex;
+  }
+
   ReaderV2State get state => stateMachine.state;
 
   int get chapterCount => repository.chapterCount;
