@@ -28,6 +28,7 @@ import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
+import 'core/engine/web_book/parse_worker.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
@@ -97,6 +98,9 @@ Future<void> _startApp() async {
     LicenseRegistry.addLicense(_punctFontLicense);
     _punctLicenseRegistered = true;
   }
+  // 不帶 JS 的搜尋結果與目錄改在背景 isolate 解析；背景下載的 Workmanager
+  // 入口不開，維持原地解析。
+  ParseWorker.enabled = true;
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
