@@ -258,16 +258,18 @@ class ReaderV2PageShell extends StatelessWidget {
                     child: ColoredBox(
                       color: backgroundColor,
                       child: layout.showHeaderInfo && infoVisible
-                          ? Padding(
-                              padding: EdgeInsets.only(
-                                top: layout.headerRowTop,
-                              ),
-                              child: Center(
-                                child: _InfoRow(
-                                  shell: this,
-                                  slots: headerInfo,
-                                  showAutoPage:
-                                      isAutoPaging && !autoPageInFooter,
+                          ? _InfoFadeIn(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  top: layout.headerRowTop,
+                                ),
+                                child: Center(
+                                  child: _InfoRow(
+                                    shell: this,
+                                    slots: headerInfo,
+                                    showAutoPage:
+                                        isAutoPaging && !autoPageInFooter,
+                                  ),
                                 ),
                               ),
                             )
@@ -286,9 +288,11 @@ class ReaderV2PageShell extends StatelessWidget {
                     // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
                     // 選單開著時由收起層處理。
                     onTap: controlsVisible ? null : onShowControls,
-                    child: _PermanentInfoBar(
-                      shell: this,
-                      rowBottom: layout.footerRowBottom,
+                    child: _InfoFadeIn(
+                      child: _PermanentInfoBar(
+                        shell: this,
+                        rowBottom: layout.footerRowBottom,
+                      ),
                     ),
                   ),
                 ),
@@ -336,6 +340,28 @@ class ReaderV2PageShell extends StatelessWidget {
         ),
         drawer: drawer,
       ),
+    );
+  }
+}
+
+/// 頁首、頁尾資訊列出現時以 [AppMotion.fade] 淡入，與正文浮現同步；
+/// 載入時直接收掉，跟正文一起消失。
+class _InfoFadeIn extends StatelessWidget {
+  const _InfoFadeIn({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : AppMotion.fade,
+      curve: AppMotion.fadeCurve,
+      builder: (context, opacity, child) =>
+          Opacity(opacity: opacity, child: child),
+      child: child,
     );
   }
 }
