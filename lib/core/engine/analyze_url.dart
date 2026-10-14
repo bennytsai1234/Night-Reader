@@ -102,23 +102,51 @@ class AnalyzeUrl {
   }
 
   void _init() {
-    // 0. 注入 BookSource.header
-    _initSourceHeaders();
-    ruleUrl = rawUrl;
-    // 1. 執行 @js, <js>
-    _analyzeJs();
-    // 2. 替換 {{js}} 和 <page,page>
-    _replaceKeyPageJs();
-    // 3. 解析 URL 選項 (如 ,{"method": "POST"})
-    _analyzeUrlOptions();
+    try {
+      // 0. 注入 BookSource.header
+      _initSourceHeaders();
+      ruleUrl = rawUrl;
+      // 1. 執行 @js, <js>
+      _analyzeJs();
+      // 2. 替換 {{js}} 和 <page,page>
+      _replaceKeyPageJs();
+      // 3. 解析 URL 選項 (如 ,{"method": "POST"})
+      _analyzeUrlOptions();
+    } finally {
+      _releaseJsRule();
+    }
   }
 
   Future<void> _initAsync() async {
-    _initSourceHeaders();
-    ruleUrl = rawUrl;
-    await _analyzeJsAsync();
-    await _replaceKeyPageJsAsync();
-    _analyzeUrlOptions();
+    try {
+      _initSourceHeaders();
+      ruleUrl = rawUrl;
+      await _analyzeJsAsync();
+      await _replaceKeyPageJsAsync();
+      _analyzeUrlOptions();
+    } finally {
+      _releaseJsRule();
+    }
+  }
+
+  /// 組網址期間（書源 header、網址裡的 JS、`{{}}`、選項）共用一個規則與它的
+  /// JS 引擎，組完就釋放。每建一個引擎要好幾毫秒，一個網址常有兩三段 JS，
+  /// 搜尋時每個書源都要組一次網址，逐段新建會在畫面執行緒上累積成掉幀。
+  AnalyzeRule? _jsRuleInstance;
+
+  AnalyzeRule _jsRule() {
+    final rule = _jsRuleInstance ??= AnalyzeRule(
+      source: source,
+      ruleData: ruleData,
+    );
+    rule.key = key;
+    rule.page = page ?? 1;
+    return rule;
+  }
+
+  void _releaseJsRule() {
+    _jsRuleInstance?.dispose();
+    _jsRuleInstance = null;
   }
 
   /// 將 BookSource.header（JSON 格式）解析並注入 headerMap
@@ -150,17 +178,10 @@ class AnalyzeUrl {
 
     for (final match in matches) {
       final jsStr = match.group(1) ?? match.group(2) ?? '';
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        final jsInput = _jsInputForMatch(match.start, result);
-        final evalRes = rule.evalJS(jsStr, jsInput);
-        result = evalRes?.toString() ?? '';
-        lastEnd = match.end;
-      } finally {
-        rule.dispose();
-      }
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = _jsRule().evalJS(jsStr, jsInput);
+      result = evalRes?.toString() ?? '';
+      lastEnd = match.end;
     }
 
     if (lastEnd > 0) {
@@ -187,14 +208,7 @@ class AnalyzeUrl {
     final innerJsRegex = RegExp(r'\{\{([\s\S]*?)\}\}');
     ruleUrl = ruleUrl.replaceAllMapped(innerJsRegex, (match) {
       final jsStr = match.group(1)!;
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule.evalJS(jsStr, null)?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule().evalJS(jsStr, null)?.toString() ?? '';
     });
 
     // 替換 <page1,page2,page3>
@@ -223,17 +237,11 @@ class AnalyzeUrl {
 
     for (final match in matches) {
       final jsStr = match.group(1) ?? match.group(2) ?? '';
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        final jsInput = _jsInputForMatch(match.start, result);
-        final evalRes = await rule.evalJSAsync(jsStr, jsInput);
-        _capturePrefetchedResponse(rule);
-        result = evalRes?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      final rule = _jsRule();
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = await rule.evalJSAsync(jsStr, jsInput);
+      _capturePrefetchedResponse(rule);
+      result = evalRes?.toString() ?? '';
     }
     ruleUrl = result;
   }
@@ -279,15 +287,8 @@ class AnalyzeUrl {
       for (final m in matches) {
         sb.write(ruleUrl.substring(lastEnd, m.start));
         final jsStr = m.group(1)!;
-        final rule = AnalyzeRule(source: source, ruleData: ruleData);
-        try {
-          rule.key = key;
-          rule.page = page ?? 1;
-          final v = await rule.evalJSAsync(jsStr, null);
-          sb.write(v?.toString() ?? '');
-        } finally {
-          rule.dispose();
-        }
+        final v = await _jsRule().evalJSAsync(jsStr, null);
+        sb.write(v?.toString() ?? '');
         lastEnd = m.end;
       }
       sb.write(ruleUrl.substring(lastEnd));
@@ -365,14 +366,7 @@ class AnalyzeUrl {
               int.tryParse(options['webViewDelayTime']?.toString() ?? '0') ?? 0;
           final ruleJs = options['js']?.toString();
           if (ruleJs != null && ruleJs.isNotEmpty) {
-            final rule = AnalyzeRule(source: source, ruleData: ruleData);
-            try {
-              rule.key = key;
-              rule.page = page ?? 1;
-              url = rule.evalJS(ruleJs, url)?.toString() ?? url;
-            } finally {
-              rule.dispose();
-            }
+            url = _jsRule().evalJS(ruleJs, url)?.toString() ?? url;
           }
         }
       } catch (e) {
@@ -408,28 +402,14 @@ class AnalyzeUrl {
   String _resolveMaybeJsString(String raw) {
     final trimmed = raw.trim();
     if (trimmed.startsWith('@js:')) {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule.evalJS(trimmed.substring(4), null)?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule().evalJS(trimmed.substring(4), null)?.toString() ?? '';
     }
     if (trimmed.toLowerCase().startsWith('<js>') &&
         trimmed.toLowerCase().endsWith('</js>')) {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule
-                .evalJS(trimmed.substring(4, trimmed.length - 5), null)
-                ?.toString() ??
-            '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule()
+              .evalJS(trimmed.substring(4, trimmed.length - 5), null)
+              ?.toString() ??
+          '';
     }
     return raw;
   }
@@ -446,15 +426,9 @@ class AnalyzeUrl {
     } catch (_) {}
 
     try {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      String? normalized;
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        normalized = rule.evalJS('JSON.stringify(($raw))', null)?.toString();
-      } finally {
-        rule.dispose();
-      }
+      final normalized = _jsRule()
+          .evalJS('JSON.stringify(($raw))', null)
+          ?.toString();
       if (normalized == null || normalized.isEmpty) {
         return null;
       }

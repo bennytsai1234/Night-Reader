@@ -38,8 +38,26 @@ List<String> searchKeyVariants(String key) =>
 
 /// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（正規化書名＋
 /// 作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
-String searchResultIdentity(SearchBook book) =>
-    '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
+///
+/// 搜尋頁每次重建都會對每張卡問一次，所以依書名與作者記在卡片上，兩者
+/// 換掉才重算。
+String searchResultIdentity(SearchBook book) {
+  final cached = _identityCache[book];
+  if (cached != null &&
+      identical(cached.$1, book.name) &&
+      identical(cached.$2, book.author)) {
+    return cached.$3;
+  }
+  final identity =
+      '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
+  // 繁簡字典還沒載入時的結果不記，載入後重算（同 [normalizeSearchText]）。
+  if (ChineseUtils.isInitialized) {
+    _identityCache[book] = (book.name, book.author, identity);
+  }
+  return identity;
+}
+
+final Expando<(String, String?, String)> _identityCache = Expando();
 
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
@@ -60,15 +78,120 @@ int searchRelevanceRank(SearchBook book, String key) {
 
 String _normalizeBookUrl(String value) => value.trim().toLowerCase();
 
-bool _isSameSourceDuplicate(SearchBook a, SearchBook b) {
-  if (a.origin != b.origin) return false;
-  final leftUrl = _normalizeBookUrl(a.bookUrl);
-  final rightUrl = _normalizeBookUrl(b.bookUrl);
-  if (leftUrl.isNotEmpty && rightUrl.isNotEmpty) {
-    return leftUrl == rightUrl;
+/// 同源去重的索引：同一書源裡網址相同（兩邊都有網址時），或任一邊沒有網址
+/// 而書名與作者相同，就算同一本。每個書源回來都要比對，用雜湊查找，不逐本
+/// 掃過所有已收到的結果（上千筆時一次合併要幾十毫秒）。
+class _SameSourceIndex {
+  final Set<String> _urls = {};
+  final Set<String> _names = {};
+  final Set<String> _namesWithoutUrl = {};
+
+  void clear() {
+    _urls.clear();
+    _names.clear();
+    _namesWithoutUrl.clear();
   }
-  return normalizeSearchText(a.name) == normalizeSearchText(b.name) &&
-      normalizeSearchText(a.author) == normalizeSearchText(b.author);
+
+  /// 不是重複時記下並回傳 true。
+  bool add(SearchBook book) {
+    final url = _normalizeBookUrl(book.bookUrl);
+    final name =
+        '${book.origin}\u0000${normalizeSearchText(book.name)}'
+        '\u0000${normalizeSearchText(book.author)}';
+    if (url.isEmpty) {
+      if (_names.contains(name)) return false;
+      _namesWithoutUrl.add(name);
+    } else {
+      final urlKey = '${book.origin}\u0000$url';
+      if (_urls.contains(urlKey) || _namesWithoutUrl.contains(name)) {
+        return false;
+      }
+      _urls.add(urlKey);
+    }
+    _names.add(name);
+    return true;
+  }
+}
+
+/// 搜尋結果依正規化書名分組，產生呈現用的合併卡。
+///
+/// 每個書名：有作者的書按正規化作者分組；缺作者的書依同名的相異作者數
+/// 安置——只有 1 個作者時併入那一組，沒有作者時自成一張「作者不詳」卡，
+/// 2 個以上時也自成一張，不硬塞任一作者。每組選代表（[SearchBook.aggregate]）。
+///
+/// 新結果只重算它所屬的書名：搜尋常見字時結果上千筆，每回來一個書源就從頭
+/// 分組會在畫面執行緒上卡住。卡片順序與從頭分組相同——先是有作者的書名
+/// （依第一本有作者的書到達的順序），再是只有缺作者書的書名。
+class _ResultGroups {
+  final Map<String, _NameGroup> _byName = {};
+  final Set<String> _namesWithAuthors = {};
+  final Set<String> _namesWithoutAuthors = {};
+  final Set<String> _dirty = {};
+
+  void clear() {
+    _byName.clear();
+    _namesWithAuthors.clear();
+    _namesWithoutAuthors.clear();
+    _dirty.clear();
+  }
+
+  void add(SearchBook book) {
+    final nameKey = normalizeSearchText(book.name);
+    final authorKey = normalizeSearchText(book.author);
+    final group = _byName.putIfAbsent(nameKey, _NameGroup.new);
+    if (authorKey.isEmpty) {
+      group.authorless.add(book);
+      _namesWithoutAuthors.add(nameKey);
+    } else {
+      group.authored.putIfAbsent(authorKey, () => []).add(book);
+      _namesWithAuthors.add(nameKey);
+    }
+    _dirty.add(nameKey);
+  }
+
+  List<SearchBook> cards() {
+    for (final nameKey in _dirty) {
+      _byName[nameKey]!.rebuildCards(nameKey);
+    }
+    _dirty.clear();
+    return [
+      for (final nameKey in _namesWithAuthors) ..._byName[nameKey]!.cards,
+      for (final nameKey in _namesWithoutAuthors)
+        if (!_namesWithAuthors.contains(nameKey)) ..._byName[nameKey]!.cards,
+    ];
+  }
+}
+
+class _NameGroup {
+  final Map<String, List<SearchBook>> authored = {};
+  final List<SearchBook> authorless = [];
+  List<SearchBook> cards = const [];
+
+  void rebuildCards(String nameKey) {
+    final result = <SearchBook>[];
+    void addCard(String authorKey, List<SearchBook> books) {
+      final card = SearchBook.aggregate(books);
+      // 身分就是分組鍵，直接記上，搜尋頁不必再對每張卡重算一次（見
+      // [searchResultIdentity]）。
+      _identityCache[card] = (
+        card.name,
+        card.author,
+        '$nameKey\u0000$authorKey',
+      );
+      result.add(card);
+    }
+
+    if (authored.length == 1) {
+      final only = authored.entries.first;
+      addCard(only.key, [...only.value, ...authorless]);
+    } else {
+      for (final entry in authored.entries) {
+        addCard(entry.key, entry.value);
+      }
+      if (authorless.isNotEmpty) addCard('', authorless);
+    }
+    cards = result;
+  }
 }
 
 class SearchFailure {
@@ -86,9 +209,10 @@ class SearchFailure {
 class SearchModel {
   final SearchModelCallback callback;
 
-  /// 每源、同源內已去重的原始搜尋結果（重算式合併的輸入）。
-  /// 合併僅在呈現層；此清單保留逐源回傳的原始書本，從不被分組污染。
-  final List<SearchBook> _rawBooks = [];
+  /// 每源、同源內已去重的原始搜尋結果，依書名分組。合併僅在呈現層；
+  /// 分組裡保留逐源回傳的原始書本，合併卡另外複製。
+  final _ResultGroups _groups = _ResultGroups();
+  final _SameSourceIndex _rawIndex = _SameSourceIndex();
   List<SearchBook> _searchBooks = [];
   CancelToken? _cancelToken;
 
@@ -161,8 +285,12 @@ class SearchModel {
     final cancelToken = CancelToken();
     _cancelToken = cancelToken;
     _normalizedText.clear();
-    _rawBooks.clear();
-    _rawBooks.addAll(_expandInitialResults(initialResults));
+    _groups.clear();
+    _rawIndex.clear();
+    for (final book in _expandInitialResults(initialResults)) {
+      _rawIndex.add(book);
+      _groups.add(book);
+    }
     _searchBooks = _rebuild(key, precisionSearch);
     _failedCount = 0;
     _completedCount = 0;
@@ -206,6 +334,7 @@ class SearchModel {
     await Future.wait(tasks);
 
     if (generation == _generation) {
+      _flushPublish();
       callback.onSearchFinish(isEmpty: _searchBooks.isEmpty);
     }
     unawaited(getIt<BookSourceDao>().updateRespondTimes(respondTimes));
@@ -270,9 +399,10 @@ class SearchModel {
         // 持久化到搜尋快取
         await getIt<SearchBookDao>().insertList(filteredBooks);
         if (stale()) return;
-        // 合併結果
-        _mergeItems(filteredBooks, key, precisionSearch);
-        callback.onSearchSuccess(List.from(_searchBooks));
+        // 合併結果：書源常常幾個一起回來，合併與通知頁面集中在一段時間內
+        // 做一次（見 [_publishDelay]）。
+        _appendRawBooks(filteredBooks);
+        _schedulePublish(key, precisionSearch);
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel || stale()) return;
@@ -296,13 +426,6 @@ class SearchModel {
       }
     }
   }
-
-  void _reportProgress() => callback.onSearchProgress(
-    waitingSources: List.unmodifiable(_waitingSources),
-    completed: _completedCount,
-    total: _totalCount,
-    failed: _failedCount,
-  );
 
   /// 在同一個書源同時搜關鍵字的每種寫法。有一種成功就算這個書源成功；
   /// 全部失敗才拋出第一個錯誤，照原本的失敗流程處理。
@@ -332,87 +455,69 @@ class SearchModel {
     return [for (final books in succeeded) ...books];
   }
 
-  /// 合併單一書源剛回傳的結果。
-  ///
-  /// 重算式（取代舊的漸進併入）：先把新結果 append 進 [_rawBooks]（同源去重），
-  /// 再從頭重建整個 [_searchBooks]。這讓「作者缺失唯一性」能反映當下整個結果集
-  /// （唯一作者時缺作者書併入；出現第二作者時缺作者書退出）。
+  /// 合併單一書源剛回傳的結果：新結果放進 [_groups]（同源去重），再重建
+  /// [_searchBooks]。「作者缺失唯一性」反映當下整個結果集（唯一作者時缺
+  /// 作者書併入；出現第二作者時缺作者書退出）。
   void _mergeItems(
     List<SearchBook> newBooks,
     String searchKey,
     bool precision,
   ) {
-    for (final book in newBooks) {
-      // 同源去重：沿用既有 bookUrl / 同名同作者判定，群組內同源只算一個 origin。
-      final isDuplicate = _rawBooks.any((b) => _isSameSourceDuplicate(b, book));
-      if (!isDuplicate) {
-        _rawBooks.add(book);
-      }
-    }
+    _appendRawBooks(newBooks);
     _searchBooks = _rebuild(searchKey, precision);
   }
 
-  /// 從 [_rawBooks] 從頭重建呈現用的合併卡清單。
+  void _appendRawBooks(List<SearchBook> newBooks) {
+    for (final book in newBooks) {
+      // 同源去重：沿用既有 bookUrl / 同名同作者判定，群組內同源只算一個 origin。
+      if (_rawIndex.add(book)) _groups.add(book);
+    }
+  }
+
+  /// 每次重建要把所有結果重新排序，頁面也跟著整份重排；上百個書源陸續
+  /// 回來時逐一重建會讓畫面一直掉幀。100ms 內回來的書源合成一次，結果晚
+  /// 出現的時間短到看不出來。
+  static const Duration _publishDelay = Duration(milliseconds: 100);
+  Timer? _publishTimer;
+  void Function()? _pendingPublish;
+
+  void _schedulePublish(String searchKey, bool precision) {
+    _pendingPublish = () {
+      _searchBooks = _rebuild(searchKey, precision);
+      callback.onSearchSuccess(List.from(_searchBooks));
+    };
+    _publishTimer ??= Timer(_publishDelay, _flushPublish);
+  }
+
+  void _flushPublish() {
+    _publishTimer?.cancel();
+    _publishTimer = null;
+    final publish = _pendingPublish;
+    _pendingPublish = null;
+    publish?.call();
+  }
+
+  void _dropPendingPublish() {
+    _publishTimer?.cancel();
+    _publishTimer = null;
+    _pendingPublish = null;
+  }
+
+  void _reportProgress() => callback.onSearchProgress(
+    waitingSources: List.unmodifiable(_waitingSources),
+    completed: _completedCount,
+    total: _totalCount,
+    failed: _failedCount,
+  );
+
+  /// 依 [_groups] 列出呈現用的合併卡並排序。
   ///
-  /// 步驟（對應計畫演算法）：
-  /// 1. 有作者的書按「(正規化書名, 正規化作者)」分組。
-  /// 2. 統計每個書名底下的相異作者數。
-  /// 3. 依「作者缺失三分支」安置缺作者的書。
-  /// 4. 每組選 representative（[SearchBook.aggregate]）。
-  /// 5. 三級相關度排序（完全 > 包含 > 其他）+ 組內 origins.length 降序；
-  ///    精準搜尋丟棄「其他」級。
+  /// 分組與合併卡見 [_ResultGroups]；這裡做三級相關度排序（完全 > 包含 >
+  /// 其他）+ 組內 origins.length 降序，精準搜尋丟棄「其他」級。
   List<SearchBook> _rebuild(String searchKey, bool precision) {
-    // 1 + 2：依正規化書名收集「群組」與「相異作者集合」。
-    //   authorGroups[name][author] = 同名同作者的原始書清單
-    //   authorlessByName[name]     = 同名但缺作者的原始書清單
-    final authorGroups = <String, Map<String, List<SearchBook>>>{};
-    final authorlessByName = <String, List<SearchBook>>{};
+    final cards = _groups.cards();
 
-    for (final book in _rawBooks) {
-      final nameKey = normalizeSearchText(book.name);
-      final authorKey = normalizeSearchText(book.author);
-      if (authorKey.isEmpty) {
-        authorlessByName.putIfAbsent(nameKey, () => []).add(book);
-      } else {
-        authorGroups
-            .putIfAbsent(nameKey, () => {})
-            .putIfAbsent(authorKey, () => [])
-            .add(book);
-      }
-    }
-
-    // 3：安置缺作者的書（每次重算從頭判定唯一性）。
-    authorlessByName.forEach((nameKey, authorlessBooks) {
-      final distinctAuthors = authorGroups[nameKey];
-      final authorCount = distinctAuthors?.length ?? 0;
-      if (authorCount == 1) {
-        // 書名只對應 1 個作者 → 缺作者同名書併入該作者群組。
-        distinctAuthors!.values.first.addAll(authorlessBooks);
-      } else if (authorCount == 0) {
-        // 書名完全沒人有作者 → 同名缺作者書併成一張「作者不詳」卡。
-        authorGroups
-            .putIfAbsent(nameKey, () => {})
-            .putIfAbsent('', () => [])
-            .addAll(authorlessBooks);
-      } else {
-        // 書名有 ≥2 個不同作者 → 缺作者同名書退出、單獨成「作者不詳」卡，
-        // 不硬塞任一作者。
-        authorGroups[nameKey]!
-            .putIfAbsent('', () => [])
-            .addAll(authorlessBooks);
-      }
-    });
-
-    // 4：每組選 representative，建立呈現用合併卡。
-    final cards = <SearchBook>[];
-    for (final byAuthor in authorGroups.values) {
-      for (final group in byAuthor.values) {
-        if (group.isEmpty) continue;
-        cards.add(SearchBook.aggregate(group));
-      }
-    }
-
-    // 5：三級相關度排序 + 組內 origins.length 降序。
+    // 三級相關度排序 + 組內 origins.length 降序。
     final equalData = <SearchBook>[];
     final containsData = <SearchBook>[];
     final otherData = <SearchBook>[];
@@ -485,6 +590,7 @@ class SearchModel {
   /// 取消搜尋
   void cancelSearch() {
     _generation++;
+    _dropPendingPublish();
     _cancelToken?.cancel('搜尋取消');
     _cancelToken = null;
   }
@@ -530,7 +636,7 @@ class SearchModel {
     bool precision,
   ) {
     final model = SearchModel(callback: const _SilentCallback());
-    model._rawBooks.addAll(rawBooks);
+    rawBooks.forEach(model._groups.add);
     return model._rebuild(searchKey, precision);
   }
 }

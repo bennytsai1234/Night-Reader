@@ -102,8 +102,20 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void notifyListeners() {
+    _progressNotify?.cancel();
+    _progressNotify = null;
     _resultsCache = null;
     super.notifyListeners();
+  }
+
+  /// 每個書源送出、回來、失敗都會回報一次，搜尋頁每次都整頁重建；上百個
+  /// 書源時 100ms 內的回報合成一次通知（與搜尋結果的合併間隔相同），其他
+  /// 變動照常立刻通知並一起帶上。
+  static const Duration _progressNotifyDelay = Duration(milliseconds: 100);
+  Timer? _progressNotify;
+
+  void _notifySoon() {
+    _progressNotify ??= Timer(_progressNotifyDelay, notifyListeners);
   }
 
   /// 這次搜尋的書源總數；重試失敗書源時不會被縮成重試的數量。
@@ -521,7 +533,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   @override
   void onSearchFailure(SearchFailure failure) {
     _sourceFailures.add(failure);
-    notifyListeners();
+    _notifySoon();
   }
 
   @override
@@ -542,11 +554,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _totalSources = total;
     _failedSources = failed;
     if (!_retrying) _searchedSourceCount = total;
-    notifyListeners();
+    _notifySoon();
   }
 
   @override
   void dispose() {
+    _progressNotify?.cancel();
     _searchModel.cancelSearch();
     _isSearching = false;
     _bookshelfTracker.dispose();

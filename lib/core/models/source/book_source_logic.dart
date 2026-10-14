@@ -113,6 +113,42 @@ class SourceRuntimeHealth {
   );
 }
 
+/// 任一非小說標記（不分大小寫）；只用來快速判斷「都沒有」，有的話再照
+/// [_nonNovelSourceMarkers] 的順序找出是哪一個。
+final RegExp _anyNonNovelMarker = RegExp(
+  _nonNovelSourceMarkers.map(RegExp.escape).join('|'),
+  caseSensitive: false,
+);
+
+String? _findNonNovelMarker(List<String?> fields) {
+  final present = fields.whereType<String>().where(_anyNonNovelMarker.hasMatch);
+  if (present.isEmpty) return null;
+  final haystack = present.join('\n').toLowerCase();
+  for (final marker in _nonNovelSourceMarkers) {
+    if (haystack.contains(marker.toLowerCase())) return marker;
+  }
+  return null;
+}
+
+/// 依書源網址記下判斷結果。每次搜尋、每次書源清單更新都會從資料庫讀出新
+/// 的書源物件，記在物件上幾乎都用不到；比對欄位內容是否相同比重新找標記
+/// 便宜得多。項目數就是用過的書源數。
+final Map<String, _NonNovelMarkerCache> _nonNovelMarkerCache = {};
+
+class _NonNovelMarkerCache {
+  _NonNovelMarkerCache(this.fields, this.marker);
+
+  final List<String?> fields;
+  final String? marker;
+
+  bool matches(List<String?> current) {
+    for (var i = 0; i < fields.length; i++) {
+      if (fields[i] != current[i]) return false;
+    }
+    return true;
+  }
+}
+
 /// 把書源的分組欄位切成各個分組名稱（同 legado）：以半形／全形逗號與分號
 /// 分隔，名稱本身可以含空白（例如「🔥 精選」）。所有讀寫分組的地方都用這裡。
 Set<String> splitSourceGroups(String? value) {
@@ -189,22 +225,22 @@ extension BookSourceLogic on BookSourceBase {
     return null;
   }
 
+  /// 發現、搜尋範圍與書源管理每次重建都會對每個書源問一次，發現網址與搜尋
+  /// 網址常是整段 JS，所以結果依書源記下來，欄位內容變了才重算。
   String? get detectedNonNovelMarker {
-    final haystack = <String>[
+    final fields = <String?>[
       bookSourceName,
-      bookSourceGroup ?? '',
-      bookSourceComment ?? '',
+      bookSourceGroup,
+      bookSourceComment,
       bookSourceUrl,
-      exploreUrl ?? '',
-      searchUrl ?? '',
-    ].join('\n').toLowerCase();
-
-    for (final marker in _nonNovelSourceMarkers) {
-      if (haystack.contains(marker.toLowerCase())) {
-        return marker;
-      }
-    }
-    return null;
+      exploreUrl,
+      searchUrl,
+    ];
+    final cached = _nonNovelMarkerCache[bookSourceUrl];
+    if (cached != null && cached.matches(fields)) return cached.marker;
+    final marker = _findNonNovelMarker(fields);
+    _nonNovelMarkerCache[bookSourceUrl] = _NonNovelMarkerCache(fields, marker);
+    return marker;
   }
 
   Set<String> get groupTags => splitSourceGroups(bookSourceGroup);
@@ -212,7 +248,10 @@ extension BookSourceLogic on BookSourceBase {
   bool hasGroupTag(String tag) => groupTags.contains(tag);
 
   SourceRuntimeHealth get runtimeHealth {
-    if (!isNovelTextSource || hasGroupTag(nonNovelSourceGroupTag)) {
+    // 分組只切一次，下面逐一比對狀態標記。
+    final tags = groupTags;
+    bool tagged(String tag) => tags.contains(tag);
+    if (!isNovelTextSource || tagged(nonNovelSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.nonNovel,
         label: nonNovelSourceGroupTag,
@@ -224,7 +263,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(downloadOnlySourceGroupTag)) {
+    if (tagged(downloadOnlySourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.downloadOnly,
         label: downloadOnlySourceGroupTag,
@@ -236,7 +275,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(loginRequiredSourceGroupTag)) {
+    if (tagged(loginRequiredSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.loginRequired,
         label: loginRequiredSourceGroupTag,
@@ -248,7 +287,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(searchBrokenSourceGroupTag)) {
+    if (tagged(searchBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.searchBroken,
         label: searchBrokenSourceGroupTag,
@@ -260,7 +299,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(discoveryDetailBrokenSourceGroupTag)) {
+    if (tagged(discoveryDetailBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.discoveryDetailBroken,
         label: discoveryDetailBrokenSourceGroupTag,
@@ -272,7 +311,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(discoveryTocBrokenSourceGroupTag)) {
+    if (tagged(discoveryTocBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.discoveryTocBroken,
         label: discoveryTocBrokenSourceGroupTag,
@@ -284,7 +323,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(discoveryContentBrokenSourceGroupTag)) {
+    if (tagged(discoveryContentBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.discoveryContentBroken,
         label: discoveryContentBrokenSourceGroupTag,
@@ -296,7 +335,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(discoveryBrokenSourceGroupTag)) {
+    if (tagged(discoveryBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.discoveryBroken,
         label: discoveryBrokenSourceGroupTag,
@@ -308,7 +347,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(detailBrokenSourceGroupTag)) {
+    if (tagged(detailBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.detailBroken,
         label: detailBrokenSourceGroupTag,
@@ -320,7 +359,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(tocBrokenSourceGroupTag)) {
+    if (tagged(tocBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.tocBroken,
         label: tocBrokenSourceGroupTag,
@@ -332,7 +371,7 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(contentBrokenSourceGroupTag)) {
+    if (tagged(contentBrokenSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.contentBroken,
         label: contentBrokenSourceGroupTag,
@@ -344,10 +383,10 @@ extension BookSourceLogic on BookSourceBase {
       );
     }
 
-    if (hasGroupTag(timeoutSourceGroupTag) ||
-        hasGroupTag(siteBrokenSourceGroupTag) ||
-        hasGroupTag(upstreamBlockedSourceGroupTag) ||
-        hasGroupTag(quarantineSourceGroupTag)) {
+    if (tagged(timeoutSourceGroupTag) ||
+        tagged(siteBrokenSourceGroupTag) ||
+        tagged(upstreamBlockedSourceGroupTag) ||
+        tagged(quarantineSourceGroupTag)) {
       return const SourceRuntimeHealth(
         category: SourceHealthCategory.upstreamUnstable,
         label: quarantineSourceGroupTag,

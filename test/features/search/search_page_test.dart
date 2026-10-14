@@ -197,7 +197,7 @@ void main() {
       total: 10,
       failed: 0,
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('正在搜尋 6/10'), findsOneWidget);
 
     provider.onSearchProgress(
@@ -206,7 +206,7 @@ void main() {
       total: 10,
       failed: 0,
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('還在等：甲源、乙源'), findsOneWidget);
 
     await tester.tap(find.text('略過'));

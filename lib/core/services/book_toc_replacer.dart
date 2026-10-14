@@ -42,9 +42,42 @@ class BookTocReplacer {
       chapters[i].bookUrl = book.bookUrl;
     }
     final progressMoved = book.realignProgress(chapters, oldToc: oldToc);
-    await chapterDao.replaceByBook(book.bookUrl, chapters);
+    // 目錄沒變就不重寫：書架檢查每本書都會走這裡，大多數時候目錄一樣，
+    // 整份刪掉再寫回要在畫面執行緒上組上千筆寫入。
+    if (!_sameAsStored(oldToc, chapters)) {
+      await chapterDao.replaceByBook(book.bookUrl, chapters);
+    }
     return (chapters: chapters, progressMoved: progressMoved);
   }
+}
+
+/// [chapters] 寫進資料庫後會和 [stored] 一模一樣。比對的欄位與章節表寫入的
+/// 欄位相同（`BookChapterToInsertable`），章節表加欄位時這裡要一起加。
+bool _sameAsStored(List<BookChapter> stored, List<BookChapter> chapters) {
+  if (stored.length != chapters.length) return false;
+  for (var i = 0; i < stored.length; i++) {
+    final a = stored[i];
+    final b = chapters[i];
+    if (a.url != b.url ||
+        a.title != b.title ||
+        a.isVolume != b.isVolume ||
+        a.baseUrl != b.baseUrl ||
+        a.bookUrl != b.bookUrl ||
+        a.index != b.index ||
+        a.isVip != b.isVip ||
+        a.isPay != b.isPay ||
+        a.resourceUrl != b.resourceUrl ||
+        a.tag != b.tag ||
+        a.wordCount != b.wordCount ||
+        a.start != b.start ||
+        a.end != b.end ||
+        a.startFragmentId != b.startFragmentId ||
+        a.endFragmentId != b.endFragmentId ||
+        a.variable != b.variable) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// [fetched] 加上 [oldToc] 裡書源拿掉、但 [keep] 要留的章節。留下的章節接在
@@ -56,7 +89,9 @@ List<BookChapter> keepDroppedChapters({
   required bool Function(BookChapter chapter) keep,
 }) {
   final fetchedUrls = {for (final chapter in fetched) chapter.url};
-  final fetchedTitles = {
+  // 只有真的遇到書源拿掉、又要留的章節才轉換整份新目錄的章名：一般檢查
+  // 更新沒有章節被拿掉，不必把上千個章名都轉一次。
+  late final fetchedTitles = {
     for (final chapter in fetched) ChineseUtils.t2s(chapter.title),
   };
   final front = <BookChapter>[];
