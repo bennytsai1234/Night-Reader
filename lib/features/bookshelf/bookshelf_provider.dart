@@ -12,8 +12,11 @@ import 'provider/bookshelf_import_mixin.dart';
 
 export 'provider/bookshelf_provider_base.dart'
     show BookshelfSortMode, BookshelfSortModeLabel;
-export 'provider/bookshelf_update_mixin.dart'
-    show BookshelfBatchDownloadResult, BookUpdateCheckResult;
+
+export 'package:night_reader/core/services/book_update_service.dart'
+    show BookUpdateCheckResult;
+
+export 'provider/bookshelf_update_mixin.dart' show BookshelfBatchDownloadResult;
 
 class BookshelfProvider extends BookshelfProviderBase
     with BookshelfLogicMixin, BookshelfUpdateMixin, BookshelfImportMixin {

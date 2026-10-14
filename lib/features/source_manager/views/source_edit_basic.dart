@@ -36,12 +36,6 @@ class SourceEditBasic extends StatelessWidget {
           ],
         ),
         GroupedSection(
-          header: '請求',
-          children: [
-            _field(controllers['loginUrl']!, '登入網址', 'URL 或 @js: 登入腳本'),
-          ],
-        ),
-        GroupedSection(
           header: '自定義 Header',
           children: [
             GroupedTextFieldRow(

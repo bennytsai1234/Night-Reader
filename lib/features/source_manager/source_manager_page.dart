@@ -729,7 +729,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             children: [
               AlertTextField(
                 controller: ctrl,
-                hintText: '分組名稱',
                 errorText: inputError,
                 // 每次輸入都重建，下方清單的勾選才跟著輸入框的內容。
                 onChanged: (_) => setDialogState(() => inputError = null),

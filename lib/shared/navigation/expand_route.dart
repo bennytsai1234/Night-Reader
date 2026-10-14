@@ -1,5 +1,6 @@
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/cupertino.dart' show CupertinoRouteTransitionMixin;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
@@ -9,7 +10,8 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 /// 時反過來縮回按鈕。每幀只改裁切範圍與一層底色遮罩的透明度：遮罩由不透明
 /// 變透明，看起來就是內容淡入，不必對整頁做 Opacity（離屏合成）。
 ///
-/// 沒有邊緣右滑返回（那是 Cupertino 平移轉場的手勢）；返回鍵照常。
+/// 和其他頁面一樣可以從左緣右滑返回：拖曳開始後頁面改成跟手的 iOS 平移，
+/// 放開後依位置返回或彈回；按返回鍵時照樣縮回按鈕。
 class ExpandFromRectRoute<T> extends PageRoute<T> {
   ExpandFromRectRoute({
     required this.builder,
@@ -55,12 +57,25 @@ class ExpandFromRectRoute<T> extends PageRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) => _ExpandTransition(
-    animation: animation,
-    sourceRect: sourceRect,
-    color: backgroundColor ?? Theme.of(context).scaffoldBackgroundColor,
-    child: child,
-  );
+  ) {
+    // 右滑返回的手勢沿用一般換頁的偵測與跟手平移：拖曳中把真正的進度交給
+    // 平移，展開效果停在全開；平常平移停在全開，由展開效果播進出場。路由
+    // 開始拖曳或結束時 Navigator 會重建這裡，兩種狀態的元件結構相同，頁面
+    // 狀態不會因切換而重建。
+    final gesturing = popGestureInProgress;
+    return CupertinoRouteTransitionMixin.buildPageTransitions<T>(
+      this,
+      context,
+      gesturing ? animation : kAlwaysCompleteAnimation,
+      secondaryAnimation,
+      _ExpandTransition(
+        animation: gesturing ? kAlwaysCompleteAnimation : animation,
+        sourceRect: sourceRect,
+        color: backgroundColor ?? Theme.of(context).scaffoldBackgroundColor,
+        child: child,
+      ),
+    );
+  }
 }
 
 class _ExpandTransition extends StatefulWidget {

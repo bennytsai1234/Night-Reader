@@ -168,7 +168,7 @@ final _markdownHeading = RegExp(r'^#{1,6}\s+');
 final _markdownBullet = RegExp(r'^[-*+]\s+');
 final _markdownLink = RegExp(r'\[([^\]]*)\]\([^)]*\)');
 
-/// 發布版號：正式版 `0.3.3`，或 CI 每次合併到 `main` 發的測試版 `0.3.4-beta.2`。
+/// 發布版號：正式版 `0.3.3`，或測試版 `0.3.4-beta.2`。
 ///
 /// 同一個 `x.y.z` 的測試版排在正式版之前，測試版之間依序號比。
 class ReleaseVersion implements Comparable<ReleaseVersion> {

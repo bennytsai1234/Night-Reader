@@ -110,12 +110,16 @@ class ReaderV2ControllerHost {
     }
   }
 
+  /// 呼叫前要確認 [settings] 已經載入（[ReaderV2SettingsController.isLoaded]），
+  /// 開書才會直接用使用者的設定排版。
   ReaderV2Runtime ensureRuntime(Size size, ReaderV2Style style) {
     _lastViewportSize = size;
     final existing = runtime;
     if (existing != null) return existing;
 
     final spec = specFromStyle(size, style);
+    // 開書時已經套用目前的繁簡轉換，不必再為設定重載一次正文。
+    _appliedContentSettingsGeneration = settings.contentSettingsGeneration;
     final repository = dependencies.createChapterRepository();
     final progressController = ReaderV2ProgressController(
       book: book,

@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/di/injection.dart';
 
@@ -30,12 +31,6 @@ extension BookshelfSortModeLabel on BookshelfSortMode {
     };
   }
 }
-
-/// 把書架上一本書還沒下載的章節排進背景下載（ADR 0008）。
-typedef ShelfBookDownloader = Future<void> Function(
-  String bookUrl, {
-  bool hasNewChapters,
-});
 
 Future<void> _keepWithDownloadService(
   String bookUrl, {
@@ -65,6 +60,15 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
 
   /// 書架自動下載，預設交給 [DownloadService]。
   final ShelfBookDownloader keepBookDownloaded;
+
+  /// 抓書源上的詳情與目錄寫回書，與書籍詳情的「檢查更新」共用進行中的檢查。
+  late final BookUpdateService updates = BookUpdateService(
+    keepDownloaded: keepBookDownloaded,
+    bookDao: bookDao,
+    chapterDao: chapterDao,
+    sourceDao: sourceDao,
+    sourceService: service,
+  );
 
   /// 排定書卡角標消失的計時，預設 [Timer.new]。
   final Timer Function(Duration duration, void Function() callback) startTimer;

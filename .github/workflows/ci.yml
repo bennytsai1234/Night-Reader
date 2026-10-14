@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  # 每條分支都跑：不走 PR 之後，合併前要在分支上看到 Linux 的結果（AGENTS.md「Git 流程」）。
+  # 每條分支都跑，結果也顯示在該分支的 PR 上，通過才合併（AGENTS.md「Git 流程」）。
   # 本機 pre-push 在 Windows 上跑，只有 Linux 會出的錯要靠這裡在進 main 之前擋下。
   push:
     branches: ["**"]
@@ -28,16 +28,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test changelog tool
+        # 有沒有寫更新說明，在手動發測試版時才檢查（android-release.yml，ADR 0014）。
         run: sh tool/changelog_test.sh
-      - name: Require release notes for app changes pushed to main
-        # 和 .githooks/pre-push 同一個檢查，沒裝 hook 的推送也擋得到；
-        # 這裡失敗時 Android Release 不會發版（ADR 0010）。
-        # Android Release 以 workflow_call 呼叫時，github.event 仍是那次推送。
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ inputs.ref || github.sha }}
-        run: sh tool/changelog.sh check "$BEFORE_SHA" "$HEAD_SHA"
 
   verify:
     name: Analyze and test

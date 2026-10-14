@@ -70,6 +70,7 @@ class _FakeBookSourceService extends BookSourceService {
     int? chapterLimit,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool requireComplete = false,
   }) async {
     if (throwOnChapterList) return const <BookChapter>[];
     return chapters;

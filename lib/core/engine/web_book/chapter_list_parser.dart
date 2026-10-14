@@ -81,7 +81,7 @@ class ChapterListParser {
         final itemRule = AnalyzeRule(
           source: source,
           ruleData: book,
-        ).setContent(elements[i], baseUrl: baseUrl);
+        ).setContent(elements[i], baseUrl: baseUrl)..jsEngineOwner = rule;
         final chapter = BookChapter(
           baseUrl: baseUrl,
           bookUrl: book.bookUrl,

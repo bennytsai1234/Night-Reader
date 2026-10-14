@@ -29,10 +29,16 @@ class ChineseUtils {
     'assets/opencc/TSCharacters.txt',
   ];
 
-  /// 在 App 啟動時呼叫一次，載入字典到記憶體
-  static Future<void> initialize() async {
-    if (_initialized) return;
+  /// 在 App 啟動時呼叫一次，載入字典到記憶體。載入中再呼叫（例如搜尋要等
+  /// 字典）接上同一次，不重複解析；載入失敗時下一次呼叫重試。
+  static Future<void> initialize() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _load().whenComplete(() => _initializing = null);
+  }
 
+  static Future<void>? _initializing;
+
+  static Future<void> _load() async {
     final results = await Future.wait(
       dictionaryAssetPaths.map(rootBundle.loadString),
     );

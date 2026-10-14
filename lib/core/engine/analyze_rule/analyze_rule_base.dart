@@ -44,6 +44,12 @@ abstract class AnalyzeRuleBase {
   AnalyzeByJsonPath? analyzeByJSonPath;
   JsEngine? jsEngine;
 
+  /// 不為自己建 JS 引擎，借用這條規則的（建在它身上、由它釋放）。解析清單時
+  /// 逐項的規則都借外層規則的引擎：新建一個引擎約 4 毫秒，在同一個引擎裡
+  /// 執行一次只要約 0.1 毫秒，3000 章的目錄差了十幾秒。各項依序解析，執行
+  /// 時 `java` 會換成當下那一項。
+  AnalyzeRuleBase? jsEngineOwner;
+
   static final HtmlUnescape htmlUnescape = HtmlUnescape();
   static final LruMap<String, RegExp> regexCache = LruMap(maxSize: 200);
   static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(

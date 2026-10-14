@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +11,11 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:night_reader/features/search/widgets/search_app_bar.dart';
+import 'package:night_reader/features/search/widgets/search_suggestion_view.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:provider/provider.dart';
@@ -96,6 +101,148 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('after the user scrolls, new books join at the end', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    provider.updateSortMode(SearchResultSortMode.sourceCount);
+
+    final shown = [for (var i = 0; i < 20; i++) book('書$i')];
+    provider.onSearchStart();
+    provider.onSearchSuccess(shown);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
+    // 來源最多的新書照排序該排第一，但使用者已經在捲了。
+    final popular = book('熱門')..addOrigin('https://s2.example', name: '書源2');
+    provider.onSearchSuccess([popular, ...shown]);
+    await tester.pumpAndSettle();
+    expect(provider.results.first.name, '書0');
+    expect(provider.results.last.name, '熱門');
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('typing suggests matching history in either script', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => GetIt.instance<SearchKeywordDao>().saveKeyword('鬥羅大陸'),
+    );
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '斗罗');
+    await tester.pump();
+    final suggestion = find.descendant(
+      of: find.byType(SearchSuggestionView),
+      matching: find.text('鬥羅大陸'),
+    );
+    expect(suggestion, findsOneWidget);
+
+    await tester.tap(suggestion);
+    await tester.pump();
+    expect(
+      Provider.of<SearchProvider>(
+        tester.element(find.byType(SearchAppBar)),
+        listen: false,
+      ).lastSearchKey,
+      '鬥羅大陸',
+    );
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the last few sources are named and can be skipped', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書')]);
+    provider.onSearchProgress(
+      waitingSources: const ['甲源', '乙源', '丙源', '丁源'],
+      completed: 6,
+      total: 10,
+      failed: 0,
+    );
+    await tester.pump();
+    expect(find.text('正在搜尋 6/10'), findsOneWidget);
+
+    provider.onSearchProgress(
+      waitingSources: const ['甲源', '乙源'],
+      completed: 8,
+      total: 10,
+      failed: 0,
+    );
+    await tester.pump();
+    expect(find.text('還在等：甲源、乙源'), findsOneWidget);
+
+    await tester.tap(find.text('略過'));
+    await tester.pumpAndSettle();
+    expect(provider.isSearching, isFalse);
+  });
+
+  testWidgets('relevance order names each tier above its first book', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    await tester.runAsync(() => provider.search('夜讀'));
+
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('夜讀'), book('夜讀外傳'), book('別的書')]);
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+    expect(find.text('完全相符'), findsOneWidget);
+    expect(find.text('部分相符'), findsOneWidget);
+    expect(find.text('其他結果'), findsOneWidget);
+
+    provider.updateSortMode(SearchResultSortMode.name);
+    await tester.pumpAndSettle();
+    expect(find.text('完全相符'), findsNothing);
+  });
+
   testWidgets('results that arrive in the same frame as the finish still fade '
       'in', (tester) async {
     await tester.pumpWidget(
@@ -116,6 +263,42 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(fadingIn(tester, '甲書'), isTrue);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('search pauses under a full page, not under a dialog', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final pageContext = tester.element(find.byType(SearchAppBar));
+    final provider = Provider.of<SearchProvider>(pageContext, listen: false);
+    expect(provider.isSearchPaused, isFalse);
+
+    // 例如點進書籍詳情。
+    Navigator.of(pageContext)
+        .push(MaterialPageRoute<void>(builder: (_) => const Scaffold()));
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isTrue);
+
+    Navigator.of(pageContext).pop();
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isFalse);
+
+    unawaited(
+      showDialog<void>(
+        context: pageContext,
+        builder: (_) => const AlertDialog(content: Text('排序')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isFalse);
+    Navigator.of(pageContext).pop();
     await tester.pumpAndSettle();
   });
 }
