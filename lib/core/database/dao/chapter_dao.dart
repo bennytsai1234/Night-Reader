@@ -59,6 +59,14 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
         .getSingleOrNull();
   }
 
+  /// 整份換成書源目前的目錄：書源拿掉的章節不留下來佔著序號。
+  Future<void> replaceByBook(String bookUrl, List<BookChapter> chapterList) {
+    return transaction(() async {
+      await deleteByBook(bookUrl);
+      await insertChapters(chapterList);
+    });
+  }
+
   Future<void> deleteByBook(String bookUrl) {
     return (delete(chapters)..where((t) => t.bookUrl.equals(bookUrl))).go();
   }

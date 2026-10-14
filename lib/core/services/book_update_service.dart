@@ -131,6 +131,17 @@ class BookUpdateService {
         info.customIntro = current.customIntro;
         info.customTag = current.customTag;
         info.readConfig = current.readConfig;
+        // 對應不到同一章時，要用舊目錄的章數估計序號。
+        info.totalChapterNum = current.totalChapterNum;
+        if (chapters.isNotEmpty) {
+          info.realignProgress(
+            chapters,
+            oldChapter: await _chapterDao.getChapter(
+              book.bookUrl,
+              current.chapterIndex,
+            ),
+          );
+        }
         info.lastCheckTime = checkedAt;
         info.lastCheckCount = newCount;
         info.totalChapterNum = chapters.length;
@@ -142,9 +153,7 @@ class BookUpdateService {
         }
         await _bookDao.upsert(info);
         if (chapters.isNotEmpty) {
-          // 整份換成書源目前的目錄：書源拿掉的章節不留下來佔著序號。
-          await _chapterDao.deleteByBook(book.bookUrl);
-          await _chapterDao.insertChapters(chapters);
+          await _chapterDao.replaceByBook(book.bookUrl, chapters);
         }
         return newCount;
       });

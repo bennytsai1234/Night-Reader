@@ -411,6 +411,76 @@ void main() {
       expect(toc.map((c) => c.title), ['第一章', '第二章', '第三章']);
     });
 
+    /// 舊目錄：照 [chapters] 的（網址路徑, 標題）依序編號。
+    Future<void> storeToc(Book book, List<(String, String)> chapters) =>
+        ChapterDao(db).insertChapters([
+          for (final (i, (path, title)) in chapters.indexed)
+            BookChapter(
+              url: 'https://source.example$path',
+              title: title,
+              bookUrl: book.bookUrl,
+              index: i,
+            ),
+        ]);
+
+    test('progress follows its chapter when the source inserts one '
+        'before it', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+      await storeToc(book, [('/c/1.html', '第一章'), ('/c/3.html', '第三章')]);
+      await bookDao.updateProgress(
+        book.bookUrl,
+        1,
+        '第三章',
+        120,
+        readerAnchorJson: '{"chapterIndex":1,"charOffset":120}',
+      );
+
+      await provider.checkBookUpdate(book);
+
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 2);
+      expect(saved.durChapterTitle, '第三章');
+      expect(saved.charOffset, 120);
+      expect(saved.readerAnchorJson, '{"chapterIndex":2,"charOffset":120}');
+    });
+
+    test('progress follows its chapter when the source removes one '
+        'before it', () async {
+      final book = onlineBook()..totalChapterNum = 4;
+      await bookDao.upsert(book);
+      await storeToc(book, [
+        ('/c/1.html', '第一章'),
+        ('/c/1b.html', '公告'),
+        ('/c/2.html', '第二章'),
+        ('/c/3.html', '第三章'),
+      ]);
+      await bookDao.updateProgress(book.bookUrl, 2, '第二章', 40);
+
+      await provider.checkBookUpdate(book);
+
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 1);
+      expect(saved.durChapterTitle, '第二章');
+      expect(saved.charOffset, 40);
+    });
+
+    test('a chapter that changed its address is found by title, from its '
+        'start', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+      await storeToc(book, [('/c/1.html', '第一章'), ('/old/3.html', '第三章')]);
+      await bookDao.updateProgress(book.bookUrl, 1, '第三章', 80);
+
+      await provider.checkBookUpdate(book);
+
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.chapterIndex, 2);
+      expect(saved.durChapterTitle, '第三章');
+      // 網址不同，不能確定是同一份正文，從章首開始。
+      expect(saved.charOffset, 0);
+    });
+
     test('a failed check queues no download', () async {
       final book = shelfBook('https://a.example/1');
       await bookDao.upsert(book);

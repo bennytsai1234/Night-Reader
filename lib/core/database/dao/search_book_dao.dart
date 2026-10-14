@@ -11,10 +11,9 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
     with _$SearchBookDaoMixin {
   SearchBookDao(super.db);
 
-  Future<List<SearchBook>> getByNameAuthor(String name, String author) {
-    return (select(
-      searchBooks,
-    )..where((t) => t.name.equals(name) & t.author.equals(author))).get();
+  /// 書名是 [names] 其中之一的結果，例如同一個書名的繁簡兩種寫法。
+  Future<List<SearchBook>> getByNames(Iterable<String> names) {
+    return (select(searchBooks)..where((t) => t.name.isIn(names))).get();
   }
 
   Future<List<SearchBook>> getEnabledHasCover(String name, String author) {
@@ -53,7 +52,4 @@ class SearchBookDao extends DatabaseAccessor<AppDatabase>
       searchBooks,
     )..where((t) => t.name.equals(name) & t.author.equals(author))).go();
   }
-
-  Future<List<SearchBook>> getSearchBooks(String name, String author) =>
-      getByNameAuthor(name, author);
 }

@@ -282,16 +282,21 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
         continue;
       }
 
-      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取
+      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取。抓到的目錄整份
+      // 換掉舊的，所以目錄分頁要全部抓到。
       List<BookChapter> chapters;
       try {
-        final fetched = await service.getChapterList(source, book);
+        final fetched = await service.getChapterList(
+          source,
+          book,
+          requireComplete: true,
+        );
         for (var i = 0; i < fetched.length; i++) {
           fetched[i].index = i;
           fetched[i].bookUrl = book.bookUrl;
         }
         if (fetched.isNotEmpty) {
-          await chapterDao.insertChapters(fetched);
+          await _replaceToc(book, fetched);
         }
         chapters = fetched;
       } catch (e) {
@@ -326,6 +331,24 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       queuedChapters: queuedChapters,
       skippedBooks: skippedBooks,
     );
+  }
+
+  /// 閱讀進度依章節網址對到新目錄；以資料庫裡最新的一筆為準，抓目錄期間
+  /// 閱讀器可能寫了新進度。
+  Future<void> _replaceToc(Book book, List<BookChapter> chapters) {
+    return bookDao.transaction(() async {
+      final stored = await bookDao.getByUrl(book.bookUrl);
+      if (stored == null || stored.origin != book.origin) return;
+      final moved = stored.realignProgress(
+        chapters,
+        oldChapter: await chapterDao.getChapter(
+          book.bookUrl,
+          stored.chapterIndex,
+        ),
+      );
+      if (moved) await bookDao.upsert(stored);
+      await chapterDao.replaceByBook(book.bookUrl, chapters);
+    });
   }
 
   Future<List<Book>> _booksForUrls(Set<String> urls) async {
