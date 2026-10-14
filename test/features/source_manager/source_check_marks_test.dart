@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -104,4 +106,73 @@ void main() {
       expect(service.isChecking, isFalse);
     },
   );
+
+  test(
+    'error lines go even when the comment uses single line breaks',
+    () async {
+      await dao.upsertAll([
+        BookSource(
+          bookSourceUrl: 'https://error-first.example',
+          bookSourceName: '錯誤在前',
+          bookSourceComment: '// Error: 舊錯誤\n作者說明',
+        ),
+        BookSource(
+          bookSourceUrl: 'https://error-last.example',
+          bookSourceName: '錯誤在後',
+          bookSourceComment: '作者說明\n// Error: 舊錯誤',
+        ),
+      ]);
+      final provider = await loadedProvider();
+
+      await provider.clearCheckMarks({
+        'https://error-first.example',
+        'https://error-last.example',
+      });
+
+      expect(
+        (await dao.getByUrl('https://error-first.example'))!.bookSourceComment,
+        '作者說明',
+      );
+      expect(
+        (await dao.getByUrl('https://error-last.example'))!.bookSourceComment,
+        '作者說明',
+      );
+    },
+  );
+
+  test(
+    'a background reload that overtakes the first load finishes it',
+    () async {
+      final gated = _GatedSourceDao(db)..gate = Completer<void>();
+      GetIt.instance.unregister<BookSourceDao>();
+      GetIt.instance.registerSingleton<BookSourceDao>(gated);
+
+      final provider = SourceManagerProvider();
+      addTearDown(provider.dispose);
+      final countsSeen = <int>[];
+      provider.addListener(() => countsSeen.add(provider.totalSourceCount));
+      expect(provider.isLoading, isTrue);
+
+      // 校驗結束時在背景重新讀取，蓋過還沒讀完的初次載入。
+      final reload = provider.loadSources(showLoading: false);
+      gated.gate!.complete();
+      await reload;
+
+      expect(provider.isLoading, isFalse);
+      expect(provider.isMutationBusy, isFalse);
+      expect(countsSeen.last, 3);
+    },
+  );
+}
+
+class _GatedSourceDao extends BookSourceDao {
+  _GatedSourceDao(super.db);
+
+  Completer<void>? gate;
+
+  @override
+  Future<List<BookSource>> getAllPart() async {
+    await gate?.future;
+    return super.getAllPart();
+  }
 }

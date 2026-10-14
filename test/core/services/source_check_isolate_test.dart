@@ -112,11 +112,11 @@ Future<(SourceCheckIsolateResult, BookSource)> _check(
   _FakeBookSourceService service, {
   BookSource? source,
 }) async {
-  final result = await runSourceCheckForTesting(
-    source ?? _source(),
-    _searchOnly,
-    service,
-  );
+  final result = await SourceChecker(
+    source: source ?? _source(),
+    config: _searchOnly,
+    service: service,
+  ).run();
   return (result, BookSource.fromJson(result.updatedSourceJson));
 }
 

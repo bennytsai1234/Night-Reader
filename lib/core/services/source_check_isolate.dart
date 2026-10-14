@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
@@ -204,7 +203,7 @@ void _sourceCheckIsolateEntry(Map<String, dynamic> args) {
       await NetworkService().init(ephemeral: true);
       final source = BookSource.fromJson(sourceJson);
       final config = IsolateCheckConfig.fromMap(configJson);
-      final checker = _IsolateSourceChecker(source: source, config: config);
+      final checker = SourceChecker(source: source, config: config);
       final result = await checker.run();
       sendPort.send(result.toMap());
     } catch (e, st) {
@@ -241,20 +240,10 @@ class _IssueData {
 //  Core checker (runs inside the isolate)
 // ═══════════════════════════════════════════════════════════════════
 
-/// 在目前的 isolate 直接跑一次校驗判定，抓取改走 [service]，讓測試
-/// 不連網就能餵入各階段的結果。
-@visibleForTesting
-Future<SourceCheckIsolateResult> runSourceCheckForTesting(
-  BookSource source,
-  IsolateCheckConfig config,
-  BookSourceService service,
-) => _IsolateSourceChecker(
-  source: source,
-  config: config,
-  service: service,
-).run();
-
-class _IsolateSourceChecker {
+/// 一個書源的校驗判定：依序測搜尋、發現、詳情、目錄與正文，把結果寫成
+/// 書源的狀態分組與錯誤註解。背景 isolate 用它跑校驗；抓取都經過
+/// [BookSourceService]，可以換成別的實作。
+class SourceChecker {
   final BookSource _source;
   final IsolateCheckConfig _config;
   final BookSourceService _service;
@@ -264,7 +253,7 @@ class _IsolateSourceChecker {
   static const int _validationChapterLimit = 8;
   static const int _validationContentProbeLimit = 5;
 
-  _IsolateSourceChecker({
+  SourceChecker({
     required this._source,
     required this._config,
     BookSourceService? service,

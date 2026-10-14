@@ -328,6 +328,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   bool _isLoading = false;
+  bool _loadOwnsLoading = false;
   bool get isLoading => _isLoading;
   bool _isBatchOperationInProgress = false;
   bool get isBatchOperationInProgress => _isBatchOperationInProgress;
@@ -412,6 +413,7 @@ class SourceManagerProvider with ChangeNotifier {
     final generation = ++_loadGeneration;
     if (showLoading) {
       _isLoading = true;
+      _loadOwnsLoading = true;
       notifyListeners();
     }
     try {
@@ -430,8 +432,13 @@ class SourceManagerProvider with ChangeNotifier {
         _markVisibleSourcesDirty();
       }
     } finally {
-      if (showLoading && !_disposed && generation == _loadGeneration) {
-        _isLoading = false;
+      // 最新一次讀取收尾：一律發布結果，也收掉被它取代的讀取留下的載入狀態
+      // （匯入自己設的載入狀態由匯入收）。
+      if (!_disposed && generation == _loadGeneration) {
+        if (_loadOwnsLoading) {
+          _isLoading = false;
+          _loadOwnsLoading = false;
+        }
         notifyListeners();
       }
     }
