@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
@@ -240,17 +241,34 @@ class _IssueData {
 //  Core checker (runs inside the isolate)
 // ═══════════════════════════════════════════════════════════════════
 
+/// 在目前的 isolate 直接跑一次校驗判定，抓取改走 [service]，讓測試
+/// 不連網就能餵入各階段的結果。
+@visibleForTesting
+Future<SourceCheckIsolateResult> runSourceCheckForTesting(
+  BookSource source,
+  IsolateCheckConfig config,
+  BookSourceService service,
+) => _IsolateSourceChecker(
+  source: source,
+  config: config,
+  service: service,
+).run();
+
 class _IsolateSourceChecker {
   final BookSource _source;
   final IsolateCheckConfig _config;
-  final BookSourceService _service = BookSourceService();
+  final BookSourceService _service;
   final List<String> _logs = [];
 
   static const int _validationPageConcurrency = 1;
   static const int _validationChapterLimit = 8;
   static const int _validationContentProbeLimit = 5;
 
-  _IsolateSourceChecker({required this._source, required this._config});
+  _IsolateSourceChecker({
+    required this._source,
+    required this._config,
+    BookSourceService? service,
+  }) : _service = service ?? BookSourceService();
 
   Future<SourceCheckIsolateResult> run() async {
     _source.removeInvalidGroups();

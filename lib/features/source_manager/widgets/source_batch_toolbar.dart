@@ -26,6 +26,7 @@ class SelectActionBar extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onShare;
   final VoidCallback onCheckSource;
+  final VoidCallback onClearCheckMarks;
   final VoidCallback onDelete;
   final bool externallyBusy;
 
@@ -44,6 +45,7 @@ class SelectActionBar extends StatelessWidget {
     required this.onExport,
     required this.onShare,
     required this.onCheckSource,
+    required this.onClearCheckMarks,
     required this.onDelete,
     this.externallyBusy = false,
   });
@@ -173,6 +175,11 @@ class SelectActionBar extends StatelessWidget {
       icon: Icons.playlist_add_check,
       label: '校驗選中',
     ),
+    GlassMenuItem(
+      value: 'clear_check_marks',
+      icon: Icons.layers_clear_outlined,
+      label: '清除校驗標記',
+    ),
   ];
 
   void _onMenuSelected(String value) {
@@ -201,6 +208,8 @@ class SelectActionBar extends StatelessWidget {
         onShare();
       case 'check':
         onCheckSource();
+      case 'clear_check_marks':
+        onClearCheckMarks();
     }
   }
 }

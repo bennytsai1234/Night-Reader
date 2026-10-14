@@ -10,82 +10,10 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
-import 'package:night_reader/core/services/event_bus.dart';
 import 'package:night_reader/core/services/source_check_isolate.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/js/js_extensions_base.dart';
-
-Map<String, bool> _classifySourceExecutionTraitsForIsolate(
-  List<Map<String, dynamic>> sourcePayloads,
-) {
-  final result = <String, bool>{};
-  for (final payload in sourcePayloads) {
-    final url = payload['bookSourceUrl']?.toString() ?? '';
-    if (url.isEmpty) continue;
-    result[url] = _payloadMapContainsRuleJs(payload);
-  }
-  return result;
-}
-
-bool _payloadMapContainsRuleJs(Map<dynamic, dynamic> payload) {
-  for (final entry in payload.entries) {
-    final key = entry.key.toString().toLowerCase();
-    final value = entry.value;
-    if (value == null) continue;
-    if (key.contains('js') && value.toString().trim().isNotEmpty) {
-      return true;
-    }
-    if (value is Map) {
-      if (_payloadMapContainsRuleJs(value)) return true;
-      continue;
-    }
-    if (value is Iterable && value is! String) {
-      if (_payloadContainsRuleJs(value)) return true;
-      continue;
-    }
-    if (_payloadStringLooksJsHeavy(value.toString())) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _payloadContainsRuleJs(Iterable<dynamic> values) {
-  for (final value in values) {
-    if (value == null) continue;
-    if (value is Map) {
-      if (_payloadMapContainsRuleJs(value)) return true;
-      continue;
-    }
-    if (value is Iterable && value is! String) {
-      if (_payloadContainsRuleJs(value)) return true;
-      continue;
-    }
-    if (_payloadStringLooksJsHeavy(value.toString())) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Matches legeado-style JS bridge invocations like `java.ajax(`, `java.put(`,
-// but skips bare prose containing "java." such as URLs or category names.
-final RegExp _kJsBridgeCallPattern = RegExp(r'java\.[a-z_][a-z0-9_]*\s*\(');
-
-bool _payloadStringLooksJsHeavy(String value) {
-  final normalized = value.toLowerCase();
-  return normalized.contains('<js>') ||
-      normalized.contains('@js:') ||
-      normalized.startsWith('@js') ||
-      normalized.contains('"jslib"') ||
-      normalized.contains('"logincheckjs"') ||
-      normalized.contains('"coverdecodejs"') ||
-      normalized.contains('"preupdatejs"') ||
-      normalized.contains('"formatjs"') ||
-      normalized.contains('"webjs"') ||
-      _kJsBridgeCallPattern.hasMatch(normalized);
-}
 
 class SourceCheckEntry {
   final String sourceUrl;
@@ -312,43 +240,6 @@ class _SourceCheckTaskQueue {
   }
 }
 
-class _AsyncSemaphore {
-  final int _maxPermits;
-  int _activePermits = 0;
-  final Queue<Completer<void>> _waiters = Queue<Completer<void>>();
-
-  _AsyncSemaphore(int permits) : _maxPermits = math.max(1, permits);
-
-  Future<T> run<T>(Future<T> Function() action) async {
-    await _acquire();
-    try {
-      return await action();
-    } finally {
-      _release();
-    }
-  }
-
-  Future<void> _acquire() {
-    if (_activePermits < _maxPermits) {
-      _activePermits++;
-      return Future<void>.value();
-    }
-    final completer = Completer<void>();
-    _waiters.add(completer);
-    return completer.future;
-  }
-
-  void _release() {
-    if (_waiters.isNotEmpty) {
-      _waiters.removeFirst().complete();
-      return;
-    }
-    if (_activePermits > 0) {
-      _activePermits--;
-    }
-  }
-}
-
 class _SourceCheckExecutionPool {
   final int workerCount;
   final Future<SourceCheckEntry?> Function(String sourceUrl) checkSource;
@@ -356,14 +247,6 @@ class _SourceCheckExecutionPool {
   recordFailure;
   final void Function() onTaskDone;
   final bool Function() shouldContinue;
-  final bool Function(String sourceUrl) isJsHeavySource;
-  final String Function(String sourceUrl) domainOf;
-  final int sameDomainConcurrency;
-  final int jsConcurrency;
-
-  final Map<String, _AsyncSemaphore> _domainSemaphores =
-      <String, _AsyncSemaphore>{};
-  late final _AsyncSemaphore _jsSemaphore = _AsyncSemaphore(jsConcurrency);
 
   _SourceCheckExecutionPool({
     required this.workerCount,
@@ -371,10 +254,6 @@ class _SourceCheckExecutionPool {
     required this.recordFailure,
     required this.onTaskDone,
     required this.shouldContinue,
-    required this.isJsHeavySource,
-    required this.domainOf,
-    required this.sameDomainConcurrency,
-    required this.jsConcurrency,
   });
 
   Future<List<SourceCheckEntry?>> run(List<String> sourceUrls) async {
@@ -390,7 +269,7 @@ class _SourceCheckExecutionPool {
         final task = queue.takeNext();
         if (task == null) break;
         try {
-          results[task.index] = await _runTask(task.sourceUrl);
+          results[task.index] = await checkSource(task.sourceUrl);
         } catch (error, stack) {
           AppLog.e(
             '書源校驗任務失敗: ${task.sourceUrl}',
@@ -407,36 +286,20 @@ class _SourceCheckExecutionPool {
     await Future.wait(List.generate(effectiveWorkerCount, (_) => worker()));
     return results;
   }
-
-  Future<SourceCheckEntry?> _runTask(String sourceUrl) {
-    final domainSemaphore = _domainSemaphores.putIfAbsent(
-      domainOf(sourceUrl),
-      () => _AsyncSemaphore(sameDomainConcurrency),
-    );
-    return domainSemaphore.run(() {
-      if (!isJsHeavySource(sourceUrl)) {
-        return checkSource(sourceUrl);
-      }
-      return _jsSemaphore.run(() => checkSource(sourceUrl));
-    });
-  }
 }
 
 /// CheckSourceService - 書源校驗服務
 /// 參考 legado CheckSourceService，以 group/comment 持久化校驗結果，
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
+/// 整個 App 共用一份（DI 單例）：離開書源管理頁校驗照跑，回來接著看進度。
 class CheckSourceService extends ChangeNotifier {
   static const int _sourceCheckConcurrency = 8;
-  static const int _sameDomainSourceConcurrency = 8;
-  static const int _jsHeavySourceConcurrency = 8;
   static const int _statusWriteBatchSize = 16;
   static const Duration _notifyThrottleInterval = Duration(milliseconds: 350);
   final BookSourceDao _sourceDao;
-  final AppEventBus _eventBus;
-
-  AppEventBus get eventBus => _eventBus;
 
   bool _isChecking = false;
+  int _finishedRunCount = 0;
   int _totalCount = 0;
   int _currentCount = 0;
   String _statusMsg = '';
@@ -449,15 +312,17 @@ class CheckSourceService extends ChangeNotifier {
   final Map<String, SourceCheckIsolateHandle> _activeTasks =
       <String, SourceCheckIsolateHandle>{};
   final Map<String, BookSource> _pendingStatusWrites = <String, BookSource>{};
-  final Map<String, bool> _jsHeavySourceCache = <String, bool>{};
   Timer? _notifyTimer;
   bool _isDisposed = false;
 
-  CheckSourceService({BookSourceDao? sourceDao, AppEventBus? eventBus})
-    : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-      _eventBus = eventBus ?? AppEventBus();
+  CheckSourceService({BookSourceDao? sourceDao})
+    : _sourceDao = sourceDao ?? getIt<BookSourceDao>();
 
   bool get isChecking => _isChecking;
+
+  /// 已結束（含取消）的校驗次數；結果全部寫進資料庫後才加一，
+  /// 書源清單看到它變了就重新讀取。
+  int get finishedRunCount => _finishedRunCount;
   int get totalCount => _totalCount;
   int get currentCount => _currentCount;
   String get statusMsg => _statusMsg;
@@ -531,14 +396,12 @@ class CheckSourceService extends ChangeNotifier {
     _timedOutSourceUrls.clear();
     _activeTasks.clear();
     _pendingStatusWrites.clear();
-    _jsHeavySourceCache.clear();
     // 清除上次校驗殘留的 JS 靜態快取，避免大量 jsLib / TTF 字型佔用記憶體。
     JsEngine.clearCaches();
     JsExtensionsBase.clearCaches();
 
     _appendLog('開始校驗，共 $_totalCount 個書源 (${config.summary})');
     _notifyIfAlive();
-    await _primeSourceExecutionTraits(normalizedUrls);
 
     List<SourceCheckEntry?> results;
     try {
@@ -551,10 +414,6 @@ class CheckSourceService extends ChangeNotifier {
           _notifyIfAlive();
         },
         shouldContinue: () => _isChecking,
-        isJsHeavySource: _isJsHeavySource,
-        domainOf: _sourceDomainKey,
-        sameDomainConcurrency: _sameDomainSourceConcurrency,
-        jsConcurrency: _jsHeavySourceConcurrency,
       ).run(normalizedUrls);
     } finally {
       // 校驗結束（無論正常、取消或例外）都清除 JS 靜態快取。
@@ -576,7 +435,7 @@ class CheckSourceService extends ChangeNotifier {
     );
     _statusMsg = _lastReport.summary;
     _appendLog('校驗完成：${_lastReport.summary}');
-    _eventBus.fire(AppEvent(AppEventBus.checkSourceDone, data: _lastReport));
+    _finishedRunCount++;
     _notifyIfAlive();
     return _lastReport;
   }
@@ -835,6 +694,16 @@ class CheckSourceService extends ChangeNotifier {
     }
   }
 
+  /// 書源的校驗標記被清掉後，上次的摘要已經對不上，一併收起。
+  void clearLastReport() {
+    if (_isChecking || !_lastReport.hasEntries) return;
+    _lastReport = SourceCheckReport.empty;
+    _statusMsg = '';
+    _logs.clear();
+    _sourceProgress.clear();
+    _notifyIfAlive();
+  }
+
   void cancel() {
     if (!_isChecking) return;
     _isChecking = false;
@@ -857,150 +726,6 @@ class CheckSourceService extends ChangeNotifier {
   bool _shouldIgnoreSourceUpdate(String sourceUrl) =>
       _isDisposed || !_isChecking || _timedOutSourceUrls.contains(sourceUrl);
 
-  Future<void> _primeSourceExecutionTraits(List<String> sourceUrls) async {
-    final payloads = <Map<String, dynamic>>[];
-    for (final sourceUrl in sourceUrls) {
-      if (_shouldIgnoreSourceUpdate(sourceUrl)) continue;
-      final source = await _sourceDao.getByUrl(sourceUrl);
-      if (source != null) {
-        payloads.add(source.toJson());
-      }
-    }
-    if (payloads.isEmpty) return;
-
-    try {
-      final classified = await compute(
-        _classifySourceExecutionTraitsForIsolate,
-        payloads,
-      );
-      _jsHeavySourceCache.addAll(classified);
-    } catch (error, stack) {
-      AppLog.e('書源校驗背景特徵分類失敗，改用主 isolate', error: error, stackTrace: stack);
-      for (final payload in payloads) {
-        final source = BookSource.fromJson(payload);
-        _cacheSourceExecutionTraits(source);
-      }
-    }
-  }
-
-  bool _isJsHeavySource(String sourceUrl) {
-    final cached = _jsHeavySourceCache[sourceUrl];
-    if (cached != null) return cached;
-
-    // Fallback when prime/classification missed this URL — only the most
-    // specific markers, since URLs commonly contain unrelated "java" text.
-    final normalized = sourceUrl.toLowerCase();
-    final looksJsByUrl =
-        normalized.contains('<js>') ||
-        normalized.contains('@js:') ||
-        _kJsBridgeCallPattern.hasMatch(normalized);
-    _jsHeavySourceCache[sourceUrl] = looksJsByUrl;
-    return looksJsByUrl;
-  }
-
-  void _cacheSourceExecutionTraits(BookSource source) {
-    _jsHeavySourceCache[source.bookSourceUrl] = _sourceLooksJsHeavy(source);
-  }
-
-  bool _sourceLooksJsHeavy(BookSource source) {
-    if (_hasExplicitJsFields(source)) {
-      return true;
-    }
-    return _containsRuleJs(<String?>[
-      source.searchUrl,
-      source.exploreUrl,
-      source.jsLib,
-      source.loginCheckJs,
-      source.coverDecodeJs,
-      source.ruleSearch?.checkKeyWord,
-      source.ruleSearch?.bookList,
-      source.ruleSearch?.name,
-      source.ruleSearch?.author,
-      source.ruleSearch?.intro,
-      source.ruleSearch?.kind,
-      source.ruleSearch?.lastChapter,
-      source.ruleSearch?.updateTime,
-      source.ruleSearch?.bookUrl,
-      source.ruleSearch?.coverUrl,
-      source.ruleSearch?.wordCount,
-      source.ruleExplore?.bookList,
-      source.ruleExplore?.name,
-      source.ruleExplore?.author,
-      source.ruleExplore?.intro,
-      source.ruleExplore?.kind,
-      source.ruleExplore?.lastChapter,
-      source.ruleExplore?.updateTime,
-      source.ruleExplore?.bookUrl,
-      source.ruleExplore?.coverUrl,
-      source.ruleExplore?.wordCount,
-      source.ruleBookInfo?.init,
-      source.ruleBookInfo?.name,
-      source.ruleBookInfo?.author,
-      source.ruleBookInfo?.intro,
-      source.ruleBookInfo?.kind,
-      source.ruleBookInfo?.lastChapter,
-      source.ruleBookInfo?.updateTime,
-      source.ruleBookInfo?.coverUrl,
-      source.ruleBookInfo?.tocUrl,
-      source.ruleBookInfo?.wordCount,
-      source.ruleBookInfo?.canReName,
-      source.ruleBookInfo?.downloadUrls,
-      source.ruleToc?.preUpdateJs,
-      source.ruleToc?.chapterList,
-      source.ruleToc?.chapterName,
-      source.ruleToc?.chapterUrl,
-      source.ruleToc?.formatJs,
-      source.ruleToc?.isVolume,
-      source.ruleToc?.isVip,
-      source.ruleToc?.isPay,
-      source.ruleToc?.updateTime,
-      source.ruleToc?.nextTocUrl,
-      source.ruleContent?.content,
-      source.ruleContent?.title,
-      source.ruleContent?.nextContentUrl,
-      source.ruleContent?.webJs,
-      source.ruleContent?.sourceRegex,
-      source.ruleContent?.replaceRegex,
-      source.ruleContent?.imageStyle,
-      source.ruleContent?.imageDecode,
-      source.ruleContent?.payAction,
-    ]);
-  }
-
-  bool _hasExplicitJsFields(BookSource source) {
-    return <String?>[
-      source.jsLib,
-      source.loginCheckJs,
-      source.coverDecodeJs,
-      source.ruleToc?.preUpdateJs,
-      source.ruleToc?.formatJs,
-      source.ruleContent?.webJs,
-    ].any((value) => value != null && value.trim().isNotEmpty);
-  }
-
-  bool _containsRuleJs(Iterable<String?> values) {
-    for (final value in values) {
-      if (value == null || value.isEmpty) continue;
-      final normalized = value.toLowerCase();
-      if (normalized.contains('<js>') ||
-          normalized.contains('@js:') ||
-          normalized.startsWith('@js') ||
-          _kJsBridgeCallPattern.hasMatch(normalized)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  String _sourceDomainKey(String sourceUrl) {
-    final uri = Uri.tryParse(sourceUrl);
-    final host = uri?.host.trim();
-    if (host != null && host.isNotEmpty) {
-      return host;
-    }
-    return sourceUrl.trim().isEmpty ? 'unknown' : sourceUrl.trim();
-  }
-
   void _appendLog(String msg, {String? sourceUrl, bool force = false}) {
     if (_isDisposed) return;
     if (!force && sourceUrl != null && _shouldIgnoreSourceUpdate(sourceUrl)) {
@@ -1010,7 +735,6 @@ class CheckSourceService extends ChangeNotifier {
     if (_logs.length > 400) {
       _logs.removeAt(0);
     }
-    _eventBus.fire(AppEvent(AppEventBus.checkSource, data: msg));
     _notifyIfAlive();
   }
 
