@@ -123,7 +123,6 @@ enum AppStyle {
       text: Color(0xFF2C2014),
       textMuted: Color(0xFF6B5840),
       border: Color(0xFFD2C2A2),
-      // 主色也當文字用（「完成」、選取膠囊），對頁面底色要有 4.5:1。
       primary: Color(0xFF7E5124),
       secondary: AppPalette.gold,
       readerBackground: Color(0xFFDFD0B0),
@@ -180,7 +179,7 @@ enum AppStyle {
       highlight: _amber,
     ),
   ),
-  // 以下五種取材自常見的編輯器與閱讀配色，明暗依對比度契約微調過，
+  // 以下五種取材自常見的編輯器與閱讀配色，明暗略有調整，
   // 色相與原作相同、明度不完全一樣。
 
   /// Rosé Pine（Dawn／Main）。
@@ -367,27 +366,12 @@ enum AppStyle {
   StylePalette of(Brightness brightness) =>
       brightness == Brightness.dark ? dark : light;
 
-  /// 套上強調色後的配色；[AppAccent.theme] 就是 [of]。
-  ///
-  /// 強調色的明度會往遠離底色的方向調，直到主色在這個風格裡仍符合對比度
-  /// 契約（見 `test/shared/theme/app_style_test.dart`）：淺色風格裡變深、
-  /// 深色風格裡變亮，色相不變。
+  /// 套上強調色後的配色：主色換成強調色在這個深淺的顏色，其餘照風格；
+  /// [AppAccent.theme] 就是 [of]。
   StylePalette paletteFor(Brightness brightness, AppAccent accent) {
     final palette = of(brightness);
-    final base = accent.colorFor(brightness);
-    if (base == null) return palette;
-    final isDark = brightness == Brightness.dark;
-    // 淺色模式的提示訊息是深底，動作字取深色配色的主色。
-    final lightToast = isDark
-        ? Color.alphaBlend(light.text.withValues(alpha: 0.94), light.background)
-        : null;
-    var primary = HSLColor.fromColor(base);
-    for (var step = 0; step < 100; step++) {
-      if (_primaryReadable(palette, primary.toColor(), lightToast)) break;
-      final lightness = primary.lightness + (isDark ? 0.01 : -0.01);
-      primary = primary.withLightness(lightness.clamp(0.0, 1.0).toDouble());
-    }
-    return palette.copyWith(primary: primary.toColor());
+    final color = accent.colorFor(brightness);
+    return color == null ? palette : palette.copyWith(primary: color);
   }
 
   static AppStyle fromStorage(String? value) => AppStyle.values.firstWhere(
@@ -396,41 +380,8 @@ enum AppStyle {
   );
 }
 
-/// 主色在 [palette] 裡的對比度契約。底色的推導與 `GlassCapsule.selectedTintOf`、
-/// `AppChrome.derive` 的提示訊息相同；兩邊改動時由測試對實際主題核對。
-bool _primaryReadable(StylePalette palette, Color primary, Color? lightToast) {
-  final capsule = Color.alphaBlend(
-    Color.alphaBlend(
-      primary.withValues(alpha: 0.06),
-      palette.surface.withValues(alpha: 0.9),
-    ),
-    palette.background,
-  );
-  for (final background in [palette.background, palette.surface, capsule]) {
-    if (_contrast(primary, background) < 4.5) return false;
-  }
-  if (_contrast(palette.copyWith(primary: primary).onPrimary, primary) < 4.5) {
-    return false;
-  }
-  if (palette.brightness == Brightness.dark) {
-    final toast = Color.alphaBlend(
-      Color.alphaBlend(
-        palette.text.withValues(alpha: 0.1),
-        palette.surface,
-      ).withValues(alpha: 0.96),
-      palette.background,
-    );
-    final action = Color.lerp(primary, palette.text, 0.3)!;
-    if (_contrast(action, toast) < 4.5) return false;
-    if (lightToast != null && _contrast(primary, lightToast) < 4.5) {
-      return false;
-    }
-  }
-  return true;
-}
-
 /// 強調色：開關、選取、勾勾、強調按鈕與純文字動作用的主色。預設跟隨風格；
-/// 選了其他顏色時，每個風格與深淺都由 [AppStyle.paletteFor] 調到看得清楚。
+/// 其他顏色各有一個淺色、一個深色版本，不分風格。
 enum AppAccent {
   theme('跟隨主題'),
   cinnabar('朱紅', light: Color(0xFFA8322B), dark: Color(0xFFE8806F)),
@@ -452,7 +403,7 @@ enum AppAccent {
   final Color? light;
   final Color? dark;
 
-  /// 調整前的原色；[theme] 沒有自己的顏色。
+  /// 這個深淺用的顏色；[theme] 沒有自己的顏色。
   Color? colorFor(Brightness brightness) =>
       brightness == Brightness.dark ? dark : light;
 
@@ -508,7 +459,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
   final Color readerBackground;
   final Color readerText;
 
-  /// 閱讀器頁首／頁尾資訊列的文字與圖示，對 [readerBackground] 至少 4.5:1。
+  /// 閱讀器頁首／頁尾資訊列的文字與圖示。
   final Color readerInfo;
 
   /// 朗讀高亮與選字反白選「跟隨主題」時的顏色（實際以設定的深淺疊上）。
