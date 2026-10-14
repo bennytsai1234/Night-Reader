@@ -7,7 +7,6 @@ import 'package:night_reader/core/widgets/book_cover_widget.dart';
 
 import '../../book_detail/book_detail_page.dart';
 import '../../explore/widgets/explore_book_item.dart';
-import '../search_model.dart';
 
 import 'package:night_reader/core/services/chinese_display.dart';
 
@@ -43,22 +42,13 @@ class _SearchResultItemState extends State<SearchResultItem> {
       height: 1.35,
       color: secondary,
     );
-    // 以合併卡的身分當 tag：開著詳情時已經送出的書源仍會回來，代表書可能
-    // 換成別的書源，用 bookUrl 的話返回時封面飛不回來。
-    final heroTag = BookCoverWidget.heroTag(
-      BookCoverHeroScope.search,
-      searchResultIdentity(book),
-    );
     return InkWell(
       onTap: () {
         // 詳情蓋住搜尋頁時，還沒送出的書源先暫停，回來再接著搜。
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => BookDetailPage(
-              searchBook: widget.result,
-              coverHeroTag: heroTag,
-            ),
+            builder: (context) => BookDetailPage(searchBook: widget.result),
           ),
         );
       },
@@ -72,16 +62,13 @@ class _SearchResultItemState extends State<SearchResultItem> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Hero(
-              tag: heroTag,
-              child: BookCoverWidget(
-                coverUrl: book.coverUrl,
-                bookName: context.zh(book.name),
-                author: context.zh(book.author),
-                width: ExploreBookItem.coverWidth,
-                height: ExploreBookItem.coverHeight,
-                borderRadius: AppRadius.cardXs,
-              ),
+            BookCoverWidget(
+              coverUrl: book.coverUrl,
+              bookName: context.zh(book.name),
+              author: context.zh(book.author),
+              width: ExploreBookItem.coverWidth,
+              height: ExploreBookItem.coverHeight,
+              borderRadius: AppRadius.cardXs,
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(

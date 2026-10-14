@@ -15,17 +15,13 @@ import 'package:night_reader/core/services/chinese_display.dart';
 /// 玻璃動作按鈕（圖示在上、小字在下）。「開始閱讀」不在這裡，是頁面底部
 /// 的浮動膠囊（`BookReadCapsule`）。
 ///
-/// 書名、作者與封面在進頁時就已知道，載入中照樣畫出（封面 Hero 才有
-/// 落點），只有動作按鈕在 [loading] 時是骨架。頁面往上捲時這一區捲進
-/// 玻璃頁首底下，由頁首標題接手顯示書名（見 [collapseOffset]）。
+/// 書名、作者與封面在進頁時就已知道，載入中照樣畫出，只有動作按鈕在
+/// [loading] 時是骨架。頁面往上捲時這一區捲進玻璃頁首底下，由頁首標題
+/// 接手顯示書名（見 [collapseOffset]）。
 class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
-
-  /// 封面的 Hero tag：開啟這頁的清單所用的 tag，長按看大圖也用它。
-  final String coverHeroTag;
-  final void Function(BuildContext context, String url, String heroTag)
-  showPhotoView;
+  final void Function(BuildContext context, String url) showPhotoView;
   final VoidCallback onToggleBookshelf;
 
   /// 書籍資料還在載入：書架狀態等還不確定，動作按鈕先畫骨架。
@@ -39,7 +35,6 @@ class BookInfoHeader extends StatelessWidget {
     super.key,
     required this.book,
     required this.provider,
-    required this.coverHeroTag,
     required this.showPhotoView,
     required this.onToggleBookshelf,
     required this.onChangeSource,
@@ -70,19 +65,16 @@ class BookInfoHeader extends StatelessWidget {
         GestureDetector(
           onLongPress: () {
             if (coverUrl != null && coverUrl.isNotEmpty) {
-              showPhotoView(context, coverUrl, coverHeroTag);
+              showPhotoView(context, coverUrl);
             }
           },
-          child: Hero(
-            tag: coverHeroTag,
-            child: BookCoverWidget(
-              coverUrl: coverUrl,
-              bookName: context.zh(book.name),
-              author: author,
-              width: coverWidth,
-              height: coverHeight,
-              borderRadius: AppRadius.cardXs,
-            ),
+          child: BookCoverWidget(
+            coverUrl: coverUrl,
+            bookName: context.zh(book.name),
+            author: author,
+            width: coverWidth,
+            height: coverHeight,
+            borderRadius: AppRadius.cardXs,
           ),
         ),
         const SizedBox(height: AppSpacing.lg),

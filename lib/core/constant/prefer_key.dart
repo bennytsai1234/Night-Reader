@@ -11,6 +11,9 @@ class PreferKey {
 
   /// 玻璃材質強度（[GlassStrength.name]）。
   static const String glassStrength = 'theme_glass_strength_v1';
+
+  /// 換頁動畫（[AppPageTransition.name]）。
+  static const String pageTransition = 'page_transition';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';

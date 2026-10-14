@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
+import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 
 /// 目錄解析結果
 class ChapterListResult {
@@ -29,6 +30,61 @@ class ChapterListParser {
   /// 解析目錄頁，返回章節列表與下一頁 URL
   /// (對標 Android BookChapterList.analyzeChapterList)
   static Future<ChapterListResult> parse({
+    required BookSource source,
+    required Book book,
+    required String body,
+    required String baseUrl,
+    int? maxChapters,
+  }) async {
+    final tocRule = source.ruleToc;
+    if (tocRule != null &&
+        ParseWorker.isPureRule([
+          tocRule.chapterList,
+          tocRule.chapterName,
+          tocRule.chapterUrl,
+          tocRule.updateTime,
+          tocRule.isVolume,
+          tocRule.isVip,
+          tocRule.isPay,
+          tocRule.nextTocUrl,
+        ])) {
+      final result = await ParseWorker.run(
+        _offMain(
+          source: source,
+          book: book,
+          body: body,
+          baseUrl: baseUrl,
+          maxChapters: maxChapters,
+        ),
+      );
+      if (result != null) return result;
+    }
+    return _parse(
+      source: source,
+      book: book,
+      body: body,
+      baseUrl: baseUrl,
+      maxChapters: maxChapters,
+    );
+  }
+
+  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
+  static Future<ChapterListResult> Function() _offMain({
+    required BookSource source,
+    required Book book,
+    required String body,
+    required String baseUrl,
+    int? maxChapters,
+  }) =>
+      () => _parse(
+        source: source,
+        book: book,
+        body: body,
+        baseUrl: baseUrl,
+        maxChapters: maxChapters,
+      );
+
+  static Future<ChapterListResult> _parse({
     required BookSource source,
     required Book book,
     required String body,

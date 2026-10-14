@@ -407,7 +407,7 @@ packages:
       path: "third_party/file_picker"
       relative: true
     source: path
-    version: "11.0.3+nightreader.2"
+    version: "11.0.3+nightreader.3"
   file_selector_linux:
     dependency: transitive
     description:
@@ -467,7 +467,7 @@ packages:
       path: "third_party/flutter_js"
       relative: true
     source: path
-    version: "0.8.7+nightreader.2"
+    version: "0.8.7+nightreader.3"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -516,7 +516,7 @@ packages:
       path: "third_party/flutter_tts"
       relative: true
     source: path
-    version: "4.2.5+nightreader.2"
+    version: "4.2.5+nightreader.4"
   flutter_web_plugins:
     dependency: transitive
     description: flutter

@@ -103,7 +103,7 @@ void main() {
     (tester) async {
       await pumpDetail(tester, bookWith());
 
-      // 書名與作者畫在大頁首裡，封面 Hero 的落點也已經在。
+      // 書名與作者畫在大頁首裡。
       expect(
         find.descendant(
           of: find.byType(BookInfoHeader),
@@ -113,7 +113,6 @@ void main() {
         findsNWidgets(2),
       );
       expect(find.text('某作者'), findsOneWidget);
-      expect(find.byType(Hero), findsOneWidget);
       expect(find.byType(SkeletonBox), findsWidgets);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       // 書架狀態還不確定，動作按鈕與閱讀鈕都還沒出現。

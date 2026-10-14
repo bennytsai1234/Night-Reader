@@ -12,7 +12,6 @@ import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
-import 'package:night_reader/shared/navigation/expand_route.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
@@ -370,18 +369,13 @@ class _MainPageState extends State<MainPage> {
   bool _openingSearch = false;
 
   /// 換頁動畫期間舊頁面還能點，連點兩下會疊兩個搜尋頁；開啟中就忽略。
-  /// 搜尋頁從搜尋鈕的位置展開，返回時縮回按鈕。
-  Future<void> _openSearch(Rect buttonRect) async {
+  Future<void> _openSearch() async {
     if (_openingSearch) return;
     _openingSearch = true;
     try {
       await Navigator.push(
         context,
-        ExpandFromRectRoute<void>(
-          sourceRect: buttonRect,
-          backgroundColor: AppChrome.of(context).groupedBackground,
-          builder: (_) => const SearchPage(),
-        ),
+        MaterialPageRoute<void>(builder: (_) => const SearchPage()),
       );
     } finally {
       _openingSearch = false;
