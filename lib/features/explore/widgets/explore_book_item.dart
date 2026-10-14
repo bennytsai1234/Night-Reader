@@ -39,9 +39,14 @@ class ExploreBookItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final secondary = AppChrome.of(context).sectionText;
     final kinds = _kinds(context);
+    final wordCount = StringUtils.displayWordCount(
+      book.wordCount,
+      context.zh(book.kind ?? ''),
+    );
     final meta = [
       if (book.author != null && book.author!.isNotEmpty)
         context.zh(book.author!),
+      if (wordCount.isNotEmpty) wordCount,
       ...kinds,
     ].join(' · ');
 

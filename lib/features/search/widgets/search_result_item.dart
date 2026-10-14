@@ -18,10 +18,14 @@ class SearchResultItem extends StatelessWidget {
   /// 要顯示的封面；沒給時用書本身的（見 [SearchProvider.coverOf]）。
   final String? coverUrl;
 
+  /// 進書籍詳情之前呼叫（見 [SearchProvider.rememberOpenedCard]）。
+  final VoidCallback? onOpen;
+
   const SearchResultItem({
     super.key,
     required this.result,
     this.coverUrl,
+    this.onOpen,
     this.isInBookshelf = false,
   });
 
@@ -42,6 +46,7 @@ class SearchResultItem extends StatelessWidget {
     );
     return InkWell(
       onTap: () {
+        onOpen?.call();
         // 詳情蓋住搜尋頁時，還沒送出的書源先暫停，回來再接著搜。
         Navigator.push(
           context,

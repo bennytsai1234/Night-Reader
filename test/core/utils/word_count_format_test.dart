@@ -24,6 +24,13 @@ void main() {
       expect(StringUtils.wordCountFormat('9999'), '1萬字');
     });
 
+    test('一位小數照十進位四捨五入，不受浮點誤差影響', () {
+      expect(StringUtils.wordCountFormat('11499'), '1.1萬字');
+      expect(StringUtils.wordCountFormat('11500'), '1.2萬字');
+      expect(StringUtils.wordCountFormat('14500'), '1.5萬字');
+      expect(StringUtils.wordCountFormat('1450'), '1.5千字');
+    });
+
     test('格式化過的結果再格式化一次不變', () {
       for (final value in ['123.5萬字', '1萬字', '3.5千字', '850字']) {
         expect(StringUtils.wordCountFormat(value), value);
@@ -38,6 +45,10 @@ void main() {
       expect(StringUtils.wordCountFormat('未知'), '');
       expect(StringUtils.wordCountFormat('2024-05-01'), '');
       expect(StringUtils.wordCountFormat('更新于3天前'), '');
+      expect(StringUtils.wordCountFormat('2024 年 10 月 15 日'), '');
+      expect(StringUtils.wordCountFormat('共850章'), '');
+      expect(StringUtils.wordCountFormat('12.3 萬字'), '12.3萬字');
+      expect(StringUtils.wordCountFormat('约50万+'), '50萬字');
     });
   });
 
@@ -51,6 +62,16 @@ void main() {
       expect(StringUtils.kindLabels('12.3万'), isEmpty);
       expect(StringUtils.kindLabels(null), isEmpty);
     });
+
+    test('千分位、單位前的空白與「3 小時前」不會被拆成殘片', () {
+      expect(StringUtils.kindLabels('玄幻,1,234,567字'), ['玄幻']);
+      expect(StringUtils.kindLabels('玄幻,12.3 萬字'), ['玄幻']);
+      expect(StringUtils.kindLabels('玄幻,3 小時前'), ['玄幻']);
+    });
+
+    test('含數字的分類照留', () {
+      expect(StringUtils.kindLabels('玄幻,3D文字冒險'), ['玄幻', '3D文字冒險']);
+    });
   });
 
   group('displayWordCount', () {
@@ -58,6 +79,10 @@ void main() {
       expect(StringUtils.displayWordCount(null, '玄幻,字数：88万'), '88萬字');
       expect(StringUtils.displayWordCount('', '玄幻,12.3万'), '');
       expect(StringUtils.displayWordCount('5000', '玄幻,88万字'), '5千字');
+      expect(StringUtils.displayWordCount(null, '玄幻,1,234,567字'), '123.5萬字');
+      expect(StringUtils.displayWordCount(null, '玄幻,字數：1,234,567字'), '123.5萬字');
+      expect(StringUtils.displayWordCount('', '玄幻,12.3 萬字'), '12.3萬字');
+      expect(StringUtils.displayWordCount(null, '玄幻,3D文字冒險'), '');
     });
   });
 

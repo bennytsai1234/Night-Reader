@@ -109,7 +109,13 @@ void main() {
     test('a cover found on the detail page stays on the card until the next '
         'search', () async {
       final provider = await settledProvider();
-      provider.onSearchSuccess([book('甲'), book('乙')]);
+      final opened = book('甲');
+      provider.onSearchSuccess([opened, book('乙')]);
+      provider.rememberOpenedCard(opened);
+
+      // 詳情還沒回報封面，同一本書就換了代表來源（bookUrl 不同）。
+      final replaced = book('甲')..bookUrl = 'https://other.example/甲';
+      provider.onSearchSuccess([replaced, book('乙')]);
       AppEventBus().fire(
         AppEventBus.bookCover,
         data: const BookCoverEvent(
@@ -118,13 +124,13 @@ void main() {
         ),
       );
       await pumpEventQueue();
-      expect(provider.coverOf(provider.results.first), 'local:///covers/甲.jpg');
+      expect(provider.coverOf(replaced), 'local:///covers/甲.jpg');
       expect(provider.coverOf(provider.results.last), isNull);
 
-      // 同一本書換了代表來源（bookUrl 不同），封面照樣跟著卡片。
-      final replaced = book('甲')..bookUrl = 'https://other.example/甲';
-      provider.onSearchSuccess([replaced, book('乙')]);
-      expect(provider.coverOf(replaced), 'local:///covers/甲.jpg');
+      // 「只看有封面」看的是卡片實際顯示的封面。
+      provider.setOnlyWithCover(true);
+      expect(names(provider), ['甲']);
+      provider.setOnlyWithCover(false);
 
       await provider.search('另一本');
       expect(provider.coverOf(replaced), isNull);
