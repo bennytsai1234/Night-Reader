@@ -481,7 +481,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get isSearchPaused => _searchModel.isPaused;
 
   void stopSearch() {
-    _searchModel.cancelSearch();
+    _searchModel.stopSearch();
     _isSearching = false;
     _waitingSources = const [];
     notifyListeners();

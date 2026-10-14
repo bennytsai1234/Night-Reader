@@ -569,7 +569,13 @@ class SearchModel {
     return expanded;
   }
 
-  /// 取消搜尋
+  /// 使用者停止搜尋：已經收到、還在等下一次送出的結果照常送出，再取消。
+  void stopSearch() {
+    _flushPublish();
+    cancelSearch();
+  }
+
+  /// 取消搜尋，還沒送出的結果丟掉（開始新搜尋或離開頁面時用）。
   void cancelSearch() {
     _generation++;
     _dropPendingPublish();
