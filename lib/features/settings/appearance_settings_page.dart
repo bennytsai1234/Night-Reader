@@ -6,12 +6,13 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、深淺與玻璃效果。風格與深淺同時決定 App 介面、
+/// 外觀與主題：風格、強調色、深淺與玻璃效果。風格與深淺同時決定 App 介面、
 /// 閱讀正文與閱讀選單的配色。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
@@ -33,11 +34,23 @@ class AppearanceSettingsPage extends StatelessWidget {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: _StyleGrid(
                   selected: themeSettings.style,
+                  accent: themeSettings.accent,
                   onSelected: (style) {
                     if (style == themeSettings.style) return;
                     ThemeRevealScope.of(context)
                         .run(change: () => themeSettings.setStyle(style));
                   },
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '強調色',
+                  value: themeSettings.accent.label,
+                  trailing: _AccentDot(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  showChevron: false,
+                  onTap: () => _pickAccent(rowContext, themeSettings),
                 ),
               ),
             ],
@@ -82,12 +95,58 @@ class AppearanceSettingsPage extends StatelessWidget {
   }
 }
 
+/// 強調色選單：每個色點是套到目前風格與深淺後實際會用的顏色。
+Future<void> _pickAccent(
+  BuildContext rowContext,
+  ThemeSettingsProvider themeSettings,
+) async {
+  final brightness = Theme.of(rowContext).brightness;
+  final accent = await showGlassMenu<AppAccent>(
+    context: rowContext,
+    anchor: globalRectOf(rowContext),
+    entries: [
+      for (final accent in AppAccent.values)
+        GlassMenuItem(
+          value: accent,
+          label: accent.label,
+          checked: accent == themeSettings.accent,
+          swatch: themeSettings.style.paletteFor(brightness, accent).primary,
+        ),
+    ],
+  );
+  if (accent == null || accent == themeSettings.accent) return;
+  if (!rowContext.mounted) return;
+  ThemeRevealScope.of(rowContext)
+      .run(change: () => themeSettings.setAccent(accent));
+}
+
+class _AccentDot extends StatelessWidget {
+  const _AccentDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 18,
+    child: DecoratedBox(
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    ),
+  );
+}
+
 /// 三欄風格卡：上半是正文紙張與文字，下半是 App 卡片底色與主色；
 /// 顯示各風格在目前深淺下的樣子。
 class _StyleGrid extends StatelessWidget {
-  const _StyleGrid({required this.selected, required this.onSelected});
+  const _StyleGrid({
+    required this.selected,
+    required this.accent,
+    required this.onSelected,
+  });
 
   final AppStyle selected;
+
+  /// 卡片上的主色照目前的強調色畫，選下去看到的就是那個樣子。
+  final AppAccent accent;
   final ValueChanged<AppStyle> onSelected;
 
   static const int _columns = 3;
@@ -117,7 +176,7 @@ class _StyleGrid extends StatelessWidget {
                 height: cardHeight,
                 child: _StyleCard(
                   style: style,
-                  palette: style.of(brightness),
+                  palette: style.paletteFor(brightness, accent),
                   selected: style == selected,
                   onTap: () => onSelected(style),
                 ),

@@ -2,17 +2,17 @@
 
 夜讀以 Material 3 為底，介面結構與互動取法 Telegram iOS（浮動玻璃列、分組清單、情境選單），視覺基線為「紙墨相生」：淺色介面以溫潤暖白宣紙承載文字，深色介面以低刺激夜墨降低長時間閱讀疲勞。設計哲學恪守「介面服務於內容，克制而不喧賓奪主」，追求如精裝紙本書冊般的雅緻、秩序與呼吸感。
 
-外觀由「風格 × 深淺」決定：五種風格（紙墨、竹青、石青、茶褐、素色）各有一套淺色與深色配色，一次套到 App 介面、閱讀正文與閱讀選單；深淺（跟隨系統／淺色／深色）全 App 共用，閱讀器的月亮鈕切換的也是它。不提供個別調色。
+外觀由「風格 × 深淺」決定：十種風格（紙墨、竹青、石青、茶褐、素色，以及取材自 Rosé Pine、Catppuccin、Solarized、Gruvbox、Nord 的胭脂、藕荷、黃卷、琥珀、霜夜）各有一套淺色與深色配色，一次套到 App 介面、閱讀正文與閱讀選單；深淺（跟隨系統／淺色／深色）全 App 共用，閱讀器的月亮鈕切換的也是它。另可選強調色（`AppAccent`，「外觀與主題 → 強調色」選單，預設「跟隨主題」，另有十二色）換掉主色：開關、選取、勾勾、強調按鈕與純文字動作一起換，其餘配色照風格；`AppStyle.paletteFor` 依風格與深淺只調明暗、不改色相，直到符合下方的主色對比度契約。不提供其他個別調色或自訂色碼。
 
 ## 實作入口
 
 - `lib/shared/theme/app_tokens.dart`：品牌色、紙／墨色階、間距與圓角 token。
 - `lib/shared/theme/app_text_styles.dart`：標題、正文與 UI 字階。
-- `lib/shared/theme/app_style.dart`：五種風格（`AppStyle`）與每個深淺的完整配色（`StylePalette`，掛在 `ThemeData` 上的擴充）。
+- `lib/shared/theme/app_style.dart`：風格（`AppStyle`）與每個深淺的完整配色（`StylePalette`，掛在 `ThemeData` 上的擴充），以及強調色（`AppAccent`）。
 - `lib/shared/theme/custom_app_theme.dart`：風格映射至 Material `ThemeData` 的唯一入口。
 - `lib/shared/theme/app_chrome.dart`：分組清單與玻璃元件的衍生色（`AppChrome.of(context)`），全由風格配色推導，不新增序列化欄位。
 - `lib/shared/widgets/`：紙墨玻璃元件庫，見下方「紙墨玻璃元件」。
-- `lib/features/settings/theme_settings_provider.dart`：使用者選的風格與玻璃強度；深淺在 `SettingsProvider.themeMode`。
+- `lib/features/settings/theme_settings_provider.dart`：使用者選的風格、強調色與玻璃強度；深淺在 `SettingsProvider.themeMode`。
 
 ## 色彩與材質層次
 

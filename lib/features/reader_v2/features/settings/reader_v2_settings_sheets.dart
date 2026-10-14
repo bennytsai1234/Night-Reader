@@ -79,7 +79,7 @@ class _ReaderStyleSelector extends StatelessWidget {
     final themeSettings = context.watch<ThemeSettingsProvider>();
     final brightness = StylePalette.of(context).brightness;
     final scheme = Theme.of(context).colorScheme;
-    // 寬度夠時五個色票平均分散；窄視窗（分割畫面等）放不下時改為左右捲動。
+    // 寬度夠時色票平均分散；窄視窗（分割畫面等）放不下時改為左右捲動。
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,

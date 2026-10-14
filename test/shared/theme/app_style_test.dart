@@ -177,6 +177,81 @@ void main() {
     }
   });
 
+  group('強調色套到每個風格的淺色與深色', () {
+    for (final accent in AppAccent.values) {
+      for (final style in AppStyle.values) {
+        test('${accent.label}・${style.label}：主色對比達標', () {
+          for (final brightness in Brightness.values) {
+            final reason = '${accent.label}・${style.label}・${brightness.name}';
+            final theme = buildAppTheme(style, brightness, accent: accent);
+            final palette = theme.extension<StylePalette>()!;
+            final scheme = theme.colorScheme;
+            expect(palette.primary, scheme.primary, reason: reason);
+            expect(
+              palette.primary,
+              style.paletteFor(brightness, accent).primary,
+              reason: reason,
+            );
+            // 主色以外的配色都照風格。
+            final base = style.of(brightness);
+            expect(palette.background, base.background, reason: reason);
+            expect(palette.text, base.text, reason: reason);
+            expect(palette.readerText, base.readerText, reason: reason);
+            for (final background in [
+              palette.background,
+              palette.surface,
+              Color.alphaBlend(
+                GlassCapsule.selectedTintOf(scheme),
+                palette.background,
+              ),
+            ]) {
+              expect(
+                _contrast(palette.primary, background),
+                greaterThanOrEqualTo(4.5),
+                reason: reason,
+              );
+            }
+            expect(
+              _contrast(palette.onPrimary, palette.primary),
+              greaterThanOrEqualTo(4.5),
+              reason: reason,
+            );
+            final chrome = theme.extension<AppChrome>()!;
+            final toast = Color.alphaBlend(
+              chrome.toastBackground,
+              palette.background,
+            );
+            expect(
+              _contrast(chrome.toastAction, toast),
+              greaterThanOrEqualTo(4.5),
+              reason: reason,
+            );
+          }
+        });
+      }
+    }
+
+    test('選了顏色就看得出是那個顏色：色相不變、只調明暗', () {
+      for (final accent in AppAccent.values) {
+        for (final style in AppStyle.values) {
+          for (final brightness in Brightness.values) {
+            final base = accent.colorFor(brightness);
+            if (base == null) continue;
+            final primary = style.paletteFor(brightness, accent).primary;
+            final hue = HSLColor.fromColor(base).hue;
+            final saturation = HSLColor.fromColor(base).saturation;
+            if (saturation < 0.05) continue;
+            expect(
+              HSLColor.fromColor(primary).hue,
+              closeTo(hue, 2),
+              reason: '${accent.label}・${style.label}・${brightness.name}',
+            );
+          }
+        }
+      }
+    });
+  });
+
   group('ThemeSettingsProvider', () {
     tearDown(() => GetIt.instance.reset());
 
@@ -200,6 +275,21 @@ void main() {
     test('無法辨識的保存值回到預設風格', () async {
       await register(<String, Object>{PreferKey.appStyle: 'rainbow'});
       expect(ThemeSettingsProvider().style, AppStyle.paper);
+    });
+
+    test('強調色預設跟隨主題，保存後重新開啟仍是同一個', () async {
+      final prefs = await register(<String, Object>{});
+      final provider = ThemeSettingsProvider();
+      expect(provider.accent, AppAccent.theme);
+
+      provider.setAccent(AppAccent.bamboo);
+      expect(prefs.getString(PreferKey.appAccent), AppAccent.bamboo.name);
+      expect(ThemeSettingsProvider().accent, AppAccent.bamboo);
+    });
+
+    test('無法辨識的強調色回到跟隨主題', () async {
+      await register(<String, Object>{PreferKey.appAccent: 'rainbow'});
+      expect(ThemeSettingsProvider().accent, AppAccent.theme);
     });
   });
 }

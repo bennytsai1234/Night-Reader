@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/settings/appearance_settings_page.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
+import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final prefs = await SharedPreferences.getInstance();
+    GetIt.instance.registerSingleton<SharedPreferences>(prefs);
+    addTearDown(GetIt.instance.reset);
+    final themeSettings = ThemeSettingsProvider()..setStyle(AppStyle.plain);
+    final settings = SettingsProvider();
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: themeSettings),
+          ChangeNotifierProvider.value(value: settings),
+        ],
+        child: Consumer<ThemeSettingsProvider>(
+          builder: (context, theme, _) => MaterialApp(
+            theme: buildAppTheme(
+              theme.style,
+              Brightness.dark,
+              accent: theme.accent,
+            ),
+            home: const AppearanceSettingsPage(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('跟隨主題'), findsOneWidget);
+
+    await tester.tap(find.text('強調色'));
+    await tester.pumpAndSettle();
+    for (final accent in AppAccent.values.skip(1)) {
+      expect(find.text(accent.label), findsWidgets);
+    }
+
+    await tester.tap(find.text('竹綠').last);
+    await tester.pumpAndSettle();
+
+    expect(themeSettings.accent, AppAccent.bamboo);
+    expect(prefs.getString(PreferKey.appAccent), AppAccent.bamboo.name);
+    final context = tester.element(find.byType(AppearanceSettingsPage));
+    final primary = Theme.of(context).colorScheme.primary;
+    expect(
+      primary,
+      AppStyle.plain.paletteFor(Brightness.dark, AppAccent.bamboo).primary,
+    );
+    expect(
+      HSLColor.fromColor(primary).hue,
+      closeTo(HSLColor.fromColor(AppAccent.bamboo.dark!).hue, 2),
+      reason: '素色深色選竹綠，開關是綠色而不是白色',
+    );
+  });
+}

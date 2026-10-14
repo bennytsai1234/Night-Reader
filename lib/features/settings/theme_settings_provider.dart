@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
     style = AppStyle.fromStorage(_prefs.getString(PreferKey.appStyle));
+    accent = AppAccent.fromStorage(_prefs.getString(PreferKey.appAccent));
     glassStrength = GlassStrength.fromStorage(
       _prefs.getString(PreferKey.glassStrength),
     );
@@ -19,6 +20,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
   /// App 介面、閱讀正文與閱讀選單共用的風格。
   late AppStyle style;
 
+  /// 開關、選取與強調按鈕的顏色；預設跟隨風格。
+  late AppAccent accent;
+
   /// 浮動列、選單等玻璃材質的強度；App 介面與閱讀選單共用。
   late GlassStrength glassStrength;
 
@@ -26,6 +30,13 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (style == value) return;
     style = value;
     _prefs.setString(PreferKey.appStyle, value.name);
+    notifyListeners();
+  }
+
+  void setAccent(AppAccent value) {
+    if (accent == value) return;
+    accent = value;
+    _prefs.setString(PreferKey.appAccent, value.name);
     notifyListeners();
   }
 
