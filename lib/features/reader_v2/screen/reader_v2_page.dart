@@ -255,6 +255,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final mediaPadding = MediaQuery.paddingOf(context);
         _lastViewportSize = size;
 
+        // 設定讀完才開書（通常只差幾毫秒）；用預設值先開，設定到了會再重排
+        // 一次，正文出現後又轉圈、跳到別的位置。
+        if (!_host.settings.isLoaded) {
+          return ColoredBox(color: StylePalette.of(context).readerBackground);
+        }
         final style = _host.settings.readStyleFor(
           mediaPadding,
           topInfoReservedExternally: true,

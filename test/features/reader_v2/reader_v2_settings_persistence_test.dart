@@ -9,6 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 設定保存失敗時的還原契約，以及持久化資料損毀時的回退。
 ///
 /// 可切換寫入失敗的 repository；讀取仍走 SharedPreferences mock。
+class _BrokenLoadRepository extends ReaderV2PrefsRepository {
+  const _BrokenLoadRepository();
+
+  @override
+  Future<ReaderV2PrefsSnapshot> load() async => throw StateError('no prefs');
+}
+
 class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
   _FlakyPrefsRepository();
 
@@ -31,6 +38,29 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await SharedPreferences.getInstance();
+  });
+
+  group('loading before the reader opens', () {
+    test('is not loaded until the first load ends', () async {
+      final settings = ReaderV2SettingsController();
+      expect(settings.isLoaded, isFalse);
+
+      await settings.loadSettings();
+
+      expect(settings.isLoaded, isTrue);
+      settings.dispose();
+    });
+
+    test('a failed load still counts as loaded, so the reader opens', () async {
+      final settings = ReaderV2SettingsController(
+        prefsRepository: const _BrokenLoadRepository(),
+      );
+
+      await settings.loadSettings();
+
+      expect(settings.isLoaded, isTrue);
+      settings.dispose();
+    });
   });
 
   group('save failure rollback', () {
