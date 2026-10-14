@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
@@ -103,6 +104,30 @@ void main() {
 
       provider.updateSortMode(SearchResultSortMode.sourceCount);
       expect(names(provider), ['乙', '甲']);
+    });
+
+    test('a cover found on the detail page stays on the card until the next '
+        'search', () async {
+      final provider = await settledProvider();
+      provider.onSearchSuccess([book('甲'), book('乙')]);
+      AppEventBus().fire(
+        AppEventBus.bookCover,
+        data: const BookCoverEvent(
+          bookUrl: 'https://b.example/甲',
+          cover: 'local:///covers/甲.jpg',
+        ),
+      );
+      await pumpEventQueue();
+      expect(provider.coverOf(provider.results.first), 'local:///covers/甲.jpg');
+      expect(provider.coverOf(provider.results.last), isNull);
+
+      // 同一本書換了代表來源（bookUrl 不同），封面照樣跟著卡片。
+      final replaced = book('甲')..bookUrl = 'https://other.example/甲';
+      provider.onSearchSuccess([replaced, book('乙')]);
+      expect(provider.coverOf(replaced), 'local:///covers/甲.jpg');
+
+      await provider.search('另一本');
+      expect(provider.coverOf(replaced), isNull);
     });
   });
 

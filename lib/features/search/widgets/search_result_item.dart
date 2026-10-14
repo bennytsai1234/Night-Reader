@@ -15,9 +15,13 @@ class SearchResultItem extends StatelessWidget {
   final AggregatedSearchBook result;
   final bool isInBookshelf;
 
+  /// 要顯示的封面；沒給時用書本身的（見 [SearchProvider.coverOf]）。
+  final String? coverUrl;
+
   const SearchResultItem({
     super.key,
     required this.result,
+    this.coverUrl,
     this.isInBookshelf = false,
   });
 
@@ -57,7 +61,7 @@ class SearchResultItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             BookCoverWidget(
-              coverUrl: book.coverUrl,
+              coverUrl: coverUrl ?? book.coverUrl,
               bookName: context.zh(book.name),
               author: context.zh(book.author),
               width: ExploreBookItem.coverWidth,
@@ -65,50 +69,57 @@ class SearchResultItem extends StatelessWidget {
               borderRadius: AppRadius.cardXs,
             ),
             const SizedBox(width: AppSpacing.lg),
+            // 書名、作者 · 字數 · 分類、最新章節各一行，上下對齊封面的上下
+            // 緣，每一列一樣高；字放大到超過封面高時才撐高。
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          context.zh(book.name),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: ExploreBookItem.coverHeight,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.zh(book.name),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodyBase.copyWith(
+                              height: 1.3,
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      if (isInBookshelf) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        const InfoBadge(),
+                        if (isInBookshelf) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          const InfoBadge(),
+                        ],
+                        if (sourceCount > 1) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          InfoBadge(label: '$sourceCount 個書源'),
+                        ],
                       ],
-                      if (sourceCount > 1) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        InfoBadge(label: '$sourceCount 個書源'),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    metadata,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: secondaryStyle,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: secondaryStyle,
-                  ),
-                ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      metadata,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: secondaryStyle,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '最新：${context.zh(_valueOrFallback(book.latestChapterTitle, '暫無'))}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: secondaryStyle,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
