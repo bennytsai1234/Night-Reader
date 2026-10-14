@@ -15,6 +15,7 @@ import 'package:night_reader/shared/widgets/search_field.dart';
 /// - 開始／停止搜尋
 class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final TextEditingController controller;
+  final FocusNode focusNode;
   final SearchProvider provider;
   final ValueChanged<String> onSearch;
   final VoidCallback? onScopePressed;
@@ -24,6 +25,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   const SearchAppBar({
     super.key,
     required this.controller,
+    required this.focusNode,
     required this.provider,
     required this.onSearch,
     required this.onCancel,
@@ -56,6 +58,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
             Expanded(
               child: SearchField(
                 controller: controller,
+                focusNode: focusNode,
                 hintText: '搜尋書名或作者',
                 autofocus: autofocus,
                 onSubmitted: onSearch,

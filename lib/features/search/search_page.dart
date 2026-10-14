@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -24,6 +25,7 @@ import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
+import 'widgets/search_suggestion_view.dart';
 
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)
@@ -61,6 +63,7 @@ class _SearchPageContent extends StatefulWidget {
 
 class _SearchPageContentState extends State<_SearchPageContent> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _inputFocus = FocusNode();
 
   /// Scaffold 內容區的系統內距（含玻璃頁首）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
@@ -118,9 +121,34 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     }
   }
 
+  /// 頁面被不透明的整頁蓋住後，Overlay 會關掉這一頁的 TickerMode；跳出
+  /// 選單、對話框與底部面板時不會。用它決定搜尋要不要暫停。
+  ValueListenable<TickerModeData>? _tickerMode;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerMode = TickerMode.getValuesNotifier(context);
+    if (tickerMode == _tickerMode) return;
+    _tickerMode?.removeListener(_onTickerModeChanged);
+    _tickerMode = tickerMode..addListener(_onTickerModeChanged);
+    _onTickerModeChanged();
+  }
+
+  void _onTickerModeChanged() {
+    final provider = context.read<SearchProvider>();
+    if (_tickerMode!.value.enabled) {
+      provider.resumeSearch();
+    } else {
+      provider.pauseSearch();
+    }
+  }
+
   @override
   void dispose() {
+    _tickerMode?.removeListener(_onTickerModeChanged);
     _controller.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -155,6 +183,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
           backgroundColor: AppChrome.of(context).groupedBackground,
           appBar: SearchAppBar(
             controller: _controller,
+            focusNode: _inputFocus,
             provider: provider,
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
@@ -174,6 +203,8 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                         ? _buildResults(provider)
                         : _buildEmptyOrHistory(provider),
                   ),
+                  // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
+                  Positioned.fill(child: _buildSuggestions(provider)),
                   if (provider.isSearching)
                     Positioned(
                       // 進度條貼在玻璃頁首實色區的下緣。
@@ -195,16 +226,40 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     );
   }
 
+  /// 輸入框有焦點、正在打一個還沒搜過的詞時，列出符合的搜尋紀錄與書架書名。
+  Widget _buildSuggestions(SearchProvider provider) => ListenableBuilder(
+    listenable: Listenable.merge([_controller, _inputFocus]),
+    builder: (context, _) {
+      final input = _controller.text.trim();
+      final suggestions =
+          _inputFocus.hasFocus &&
+              input.isNotEmpty &&
+              input != provider.lastSearchKey
+          ? provider.suggestionsFor(input)
+          : const <SearchSuggestion>[];
+      if (suggestions.isEmpty) return const SizedBox.shrink();
+      return ColoredBox(
+        color: AppChrome.of(context).groupedBackground,
+        child: SearchSuggestionView(
+          suggestions: suggestions,
+          onSelected: (word) {
+            _controller.text = word;
+            _onSearch(word);
+          },
+        ),
+      );
+    },
+  );
+
   /// 清單頂端的狀態列；跟著結果或歷史一起捲動。
   List<Widget> _buildPanels(SearchProvider provider) {
     return [
-      if (provider.isSearching) _buildCurrentSourcePanel(provider),
-      if (!provider.isSearching && provider.failedSources > 0)
-        _buildFailedSourcesPanel(context, provider),
       if (provider.precisionSearch || !provider.searchScope.isAll)
         _buildFilterStatusPanel(provider),
-      if (provider.hasUnfilteredResults && !provider.isSearching)
-        _buildResultToolbar(context, provider),
+      if (provider.isSearching || provider.hasUnfilteredResults)
+        _buildStatusSlot(context, provider)
+      else if (provider.failedSources > 0)
+        _buildFailedSourcesPanel(context, provider),
     ];
   }
 
@@ -378,23 +433,59 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         ],
       );
 
-  Widget _buildCurrentSourcePanel(SearchProvider p) => Padding(
+  /// 搜尋中的進度與結束後的結果工具列輪流佔同一格、高度相同，搜尋結束時
+  /// 下面的結果不會被推動。
+  Widget _buildStatusSlot(BuildContext context, SearchProvider p) => Padding(
     padding: const EdgeInsets.fromLTRB(
-      AppGrouped.margin + AppGrouped.rowPadding,
+      AppGrouped.margin,
       AppSpacing.sm,
-      AppGrouped.margin + AppGrouped.rowPadding,
-      0,
+      AppGrouped.margin,
+      AppSpacing.xs,
     ),
-    child: Text(
-      '正在搜尋：${p.currentSource}（${p.progress * 100 ~/ 1}%）',
-      style: AppTextStyles.labelXs.copyWith(
-        height: 1.3,
-        color: AppChrome.of(context).sectionText,
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: GlassCapsule.height),
+      child: p.isSearching
+          ? _buildSearchProgress(p)
+          : _buildResultToolbar(context, p),
     ),
   );
+
+  /// 剩下的書源不超過這個數時，改列出還在等哪幾個並可略過；三個名稱
+  /// 大致排得進一行。
+  static const _namedWaitingLimit = 3;
+
+  Widget _buildSearchProgress(SearchProvider p) {
+    final remaining = p.totalSources - p.completedSources;
+    final waiting = p.waitingSources;
+    final namesWaiting =
+        p.totalSources > 0 &&
+        remaining <= _namedWaitingLimit &&
+        waiting.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              namesWaiting
+                  ? '還在等：${waiting.join('、')}'
+                  : p.totalSources > 0
+                  ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
+                  : '正在搜尋',
+              style: AppTextStyles.labelXs.copyWith(
+                height: 1.3,
+                color: AppChrome.of(context).sectionText,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (namesWaiting)
+            PlainTextAction(label: '略過', small: true, onPressed: p.stopSearch),
+        ],
+      ),
+    );
+  }
 
   Widget _buildFilterStatusPanel(SearchProvider p) => _noticeBar(
     color: context.warning,
@@ -417,13 +508,8 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   );
 
   Widget _buildResultToolbar(BuildContext context, SearchProvider p) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppGrouped.margin,
-        AppSpacing.sm,
-        AppGrouped.margin,
-        AppSpacing.xs,
-      ),
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -476,6 +562,16 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                 tooltip: '清除篩選',
                 blur: false,
                 onTap: p.clearResultFilters,
+              ),
+            ],
+            if (p.failedSources > 0) ...[
+              const SizedBox(width: AppSpacing.sm),
+              GlassCapsule(
+                label: '${p.failedSources} 個書源失敗',
+                icon: Icons.warning_amber_rounded,
+                foregroundColor: Theme.of(context).colorScheme.error,
+                blur: false,
+                onTap: () => _showFailureSheet(context),
               ),
             ],
           ],
@@ -716,44 +812,84 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     final results = p.results;
     final panels = _buildPanels(p);
     final padding = _bodyPadding;
-    return ListView.builder(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.only(
-        top: padding.top,
-        bottom: padding.bottom + AppSpacing.xl,
-      ),
-      itemCount: panels.length + results.length,
-      itemBuilder: (ctx, i) {
-        if (i < panels.length) return panels[i];
-        final index = i - panels.length;
-        final book = results[index];
-        final key = _resultKey(book);
-        return _ResultEntrance(
-          // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
-          // 留在原本的位置。
-          key: ValueKey(key),
-          animate: _arrivingResultKeys.contains(key),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (index > 0)
-                const InsetSeparator(indent: ExploreBookItem.textIndent),
-              SearchResultItem(
-                result: AggregatedSearchBook(
-                  book: book,
-                  sources: book.sourceLabels.isNotEmpty
-                      ? book.sourceLabels
-                      : [book.originName ?? '未知來源'],
-                ),
-                isInBookshelf: p.isInBookshelf(book),
-              ),
-            ],
-          ),
-        );
+    return NotificationListener<ScrollUpdateNotification>(
+      // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
+      onNotification: (notification) {
+        if (notification.depth == 0 &&
+            notification.dragDetails != null &&
+            notification.metrics.pixels > 0) {
+          p.holdResultOrder();
+        }
+        return false;
       },
+      child: ListView.builder(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.only(
+          top: padding.top,
+          bottom: padding.bottom + AppSpacing.xl,
+        ),
+        itemCount: panels.length + results.length,
+        itemBuilder: (ctx, i) {
+          if (i < panels.length) return panels[i];
+          final index = i - panels.length;
+          final book = results[index];
+          final key = _resultKey(book);
+          // 相關度排序時，每換一段就在那一段第一本書上方標出段名；順序固定
+          // 後接到尾端的書若是前面的段，尾端會再出現一次同名的段。
+          final tier = p.relevanceTierOf(book);
+          final startsTier =
+              tier != null &&
+              (index == 0 || tier != p.relevanceTierOf(results[index - 1]));
+          return _ResultEntrance(
+            // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
+            // 留在原本的位置。
+            key: ValueKey(key),
+            animate: _arrivingResultKeys.contains(key),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (startsTier)
+                  _RelevanceTierHeader(tier: tier, first: index == 0)
+                else if (index > 0)
+                  const InsetSeparator(indent: ExploreBookItem.textIndent),
+                SearchResultItem(
+                  result: AggregatedSearchBook(
+                    book: book,
+                    sources: book.sourceLabels.isNotEmpty
+                        ? book.sourceLabels
+                        : [book.originName ?? '未知來源'],
+                  ),
+                  isInBookshelf: p.isInBookshelf(book),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
+}
+
+/// 相關度分段的段名，接在該段第一本書上方。
+class _RelevanceTierHeader extends StatelessWidget {
+  const _RelevanceTierHeader({required this.tier, required this.first});
+
+  final int tier;
+  final bool first;
+
+  static const _labels = ['完全相符', '部分相符', '其他結果'];
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      AppGrouped.margin,
+      first ? AppSpacing.sm : AppSpacing.xl,
+      AppGrouped.margin,
+      0,
+    ),
+    child: GroupedSectionHeader(_labels[tier]),
+  );
 }
 
 /// 串流進來的搜尋結果第一次出現時，短暫淡入並微微上移。

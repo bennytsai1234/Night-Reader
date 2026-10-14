@@ -105,6 +105,20 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
         .write(BookSourcesCompanion(enabledExplore: Value(enabledExplore)));
   }
 
+  /// 寫入搜尋量到的回應時間（毫秒），鍵是書源網址。
+  Future<void> updateRespondTimes(Map<String, int> respondTimes) async {
+    if (respondTimes.isEmpty) return;
+    await batch((b) {
+      respondTimes.forEach((url, ms) {
+        b.update(
+          bookSources,
+          BookSourcesCompanion(respondTime: Value(ms)),
+          where: (t) => t.bookSourceUrl.equals(url),
+        );
+      });
+    });
+  }
+
   Future<void> updateCustomOrder(List<BookSource> sources) async {
     for (var i = 0; i < sources.length; i++) {
       await (update(bookSources)
