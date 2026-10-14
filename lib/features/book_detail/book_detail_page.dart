@@ -866,7 +866,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
         content: _fieldCard(ctx, [
           GroupedTextFieldRow(
             controller: fields.single,
-            hintText: '章節名稱',
             autofocus: true,
             onChanged: p.setSearchQuery,
           ),
