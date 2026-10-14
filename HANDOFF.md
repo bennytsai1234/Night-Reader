@@ -8,7 +8,7 @@
 
 ## 等使用者決定或動手
 
-- **正式版**：使用者 2026-10-14 說先只發測試版，正式版（下一版 0.3.4，目前正式版 v0.3.3）等使用者再說。
+- **正式版**：使用者 2026-10-14 說先只發測試版，正式版等使用者再說。
 - **網站曝光（#60，只能使用者做，已告知）**：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。
 - **測試日誌**：`download_service_test` 有一批「`_dio` 尚未初始化」的下載失敗日誌（測試沒準備網路層，只檢查排隊與範圍），不是警告；使用者要的話再補假的網路層。
@@ -20,7 +20,7 @@
 
 ## 接下來
 
-- 只做計算的 JS 已在背景解析（`JsBridgeGuard` 在橋接層把關）；若用到網路、`java.put`、Cookie 的書源在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。搜尋剩下的成本主要是搜尋頁本身的重建與 TLS 握手。
+- 若用到網路、`java.put`、Cookie 的書源在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。搜尋剩下的成本主要是搜尋頁本身的重建與 TLS 握手。
 - 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者若在手機上覺得捲動掉幀再重新開題。
 
 ## 注意
