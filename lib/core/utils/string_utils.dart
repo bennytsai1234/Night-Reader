@@ -148,26 +148,101 @@ class StringUtils {
     return List.filled(n, str).join();
   }
 
-  /// 格式化字數 (對標 wordCountFormat)
+  /// 格式化字數 (對標 wordCountFormat)。
+  ///
+  /// 書源給的字數各寫各的（123456、12.3萬字、56.8万、123.4K、字數：1.2M），
+  /// 一律換成同一種寫法：一萬以上「12.3萬字」，一千以上「3.5千字」，再少寫
+  /// 「850字」。格式化過的結果再格式化一次不變。讀不出字數（例如書源把更新
+  /// 時間放在字數欄）時回傳空字串，不把別的資訊當成字數顯示。
   static String wordCountFormat(dynamic words) {
     if (words == null) return '';
-    if (words is String) {
-      if (int.tryParse(words) != null) {
-        return _formatIntWordCount(int.parse(words));
-      }
-      return words;
-    }
-    if (words is num) {
-      return _formatIntWordCount(words.toInt());
-    }
-    return words.toString();
+    if (words is num) return _formatIntWordCount(words.round());
+    return _formatIntWordCount(_parseWordCount(words.toString()) ?? 0);
+  }
+
+  static final _wordCountPattern = RegExp(
+    r'(\d+(?:\.\d+)?)\s*(百万|百萬|千万|千萬|万|萬|千|[kKwWmM])?',
+  );
+  static const _wordCountUnits = {
+    '百万': 1000000,
+    '百萬': 1000000,
+    'm': 1000000,
+    '千万': 10000000,
+    '千萬': 10000000,
+    '万': 10000,
+    '萬': 10000,
+    'w': 10000,
+    '千': 1000,
+    'k': 1000,
+  };
+
+  /// 日期、時刻與「3 天前」這類更新時間。
+  static final _datePattern = RegExp(
+    r'\d{4}[-/年]\d{1,2}|\d{4}\.\d{1,2}\.\d{1,2}|\d{1,2}[-/月]\d{1,2}|'
+    r'\d{1,2}:\d{2}|'
+    r'\d+\s*(?:秒|分钟|分鐘|小时|小時|天|日|周|週|星期|个月|個月|月|年)前|'
+    r'刚刚|剛剛|今天|昨天|前天|更新',
+  );
+
+  static int? _parseWordCount(String text) {
+    final value = fullToHalf(text).replaceAll(RegExp(r'(?<=\d),(?=\d)'), '');
+    if (_datePattern.hasMatch(value)) return null;
+    final match = _wordCountPattern.firstMatch(value);
+    if (match == null) return null;
+    final number = double.parse(match.group(1)!);
+    final unit = match.group(2)?.toLowerCase();
+    return (number * (unit == null ? 1 : _wordCountUnits[unit]!)).round();
   }
 
   static String _formatIntWordCount(int words) {
     if (words <= 0) return '';
-    if (words > 10000) {
-      return '${(words / 10000.0).toStringAsFixed(1)}萬字';
+    String oneDecimal(double value) {
+      final text = value.toStringAsFixed(1);
+      return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
     }
+
+    // 9950 以上四捨五入到 0.1 千就是十千，直接寫成萬。
+    if (words >= 9950) return '${oneDecimal(words / 10000)}萬字';
+    if (words >= 1000) return '${oneDecimal(words / 1000)}千字';
     return '$words字';
+  }
+
+  /// 書源的分類拆成標籤，丟掉混進來的日期、更新時間與數字（字數、點擊數），
+  /// 重複的只留一個。
+  static List<String> kindLabels(String? kind) {
+    if (kind == null || kind.trim().isEmpty) return const [];
+    final labels = <String>{};
+    for (final raw in kind.split(_kindSeparator)) {
+      final label = raw.trim();
+      if (label.isEmpty || _isKindNoise(label)) continue;
+      labels.add(label);
+    }
+    return labels.toList();
+  }
+
+  /// 卡片上的字數：字數欄讀不出來時，再看分類裡有沒有寫成「…字」的標籤
+  /// （有些書源把字數放在分類欄）。
+  static String displayWordCount(String? wordCount, String? kind) {
+    final formatted = wordCountFormat(wordCount);
+    if (formatted.isNotEmpty || kind == null) return formatted;
+    for (final raw in kind.split(_kindSeparator)) {
+      if (!raw.contains('字')) continue;
+      final fromKind = wordCountFormat(raw);
+      if (fromKind.isNotEmpty) return fromKind;
+    }
+    return '';
+  }
+
+  static final _kindSeparator = RegExp(r'[,，、|｜/／\s]+');
+  static final _numericKind = RegExp(
+    r'^[\d.,]+\s*(?:百万|百萬|千万|千萬|万|萬|千|[kKwWmM])?\s*字?$',
+  );
+
+  static bool _isKindNoise(String label) {
+    final value = fullToHalf(label);
+    if (_datePattern.hasMatch(value) || _numericKind.hasMatch(value)) {
+      return true;
+    }
+    return value.contains('字') && _parseWordCount(value) != null;
   }
 }
