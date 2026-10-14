@@ -25,7 +25,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 這一節與發布流程照 ADR 0014；要改流程先改那份 ADR。
 
 - 所有改動都在分支上做，文件、交接這類小改動也不直接推 `main`：不急的就在分支上累積，跟下一次較大的更新一起合併。
-- 使用者說合併時，把這次要合併的分支併成一條、推上去、開一個 PR（PR 說明照 `pr` 技能寫）。開 PR 後派 Codex 審整個 PR 一次（`codex-review` 技能），核對屬實的問題修在同一個 PR，再用 `gh pr comment` 把審查摘要貼成 PR 留言（發現了什麼、核對結果、修了哪些、沒修的為什麼）；CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `main`，刪掉本機分支。- commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
+- 使用者說合併時，把這次要合併的分支併成一條、推上去、開一個 PR（PR 說明照 `pr` 技能寫）。開 PR 後派 Codex 審整個 PR 一次（`codex-review` 技能），核對屬實的問題修在同一個 PR，再用 `gh pr comment` 把審查摘要貼成 PR 留言（發現了什麼、核對結果、修了哪些、沒修的為什麼）；CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `main`，刪掉本機分支。
+- commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
 - 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
 - `main` 的分支保護只禁止強制推送與刪除，不強制走 PR：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
