@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -36,9 +37,27 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
     engine.ruleContext = this;
     try {
       return await engine.evaluateAsync(jsStr, context: context);
+    } on TimeoutException {
+      // 逾時的規則還在引擎裡等它的非同步呼叫，晚到時會寫進當時的 `book`、
+      // `java`。引擎在清單逐項間共用，那時已經換成後面的項目，所以整個引擎
+      // 丟掉，下一次執行重建；晚到的回呼碰到已釋放的引擎就被擋下。
+      _discardJsEngine(engine);
+      rethrow;
     } finally {
       engine.ruleContext = previous;
     }
+  }
+
+  void _discardJsEngine(JsEngine engine) {
+    final owner = jsEngineOwner;
+    if (owner != null && identical(owner.jsEngine, engine)) {
+      owner.jsEngine = null;
+    } else if (identical(jsEngine, engine)) {
+      jsEngine = null;
+    } else {
+      return;
+    }
+    engine.dispose();
   }
 
   /// 自己的引擎，或借用 [jsEngineOwner] 的（見該欄位說明）。

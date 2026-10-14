@@ -73,6 +73,7 @@ class JsEngine {
         ruleContext: ruleContext,
       );
       _extensions!.inject();
+      _runtime!.evaluate(_ruleGlobalsHelpers);
     } catch (e) {
       // Library not available in some test environments
       AppLog.e('JS Engine init error: $e', error: e);
@@ -140,7 +141,9 @@ class JsEngine {
     final asyncFriendlyJs = _normalizeLegacySyncIifeForAsync(normalizedJs);
     final rewritten = AsyncJsRewriter.rewrite(asyncFriendlyJs);
     final (callId, future) = _extensions!.registerRuleCall();
-    final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+    // 非同步規則在 await 之後才跑完，進入在這段腳本開頭、清除等它結束。
+    final wrapped =
+        '__lrEnterRule();\n${JsRuleAsyncWrapper.wrap(rewritten, callId)}';
 
     try {
       final res = _runtime!.evaluate(wrapped);
@@ -176,7 +179,10 @@ class JsEngine {
               const Duration(seconds: 20),
             );
           },
-        );
+        )
+        .whenComplete(() {
+          if (!_isDisposed) _runtime?.evaluate('__lrExitRule()');
+        });
   }
 
   String _normalizeLegacySyncIifeForAsync(String jsCode) {
@@ -380,14 +386,37 @@ class JsEngine {
     return trimmed;
   }
 
+  /// 規則執行時新掛上全域的名稱（沒宣告就賦值的變數，例如 `seen = result`），
+  /// 在規則結束後刪掉，下一次執行（下一章、下一筆結果）看不到；Legado 每次
+  /// 執行都是新的作用域。規則的 JS 可能經 `java.getString` 再執行一段規則，
+  /// 所以只在最外層記下與清除。脈絡、書源 jsLib 都在進入規則前寫好，不受影響。
+  static const String _ruleGlobalsHelpers = '''
+globalThis.__lrRuleDepth = 0;
+globalThis.__lrEnterRule = function () {
+  if (__lrRuleDepth++ === 0) globalThis.__lrGlobalsBefore = Object.keys(globalThis);
+};
+globalThis.__lrExitRule = function () {
+  if (__lrRuleDepth === 0 || --__lrRuleDepth > 0) return;
+  var keep = new Set(globalThis.__lrGlobalsBefore);
+  Object.keys(globalThis).forEach(function (name) {
+    if (!keep.has(name)) delete globalThis[name];
+  });
+};
+globalThis.__lrRunRule = function (run) {
+  __lrEnterRule();
+  try { return run(); } finally { __lrExitRule(); }
+};
+''';
+
   /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
   /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
-  /// 執行一個新作用域相同；非同步規則的 async IIFE 本來就是這樣。
+  /// 執行一個新作用域相同；非同步規則的 async IIFE 本來就是這樣。沒宣告就
+  /// 賦值的變數由 `__lrRunRule` 在結束後清掉（見 [_ruleGlobalsHelpers]）。
   JsEvalResult _evaluateRuleScript(String jsCode) {
     final wrapped =
-        '(function() { return typeof __lrNormalizeRuleResult === "function" '
+        '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
-        ': eval(${jsonEncode(jsCode)}); })()';
+        ': eval(${jsonEncode(jsCode)}); })';
     final result = _runtime!.evaluate(wrapped);
     if (!result.isError) {
       return result;
@@ -397,9 +426,9 @@ class JsEngine {
     // 邏輯繼續生效。
     final fallbackBody = JsRuleAsyncWrapper.injectFinalReturn(jsCode);
     final fallbackWrapped =
-        'typeof __lrNormalizeRuleResult === "function" '
+        '__lrRunRule(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult((function() {\n$fallbackBody\n})()) '
-        ': (function() {\n$fallbackBody\n})()';
+        ': (function() {\n$fallbackBody\n})(); })';
     return _runtime!.evaluate(fallbackWrapped);
   }
 

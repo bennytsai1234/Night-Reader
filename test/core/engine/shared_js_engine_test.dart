@@ -116,4 +116,73 @@ void main() {
     ]);
     expect(books.map((b) => b.author?.trim()), ['甲書', '乙書']);
   });
+
+  group('globals a chapter rule creates', () {
+    Future<List<String>> chapterTitles(String nameRule, {String? jsLib}) async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '共用引擎',
+        'bookSourceUrl': 'https://js.test',
+        'jsLib': ?jsLib,
+        'ruleToc': {
+          'chapterList': 'class.list@a',
+          'chapterName': nameRule,
+          'chapterUrl': 'a@href',
+        },
+      });
+      final book = Book(
+        bookUrl: 'https://js.test/book/',
+        origin: 'https://js.test',
+        name: '共用引擎',
+        tocUrl: 'https://js.test/book/',
+      );
+      const html =
+          '<html><body><div class="list">'
+          '<a href="/book/1.html">第一章</a>'
+          '<a href="/book/2.html">第二章</a>'
+          '</div></body></html>';
+      final result = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: html,
+        baseUrl: book.tocUrl,
+      );
+      return [for (final chapter in result.chapters) chapter.title];
+    }
+
+    test('an undeclared assignment does not reach the next chapter', () async {
+      // 沒有 var 的賦值在非嚴格模式下掛到全域；Legado 每次執行是新的作用域，
+      // 下一章看不到。
+      expect(
+        await chapterTitles(
+          'a@text@js:if (typeof seen === "undefined") { seen = result; } seen',
+        ),
+        ['第一章', '第二章'],
+      );
+    });
+
+    test('state kept by the source jsLib carries across chapters', () async {
+      // jsLib 是書源共用的作用域，Legado 也保留它的狀態。
+      expect(
+        await chapterTitles(
+          'a@text@js:result + bump()',
+          jsLib:
+              'var counter = 0; function bump() { counter++; return counter; }',
+        ),
+        ['第一章1', '第二章2'],
+      );
+    });
+
+    test('a nested rule does not clear what the outer rule set', () async {
+      // java.getString 帶 @js: 時在同一個引擎裡再執行一段規則；外層規則先
+      // 掛上的全域在內層結束時還要在。
+      expect(
+        await chapterTitles(
+          'a@text@js:outer = result; '
+          'var inner = java.getString("a@href@js:result + \'!\'"); '
+          'outer + inner',
+        ),
+        ['第一章/book/1.html!', '第二章/book/2.html!'],
+      );
+    });
+  });
 }
