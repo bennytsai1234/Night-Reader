@@ -81,10 +81,12 @@ class SelectActionBar extends StatelessWidget {
           child: Row(
             children: [
               _BarTextButton(
-                label: '反選',
+                label: hasSelection ? '反選' : '全選',
                 color: scheme.onSurface,
                 onTap: allCount > 0 && !isBusy
-                    ? provider.revertSelection
+                    ? (hasSelection
+                          ? provider.revertSelection
+                          : provider.selectAll)
                     : null,
               ),
               Expanded(

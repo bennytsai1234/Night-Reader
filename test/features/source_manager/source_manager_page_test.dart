@@ -168,11 +168,7 @@ void main() {
     expect(find.textContaining('壞掉的書源'), findsOneWidget);
     expect(find.textContaining('書源0'), findsNothing);
 
-    // 篩出校驗失敗的書源後全選刪除。
-    await tester.tap(find.bySemanticsLabel('更多操作'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('選取書源'));
-    await tester.pumpAndSettle();
+    // 篩出校驗失敗的書源後，用底部工作列全選刪除。
     await tester.tap(find.text('全選'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('刪除'));
@@ -198,13 +194,14 @@ void main() {
   ) async {
     await pumpPage(tester);
 
-    expect(find.text('反選'), findsOneWidget);
+    expect(find.text('全選'), findsOneWidget);
     expect(find.text('0/3'), findsOneWidget);
 
-    await tester.tap(find.text('反選'));
+    await tester.tap(find.text('全選'));
     await tester.pumpAndSettle();
     expect(find.text('3/3'), findsOneWidget);
     expect(find.text('已選 3 項'), findsOneWidget);
+    expect(find.text('反選'), findsOneWidget);
   });
 
   testWidgets('toggling one source leaves the other rows usable', (
