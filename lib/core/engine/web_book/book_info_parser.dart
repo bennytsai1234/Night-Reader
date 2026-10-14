@@ -16,7 +16,7 @@ class BookInfoParser {
   }) async {
     final infoRule = source.ruleBookInfo;
     if (infoRule == null) return book;
-    if (ParseWorker.isPureRule([
+    final fit = ParseWorker.fit(source, [
       infoRule.init,
       infoRule.name,
       infoRule.author,
@@ -25,9 +25,12 @@ class BookInfoParser {
       infoRule.coverUrl,
       infoRule.intro,
       infoRule.lastChapter,
-    ])) {
+      infoRule.canReName,
+    ]);
+    if (fit != ParseWorkerFit.none) {
       final result = await ParseWorker.run(
         _offMain(source: source, book: book, body: body, baseUrl: baseUrl),
+        usesJs: fit == ParseWorkerFit.js,
       );
       if (result != null) return result;
     }

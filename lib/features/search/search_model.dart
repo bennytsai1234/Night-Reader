@@ -39,25 +39,11 @@ List<String> searchKeyVariants(String key) =>
 /// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（正規化書名＋
 /// 作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
 ///
-/// 搜尋頁每次重建都會對每張卡問一次，所以依書名與作者記在卡片上，兩者
-/// 換掉才重算。
-String searchResultIdentity(SearchBook book) {
-  final cached = _identityCache[book];
-  if (cached != null &&
-      identical(cached.$1, book.name) &&
-      identical(cached.$2, book.author)) {
-    return cached.$3;
-  }
-  final identity =
-      '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
-  // 繁簡字典還沒載入時的結果不記，載入後重算（同 [normalizeSearchText]）。
-  if (ChineseUtils.isInitialized) {
-    _identityCache[book] = (book.name, book.author, identity);
-  }
-  return identity;
-}
-
-final Expando<(String, String?, String)> _identityCache = Expando();
+/// 搜尋頁每次重建都會對每張卡問一次；合併卡建立時已把分組鍵記在
+/// [SearchBook.groupIdentity]，直接取用。
+String searchResultIdentity(SearchBook book) =>
+    book.groupIdentity ??
+    '${normalizeSearchText(book.name)}\u0000${normalizeSearchText(book.author)}';
 
 bool matchesPrecisionSearch(SearchBook book, String key) {
   final keyword = normalizeSearchText(key);
@@ -173,11 +159,7 @@ class _NameGroup {
       final card = SearchBook.aggregate(books);
       // 身分就是分組鍵，直接記上，搜尋頁不必再對每張卡重算一次（見
       // [searchResultIdentity]）。
-      _identityCache[card] = (
-        card.name,
-        card.author,
-        '$nameKey\u0000$authorKey',
-      );
+      card.groupIdentity = '$nameKey\u0000$authorKey';
       result.add(card);
     }
 

@@ -36,12 +36,15 @@ class ContentParser {
     String? nextChapterUrl,
   }) async {
     final contentRule = source.ruleContent;
-    if (contentRule != null &&
-        ParseWorker.isPureRule([
-          contentRule.content,
-          contentRule.nextContentUrl,
-        ])) {
+    final fit = contentRule == null
+        ? ParseWorkerFit.none
+        : ParseWorker.fit(source, [
+            contentRule.content,
+            contentRule.nextContentUrl,
+          ]);
+    if (fit != ParseWorkerFit.none) {
       final result = await ParseWorker.run(
+        usesJs: fit == ParseWorkerFit.js,
         _offMain(
           source: source,
           book: book,

@@ -30,6 +30,10 @@ class SearchBook implements RuleDataInterface {
   String? infoHtml;
   String? tocHtml;
 
+  /// 搜尋合併卡的身分（正規化書名＋作者），建立合併卡時由搜尋分組填入；
+  /// 原始結果為 null。不存檔。
+  String? groupIdentity;
+
   late final Set<String> origins = {origin};
   late final Map<String, String> _originNames = {
     if (originName != null && originName!.isNotEmpty) origin: originName!,
