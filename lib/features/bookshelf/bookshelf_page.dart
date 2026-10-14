@@ -19,10 +19,8 @@ import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/swipe_actions.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -672,40 +670,36 @@ class _BookshelfPageState extends State<BookshelfPage>
       bottomInset,
     );
     final books = provider.books;
-    // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走左滑動作。
+    // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走「選取」。
     if (!_isMultiSelect && provider.sortMode == BookshelfSortMode.custom) {
-      return SwipeActionsGroup(
-        child: ReorderableListView.builder(
-          padding: padding,
-          itemCount: books.length,
-          onReorderStart: (_) => AppHaptics.lift(),
-          onReorderEnd: (_) => AppHaptics.snap(),
-          onReorderItem: (oldIndex, newIndex) {
-            // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
-            // 書卡放到定位，採用新順序，不再播換位動畫。
-            unawaited(provider.reorderBooks(oldIndex, newIndex));
-            _motion.accept([for (final book in books) book.bookUrl]);
-          },
-          // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
-          proxyDecorator: (child, _, animation) => ScaleTransition(
-            scale: Tween<double>(begin: 1, end: 1.03).animate(
-              CurvedAnimation(parent: animation, curve: AppMotion.menuCurve),
-            ),
-            child: Material(type: MaterialType.transparency, child: child),
+      return ReorderableListView.builder(
+        padding: padding,
+        itemCount: books.length,
+        onReorderStart: (_) => AppHaptics.lift(),
+        onReorderEnd: (_) => AppHaptics.snap(),
+        onReorderItem: (oldIndex, newIndex) {
+          // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
+          // 書卡放到定位，採用新順序，不再播換位動畫。
+          unawaited(provider.reorderBooks(oldIndex, newIndex));
+          _motion.accept([for (final book in books) book.bookUrl]);
+        },
+        // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
+        proxyDecorator: (child, _, animation) => ScaleTransition(
+          scale: Tween<double>(begin: 1, end: 1.03).animate(
+            CurvedAnimation(parent: animation, curve: AppMotion.menuCurve),
           ),
-          itemBuilder: (context, index) => KeyedSubtree(
-            key: ValueKey(books[index].bookUrl),
-            child: _buildListCard(provider, books[index], reorderable: true),
-          ),
+          child: Material(type: MaterialType.transparency, child: child),
+        ),
+        itemBuilder: (context, index) => KeyedSubtree(
+          key: ValueKey(books[index].bookUrl),
+          child: _buildListCard(provider, books[index], reorderable: true),
         ),
       );
     }
-    return SwipeActionsGroup(
-      child: ListView.builder(
-        padding: padding,
-        itemCount: books.length,
-        itemBuilder: (context, index) => _buildListCard(provider, books[index]),
-      ),
+    return ListView.builder(
+      padding: padding,
+      itemCount: books.length,
+      itemBuilder: (context, index) => _buildListCard(provider, books[index]),
     );
   }
 
@@ -715,42 +709,18 @@ class _BookshelfPageState extends State<BookshelfPage>
     bool reorderable = false,
   }) {
     final selecting = _isMultiSelect;
+    // 書卡不設左滑動作：書架在可左右滑動換分頁的主畫面裡，兩者會搶同一個手勢。
     final card = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      // 滑出的動作按鈕裁在卡片圓角內。
-      child: ClipRRect(
-        borderRadius: AppGrouped.cardRadius,
-        child: SwipeActions(
-          enabled: !selecting,
-          trailing: [
-            if (!book.isLocal)
-              SwipeAction(
-                label: '檢查更新',
-                icon: Icons.update,
-                color: AppTint.azurite.color,
-                onPressed: () => _checkUpdateOne(provider, book),
-              ),
-            SwipeAction(
-              label: '移出書架',
-              icon: Icons.delete_outline,
-              color: AppTint.rust.color,
-              destructive: true,
-              onPressed: () => _confirmRemoveOne(provider, book),
-            ),
-          ],
-          child: BookshelfListCard(
-            book: book,
-            updateBadge: selecting
-                ? null
-                : provider.updateBadgeOf(book.bookUrl),
-            selecting: selecting,
-            selected: _selectedUrls.contains(book.bookUrl),
-            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
-            onLongPress: selecting || reorderable
-                ? null
-                : (rect) => _showBookMenu(provider, book, rect, grid: false),
-          ),
-        ),
+      child: BookshelfListCard(
+        book: book,
+        updateBadge: selecting ? null : provider.updateBadgeOf(book.bookUrl),
+        selecting: selecting,
+        selected: _selectedUrls.contains(book.bookUrl),
+        onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+        onLongPress: selecting || reorderable
+            ? null
+            : (rect) => _showBookMenu(provider, book, rect, grid: false),
       ),
     );
     return BookshelfMotionItem(id: book.bookUrl, motion: _motion, child: card);
