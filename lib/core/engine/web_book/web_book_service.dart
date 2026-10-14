@@ -139,12 +139,16 @@ class WebBook {
 
   /// 獲取目錄列表 (對標 getChapterListAwait / BookChapterList.analyzeChapterList)
   /// 支援 nextTocUrl 多頁目錄自動翻頁、isReverse、去重、formatJs、並發抓取
+  ///
+  /// 並發抓取的目錄分頁預設略過抓不到的頁，先給出能讀的部分；[requireComplete]
+  /// 時任一頁失敗就整個失敗，給要拿結果整份替換已存目錄的呼叫端用。
   static Future<List<BookChapter>> getChapterListAwait(
     BookSource source,
     Book book, {
     int? chapterLimit,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool requireComplete = false,
   }) async {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final rule = AnalyzeRule(source: source, ruleData: book);
@@ -188,7 +192,7 @@ class WebBook {
             source,
             book,
             stage: 'toc',
-            allowPartial: true,
+            allowPartial: !requireComplete,
             concurrency: effectivePageConcurrency,
             cancelToken: cancelToken,
           );

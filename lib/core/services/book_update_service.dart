@@ -82,7 +82,13 @@ class BookUpdateService {
         throw StateError('找不到可閱讀書源');
       }
       final info = await _sourceService.getBookInfo(source, book);
-      final chapters = await _sourceService.getChapterList(source, info);
+      // 下面會用它整份換掉已存的目錄，所以目錄分頁要全部抓到；漏一頁就當
+      // 這次檢查失敗，舊目錄不動。
+      final chapters = await _sourceService.getChapterList(
+        source,
+        info,
+        requireComplete: true,
+      );
       info.bookUrl = book.bookUrl;
       info.origin = book.origin;
       info.originName = book.originName;

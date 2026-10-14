@@ -33,6 +33,7 @@ class BookSourceService {
     int? chapterLimit,
     int? pageConcurrency,
     CancelToken? cancelToken,
+    bool requireComplete = false,
   }) async {
     return await WebBook.getChapterListAwait(
       source,
@@ -40,6 +41,7 @@ class BookSourceService {
       chapterLimit: chapterLimit,
       pageConcurrency: pageConcurrency,
       cancelToken: cancelToken,
+      requireComplete: requireComplete,
     );
   }
 
