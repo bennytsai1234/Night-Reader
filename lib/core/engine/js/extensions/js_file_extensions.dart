@@ -18,7 +18,7 @@ import 'package:night_reader/core/services/encoding_detect.dart';
 extension JsFileExtensions on JsExtensionsBase {
   void injectFileExtensions() {
     // ─── java.downloadFile(url) — 返回本地路徑 ───────────────────
-    runtime.onMessage('downloadFile', (dynamic args) {
+    onBridge('downloadFile', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = parsed.payload.toString();
       () async {
@@ -41,7 +41,7 @@ extension JsFileExtensions on JsExtensionsBase {
     });
 
     // ─── java.readFile(path) — 返回 byte array (List<int>) ──────
-    runtime.onMessage('readFile', (dynamic args) {
+    onBridge('readFile', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final path = parsed.payload.toString();
       () async {
@@ -62,7 +62,7 @@ extension JsFileExtensions on JsExtensionsBase {
     });
 
     // ─── java.readTxtFile(path, charset) — 返回文字內容 ─────────
-    runtime.onMessage('readTxtFile', (dynamic args) {
+    onBridge('readTxtFile', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       final String path;
@@ -93,7 +93,7 @@ extension JsFileExtensions on JsExtensionsBase {
     });
 
     // ─── java.unArchiveFile(zipRelPath) — 解壓到 temp，返回 rel 路徑 ─
-    runtime.onMessage('unArchiveFile', (dynamic args) {
+    onBridge('unArchiveFile', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final relPath = parsed.payload.toString();
       () async {
@@ -146,7 +146,7 @@ extension JsFileExtensions on JsExtensionsBase {
     });
 
     // ─── java.getTxtInFolder(relPath) — 返回資料夾內所有 txt 串接 ───
-    runtime.onMessage('getTxtInFolder', (dynamic args) {
+    onBridge('getTxtInFolder', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final relPath = parsed.payload.toString();
       () async {

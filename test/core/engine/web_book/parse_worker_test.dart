@@ -1,13 +1,19 @@
+import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
+import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 import '../../../test_helper.dart';
 
@@ -217,6 +223,76 @@ void main() {
     expect(await ParseWorker.run(() async => 'x'), isNull);
   });
 
+  test('JS that writes to the chapter in ways the rule check cannot see '
+      'still updates the caller\'s chapter', () async {
+    for (final js in [
+      'chapter["title"] = "新標題"; result',
+      'chapter.title += "!"; result',
+      'var c = chapter; c.title = "新標題"; result',
+    ]) {
+      final source = BookSource.fromJson({
+        'bookSourceName': '背景正文',
+        'bookSourceUrl': 'https://worker.test',
+        'ruleContent': {'content': '@js:$js'},
+      });
+      expect(
+        ParseWorker.fit(source, [source.ruleContent!.content]),
+        ParseWorkerFit.js,
+        reason: js,
+      );
+      Future<(String, String)> parse() async {
+        final chapter = BookChapter(title: '原標題');
+        final result = await ContentParser.parse(
+          source: source,
+          chapter: chapter,
+          body: '正文',
+          baseUrl: 'https://worker.test/1',
+        );
+        return (result.content, chapter.title);
+      }
+
+      ParseWorker.enabled = false;
+      final inPlace = await parse();
+      ParseWorker.enabled = true;
+      final withWorker = await parse();
+
+      expect(inPlace.$2, isNot('原標題'), reason: js);
+      expect(withWorker, inPlace, reason: js);
+    }
+  }, timeout: const Timeout(Duration(seconds: 20)));
+
+  test('a URL built in the worker keeps a response the book already '
+      'fetched', () async {
+    await NetworkService().init(ephemeral: true);
+    final adapter = _CountingAdapter();
+    NetworkService().dio
+      ..interceptors.clear()
+      ..httpClientAdapter = adapter;
+    const url = 'https://prefetch.test/page';
+    final source = BookSource(
+      bookSourceUrl: 'https://prefetch.test',
+      bookSourceName: '預取',
+    );
+    final book =
+        Book(bookUrl: 'https://prefetch.test/b', origin: source.bookSourceUrl)
+          ..putVariable('_lastHttpResponseBody', '已預取的正文')
+          ..putVariable('_lastHttpResponseUrl', url);
+    Future<String> fetch() async {
+      final built = await AnalyzeUrl.create(
+        '@js:"$url"',
+        source: source,
+        ruleData: book,
+      );
+      return (await built.getStrResponse()).body;
+    }
+
+    ParseWorker.enabled = false;
+    expect(await fetch(), '已預取的正文');
+    ParseWorker.enabled = true;
+    expect(await fetch(), '已預取的正文');
+    expect(adapter.requests, 0);
+  });
+
   test('a search URL built by JS is the same with the worker on', () async {
     final source = BookSource.fromJson({
       'bookSourceName': '網址 JS',
@@ -247,4 +323,28 @@ void main() {
     expect(withWorker.headerMap, inPlace.headerMap);
     expect(withWorker.headerMap['X-Key'], isNotEmpty);
   });
+}
+
+/// 記下送出的請求數；回應在記憶體裡，不連網。
+class _CountingAdapter implements HttpClientAdapter {
+  int requests = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests++;
+    return ResponseBody.fromBytes(
+      utf8.encode('重新請求的正文'),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['text/html; charset=utf-8'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

@@ -26,6 +26,11 @@ typedef _BuiltUrl = ({
   bool useWebView,
   String? webJs,
   int webViewDelayTime,
+  // 書籍變數裡前一個規則留下的回應，網址對得上時直接拿來用、不再請求。
+  String? prefetchedBody,
+  String? prefetchedUrl,
+  String? prefetchedRequestUrl,
+  String? prefetchedRedirectUrl,
 });
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
@@ -169,6 +174,10 @@ class AnalyzeUrl {
       useWebView: built.useWebView,
       webJs: built.webJs,
       webViewDelayTime: built.webViewDelayTime,
+      prefetchedBody: built._prefetchedResponseBody,
+      prefetchedUrl: built._prefetchedResponseUrl,
+      prefetchedRequestUrl: built._prefetchedResponseRequestUrl,
+      prefetchedRedirectUrl: built._prefetchedResponseRedirectUrl,
     );
   };
 
@@ -182,6 +191,10 @@ class AnalyzeUrl {
     useWebView = built.useWebView;
     webJs = built.webJs;
     webViewDelayTime = built.webViewDelayTime;
+    _prefetchedResponseBody = built.prefetchedBody;
+    _prefetchedResponseUrl = built.prefetchedUrl;
+    _prefetchedResponseRequestUrl = built.prefetchedRequestUrl;
+    _prefetchedResponseRedirectUrl = built.prefetchedRedirectUrl;
   }
 
   void _init() {
@@ -215,6 +228,8 @@ class AnalyzeUrl {
   /// 組網址期間（書源 header、網址裡的 JS、`{{}}`、選項）共用一個規則與它的
   /// JS 引擎，組完就釋放。每建一個引擎要好幾毫秒，一個網址常有兩三段 JS，
   /// 搜尋時每個書源都要組一次網址，逐段新建會在畫面執行緒上累積成掉幀。
+  /// jsLib 裡的變數因此在同一個網址的各段之間延續，和清單逐項共用外層規則
+  /// 的引擎一樣；原版 Legado 的 jsLib 作用域更是整個書源共用。
   AnalyzeRule? _jsRuleInstance;
 
   AnalyzeRule _jsRule() {

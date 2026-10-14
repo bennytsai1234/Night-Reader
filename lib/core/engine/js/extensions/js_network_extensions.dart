@@ -49,7 +49,7 @@ extension JsNetworkExtensions on JsExtensions {
 
   void injectNetworkExtensions() {
     // ─── java.ajax(url) — 返回 body 字串 ─────────────────────────
-    runtime.onMessage('ajax', (dynamic args) {
+    onBridge('ajax', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = _parseUrlArg(parsed.payload);
       _runAjax(url)
@@ -64,7 +64,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.ajaxAll(urlList) — 返回 body 字串陣列 ──────────────
-    runtime.onMessage('ajaxAll', (dynamic args) {
+    onBridge('ajaxAll', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List) {
@@ -84,7 +84,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.connect(url) — 返回 {body, url, code} ──────────────
-    runtime.onMessage('connect', (dynamic args) {
+    onBridge('connect', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       final url = _parseUrlArg(payload);
@@ -124,7 +124,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.get(url, headers) — 返回 {body, url, code, headers} ─
-    runtime.onMessage('get', (dynamic args) {
+    onBridge('get', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.isEmpty) {
@@ -167,7 +167,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.post(url, body, headers) ───────────────────────────
-    runtime.onMessage('post', (dynamic args) {
+    onBridge('post', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.length < 2) {
@@ -226,7 +226,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.head(url, headers) — 返回 headers/status，且不自動跟跳轉 ───
-    runtime.onMessage('head', (dynamic args) {
+    onBridge('head', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.isEmpty) {
@@ -268,7 +268,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.getCookie(tag, key) ────────────────────────────────
-    runtime.onMessage('getCookie', (dynamic args) {
+    onBridge('getCookie', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.isEmpty) {
@@ -296,7 +296,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.webView(html, url, js) ─────────────────────────────
-    runtime.onMessage('webView', (dynamic args) {
+    onBridge('webView', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (_rejectNonInteractiveValidation(
         parsed.callId,
@@ -329,7 +329,7 @@ extension JsNetworkExtensions on JsExtensions {
       return null;
     });
 
-    runtime.onMessage('webViewGetSource', (dynamic args) {
+    onBridge('webViewGetSource', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (_rejectNonInteractiveValidation(
         parsed.callId,
@@ -364,7 +364,7 @@ extension JsNetworkExtensions on JsExtensions {
       return null;
     });
 
-    runtime.onMessage('webViewGetOverrideUrl', (dynamic args) {
+    onBridge('webViewGetOverrideUrl', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (_rejectNonInteractiveValidation(
         parsed.callId,
@@ -404,7 +404,7 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.startBrowserAwait / java.getVerificationCode ───────
     // 驗證 UI 已移除；書源若呼叫這兩個方法一律快速拒絕，
     // 使書源校驗能正確標記為「需要互動驗證」而非逾時。
-    runtime.onMessage('startBrowserAwait', (dynamic args) {
+    onBridge('startBrowserAwait', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       rejectJsPending(
         parsed.callId,
@@ -413,7 +413,7 @@ extension JsNetworkExtensions on JsExtensions {
       return null;
     });
 
-    runtime.onMessage('getVerificationCode', (dynamic args) {
+    onBridge('getVerificationCode', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       rejectJsPending(
         parsed.callId,
@@ -423,7 +423,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.getZipByteArrayContent(url, innerPath) ─────────────
-    runtime.onMessage('getZipByteArrayContent', (dynamic args) {
+    onBridge('getZipByteArrayContent', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.length < 2) {
@@ -453,7 +453,7 @@ extension JsNetworkExtensions on JsExtensions {
     });
 
     // ─── java.timeFormatUTC — 真正同步 ───────────────────────────
-    runtime.onMessage('timeFormatUTC', (dynamic args) {
+    onBridge('timeFormatUTC', (dynamic args) {
       try {
         final time = args[0] as int;
         final format = args[1].toString();

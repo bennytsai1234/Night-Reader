@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:night_reader/core/engine/js/js_bridge_guard.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -42,11 +43,12 @@ abstract final class ParseWorker {
 
   static final RegExp _variables = RegExp(r'@put|@get', caseSensitive: false);
 
-  /// 背景 isolate 給不了正確結果的寫法：會用到主 isolate 狀態的 `java.*`
-  /// （網路、檔案、WebView、紀錄、快取、Cookie、字型、繁簡字典）、
+  /// 一看就知道背景 isolate 給不了正確結果的寫法：會用到主 isolate 狀態的
+  /// `java.*`（網路、檔案、WebView、紀錄、快取、Cookie、字型、繁簡字典）、
   /// `cookie`／`cache`／`source` 物件、改動 `book`／`chapter`（背景改到的是
-  /// 複本，改動會遺失），以及瀏覽器的網路 API。寧可多擋：誤擋只是照舊原地
-  /// 解析。
+  /// 複本，改動會遺失），以及瀏覽器的網路 API。這只是先篩掉明顯不行的，省一
+  /// 趟來回；別的寫法（中括號、別名）由背景 isolate 的 [JsBridgeGuard] 在
+  /// 執行時擋下，任務改回原地。
   static final RegExp _workerUnsafe = RegExp(
     r'java\s*\.\s*(ajax|ajaxAll|cacheFile|connect|get|post|head|webView\w*|'
     r'startBrowser\w*|getVerificationCode|downloadFile|importScript|'
@@ -88,7 +90,8 @@ abstract final class ParseWorker {
   }
 
   /// 在背景 isolate 執行 [task] 並回傳結果；沒開啟、送不出去、執行失敗、
-  /// 背景的 JS 引擎不能用（[usesJs]）或逾時都回傳 null，由呼叫端改在原地
+  /// 背景的 JS 引擎不能用（[usesJs]）、JS 呼叫了被 [JsBridgeGuard] 擋下的
+  /// 頻道或逾時都回傳 null，由呼叫端改在原地
   /// 解析（失敗時原地再跑一次，例外照原樣丟出）。
   ///
   /// [task] 連同它捕捉的變數會複製到背景 isolate，所以要在只捕捉書源、書籍與
@@ -140,6 +143,7 @@ abstract final class ParseWorker {
   }
 
   static void _main(SendPort ready) {
+    JsBridgeGuard.restricted = true;
     final requests = ReceivePort();
     ready.send(requests.sendPort);
     requests.listen((message) async {
@@ -150,9 +154,16 @@ abstract final class ParseWorker {
           reply.send((false, 'JS engine unavailable in ParseWorker'));
           return;
         }
+        final blockedBefore = JsBridgeGuard.blockedCalls;
         // 非互動模式：JS 引擎不載入瀏覽器的 fetch／XHR（背景 isolate 拿不到
         // rootBundle），也不會開瀏覽器或驗證流程。
         final result = await SourceValidationContext.runNonInteractive(task);
+        // JS 碰到只有主 isolate 才有的東西：這個結果不可信，改回原地。同時
+        // 在跑的其他任務也會因此改回原地，只是多解析一次。
+        if (JsBridgeGuard.blockedCalls != blockedBefore) {
+          reply.send((false, 'JS used a bridge only the main isolate has'));
+          return;
+        }
         reply.send((true, result));
       } catch (e, stack) {
         reply.send((false, '$e\n$stack'));

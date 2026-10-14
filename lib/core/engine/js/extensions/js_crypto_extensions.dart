@@ -10,7 +10,7 @@ import '../js_encode_utils.dart';
 extension JsCryptoExtensions on JsExtensions {
   void injectCryptoExtensions() {
     // 實作 java.createSymmetricCrypto
-    runtime.onMessage('symmetricCrypto', (dynamic args) {
+    onBridge('symmetricCrypto', (dynamic args) {
       final payload = _decodeArgs(args);
       final action = payload[0].toString();
       final transformation = payload[1].toString();
@@ -30,15 +30,15 @@ extension JsCryptoExtensions on JsExtensions {
     });
 
     // 注入輔助函式
-    runtime.onMessage(
+    onBridge(
       '_md5Encode',
       (dynamic args) => JsEncodeUtils.md5Encode(args.toString()),
     );
-    runtime.onMessage(
+    onBridge(
       '_md5Encode16',
       (dynamic args) => JsEncodeUtils.md5Encode16(args.toString()),
     );
-    runtime.onMessage('_digest', (dynamic args) {
+    onBridge('_digest', (dynamic args) {
       final payload = _decodeArgs(args);
       if (payload is List && payload.length >= 2) {
         final data = payload[0].toString();
@@ -50,7 +50,7 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
-    runtime.onMessage('_hmacHex', (dynamic args) {
+    onBridge('_hmacHex', (dynamic args) {
       final payload = _decodeArgs(args);
       if (payload is List && payload.length >= 3) {
         return JsEncodeUtils.hmacHex(
@@ -61,7 +61,7 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
-    runtime.onMessage('_desEncodeToBase64String', (dynamic args) {
+    onBridge('_desEncodeToBase64String', (dynamic args) {
       final payload = _decodeArgs(args);
       if (payload is List && payload.length >= 2) {
         final data = payload[0];
@@ -84,11 +84,11 @@ extension JsCryptoExtensions on JsExtensions {
       }
       return '';
     });
-    runtime.onMessage('_base64Encode', (dynamic args) {
+    onBridge('_base64Encode', (dynamic args) {
       final payload = _decodeArgs(args);
       return JsEncodeUtils.base64Encode(payload);
     });
-    runtime.onMessage('_base64Decode', (dynamic args) {
+    onBridge('_base64Decode', (dynamic args) {
       final payload = _decodeArgs(args);
       final str = payload is List ? payload[0].toString() : payload.toString();
       final charset = payload is List && payload.length > 1
@@ -96,23 +96,23 @@ extension JsCryptoExtensions on JsExtensions {
           : 'UTF-8';
       return JsEncodeUtils.base64Decode(str, charset: charset);
     });
-    runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
+    onBridge('_base64DecodeToBytes', (dynamic args) {
       final payload = _decodeArgs(args);
       final str = payload is List
           ? payload.first.toString()
           : payload.toString();
       return jsonEncode(JsEncodeUtils.base64DecodeToBytes(str).toList());
     });
-    runtime.onMessage(
+    onBridge(
       '_hexEncode',
       (dynamic args) => hex.encode(utf8.encode(args.toString())),
     );
-    runtime.onMessage(
+    onBridge(
       '_hexDecode',
       (dynamic args) => utf8.decode(hex.decode(args.toString())),
     );
-    runtime.onMessage('_randomUUID', (dynamic args) => const Uuid().v4());
-    runtime.onMessage('_gunzipBytes', (dynamic args) {
+    onBridge('_randomUUID', (dynamic args) => const Uuid().v4());
+    onBridge('_gunzipBytes', (dynamic args) {
       final payload = _decodeArgs(args);
       final bytesSource =
           payload is List && payload.every((item) => item is num)

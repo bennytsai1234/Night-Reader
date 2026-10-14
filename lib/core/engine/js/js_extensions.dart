@@ -53,7 +53,7 @@ class JsExtensions extends JsExtensionsBase {
 
   void _injectCoreHandlers() {
     // ─── 純同步 (sharedScope / log / toast) ─────────────────────
-    runtime.onMessage('scopePut', (args) {
+    onBridge('scopePut', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         final key = payload[0].toString();
@@ -76,7 +76,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('scopeGet', (args) {
+    onBridge('scopeGet', (args) {
       final key = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -96,7 +96,7 @@ class JsExtensions extends JsExtensionsBase {
       final value = JsExtensionsBase.sharedScope[key];
       return value == null ? '' : value.toString();
     });
-    runtime.onMessage('ruleGetString', (args) {
+    onBridge('ruleGetString', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -105,7 +105,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    runtime.onMessage('ruleGetStringList', (args) {
+    onBridge('ruleGetStringList', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -114,7 +114,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    runtime.onMessage('ruleGetElement', (args) {
+    onBridge('ruleGetElement', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -123,7 +123,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    runtime.onMessage('ruleGetElements', (args) {
+    onBridge('ruleGetElements', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -133,7 +133,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <dynamic>[];
     });
-    runtime.onMessage('ruleSetContent', (args) {
+    onBridge('ruleSetContent', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.isNotEmpty && ruleContext != null) {
         try {
@@ -145,29 +145,29 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('log', (args) {
+    onBridge('log', (args) {
       debugPrint('JS_LOG: ${_compactJsBridgeLog(args)}');
       return _decodeSyncArgs(args);
     });
-    runtime.onMessage('toast', (args) {
+    onBridge('toast', (args) {
       debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
       return null;
     });
-    runtime.onMessage('htmlSelectText', (args) {
+    onBridge('htmlSelectText', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlText(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    runtime.onMessage('htmlSelectHtml', (args) {
+    onBridge('htmlSelectHtml', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    runtime.onMessage('htmlSelectAttr', (args) {
+    onBridge('htmlSelectAttr', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 3) {
         return _selectHtmlAttr(
@@ -178,14 +178,14 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    runtime.onMessage('htmlSelectData', (args) {
+    onBridge('htmlSelectData', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlData(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    runtime.onMessage('htmlSelectAttributes', (args) {
+    onBridge('htmlSelectAttributes', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlAttributes(
@@ -195,7 +195,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    runtime.onMessage('htmlSelectCount', (args) {
+    onBridge('htmlSelectCount', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
@@ -205,7 +205,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return 0;
     });
-    runtime.onMessage('htmlSelectTextList', (args) {
+    onBridge('htmlSelectTextList', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
@@ -215,14 +215,14 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    runtime.onMessage('htmlRemove', (args) {
+    onBridge('htmlRemove', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _removeHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    runtime.onMessage('scopedObjectGetVariable', (args) {
+    onBridge('scopedObjectGetVariable', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectVariable(
@@ -232,7 +232,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    runtime.onMessage('scopedObjectPutVariable', (args) {
+    onBridge('scopedObjectPutVariable', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         _putScopedObjectVariable(
@@ -243,7 +243,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('scopedObjectGetField', (args) {
+    onBridge('scopedObjectGetField', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectField(
@@ -253,7 +253,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('scopedObjectSetField', (args) {
+    onBridge('scopedObjectSetField', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 3) {
         _setScopedObjectField(
@@ -267,17 +267,17 @@ class JsExtensions extends JsExtensionsBase {
 
     // ─── Fire-and-forget async (JS 不讀回傳值) ──────────────────
     // 直接啟動 Future，不 block handler；失敗寫 log 但不 reject JS
-    runtime.onMessage('setCookie', (args) {
+    onBridge('setCookie', (args) {
       if (args is List && args.length >= 2) {
         CookieStore().setCookie(args[0].toString(), args[1].toString());
       }
       return null;
     });
-    runtime.onMessage('removeCookie', (args) {
+    onBridge('removeCookie', (args) {
       CookieStore().removeCookie(args.toString());
       return null;
     });
-    runtime.onMessage('putCache', (args) {
+    onBridge('putCache', (args) {
       if (args is List && args.length >= 2) {
         final saveTime = args.length > 2
             ? int.tryParse(args[2].toString()) ?? 0
@@ -290,11 +290,11 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('deleteCache', (args) {
+    onBridge('deleteCache', (args) {
       cacheManager.delete(args.toString());
       return null;
     });
-    runtime.onMessage('sourcePut', (args) {
+    onBridge('sourcePut', (args) {
       if (args is List && args.length >= 2 && source != null) {
         final key = args[0].toString();
         final value = args[1].toString();
@@ -302,20 +302,20 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    runtime.onMessage('sourcePutLoginInfo', (args) {
+    onBridge('sourcePutLoginInfo', (args) {
       if (source != null) {
         source!.putLoginInfo(args.toString());
       }
       return null;
     });
-    runtime.onMessage('sourceSetVariable', (args) {
+    onBridge('sourceSetVariable', (args) {
       if (source != null) {
         final decoded = _decodeSyncArgs(args);
         source!.setVariableSync(decoded?.toString());
       }
       return null;
     });
-    runtime.onMessage('sourceGetHeaderMap', (args) {
+    onBridge('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
       final includeLoginHeader = _decodeSyncArgs(args) is bool
           ? _decodeSyncArgs(args) as bool
@@ -324,7 +324,7 @@ class JsExtensions extends JsExtensionsBase {
     });
 
     // ─── Promise bridge: async with return value ────────────────
-    runtime.onMessage('getCache', (args) {
+    onBridge('getCache', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final key = parsed.payload.toString();
       cacheManager
@@ -338,7 +338,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('cacheTextFile', (args) {
+    onBridge('cacheTextFile', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       final url = payload is List && payload.isNotEmpty
@@ -357,7 +357,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('importScript', (args) {
+    onBridge('importScript', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final path = parsed.payload.toString();
       () async {
@@ -386,7 +386,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('sourceGet', (args) {
+    onBridge('sourceGet', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -404,7 +404,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('sourceGetLoginInfo', (args) {
+    onBridge('sourceGetLoginInfo', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -421,7 +421,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('sourceGetVariable', (args) {
+    onBridge('sourceGetVariable', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -438,7 +438,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('cookieGet', (args) {
+    onBridge('cookieGet', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = parsed.payload.toString();
       CookieStore()
@@ -452,7 +452,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    runtime.onMessage('allCookies', (args) {
+    onBridge('allCookies', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       // CookieStore 目前沒有 allCookies API，回傳空字串維持既有行為
       resolveJsPending(parsed.callId, '');
@@ -460,7 +460,7 @@ class JsExtensions extends JsExtensionsBase {
     });
 
     // cacheFile 供 Dart 端內部使用 (例如 font cache)
-    runtime.onMessage('cacheFile', (args) {
+    onBridge('cacheFile', (args) {
       // 歷史上是同步呼叫，但底層是 async HTTP。維持原行為：fire-and-forget
       // 並回傳空字串。若 rule JS 實際需要讀結果，應改用 java.get(...).body()。
       if (args is List && args.isNotEmpty) {
