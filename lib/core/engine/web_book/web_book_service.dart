@@ -20,8 +20,9 @@ import 'package:night_reader/core/network/str_response.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
-/// 注意：不使用 Isolate.run()，因為 AnalyzeRule 可能呼叫 JS 引擎 (flutter_js FFI)，
-/// 而 FFI 綁定無法跨 Isolate 傳遞。解析操作本身是輕量的字串處理，不會阻塞 UI。
+/// 抓取與帶 JS 的解析在主 isolate 執行：規則的 JS 會經由 `java.*` 用到主 isolate
+/// 的網路、資料庫與 Cookie。不帶 JS 的搜尋結果與目錄由 [BookListParser]、
+/// [ChapterListParser] 自行交給背景 isolate（`ParseWorker`）。
 class WebBook {
   WebBook._();
 
