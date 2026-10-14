@@ -172,10 +172,6 @@ class AppMotion {
   /// 骨架載入的呼吸脈動：一次由深到淺（往返一輪 1.6 秒）。比 [fade] 慢
   /// 六倍以上，讀起來是安靜的等待，不像閃爍。
   static const Duration skeletonPulse = Duration(milliseconds: 800);
-
-  /// 閱讀器排版超過這段時間才淡入正文骨架。開書轉場本身 280ms，再留一點
-  /// 餘裕：排得快的（多半是已下載的書）直接浮現正文，不會先閃一下骨架。
-  static const Duration readerSkeletonDelay = Duration(milliseconds: 500);
 }
 
 /// 以臨界阻尼附近的彈簧模擬產生的曲線；用於 [AnimationController] 等只接受

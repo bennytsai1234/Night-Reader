@@ -268,8 +268,8 @@ class _StyleCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(
               style.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              // 窄螢幕加大字級時換行，不省略成「…」。
+              textAlign: TextAlign.center,
               style: AppTextStyles.labelSm.copyWith(
                 color: selected ? scheme.onSurface : chrome.sectionText,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,

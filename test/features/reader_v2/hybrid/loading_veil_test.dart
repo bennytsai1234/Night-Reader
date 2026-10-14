@@ -62,18 +62,14 @@ void main() {
     veil.dispose();
   }
 
-  testWidgets('plain paper until the skeleton delay, then text-shaped lines', (
+  testWidgets('covering fades text-shaped lines in on the paper right away', (
     tester,
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
     expect(find.byType(LoadingVeil), paints..rect());
-    expect(find.byType(LoadingVeil), noSkeleton);
 
-    await tester.pump(AppMotion.readerSkeletonDelay - frame);
-    expect(find.byType(LoadingVeil), noSkeleton, reason: '排得快的書不閃骨架');
-
-    await advance(tester, frame + AppMotion.fade);
+    await advance(tester, AppMotion.fade);
     expect(
       find.byType(LoadingVeil),
       paints
@@ -90,7 +86,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.readerSkeletonDelay + AppMotion.fade);
+    await advance(tester, AppMotion.fade);
 
     veil.reveal();
     await advance(tester, AppMotion.fade ~/ 2);
@@ -104,31 +100,33 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('a quick load never shows the skeleton', (tester) async {
+  testWidgets('a quick load fades the skeleton out with the paper', (
+    tester,
+  ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, const Duration(milliseconds: 200));
-    veil.reveal();
     await advance(tester, AppMotion.fade ~/ 2);
-    expect(find.byType(LoadingVeil), noSkeleton);
-
-    await advance(tester, AppMotion.readerSkeletonDelay);
+    veil.reveal();
+    await advance(tester, AppMotion.fade * 2);
     expect(veil.isVisible, isFalse);
+    expect(find.byType(LoadingVeil), noSkeleton);
     expect(tester.hasRunningAnimations, isFalse);
     await finish(tester);
   });
 
-  testWidgets('covering again restarts the skeleton delay', (tester) async {
+  testWidgets('covering again mid-fade keeps the skeleton on the paper', (
+    tester,
+  ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.readerSkeletonDelay + AppMotion.fade);
+    await advance(tester, AppMotion.fade);
     veil.reveal();
-    await advance(tester, AppMotion.fade * 2);
+    await advance(tester, AppMotion.fade ~/ 2);
 
     veil.cover();
     await tester.pump();
     expect(veil.isVisible, isTrue);
-    expect(find.byType(LoadingVeil), noSkeleton);
+    expect(find.byType(LoadingVeil), paints..rrect(), reason: '不先閃空再淡入');
     await finish(tester);
   });
 
@@ -137,7 +135,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester, mounted: false);
-    await advance(tester, AppMotion.readerSkeletonDelay + AppMotion.fade * 2);
+    await advance(tester, AppMotion.fade * 2);
     expect(tester.hasRunningAnimations, isFalse);
 
     await pumpVeil(tester);
@@ -150,13 +148,45 @@ void main() {
   ) async {
     makeVeil(tester, reduceMotion: true);
     await pumpVeil(tester);
-    await tester.pump(AppMotion.readerSkeletonDelay);
     expect(find.byType(LoadingVeil), paints..rrect());
     expect(tester.hasRunningAnimations, isFalse);
 
     veil.reveal();
     expect(veil.isVisible, isFalse);
     expect(hiddenCount, 1);
+    await finish(tester);
+  });
+
+  testWidgets('turning animations off mid-fade lands the skeleton at once', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, AppMotion.fade ~/ 2);
+    expect(tester.hasRunningAnimations, isTrue);
+
+    veil.reduceMotion = true;
+    await tester.pump();
+    expect(find.byType(LoadingVeil), paints..rrect());
+    expect(tester.hasRunningAnimations, isFalse);
+    await finish(tester);
+  });
+
+  testWidgets('turning animations off mid-reveal hides the paper at once', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    await pumpVeil(tester);
+    await advance(tester, AppMotion.fade);
+    veil.reveal();
+    await advance(tester, AppMotion.fade ~/ 2);
+    expect(veil.isVisible, isTrue);
+
+    veil.reduceMotion = true;
+    expect(veil.isVisible, isFalse);
+    expect(hiddenCount, 1);
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isFalse);
     await finish(tester);
   });
 }

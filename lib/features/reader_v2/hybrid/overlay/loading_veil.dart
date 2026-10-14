@@ -7,10 +7,9 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///
-/// 排版期間整張紙蓋住，畫面只有閱讀器底色，接在開書轉場後面看起來是同一
-/// 張紙；超過 [AppMotion.readerSkeletonDelay] 還沒排好，才在紙上淡入照閱讀
-/// 版面畫的正文骨架。正文排好後紙以 [AppMotion.fade] 淡出、露出正文，骨架
-/// 跟著一起淡掉。
+/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙；蓋上時紙上就
+/// 淡入照閱讀版面畫的正文骨架。正文排好後紙以 [AppMotion.fade] 淡出、露出
+/// 正文，骨架跟著一起淡掉。
 ///
 /// 只改紙與骨架顏色的透明度，不對正文做整頁 Opacity：載入期間排版用滿每
 /// 一幀的預算，這一層每幀只多畫幾十個圓角條。
@@ -47,34 +46,37 @@ class LoadingVeilController {
     parent: _pulse,
     curve: AppMotion.fadeCurve,
   );
-  Timer? _skeletonDelay;
   int _attachedVeils = 0;
   bool _reduceMotion = false;
 
   /// 系統要求減少動態（`MediaQuery.disableAnimations`）時，紙與骨架直接到位，
-  /// 骨架不呼吸。
+  /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點。
   set reduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
+    if (value) {
+      if (_cover.isAnimating) _cover.value = 0;
+      if (_skeleton.isAnimating) _skeleton.value = 1;
+    }
     _syncPulse();
   }
 
   /// 紙還蓋著或正在淡出。
   bool get isVisible => !_cover.isDismissed;
 
-  /// 蓋上整張紙，重新計時骨架。
+  /// 蓋上整張紙，骨架從目前的濃淡繼續淡入（淡出途中再蓋上不會先閃空）。
   void cover() {
-    _skeletonDelay?.cancel();
     _cover.value = 1;
-    _skeleton.value = 0;
-    _skeletonDelay = Timer(AppMotion.readerSkeletonDelay, _showSkeleton);
+    if (_reduceMotion) {
+      _skeleton.value = 1;
+    } else {
+      unawaited(_skeleton.forward());
+    }
     _syncPulse();
   }
 
   /// 正文已排好：紙淡出。
   void reveal() {
-    _skeletonDelay?.cancel();
-    _skeletonDelay = null;
     if (_reduceMotion) {
       _cover.value = 0;
     } else {
@@ -83,20 +85,9 @@ class LoadingVeilController {
   }
 
   void dispose() {
-    _skeletonDelay?.cancel();
     _cover.dispose();
     _skeleton.dispose();
     _pulse.dispose();
-  }
-
-  void _showSkeleton() {
-    _skeletonDelay = null;
-    if (_reduceMotion) {
-      _skeleton.value = 1;
-    } else {
-      unawaited(_skeleton.forward());
-    }
-    _syncPulse();
   }
 
   void _onCoverStatus(AnimationStatus status) {

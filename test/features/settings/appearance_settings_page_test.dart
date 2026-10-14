@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -14,15 +15,18 @@ void main() {
   late SharedPreferences prefs;
   late ThemeSettingsProvider themeSettings;
 
-  /// 一般手機的大小（393×852）。
-  Future<void> pumpPage(WidgetTester tester) async {
+  /// 預設是一般手機的大小（393×852）。
+  Future<void> pumpPage(
+    WidgetTester tester, {
+    Size size = const Size(393, 852),
+  }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     prefs = await SharedPreferences.getInstance();
     GetIt.instance.registerSingleton<SharedPreferences>(prefs);
     addTearDown(GetIt.instance.reset);
     themeSettings = ThemeSettingsProvider();
     final settings = SettingsProvider();
-    tester.view.physicalSize = const Size(393 * 3, 852 * 3);
+    tester.view.physicalSize = size * 3;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
@@ -57,6 +61,18 @@ void main() {
     expect(tops.where((top) => top == tops.first), hasLength(5));
     final glass = tester.getBottomLeft(find.text('玻璃'));
     expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
+  });
+
+  testWidgets('窄螢幕加大字級時，風格名稱換行而不省略', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpPage(tester, size: const Size(320, 640));
+    for (final style in AppStyle.values) {
+      final label = tester.renderObject<RenderParagraph>(
+        find.text(style.label),
+      );
+      expect(label.didExceedMaxLines, isFalse, reason: style.label);
+    }
   });
 
   testWidgets('從強調色選單選顏色，整個 App 的主色跟著換並保存', (tester) async {
