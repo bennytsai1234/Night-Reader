@@ -4,6 +4,7 @@ import 'book.dart';
 
 import 'package:night_reader/core/models/rule_data_interface.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 
 /// SearchBook - 搜尋結果模型
 /// (原 Android data/entities/SearchBook.kt)
@@ -44,17 +45,15 @@ class SearchBook implements RuleDataInterface {
   List<String> get sourceLabels =>
       origins.map((originUrl) => _originNames[originUrl] ?? originUrl).toList();
 
-  bool get _hasCover => (coverUrl ?? '').trim().isNotEmpty;
-
   /// 從同一群組（同名 + 同作者 / 安置後的缺作者）建立一張「合併卡」。
   ///
   /// 僅用於呈現層：書架儲存模型仍是「每源獨立」，此方法不會改動傳入的原始
   /// [SearchBook]（[origins] 為 `late final`，於原物件上呼叫 [addOrigin] 會
   /// 永久污染，故這裡複製出全新的 representative 物件再累計 origins）。
   ///
-  /// representative 選擇規則（決策 2）：
-  /// 群組內 [originOrder] 最前者；**優先有封面**者；若皆無封面，退回
-  /// [originOrder] 最前者。決定卡片封面 / 最新章與 [origin]。
+  /// representative 決定點進去、加入書架預設的來源（[origin]）與卡片上的
+  /// 最新章節，見 [_pickRepresentative]。它缺的封面、簡介、分類與字數從
+  /// 群組裡其他來源補上。
   static SearchBook aggregate(List<SearchBook> group) {
     if (group.isEmpty) {
       throw ArgumentError.value(group, 'group', 'aggregate 需要非空群組');
@@ -63,30 +62,46 @@ class SearchBook implements RuleDataInterface {
     final card = representative._cloneForCard();
     for (final book in group) {
       card.addOrigin(book.origin, name: book.originName);
+      card.coverUrl = _filled(card.coverUrl) ?? book.coverUrl;
+      card.intro = _filled(card.intro) ?? book.intro;
+      card.kind = _filled(card.kind) ?? book.kind;
+      card.wordCount = _filled(card.wordCount) ?? book.wordCount;
     }
     return card;
   }
 
+  static String? _filled(String? value) =>
+      (value ?? '').trim().isEmpty ? null : value;
+
+  /// 最新章節最新的來源（章節編號較大；讀不出編號的排在後面）；一樣新時
+  /// 取這次搜尋回得最快的，再一樣就照書源順序。
   static SearchBook _pickRepresentative(List<SearchBook> group) {
-    SearchBook? best;
-    for (final candidate in group) {
-      if (best == null) {
-        best = candidate;
-        continue;
-      }
-      final bestHasCover = best._hasCover;
-      final candidateHasCover = candidate._hasCover;
-      if (candidateHasCover != bestHasCover) {
-        // 優先有封面者
-        if (candidateHasCover) best = candidate;
-        continue;
-      }
-      // 封面有無相同 → 取 originOrder 最前者
-      if (candidate.originOrder < best.originOrder) {
-        best = candidate;
-      }
+    int compare(SearchBook a, SearchBook b) {
+      final byChapter = (b._latestChapterNumber ?? -1).compareTo(
+        a._latestChapterNumber ?? -1,
+      );
+      if (byChapter != 0) return byChapter;
+      final bySpeed = a._searchSpeed.compareTo(b._searchSpeed);
+      if (bySpeed != 0) return bySpeed;
+      return a.originOrder.compareTo(b.originOrder);
     }
-    return best!;
+
+    return group.reduce((best, book) => compare(book, best) < 0 ? book : best);
+  }
+
+  /// 這次搜尋這個來源花的毫秒數；沒量到（0）排在最後。
+  int get _searchSpeed => respondTime > 0 ? respondTime : 1 << 31;
+
+  static final _chapterNumberPattern = RegExp(
+    r'第\s*([0-9０-９〇零一二三四五六七八九十百千万萬两兩壹贰貳叁參肆伍陆陸柒捌玖拾佰仟亿億]+)\s*[章節节回話话集篇]',
+  );
+
+  /// 最新章節標題裡「第 N 章」的 N；讀不出來時為 null。
+  int? get _latestChapterNumber {
+    final match = _chapterNumberPattern.firstMatch(latestChapterTitle ?? '');
+    if (match == null) return null;
+    final number = StringUtils.stringToInt(match.group(1));
+    return number > 0 ? number : null;
   }
 
   /// 複製出一張全新的呈現卡，origins 重置為只含自身來源。

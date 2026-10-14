@@ -235,10 +235,15 @@ class SearchModel {
     try {
       final stopwatch = Stopwatch()..start();
       final books = await _searchKeyVariants(source, key, cancelToken);
+      final elapsed = stopwatch.elapsedMilliseconds;
       respondTimes[source.bookSourceUrl] = _smoothedRespondTime(
         source.respondTime,
-        stopwatch.elapsedMilliseconds,
+        elapsed,
       );
+      // 合併卡挑預設來源時，同樣新的來源取這次回得快的。
+      for (final book in books) {
+        book.respondTime = elapsed;
+      }
 
       if (stale()) return;
 
