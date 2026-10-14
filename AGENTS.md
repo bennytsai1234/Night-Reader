@@ -14,28 +14,31 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，只發布 Androi
 
 ## 驗證
 
-- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行；`main` 上沒通過時 Android Release 不會發版。本機先跑受影響的測試，推送前跑全套。
-- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試，推往 `main` 時另外檢查 `CHANGELOG.md`。
+- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機先跑受影響的測試，推送前跑全套。
+- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart` 一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。
 - Android 實機與模擬器驗證（UI、手勢、滾動、動畫、生命週期、原生外掛、執行效能）是使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，回報中也不列出實機行為相關的未驗證項目。
 
 ## Git 流程
 
-- 不開 PR，合併在本機做完再推上 `main`。快轉 `main` 之前，分支最新的提交要已推上 GitHub，而且它的 CI 通過（`gh run list --commit <sha> --workflow CI` 查結果，還在跑就 `gh run watch <id> --exit-status` 等）；沒通過就在分支上修好再合併。本機的 hook 在 Windows 上跑，有些錯誤只在 Linux 的 CI 出現。`main` 的分支保護只禁止強制推送與刪除：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
-- 每次推上 `main` 只要改到 App 內容就會發一個測試版，所以 App 的改動在分支上累積，使用者說合併才進 `main`。commit message 用 Conventional Commits 格式（`fix(reader): …`）。
-- 合併進 `main` 時，在 `CHANGELOG.md` 的 `## 未發布` 用一般讀者看得懂的中文寫這次的變化（一兩句介紹加條列，不寫內部實作與 commit 前綴）；功能分支上不用寫。沒寫時 pre-push hook 與 CI 會擋下（ADR 0010）。
-- App 行為沒變的小改動（例如只改註解）直接改、直接推上 `main`，不用等下一次 App 改動一起發；因此多發一個內容沒變的測試版沒關係。這種提交不寫 `CHANGELOG.md`，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
+這一節與發布流程照 ADR 0014；要改流程先改那份 ADR。
+
+- App 改動一律在分支上做，推上去開 PR（PR 說明照 `pr` 技能寫），使用者說合併才合併：開 PR 後派 Codex 審整個 PR（`codex-review` 技能），核對屬實的問題修在同一個 PR；CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `main`，刪掉本機分支。
+- 不改 App 內容的小改動（交接文件、文件錯字）可以直接推 `main`。
+- commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
+- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
+- `main` 的分支保護只禁止強制推送與刪除，不強制走 PR：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程
 
-- 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取 `main` 的提交數。
-- 測試版：每次推上 `main` 的改動只要改到 App 內容，CI 就發一個 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布`。日常改進合併進 `main` 即可，不用另外升版號。
+- 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004、0014）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取 `main` 的提交數。
+- 測試版：推上 `main` 不會發版。使用者說「發 beta」時執行 `gh workflow run android-release.yml --ref main -f channel=beta`，把上一個發布之後累積的改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布`。上一個發布之後沒有 App 改動，或改了 App 卻沒寫「未發布」時，這次執行會失敗並寫明原因。日常改進不用升版號。
 - 正式版：推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時把 `CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留一個空的 `## 未發布`；CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
-- 推送後檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
-- 手動 `workflow_dispatch` 與 `internal-test/**` 分支只建置測試 APK artifact，不打 tag、不發布。
+- 觸發測試版或推上版號 commit 後，檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
+- `channel=test` 的手動執行與 `internal-test/**` 分支只建置測試 APK artifact，不打 tag、不發布。
 - `website/` 推送到 `main` 時由 `.github/workflows/website-deploy.yml` 部署到 GitHub Pages；網站上的功能描述要與 App 實際行為一致。
 
 ## Agent skills

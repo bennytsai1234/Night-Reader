@@ -1,9 +1,8 @@
 name: Android Release
 
 on:
-  # main 上有還沒發布的 App 改動就發版（正式版或測試版）。每次推送都跑，由下面的
-  # release_ignored 判斷：只用推送的路徑過濾的話，發版失敗後只修測試的推送不會觸發，
-  # 那批改動就一直發不出去。
+  # 推上 main 只在 pubspec 版號升到還沒發布的版本時發正式版（ADR 0002）；測試版不隨推送
+  # 發布，由手動觸發（ADR 0014）。
   push:
     branches:
       - main
@@ -11,6 +10,14 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "beta：在 main 上發測試版；test：只建置測試 APK，不發布"
+        type: choice
+        options:
+          - beta
+          - test
+        default: beta
 
 permissions:
   contents: write
@@ -47,6 +54,7 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
 
@@ -90,8 +98,14 @@ jobs:
           build_name="$app_version"
           artifact_label="$stable_tag"
 
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/heads/internal-test/* ]]; then
-            # 手動執行與 internal-test branch 永遠只做 signed APK 驗證，不發布。
+          manual_beta=false
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$CHANNEL" == "beta" ]]; then
+            manual_beta=true
+          fi
+
+          if [[ "$GITHUB_REF" == refs/heads/internal-test/* ||
+                ( "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$manual_beta" != "true" ) ]]; then
+            # internal-test branch 與 channel=test 的手動執行只做 signed APK 驗證，不發布。
             mode=manual-test
             should_build=true
             artifact_label="manual-${GITHUB_SHA::7}"
@@ -106,32 +120,48 @@ jobs:
             publish=true
             target_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
           elif [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Unsupported release ref: $GITHUB_REF"
+            if [[ "$manual_beta" == "true" ]]; then
+              echo "::error::測試版只從 main 發布，請在 main 上執行（目前是 $GITHUB_REF）。"
+            else
+              echo "::error::Unsupported release ref: $GITHUB_REF"
+            fi
             exit 1
           elif gh release view "$stable_tag" >/dev/null 2>&1; then
-            # pubspec 版本已發布過：這次合併發成測試版 v<下一個修訂號>-beta.<正式版之後的提交數>。
-            commits="$(git rev-list --count "${stable_tag}..${GITHUB_SHA}")"
-            if [[ "$commits" == 0 ]]; then
-              echo "Release $stable_tag already exists; nothing to publish."
-              mode=already-released
-            elif ! has_unreleased_app_changes; then
-              echo "No app changes since the last release; nothing to publish."
-              mode=already-released
+            if [[ "$manual_beta" != "true" ]]; then
+              # 推上 main 不發測試版（ADR 0014）；改動累積到手動觸發時一起發。
+              echo "Release $stable_tag already exists; betas are published by running this workflow with channel=beta."
+              mode=no-release
             else
+              # 手動發測試版 v<下一個修訂號>-beta.<正式版之後的提交數>。沒有東西可發時讓這次執行
+              # 失敗並寫明原因，手動觸發的人才看得出為什麼沒有新版。
+              commits="$(git rev-list --count "${stable_tag}..${GITHUB_SHA}")"
+              if [[ "$commits" == 0 ]] || ! has_unreleased_app_changes; then
+                echo "::error::上一個發布之後 main 沒有改到 App 內容，沒有新的測試版可發。"
+                exit 1
+              fi
               IFS=. read -r major minor patch <<< "$app_version"
               build_name="${major}.${minor}.$((patch + 1))-beta.${commits}"
               tag_name="v${build_name}"
               artifact_label="$tag_name"
               prerelease=true
               if gh release view "$tag_name" >/dev/null 2>&1; then
-                echo "Beta $tag_name already exists; nothing to publish."
-                mode=already-released
-              else
-                mode=beta
-                should_build=true
-                publish=true
+                echo "::error::測試版 $tag_name 已經發布過，main 之後沒有新的提交。"
+                exit 1
               fi
+              # 更新說明在發版這一刻檢查（ADR 0010、0014）：上一個發布之後改到 App 內容，
+              # 「未發布」就要跟著寫，且不是空的。
+              last_tag="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$GITHUB_SHA")"
+              if ! sh tool/changelog.sh check "$last_tag" "$GITHUB_SHA"; then
+                echo "::error::$last_tag 之後的 App 改動沒有寫進 CHANGELOG.md 的「未發布」，補上後再發測試版。"
+                exit 1
+              fi
+              mode=beta
+              should_build=true
+              publish=true
             fi
+          elif [[ "$manual_beta" == "true" ]]; then
+            echo "::error::pubspec 的 $stable_tag 還沒發布：推上升版號的 commit 會發正式版，正式版發出後才能發測試版。"
+            exit 1
           elif git show-ref --verify --quiet "refs/tags/$stable_tag"; then
             # 支援「tag 已建立但 Release 尚未完成」的恢復路徑。
             mode=recover-existing-tag
