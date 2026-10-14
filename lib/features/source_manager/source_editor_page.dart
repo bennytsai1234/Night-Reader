@@ -91,9 +91,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     _controllers['comment'] = TextEditingController(
       text: _editingSource.bookSourceComment,
     );
-    _controllers['loginUrl'] = TextEditingController(
-      text: _editingSource.loginUrl,
-    );
     _controllers['header'] = TextEditingController(text: _editingSource.header);
 
     _controllers['searchUrl'] = TextEditingController(
@@ -212,7 +209,6 @@ class _SourceEditorPageState extends State<SourceEditorPage>
     _editingSource.bookSourceUrl = _controllers['url']!.text.trim();
     _editingSource.bookSourceGroup = _controllers['group']!.text;
     _editingSource.bookSourceComment = _controllers['comment']!.text;
-    _editingSource.loginUrl = _controllers['loginUrl']!.text;
     _editingSource.header = _controllers['header']!.text;
     _editingSource.searchUrl = _controllers['searchUrl']!.text;
     _editingSource.exploreUrl = _controllers['exploreUrl']!.text;
