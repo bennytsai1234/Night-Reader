@@ -1,4 +1,4 @@
-# Release 說明改由中文 CHANGELOG 提供，CI 與 pre-push hook 強制要寫
+# Release 說明改由中文 CHANGELOG 提供，發版前檢查一定要寫
 
 App 的更新視窗與「更新紀錄」顯示的是 GitHub Release 說明。原本 CI 發版時用 `gh release create --generate-notes`，說明就是英文的 commit 標題（例如 `feat(update): add …`），一般使用者看不懂。現在改成在 repo 根目錄維護 `CHANGELOG.md`，用繁體中文寫給一般讀者看：最上面是 `## 未發布`，下面依序是各正式版的 `## X.Y.Z`；每段先用一兩句介紹這次的重點，再條列使用者看得到的改動，不寫內部實作與 commit 前綴。
 
@@ -14,5 +14,5 @@ App 端的 `releaseNotesForDisplay` 只去掉 Markdown 符號、把條列前綴�
 ## 考慮過的做法
 
 - **commit 標題改寫中文**：讀起來仍是開發流水帳，一個功能常拆成好幾個 commit，也沒有整體介紹；而且 Conventional Commits 的前綴還是會出現。
-- **發版後到 GitHub 手動改 Release 說明**：每次推上 `main` 都會發測試版，測試版的說明實際上一直是英文；手動步驟也容易忘，忘了就沒有東西擋。
+- **發版後到 GitHub 手動改 Release 說明**：當時每次推上 `main` 都會發測試版，測試版的說明實際上一直是英文；手動步驟也容易忘，忘了就沒有東西擋。
 - **只靠 pre-push hook 提醒**：hook 要在 clone 後自己啟用，沒啟用的推送就沒人檢查，所以 CI 也跑同一個檢查。

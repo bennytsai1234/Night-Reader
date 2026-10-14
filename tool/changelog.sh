@@ -114,9 +114,9 @@ check() {
 
   {
     if [ -z "$new" ] && [ -n "$old" ]; then
-      echo "changelog: 這次推上 main 的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」被清空了，也沒有新增正式版的段落。"
+      echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」被清空了，也沒有新增正式版的段落。"
     else
-      echo "changelog: 這次推上 main 的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
+      echo "changelog: 這段範圍的改動動到了 App 內容，但 CHANGELOG.md 的「## $UNRELEASED」沒有更新。"
     fi
     echo
     echo "  測試版與正式版的 GitHub Release 說明都取自 CHANGELOG.md，App 的更新視窗與「更新紀錄」會顯示它。"
