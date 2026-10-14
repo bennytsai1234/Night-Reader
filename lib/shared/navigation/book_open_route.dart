@@ -5,49 +5,30 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.da
 import 'package:night_reader/features/reader_v2/session/reader_v2_read_time_scope.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page.dart';
 
-/// 開書轉場：短促的淡入 + 輕微上滑。
+/// 開閱讀器。轉場與其他換頁相同（「外觀與主題 → 換頁動畫」）；目的地
+/// [ReaderV2Page] 的重排版延後到第一幀後，轉場本身每幀都便宜。
 ///
-/// 刻意保持輕量——以 transform 為主（[SlideTransition] 只是位移，不需離屏
-/// 合成），搭配一段短暫的淡入。目的地 [ReaderV2Page] 的重排版已由
-/// `_openRuntimeAfterFirstFrame` 延後到第一幀後，因此轉場本身只需保持每幀
-/// 便宜即可順暢，不再使用整頁 `Opacity`(saveLayer) 或 3D 透視 overlay。
-class BookOpenRoute extends PageRouteBuilder {
+/// 閱讀器維持不能從左緣右滑返回（原本自帶轉場時就沒有），由選單或返回鍵離開。
+class BookOpenRoute extends MaterialPageRoute<void> {
   BookOpenRoute({
     required this.book,
     this.openTarget,
     this.initialChapters = const <BookChapter>[],
   }) : super(
-         pageBuilder: (context, animation, secondaryAnimation) =>
-             ReaderV2ReadTimeScope(
-               book: book,
-               child: ReaderV2Page(
-                 book: book,
-                 openTarget: openTarget,
-                 initialChapters: initialChapters,
-               ),
-             ),
-         transitionDuration: const Duration(milliseconds: 280),
-         reverseTransitionDuration: const Duration(milliseconds: 220),
-         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-           final curved = CurvedAnimation(
-             parent: animation,
-             curve: Curves.easeOutCubic,
-             reverseCurve: Curves.easeInCubic,
-           );
-           return FadeTransition(
-             opacity: curved,
-             child: SlideTransition(
-               position: Tween<Offset>(
-                 begin: const Offset(0, 0.04),
-                 end: Offset.zero,
-               ).animate(curved),
-               child: child,
-             ),
-           );
-         },
+         builder: (context) => ReaderV2ReadTimeScope(
+           book: book,
+           child: ReaderV2Page(
+             book: book,
+             openTarget: openTarget,
+             initialChapters: initialChapters,
+           ),
+         ),
        );
 
   final Book book;
   final ReaderV2OpenTarget? openTarget;
   final List<BookChapter> initialChapters;
+
+  @override
+  bool get popGestureEnabled => false;
 }

@@ -7,7 +7,6 @@ import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
-import 'glass_menu.dart' show globalRectOf;
 
 class FloatingTabItem {
   const FloatingTabItem({
@@ -116,8 +115,8 @@ class FloatingTabBar extends StatefulWidget {
   /// 主頁的 [PageController]；提供時選取膠囊跟著頁面捲動位置。
   final PageController? controller;
 
-  /// 點右側搜尋鈕；參數是按鈕在螢幕上的範圍，給搜尋頁從按鈕展開用。
-  final ValueChanged<Rect>? onSearch;
+  /// 點右側搜尋鈕。
+  final VoidCallback? onSearch;
   final String searchTooltip;
 
   /// 沉到畫面外並停止接收點擊；佔用的高度不變，內容不會跟著跳動。
@@ -182,19 +181,16 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             Semantics(
               button: true,
               label: widget.searchTooltip,
-              // 在按壓縮放之外量範圍，量到的是按鈕原本的大小。
-              child: Builder(
-                builder: (buttonContext) => PressScale(
-                  onTap: () => widget.onSearch!(globalRectOf(buttonContext)),
-                  child: SizedBox.square(
-                    dimension: AppGlass.tabBarHeight,
-                    child: GlassSurface(
-                      shape: BoxShape.circle,
-                      child: Icon(
-                        Icons.search_rounded,
-                        size: 26,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+              child: PressScale(
+                onTap: widget.onSearch,
+                child: SizedBox.square(
+                  dimension: AppGlass.tabBarHeight,
+                  child: GlassSurface(
+                    shape: BoxShape.circle,
+                    child: Icon(
+                      Icons.search_rounded,
+                      size: 26,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ),

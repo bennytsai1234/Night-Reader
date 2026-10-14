@@ -1,16 +1,20 @@
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 外觀風格與玻璃強度；深淺模式由 [SettingsProvider.themeMode] 決定。
+/// 外觀風格、玻璃強度與換頁動畫；深淺模式由 [SettingsProvider.themeMode] 決定。
 class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
     style = AppStyle.fromStorage(_prefs.getString(PreferKey.appStyle));
     glassStrength = GlassStrength.fromStorage(
       _prefs.getString(PreferKey.glassStrength),
+    );
+    pageTransition = AppPageTransition.fromStorage(
+      _prefs.getString(PreferKey.pageTransition),
     );
   }
 
@@ -21,6 +25,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   /// 浮動列、選單等玻璃材質的強度；App 介面與閱讀選單共用。
   late GlassStrength glassStrength;
+
+  /// 全 App 換頁共用的轉場。
+  late AppPageTransition pageTransition;
 
   void setStyle(AppStyle value) {
     if (style == value) return;
@@ -33,6 +40,13 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (glassStrength == value) return;
     glassStrength = value;
     _prefs.setString(PreferKey.glassStrength, value.name);
+    notifyListeners();
+  }
+
+  void setPageTransition(AppPageTransition value) {
+    if (pageTransition == value) return;
+    pageTransition = value;
+    _prefs.setString(PreferKey.pageTransition, value.name);
     notifyListeners();
   }
 }
