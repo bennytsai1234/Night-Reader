@@ -1,6 +1,6 @@
 name: flutter_tts
-description: Text to Speech plugin for Night Reader on Android.
-version: 4.2.5+nightreader.2
+description: Text to Speech plugin for Night Reader on Android and iOS.
+version: 4.2.5+nightreader.4
 publish_to: none
 
 dependencies:
@@ -12,6 +12,8 @@ flutter:
     platforms:
       android:
         package: com.eyedeadevelopment.fluttertts
+        pluginClass: FlutterTtsPlugin
+      ios:
         pluginClass: FlutterTtsPlugin
 
 environment:

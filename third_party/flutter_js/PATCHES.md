@@ -48,3 +48,14 @@ The published 0.8.7 Android script applies the legacy Kotlin Android plugin and 
 ## Maintenance
 
 Night Reader maintains this package in-tree and no longer tracks upstream.
+
+## Patch `nightreader.3`: JavaScriptCore on iOS
+
+- Restored the upstream JavaScriptCore runtime (`lib/javascriptcore/`) from the
+  `nightreader.1` tree. `getJavascriptRuntime()` returns
+  `JavascriptCoreRuntime` on iOS and `QuickJsRuntime2` everywhere else.
+- No iOS plugin is registered: the runtime opens the system
+  `JavaScriptCore.framework` over Dart FFI, so the upstream method-channel
+  Swift classes were not restored.
+- `analysis_options.yaml` again disables `library_prefixes` for the
+  JavaScriptCore bindings, which keep the C API names.
