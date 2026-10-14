@@ -113,19 +113,4 @@ void main() {
     expect(find.byType(ListView), findsOneWidget);
     expect(find.widgetWithText(BookshelfListCard, '甲'), findsWidgets);
   });
-
-  testWidgets('交叉淡化途中換頁，封面 Hero 不重複', (tester) async {
-    await pumpShelf(tester);
-
-    provider.setGridView(false);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byType(GridView), findsOneWidget);
-
-    // 換頁時收集來源路由的 Hero；淡出中的網格若還帶著 tag 會和列表重複。
-    Navigator.of(tester.element(find.byType(ListView)))
-        .push(MaterialPageRoute<void>(builder: (_) => const SizedBox()));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-  });
 }

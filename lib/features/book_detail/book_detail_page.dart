@@ -13,7 +13,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
-import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
@@ -45,16 +44,8 @@ class BookDetailPage extends StatefulWidget {
   final Book? book;
   final AggregatedSearchBook? searchBook;
 
-  /// 開啟這頁的清單封面所用的 Hero tag（[BookCoverWidget.heroTag]），封面
-  /// 從清單飛進來；null 時用詳情頁自己的 tag。
-  final String? coverHeroTag;
-
-  const BookDetailPage({
-    super.key,
-    this.book,
-    this.searchBook,
-    this.coverHeroTag,
-  }) : assert(book != null || searchBook != null);
+  const BookDetailPage({super.key, this.book, this.searchBook})
+    : assert(book != null || searchBook != null);
 
   @override
   State<BookDetailPage> createState() => _BookDetailPageState();
@@ -156,7 +147,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   ImageProvider? _ambienceOf(BookDetailProvider provider) =>
       BookCoverAmbience.imageOf(provider.book.getDisplayCover());
 
-  /// 書名、作者與封面一進頁就畫出（封面 Hero 才有落點），載入中只有
+  /// 書名、作者與封面一進頁就畫出，載入中只有
   /// 動作按鈕與頁首以下顯示骨架；資料到了以淡入取代。
   Widget _buildContent(BuildContext context, BookDetailProvider provider) {
     final currentBook = provider.book;
@@ -184,12 +175,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   book: currentBook,
                   provider: provider,
                   loading: loading,
-                  coverHeroTag:
-                      widget.coverHeroTag ??
-                      BookCoverWidget.heroTag(
-                        BookCoverHeroScope.detail,
-                        currentBook.bookUrl,
-                      ),
                   showPhotoView: _showPhotoView,
                   onToggleBookshelf: () =>
                       _handleBookshelfToggle(context, provider),
@@ -750,7 +735,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     });
   }
 
-  void _showPhotoView(BuildContext context, String url, String heroTag) {
+  void _showPhotoView(BuildContext context, String url) {
     final isLocal = url.startsWith('local://') || url.startsWith('file://');
     Navigator.push(
       context,
@@ -763,16 +748,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
             foregroundColor: Colors.white,
           ),
           body: Center(
-            child: Hero(
-              tag: heroTag,
-              child: isLocal
-                  ? Image.file(
-                      url.startsWith('local://')
-                          ? File(url.replaceFirst('local://', ''))
-                          : File(Uri.parse(url).toFilePath()),
-                    )
-                  : CachedNetworkImage(imageUrl: url),
-            ),
+            child: isLocal
+                ? Image.file(
+                    url.startsWith('local://')
+                        ? File(url.replaceFirst('local://', ''))
+                        : File(Uri.parse(url).toFilePath()),
+                  )
+                : CachedNetworkImage(imageUrl: url),
           ),
         ),
       ),

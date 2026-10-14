@@ -20,6 +20,7 @@ import 'app_providers.dart';
 import 'shared/theme/app_style.dart';
 import 'shared/theme/app_tokens.dart';
 import 'shared/theme/custom_app_theme.dart';
+import 'shared/navigation/app_page_transition.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
 import 'shared/widgets/theme_reveal_scope.dart';
@@ -28,6 +29,7 @@ import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
+import 'core/engine/web_book/parse_worker.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
@@ -97,6 +99,9 @@ Future<void> _startApp() async {
     LicenseRegistry.addLicense(_punctFontLicense);
     _punctLicenseRegistered = true;
   }
+  // 不帶 JS 的搜尋結果與目錄改在背景 isolate 解析；背景下載的 Workmanager
+  // 入口不開，維持原地解析。
+  ParseWorker.enabled = true;
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
@@ -302,12 +307,14 @@ class ReaderApp extends StatelessWidget {
             Brightness.light,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
+            pageTransition: themeSettings.pageTransition,
           ),
           darkTheme: buildAppTheme(
             themeSettings.style,
             Brightness.dark,
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
+            pageTransition: themeSettings.pageTransition,
           ),
           themeMode: settings.themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
@@ -316,11 +323,13 @@ class ReaderApp extends StatelessWidget {
           themeAnimationStyle: AnimationStyle.noAnimation,
           locale: settings.locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
-          builder: (context, child) => ThemeRevealScope(
-            child: StatusBarStableInset(
-              child: BackdropGroup(
-                child: ChineseDisplayScope(
-                  child: child ?? const SizedBox.shrink(),
+          builder: (context, child) => TransitionOriginRecorder(
+            child: ThemeRevealScope(
+              child: StatusBarStableInset(
+                child: BackdropGroup(
+                  child: ChineseDisplayScope(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

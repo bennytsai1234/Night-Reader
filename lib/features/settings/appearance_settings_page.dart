@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -12,8 +13,8 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、強調色、深淺與玻璃效果。風格與深淺同時決定 App 介面、
-/// 閱讀正文與閱讀選單的配色。
+/// 外觀與主題：風格、強調色、深淺、玻璃效果與換頁動畫。風格與深淺同時
+/// 決定 App 介面、閱讀正文與閱讀選單的配色。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
@@ -90,6 +91,21 @@ class AppearanceSettingsPage extends StatelessWidget {
                   ],
                   selected: themeSettings.glassStrength,
                   onChanged: themeSettings.setGlassStrength,
+                ),
+              ),
+            ],
+          ),
+          GroupedSection(
+            header: '換頁動畫',
+            children: [
+              GroupedContent(
+                child: GlassSegmented<AppPageTransition>(
+                  segments: [
+                    for (final transition in AppPageTransition.values)
+                      GlassSegment(transition, transition.label),
+                  ],
+                  selected: themeSettings.pageTransition,
+                  onChanged: themeSettings.setPageTransition,
                 ),
               ),
             ],

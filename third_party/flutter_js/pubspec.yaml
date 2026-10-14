@@ -1,6 +1,6 @@
 name: flutter_js
-description: QuickJS engine for Night Reader on Android, driven over Dart FFI.
-version: 0.8.7+nightreader.2
+description: JavaScript engine for Night Reader over Dart FFI (QuickJS on Android, JavaScriptCore on iOS).
+version: 0.8.7+nightreader.3
 publish_to: none
 
 environment:

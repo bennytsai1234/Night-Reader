@@ -1,5 +1,5 @@
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 
 import 'app_chrome.dart';
 import 'app_style.dart';
@@ -11,6 +11,7 @@ ThemeData buildAppTheme(
   Brightness brightness, {
   GlassStrength glassStrength = GlassStrength.frosted,
   AppAccent accent = AppAccent.theme,
+  AppPageTransition pageTransition = AppPageTransition.paper,
 }) {
   final colors = style.paletteFor(brightness, accent);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
@@ -97,12 +98,12 @@ ThemeData buildAppTheme(
     splashFactory: NoSplash.splashFactory,
     highlightColor: chrome.pressedHighlight,
     hoverColor: Colors.transparent,
-    // 換頁採 iOS 平移並支援邊緣右滑返回；開書的 [BookOpenRoute] 自帶轉場，
-    // 不受影響，閱讀器內的橫向手勢因此不會觸發返回。
-    pageTransitionsTheme: const PageTransitionsTheme(
+    // 全 App 換頁用使用者選的轉場（含開書），開關對稱，支援邊緣右滑返回；
+    // 閱讀器關掉右滑返回（見 BookOpenRoute）。
+    pageTransitionsTheme: PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: AppPageTransitionsBuilder(pageTransition),
+        TargetPlatform.iOS: AppPageTransitionsBuilder(pageTransition),
       },
     ),
     snackBarTheme: SnackBarThemeData(

@@ -192,7 +192,6 @@ class BookshelfListCard extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.onLongPress,
-    this.hero = true,
     this.updateBadge,
   });
 
@@ -209,9 +208,6 @@ class BookshelfListCard extends StatelessWidget {
 
   /// 長按時回傳卡片在螢幕上的範圍，供情境預覽選單浮起。
   final ValueChanged<Rect>? onLongPress;
-
-  /// 長按預覽裡的複本不能帶 Hero，否則與清單本身的 tag 重複。
-  final bool hero;
 
   /// 書架檢查後暫時顯示在封面右上角的結果。
   final BookUpdateCheckResult? updateBadge;
@@ -232,15 +228,6 @@ class BookshelfListCard extends StatelessWidget {
       height: coverHeight,
       borderRadius: AppRadius.cardXs,
     );
-    if (hero) {
-      cover = Hero(
-        tag: BookCoverWidget.heroTag(
-          BookCoverHeroScope.bookshelf,
-          book.bookUrl,
-        ),
-        child: cover,
-      );
-    }
     cover = Stack(
       clipBehavior: Clip.none,
       children: [
@@ -421,19 +408,13 @@ class BookshelfGridTile extends StatelessWidget {
                     scale: selected ? 0.92 : 1,
                     duration: AppMotion.spring,
                     curve: AppMotion.springCurve,
-                    child: Hero(
-                      tag: BookCoverWidget.heroTag(
-                        BookCoverHeroScope.bookshelf,
-                        book.bookUrl,
-                      ),
-                      child: BookCoverWidget(
-                        bookName: name,
-                        author: book.author,
-                        coverUrl: book.getDisplayCover(),
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: AppRadius.cardXs,
-                      ),
+                    child: BookCoverWidget(
+                      bookName: name,
+                      author: book.author,
+                      coverUrl: book.getDisplayCover(),
+                      width: double.infinity,
+                      height: double.infinity,
+                      borderRadius: AppRadius.cardXs,
                     ),
                   ),
                   Positioned(

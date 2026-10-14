@@ -1,6 +1,6 @@
 name: file_picker
-description: Native Android file picker for Night Reader, with extension filtering support.
-version: 11.0.3+nightreader.2
+description: Native Android and iOS file picker for Night Reader, with extension filtering support.
+version: 11.0.3+nightreader.3
 publish_to: none
 
 dependencies:
@@ -21,4 +21,6 @@ flutter:
     platforms:
       android:
         package: com.mr.flutter.plugin.filepicker
+        pluginClass: FilePickerPlugin
+      ios:
         pluginClass: FilePickerPlugin
