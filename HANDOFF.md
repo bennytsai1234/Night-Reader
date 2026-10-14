@@ -39,7 +39,7 @@ DESIGN.md 原本規定每個風格深淺都要過對比度門檻，測試會擋�
 
 ## 接下來
 
-- **拆 `HybridReaderScreen`**（約 2600 行；使用者已同意做）：#59 已合併，可以開分支。先照 `codebase-design` 定切分點，候選是選字與反白（`_selection*`）、版面世代與還原（`_epoch*`、`_restore*`、`_jumpVeil`）、排版管線與磁碟快取（`_pump*`、`metricsDiskCache`、`planDiskCache`、`_measurementStore`）；逐段搬，每段跑全套測試。
+- **拆 `HybridReaderScreen`**：已做完，在分支 `refactor/split-hybrid-reader-screen`（worktree `../Night-Reader-split`，已推上、CI 通過），2651 → 1540 行，行為不變，細節看該分支的提交與 HANDOFF。等使用者說合併時和本分支併成一條開 PR：兩條分支的程式碼互不衝突，只有 `HANDOFF.md` 要手動合。
 - 只做計算的 JS 已在背景解析；若用到網路、`java.put`、Cookie 的書源在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。
 - 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者若在手機上覺得捲動掉幀再重新開題。
 
