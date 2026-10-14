@@ -132,8 +132,15 @@ String? _findNonNovelMarker(List<String?> fields) {
 
 /// 依書源網址記下判斷結果。每次搜尋、每次書源清單更新都會從資料庫讀出新
 /// 的書源物件，記在物件上幾乎都用不到；比對欄位內容是否相同比重新找標記
-/// 便宜得多。項目數就是用過的書源數。
+/// 便宜得多。項目數就是用過、還沒刪掉的書源數（[forgetNonNovelMarkers]）。
 final Map<String, _NonNovelMarkerCache> _nonNovelMarkerCache = {};
+
+/// 書源刪掉後放掉記下的判斷結果，連同它保留的發現、搜尋網址。
+void forgetNonNovelMarkers(Iterable<String> sourceUrls) {
+  for (final url in sourceUrls) {
+    _nonNovelMarkerCache.remove(url);
+  }
+}
 
 class _NonNovelMarkerCache {
   _NonNovelMarkerCache(this.fields, this.marker);
