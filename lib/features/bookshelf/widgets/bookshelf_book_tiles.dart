@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
-import 'package:night_reader/features/bookshelf/provider/bookshelf_update_mixin.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
