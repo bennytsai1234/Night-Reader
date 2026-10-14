@@ -24,6 +24,7 @@ import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
 import 'widgets/search_scope_sheet.dart';
+import 'widgets/search_suggestion_view.dart';
 
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)
@@ -61,6 +62,7 @@ class _SearchPageContent extends StatefulWidget {
 
 class _SearchPageContentState extends State<_SearchPageContent> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _inputFocus = FocusNode();
 
   /// Scaffold 內容區的系統內距（含玻璃頁首）。
   EdgeInsets _bodyPadding = EdgeInsets.zero;
@@ -121,6 +123,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   @override
   void dispose() {
     _controller.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -155,6 +158,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
           backgroundColor: AppChrome.of(context).groupedBackground,
           appBar: SearchAppBar(
             controller: _controller,
+            focusNode: _inputFocus,
             provider: provider,
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
@@ -174,6 +178,8 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                         ? _buildResults(provider)
                         : _buildEmptyOrHistory(provider),
                   ),
+                  // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
+                  Positioned.fill(child: _buildSuggestions(provider)),
                   if (provider.isSearching)
                     Positioned(
                       // 進度條貼在玻璃頁首實色區的下緣。
@@ -194,6 +200,31 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       },
     );
   }
+
+  /// 輸入框有焦點、正在打一個還沒搜過的詞時，列出符合的搜尋紀錄與書架書名。
+  Widget _buildSuggestions(SearchProvider provider) => ListenableBuilder(
+    listenable: Listenable.merge([_controller, _inputFocus]),
+    builder: (context, _) {
+      final input = _controller.text.trim();
+      final suggestions =
+          _inputFocus.hasFocus &&
+              input.isNotEmpty &&
+              input != provider.lastSearchKey
+          ? provider.suggestionsFor(input)
+          : const <SearchSuggestion>[];
+      if (suggestions.isEmpty) return const SizedBox.shrink();
+      return ColoredBox(
+        color: AppChrome.of(context).groupedBackground,
+        child: SearchSuggestionView(
+          suggestions: suggestions,
+          onSelected: (word) {
+            _controller.text = word;
+            _onSearch(word);
+          },
+        ),
+      );
+    },
+  );
 
   /// 清單頂端的狀態列；跟著結果或歷史一起捲動。
   List<Widget> _buildPanels(SearchProvider provider) {

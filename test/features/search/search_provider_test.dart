@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
 import 'package:night_reader/features/search/search_provider.dart';
@@ -103,6 +104,29 @@ void main() {
       provider.updateSortMode(SearchResultSortMode.sourceCount);
       expect(names(provider), ['乙', '甲']);
     });
+  });
+
+  test('suggestions list matching history first, then shelf titles, each '
+      'word once', () async {
+    await GetIt.instance<SearchKeywordDao>().saveKeyword('夜讀');
+    await GetIt.instance<BookDao>().upsertAll([
+      for (final name in ['夜讀', '夜讀外傳', '白晝'])
+        Book(
+          bookUrl: 'https://b.example/$name',
+          origin: 'https://s.example',
+          name: name,
+          author: '作者',
+          isInBookshelf: true,
+        ),
+    ]);
+    final provider = SearchProvider();
+    addTearDown(provider.dispose);
+    await pumpEventQueue();
+
+    final suggestions = provider.suggestionsFor('夜');
+    expect(suggestions.map((s) => s.word), ['夜讀', '夜讀外傳']);
+    expect(suggestions.map((s) => s.fromBookshelf), [false, true]);
+    expect(provider.suggestionsFor('  '), isEmpty);
   });
 
   test('leaving search clears the stored results', () async {

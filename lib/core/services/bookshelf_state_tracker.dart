@@ -37,8 +37,15 @@ class BookshelfStateTracker {
     _bookshelfKeys
       ..clear()
       ..addAll(books.expand(_bookshelfKeysForBook));
+    _bookNames
+      ..clear()
+      ..addAll({for (final book in books) book.name});
     onChanged?.call();
   }
+
+  /// 書架上的書名（不重複），供搜尋時提示。
+  List<String> get bookNames => List.unmodifiable(_bookNames);
+  final List<String> _bookNames = [];
 
   bool containsSearchBook(SearchBook book) {
     return contains(

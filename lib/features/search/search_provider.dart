@@ -42,6 +42,14 @@ extension SearchResultSortModeDisplay on SearchResultSortMode {
   }
 }
 
+/// 輸入框下方的一條建議：搜尋紀錄或書架上的書名。
+class SearchSuggestion {
+  const SearchSuggestion(this.word, {required this.fromBookshelf});
+
+  final String word;
+  final bool fromBookshelf;
+}
+
 /// SearchProvider - 搜尋頁面狀態管理
 /// (對標 Legado SearchViewModel.kt)
 ///
@@ -164,6 +172,26 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   bool isInBookshelf(SearchBook book) =>
       _bookshelfTracker.containsSearchBook(book);
+
+  /// 打字時的建議：包含輸入文字的搜尋紀錄在前，再來是書架上的書名；
+  /// 繁簡、全半形、大小寫與空白都不分，同一個詞只出現一次。
+  List<SearchSuggestion> suggestionsFor(String input) {
+    final key = normalizeSearchText(input);
+    if (key.isEmpty) return const [];
+    final seen = <String>{};
+    bool matches(String word) {
+      final normalized = normalizeSearchText(word);
+      return normalized.contains(key) && seen.add(normalized);
+    }
+
+    return [
+      for (final keyword in _history)
+        if (matches(keyword.word))
+          SearchSuggestion(keyword.word, fromBookshelf: false),
+      for (final name in _bookshelfTracker.bookNames)
+        if (matches(name)) SearchSuggestion(name, fromBookshelf: true),
+    ];
+  }
 
   List<String> _sourceLabelsFor(SearchBook book) => book.sourceLabels.isNotEmpty
       ? book.sourceLabels

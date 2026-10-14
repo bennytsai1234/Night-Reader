@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +10,11 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:night_reader/features/search/widgets/search_app_bar.dart';
+import 'package:night_reader/features/search/widgets/search_suggestion_view.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:provider/provider.dart';
@@ -127,6 +131,45 @@ void main() {
     expect(provider.results.last.name, '熱門');
 
     provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('typing suggests matching history in either script', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => GetIt.instance<SearchKeywordDao>().saveKeyword('鬥羅大陸'),
+    );
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '斗罗');
+    await tester.pump();
+    final suggestion = find.descendant(
+      of: find.byType(SearchSuggestionView),
+      matching: find.text('鬥羅大陸'),
+    );
+    expect(suggestion, findsOneWidget);
+
+    await tester.tap(suggestion);
+    await tester.pump();
+    expect(
+      Provider.of<SearchProvider>(
+        tester.element(find.byType(SearchAppBar)),
+        listen: false,
+      ).lastSearchKey,
+      '鬥羅大陸',
+    );
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
   });
 
