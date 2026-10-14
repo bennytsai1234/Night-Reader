@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 /// 全 App 換頁共用的轉場，在「外觀與主題 → 換頁動畫」選擇。
@@ -94,6 +95,16 @@ abstract final class _Curves {
 
   /// Telegram 放開手指後收尾用的 easeInOut。
   static const Curve settle = Curves.easeInOut;
+
+  /// 推進：開啟照 Android 系統的 emphasized（先慢後快再慢）；返回換成同一
+  /// 系列只減速的 emphasizedDecelerate，先快後慢。
+  static Curve forward(bool closing) =>
+      closing ? Easing.emphasizedDecelerate : Curves.easeInOutCubicEmphasized;
+
+  /// 覆蓋、縮放：開啟照來源的 FastOutSlowIn；返回換成同一系列只減速的
+  /// LinearOutSlowIn，先快後慢。
+  static Curve standard(bool closing) =>
+      closing ? Easing.legacyDecelerate : Curves.fastOutSlowIn;
 }
 
 /// 臨界阻尼彈簧 x(t) = 1 - (1 + ωt)e^(-ωt)，在 [seconds] 內跑完。
@@ -205,9 +216,19 @@ class _TransitionOriginRecorderState extends State<TransitionOriginRecorder> {
 /// 按下時把自己的範圍交給 [TransitionOrigin]，「展開」從這裡長出來。
 /// 包在會開新頁的卡片與列上。
 class TransitionSource extends StatelessWidget {
-  const TransitionSource({super.key, this.radius = 0, required this.child});
+  const TransitionSource({
+    super.key,
+    this.radius = 0,
+    this.area,
+    required this.child,
+  });
 
   final double radius;
+
+  /// 從整張卡片的範圍取出要長出來的那一塊（例如書架網格只取封面）；
+  /// 沒給時用整張卡片。
+  final Rect Function(Rect card)? area;
+
   final Widget child;
 
   @override
@@ -216,8 +237,9 @@ class TransitionSource extends StatelessWidget {
     onPointerDown: (_) {
       final box = context.findRenderObject();
       if (box is! RenderBox || !box.hasSize) return;
+      final card = box.localToGlobal(Offset.zero) & box.size;
       TransitionOrigin._pendingSource = (
-        rect: box.localToGlobal(Offset.zero) & box.size,
+        rect: area?.call(card) ?? card,
         radius: radius,
       );
     },
@@ -271,6 +293,10 @@ class _AppTransitionState extends State<_AppTransition>
   /// 正在由這一頁處理的返回手勢。
   bool _tracking = false;
 
+  /// 手勢途中有新頁蓋上來，路由停在半途（不是最上層時 [ModalRoute] 不讓
+  /// 手勢改它的進度）；蓋上來的頁關掉後要把這一頁補回整頁。
+  bool _stranded = false;
+
   /// 系統預測返回：最近的觸控位置與時間，放開時估速度。
   final List<({Offset at, Duration time})> _touches = [];
   final Stopwatch _clock = Stopwatch()..start();
@@ -286,8 +312,8 @@ class _AppTransitionState extends State<_AppTransition>
     _finish = AnimationController(vsync: this)
       ..addListener(_onFinishTick)
       ..addStatusListener(_onFinishStatus);
-    _listen(widget.animation, _top);
-    _listen(widget.secondaryAnimation, _under);
+    _listen(widget.animation, _top.update);
+    _listen(widget.secondaryAnimation, _onCoveredStatus);
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -296,27 +322,50 @@ class _AppTransitionState extends State<_AppTransition>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.animation != widget.animation) {
       oldWidget.animation.removeStatusListener(_top.update);
-      _listen(widget.animation, _top);
+      _listen(widget.animation, _top.update);
     }
     if (oldWidget.secondaryAnimation != widget.secondaryAnimation) {
-      oldWidget.secondaryAnimation.removeStatusListener(_under.update);
-      _listen(widget.secondaryAnimation, _under);
+      oldWidget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
+      _listen(widget.secondaryAnimation, _onCoveredStatus);
     }
   }
 
-  void _listen(Animation<double> animation, _Trip trip) {
-    trip.update(animation.status);
-    animation.addStatusListener(trip.update);
+  void _listen(Animation<double> animation, AnimationStatusListener listener) {
+    listener(animation.status);
+    animation.addStatusListener(listener);
+  }
+
+  void _onCoveredStatus(AnimationStatus status) {
+    _under.update(status);
+    if (status.isDismissed && _stranded) _restore();
+  }
+
+  // 用公開的手勢入口把路由送回整頁：開始一次手勢、立刻取消，路由自己播完。
+  void _restore() {
+    _stranded = false;
+    if (!_route.isCurrent || _progress >= 1) return;
+    _route
+      ..handleStartBackGesture(progress: _progress)
+      ..handleCancelBackGesture();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.animation.removeStatusListener(_top.update);
-    widget.secondaryAnimation.removeStatusListener(_under.update);
+    widget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
     _drag.dispose();
     _finish.dispose();
-    if (_tracking) widget.route.navigator?.didStopUserGesture();
+    if (_tracking) {
+      // 手勢途中頁面被程式關掉。卸載時整棵樹鎖著，通知 Navigator 會讓其他
+      // 頁面重建，要等這一格畫完。
+      final navigator = widget.route.navigator;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (navigator != null && navigator.mounted) {
+          navigator.didStopUserGesture();
+        }
+      });
+    }
     super.dispose();
   }
 
@@ -390,11 +439,12 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   void _record(PredictiveBackEvent event) {
+    // Android 送來的是實體像素，換成和頁寬一樣的邏輯像素。
     final at = event.touchOffset;
     if (at == null) return;
     final now = _clock.elapsed;
     _touches
-      ..add((at: at, time: now))
+      ..add((at: at / MediaQuery.devicePixelRatioOf(context), time: now))
       ..removeWhere(
         (touch) => now - touch.time > const Duration(milliseconds: 100),
       );
@@ -459,6 +509,7 @@ class _AppTransitionState extends State<_AppTransition>
     if (status != AnimationStatus.completed) return;
     _tracking = false;
     _touches.clear();
+    _stranded = !_route.isCurrent;
     if (_finishTo == 0) {
       _route.handleCommitBackGesture();
     } else {
@@ -592,7 +643,7 @@ class _TopPose {
         final v = shown(_Curves.decelerate);
         return _TopPose(offset: Offset(48 * (1 - v), 0), opacity: v);
       case AppPageTransition.forward:
-        final e = Curves.easeInOutCubicEmphasized.transform(time);
+        final e = _Curves.forward(closing).transform(time);
         return closing
             ? _TopPose(
                 fractionalOffset: Offset(0.25 * e, 0),
@@ -604,23 +655,23 @@ class _TopPose {
               );
       case AppPageTransition.cover:
         // 位移 480ms，淡入淡出 360ms（Compose 預設的 FastOutSlowIn）。
-        final f = Curves.fastOutSlowIn.transform(time);
+        final f = _Curves.standard(closing).transform(time);
         final fade = _interval(time, 0, 360 / 480);
         return closing
             ? _TopPose(
                 scale: 1 - 0.2 * f,
-                opacity: 1 - Curves.fastOutSlowIn.transform(fade),
+                opacity: 1 - Easing.legacyDecelerate.transform(fade),
               )
             : _TopPose(
                 fractionalOffset: Offset(1 - f, 0),
                 opacity: Easing.legacyDecelerate.transform(fade),
               );
       case AppPageTransition.zoom:
-        final s = Curves.fastOutSlowIn.transform(time);
+        final s = _Curves.standard(closing).transform(time);
         return closing
             ? _TopPose(
                 scale: 1 - 0.2 * s,
-                opacity: 1 - _interval(time, 0, 0.3, Easing.legacyAccelerate),
+                opacity: 1 - _interval(time, 0, 0.3, Easing.legacyDecelerate),
               )
             : _TopPose(
                 scale: 0.8 + 0.2 * s,
@@ -740,7 +791,7 @@ class _UnderPose {
       case AppPageTransition.glide:
         return const _UnderPose();
       case AppPageTransition.forward:
-        final e = Curves.easeInOutCubicEmphasized.transform(time);
+        final e = _Curves.forward(closing).transform(time);
         return closing
             ? _UnderPose(
                 fractionalOffset: Offset(-0.25 * (1 - e), 0),
@@ -751,7 +802,7 @@ class _UnderPose {
                 opacity: 1 - _interval(time, 0, 0.25),
               );
       case AppPageTransition.cover:
-        final f = Curves.fastOutSlowIn.transform(time);
+        final f = _Curves.standard(closing).transform(time);
         final fade = Easing.legacyDecelerate.transform(
           _interval(time, 0, 360 / 480),
         );
@@ -765,7 +816,7 @@ class _UnderPose {
                 opacity: 1 - fade,
               );
       case AppPageTransition.zoom:
-        final s = Curves.fastOutSlowIn.transform(time);
+        final s = _Curves.standard(closing).transform(time);
         return closing
             ? _UnderPose(
                 scale: 1.1 - 0.1 * s,

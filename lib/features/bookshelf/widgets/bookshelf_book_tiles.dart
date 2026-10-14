@@ -380,6 +380,14 @@ class BookshelfGridTile extends StatelessWidget {
   /// 書架檢查後暫時顯示在封面右上角的結果；編輯模式時讓位給勾選圓圈。
   final BookUpdateCheckResult? updateBadge;
 
+  /// 整格（封面在上、書名在下）裡封面的範圍。
+  static Rect _coverOf(Rect tile) => Rect.fromLTWH(
+    tile.left,
+    tile.top,
+    tile.width,
+    tile.width / coverAspectRatio,
+  );
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -392,23 +400,15 @@ class BookshelfGridTile extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress == null
             ? null
-            : () {
-                final tile = globalRectOf(context);
-                onLongPress!(
-                  Rect.fromLTWH(
-                    tile.left,
-                    tile.top,
-                    tile.width,
-                    tile.width / coverAspectRatio,
-                  ),
-                );
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TransitionSource(
-              radius: AppRadius.xs,
-              child: AspectRatio(
+            : () => onLongPress!(_coverOf(globalRectOf(context))),
+        // 點封面或書名都從封面長出來。
+        child: TransitionSource(
+          radius: AppRadius.xs,
+          area: _coverOf,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
                 aspectRatio: coverAspectRatio,
                 child: Stack(
                   fit: StackFit.expand,
@@ -448,17 +448,17 @@ class BookshelfGridTile extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: titleStyle.copyWith(color: scheme.onSurface),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            BookshelfProgressLine(book: book),
-          ],
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle.copyWith(color: scheme.onSurface),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              BookshelfProgressLine(book: book),
+            ],
+          ),
         ),
       ),
     );

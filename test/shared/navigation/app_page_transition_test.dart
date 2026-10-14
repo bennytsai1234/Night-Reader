@@ -56,29 +56,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// 新頁此刻的樣子：文字位置、外層透明度與裁切，攤成一串數字。
+  /// 新頁此刻的樣子：外層透明度（百分比）、裁切範圍與文字位置，攤成一串
+  /// 長度固定的數字。
   List<double> pose(WidgetTester tester) {
     final page = find.text('新頁');
-    final opacities = tester
+    final opacity = tester
         .widgetList<Opacity>(
           find.ancestor(of: page, matching: find.byType(Opacity)),
         )
-        .map((w) => w.opacity);
-    final clips = tester
-        .widgetList<ClipRRect>(
-          find.ancestor(of: page, matching: find.byType(ClipRRect)),
-        )
-        .map((w) => w.clipper?.getClip(const Size(800, 600)).outerRect)
-        .nonNulls;
+        .fold(1.0, (product, w) => product * w.opacity);
+    final clip =
+        tester
+            .widgetList<ClipRRect>(
+              find.ancestor(of: page, matching: find.byType(ClipRRect)),
+            )
+            .map((w) => w.clipper?.getClip(const Size(800, 600)).outerRect)
+            .nonNulls
+            .firstOrNull ??
+        const Rect.fromLTWH(0, 0, 800, 600);
     final rect = tester.getRect(page);
     return [
-      ...opacities,
-      for (final clip in clips) ...[clip.left, clip.top, clip.width],
+      100 * opacity,
+      clip.left,
+      clip.top,
+      clip.width,
       rect.left,
       rect.top,
       rect.width,
     ];
   }
+
+  double distance(List<double> a, List<double> b) =>
+      [for (var i = 0; i < a.length; i++) (a[i] - b[i]).abs()]
+          .fold(0.0, (sum, d) => sum + d);
 
   bool samePose(List<double> a, List<double> b) =>
       a.length == b.length &&
@@ -119,6 +129,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('新頁'), findsNothing);
       expect(find.text('主頁'), findsOneWidget);
+    });
+
+    testWidgets('${transition.name}: closing moves most at the start', (
+      tester,
+    ) async {
+      await pumpApp(tester, transition);
+      await tester.tapAt(card.center);
+      await push(tester);
+
+      Navigator.pop(tester.element(find.text('新頁')));
+      await tester.pump();
+      final start = pose(tester);
+      // 先快後慢：第一段時間變得比下一段多。俐落平移的彈簧從靜止起步、
+      // 約 8.5% 時最快，所以比 20% 一段；其他比 10%。
+      final step =
+          transition.duration *
+          (transition == AppPageTransition.slideCrisp ? 0.2 : 0.1);
+      await tester.pump(step);
+      final first = pose(tester);
+      await tester.pump(step);
+      final second = pose(tester);
+
+      expect(distance(start, first), greaterThan(distance(first, second)));
+      await tester.pumpAndSettle();
     });
   }
 
@@ -173,6 +207,60 @@ void main() {
     expect(clip.outerRect.top, closeTo(card.top, 12));
     expect(clip.outerRect.width, closeTo(card.width, 24));
     expect(clip.tlRadius.x, lessThan(12));
+  });
+
+  testWidgets('a card can grow out of just part of itself', (tester) async {
+    const tile = Rect.fromLTWH(100, 100, 120, 240);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(
+          AppStyle.paper,
+          Brightness.light,
+          pageTransition: AppPageTransition.expand,
+        ),
+        builder: (context, child) => TransitionOriginRecorder(child: child!),
+        home: Builder(
+          builder: (context) {
+            home = context;
+            return Stack(
+              children: [
+                Positioned.fromRect(
+                  rect: tile,
+                  child: TransitionSource(
+                    // 像書架網格：上半是封面，下半是書名。
+                    area: (card) => Rect.fromLTWH(
+                      card.left,
+                      card.top,
+                      card.width,
+                      card.height / 2,
+                    ),
+                    child: const ColoredBox(color: Colors.brown),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tapAt(const Offset(160, 300)); // 點在下半的書名。
+    Navigator.push(
+      home,
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    final clip = tester
+        .widget<ClipRRect>(
+          find.ancestor(of: find.text('新頁'), matching: find.byType(ClipRRect)),
+        )
+        .clipper!
+        .getClip(const Size(800, 600));
+    expect(clip.outerRect.top, closeTo(tile.top, 12));
+    expect(clip.outerRect.width, closeTo(tile.width, 24));
   });
 
   group('swiping back from the left edge', () {
@@ -282,6 +370,53 @@ void main() {
       await send(tester, 'cancelBackGesture');
       await tester.pumpAndSettle();
       expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+    });
+
+    for (final ending in ['cancelBackGesture', 'commitBackGesture']) {
+      testWidgets('a page pushed mid-gesture ($ending) leaves the page whole', (
+        tester,
+      ) async {
+        await pumpApp(tester, AppPageTransition.slide);
+        await push(tester);
+        final page = tester.element(find.text('新頁'));
+        final route = ModalRoute.of(page)!;
+        await send(tester, 'startBackGesture', event(0, 0));
+        await send(tester, 'updateBackGestureProgress', event(100, 0.4));
+        await tester.pump();
+
+        Navigator.push(
+          page,
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Center(child: Text('第三頁'))),
+          ),
+        );
+        await tester.pump();
+        await send(tester, ending);
+        await tester.pumpAndSettle();
+        Navigator.pop(tester.element(find.text('第三頁')));
+        await tester.pumpAndSettle();
+
+        // 回到這一頁時是整頁，也還能再拖曳返回。
+        expect(tester.getCenter(find.text('新頁')), const Offset(400, 300));
+        expect(route.animation!.value, 1);
+        expect(route.popGestureEnabled, isTrue);
+      });
+    }
+
+    testWidgets('closing the page in code mid-gesture ends the gesture', (
+      tester,
+    ) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(100, 0.4));
+      await tester.pump();
+
+      Navigator.pop(tester.element(find.text('新頁')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('新頁'), findsNothing);
+      expect(Navigator.of(home).userGestureInProgress, isFalse);
     });
   });
 
