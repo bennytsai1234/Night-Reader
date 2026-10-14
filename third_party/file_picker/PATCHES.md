@@ -47,6 +47,11 @@ patches below are applied.
   `flutter_web_plugins`.
 - Dart sources follow Night Reader's `flutter_lints` and `dart format` rules.
 
+### Patch `nightreader.3`: iOS restored
+
+- Restored the upstream 11.0.3 iOS implementation (`ios/`, CocoaPods and Swift
+  Package Manager manifests) and its plugin registration, unchanged.
+
 ## Maintenance
 
 Night Reader maintains this package in-tree and no longer tracks upstream.

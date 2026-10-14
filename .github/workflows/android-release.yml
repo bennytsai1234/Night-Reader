@@ -365,3 +365,65 @@ jobs:
           name: night-reader-test-arm64-v8a
           path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 7
+
+  # 未簽章的 iOS IPA（ADR 0003）：沒有 Apple 開發者帳號，使用者自行用 AltStore／Sideloadly
+  # 簽章安裝。排在 APK 之後：發布時 Release 由 APK 那步建立，這裡只補上 IPA；iOS 建置失敗
+  # 不影響已發出的 Android 版。
+  build-ios-ipa:
+    name: Build unsigned iOS IPA
+    needs: [plan-release, build-release-apk]
+    if: needs.plan-release.outputs.should_build == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan-release.outputs.target_sha }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.0"
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        env:
+          BUILD_NAME: ${{ needs.plan-release.outputs.build_name }}
+          BUILD_NUMBER: ${{ needs.plan-release.outputs.build_number }}
+        run: >-
+          flutter build ios
+          --release
+          --no-codesign
+          --build-name "$BUILD_NAME"
+          --build-number "$BUILD_NUMBER"
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R build/ios/iphoneos/Runner.app "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry night-reader-unsigned.ipa Payload)
+          test -s "$RUNNER_TEMP/ipa/night-reader-unsigned.ipa"
+
+      - name: Attach IPA to GitHub release
+        if: needs.plan-release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.plan-release.outputs.tag_name }}
+        run: >-
+          gh release upload "$TAG_NAME"
+          "$RUNNER_TEMP/ipa/night-reader-unsigned.ipa#night-reader-${TAG_NAME}-ios-unsigned.ipa"
+          --clobber
+
+      - name: Upload test IPA artifact
+        if: needs.plan-release.outputs.publish != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: night-reader-test-ios-unsigned
+          path: ${{ runner.temp }}/ipa/night-reader-unsigned.ipa
+          retention-days: 7

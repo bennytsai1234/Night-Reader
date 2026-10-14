@@ -49,3 +49,9 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
 - `getEngines` returns `{name, label}` maps instead of bare package names, so
   the app can show 「Google 語音服務」 instead of `com.google.android.tts`
   while still passing `name` to `setEngine`.
+
+## Patch `nightreader.4`: iOS restored
+
+- Restored the upstream 4.2.5 iOS implementation (`ios/`) and its plugin
+  registration. The podspec's deployment target is raised from 8.0 to 13.0;
+  the sources are otherwise unchanged.
