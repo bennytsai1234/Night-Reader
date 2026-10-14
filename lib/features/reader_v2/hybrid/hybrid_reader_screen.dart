@@ -28,6 +28,7 @@ import 'measure/chapter_plan_disk_cache.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'measure/metrics_disk_cache.dart';
+import 'overlay/loading_veil.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/text_selection_overlay.dart';
 import 'overlay/tts_highlight_overlay.dart';
@@ -110,7 +111,8 @@ bool isHybridPageMoveComplete({
   return atBookBoundary;
 }
 
-class _HybridReaderScreenState extends State<HybridReaderScreen> {
+class _HybridReaderScreenState extends State<HybridReaderScreen>
+    with TickerProviderStateMixin {
   static const Duration _viewportMotionDuration = Duration(milliseconds: 260);
   static const double _minimumViewportMovement = 0.01;
   static const String _friendlyErrorMessage = '閱讀內容暫時無法顯示，請稍後再試';
@@ -155,6 +157,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   int _restoreRevision = 0;
   ReaderV2Location? _lastReportedLocation;
   bool _initialRestoreCompleted = false;
+  late final LoadingVeilController _veil = LoadingVeilController(
+    vsync: this,
+    onHidden: () {
+      if (mounted) setState(() {});
+    },
+  );
   bool _dragging = false;
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
@@ -183,6 +191,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
     _registerRuntime();
     _attachController();
+    _veil.cover();
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _restoreAttachedRuntime();
@@ -201,6 +210,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     runtime.removeViewportGeometryListener(_onViewportGeometryChanged);
     runtime.unregisterVisibleLocationCapture(this);
     runtime.unregisterViewportRestore(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _veil.reduceMotion = MediaQuery.disableAnimationsOf(context);
   }
 
   @override
@@ -255,7 +270,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     _paragraphCache.dispose();
     _scrollController?.dispose();
     _selection.dispose();
+    _veil.dispose();
     super.dispose();
+  }
+
+  /// 正文是否已排好可以顯示；切換時蓋上或掀開 [_veil]。
+  void _setRestoreCompleted(bool completed) {
+    if (_initialRestoreCompleted == completed) return;
+    _initialRestoreCompleted = completed;
+    if (completed) {
+      _veil.reveal();
+    } else {
+      _veil.cover();
+    }
   }
 
   void _refreshEpochBinding() {
@@ -292,7 +319,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
   void _handleEpochRebuild(String? previousBookUrl) {
     _runtimeLocationRevision += 1;
     _restoreRevision += 1;
-    _initialRestoreCompleted = false;
+    _setRestoreCompleted(false);
     final oldNamespace = _namespace;
     unawaited(
       _writeDiskMetrics(
@@ -359,7 +386,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
         chapterLength: blocks.displayText.length,
       );
       final anchor = HybridAnchor.fromLocation(normalized, blocks);
-      _initialRestoreCompleted = false;
+      _setRestoreCompleted(false);
       binding.onScrollStateChanged(PumpState.loading);
       _scheduleRebuild();
       _releaseViewportLeases();
@@ -426,7 +453,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
       }
       _pendingScrollOffset = target;
       _lastReportedLocation = normalized;
-      _initialRestoreCompleted = true;
+      _setRestoreCompleted(true);
       binding.onScrollStateChanged(PumpState.rebuilding);
       _scheduleRebuild();
       // Return only after the native viewport exists and has applied the
@@ -2318,51 +2345,16 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
     return boxes.first.top;
   }
 
+  Widget _buildVeil(ReaderV2State state) => LoadingVeil(
+    controller: _veil,
+    spec: state.layoutSpec,
+    backgroundColor: widget.backgroundColor,
+    textColor: widget.textColor,
+  );
+
   Widget _buildLoading(ReaderV2State state) {
     final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;
     final message = unavailable ? _friendlyErrorMessage : '正在準備閱讀內容';
-    final Widget child;
-    if (unavailable) {
-      child = Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              color: widget.textColor.withValues(alpha: 0.72),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              style: AppTextStyles.bodyBase.copyWith(color: widget.textColor),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    } else {
-      child = Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: widget.textColor.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: AppTextStyles.bodySm.copyWith(
-              color: widget.textColor.withValues(alpha: 0.72),
-            ),
-          ),
-        ],
-      );
-    }
     return ColoredBox(
       color: widget.backgroundColor,
       child: ReaderV2PointerTapLayer(
@@ -2371,7 +2363,32 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
           liveRegion: true,
           excludeSemantics: true,
           label: message,
-          child: Center(child: child),
+          child: unavailable
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: widget.textColor.withValues(alpha: 0.72),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          message,
+                          style: AppTextStyles.bodyBase.copyWith(
+                            color: widget.textColor,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              // 載入中不放轉圈與文字：先是一張空白的紙，等久了才浮出正文
+              // 骨架（見 [LoadingVeilController]）。
+              : _buildVeil(state),
         ),
       ),
     );
@@ -2432,6 +2449,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen> {
                   ),
                 ),
               ),
+            // 正文剛排好時，蓋著的紙在上面淡出。
+            if (_veil.isVisible)
+              Positioned.fill(child: IgnorePointer(child: _buildVeil(state))),
           ],
         );
         // 長按與捲動在同一個手勢競技場：先拖動就是捲動，按住不動才選字。

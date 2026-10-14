@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_reposi
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -19,6 +20,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -383,6 +385,31 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(runtime.state.visibleLocation.chapterIndex, 0);
     expect(position.pixels, draggedTo);
+  });
+
+  testWidgets('opening fades the text in from paper without a spinner', (
+    tester,
+  ) async {
+    await pumpReader(tester, waitForOpen: false);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('正在準備閱讀內容'), findsNothing);
+
+    for (
+      var frame = 0;
+      frame < 2000 && find.byType(CustomScrollView).evaluate().isEmpty;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(find.byType(LoadingVeil), findsOneWidget, reason: '紙還在正文上淡出');
+
+    await tester.tapAt(const Offset(200, 300));
+    await tester.pump();
+    expect(taps, hasLength(1), reason: '淡出中的紙不攔點擊');
+
+    await tester.pump(AppMotion.fade);
+    expect(find.byType(LoadingVeil), findsNothing);
   });
 
   testWidgets('opening mid-chapter does not wait for adjacent chapters', (

@@ -17,9 +17,20 @@ class Skeleton extends StatefulWidget {
   /// 深色是略亮一階的墨；各風格都從自己的配色推導。
   static Color colorOf(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    return theme.colorScheme.onSurface.withValues(alpha: dark ? 0.09 : 0.07);
+    return tint(
+      theme.colorScheme.onSurface,
+      dark: theme.brightness == Brightness.dark,
+    );
   }
+
+  /// [colorOf] 的配色公式，給不從 App 主題取色的畫面（例如閱讀器用自己的
+  /// 正文色）共用。
+  static Color tint(Color ink, {required bool dark}) =>
+      ink.withValues(alpha: dark ? 0.09 : 0.07);
+
+  /// 脈動進度 [pulse]（0 最深、1 最淺）對應的深淺比例，乘在佔位底色的
+  /// 透明度上。
+  static double pulseStrength(double pulse) => 1 - (1 - _pulseFloor) * pulse;
 
   /// 脈動最淺時保留的深淺比例：再淺就會在紙上消失，看不出形狀。
   static const double _pulseFloor = 0.55;
@@ -101,7 +112,7 @@ class SkeletonBox extends StatelessWidget {
     return AnimatedBuilder(
       animation: pulse,
       builder: (context, _) {
-        final factor = 1 - (1 - Skeleton._pulseFloor) * pulse.value;
+        final factor = Skeleton.pulseStrength(pulse.value);
         return box(base.withValues(alpha: base.a * factor));
       },
     );
