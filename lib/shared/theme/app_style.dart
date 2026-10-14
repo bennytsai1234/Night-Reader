@@ -12,7 +12,7 @@ const _sky = Color(0xFF5AA9FF);
 const _apricot = Color(0xFFF5A742);
 
 /// 外觀風格：一套同時套到 App 介面、閱讀正文與閱讀選單的配色，
-/// 各有淺色與深色；使用者只選風格與深淺，不個別調色。
+/// 各有淺色與深色；使用者只選風格、深淺與強調色（[AppAccent]），不個別調色。
 enum AppStyle {
   paper(
     '紙墨',
@@ -179,6 +179,183 @@ enum AppStyle {
       readerInfo: Color(0xFF757575),
       highlight: _amber,
     ),
+  ),
+  // 以下五種取材自常見的編輯器與閱讀配色，明暗依對比度契約微調過，
+  // 色相與原作相同、明度不完全一樣。
+
+  /// Rosé Pine（Dawn／Main）。
+  rouge(
+    '胭脂',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFF7EFE8),
+      surface: Color(0xFFFFFAF3),
+      bar: Color(0xFFFBF4ED),
+      text: Color(0xFF3E3A5E),
+      textMuted: Color(0xFF6E6A86),
+      border: Color(0xFFE6D9CE),
+      primary: Color(0xFFA9516A),
+      secondary: Color(0xFFD7827E),
+      readerBackground: Color(0xFFFAF4ED),
+      readerText: Color(0xFF4A4570),
+      readerInfo: Color(0xFF706C8A),
+      highlight: Color(0xFFF6C177),
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF191724),
+      surface: Color(0xFF1F1D2E),
+      bar: Color(0xFF1F1D2E),
+      text: Color(0xFFE0DEF4),
+      textMuted: Color(0xFF908CAA),
+      border: Color(0xFF2E2B44),
+      primary: Color(0xFFF2A0B7),
+      secondary: Color(0xFFEBBCBA),
+      readerBackground: Color(0xFF171521),
+      readerText: Color(0xFFD3D0E8),
+      readerInfo: Color(0xFF908CAA),
+      highlight: Color(0xFFF6C177),
+    ),
+  ),
+
+  /// Catppuccin（Latte／Mocha）。
+  lotus(
+    '藕荷',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFE6E9EF),
+      surface: Color(0xFFEFF1F5),
+      bar: Color(0xFFECEEF3),
+      text: Color(0xFF3A3D55),
+      textMuted: Color(0xFF5C5F77),
+      border: Color(0xFFCCD0DA),
+      primary: Color(0xFF8534EF),
+      secondary: Color(0xFF7287FD),
+      readerBackground: Color(0xFFEFF1F5),
+      readerText: Color(0xFF3A3D55),
+      readerInfo: Color(0xFF5C5F77),
+      highlight: Color(0xFFDF8E1D),
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF181825),
+      surface: Color(0xFF1E1E2E),
+      bar: Color(0xFF1E1E2E),
+      text: Color(0xFFCDD6F4),
+      textMuted: Color(0xFFA6ADC8),
+      border: Color(0xFF313244),
+      primary: Color(0xFFCCA8F7),
+      secondary: Color(0xFFB4BEFE),
+      readerBackground: Color(0xFF161622),
+      readerText: Color(0xFFBAC2DE),
+      readerInfo: Color(0xFF9399B2),
+      highlight: Color(0xFFF9E2AF),
+    ),
+  ),
+
+  /// Solarized。
+  scroll(
+    '黃卷',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFEEE8D5),
+      surface: Color(0xFFFDF6E3),
+      bar: Color(0xFFF6F0DC),
+      text: Color(0xFF073642),
+      textMuted: Color(0xFF566B72),
+      border: Color(0xFFDDD6C1),
+      primary: Color(0xFF1B6C66),
+      secondary: Color(0xFFB58900),
+      readerBackground: Color(0xFFFDF6E3),
+      readerText: Color(0xFF073642),
+      readerInfo: Color(0xFF5F747C),
+      highlight: Color(0xFFB58900),
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF00212B),
+      surface: Color(0xFF002B36),
+      bar: Color(0xFF002B36),
+      text: Color(0xFFEEE8D5),
+      textMuted: Color(0xFF93A1A1),
+      border: Color(0xFF0B4250),
+      primary: Color(0xFF30B7AD),
+      secondary: Color(0xFFB58900),
+      readerBackground: Color(0xFF002B36),
+      readerText: Color(0xFFD2CDBA),
+      readerInfo: Color(0xFF839496),
+      highlight: Color(0xFFB58900),
+    ),
+  ),
+
+  /// Gruvbox。
+  amber(
+    '琥珀',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFF2E5BC),
+      surface: Color(0xFFFBF1C7),
+      bar: Color(0xFFF7EBC1),
+      text: Color(0xFF3C3836),
+      textMuted: Color(0xFF665C54),
+      border: Color(0xFFD5C4A1),
+      primary: Color(0xFFAF3A03),
+      secondary: Color(0xFF79740E),
+      readerBackground: Color(0xFFFBF1C7),
+      readerText: Color(0xFF3C3836),
+      readerInfo: Color(0xFF786B61),
+      highlight: Color(0xFFFABD2F),
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF1D2021),
+      surface: Color(0xFF282828),
+      bar: Color(0xFF282828),
+      text: Color(0xFFEBDBB2),
+      textMuted: Color(0xFFA89984),
+      border: Color(0xFF3C3836),
+      primary: Color(0xFFFE953F),
+      secondary: Color(0xFFB8BB26),
+      readerBackground: Color(0xFF1D2021),
+      readerText: Color(0xFFD5C4A1),
+      readerInfo: Color(0xFFA89984),
+      highlight: Color(0xFFFABD2F),
+    ),
+  ),
+
+  /// Nord。
+  frost(
+    '霜夜',
+    light: StylePalette(
+      brightness: Brightness.light,
+      background: Color(0xFFE5E9F0),
+      surface: Color(0xFFECEFF4),
+      bar: Color(0xFFE9ECF2),
+      text: Color(0xFF2E3440),
+      textMuted: Color(0xFF4C566A),
+      border: Color(0xFFD8DEE9),
+      primary: Color(0xFF4A6990),
+      secondary: Color(0xFFBF616A),
+      readerBackground: Color(0xFFECEFF4),
+      readerText: Color(0xFF2E3440),
+      readerInfo: Color(0xFF4C566A),
+      highlight: Color(0xFFEBCB8B),
+    ),
+    dark: StylePalette(
+      brightness: Brightness.dark,
+      background: Color(0xFF2E3440),
+      surface: Color(0xFF3B4252),
+      bar: Color(0xFF3B4252),
+      text: Color(0xFFECEFF4),
+      textMuted: Color(0xFFD8DEE9),
+      border: Color(0xFF434C5E),
+      primary: Color(0xFF88C0D0),
+      secondary: Color(0xFFB48EAD),
+      readerBackground: Color(0xFF2E3440),
+      readerText: Color(0xFFD8DEE9),
+      readerInfo: Color(0xFFA3ABBA),
+      highlight: Color(0xFFEBCB8B),
+    ),
   );
 
   const AppStyle(this.label, {required this.light, required this.dark});
@@ -190,9 +367,98 @@ enum AppStyle {
   StylePalette of(Brightness brightness) =>
       brightness == Brightness.dark ? dark : light;
 
+  /// 套上強調色後的配色；[AppAccent.theme] 就是 [of]。
+  ///
+  /// 強調色的明度會往遠離底色的方向調，直到主色在這個風格裡仍符合對比度
+  /// 契約（見 `test/shared/theme/app_style_test.dart`）：淺色風格裡變深、
+  /// 深色風格裡變亮，色相不變。
+  StylePalette paletteFor(Brightness brightness, AppAccent accent) {
+    final palette = of(brightness);
+    final base = accent.colorFor(brightness);
+    if (base == null) return palette;
+    final isDark = brightness == Brightness.dark;
+    // 淺色模式的提示訊息是深底，動作字取深色配色的主色。
+    final lightToast = isDark
+        ? Color.alphaBlend(light.text.withValues(alpha: 0.94), light.background)
+        : null;
+    var primary = HSLColor.fromColor(base);
+    for (var step = 0; step < 100; step++) {
+      if (_primaryReadable(palette, primary.toColor(), lightToast)) break;
+      final lightness = primary.lightness + (isDark ? 0.01 : -0.01);
+      primary = primary.withLightness(lightness.clamp(0.0, 1.0).toDouble());
+    }
+    return palette.copyWith(primary: primary.toColor());
+  }
+
   static AppStyle fromStorage(String? value) => AppStyle.values.firstWhere(
     (style) => style.name == value,
     orElse: () => AppStyle.paper,
+  );
+}
+
+/// 主色在 [palette] 裡的對比度契約。底色的推導與 `GlassCapsule.selectedTintOf`、
+/// `AppChrome.derive` 的提示訊息相同；兩邊改動時由測試對實際主題核對。
+bool _primaryReadable(StylePalette palette, Color primary, Color? lightToast) {
+  final capsule = Color.alphaBlend(
+    Color.alphaBlend(
+      primary.withValues(alpha: 0.06),
+      palette.surface.withValues(alpha: 0.9),
+    ),
+    palette.background,
+  );
+  for (final background in [palette.background, palette.surface, capsule]) {
+    if (_contrast(primary, background) < 4.5) return false;
+  }
+  if (_contrast(palette.copyWith(primary: primary).onPrimary, primary) < 4.5) {
+    return false;
+  }
+  if (palette.brightness == Brightness.dark) {
+    final toast = Color.alphaBlend(
+      Color.alphaBlend(
+        palette.text.withValues(alpha: 0.1),
+        palette.surface,
+      ).withValues(alpha: 0.96),
+      palette.background,
+    );
+    final action = Color.lerp(primary, palette.text, 0.3)!;
+    if (_contrast(action, toast) < 4.5) return false;
+    if (lightToast != null && _contrast(primary, lightToast) < 4.5) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// 強調色：開關、選取、勾勾、強調按鈕與純文字動作用的主色。預設跟隨風格；
+/// 選了其他顏色時，每個風格與深淺都由 [AppStyle.paletteFor] 調到看得清楚。
+enum AppAccent {
+  theme('跟隨主題'),
+  cinnabar('朱紅', light: Color(0xFFA8322B), dark: Color(0xFFE8806F)),
+  rouge('胭脂', light: Color(0xFFB4446C), dark: Color(0xFFF08FB0)),
+  amber('琥珀', light: Color(0xFFB5530F), dark: Color(0xFFF59A4A)),
+  tea('茶金', light: Color(0xFF8F6A1E), dark: Color(0xFFD9B061)),
+  yellow('黃', light: Color(0xFF8A6D00), dark: Color(0xFFE8C547)),
+  bamboo('竹綠', light: Color(0xFF3F7A34), dark: Color(0xFF8CC47E)),
+  teal('青綠', light: Color(0xFF12796F), dark: Color(0xFF5CC6B8)),
+  sky('天藍', light: Color(0xFF1F78B4), dark: Color(0xFF7CC3F0)),
+  azurite('石青', light: Color(0xFF2F5F99), dark: Color(0xFF8AB4E8)),
+  lotus('藕荷', light: Color(0xFF7446B8), dark: Color(0xFFBFA0F0)),
+  gray('灰', light: Color(0xFF666666), dark: Color(0xFFA6A6A6)),
+  ink('墨', light: Color(0xFF222222), dark: Color(0xFFE6E6E6));
+
+  const AppAccent(this.label, {this.light, this.dark});
+
+  final String label;
+  final Color? light;
+  final Color? dark;
+
+  /// 調整前的原色；[theme] 沒有自己的顏色。
+  Color? colorFor(Brightness brightness) =>
+      brightness == Brightness.dark ? dark : light;
+
+  static AppAccent fromStorage(String? value) => AppAccent.values.firstWhere(
+    (accent) => accent.name == value,
+    orElse: () => AppAccent.theme,
   );
 }
 

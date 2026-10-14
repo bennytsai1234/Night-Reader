@@ -301,11 +301,13 @@ class ReaderApp extends StatelessWidget {
             themeSettings.style,
             Brightness.light,
             glassStrength: themeSettings.glassStrength,
+            accent: themeSettings.accent,
           ),
           darkTheme: buildAppTheme(
             themeSettings.style,
             Brightness.dark,
             glassStrength: themeSettings.glassStrength,
+            accent: themeSettings.accent,
           ),
           themeMode: settings.themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
