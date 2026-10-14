@@ -34,7 +34,9 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
 
     context = JSContext(_globalContext);
 
-    _sendMessageDartFunc = _sendMessage;
+    // 原生回呼是 static 的；依呼叫端的全域 context 找回所屬的實例，同一個
+    // isolate 裡同時有多個引擎時才不會送錯對象。
+    _byGlobalContext[_globalContext.address] = this;
 
     Pointer<Utf8> funcNameCString = 'sendMessage'.toNativeUtf8();
     var functionObject = jSObjectMakeFunctionWithCallback(
@@ -104,8 +106,40 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
 
   @override
   void dispose() {
+    _byGlobalContext.remove(_globalContext.address);
+    JavascriptRuntime.channelFunctionsRegistered.remove(getEngineInstanceId());
     jSGlobalContextRelease(_globalContext);
     jSContextGroupRelease(_contextGroup);
+  }
+
+  /// [evaluate] 的 rawResult 是原生的 `JSValueRef`（Promise 與函式呼叫要用），
+  /// 這裡轉成與 QuickJS 相同的 Dart 值：字串、數字、布林、null、List、Map。
+  /// 必須在下一次執行前取用，之後原生值可能已被回收。
+  @override
+  dynamic dartValueOf(JsEvalResult result) {
+    if (result.isError) return result.stringResult;
+    final Pointer value = result.rawResult;
+    if (jSValueIsUndefined(_globalContext, value) == 1 ||
+        jSValueIsNull(_globalContext, value) == 1) {
+      return null;
+    }
+    if (jSValueIsString(_globalContext, value) == 1) return _getJsValue(value);
+    if (jSValueIsBoolean(_globalContext, value) == 1) {
+      return jSValueToBoolean(_globalContext, value) == 1;
+    }
+    if (jSValueIsNumber(_globalContext, value) == 1) {
+      final number = jSValueToNumber(_globalContext, value, nullptr);
+      // QuickJS 對整數回傳 int。
+      return number.isFinite && number == number.truncateToDouble()
+          ? number.toInt()
+          : number;
+    }
+    // 物件與陣列經 JSON 轉成 Map／List；函式等無法序列化的退回文字。
+    try {
+      return jsonDecode(jsonStringify(result));
+    } catch (_) {
+      return result.stringResult;
+    }
   }
 
   @override
@@ -142,11 +176,10 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
       int argumentCount,
       Pointer<Pointer> arguments,
       Pointer<Pointer> exception) {
-    if (_sendMessageDartFunc != null) {
-      return _sendMessageDartFunc!(
-          ctx, function, thisObject, argumentCount, arguments, exception);
-    }
-    return nullptr;
+    final runtime = _byGlobalContext[jSContextGetGlobalContext(ctx).address];
+    if (runtime == null) return nullptr;
+    return runtime._sendMessage(
+        ctx, function, thisObject, argumentCount, arguments, exception);
   }
 
   String _getJsValue(Pointer jsValueRef) {
@@ -170,7 +203,7 @@ class JavascriptCoreRuntime extends JavascriptRuntime {
     return result;
   }
 
-  static jsObject.JSObjectCallAsFunctionCallbackDart? _sendMessageDartFunc;
+  static final Map<int, JavascriptCoreRuntime> _byGlobalContext = {};
 
   Pointer _sendMessage(
       Pointer ctx,

@@ -59,3 +59,12 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   Swift classes were not restored.
 - `analysis_options.yaml` again disables `library_prefixes` for the
   JavaScriptCore bindings, which keep the C API names.
+- `JavascriptRuntime.dartValueOf` returns an evaluation result as Dart values
+  (string, number, bool, null, List, Map). QuickJS already stores them in
+  `rawResult`; `JavascriptCoreRuntime` keeps the native `JSValueRef` there
+  (promise handling needs it) and converts on request, objects via JSON.
+- `JavascriptCoreRuntime` dispatches the native `sendMessage` callback to the
+  runtime that owns the calling global context. Upstream kept one static
+  callback that every new runtime overwrote, so with several runtimes in an
+  isolate a message went to the last one created, even after it was disposed.
+  `dispose()` now unregisters the runtime and its channels.

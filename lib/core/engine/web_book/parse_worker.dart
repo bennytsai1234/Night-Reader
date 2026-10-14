@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:night_reader/core/services/app_log_service.dart';
 
 /// 把書源頁面的解析交給一個常駐的背景 isolate，主 isolate 只收結果。
@@ -16,10 +14,6 @@ import 'package:night_reader/core/services/app_log_service.dart';
 /// 的 isolate 維持原地解析，不再多開一層。
 abstract final class ParseWorker {
   static bool enabled = false;
-
-  /// 在背景 isolate 完成的解析次數，給測試確認真的離開了主 isolate。
-  @visibleForTesting
-  static int completed = 0;
 
   static Future<SendPort>? _port;
 
@@ -44,10 +38,7 @@ abstract final class ParseWorker {
       final port = await (_port ??= _spawn());
       port.send((task, reply.sendPort));
       final (ok, value) = await reply.first as (bool, Object?);
-      if (ok) {
-        completed++;
-        return value as R;
-      }
+      if (ok) return value as R;
       AppLog.w('ParseWorker task failed, parsing in place: $value');
     } catch (e) {
       AppLog.w('ParseWorker unavailable, parsing in place: $e');

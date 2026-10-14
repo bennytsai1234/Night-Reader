@@ -64,6 +64,10 @@ class FlutterJsPlatformEmpty extends JavascriptRuntime {
 abstract class JavascriptRuntime {
   static bool debugEnabled = false;
 
+  /// [evaluate] 結果的 Dart 值（字串、數字、布林、null、List、Map）。QuickJS
+  /// 的 rawResult 本身就是；JavaScriptCore 的是原生指標，由它覆寫轉換。
+  dynamic dartValueOf(JsEvalResult result) => result.rawResult;
+
   @protected
   JavascriptRuntime init() {
     initChannelFunctions();

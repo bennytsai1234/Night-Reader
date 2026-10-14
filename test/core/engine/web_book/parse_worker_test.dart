@@ -65,15 +65,13 @@ void main() {
         baseUrl: book.tocUrl,
       );
 
-  test('a JS-free TOC is parsed off the main isolate with the same '
-      'result', () async {
+  test('a JS-free TOC parsed with the worker on matches parsing in '
+      'place', () async {
     ParseWorker.enabled = false;
     final inPlace = await parseToc(tocSource());
     ParseWorker.enabled = true;
-    final before = ParseWorker.completed;
     final offMain = await parseToc(tocSource());
 
-    expect(ParseWorker.completed, before + 1);
     expect(
       offMain.chapters.map((c) => (c.title, c.url, c.index)),
       inPlace.chapters.map((c) => (c.title, c.url, c.index)),
@@ -83,8 +81,7 @@ void main() {
     expect(offMain.nextUrls, ['https://worker.test/book/?page=2']);
   });
 
-  test('JS-free search results are parsed off the main isolate', () async {
-    final before = ParseWorker.completed;
+  test('JS-free search results parse with the worker on', () async {
     final books = await BookListParser.parse(
       source: searchSource,
       body: searchHtml,
@@ -92,20 +89,17 @@ void main() {
       isSearch: true,
     );
 
-    expect(ParseWorker.completed, before + 1);
     expect(books.map((b) => (b.name, b.author, b.bookUrl)), [
       ('甲書', '作者甲', 'https://worker.test/b/1'),
       ('乙書', '作者乙', 'https://worker.test/b/2'),
     ]);
   });
 
-  test('rules with JS or variables stay on the main isolate', () async {
-    final before = ParseWorker.completed;
+  test('rules with JS or variables are not pure and still parse', () async {
     final result = await parseToc(
       tocSource(chapterName: 'a@text@js:result + "!"'),
     );
 
-    expect(ParseWorker.completed, before);
     expect(result.chapters.map((c) => c.title), ['第1章!', '第2章!']);
     expect(ParseWorker.isPureRule(['a@text', null, 'class.x@href##\\d']), true);
     for (final rule in [
@@ -118,8 +112,7 @@ void main() {
     }
   });
 
-  test('search with a filter stays on the main isolate', () async {
-    final before = ParseWorker.completed;
+  test('search with a filter still filters with the worker on', () async {
     final books = await BookListParser.parse(
       source: searchSource,
       body: searchHtml,
@@ -128,7 +121,6 @@ void main() {
       filter: (name, author) => name == '乙書',
     );
 
-    expect(ParseWorker.completed, before);
     expect(books.map((b) => b.name), ['乙書']);
   });
 

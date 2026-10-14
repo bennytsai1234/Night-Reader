@@ -107,7 +107,7 @@ class JsEngine {
     _injectContext(context);
     _ensureSourceJsLibLoadedSync();
     final result = _evaluateRuleScript(normalizedJs);
-    return _decodeContextValue(result.rawResult);
+    return _decodeContextValue(_runtime!.dartValueOf(result));
   }
 
   /// Execute rule JS that may invoke async `java.*` / `cache.*` / `source.*`

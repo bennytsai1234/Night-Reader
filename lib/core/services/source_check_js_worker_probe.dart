@@ -43,7 +43,7 @@ Map<String, Object?> _probeJsRuntimeInWorker(String script) {
     return <String, Object?>{
       'supported': true,
       'message': 'JS runtime initialized in worker isolate',
-      'value': result.rawResult,
+      'value': runtime.dartValueOf(result),
     };
   } catch (error) {
     return <String, Object?>{'supported': false, 'message': error.toString()};
