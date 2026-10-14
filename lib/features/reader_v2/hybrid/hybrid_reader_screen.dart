@@ -1,15 +1,10 @@
 import 'dart:async';
-import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
-import 'package:night_reader/core/storage/reader_layout_cache.dart';
-import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -22,29 +17,24 @@ import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_cont
 
 import 'anchor/anchor_manager.dart';
 import 'core/hybrid_contracts.dart';
-import 'core/chapter_layout_plan.dart';
 import 'core/hybrid_types.dart';
 import 'geometry/text_geometry.dart';
-import 'measure/chapter_plan_disk_cache.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
-import 'measure/metrics_disk_cache.dart';
 import 'overlay/loading_veil.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/text_selection_overlay.dart';
 import 'overlay/tts_highlight_overlay.dart';
-import 'paragraph/paragraph_cache.dart';
+import 'pipeline/layout_disk_cache.dart';
+import 'pipeline/layout_pipeline.dart';
 import 'progress/hybrid_progress.dart';
 import 'pump/budget_governor.dart';
-import 'pump/layout_pump.dart';
 import 'text/hybrid_chapter_repository.dart';
 import 'text/text_preprocessor.dart';
 import 'text/word_segmenter.dart';
 import 'view/admission_controller.dart';
 import 'view/hybrid_scroll_controller.dart';
 import 'view/hybrid_scroll_view.dart';
-
-enum _MaterializationWait { progressed, frontierUnavailable, cancelled }
 
 class HybridReaderScreen extends StatefulWidget {
   const HybridReaderScreen({
@@ -119,24 +109,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   final HybridScrollPhysics _physics = const HybridScrollPhysics();
   late HybridChapterRepository _chapterRepo;
   late final AdmissionController _admission;
-  late ParagraphCache _paragraphCache;
-  late LayoutPump _pump;
-  late LayoutEpoch _epoch;
-  late StyleFingerprint _fingerprint;
-  late MeasurementNamespace _namespace;
-  late HybridTextGeometry _geometry;
-  final Map<int, ChapterLayoutPlan> _layoutPlans = <int, ChapterLayoutPlan>{};
-  final Map<int, ChapterBlocks> _blocks = {};
-  final Map<int, _ChapterMaterialization> _blocksInFlight = {};
-  final Map<BlockKey, ParagraphLease> _viewportLeases = {};
-  final Set<({MeasurementNamespace namespace, int chapter, String contentHash})>
-  _warmedChapters = {};
+  HybridLayoutDiskCache? _diskCache;
+
+  /// 目前排版世代的排版管線；排版或內容換代時整份換新（見
+  /// [_handleEpochRebuild]）。
+  late HybridLayoutPipeline _pipeline;
   StreamSubscription<ChapterEvent>? _chapterEventsSub;
-  StreamSubscription<BlockReady>? _pumpEventsSub;
   HybridScrollController? _scrollController;
   _PageTurn? _pageTurn;
-  MetricsDiskCache? _metricsDiskCache;
-  ChapterPlanDiskCache? _planDiskCache;
   Size _viewportSize = Size.zero;
   double? _pendingScrollOffset;
   ReaderV2OperationToken? _demandOwner;
@@ -185,8 +165,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
     _chapterEventsSub = _chapterRepo.events.listen(_onChapterEvent);
     _admission = AdmissionController(documentIndex: _documentIndex);
-    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
-    _refreshEpochBinding();
+    _diskCache = _diskCacheFor(widget);
+    _pipeline = _createPipeline();
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
     _lastContentGeneration = widget.runtime.state.contentGeneration;
     _lastReportedLocation = widget.runtime.state.visibleLocation;
@@ -236,7 +216,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _lastContentGeneration = widget.runtime.state.contentGeneration;
       _lastReportedLocation = widget.runtime.state.visibleLocation;
       _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
-      _handleEpochRebuild(oldWidget.bookUrl);
+      // 舊世代的段落尺寸由舊管線存回它那本書的快取。
+      _diskCache = _diskCacheFor(widget);
+      _handleEpochRebuild();
       _registerRuntime();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _restoreAttachedRuntime();
@@ -258,18 +240,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _detachController(widget.viewportController);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     _chapterEventsSub?.cancel();
-    _pumpEventsSub?.cancel();
-    unawaited(
-      _writeDiskMetrics(
-        _measurementStore.snapshot(_namespace),
-        bookUrl: widget.bookUrl,
-      ),
-    );
+    _pipeline.dispose();
     unawaited(_chapterRepo.dispose());
-    _releaseViewportLeases();
     _admission.dispose();
-    _pump.dispose();
-    _paragraphCache.dispose();
     _scrollController?.dispose();
     _selection.dispose();
     _veil.dispose();
@@ -289,69 +262,42 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  void _refreshEpochBinding() {
+  static HybridLayoutDiskCache? _diskCacheFor(HybridReaderScreen widget) {
+    final bookUrl = widget.bookUrl;
+    if (!widget.enableDiskCache || bookUrl == null) return null;
+    return HybridLayoutDiskCache(bookUrl: bookUrl);
+  }
+
+  HybridLayoutPipeline _createPipeline() {
     final state = widget.runtime.state;
-    _epoch = LayoutEpoch(
-      state.layoutGeneration,
-      contentGeneration: state.contentGeneration,
-    );
-    _fingerprint = _fingerprintFor(widget.runtime.state.layoutSpec);
-    _namespace = MeasurementNamespace(epoch: _epoch, fingerprint: _fingerprint);
-    _pump = LayoutPump(
-      paragraphCache: _paragraphCache,
-      measurementStore: _measurementStore,
-      namespace: _namespace,
-      governor: _governor,
-    );
-    _geometry = HybridTextGeometry(
-      paragraphCache: _paragraphCache,
-      epoch: _epoch,
-      documentIndex: _documentIndex,
-      blocksOf: (chapter) => _blocks[chapter],
+    return HybridLayoutPipeline(
+      epoch: LayoutEpoch(
+        state.layoutGeneration,
+        contentGeneration: state.contentGeneration,
+      ),
       layoutSpec: () => widget.runtime.state.layoutSpec,
-    );
-    _admission.reset(epoch: _epoch, chapterCount: widget.runtime.chapterCount);
-    _admission.attach(_pump.completed);
-    _pumpEventsSub = _pump.completed.listen((_) {
-      // Admission has consumed this result before demand is advanced. Newly
-      // measured frontier blocks can therefore supply the same native frame.
-      _reconcileVisibleWindow();
-    });
-  }
-
-  StyleFingerprint _fingerprintFor(ReaderV2LayoutSpec spec) {
-    return StyleFingerprint.fromLayoutSpec(
-      spec,
-      platformFontSignature:
-          '${defaultTargetPlatform.name}:${io.Platform.operatingSystemVersion}',
+      measurementStore: _measurementStore,
+      documentIndex: _documentIndex,
+      admission: _admission,
+      governor: _governor,
+      chapters: _chapterRepo,
+      preprocessor: widget.preprocessor,
+      diskCache: _diskCache,
+      paragraphCacheCapacity: widget.paragraphCacheCapacity,
+      chapterCount: () => widget.runtime.chapterCount,
+      textColor: () => widget.textColor,
+      onProgress: _reconcileVisibleWindow,
     );
   }
 
-  void _handleEpochRebuild(String? previousBookUrl) {
+  void _handleEpochRebuild() {
     _runtimeLocationRevision += 1;
     _restoreRevision += 1;
     _setRestoreCompleted(false);
-    final oldNamespace = _namespace;
-    unawaited(
-      _writeDiskMetrics(
-        _measurementStore.snapshot(oldNamespace),
-        fingerprint: oldNamespace.fingerprint,
-        bookUrl: previousBookUrl,
-      ),
-    );
-    _releaseViewportLeases();
-    _pumpEventsSub?.cancel();
-    _pump.dispose();
-    _paragraphCache.dispose();
-    _measurementStore.invalidateNamespace(oldNamespace);
-    _blocks.clear();
-    _layoutPlans.clear();
-    _blocksInFlight.clear();
+    _pipeline.dispose();
     _chapterRepo.invalidateLoaded(emitEvents: false);
-    _warmedChapters.clear();
     _documentIndex.reset(centerKey: _documentIndex.centerKey);
-    _paragraphCache = ParagraphCache(capacity: widget.paragraphCacheCapacity);
-    _refreshEpochBinding();
+    _pipeline = _createPipeline();
   }
 
   Future<bool> _restoreCore(
@@ -362,24 +308,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
     // 開書、跳章與重新定位都是使用者的動作：之前取不到的章節都再試一次。
     _chapterRepo.forgetFailures();
-    final binding = _pump;
+    final pipeline = _pipeline;
     final chapter = location.chapterIndex
         .clamp(0, widget.runtime.chapterCount - 1)
         .toInt();
     _windowCenter = chapter;
-    _setDemandRange(
-      math.max(0, chapter - _chapterRepo.windowRadius),
-      math.min(
-        widget.runtime.chapterCount - 1,
-        chapter + _chapterRepo.windowRadius,
-      ),
-    );
-    binding.clearPendingLayouts();
-    binding.onScrollStateChanged(
+    pipeline.demandAround(chapter);
+    pipeline.clearPendingLayouts();
+    pipeline.onScrollStateChanged(
       _initialRestoreCompleted ? PumpState.rebuilding : PumpState.loading,
     );
     try {
-      final blocks = await _ensureChapterBlocks(
+      final blocks = await pipeline.ensureChapter(
         chapter,
         priority: LayoutTaskPriority.anchor,
       );
@@ -398,22 +338,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       final anchor = HybridAnchor.fromLocation(normalized, blocks);
       _setRestoreCompleted(false);
-      binding.onScrollStateChanged(PumpState.loading);
+      pipeline.onScrollStateChanged(PumpState.loading);
       _scheduleRebuild();
-      _releaseViewportLeases();
-      _documentIndex.reset(centerKey: anchor.blockKey);
-      _admission.reset(
-        epoch: _epoch,
-        chapterCount: widget.runtime.chapterCount,
-      );
-      // Only a document reset relinquishes the old world. Raw-cache eviction
-      // never removes coordinates underneath a mounted viewport.
-      for (final oldChapter in _layoutPlans.keys.toList(growable: false)) {
-        if (!_chapterRepo.isResident(oldChapter)) _releaseChapter(oldChapter);
-      }
-      for (final shape in _blocks.values) {
-        _admission.registerChapter(shape);
-      }
+      pipeline.resetDocument(anchor.blockKey);
       restoreLoop:
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
@@ -426,10 +353,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           target: target ?? 0,
           operationOwnsReadyWorld: operationOwnsReadyWorld,
         );
-        _requestWindow(readyTop, readyBottom, anchorKey: anchor.blockKey);
+        pipeline.requestWindow(
+          readyTop,
+          readyBottom,
+          anchorKey: anchor.blockKey,
+        );
         final positionedTarget = _offsetForAnchor(anchor, blocks);
         if (positionedTarget != null &&
-            _windowReady(
+            pipeline.windowReady(
               _readyWorldTop(
                 target: positionedTarget,
                 operationOwnsReadyWorld: operationOwnsReadyWorld,
@@ -444,13 +375,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         // Cached exact metrics may advance admission synchronously, without
         // creating a layout task. Re-evaluate that progress before waiting.
         if (_documentIndex.revisionNumber != revision) continue;
-        final wait = await _waitForMaterialization(isCurrent);
+        final wait = await pipeline.waitForProgress(isCurrent);
         switch (wait) {
-          case _MaterializationWait.progressed:
+          case MaterializationWait.progressed:
             continue;
-          case _MaterializationWait.frontierUnavailable:
+          case MaterializationWait.frontierUnavailable:
             break restoreLoop;
-          case _MaterializationWait.cancelled:
+          case MaterializationWait.cancelled:
             return false;
         }
       }
@@ -465,7 +396,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _pendingScrollOffset = target;
       _lastReportedLocation = normalized;
       _setRestoreCompleted(true);
-      binding.onScrollStateChanged(PumpState.rebuilding);
+      pipeline.onScrollStateChanged(PumpState.rebuilding);
       _scheduleRebuild();
       // Return only after the native viewport exists and has applied the
       // position. This is a Flutter frame transaction, not a prefetch barrier.
@@ -486,8 +417,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _publishProgress();
       return true;
     } finally {
-      if (mounted && identical(binding, _pump)) {
-        binding.onScrollStateChanged(
+      if (mounted && identical(pipeline, _pipeline)) {
+        pipeline.onScrollStateChanged(
           _dragging ? PumpState.dragging : PumpState.idle,
         );
       }
@@ -519,322 +450,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return WidgetsBinding.instance.endOfFrame;
   }
 
-  Future<_MaterializationWait> _waitForMaterialization(
-    bool Function() isCurrent,
-  ) async {
-    if (!isCurrent()) return _MaterializationWait.cancelled;
-    if (_pump.queueDepth > 0) {
-      await _nextFrame();
-      return isCurrent()
-          ? _MaterializationWait.progressed
-          : _MaterializationWait.cancelled;
-    }
-
-    final pending = <int, Future<({int chapter, bool unavailable})>>{
-      for (final entry in _blocksInFlight.entries)
-        entry.key: _observeSpeculativeMaterialization(
-          entry.key,
-          entry.value.future,
-        ),
-    };
-    if (pending.isEmpty) {
-      throw StateError(
-        'Hybrid restore stalled with no layout work or chapter acquisition in flight.',
-      );
-    }
-
-    while (pending.isNotEmpty) {
-      final outcome = await Future.any(pending.values);
-      unawaited(pending.remove(outcome.chapter));
-      if (!isCurrent()) return _MaterializationWait.cancelled;
-      if (!outcome.unavailable) return _MaterializationWait.progressed;
-    }
-    return _MaterializationWait.frontierUnavailable;
-  }
-
-  Future<({int chapter, bool unavailable})> _observeSpeculativeMaterialization(
-    int chapter,
-    Future<ChapterBlocks?> load,
-  ) async {
-    try {
-      await load;
-      return (chapter: chapter, unavailable: false);
-    } on ReaderV2ContentUnavailableException {
-      // The operation target was acquired before this wait. A neighboring
-      // speculative chapter being unavailable is a bounded external frontier,
-      // not cancellation and not a failure of the target or Hybrid core.
-      return (chapter: chapter, unavailable: true);
-    }
-  }
-
-  bool _windowReady(double top, double bottom) {
-    if (_documentIndex.admittedCount == 0) return false;
-    if (-_documentIndex.beforeExtent > top + 0.001 && !_isBookStartAdmitted()) {
-      return false;
-    }
-    if (_documentIndex.afterExtent < bottom - 0.001 && !_isBookEndAdmitted()) {
-      return false;
-    }
-    return _documentIndex
-        .keysInRange(top, bottom)
-        .every((key) => _paragraphCache.contains(key, _epoch));
-  }
-
-  Future<ChapterBlocks?> _ensureChapterBlocks(
-    int chapter, {
-    LayoutTaskPriority priority = LayoutTaskPriority.prefetch,
-  }) {
-    final cached = _blocks[chapter];
-    if (cached != null) return Future.value(cached);
-
-    final pending = _blocksInFlight[chapter];
-    if (pending != null) {
-      pending.promote(priority);
-      _pump.promoteChapterVisualLines(chapter, pending.priority);
-      return pending.future;
-    }
-
-    final binding = _pump;
-    final repository = _chapterRepo;
-    final preprocessor = widget.preprocessor;
-    final maxBlockChars = binding.maxCharsForBudget(
-      _governor.ballisticSliceBudget,
-    );
-    final materialization = _ChapterMaterialization(priority);
-    bool current() =>
-        mounted &&
-        identical(binding, _pump) &&
-        identical(_blocksInFlight[chapter], materialization);
-    late final Future<ChapterBlocks?> task;
-    task = () async {
-      final text = await repository.load(chapter);
-      if (!current()) return null;
-      final plan = _layoutPlans[chapter];
-      if (plan != null) {
-        final restored = plan.materialize(text);
-        _blocks[chapter] = restored;
-        _admission.registerChapter(restored);
-        return restored;
-      }
-      final spec = widget.runtime.state.layoutSpec;
-      final fingerprint = _fingerprintFor(spec);
-      final stored = await _readDiskPlan(text, fingerprint);
-      if (!current()) return null;
-      if (stored != null) {
-        _layoutPlans[chapter] = ChapterLayoutPlan(stored);
-        _blocks[chapter] = stored;
-        _admission.registerChapter(stored);
-        unawaited(_warmDiskMetricsForChapter(stored));
-        return stored;
-      }
-      final rough = await preprocessor.process(
-        text,
-        maxBlockChars: maxBlockChars,
-      );
-      if (!current()) return null;
-      final blocks = await binding.planChapterVisualLines(
-        rough,
-        maxBlockChars: maxBlockChars,
-        bodyStyle: HybridBlockTextStyle.fromLayoutStyle(spec.style),
-        titleStyle: HybridBlockTextStyle.fromLayoutStyle(
-          spec.style,
-          isTitle: true,
-        ),
-        contentWidth: spec.textLayoutFrame.width,
-        cellWidth: spec.cellWidth,
-        textIndent: spec.style.textIndent.clamp(0, 8).toInt(),
-        priority: materialization.priority,
-      );
-      if (blocks == null || !current()) return null;
-      _layoutPlans[chapter] = ChapterLayoutPlan(blocks);
-      _blocks[chapter] = blocks;
-      _admission.registerChapter(blocks);
-      // Disk reads may improve later reuse; neither first paint nor command
-      // completion waits for this optional cache.
-      unawaited(_warmDiskMetricsForChapter(blocks));
-      unawaited(_writeDiskPlan(blocks, fingerprint));
-      return blocks;
-    }();
-    materialization.attach(task);
-    _blocksInFlight[chapter] = materialization;
-    void cleanUp() {
-      if (identical(_blocksInFlight[chapter], materialization)) {
-        _blocksInFlight.remove(chapter);
-      }
-    }
-
-    // Cleanup observes completion only. It never changes the original task's
-    // success/error semantics seen by the operation or prefetch owner.
-    unawaited(task.then<void>((_) => cleanUp(), onError: (_, _) => cleanUp()));
-    return task;
-  }
-
-  void _setDemandRange(int first, int last) {
-    _pump.setDemandRange(first, last);
-    if (_chapterRepo.residentFirst == first &&
-        _chapterRepo.residentLast == last) {
-      return;
-    }
-    _chapterRepo.setResidentRange(first, last);
-  }
-
-  void _requestChapter(
-    int chapter, {
-    LayoutTaskPriority priority = LayoutTaskPriority.prefetch,
-  }) {
-    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
-    final first = math.min(_chapterRepo.residentFirst ?? chapter, chapter);
-    final last = math.max(_chapterRepo.residentLast ?? chapter, chapter);
-    _setDemandRange(first, last);
-    final binding = _pump;
-    unawaited(_materializeChapter(chapter, binding, priority));
-  }
-
-  Future<void> _materializeChapter(
-    int chapter,
-    LayoutPump binding,
-    LayoutTaskPriority priority,
-  ) async {
-    try {
-      final blocks = await _ensureChapterBlocks(chapter, priority: priority);
-      if (blocks != null && mounted && identical(binding, _pump)) {
-        _reconcileVisibleWindow();
-      }
-    } on ReaderV2ContentUnavailableException {
-      // Speculative neighbor acquisition may be unavailable. This is neither
-      // operation cancellation nor a Hybrid deterministic-core failure.
-    }
-  }
-
   void _onChapterEvent(ChapterEvent event) {
     if (!mounted) return;
-    switch (event.kind) {
-      case ChapterEventKind.loaded:
-        if (_chapterRepo.isResident(event.chapterId)) {
-          _requestChapter(event.chapterId);
-        }
-      case ChapterEventKind.evicted:
-        // The active document keeps only text-free boundaries and metrics.
-        // Raw text can be released without reinterpreting its geometry.
-        if (!_chapterRepo.isResident(event.chapterId)) {
-          _blocks.remove(event.chapterId);
-          _blocksInFlight.remove(event.chapterId);
-        }
-        break;
-      case ChapterEventKind.invalidated:
-        _releaseChapter(event.chapterId);
-        _documentIndex.invalidateChapter(event.chapterId);
-        _scheduleRebuild();
-    }
-  }
-
-  void _releaseChapter(int chapter) {
-    _blocks.remove(chapter);
-    _layoutPlans.remove(chapter);
-    _blocksInFlight.remove(chapter);
-    _warmedChapters.removeWhere((entry) => entry.chapter == chapter);
-    _pump.invalidateChapter(chapter);
-    _measurementStore.invalidateChapter(chapter);
-    _paragraphCache.invalidateChapter(chapter);
-    _admission.invalidateChapter(chapter);
-  }
-
-  void _releaseViewportLeases() {
-    for (final lease in _viewportLeases.values) {
-      lease.release();
-    }
-    _viewportLeases.clear();
-  }
-
-  void _requestWindow(double top, double bottom, {BlockKey? anchorKey}) {
-    final needed = <BlockKey>{};
-    final groups = <BlockKey>{};
-    void request(BlockKey key, {bool anchor = false}) {
-      final blocks = _blocks[key.chapterIndex];
-      if (blocks == null) {
-        _requestChapter(
-          key.chapterIndex,
-          priority: anchor
-              ? LayoutTaskPriority.anchor
-              : LayoutTaskPriority.visible,
-        );
-        return;
-      }
-      final group = blocks.groupContaining(key);
-      if (group.isEmpty || !groups.add(group.first.key)) return;
-      for (final block in group) {
-        needed.add(block.key);
-        _viewportLeases.putIfAbsent(
-          block.key,
-          () => _paragraphCache.retain(block.key, _epoch),
-        );
-      }
-      final ready = group.every(
-        (block) =>
-            _measurementStore.get(_namespace, block.key) != null &&
-            _paragraphCache.containsFresh(block.key, _epoch, widget.textColor),
-      );
-      if (!ready) {
-        _submitGroupTask(blocks, group, anchor: anchor);
-      } else {
-        for (final block in group) {
-          if (_documentIndex.metricsFor(block.key) == null) {
-            _admission.offer(
-              BlockReady(
-                key: block.key,
-                epoch: _epoch,
-                metrics: _measurementStore.get(_namespace, block.key)!,
-              ),
-            );
-          }
-        }
-      }
-    }
-
-    if (anchorKey != null) request(anchorKey, anchor: true);
-    for (final key
-        in _documentIndex.keysInRange(top, bottom).toList(growable: false)) {
-      request(key);
-    }
-    if (_documentIndex.metricsFor(_documentIndex.centerKey) != null) {
-      if (_documentIndex.afterExtent < bottom && !_isBookEndAdmitted()) {
-        final key = _frontierKey(forward: true);
-        if (key != null) request(key);
-      }
-      if (-_documentIndex.beforeExtent > top && !_isBookStartAdmitted()) {
-        final key = _frontierKey(forward: false);
-        if (key != null) request(key);
-      }
-    }
-    // New consumers are acquired before old ones release their ownership.
-    for (final key in _viewportLeases.keys.toList(growable: false)) {
-      if (!needed.contains(key)) _viewportLeases.remove(key)!.release();
-    }
-  }
-
-  BlockKey? _frontierKey({required bool forward}) {
-    final edge =
-        (forward
-            ? _documentIndex.forwardEdgeKey
-            : _documentIndex.backwardEdgeKey) ??
-        _documentIndex.centerKey;
-    final blocks = _blocks[edge.chapterIndex];
-    if (blocks == null) {
-      _requestChapter(edge.chapterIndex, priority: LayoutTaskPriority.visible);
-      return null;
-    }
-    final index = edge.blockIndex + (forward ? 1 : -1);
-    if (index >= 0 && index < blocks.blocks.length) {
-      return blocks.blocks[index].key;
-    }
-    final chapter = edge.chapterIndex + (forward ? 1 : -1);
-    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return null;
-    final neighbor = _blocks[chapter];
-    if (neighbor == null) {
-      _requestChapter(chapter, priority: LayoutTaskPriority.visible);
-      return null;
-    }
-    return (forward ? neighbor.blocks.first : neighbor.blocks.last).key;
+    if (_pipeline.handleChapterEvent(event)) _scheduleRebuild();
   }
 
   void _reconcileVisibleWindow() {
@@ -846,40 +464,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (offset == null || _viewportSize.height <= 0) return;
     final top = offset - _admission.backwardGuaranteedWindow;
     final bottom = offset + _viewportSize.height + _admission.guaranteedWindow;
-    final keys = _documentIndex
-        .keysInRange(top, bottom)
-        .toList(growable: false);
-    var first = math.max(0, _windowCenter - _chapterRepo.windowRadius);
-    var last = math.min(
-      widget.runtime.chapterCount - 1,
-      _windowCenter + _chapterRepo.windowRadius,
-    );
-    if (keys.isNotEmpty) {
-      first = math.min(first, keys.first.chapterIndex);
-      last = math.max(last, keys.last.chapterIndex);
-    }
-    // Keep an in-progress frontier load until it supplies this demand. The
-    // outermost chapter may not yet have any admitted geometry.
-    if (_documentIndex.afterExtent < bottom && !_isBookEndAdmitted()) {
-      last = math.max(
-        last,
-        math.min(
-          widget.runtime.chapterCount - 1,
-          (_documentIndex.forwardEdgeKey?.chapterIndex ?? _windowCenter) + 1,
-        ),
-      );
-    }
-    if (-_documentIndex.beforeExtent > top && !_isBookStartAdmitted()) {
-      first = math.min(
-        first,
-        math.max(
-          0,
-          (_documentIndex.backwardEdgeKey?.chapterIndex ?? _windowCenter) - 1,
-        ),
-      );
-    }
-    _setDemandRange(first, last);
-    _requestWindow(top, bottom);
+    _pipeline.reconcile(top: top, bottom: bottom, windowCenter: _windowCenter);
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
@@ -901,10 +486,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         _clearSelection();
         _runtimeLocationRevision += 1;
         widget.runtime.cancelJumpForUserScroll();
-        _pump.onScrollStateChanged(PumpState.dragging);
+        _pipeline.onScrollStateChanged(PumpState.dragging);
       } else if (_dragging && notification.dragDetails == null) {
         _dragging = false;
-        _pump.onScrollStateChanged(PumpState.ballistic);
+        _pipeline.onScrollStateChanged(PumpState.ballistic);
       }
       _scheduleMotionCapture();
     } else if (notification is OverscrollNotification &&
@@ -916,7 +501,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       final wasUser = _sawUserScroll;
       _dragging = false;
       _sawUserScroll = false;
-      _pump.onScrollStateChanged(PumpState.idle);
+      _pipeline.onScrollStateChanged(PumpState.idle);
       if (wasUser) {
         _retryUnavailableFrontierAtExtent();
         unawaited(_handleScrollSettled());
@@ -945,25 +530,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// 告訴使用者，並重試一次那一章。只在使用者捲到或翻到這個邊緣時呼叫，
   /// 不會在背景反覆請求。
   void _retryUnavailableFrontier({required bool forward}) {
-    final edge = forward
-        ? _documentIndex.forwardEdgeKey
-        : _documentIndex.backwardEdgeKey;
-    if (edge == null) return;
-    final blocks = _blocks[edge.chapterIndex];
-    if (blocks == null || blocks.blocks.isEmpty) return;
-    final atChapterEdge = forward
-        ? edge == blocks.blocks.last.key
-        : edge.blockIndex == 0;
-    if (!atChapterEdge) return;
-    final chapter = edge.chapterIndex + (forward ? 1 : -1);
-    if (chapter < 0 || chapter >= widget.runtime.chapterCount) return;
-    final failure = _chapterRepo.failureOf(chapter);
-    if (failure == null) return;
-    widget.runtime.emitUserNotice(failure.message);
-    _chapterRepo.forgetFailure(chapter);
-    // 還在進行中的那次取得讀的是記下來的失敗，一定會失敗；不要讓重試併進去。
-    _blocksInFlight.remove(chapter);
-    _requestChapter(chapter, priority: LayoutTaskPriority.visible);
+    final unavailable = _pipeline.unavailableFrontier(forward: forward);
+    if (unavailable == null) return;
+    widget.runtime.emitUserNotice(unavailable.failure.message);
+    _pipeline.retryChapter(unavailable.chapter);
   }
 
   void _scheduleMotionCapture() {
@@ -1013,86 +583,25 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final target = pixels + (forward ? distance : -distance);
     final top = math.min(pixels, target);
     final bottom = math.max(pixels, target) + _viewportSize.height;
+    final pipeline = _pipeline;
     while (isCurrent()) {
-      _requestWindow(top, bottom);
-      if (_windowReady(top, bottom)) {
+      pipeline.requestWindow(top, bottom);
+      if (pipeline.windowReady(top, bottom)) {
         if (_documentIndex.revisionNumber != geometryRevision) {
           await _nextFrame();
         }
         return isCurrent();
       }
-      final wait = await _waitForMaterialization(isCurrent);
+      final wait = await pipeline.waitForProgress(isCurrent);
       switch (wait) {
-        case _MaterializationWait.progressed:
+        case MaterializationWait.progressed:
           continue;
-        case _MaterializationWait.frontierUnavailable:
-        case _MaterializationWait.cancelled:
+        case MaterializationWait.frontierUnavailable:
+        case MaterializationWait.cancelled:
           return false;
       }
     }
     return false;
-  }
-
-  Future<List<ParagraphLease>> _ensureRangeLaidOut(
-    ChapterBlocks blocks,
-    int start,
-    int end,
-    bool Function() isCurrent,
-  ) async {
-    final range = HybridTextRange(math.max(0, start), math.max(0, end));
-    final targets = blocks.blocks
-        .where(
-          (block) =>
-              block.charRange.intersects(range) ||
-              (range.isEmpty && block.charRange.containsOffset(range.start)),
-        )
-        .toList(growable: false);
-    // This command owns these drawables until its geometry query and native
-    // movement finish. Viewport prefetch may independently release its leases.
-    final leases = <ParagraphLease>[];
-    final groups = <BlockKey>{};
-    try {
-      for (final block in targets) {
-        leases.add(_paragraphCache.retain(block.key, _epoch));
-        if (!_paragraphCache.containsFresh(
-          block.key,
-          _epoch,
-          widget.textColor,
-        )) {
-          final group = blocks.groupContaining(block.key);
-          if (groups.add(group.first.key)) {
-            _submitGroupTask(blocks, group, anchor: true);
-          }
-        }
-      }
-      while (isCurrent() &&
-          !targets.every(
-            (block) => _paragraphCache.containsFresh(
-              block.key,
-              _epoch,
-              widget.textColor,
-            ),
-          )) {
-        final wait = await _waitForMaterialization(isCurrent);
-        switch (wait) {
-          case _MaterializationWait.progressed:
-            continue;
-          case _MaterializationWait.cancelled:
-            break;
-          case _MaterializationWait.frontierUnavailable:
-            throw StateError(
-              'Hybrid target range is not materialized and only unavailable '
-              'speculative frontier work remains.',
-            );
-        }
-      }
-      return leases;
-    } catch (_) {
-      for (final lease in leases) {
-        lease.release();
-      }
-      rethrow;
-    }
   }
 
   void _handleFrameTimings(List<ui.FrameTiming> timings) {
@@ -1117,7 +626,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (layoutChanged || contentChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
       _lastContentGeneration = state.contentGeneration;
-      _handleEpochRebuild(widget.bookUrl);
+      _handleEpochRebuild();
       if (contentChanged && operation == null && state.hasStableWorld) {
         _restorePublishedContentGeneration(
           state.visibleLocation,
@@ -1133,14 +642,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             .clamp(0, widget.runtime.chapterCount - 1)
             .toInt();
         _windowCenter = chapter;
-        _pump.clearPendingLayouts();
-        _setDemandRange(
-          math.max(0, chapter - _chapterRepo.windowRadius),
-          math.min(
-            widget.runtime.chapterCount - 1,
-            chapter + _chapterRepo.windowRadius,
-          ),
-        );
+        _pipeline.clearPendingLayouts();
+        _pipeline.demandAround(chapter);
       }
     }
     if (state.hasStableWorld && _initialRestoreCompleted) {
@@ -1182,7 +685,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     position.jumpTo(position.pixels);
     _dragging = false;
     _sawUserScroll = false;
-    _pump.onScrollStateChanged(PumpState.idle);
+    _pipeline.onScrollStateChanged(PumpState.idle);
   }
 
   void _holdScrollUnderJumpVeilAgain() {
@@ -1252,7 +755,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (preserved != null) return preserved;
     final hit = anchorHit ?? scrollTopHit;
     if (hit == null) return null;
-    return _geometry.locationAt(
+    return _pipeline.geometry.locationAt(
       hit,
       worldY: worldY,
       chapterCount: widget.runtime.chapterCount,
@@ -1277,13 +780,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
-    final binding = _pump;
+    final pipeline = _pipeline;
     _runtimeLocationRevision += 1;
     final revision = ++_restoreRevision;
     bool current() =>
         mounted &&
         identical(widget.runtime, runtime) &&
-        identical(_pump, binding) &&
+        identical(_pipeline, pipeline) &&
         revision == _restoreRevision &&
         (operation == null || runtime.isCurrentOperationToken(operation));
     if (!current() || runtime.chapterCount <= 0) return false;
@@ -1304,21 +807,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return true;
   }
 
-  bool _isBookStartAdmitted() {
-    const first = BlockKey(chapterIndex: 0, blockIndex: 0);
-    return _documentIndex.metricsFor(first) != null;
-  }
-
-  bool _isBookEndAdmitted() {
-    final lastChapter = widget.runtime.chapterCount - 1;
-    if (lastChapter < 0) return true;
-    final blocks = _blocks[lastChapter];
-    if (blocks == null || blocks.blocks.isEmpty) return false;
-    return _documentIndex.metricsFor(blocks.blocks.last.key) != null;
-  }
-
   double? _offsetForAnchor(HybridAnchor anchor, ChapterBlocks blocks) =>
-      _geometry.scrollOffsetForAnchor(
+      _pipeline.geometry.scrollOffsetForAnchor(
         anchor,
         blocks,
         anchorLine: AnchorManager.anchorOffsetInViewport(_viewportSize.height),
@@ -1330,69 +820,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       return controller.position.pixels;
     }
     return _pendingScrollOffset;
-  }
-
-  void _submitGroupTask(
-    ChapterBlocks blocks,
-    List<ChapterBlock> group, {
-    bool anchor = false,
-  }) {
-    final head = group.first;
-    final headKey = head.key;
-    final last = group.last;
-    final spec = widget.runtime.state.layoutSpec;
-    _pump.submit(
-      LayoutTask(
-        block: head,
-        continuationBlocks: group.length > 1
-            ? group.sublist(1)
-            : const <ChapterBlock>[],
-        epoch: _epoch,
-        fingerprint: _fingerprint,
-        textStyle: HybridBlockTextStyle.fromLayoutStyle(
-          spec.style,
-          isTitle: head.isTitle,
-        ),
-        contentWidth: spec.textLayoutFrame.width,
-        cellWidth: spec.cellWidth,
-        textColor: widget.textColor,
-        priority: _priorityFor(headKey, anchor: anchor),
-        direction: headKey < _documentIndex.centerKey
-            ? HybridScrollDirection.backward
-            : HybridScrollDirection.forward,
-        indentChars: hybridIndentCharsFor(head, spec),
-        trailingSpacing: _trailingSpacingFor(blocks, last),
-        readerOwnedLinePlan: true,
-      ),
-    );
-  }
-
-  LayoutTaskPriority _priorityFor(BlockKey key, {required bool anchor}) {
-    if (anchor) return LayoutTaskPriority.anchor;
-    final center = _documentIndex.centerKey;
-    if (key.chapterIndex == center.chapterIndex &&
-        (key.blockIndex - center.blockIndex).abs() <= 40) {
-      return LayoutTaskPriority.visible;
-    }
-    return LayoutTaskPriority.prefetch;
-  }
-
-  double _trailingSpacingFor(ChapterBlocks blocks, ChapterBlock block) {
-    final style = widget.runtime.state.layoutSpec.style;
-    final nextIndex = block.blockIndex + 1;
-    final isChapterEnd = nextIndex >= blocks.blocks.length;
-    if (!isChapterEnd) {
-      final next = blocks.blocks[nextIndex];
-      if (next.isContinuation &&
-          next.sourceParagraphIndex == block.sourceParagraphIndex) {
-        return 0.0;
-      }
-    }
-    return readerV2BlockTrailingSpacing(
-      style,
-      isTitle: block.isTitle,
-      isChapterEnd: isChapterEnd,
-    );
   }
 
   ReaderV2Location? _captureAndReport({required bool notify}) {
@@ -1415,7 +842,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         ? widget.runtime.state.visibleLocation
         : _captureVisibleLocation();
     if (location == null) return;
-    final blocks = _blocks[location.chapterIndex];
+    final blocks = _pipeline.blocksOf(location.chapterIndex);
     if (blocks == null) return;
 
     notifier.value = HybridProgress(
@@ -1460,7 +887,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool Function() _captureCommandOwner() {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
-    final binding = _pump;
+    final pipeline = _pipeline;
     final revision = _runtimeLocationRevision;
     final admitted =
         _initialRestoreCompleted && !_sawUserScroll && _jumpVeil == null;
@@ -1470,7 +897,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         identical(widget.runtime, runtime) &&
         !runtime.disposed &&
         runtime.state.hasStableWorld &&
-        identical(_pump, binding) &&
+        identical(_pipeline, pipeline) &&
         revision == _runtimeLocationRevision &&
         identical(runtime.stateMachine.currentOperation, operation) &&
         !_sawUserScroll &&
@@ -1586,8 +1013,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
     final top = math.min(position.pixels, target);
     final bottom = math.max(position.pixels, target) + _viewportSize.height;
-    _requestWindow(top, bottom);
-    if (!_windowReady(top, bottom)) return false;
+    _pipeline.requestWindow(top, bottom);
+    if (!_pipeline.windowReady(top, bottom)) return false;
     turn
       ..target = target
       ..requestedDistance += distance
@@ -1712,7 +1139,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (ok && isCurrent()) await _handleScrollSettled();
       return ok && isCurrent();
     }
-    final blocks = await _ensureChapterBlocks(
+    final pipeline = _pipeline;
+    final blocks = await pipeline.ensureChapter(
       safeChapter,
       priority: LayoutTaskPriority.anchor,
     );
@@ -1728,10 +1156,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (ok && isCurrent()) await _handleScrollSettled();
       return ok && isCurrent();
     }
-    final leases = await _ensureRangeLaidOut(blocks, start, end, isCurrent);
+    final leases = await pipeline.retainRange(blocks, start, end, isCurrent);
     try {
       if (!isCurrent()) return false;
-      final rect = _geometry.rangeRect(blocks, start, end);
+      final rect = pipeline.geometry.rangeRect(blocks, start, end);
       final offset = _effectiveScrollOffset();
       if (rect == null || offset == null) return false;
       final height = _viewportSize.height;
@@ -1778,11 +1206,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   int? _selectionCaretAt(ReaderTextSelection selection, Offset point) {
     final scrollOffset = _effectiveScrollOffset();
     if (scrollOffset == null) return null;
-    return _geometry.caretAt(selection, point.translate(0, scrollOffset));
+    return _pipeline.geometry.caretAt(
+      selection,
+      point.translate(0, scrollOffset),
+    );
   }
 
   List<HybridLineBox> _selectionBoxes(ReaderTextSelection selection) {
-    if (!_geometry.isSelectionCurrent(selection)) {
+    if (!_pipeline.geometry.isSelectionCurrent(selection)) {
       // 章節重新切分、換內容或樣式換代後，舊 offset 不再對應畫面。
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && identical(_selection.selection, selection)) {
@@ -1803,13 +1234,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final scrollOffset = _effectiveScrollOffset();
     final hit = scrollOffset == null
         ? null
-        : _geometry.glyphAt(details.localPosition.translate(0, scrollOffset));
+        : _pipeline.geometry.glyphAt(
+            details.localPosition.translate(0, scrollOffset),
+          );
     if (hit == null) {
       _selection.clear();
       return;
     }
     unawaited(Feedback.forLongPress(context));
-    final epoch = _epoch;
+    final epoch = _pipeline.epoch;
     final paragraphText = hit.blocks.displayText.substring(
       hit.paragraph.start,
       hit.paragraph.end,
@@ -1821,8 +1254,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!mounted ||
         request != _selectionRequest ||
         !widget.textSelectionEnabled ||
-        epoch != _epoch ||
-        !identical(_blocks[hit.blocks.chapterIndex], hit.blocks)) {
+        epoch != _pipeline.epoch ||
+        !identical(_pipeline.blocksOf(hit.blocks.chapterIndex), hit.blocks)) {
       return;
     }
     _selection.select(
@@ -1863,7 +1296,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   List<HybridLineBox> _lineBoxes(int chapterIndex, int start, int end) {
     final offset = _effectiveScrollOffset();
     if (offset == null) return const <HybridLineBox>[];
-    final world = _geometry.lineBoxes(chapterIndex, start, end);
+    final world = _pipeline.geometry.lineBoxes(chapterIndex, start, end);
     return <HybridLineBox>[
       for (final box in world)
         HybridLineBox(
@@ -1873,116 +1306,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           bottom: box.bottom - offset,
         ),
     ];
-  }
-
-  Future<void> _warmDiskMetricsForChapter(ChapterBlocks blocks) async {
-    final bookUrl = widget.bookUrl;
-    if (!widget.enableDiskCache || bookUrl == null) return;
-    final namespace = _namespace;
-    final binding = _pump;
-    final warmKey = (
-      namespace: namespace,
-      chapter: blocks.chapterIndex,
-      contentHash: blocks.layoutIdentity,
-    );
-    if (!_warmedChapters.add(warmKey)) return;
-    try {
-      final cache = await _obtainDiskCache();
-      await cache.warmIntoStore(
-        bookUrl: bookUrl,
-        namespace: namespace,
-        chapterLayoutIdentities: {blocks.chapterIndex: blocks.layoutIdentity},
-        put: (key, metrics) {
-          if (mounted &&
-              identical(binding, _pump) &&
-              _warmedChapters.contains(warmKey) &&
-              _measurementStore.get(namespace, key) == null) {
-            _measurementStore.put(namespace, key, metrics);
-          }
-        },
-      );
-    } on io.FileSystemException {
-      // 磁碟快取只用來加速；讀不到就照常量測。
-    }
-  }
-
-  Future<void> _writeDiskMetrics(
-    Map<BlockKey, BlockMetrics> snapshot, {
-    required String? bookUrl,
-    StyleFingerprint? fingerprint,
-  }) async {
-    if (!widget.enableDiskCache || bookUrl == null || snapshot.isEmpty) {
-      return;
-    }
-    final targetFingerprint = fingerprint ?? _fingerprint;
-    final chapterLayoutIdentities = <int, String>{
-      for (final plan in _layoutPlans.values)
-        plan.chapterIndex: plan.layoutIdentity,
-    };
-    try {
-      final cache = await _obtainDiskCache();
-      await cache.write(
-        bookUrl: bookUrl,
-        fingerprint: targetFingerprint,
-        metrics: snapshot,
-        chapterLayoutIdentities: chapterLayoutIdentities,
-      );
-    } on io.FileSystemException {
-      // 寫不進去只是少了下次的加速，不影響這次排版。
-    }
-  }
-
-  Future<MetricsDiskCache> _obtainDiskCache() async {
-    final existing = _metricsDiskCache;
-    if (existing != null) return existing;
-    final directory = await ReaderLayoutCache.baseDirectory();
-    return _metricsDiskCache = MetricsDiskCache(baseDirectory: directory);
-  }
-
-  Future<ChapterBlocks?> _readDiskPlan(
-    ChapterText text,
-    StyleFingerprint fingerprint,
-  ) async {
-    final bookUrl = widget.bookUrl;
-    if (!widget.enableDiskCache || bookUrl == null) return null;
-    try {
-      final cache = await _obtainPlanCache();
-      return await cache.read(
-        bookUrl: bookUrl,
-        fingerprint: fingerprint,
-        text: text,
-      );
-    } on Exception {
-      // 快取只用來省掉換行計算；取不到就照常排版，不能讓章節載入失敗。
-      return null;
-    }
-  }
-
-  Future<void> _writeDiskPlan(
-    ChapterBlocks blocks,
-    StyleFingerprint fingerprint,
-  ) async {
-    final bookUrl = widget.bookUrl;
-    if (!widget.enableDiskCache || bookUrl == null) return;
-    try {
-      final cache = await _obtainPlanCache();
-      await cache.write(
-        bookUrl: bookUrl,
-        fingerprint: fingerprint,
-        blocks: blocks,
-      );
-    } on Exception {
-      // 寫不進去只是下次要重算換行，不影響這次排版。
-    }
-  }
-
-  Future<ChapterPlanDiskCache> _obtainPlanCache() async {
-    final existing = _planDiskCache;
-    if (existing != null) return existing;
-    return _planDiskCache = ChapterPlanDiskCache(
-      baseDirectory: await ReaderLayoutCache.baseDirectory(),
-      buildSignature: await ReaderLayoutCache.currentBuild(),
-    );
   }
 
   void _scheduleRebuild() {
@@ -2070,10 +1393,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           child: HybridScrollView(
             centerKey: _centerKey,
             documentIndex: _documentIndex,
-            namespace: _namespace,
+            namespace: _pipeline.namespace,
             measurementStore: _measurementStore,
-            paragraphCache: _paragraphCache,
-            epoch: _epoch,
+            paragraphCache: _pipeline.paragraphCache,
+            epoch: _pipeline.epoch,
             controller: controller,
             cacheExtent: _viewportSize.height,
             textColor: widget.textColor,
@@ -2159,21 +1482,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       isCurrent: current,
     ),
   );
-}
-
-final class _ChapterMaterialization {
-  _ChapterMaterialization(this.priority);
-
-  LayoutTaskPriority priority;
-  late final Future<ChapterBlocks?> future;
-
-  void attach(Future<ChapterBlocks?> task) {
-    future = task;
-  }
-
-  void promote(LayoutTaskPriority next) {
-    if (next.index < priority.index) priority = next;
-  }
 }
 
 /// 進行中的一次翻頁；連點時目標與距離會一路累加。
