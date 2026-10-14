@@ -19,7 +19,10 @@ class BookListParser {
     bool Function(int size)? shouldBreak,
   }) async {
     // 回呼不能帶進背景 isolate；帶回呼的只有精確搜尋，結果最多一筆。
-    if (filter == null && shouldBreak == null && _isPure(source, isSearch)) {
+    final fit = filter == null && shouldBreak == null
+        ? _fit(source, isSearch)
+        : ParseWorkerFit.none;
+    if (fit != ParseWorkerFit.none) {
       final books = await ParseWorker.run(
         _offMain(
           source: source,
@@ -27,6 +30,7 @@ class BookListParser {
           baseUrl: baseUrl,
           isSearch: isSearch,
         ),
+        usesJs: fit == ParseWorkerFit.js,
       );
       if (books != null) return books;
     }
@@ -54,14 +58,15 @@ class BookListParser {
         isSearch: isSearch,
       );
 
-  /// 這次解析可能用到的規則都不帶 JS 與變數存取。列表為空或網址符合
-  /// `bookUrlPattern` 時會改用詳情頁規則，發現頁找不到書時會改用搜尋規則，
-  /// 所以一併檢查。
-  static bool _isPure(BookSource source, bool isSearch) {
+  /// 這次解析可能用到的規則能不能交給背景 isolate（[ParseWorker.fit]）。
+  /// 列表為空或網址符合 `bookUrlPattern` 時會改用詳情頁規則，發現頁找不到
+  /// 書時會改用搜尋規則，所以一併檢查。`@put`／`@get` 寫讀的是每一筆結果
+  /// 或規則自己的暫存，都跟著結果傳回，可以交出去。
+  static ParseWorkerFit _fit(BookSource source, bool isSearch) {
     final search = source.ruleSearch;
     final explore = isSearch ? null : source.ruleExplore;
     final info = source.ruleBookInfo;
-    return ParseWorker.isPureRule([
+    return ParseWorker.fit(source, variablesInResult: true, [
       for (final dynamic rule in [search, explore]) ...[
         rule?.bookList,
         rule?.name,

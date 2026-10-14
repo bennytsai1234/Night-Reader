@@ -24,7 +24,7 @@ class BackupService {
   BackupService._internal();
 
   /// 備份檔案的 Schema 版本，應與 [AppDatabase.schemaVersion] 保持一致。
-  int get currentSchemaVersion => AppDatabase().schemaVersion;
+  int get currentSchemaVersion => getIt<AppDatabase>().schemaVersion;
 
   /// 執行全量備份並返回 ZIP 檔案路徑
   Future<File?> createBackupZip() async {

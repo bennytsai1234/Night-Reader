@@ -128,6 +128,8 @@ void main() {
     await tester.tap(find.text('置頂'), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(log, ['row0:pin']);
+    // 第二次點擊沒有變成拖動，不會把收合中的列彈回展開。
+    expect(find.text('置頂'), findsNothing);
 
     // 下一次滑開後照常可以再執行。
     await swipe(tester, 'row0', -120);

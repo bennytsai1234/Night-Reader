@@ -406,15 +406,23 @@ final class ChapterBlocks {
   }
 
   int blockStartOffset(BlockKey key) {
-    final block = blocks.firstWhere((item) => item.key == key);
-    return block.charRange.start;
+    return blocks[_indexOf(key)].charRange.start;
+  }
+
+  /// 區塊照 blockIndex 排在清單的同一個位置，先直接取；對不上才逐一找。
+  /// 閱讀器每次要排的視窗都會對範圍內每個區塊查一次，逐一找在長章節裡
+  /// 會變成平方成長（跳章時一次卡上 40 毫秒）。
+  int _indexOf(BlockKey key) {
+    final direct = key.blockIndex;
+    if (direct < blocks.length && blocks[direct].key == key) return direct;
+    return blocks.indexWhere((block) => block.key == key);
   }
 
   /// Returns the blocks that still require one continuous ui.Paragraph. Raw
   /// preprocessing chunks remain grouped until the reader-owned line planner
   /// produces authoritative transaction boundaries.
   List<ChapterBlock> groupContaining(BlockKey key) {
-    final index = blocks.indexWhere((block) => block.key == key);
+    final index = _indexOf(key);
     if (index < 0) return const <ChapterBlock>[];
     final sourceParagraphIndex = blocks[index].sourceParagraphIndex;
     var start = index;

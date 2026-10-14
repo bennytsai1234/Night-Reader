@@ -12,7 +12,26 @@ import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
+import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/network/str_response.dart';
+
+/// 背景 isolate 組好的網址與請求選項（見 [AnalyzeUrl.create]）。
+typedef _BuiltUrl = ({
+  String ruleUrl,
+  String url,
+  String method,
+  Map<String, String> headers,
+  dynamic body,
+  String? charset,
+  bool useWebView,
+  String? webJs,
+  int webViewDelayTime,
+  // 書籍變數裡前一個規則留下的回應，網址對得上時直接拿來用、不再請求。
+  String? prefetchedBody,
+  String? prefetchedUrl,
+  String? prefetchedRequestUrl,
+  String? prefetchedRedirectUrl,
+});
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
 class AnalyzeUrl {
@@ -97,28 +116,135 @@ class AnalyzeUrl {
       source: source,
       ruleData: ruleData,
     );
+    // 網址或書源 header 帶的 JS 只做計算時，在背景 isolate 組好網址：搜尋時
+    // 每個書源都要組一次，每次都要建 JS 引擎，原地組會讓畫面一直掉幀。
+    if (source != null &&
+        ParseWorker.fit(source, [rawUrl, source.header]) == ParseWorkerFit.js) {
+      final built = await ParseWorker.run(
+        _buildOffMain(
+          rawUrl,
+          key: key,
+          page: page,
+          speakText: speakText,
+          speakSpeed: speakSpeed,
+          baseUrl: baseUrl,
+          source: source,
+          ruleData: ruleData,
+        ),
+        usesJs: true,
+      );
+      if (built != null) {
+        instance._apply(built);
+        return instance;
+      }
+    }
     await instance._initAsync();
     return instance;
   }
 
+  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
+  static Future<_BuiltUrl> Function() _buildOffMain(
+    String rawUrl, {
+    String? key,
+    int? page,
+    String? speakText,
+    int? speakSpeed,
+    String baseUrl = '',
+    BaseSource? source,
+    dynamic ruleData,
+  }) => () async {
+    final built = AnalyzeUrl._bare(
+      rawUrl,
+      key: key,
+      page: page,
+      speakText: speakText,
+      speakSpeed: speakSpeed,
+      baseUrl: baseUrl,
+      source: source,
+      ruleData: ruleData,
+    );
+    await built._initAsync();
+    return (
+      ruleUrl: built.ruleUrl,
+      url: built.url,
+      method: built.method,
+      headers: Map<String, String>.of(built.headerMap),
+      body: built.body,
+      charset: built.charset,
+      useWebView: built.useWebView,
+      webJs: built.webJs,
+      webViewDelayTime: built.webViewDelayTime,
+      prefetchedBody: built._prefetchedResponseBody,
+      prefetchedUrl: built._prefetchedResponseUrl,
+      prefetchedRequestUrl: built._prefetchedResponseRequestUrl,
+      prefetchedRedirectUrl: built._prefetchedResponseRedirectUrl,
+    );
+  };
+
+  void _apply(_BuiltUrl built) {
+    ruleUrl = built.ruleUrl;
+    url = built.url;
+    method = built.method;
+    headerMap.addAll(built.headers);
+    body = built.body;
+    charset = built.charset;
+    useWebView = built.useWebView;
+    webJs = built.webJs;
+    webViewDelayTime = built.webViewDelayTime;
+    _prefetchedResponseBody = built.prefetchedBody;
+    _prefetchedResponseUrl = built.prefetchedUrl;
+    _prefetchedResponseRequestUrl = built.prefetchedRequestUrl;
+    _prefetchedResponseRedirectUrl = built.prefetchedRedirectUrl;
+  }
+
   void _init() {
-    // 0. 注入 BookSource.header
-    _initSourceHeaders();
-    ruleUrl = rawUrl;
-    // 1. 執行 @js, <js>
-    _analyzeJs();
-    // 2. 替換 {{js}} 和 <page,page>
-    _replaceKeyPageJs();
-    // 3. 解析 URL 選項 (如 ,{"method": "POST"})
-    _analyzeUrlOptions();
+    try {
+      // 0. 注入 BookSource.header
+      _initSourceHeaders();
+      ruleUrl = rawUrl;
+      // 1. 執行 @js, <js>
+      _analyzeJs();
+      // 2. 替換 {{js}} 和 <page,page>
+      _replaceKeyPageJs();
+      // 3. 解析 URL 選項 (如 ,{"method": "POST"})
+      _analyzeUrlOptions();
+    } finally {
+      _releaseJsRule();
+    }
   }
 
   Future<void> _initAsync() async {
-    _initSourceHeaders();
-    ruleUrl = rawUrl;
-    await _analyzeJsAsync();
-    await _replaceKeyPageJsAsync();
-    _analyzeUrlOptions();
+    try {
+      _initSourceHeaders();
+      ruleUrl = rawUrl;
+      await _analyzeJsAsync();
+      await _replaceKeyPageJsAsync();
+      _analyzeUrlOptions();
+    } finally {
+      _releaseJsRule();
+    }
+  }
+
+  /// 組網址期間（書源 header、網址裡的 JS、`{{}}`、選項）共用一個規則與它的
+  /// JS 引擎，組完就釋放。每建一個引擎要好幾毫秒，一個網址常有兩三段 JS，
+  /// 搜尋時每個書源都要組一次網址，逐段新建會在畫面執行緒上累積成掉幀。
+  /// jsLib 裡的變數因此在同一個網址的各段之間延續，和清單逐項共用外層規則
+  /// 的引擎一樣；原版 Legado 的 jsLib 作用域更是整個書源共用。
+  AnalyzeRule? _jsRuleInstance;
+
+  AnalyzeRule _jsRule() {
+    final rule = _jsRuleInstance ??= AnalyzeRule(
+      source: source,
+      ruleData: ruleData,
+    );
+    rule.key = key;
+    rule.page = page ?? 1;
+    return rule;
+  }
+
+  void _releaseJsRule() {
+    _jsRuleInstance?.dispose();
+    _jsRuleInstance = null;
   }
 
   /// 將 BookSource.header（JSON 格式）解析並注入 headerMap
@@ -150,17 +276,10 @@ class AnalyzeUrl {
 
     for (final match in matches) {
       final jsStr = match.group(1) ?? match.group(2) ?? '';
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        final jsInput = _jsInputForMatch(match.start, result);
-        final evalRes = rule.evalJS(jsStr, jsInput);
-        result = evalRes?.toString() ?? '';
-        lastEnd = match.end;
-      } finally {
-        rule.dispose();
-      }
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = _jsRule().evalJS(jsStr, jsInput);
+      result = evalRes?.toString() ?? '';
+      lastEnd = match.end;
     }
 
     if (lastEnd > 0) {
@@ -187,14 +306,7 @@ class AnalyzeUrl {
     final innerJsRegex = RegExp(r'\{\{([\s\S]*?)\}\}');
     ruleUrl = ruleUrl.replaceAllMapped(innerJsRegex, (match) {
       final jsStr = match.group(1)!;
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule.evalJS(jsStr, null)?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule().evalJS(jsStr, null)?.toString() ?? '';
     });
 
     // 替換 <page1,page2,page3>
@@ -223,17 +335,11 @@ class AnalyzeUrl {
 
     for (final match in matches) {
       final jsStr = match.group(1) ?? match.group(2) ?? '';
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        final jsInput = _jsInputForMatch(match.start, result);
-        final evalRes = await rule.evalJSAsync(jsStr, jsInput);
-        _capturePrefetchedResponse(rule);
-        result = evalRes?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      final rule = _jsRule();
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = await rule.evalJSAsync(jsStr, jsInput);
+      _capturePrefetchedResponse(rule);
+      result = evalRes?.toString() ?? '';
     }
     ruleUrl = result;
   }
@@ -279,15 +385,8 @@ class AnalyzeUrl {
       for (final m in matches) {
         sb.write(ruleUrl.substring(lastEnd, m.start));
         final jsStr = m.group(1)!;
-        final rule = AnalyzeRule(source: source, ruleData: ruleData);
-        try {
-          rule.key = key;
-          rule.page = page ?? 1;
-          final v = await rule.evalJSAsync(jsStr, null);
-          sb.write(v?.toString() ?? '');
-        } finally {
-          rule.dispose();
-        }
+        final v = await _jsRule().evalJSAsync(jsStr, null);
+        sb.write(v?.toString() ?? '');
         lastEnd = m.end;
       }
       sb.write(ruleUrl.substring(lastEnd));
@@ -365,14 +464,7 @@ class AnalyzeUrl {
               int.tryParse(options['webViewDelayTime']?.toString() ?? '0') ?? 0;
           final ruleJs = options['js']?.toString();
           if (ruleJs != null && ruleJs.isNotEmpty) {
-            final rule = AnalyzeRule(source: source, ruleData: ruleData);
-            try {
-              rule.key = key;
-              rule.page = page ?? 1;
-              url = rule.evalJS(ruleJs, url)?.toString() ?? url;
-            } finally {
-              rule.dispose();
-            }
+            url = _jsRule().evalJS(ruleJs, url)?.toString() ?? url;
           }
         }
       } catch (e) {
@@ -408,28 +500,14 @@ class AnalyzeUrl {
   String _resolveMaybeJsString(String raw) {
     final trimmed = raw.trim();
     if (trimmed.startsWith('@js:')) {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule.evalJS(trimmed.substring(4), null)?.toString() ?? '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule().evalJS(trimmed.substring(4), null)?.toString() ?? '';
     }
     if (trimmed.toLowerCase().startsWith('<js>') &&
         trimmed.toLowerCase().endsWith('</js>')) {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        return rule
-                .evalJS(trimmed.substring(4, trimmed.length - 5), null)
-                ?.toString() ??
-            '';
-      } finally {
-        rule.dispose();
-      }
+      return _jsRule()
+              .evalJS(trimmed.substring(4, trimmed.length - 5), null)
+              ?.toString() ??
+          '';
     }
     return raw;
   }
@@ -446,15 +524,9 @@ class AnalyzeUrl {
     } catch (_) {}
 
     try {
-      final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      String? normalized;
-      try {
-        rule.key = key;
-        rule.page = page ?? 1;
-        normalized = rule.evalJS('JSON.stringify(($raw))', null)?.toString();
-      } finally {
-        rule.dispose();
-      }
+      final normalized = _jsRule()
+          .evalJS('JSON.stringify(($raw))', null)
+          ?.toString();
       if (normalized == null || normalized.isEmpty) {
         return null;
       }

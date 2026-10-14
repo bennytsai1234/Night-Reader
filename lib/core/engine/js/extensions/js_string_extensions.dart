@@ -103,7 +103,7 @@ extension JsStringExtensions on JsExtensions {
     ''');
 
     // 實作 java.strToBytes
-    runtime.onMessage('strToBytes', (dynamic args) {
+    onBridge('strToBytes', (dynamic args) {
       final payload = _decodeArgs(args);
       final str = payload is List && payload.isNotEmpty
           ? payload[0].toString()
@@ -119,7 +119,7 @@ extension JsStringExtensions on JsExtensions {
     });
 
     // 實作 java.bytesToStr
-    runtime.onMessage('bytesToStr', (dynamic args) {
+    onBridge('bytesToStr', (dynamic args) {
       final payload = _decodeArgs(args);
       final bytesSource = payload is List && payload.isNotEmpty
           ? payload[0]
@@ -135,28 +135,22 @@ extension JsStringExtensions on JsExtensions {
       return utf8.decode(bytes);
     });
 
-    runtime.onMessage('_timeFormat', (dynamic args) {
+    onBridge('_timeFormat', (dynamic args) {
       final time = args;
       final t = time is int ? time : int.tryParse(time.toString()) ?? 0;
       return DateTime.fromMillisecondsSinceEpoch(t).toIso8601String();
     });
 
-    runtime.onMessage('_htmlFormat', (dynamic args) {
+    onBridge('_htmlFormat', (dynamic args) {
       final doc = html_parser.parse(args.toString());
       return doc.body?.text ?? '';
     });
 
-    runtime.onMessage(
-      't2s',
-      (dynamic args) => ChineseUtils.t2s(args.toString()),
-    );
-    runtime.onMessage(
-      's2t',
-      (dynamic args) => ChineseUtils.s2t(args.toString()),
-    );
+    onBridge('t2s', (dynamic args) => ChineseUtils.t2s(args.toString()));
+    onBridge('s2t', (dynamic args) => ChineseUtils.s2t(args.toString()));
 
     // 實作 java.toNumChapter ((原 Android ))
-    runtime.onMessage('_toNumChapter', (dynamic args) {
+    onBridge('_toNumChapter', (dynamic args) {
       final s = args.toString();
       final regex = RegExp(r'(.*?)([〇零一二三四五六七八九十百千萬億壹貳叁肆伍陸柒捌玖拾佰仟]+)(.*)');
       final match = regex.firstMatch(s);

@@ -270,18 +270,6 @@ class _SwipeActionsState extends State<SwipeActions>
     }
   }
 
-  void _onDragCancel() {
-    _dragging = false;
-    final offset = _offset.value;
-    final actions = _actionsFor(offset);
-    if (offset != 0 && offset.abs() > _revealWidth(actions) / 2) {
-      _setArmed(false, haptic: false);
-      _animateOffset(_revealWidth(actions) * offset.sign);
-    } else {
-      _close();
-    }
-  }
-
   /// 這次滑開後是否已經觸發過動作；收合動畫期間按鈕還在，再點一次不重複執行，
   /// 下一次開始滑動才解除。
   bool _fired = false;
@@ -365,11 +353,12 @@ class _SwipeActionsState extends State<SwipeActions>
                   GestureRecognizerFactoryWithHandlers<
                     HorizontalDragGestureRecognizer
                   >(HorizontalDragGestureRecognizer.new, (recognizer) {
+                    // 不設 onCancel：它只在點擊沒變成拖動時觸發，
+                    // 已開始的拖動被中斷時走 onEnd。
                     recognizer
                       ..onStart = _onDragStart
                       ..onUpdate = _onDragUpdate
-                      ..onEnd = _onDragEnd
-                      ..onCancel = _onDragCancel;
+                      ..onEnd = _onDragEnd;
                   }),
           },
           child: row,

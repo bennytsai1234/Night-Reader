@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -21,6 +22,13 @@ import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:path/path.dart' as p;
+
+typedef _DecodedFile = ({String fileName, Object? decoded, Object? error});
+typedef _DecodedBackup = ({
+  Map<String, dynamic>? manifest,
+  Object? manifestError,
+  List<_DecodedFile> files,
+});
 
 /// 一次還原的結果。單一檔案失敗時仍繼續還原其他檔案，失敗的檔名記在
 /// [failedFiles]；[invalidArchive] 表示不是可用的備份檔，什麼都沒寫入。
@@ -58,44 +66,30 @@ class RestoreService {
   ///
   /// 讀不到檔案時丟出例外，交給呼叫端顯示原因。
   Future<RestoreResult> restoreFromZip(File zipFile) async {
-    final bytes = await zipFile.readAsBytes();
-    final Archive archive;
-    try {
-      archive = ZipDecoder().decodeBytes(bytes);
-    } catch (e) {
-      AppLog.e('Restore aborted: not a zip archive', error: e);
+    final path = zipFile.path;
+    // 解壓縮與 JSON 解析在背景 isolate 做：備份含已下載的正文時有幾十 MB，
+    // 在畫面執行緒上一次解完會卡住將近半秒。
+    final backup = await Isolate.run(() => _decodeBackup(path));
+    if (backup == null) {
+      AppLog.w('Restore aborted: not a zip archive or empty');
       return const RestoreResult.invalid();
     }
-    final files = archive.where((file) => file.isFile).toList();
-    if (files.isEmpty) return const RestoreResult.invalid();
-
-    Map<String, dynamic>? manifest;
-    for (final file in files) {
-      if (_normalizedFileName(file.name) != 'manifest.json') continue;
-      try {
-        final decoded = jsonDecode(
-          utf8.decode(file.content as List<int>, allowMalformed: true),
-        );
-        if (decoded is Map<String, dynamic>) manifest = decoded;
-      } on FormatException catch (e) {
-        AppLog.e('Restore aborted: unreadable manifest', error: e);
-      }
-      break;
+    if (backup.manifestError != null) {
+      AppLog.e(
+        'Restore aborted: unreadable manifest',
+        error: backup.manifestError,
+      );
     }
-    if (!_isManifestCompatible(manifest)) {
+    if (!_isManifestCompatible(backup.manifest)) {
       AppLog.w('Restore aborted: missing or incompatible manifest');
       return const RestoreResult.invalid();
     }
 
     var restoredAny = false;
     final failedFiles = <String>[];
-    for (final file in files) {
-      final fileName = _normalizedFileName(file.name);
-      if (fileName == 'manifest.json') continue;
+    for (final (:fileName, :decoded, :error) in backup.files) {
       try {
-        final dynamic decoded = jsonDecode(
-          utf8.decode(file.content as List<int>, allowMalformed: true),
-        );
+        if (error != null) throw error;
         if (decoded is List<dynamic>) {
           final restored = await _importListData(fileName, decoded);
           restoredAny = restoredAny || restored;
@@ -111,6 +105,52 @@ class RestoreService {
       }
     }
     return RestoreResult(restoredAny: restoredAny, failedFiles: failedFiles);
+  }
+
+  /// 在背景 isolate 讀檔、解壓縮並解析每個 JSON 檔。不是 zip 或沒有檔案時
+  /// 回傳 null；單一檔案解析失敗記在該檔的 `error`，由呼叫端回報。背景
+  /// isolate 沒有 App 的服務，這裡不寫紀錄，交給呼叫端。
+  static Future<_DecodedBackup?> _decodeBackup(String path) async {
+    final bytes = await File(path).readAsBytes();
+    final Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (_) {
+      return null;
+    }
+    final files = archive.where((file) => file.isFile).toList();
+    if (files.isEmpty) return null;
+
+    Map<String, dynamic>? manifest;
+    Object? manifestError;
+    final decodedFiles = <_DecodedFile>[];
+    var manifestSeen = false;
+    for (final file in files) {
+      final fileName = p.basename(file.name);
+      Object? decoded;
+      Object? error;
+      try {
+        decoded = jsonDecode(
+          utf8.decode(file.content as List<int>, allowMalformed: true),
+        );
+      } catch (e) {
+        error = e;
+      }
+      if (fileName == 'manifest.json') {
+        // 只看第一個 manifest。
+        if (manifestSeen) continue;
+        manifestSeen = true;
+        manifestError = error;
+        if (decoded is Map<String, dynamic>) manifest = decoded;
+        continue;
+      }
+      decodedFiles.add((fileName: fileName, decoded: decoded, error: error));
+    }
+    return (
+      manifest: manifest,
+      manifestError: manifestError,
+      files: decodedFiles,
+    );
   }
 
   Future<bool> _importListData(String fileName, List<dynamic> list) async {
@@ -132,6 +172,17 @@ class RestoreService {
     };
     if (!supportedFiles.contains(fileName)) return false;
 
+    // 一個檔案在一個交易裡寫完：書架、書源這些清單只在交易結束時重新查詢
+    // 一次，不會每寫一筆就讓發現、書源管理整份重算（上百個書源時還原會
+    // 卡住數秒）。檔案中途失敗時整個檔案不寫入，由呼叫端記為失敗。
+    var importedAny = false;
+    await getIt<AppDatabase>().transaction(() async {
+      importedAny = await _importItems(fileName, list);
+    });
+    return list.isEmpty || importedAny;
+  }
+
+  Future<bool> _importItems(String fileName, List<dynamic> list) async {
     var importedAny = false;
     for (var item in list) {
       if (item is Map<String, dynamic>) {
@@ -170,7 +221,7 @@ class RestoreService {
         }
       }
     }
-    return list.isEmpty || importedAny;
+    return importedAny;
   }
 
   Future<bool> _restorePreferences(Map<String, dynamic> values) async {
@@ -197,8 +248,6 @@ class RestoreService {
     }
     return restoredAny;
   }
-
-  String _normalizedFileName(String path) => p.basename(path);
 
   bool _isManifestCompatible(Map<String, dynamic>? manifest) {
     if (manifest == null) return false;

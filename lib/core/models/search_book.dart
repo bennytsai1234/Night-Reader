@@ -30,6 +30,10 @@ class SearchBook implements RuleDataInterface {
   String? infoHtml;
   String? tocHtml;
 
+  /// 搜尋合併卡的身分（正規化書名＋作者），建立合併卡時由搜尋分組填入；
+  /// 原始結果為 null。不存檔。
+  String? groupIdentity;
+
   late final Set<String> origins = {origin};
   late final Map<String, String> _originNames = {
     if (originName != null && originName!.isNotEmpty) origin: originName!,
@@ -100,12 +104,25 @@ class SearchBook implements RuleDataInterface {
   );
 
   /// 最新章節標題裡「第 N 章」的 N；讀不出來時為 null。
+  /// 搜尋每回來一個書源就重新挑一次代表，每次比較都要讀章節編號；依章名
+  /// 記下結果，章名換掉才重算。
   int? get _latestChapterNumber {
-    final match = _chapterNumberPattern.firstMatch(latestChapterTitle ?? '');
-    if (match == null) return null;
-    final number = StringUtils.stringToInt(match.group(1));
-    return number > 0 ? number : null;
+    final title = latestChapterTitle;
+    if (!identical(title, _chapterNumberTitle) || !_chapterNumberRead) {
+      _chapterNumberTitle = title;
+      _chapterNumberRead = true;
+      final match = _chapterNumberPattern.firstMatch(title ?? '');
+      final number = match == null
+          ? 0
+          : StringUtils.stringToInt(match.group(1));
+      _chapterNumber = number > 0 ? number : null;
+    }
+    return _chapterNumber;
   }
+
+  String? _chapterNumberTitle;
+  bool _chapterNumberRead = false;
+  int? _chapterNumber;
 
   /// 複製出一張全新的呈現卡，origins 重置為只含自身來源。
   SearchBook _cloneForCard() {

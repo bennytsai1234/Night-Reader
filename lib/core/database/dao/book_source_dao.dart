@@ -64,11 +64,15 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  Future<void> deleteByUrl(String url) =>
-      (delete(bookSources)..where((t) => t.bookSourceUrl.equals(url))).go();
+  Future<void> deleteByUrl(String url) async {
+    await (delete(bookSources)..where((t) => t.bookSourceUrl.equals(url))).go();
+    forgetNonNovelMarkers([url]);
+  }
 
-  Future<void> deleteByUrls(List<String> urls) =>
-      (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
+  Future<void> deleteByUrls(List<String> urls) async {
+    await (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
+    forgetNonNovelMarkers(urls);
+  }
 
   Future<List<BookSource>> getAllFull() => getAll();
 

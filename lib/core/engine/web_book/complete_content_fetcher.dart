@@ -134,18 +134,7 @@ final class CompleteContentFetcher {
   }
 
   static void _checkLoginRequired(StrResponse response) {
-    final normalized = '${response.url}\n${response.body}'.trim().toLowerCase();
-    if (normalized.isEmpty) return;
-    final requiresLogin =
-        normalized.contains('permissionlimit') ||
-        normalized.contains('loginrequired') ||
-        normalized.contains('需要你登录后阅读') ||
-        normalized.contains('需要你登入後閱讀') ||
-        normalized.contains('登录后阅读') ||
-        normalized.contains('登入後閱讀') ||
-        normalized.contains('請先登錄') ||
-        normalized.contains('请先登录');
-    if (requiresLogin) {
+    if (response.looksLikeLoginRequired) {
       throw LoginCheckException('正文需要登入後閱讀', sourceUrl: response.url);
     }
   }

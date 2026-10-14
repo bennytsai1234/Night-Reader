@@ -37,17 +37,19 @@ class ChapterListParser {
     int? maxChapters,
   }) async {
     final tocRule = source.ruleToc;
-    if (tocRule != null &&
-        ParseWorker.isPureRule([
-          tocRule.chapterList,
-          tocRule.chapterName,
-          tocRule.chapterUrl,
-          tocRule.updateTime,
-          tocRule.isVolume,
-          tocRule.isVip,
-          tocRule.isPay,
-          tocRule.nextTocUrl,
-        ])) {
+    final fit = tocRule == null
+        ? ParseWorkerFit.none
+        : ParseWorker.fit(source, [
+            tocRule.chapterList,
+            tocRule.chapterName,
+            tocRule.chapterUrl,
+            tocRule.updateTime,
+            tocRule.isVolume,
+            tocRule.isVip,
+            tocRule.isPay,
+            tocRule.nextTocUrl,
+          ]);
+    if (fit != ParseWorkerFit.none) {
       final result = await ParseWorker.run(
         _offMain(
           source: source,
@@ -56,6 +58,7 @@ class ChapterListParser {
           baseUrl: baseUrl,
           maxChapters: maxChapters,
         ),
+        usesJs: fit == ParseWorkerFit.js,
       );
       if (result != null) return result;
     }

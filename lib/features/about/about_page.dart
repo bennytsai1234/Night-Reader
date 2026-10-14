@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
+import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -8,6 +9,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
@@ -191,6 +193,17 @@ class _AboutPageState extends State<AboutPage> {
                 title: '接收測試版更新',
                 value: _betaChannel,
                 onChanged: _setBetaChannel,
+              ),
+              GroupedSwitchRow(
+                leading: const GroupedIconTile(
+                  Icons.auto_stories_outlined,
+                  tint: AppTint.azurite,
+                ),
+                title: '啟動時檢查書架更新',
+                value: context.select<SettingsProvider, bool>(
+                  (settings) => settings.autoRefresh,
+                ),
+                onChanged: context.read<SettingsProvider>().setAutoRefresh,
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

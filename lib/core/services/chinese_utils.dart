@@ -11,12 +11,12 @@ class ChineseUtils {
   // 簡→繁
   static final Map<String, String> _s2tPhrases = {};
   static final Map<String, String> _s2tChars = {};
-  static int _s2tMaxKeyLen = 1;
+  static final Map<int, List<int>> _s2tPhraseLengths = {};
 
   // 繁→簡
   static final Map<String, String> _t2sPhrases = {};
   static final Map<String, String> _t2sChars = {};
-  static int _t2sMaxKeyLen = 1;
+  static final Map<int, List<int>> _t2sPhraseLengths = {};
 
   static bool get isInitialized => _initialized;
 
@@ -51,22 +51,22 @@ class ChineseUtils {
   static void initializeFromDictionaryData(List<String> dictionaryData) {
     if (_initialized || dictionaryData.length != 4) return;
 
-    _s2tMaxKeyLen = _parseDictionary(dictionaryData[0], _s2tPhrases);
-    _parseDictionary(dictionaryData[1], _s2tChars);
-    _t2sMaxKeyLen = _parseDictionary(dictionaryData[2], _t2sPhrases);
-    _parseDictionary(dictionaryData[3], _t2sChars);
-
-    // 詞彙 maxKeyLen 至少要考慮字元表
-    if (_s2tMaxKeyLen < 1) _s2tMaxKeyLen = 1;
-    if (_t2sMaxKeyLen < 1) _t2sMaxKeyLen = 1;
+    _parseDictionary(dictionaryData[0], _s2tPhrases, _s2tPhraseLengths);
+    _parseDictionary(dictionaryData[1], _s2tChars, null);
+    _parseDictionary(dictionaryData[2], _t2sPhrases, _t2sPhraseLengths);
+    _parseDictionary(dictionaryData[3], _t2sChars, null);
 
     _initialized = true;
   }
 
-  /// 解析 OpenCC 字典檔 (tab-separated: key\tvalue)
-  /// 回傳最長 key 的字元數
-  static int _parseDictionary(String data, Map<String, String> dict) {
-    int maxLen = 0;
+  /// 解析 OpenCC 字典檔 (tab-separated: key\tvalue)。給了 [lengthsByFirst]
+  /// 時，另外記下每個開頭字元有哪些詞長（由長到短）。
+  static void _parseDictionary(
+    String data,
+    Map<String, String> dict,
+    Map<int, List<int>>? lengthsByFirst,
+  ) {
+    final lengthSets = <int, Set<int>>{};
     final lines = data.split('\n');
     for (final line in lines) {
       if (line.isEmpty) continue;
@@ -78,29 +78,39 @@ class ChineseUtils {
       final spaceIdx = valuePart.indexOf(' ');
       final value = spaceIdx < 0 ? valuePart : valuePart.substring(0, spaceIdx);
       dict[key] = value;
-      if (key.length > maxLen) maxLen = key.length;
+      if (lengthsByFirst != null && key.length >= 2) {
+        lengthSets
+            .putIfAbsent(key.codeUnitAt(0), () => <int>{})
+            .add(key.length);
+      }
     }
-    return maxLen;
+    if (lengthsByFirst == null) return;
+    for (final entry in lengthSets.entries) {
+      lengthsByFirst[entry.key] = entry.value.toList()
+        ..sort((a, b) => b.compareTo(a));
+    }
   }
 
   /// 簡體轉繁體 (同步)
   static String s2t(String text) {
     if (text.isEmpty || !_initialized) return text;
-    return _convert(text, _s2tPhrases, _s2tChars, _s2tMaxKeyLen);
+    return _convert(text, _s2tPhrases, _s2tPhraseLengths, _s2tChars);
   }
 
   /// 繁體轉簡體 (同步)
   static String t2s(String text) {
     if (text.isEmpty || !_initialized) return text;
-    return _convert(text, _t2sPhrases, _t2sChars, _t2sMaxKeyLen);
+    return _convert(text, _t2sPhrases, _t2sPhraseLengths, _t2sChars);
   }
 
-  /// 正向最長匹配轉換
+  /// 正向最長匹配轉換。每個位置只試字典裡以這個字開頭的詞長，不從最長詞長
+  /// 逐一切子字串：書名、章名在每次重建與每次書架檢查都會轉換，逐一切會在
+  /// 畫面執行緒上累積成整幀的停頓。
   static String _convert(
     String text,
     Map<String, String> phrases,
+    Map<int, List<int>> phraseLengths,
     Map<String, String> chars,
-    int maxKeyLen,
   ) {
     final buf = StringBuffer();
     int i = 0;
@@ -110,15 +120,16 @@ class ChineseUtils {
       String? match;
       int matchLen = 0;
 
-      // 從最長嘗試到 2 字元 (詞彙匹配)
-      final maxTry = (i + maxKeyLen <= len) ? maxKeyLen : len - i;
-      for (int tryLen = maxTry; tryLen >= 2; tryLen--) {
-        final key = text.substring(i, i + tryLen);
-        final value = phrases[key];
-        if (value != null) {
-          match = value;
-          matchLen = tryLen;
-          break;
+      final lengths = phraseLengths[text.codeUnitAt(i)];
+      if (lengths != null) {
+        for (final tryLen in lengths) {
+          if (i + tryLen > len) continue;
+          final value = phrases[text.substring(i, i + tryLen)];
+          if (value != null) {
+            match = value;
+            matchLen = tryLen;
+            break;
+          }
         }
       }
 

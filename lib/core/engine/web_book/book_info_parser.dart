@@ -2,10 +2,51 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
+import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
 
 class BookInfoParser {
+  /// 規則不帶 JS 與變數存取時交給背景 isolate 解析（書架檢查更新時每本書都
+  /// 要解析一次詳情頁），失敗時原地再解析一次。
   static Future<Book> parse({
+    required BookSource source,
+    required Book book,
+    required String body,
+    required String baseUrl,
+  }) async {
+    final infoRule = source.ruleBookInfo;
+    if (infoRule == null) return book;
+    final fit = ParseWorker.fit(source, [
+      infoRule.init,
+      infoRule.name,
+      infoRule.author,
+      infoRule.tocUrl,
+      infoRule.kind,
+      infoRule.coverUrl,
+      infoRule.intro,
+      infoRule.lastChapter,
+      infoRule.canReName,
+    ]);
+    if (fit != ParseWorkerFit.none) {
+      final result = await ParseWorker.run(
+        _offMain(source: source, book: book, body: body, baseUrl: baseUrl),
+        usesJs: fit == ParseWorkerFit.js,
+      );
+      if (result != null) return result;
+    }
+    return _parse(source: source, book: book, body: body, baseUrl: baseUrl);
+  }
+
+  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
+  static Future<Book> Function() _offMain({
+    required BookSource source,
+    required Book book,
+    required String body,
+    required String baseUrl,
+  }) =>
+      () => _parse(source: source, book: book, body: body, baseUrl: baseUrl);
+
+  static Future<Book> _parse({
     required BookSource source,
     required Book book,
     required String body,

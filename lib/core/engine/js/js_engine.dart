@@ -29,6 +29,9 @@ import 'js_rule_async_wrapper.dart';
 class JsEngine {
   JavascriptRuntime? _runtime;
   bool _isAvailable = false;
+
+  /// QuickJS 有沒有建起來；沒有時 [evaluate] 回傳模擬結果（給測試環境用）。
+  bool get isAvailable => _isAvailable;
   JsExtensions? _extensions;
   final dynamic source;
 

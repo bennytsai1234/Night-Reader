@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 
 /// 書籍資訊的顯示時繁簡轉換：書名、作者、簡介、分類與章節標題。
 ///
@@ -23,8 +24,28 @@ abstract final class ChineseDisplay {
   }
 
   static String convert(String text, {int? convertType}) {
-    return _converter.convert(text, convertType: convertType ?? mode.value);
+    final type = convertType ?? mode.value;
+    if (text.isEmpty || type == 0) return text;
+    // 字典還沒載入時原樣返回，這時的結果不記。
+    if (!ChineseUtils.isInitialized || text.length > _cacheMaxLength) {
+      return _converter.convert(text, convertType: type);
+    }
+    final cache = _cache.putIfAbsent(type, () => <String, String>{});
+    final cached = cache.remove(text);
+    if (cached != null) return cache[text] = cached;
+    final converted = _converter.convert(text, convertType: type);
+    cache[text] = converted;
+    if (cache.length > _cacheMaxEntries) cache.remove(cache.keys.first);
+    return converted;
   }
+
+  /// 書名、作者、簡介這類顯示文字在每次重建時都會再轉一次（搜尋結果串流
+  /// 進來時一秒重建好幾次），所以記下最近轉過的。依轉換方向分開，各留
+  /// 最近用到的 [_cacheMaxEntries] 筆；超過 [_cacheMaxLength] 字的（例如
+  /// 整段簡介以外的長文）不記。上限約幾 MB。
+  static final Map<int, Map<String, String>> _cache = {};
+  static const int _cacheMaxEntries = 2000;
+  static const int _cacheMaxLength = 512;
 }
 
 final class ChineseDisplayMode extends ValueNotifier<int> {

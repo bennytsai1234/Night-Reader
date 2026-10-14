@@ -1,16 +1,25 @@
+import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/engine/analyze_url.dart';
 import 'package:night_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:night_reader/core/engine/web_book/chapter_list_parser.dart';
+import 'package:night_reader/core/engine/web_book/content_parser.dart';
 import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/network_service.dart';
 
 import '../../../test_helper.dart';
 
-/// 不帶 JS 的搜尋結果與目錄在背景 isolate 解析，結果要與原地解析相同；
-/// 帶 JS、`@put`／`@get` 或帶回呼的解析留在原地。
+/// 不帶 JS、或 JS 只做計算的搜尋結果與目錄在背景 isolate 解析，結果要與
+/// 原地解析相同；會用到主 isolate 狀態的 JS、`@put`／`@get` 或帶回呼的解析
+/// 留在原地。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setupTestDI();
@@ -95,22 +104,97 @@ void main() {
     ]);
   });
 
-  test('rules with JS or variables are not pure and still parse', () async {
-    final result = await parseToc(
-      tocSource(chapterName: 'a@text@js:result + "!"'),
-    );
+  test('JS that only computes parses the same with the worker on', () async {
+    final source = tocSource(chapterName: 'a@text@js:result + "!"');
+    ParseWorker.enabled = false;
+    final inPlace = await parseToc(source);
+    ParseWorker.enabled = true;
+    final withWorker = await parseToc(source);
 
-    expect(result.chapters.map((c) => c.title), ['第1章!', '第2章!']);
-    expect(ParseWorker.isPureRule(['a@text', null, 'class.x@href##\\d']), true);
+    expect(inPlace.chapters.map((c) => c.title), ['第1章!', '第2章!']);
+    expect(
+      withWorker.chapters.map((c) => (c.title, c.url)),
+      inPlace.chapters.map((c) => (c.title, c.url)),
+    );
+  });
+
+  test('rules are handed to the worker only when the worker gives the same '
+      'result', () {
+    final source = tocSource();
+    ParseWorkerFit fitOf(String rule) => ParseWorker.fit(source, [rule]);
+
+    expect(
+      ParseWorker.fit(source, ['a@text', null, 'class.x@href##\\d']),
+      ParseWorkerFit.pure,
+    );
     for (final rule in [
-      '<js>result</js>',
+      'a@text@js:result + "!"',
+      '<js>java.md5Encode(result)</js>',
+      '{{java.base64Encode(key)}}',
+      '@js:java.getString("a@text").trim()',
+    ]) {
+      expect(fitOf(rule), ParseWorkerFit.js, reason: rule);
+    }
+    for (final rule in [
       '{{java.ajax(baseUrl)}}',
       'a@text@put:{n:"a@text"}',
       '@get:{n}',
+      '@js:java.put("n", result)',
+      '@js:java.get("n")',
+      '@js:java.t2s(result)',
+      '@js:cache.get("n")',
+      '@js:source.getVariable()',
+      '@js:book.name = result',
+      '@js:chapter.putVariable("n", result)',
+      '@js:fetch(baseUrl)',
     ]) {
-      expect(ParseWorker.isPureRule([rule]), false, reason: rule);
+      expect(fitOf(rule), ParseWorkerFit.none, reason: rule);
     }
+
+    final withUrlLib = BookSource.fromJson({
+      'bookSourceName': '外部函式庫',
+      'bookSourceUrl': 'https://worker.test',
+      'jsLib': '{"lib": "https://cdn.test/lib.js"}',
+    });
+    expect(ParseWorker.fit(withUrlLib, ['@js:result']), ParseWorkerFit.none);
   });
+
+  test(
+    'search results that @put values keep them with the worker on',
+    () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': '背景搜尋變數',
+        'bookSourceUrl': 'https://worker.test',
+        'ruleSearch': {
+          'bookList': 'class.item',
+          'name': 'class.name@text@put:{"tag":"class.author@text"}',
+          'author': '@get:{tag}',
+          'bookUrl': 'a@href',
+        },
+      });
+      expect(
+        ParseWorker.fit(source, ['@get:{tag}'], variablesInResult: true),
+        ParseWorkerFit.pure,
+      );
+      Future<List<SearchBook>> parse() => BookListParser.parse(
+        source: source,
+        body: searchHtml,
+        baseUrl: 'https://worker.test/search',
+        isSearch: true,
+      );
+
+      ParseWorker.enabled = false;
+      final inPlace = await parse();
+      ParseWorker.enabled = true;
+      final withWorker = await parse();
+
+      expect(inPlace.map((b) => b.author), ['作者甲', '作者乙']);
+      expect(
+        withWorker.map((b) => (b.name, b.author, b.variable)),
+        inPlace.map((b) => (b.name, b.author, b.variable)),
+      );
+    },
+  );
 
   test('search with a filter still filters with the worker on', () async {
     final books = await BookListParser.parse(
@@ -138,4 +222,129 @@ void main() {
     ParseWorker.enabled = false;
     expect(await ParseWorker.run(() async => 'x'), isNull);
   });
+
+  test('JS that writes to the chapter in ways the rule check cannot see '
+      'still updates the caller\'s chapter', () async {
+    for (final js in [
+      'chapter["title"] = "新標題"; result',
+      'chapter.title += "!"; result',
+      'var c = chapter; c.title = "新標題"; result',
+    ]) {
+      final source = BookSource.fromJson({
+        'bookSourceName': '背景正文',
+        'bookSourceUrl': 'https://worker.test',
+        'ruleContent': {'content': '@js:$js'},
+      });
+      expect(
+        ParseWorker.fit(source, [source.ruleContent!.content]),
+        ParseWorkerFit.js,
+        reason: js,
+      );
+      Future<(String, String)> parse() async {
+        final chapter = BookChapter(title: '原標題');
+        final result = await ContentParser.parse(
+          source: source,
+          chapter: chapter,
+          body: '正文',
+          baseUrl: 'https://worker.test/1',
+        );
+        return (result.content, chapter.title);
+      }
+
+      ParseWorker.enabled = false;
+      final inPlace = await parse();
+      ParseWorker.enabled = true;
+      final withWorker = await parse();
+
+      expect(inPlace.$2, isNot('原標題'), reason: js);
+      expect(withWorker, inPlace, reason: js);
+    }
+  }, timeout: const Timeout(Duration(seconds: 20)));
+
+  test('a URL built in the worker keeps a response the book already '
+      'fetched', () async {
+    await NetworkService().init(ephemeral: true);
+    final adapter = _CountingAdapter();
+    NetworkService().dio
+      ..interceptors.clear()
+      ..httpClientAdapter = adapter;
+    const url = 'https://prefetch.test/page';
+    final source = BookSource(
+      bookSourceUrl: 'https://prefetch.test',
+      bookSourceName: '預取',
+    );
+    final book =
+        Book(bookUrl: 'https://prefetch.test/b', origin: source.bookSourceUrl)
+          ..putVariable('_lastHttpResponseBody', '已預取的正文')
+          ..putVariable('_lastHttpResponseUrl', url);
+    Future<String> fetch() async {
+      final built = await AnalyzeUrl.create(
+        '@js:"$url"',
+        source: source,
+        ruleData: book,
+      );
+      return (await built.getStrResponse()).body;
+    }
+
+    ParseWorker.enabled = false;
+    expect(await fetch(), '已預取的正文');
+    ParseWorker.enabled = true;
+    expect(await fetch(), '已預取的正文');
+    expect(adapter.requests, 0);
+  });
+
+  test('a search URL built by JS is the same with the worker on', () async {
+    final source = BookSource.fromJson({
+      'bookSourceName': '網址 JS',
+      'bookSourceUrl': 'https://worker.test',
+      'header': '@js:JSON.stringify({"X-Key": java.md5Encode("夜讀")})',
+    });
+    const rawUrl =
+        '/search?q={{java.base64Encode(key)}}&p={{page + 1}}'
+        ',{"method": "POST", "body": "k={{key}}"}';
+    Future<AnalyzeUrl> build() => AnalyzeUrl.create(
+      rawUrl,
+      key: '夜讀',
+      page: 2,
+      baseUrl: 'https://worker.test',
+      source: source,
+    );
+
+    ParseWorker.enabled = false;
+    final inPlace = await build();
+    ParseWorker.enabled = true;
+    final withWorker = await build();
+
+    expect(inPlace.url, startsWith('https://worker.test/search?q='));
+    expect(
+      (withWorker.url, withWorker.method, withWorker.body, withWorker.charset),
+      (inPlace.url, inPlace.method, inPlace.body, inPlace.charset),
+    );
+    expect(withWorker.headerMap, inPlace.headerMap);
+    expect(withWorker.headerMap['X-Key'], isNotEmpty);
+  });
+}
+
+/// 記下送出的請求數；回應在記憶體裡，不連網。
+class _CountingAdapter implements HttpClientAdapter {
+  int requests = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests++;
+    return ResponseBody.fromBytes(
+      utf8.encode('重新請求的正文'),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['text/html; charset=utf-8'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
