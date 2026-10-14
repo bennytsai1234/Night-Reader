@@ -11,7 +11,7 @@ ThemeData buildAppTheme(
   Brightness brightness, {
   GlassStrength glassStrength = GlassStrength.frosted,
   AppAccent accent = AppAccent.theme,
-  AppPageTransition pageTransition = AppPageTransition.paper,
+  AppPageTransition pageTransition = AppPageTransition.slide,
 }) {
   final colors = style.paletteFor(brightness, accent);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
@@ -98,8 +98,8 @@ ThemeData buildAppTheme(
     splashFactory: NoSplash.splashFactory,
     highlightColor: chrome.pressedHighlight,
     hoverColor: Colors.transparent,
-    // 全 App 換頁用使用者選的轉場（含開書），開關對稱，支援邊緣右滑返回；
-    // 閱讀器關掉右滑返回（見 BookOpenRoute）。
+    // 全 App 換頁用使用者選的轉場（含開書），支援左緣右滑與 Android 預測
+    // 返回；閱讀器關掉右滑返回（見 BookOpenRoute）。
     pageTransitionsTheme: PageTransitionsTheme(
       builders: {
         TargetPlatform.android: AppPageTransitionsBuilder(pageTransition),

@@ -9,6 +9,7 @@ import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.view.RoundedCorner
 import android.view.WindowInsets
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -36,6 +37,7 @@ class MainActivity : AudioServiceActivity() {
         MethodChannel(messenger, "night_reader/system_bars").setMethodCallHandler { call, result ->
             when (call.method) {
                 "statusBarExtent" -> result.success(statusBarExtent())
+                "screenCornerRadius" -> result.success(screenCornerRadius())
                 else -> result.notImplemented()
             }
         }
@@ -173,6 +175,14 @@ class MainActivity : AudioServiceActivity() {
             insets.displayCutout?.let { extentPx = maxOf(extentPx, it.waterfallInsets.top) }
         }
         return extentPx / resources.displayMetrics.density.toDouble()
+    }
+
+    // 換頁轉場中新頁帶的螢幕圓角（logical px）；Android 12 起才量得到。
+    private fun screenCornerRadius(): Double? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val insets = window.decorView.rootWindowInsets ?: return null
+        val corner = insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT) ?: return null
+        return corner.radius / resources.displayMetrics.density.toDouble()
     }
 }
 

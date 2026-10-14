@@ -96,16 +96,13 @@ class AppearanceSettingsPage extends StatelessWidget {
             ],
           ),
           GroupedSection(
-            header: '換頁動畫',
             children: [
-              GroupedContent(
-                child: GlassSegmented<AppPageTransition>(
-                  segments: [
-                    for (final transition in AppPageTransition.values)
-                      GlassSegment(transition, transition.label),
-                  ],
-                  selected: themeSettings.pageTransition,
-                  onChanged: themeSettings.setPageTransition,
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '換頁動畫',
+                  value: themeSettings.pageTransition.label,
+                  showChevron: false,
+                  onTap: () => _pickPageTransition(rowContext, themeSettings),
                 ),
               ),
             ],
@@ -114,6 +111,25 @@ class AppearanceSettingsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _pickPageTransition(
+  BuildContext rowContext,
+  ThemeSettingsProvider themeSettings,
+) async {
+  final transition = await showGlassMenu<AppPageTransition>(
+    context: rowContext,
+    anchor: globalRectOf(rowContext),
+    entries: [
+      for (final transition in AppPageTransition.values)
+        GlassMenuItem(
+          value: transition,
+          label: transition.label,
+          checked: transition == themeSettings.pageTransition,
+        ),
+    ],
+  );
+  if (transition != null) themeSettings.setPageTransition(transition);
 }
 
 /// 強調色選單：每個色點是套到目前風格與深淺後實際會用的顏色。

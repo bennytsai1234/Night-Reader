@@ -30,9 +30,28 @@ import UIKit
       }
     FlutterEventChannel(name: "night_reader/battery", binaryMessenger: messenger)
       .setStreamHandler(BatteryStreamHandler())
-    // 狀態列與挖孔高度（night_reader/system_bars、reader_device）不實作：iOS 隱藏
-    // 狀態列時安全區域不變，Flutter 的上緣內距已經是穩定值。App 內更新只在 Android。
+    // 狀態列與挖孔高度（system_bars 的 statusBarExtent、reader_device）不實作：iOS
+    // 隱藏狀態列時安全區域不變，Flutter 的上緣內距已經是穩定值。App 內更新只在 Android。
+    FlutterMethodChannel(name: "night_reader/system_bars", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "screenCornerRadius" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(screenCornerRadius())
+      }
   }
+}
+
+// 換頁轉場中新頁帶的螢幕圓角。系統沒有公開 API：Telegram 正式版依機型查表，
+// 它的測試程式讀 UIScreen 的 _displayCornerRadius，這裡也這樣讀；讀不到時回
+// nil，就不加圓角。
+private func screenCornerRadius() -> Double? {
+  let key = "_displayCornerRadius"
+  guard UIScreen.main.responds(to: NSSelectorFromString(key)),
+    let radius = UIScreen.main.value(forKey: key) as? CGFloat, radius > 0
+  else { return nil }
+  return Double(radius)
 }
 
 // Flutter 引擎的 ICU 不含中文詞典，長按選詞靠系統斷詞。offset 與回傳值都是

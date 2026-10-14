@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -50,95 +51,97 @@ class ExploreBookItem extends StatelessWidget {
       ...kinds,
     ].join(' · ');
 
-    return InkWell(
-      onTap: () => _navigateToDetail(context),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppGrouped.margin,
-          AppSpacing.md,
-          AppGrouped.margin,
-          AppSpacing.md,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BookCoverWidget(
-              coverUrl: book.coverUrl,
-              bookName: context.zh(book.name),
-              author: context.zh(book.author ?? ''),
-              width: coverWidth,
-              height: coverHeight,
-              borderRadius: AppRadius.cardXs,
-            ),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          context.zh(book.name),
-                          style: AppTextStyles.bodyBase.copyWith(
-                            height: 1.3,
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (isInBookshelf) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        const InfoBadge(),
-                      ],
-                    ],
-                  ),
-                  if (meta.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      meta,
-                      style: AppTextStyles.bodySm.copyWith(
-                        height: 1.35,
-                        color: secondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (book.latestChapterTitle != null &&
-                      book.latestChapterTitle!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      '最新：${context.zh(book.latestChapterTitle!)}',
-                      style: AppTextStyles.bodySm.copyWith(
-                        height: 1.35,
-                        color: secondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (book.intro != null && book.intro!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      context.zh(
-                        book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
-                      ),
-                      style: AppTextStyles.bodySm.copyWith(
-                        height: 1.4,
-                        color: secondary.withValues(alpha: 0.85),
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
+    return TransitionSource(
+      child: InkWell(
+        onTap: () => _navigateToDetail(context),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            AppSpacing.md,
+            AppGrouped.margin,
+            AppSpacing.md,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BookCoverWidget(
+                coverUrl: book.coverUrl,
+                bookName: context.zh(book.name),
+                author: context.zh(book.author ?? ''),
+                width: coverWidth,
+                height: coverHeight,
+                borderRadius: AppRadius.cardXs,
               ),
-            ),
-          ],
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.zh(book.name),
+                            style: AppTextStyles.bodyBase.copyWith(
+                              height: 1.3,
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isInBookshelf) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          const InfoBadge(),
+                        ],
+                      ],
+                    ),
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        meta,
+                        style: AppTextStyles.bodySm.copyWith(
+                          height: 1.35,
+                          color: secondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (book.latestChapterTitle != null &&
+                        book.latestChapterTitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '最新：${context.zh(book.latestChapterTitle!)}',
+                        style: AppTextStyles.bodySm.copyWith(
+                          height: 1.35,
+                          color: secondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (book.intro != null && book.intro!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        context.zh(
+                          book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                        ),
+                        style: AppTextStyles.bodySm.copyWith(
+                          height: 1.4,
+                          color: secondary.withValues(alpha: 0.85),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
