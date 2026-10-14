@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -11,7 +10,6 @@ import 'package:night_reader/features/cache_manager/download_manager_page.dart';
 import 'package:night_reader/features/settings/appearance_settings_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
-import 'package:night_reader/features/settings/settings_provider.dart';
 
 import 'tts_settings_page.dart';
 import 'data_privacy_settings_page.dart';
@@ -20,7 +18,7 @@ import 'backup_settings_page.dart';
 import 'package:night_reader/features/about/about_page.dart';
 
 /// 「我的」分頁：Telegram 設定頁的結構——置中的 App 頁首，下方為帶上色圖示
-/// 的分組清單。
+/// 的分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）。
 ///
 /// 圖示顏料依意義固定：硃砂＝閱讀、點金＝紀錄、石青＝網路與書源、
 /// 茄紫＝外觀、苔綠＝聲音、茶褐＝資料、墨＝App 資訊。
@@ -81,17 +79,6 @@ class SettingsPage extends StatelessWidget {
                 ),
                 title: '背景下載佇列',
                 onTap: () => _push(context, const DownloadManagerPage()),
-              ),
-              GroupedSwitchRow(
-                leading: const GroupedIconTile(
-                  Icons.update_rounded,
-                  tint: AppTint.azurite,
-                ),
-                title: '啟動時檢查書架更新',
-                value: context.select<SettingsProvider, bool>(
-                  (settings) => settings.autoRefresh,
-                ),
-                onChanged: context.read<SettingsProvider>().setAutoRefresh,
               ),
               GroupedRow(
                 leading: const GroupedIconTile(
