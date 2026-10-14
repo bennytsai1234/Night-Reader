@@ -2,7 +2,7 @@
 
 ## 正在做
 
-`fix/download-task-chapter-urls`（使用者要求做到發 beta）：下載任務的範圍改記起訖章節網址（`startChapterUrl`／`endChapterUrl`，null 是從第一章／到最後一章），開跑時才對照目錄換算；schema 6 升級時舊任務一律改成整本。規則寫在 ADR 0008。
+沒有進行中的分支。最近一次是 #55（合併後發了 beta）：下載任務的範圍改記起訖章節網址（`startChapterUrl`／`endChapterUrl`，null 是從第一章／到最後一章），開跑時才對照目錄換算；進度是範圍內每章算一次，已下載的算完成；schema 6 升級時舊任務一律改成整本。規則寫在 ADR 0008。
 
 #54 已合併並發過 beta：#53 合併前審查留下的兩件事，加上討論後延伸的網站改版、故障與付費情況——
 
