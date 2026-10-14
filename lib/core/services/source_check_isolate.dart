@@ -203,7 +203,7 @@ void _sourceCheckIsolateEntry(Map<String, dynamic> args) {
       await NetworkService().init(ephemeral: true);
       final source = BookSource.fromJson(sourceJson);
       final config = IsolateCheckConfig.fromMap(configJson);
-      final checker = _IsolateSourceChecker(source: source, config: config);
+      final checker = SourceChecker(source: source, config: config);
       final result = await checker.run();
       sendPort.send(result.toMap());
     } catch (e, st) {
@@ -240,17 +240,24 @@ class _IssueData {
 //  Core checker (runs inside the isolate)
 // ═══════════════════════════════════════════════════════════════════
 
-class _IsolateSourceChecker {
+/// 一個書源的校驗判定：依序測搜尋、發現、詳情、目錄與正文，把結果寫成
+/// 書源的狀態分組與錯誤註解。背景 isolate 用它跑校驗；抓取都經過
+/// [BookSourceService]，可以換成別的實作。
+class SourceChecker {
   final BookSource _source;
   final IsolateCheckConfig _config;
-  final BookSourceService _service = BookSourceService();
+  final BookSourceService _service;
   final List<String> _logs = [];
 
   static const int _validationPageConcurrency = 1;
   static const int _validationChapterLimit = 8;
   static const int _validationContentProbeLimit = 5;
 
-  _IsolateSourceChecker({required this._source, required this._config});
+  SourceChecker({
+    required this._source,
+    required this._config,
+    BookSourceService? service,
+  }) : _service = service ?? BookSourceService();
 
   Future<SourceCheckIsolateResult> run() async {
     _source.removeInvalidGroups();

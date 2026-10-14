@@ -5,6 +5,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_group_manage_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -22,6 +23,9 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     dao = BookSourceDao(db);
     GetIt.instance.registerSingleton<BookSourceDao>(dao);
+    GetIt.instance.registerLazySingleton<CheckSourceService>(
+      CheckSourceService.new,
+    );
   });
 
   tearDown(() async {

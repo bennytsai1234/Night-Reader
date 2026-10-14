@@ -254,6 +254,7 @@ class SourceManagerProvider with ChangeNotifier {
   bool sortDesc = false;
   bool groupByDomain = false;
   Timer? _checkNotifyTimer;
+  int _seenCheckRunCount = 0;
   SourceCheckReport get lastCheckReport => checkService.lastReport;
   bool get hasLastCheckReport => checkService.hasLastReport;
   SourceCheckConfig get checkConfig => checkService.config;
@@ -327,6 +328,7 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   bool _isLoading = false;
+  bool _loadOwnsLoading = false;
   bool get isLoading => _isLoading;
   bool _isBatchOperationInProgress = false;
   bool get isBatchOperationInProgress => _isBatchOperationInProgress;
@@ -363,7 +365,8 @@ class SourceManagerProvider with ChangeNotifier {
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
-       checkService = sourceCheckService ?? CheckSourceService() {
+       checkService = sourceCheckService ?? getIt<CheckSourceService>() {
+    _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
     loadSources();
     checkService.loadConfig();
@@ -371,6 +374,11 @@ class SourceManagerProvider with ChangeNotifier {
 
   void _handleCheckServiceChanged() {
     if (_disposed) return;
+    // 校驗結果寫進資料庫後才重新讀取；這一頁中途才打開也一樣。
+    if (checkService.finishedRunCount != _seenCheckRunCount) {
+      _seenCheckRunCount = checkService.finishedRunCount;
+      unawaited(loadSources(showLoading: false));
+    }
     if (!checkService.isChecking) {
       _checkNotifyTimer?.cancel();
       _checkNotifyTimer = null;
@@ -391,8 +399,6 @@ class SourceManagerProvider with ChangeNotifier {
     _loadGeneration++;
     _checkNotifyTimer?.cancel();
     checkService.removeListener(_handleCheckServiceChanged);
-    checkService.cancel();
-    checkService.dispose();
     super.dispose();
   }
 
@@ -407,6 +413,7 @@ class SourceManagerProvider with ChangeNotifier {
     final generation = ++_loadGeneration;
     if (showLoading) {
       _isLoading = true;
+      _loadOwnsLoading = true;
       notifyListeners();
     }
     try {
@@ -425,8 +432,13 @@ class SourceManagerProvider with ChangeNotifier {
         _markVisibleSourcesDirty();
       }
     } finally {
-      if (showLoading && !_disposed && generation == _loadGeneration) {
-        _isLoading = false;
+      // 最新一次讀取收尾：一律發布結果，也收掉被它取代的讀取留下的載入狀態
+      // （匯入自己設的載入狀態由匯入收）。
+      if (!_disposed && generation == _loadGeneration) {
+        if (_loadOwnsLoading) {
+          _isLoading = false;
+          _loadOwnsLoading = false;
+        }
         notifyListeners();
       }
     }
@@ -864,7 +876,6 @@ class SourceManagerProvider with ChangeNotifier {
         await checkService.updateConfig(config);
       }
       await checkService.check(selectedUrls.toList(growable: false));
-      await loadSources();
     } finally {
       _selectedUrls.removeAll(selectedUrls);
       _endBatchOperation();
@@ -960,9 +971,40 @@ class SourceManagerProvider with ChangeNotifier {
         await checkService.updateConfig(config);
       }
       await checkService.check(urls);
-      await loadSources();
     } finally {
       _selectedUrls.removeAll(selectedAtStart);
+      _endBatchOperation();
+    }
+  }
+
+  /// 清掉校驗留下的狀態分組與錯誤註解，書源回到可用；不給網址就清全部，
+  /// 連上次的校驗摘要一起收起。回傳實際有變動的書源數。
+  Future<int> clearCheckMarks([Set<String>? urls]) async {
+    if (!_beginBatchOperation()) return 0;
+    try {
+      final targets = urls == null
+          ? await _dao.getAll()
+          : [for (final url in urls) ?await _dao.getByUrl(url)];
+      final changed = <BookSource>[];
+      for (final source in targets) {
+        final group = source.bookSourceGroup;
+        final comment = source.bookSourceComment;
+        source.removeInvalidGroups();
+        source.removeErrorComment();
+        if (source.bookSourceGroup != group ||
+            source.bookSourceComment != comment) {
+          changed.add(source);
+        }
+      }
+      if (changed.isNotEmpty) await _dao.upsertAll(changed);
+      if (urls == null) {
+        checkService.clearLastReport();
+      } else {
+        _selectedUrls.removeAll(urls);
+      }
+      await loadSources();
+      return changed.length;
+    } finally {
       _endBatchOperation();
     }
   }

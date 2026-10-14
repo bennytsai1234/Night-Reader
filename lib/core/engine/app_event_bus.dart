@@ -20,8 +20,6 @@ class AppEventBus {
   static const String upDownload = 'upDownload';
   static const String upDownloadState = 'upDownloadState';
   static const String saveContent = 'saveContent';
-  static const String checkSource = 'checkSource';
-  static const String checkSourceDone = 'checkSourceDone';
   static const String sourceChanged = 'sourceChanged';
   static const String searchResult = 'searchResult';
   static const String updateReadActionBar = 'updateReadActionBar';

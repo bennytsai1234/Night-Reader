@@ -211,8 +211,11 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     // 選單水平位置：靠錨點同側對齊。
     final anchor = route.anchor;
     final alignRight = anchor.center.dx > screen.width / 2;
+    // 選單和可用寬高一樣大時，上下限理論上相等，但浮點誤差可能讓上限
+    // 略小於下限，clamp 會丟例外；上限一律不小於下限。
+    final double maxLeft = math.max(edge, screen.width - edge - menuWidth);
     final menuLeft = (alignRight ? anchor.right - menuWidth : anchor.left)
-        .clamp(edge, screen.width - edge - menuWidth);
+        .clamp(edge, maxLeft);
 
     // 預覽：必要時往上推，讓預覽＋選單都放得下。
     Rect previewRect = anchor;
@@ -249,7 +252,10 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           : anchor.top - AppSpacing.sm - clampedMenuHeight;
       menuTop = menuTop.clamp(
         safe.top + edge,
-        screen.height - safe.bottom - edge - clampedMenuHeight,
+        math.max(
+          safe.top + edge,
+          screen.height - safe.bottom - edge - clampedMenuHeight,
+        ),
       );
     }
 

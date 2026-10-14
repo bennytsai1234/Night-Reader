@@ -22,6 +22,7 @@ import '../database/dao/keyboard_assist_dao.dart';
 import '../database/dao/server_dao.dart';
 import '../database/dao/reader_chapter_content_dao.dart';
 import '../services/tts_service.dart';
+import '../services/check_source_service.dart';
 import '../services/crash_handler.dart';
 import '../services/app_log_service.dart';
 
@@ -91,6 +92,7 @@ Future<void> configureDependencies() async {
   // 4. 其它核心服務註冊
   getIt.registerSingleton<NetworkService>(NetworkService());
   getIt.registerSingleton<TTSService>(TTSService());
+  getIt.registerLazySingleton<CheckSourceService>(CheckSourceService.new);
 
   // 預先載入 SharedPreferences，讓 SettingsProvider / BookshelfProvider 建構時同步讀取，消除第一幀閃爍
   final prefs = await SharedPreferences.getInstance();

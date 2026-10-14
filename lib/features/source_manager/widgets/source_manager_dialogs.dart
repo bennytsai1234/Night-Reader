@@ -332,6 +332,36 @@ class SourceManagerDialogs {
     }
   }
 
+  /// 清除校驗標記：不給網址是清全部書源，先確認；選中的書源直接清。
+  static Future<void> clearCheckMarks(
+    BuildContext context,
+    SourceManagerProvider provider, {
+    Set<String>? urls,
+  }) async {
+    if (urls == null) {
+      final confirmed = await showAppConfirm(
+        context: context,
+        title: '清除校驗標記',
+        message: '所有書源的校驗分組與錯誤註解都會移除，全部回到可用。',
+        confirmLabel: '清除',
+        destructive: true,
+      );
+      if (!confirmed) return;
+    }
+    try {
+      final affected = await provider.clearCheckMarks(urls);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('已清除 $affected 個書源的校驗標記')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('清除校驗標記失敗：$error')));
+      }
+    }
+  }
+
   static Future<void> confirmDeleteNonNovel(
     BuildContext context,
     SourceManagerProvider provider,

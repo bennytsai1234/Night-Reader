@@ -96,6 +96,7 @@ class SourceManagerMenus {
     required VoidCallback onManageGroups,
     required VoidCallback onNewSource,
     required VoidCallback onCheckAllSources,
+    required VoidCallback onClearCheckMarks,
     required Function(SourceManagerProvider) onClearInvalid,
     required Function(SourceManagerProvider) onDeleteNonNovel,
     bool importEnabled = true,
@@ -119,6 +120,8 @@ class SourceManagerMenus {
             onManageGroups();
           case 'check_all':
             onCheckAllSources();
+          case 'clear_check_marks':
+            onClearCheckMarks();
           case 'group_domain':
             provider.toggleGroupByDomain();
           case 'clear_invalid':
@@ -170,6 +173,12 @@ class SourceManagerMenus {
           value: 'check_all',
           icon: Icons.playlist_add_check,
           label: '校驗所有書源',
+          enabled: provider.totalSourceCount > 0 && mutationEnabled,
+        ),
+        GlassMenuItem(
+          value: 'clear_check_marks',
+          icon: Icons.layers_clear_outlined,
+          label: '清除校驗標記',
           enabled: provider.totalSourceCount > 0 && mutationEnabled,
         ),
         GlassMenuItem(

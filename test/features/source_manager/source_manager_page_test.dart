@@ -7,6 +7,7 @@ import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -44,6 +45,9 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     gatedDao = _GatedSourceDao(db);
     GetIt.instance.registerSingleton<BookSourceDao>(gatedDao);
+    GetIt.instance.registerLazySingleton<CheckSourceService>(
+      CheckSourceService.new,
+    );
   });
 
   tearDown(() async {
@@ -121,6 +125,83 @@ void main() {
 
     gatedDao.gate!.complete();
     await tester.runAsync(() => reload);
+  });
+
+  testWidgets('the group menu lists check marks and filters by them', (
+    tester,
+  ) async {
+    // 手機尺寸、狀態列高度帶小數：選單比螢幕高時要能捲動，不能整個崩掉。
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    tester.view.padding = const FakeViewPadding(top: 130, bottom: 66);
+    addTearDown(tester.view.reset);
+    final dao = GetIt.instance<BookSourceDao>();
+    await tester.runAsync(() async {
+      await dao.upsert(
+        BookSource(
+          bookSourceUrl: 'https://broken.example',
+          bookSourceName: '壞掉的書源',
+          bookSourceGroup: '精選,${sourceRuntimeStatusTags.join(',')}',
+          customOrder: 9,
+        ),
+      );
+      for (var i = 0; i < 12; i++) {
+        await dao.upsert(
+          BookSource(
+            bookSourceUrl: 'https://g$i.example',
+            bookSourceName: '分組書源$i',
+            bookSourceGroup: '自訂分組$i',
+            customOrder: 10 + i,
+          ),
+        );
+      }
+    });
+    await pumpPage(tester);
+
+    await tester.tap(find.bySemanticsLabel('分組與篩選'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(abnormalSourceGroupTag), findsOneWidget);
+
+    await tester.tap(find.text(abnormalSourceGroupTag));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('壞掉的書源'), findsOneWidget);
+    expect(find.textContaining('書源0'), findsNothing);
+
+    // 篩出校驗失敗的書源後，用底部工作列全選刪除。
+    await tester.tap(find.text('全選'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刪除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('確定刪除'));
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+
+    final remaining = await tester.runAsync(dao.getAll);
+    expect(
+      remaining!.map((s) => s.bookSourceUrl),
+      isNot(contains('https://broken.example')),
+    );
+    expect(remaining, hasLength(15));
+  });
+
+  testWidgets('the batch toolbar stays at the bottom outside selection mode', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+
+    expect(find.text('全選'), findsOneWidget);
+    expect(find.text('0/3'), findsOneWidget);
+
+    await tester.tap(find.text('全選'));
+    await tester.pumpAndSettle();
+    expect(find.text('3/3'), findsOneWidget);
+    expect(find.text('已選 3 項'), findsOneWidget);
+    expect(find.text('反選'), findsOneWidget);
   });
 
   testWidgets('toggling one source leaves the other rows usable', (

@@ -144,12 +144,18 @@ extension BookSourceLogic on BookSourceBase {
   }
 
   // 註釋與錯誤訊息
+  /// 逐行移除 `// Error:` 錯誤行，其他行原樣保留；錯誤行後面接的空行
+  /// （addErrorComment 用來和原註解隔開）一起拿掉。
   void removeErrorComment() {
     if (bookSourceComment == null) return;
-    bookSourceComment = bookSourceComment!
-        .split('\n\n')
+    final lines = bookSourceComment!.split('\n');
+    final kept = lines
         .where((line) => !line.trim().startsWith('// Error:'))
-        .join('\n\n');
+        .toList();
+    if (kept.length == lines.length) return;
+    bookSourceComment = kept
+        .skipWhile((line) => line.trim().isEmpty)
+        .join('\n');
   }
 
   void addErrorComment(String error) {

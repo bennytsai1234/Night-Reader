@@ -75,19 +75,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     }
   }
 
-  /// 校驗由這一頁擁有，離開就會中止；先確認再走。
-  Future<void> _confirmLeaveWhileChecking() async {
-    final leave = await showAppConfirm(
-      context: context,
-      title: '校驗進行中',
-      message: '離開這一頁會取消校驗，已完成的部分不會產生摘要。',
-      confirmLabel: '取消校驗並離開',
-      cancelLabel: '繼續校驗',
-      destructive: true,
-    );
-    if (leave && mounted) Navigator.pop(context);
-  }
-
   void _exitEditMode(SourceManagerProvider p) {
     setState(() => _editMode = false);
     p.clearSelection();
@@ -104,16 +91,10 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           _editMode = false;
         }
         final editing = _isEditing(provider) && provider.totalSourceCount > 0;
-        final checking = provider.checkService.isChecking;
         return PopScope<void>(
-          canPop: !editing && !checking,
+          canPop: !editing,
           onPopInvokedWithResult: (didPop, _) {
-            if (didPop) return;
-            if (editing) {
-              _exitEditMode(provider);
-            } else if (checking) {
-              _confirmLeaveWhileChecking();
-            }
+            if (!didPop) _exitEditMode(provider);
           },
           child: Scaffold(
             extendBodyBehindAppBar: true,
@@ -129,7 +110,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               builder: (bodyContext) =>
                   _buildMainContent(bodyContext, provider),
             ),
-            bottomNavigationBar: editing
+            // 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。
+            bottomNavigationBar: provider.totalSourceCount > 0
                 ? SelectActionBar(
                     provider: provider,
                     externallyBusy: _isImporting,
@@ -190,6 +172,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
                         provider,
                       );
                     },
+                    onClearCheckMarks: () =>
+                        SourceManagerDialogs.clearCheckMarks(
+                          context,
+                          provider,
+                          urls: provider.selectedUrls,
+                        ),
                     onDelete: () {
                       _confirmDeleteSelected(context, provider);
                     },
@@ -322,6 +310,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             provider,
             checkAll: true,
           ),
+          onClearCheckMarks: () =>
+              SourceManagerDialogs.clearCheckMarks(context, provider),
           onClearInvalid: (p) =>
               SourceManagerDialogs.confirmClearInvalid(context, p),
           onDeleteNonNovel: (p) =>
