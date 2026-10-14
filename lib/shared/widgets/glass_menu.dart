@@ -19,6 +19,7 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
     required this.value,
     required this.label,
     this.icon,
+    this.swatch,
     this.subtitle,
     this.destructive = false,
     this.checked = false,
@@ -30,6 +31,9 @@ class GlassMenuItem<T> extends GlassMenuEntry<T> {
 
   /// Telegram 把圖示放在右側。
   final IconData? icon;
+
+  /// 放在圖示位置的色點（選顏色的選單）；與 [icon] 擇一。
+  final Color? swatch;
   final String? subtitle;
   final bool destructive;
 
@@ -462,6 +466,17 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
                           if (entry.icon != null) ...[
                             const SizedBox(width: AppSpacing.md),
                             Icon(entry.icon, size: 20, color: color),
+                          ] else if (entry.swatch != null) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            SizedBox.square(
+                              dimension: 20,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: entry.swatch,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
                           ],
                         ],
                       ),

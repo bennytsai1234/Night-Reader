@@ -9,6 +9,9 @@ class PreferKey {
   /// 外觀風格（[AppStyle.name]）。
   static const String appStyle = 'app_style';
 
+  /// 強調色（[AppAccent.name]）。
+  static const String appAccent = 'app_accent';
+
   /// 玻璃材質強度（[GlassStrength.name]）。
   static const String glassStrength = 'theme_glass_strength_v1';
 

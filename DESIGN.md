@@ -2,17 +2,19 @@
 
 夜讀以 Material 3 為底，介面結構與互動取法 Telegram iOS（浮動玻璃列、分組清單、情境選單），視覺基線為「紙墨相生」：淺色介面以溫潤暖白宣紙承載文字，深色介面以低刺激夜墨降低長時間閱讀疲勞。設計哲學恪守「介面服務於內容，克制而不喧賓奪主」，追求如精裝紙本書冊般的雅緻、秩序與呼吸感。
 
-外觀由「風格 × 深淺」決定：五種風格（紙墨、竹青、石青、茶褐、素色）各有一套淺色與深色配色，一次套到 App 介面、閱讀正文與閱讀選單；深淺（跟隨系統／淺色／深色）全 App 共用，閱讀器的月亮鈕切換的也是它。不提供個別調色。
+外觀由「風格 × 深淺」決定：十種風格（紙墨、竹青、石青、茶褐、素色，以及取材自 Rosé Pine、Catppuccin、Solarized、Gruvbox、Nord 的胭脂、藕荷、黃卷、琥珀、霜夜）各有一套淺色與深色配色，一次套到 App 介面、閱讀正文與閱讀選單；深淺（跟隨系統／淺色／深色）全 App 共用，閱讀器的月亮鈕切換的也是它。另可選強調色（`AppAccent`，「外觀與主題 → 強調色」選單，預設「跟隨主題」，另有十二色）換掉主色：開關、選取、勾勾、強調按鈕與純文字動作一起換，其餘配色照風格；每個強調色有一個淺色、一個深色版本，不分風格（`AppStyle.paletteFor`）。不提供其他個別調色或自訂色碼。
+
+「外觀與主題」的風格卡是直式摺角小書頁（3:4），兩列、每列五張，一般手機在預設字級下一頁放得下風格、強調色、深淺與玻璃效果，不用往下捲；字級放大時名稱可換行，放不下就捲動：紙面是該風格目前深淺的閱讀紙色，左上一個「永」（不隨系統字級放大）加幾條正文色細線，右上角摺起露出主色（跟著強調色），風格名稱寫在頁下。紙面、陰影與外框沿同一條頁形，外框跟著摺線斜切；選中時書頁浮起 2、外框由髮絲線變成 2 寬主色、陰影加深、名稱變粗（`AppMotion.menu`），不放勾。閱讀器「外觀與排版」面板仍是一排只畫紙色的圓形色票。
 
 ## 實作入口
 
 - `lib/shared/theme/app_tokens.dart`：品牌色、紙／墨色階、間距與圓角 token。
 - `lib/shared/theme/app_text_styles.dart`：標題、正文與 UI 字階。
-- `lib/shared/theme/app_style.dart`：五種風格（`AppStyle`）與每個深淺的完整配色（`StylePalette`，掛在 `ThemeData` 上的擴充）。
+- `lib/shared/theme/app_style.dart`：風格（`AppStyle`）與每個深淺的完整配色（`StylePalette`，掛在 `ThemeData` 上的擴充），以及強調色（`AppAccent`）。
 - `lib/shared/theme/custom_app_theme.dart`：風格映射至 Material `ThemeData` 的唯一入口。
 - `lib/shared/theme/app_chrome.dart`：分組清單與玻璃元件的衍生色（`AppChrome.of(context)`），全由風格配色推導，不新增序列化欄位。
 - `lib/shared/widgets/`：紙墨玻璃元件庫，見下方「紙墨玻璃元件」。
-- `lib/features/settings/theme_settings_provider.dart`：使用者選的風格與玻璃強度；深淺在 `SettingsProvider.themeMode`。
+- `lib/features/settings/theme_settings_provider.dart`：使用者選的風格、強調色與玻璃強度；深淺在 `SettingsProvider.themeMode`。
 
 ## 色彩與材質層次
 
@@ -31,7 +33,7 @@
 | 正文閱讀文字 | `#2A241C` | `#CFC6B2` | 正文溫和但不低於 7:1 |
 | 閱讀資訊列（`readerInfo`） | `#6D675E` | `#938C7D` | 頁首／頁尾的時間、進度等，對紙張至少 4.5:1 |
 
-一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文、資訊列、高亮與閱讀選單一律經 `StylePalette.of(context)`（選單經 `ReaderV2MenuStyle.of`）取色，不自行判斷深淺。主色上的勾勾與文字（`StylePalette.onPrimary`）取紙白、墨色中對比較高者，App 主題與閱讀選單共用。新增或調整風格時，每個深淺都要通過 `test/shared/theme/app_style_test.dart` 的對比度契約：正文與主要文字 7:1、次要文字與資訊列 4.5:1、主色上的勾勾與文字 4.5:1、主色 4.5:1（主色也當文字用：純文字動作、選取中的膠囊，膠囊的淡主色底見 `GlassCapsule.selectedTintOf`）、提示訊息的文字與動作字 4.5:1。
+一般 Widget 優先取用 `Theme.of(context).colorScheme` 與 `ThemeData`，不要直接複製預設色值。閱讀正文、資訊列、高亮與閱讀選單一律經 `StylePalette.of(context)`（選單經 `ReaderV2MenuStyle.of`）取色，不自行判斷深淺。主色上的勾勾與文字（`StylePalette.onPrimary`）取紙白、墨色中對比較高者，App 主題與閱讀選單共用。
 
 ## 字體與書卷排版
 
@@ -72,7 +74,7 @@
 - **其他**：`GlassSegmented` 取代分段按鈕（滑動膠囊、可拖曳）；`GroupFilterBar` 為書源分組篩選列（「全部」固定在左、分組膠囊可橫向捲動並附書源數、右側格狀鈕開出全部分組面板），發現頁與換源面板共用；`GlassCapsule` 為可點小膠囊（可附小字數量）；`SearchField` 為圓角搜尋框（浮在內容上用 `glass: true`）；`SheetHeader` 為分組面板標題列；`FloatingGlassToolbar` 為編輯模式底部浮動工具列；`SwipeActions` 提供清單列左右滑出動作。
 - **動態**：選取指示與按壓回彈用 `AppMotion.spring`（400ms，輕微回彈），淡入淡出 `AppMotion.fade`（250ms easeInOut），選單滑入 `AppMotion.menu`（200ms easeOutCubic）。換頁動畫全 App 共用一種，在「外觀與主題 → 換頁動畫」選（`AppPageTransition`，掛在主題的 `PageTransitionsTheme`，含開閱讀器的 `BookOpenRoute`）：上浮（預設，新頁從下方上浮 4% 並淡入，280ms easeOutCubic）、平移（iOS 平移，500ms）、淡入（新頁從 0.96 放大淡入、底下的頁面縮到 0.98，250ms）、展開（從手指按下的位置以頁面底色的圓角矩形撐開到整頁、內容在中段淡入，`AppMotion.spring`；只改裁切與底色遮罩的透明度，不做整頁 Opacity）。除了平移，被蓋住的頁面都微暗 6%。返回一律是開啟倒著播（同一條曲線、同樣時長，不設 reverseCurve），開關對稱。每一種都能從左緣右滑返回：拖曳中頁面改成跟手的 iOS 平移，放開後返回或彈回；閱讀器不能右滑返回。搜尋結果串流進來時每一列第一次出現短暫淡入並上移 10（`AppMotion.fade`）；同一列之後重建、捲出畫面再回來或重新排序都不再播。系統關閉動畫（`MediaQuery.disableAnimations`）時，下面這些版面與換色動畫直接到位。
   - 書架版面：網格與列表互換時整頁交叉淡化加 0.96 輕微縮放（`AppMotion.fade`）；換排序、或書因閱讀移到最前面時，書卡從舊位置滑到新位置（`AppMotion.spring`，`BookshelfLayoutMotion`，只動繪製位移、不重新排版），新加入的書淡入，移出的書直接消失、其他書卡移過去補位。拖曳排序放下時清單本身已經到位，不再播一次。
-  - 深淺與風格切換：新配色從點擊位置像墨水一樣暈開（`ThemeRevealScope`，掛在 App 根部，`AppMotion.themeReveal` 450ms easeInOutCubic），切換的那一下擷取一次舊畫面蓋在上面、挖出邊緣柔和的圓，結束即釋放。外觀設定頁的風格與深淺、閱讀器的月亮鈕與「外觀與排版」面板的風格色票都經 `ThemeRevealScope.of(context).run(...)` 切換；系統自己切換深淺時直接換。App 主題本身不做漸變（`themeAnimationStyle: AnimationStyle.noAnimation`），暈開的圓裡一開始就是最終配色。
+  - 深淺與風格切換：新配色從點擊位置像墨水一樣暈開（`ThemeRevealScope`，掛在 App 根部，`AppMotion.themeReveal` 450ms easeInOutCubic），切換的那一下擷取一次舊畫面蓋在上面、挖出邊緣柔和的圓，結束即釋放。外觀設定頁的風格、強調色與深淺、閱讀器的月亮鈕與「外觀與排版」面板的風格色票都經 `ThemeRevealScope.of(context).run(...)` 切換；系統自己切換深淺時直接換。App 主題本身不做漸變（`themeAnimationStyle: AnimationStyle.noAnimation`），暈開的圓裡一開始就是最終配色。
 - **按壓回饋**：每個可點的地方都有回饋，依元件種類只用一種：
   - 卡片、封面、玻璃按鈕與小圖示鈕（例如搜尋框的清除鈕、規則小幫手鈕）：`PressScale` 微縮回彈（按鈕約 0.92，卡片、封面與膠囊約 0.95–0.96）。
   - 清單列，以及列內可點的子區（例如搜尋結果的「來源」展開）：`InkWell` 淡墨高亮（`AppChrome.pressedHighlight`），不畫水波紋。書架列表檢視的書卡可左滑出動作，屬於清單列。
@@ -83,6 +85,7 @@
   - `lift`（mediumImpact）：長按拿起：`showContextPreviewMenu` 開啟、拖曳排序開始。
 - **載入骨架**：載入中以 `Skeleton`＋`SkeletonBox`（封面、按鈕）／`SkeletonLine`（一行文字，跟著系統字級）畫出內容將出現的形狀，不放置中轉圈；形狀照真實版面的幾何，內容到了版面不跳動；唯一例外是發現頁的分組篩選列，要等書源載入完才知道有沒有分組，有分組時篩選列在內容到了才插入頁首，清單起點下移一列。底色為主要文字色疊 7%（淺色）／9%（深色），各風格深淺都看得出但很淡；整塊共用一個很輕的呼吸脈動（`AppMotion.skeletonPulse`，只改底色、不做整塊透明度），減少動態時靜止。整區切換用 `SkeletonSwitcher`，清單（sliver）用 `SliverFadeIn`，內容以 `AppMotion.fade` 淡入取代骨架。分頁「載入更多」與列內的小狀態仍用小轉圈，主頁啟動遮罩不變。
 - **開書與詳情的轉場**：書架、發現分類與搜尋結果點進書籍詳情、開閱讀器都照上面選定的換頁動畫，不做封面的共享元素轉場（Hero）或封面放大翻開（ADR 0012）；書籍詳情長按封面看大圖也一樣。
+- **閱讀器載入**：開書、跳章與重新排版時，從排版開始正文區蓋一張閱讀底色的紙（`LoadingVeil`），轉場後看起來是同一張紙，不放轉圈或文字。跳章時正文還在取得的那段，舊正文留在畫面上、可以捲動，一捲就取消跳章。紙一蓋上就淡入正文骨架：照閱讀版面的行高、段距、首行縮排與左右邊距畫圓角條，配色與呼吸同「載入骨架」，取正文色。正文排好後紙以 `AppMotion.fade` 淡出露出正文，骨架一起淡掉；載入開始時正文直接收掉。首次開書時頁首頁尾資訊列跟著正文淡入；跳章與重新排版時資訊列留在原處。只改紙與骨架顏色的透明度，不做整頁 Opacity；淡出中的紙不攔點擊。系統關閉動畫時直接到位、骨架不呼吸。載入失敗照舊顯示錯誤訊息。
 
 ## 元件質感與動態反饋
 

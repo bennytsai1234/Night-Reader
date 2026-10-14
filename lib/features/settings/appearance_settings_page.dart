@@ -7,13 +7,14 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、深淺、玻璃效果與換頁動畫。風格與深淺同時決定 App
-/// 介面、閱讀正文與閱讀選單的配色。
+/// 外觀與主題：風格、強調色、深淺、玻璃效果與換頁動畫。風格與深淺同時
+/// 決定 App 介面、閱讀正文與閱讀選單的配色。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
@@ -31,14 +32,31 @@ class AppearanceSettingsPage extends StatelessWidget {
             header: '風格',
             children: [
               GroupedContent(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
                 child: _StyleGrid(
                   selected: themeSettings.style,
+                  accent: themeSettings.accent,
                   onSelected: (style) {
                     if (style == themeSettings.style) return;
                     ThemeRevealScope.of(context)
                         .run(change: () => themeSettings.setStyle(style));
                   },
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '強調色',
+                  value: themeSettings.accent.label,
+                  trailing: _AccentDot(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  showChevron: false,
+                  onTap: () => _pickAccent(rowContext, themeSettings),
                 ),
               ),
             ],
@@ -98,42 +116,81 @@ class AppearanceSettingsPage extends StatelessWidget {
   }
 }
 
-/// 三欄風格卡：上半是正文紙張與文字，下半是 App 卡片底色與主色；
-/// 顯示各風格在目前深淺下的樣子。
+/// 強調色選單：每個色點是套到目前風格與深淺後實際會用的顏色。
+Future<void> _pickAccent(
+  BuildContext rowContext,
+  ThemeSettingsProvider themeSettings,
+) async {
+  final brightness = Theme.of(rowContext).brightness;
+  final accent = await showGlassMenu<AppAccent>(
+    context: rowContext,
+    anchor: globalRectOf(rowContext),
+    entries: [
+      for (final accent in AppAccent.values)
+        GlassMenuItem(
+          value: accent,
+          label: accent.label,
+          checked: accent == themeSettings.accent,
+          swatch: themeSettings.style.paletteFor(brightness, accent).primary,
+        ),
+    ],
+  );
+  if (accent == null || accent == themeSettings.accent) return;
+  if (!rowContext.mounted) return;
+  ThemeRevealScope.of(rowContext)
+      .run(change: () => themeSettings.setAccent(accent));
+}
+
+class _AccentDot extends StatelessWidget {
+  const _AccentDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 18,
+    child: DecoratedBox(
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    ),
+  );
+}
+
+/// 風格卡：每個風格一張直式小書頁，兩列、每列五張，一頁放得下全部風格與
+/// 下面的強調色、深淺與玻璃效果。顯示各風格在目前深淺下的樣子。
 class _StyleGrid extends StatelessWidget {
-  const _StyleGrid({required this.selected, required this.onSelected});
+  const _StyleGrid({
+    required this.selected,
+    required this.accent,
+    required this.onSelected,
+  });
 
   final AppStyle selected;
+
+  /// 摺角的主色照目前的強調色畫，選下去看到的就是那個樣子。
+  final AppAccent accent;
   final ValueChanged<AppStyle> onSelected;
 
-  static const int _columns = 3;
-  static const double _gap = AppSpacing.md;
-
-  /// 卡片高度 = 不隨字級變動的留白與色塊 + 三行文字（「永」、範例字、
-  /// 風格名稱）。1 倍字級時是 112，系統字級放大時跟著長高。
-  static const double _cardChromeHeight = 60;
-  static const double _cardTextHeight = 52;
+  static const int _columns = 5;
+  static const double _columnGap = AppSpacing.md;
+  static const double _rowGap = AppSpacing.lg;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final cardHeight =
-        _cardChromeHeight +
-        MediaQuery.textScalerOf(context).scale(_cardTextHeight);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = (constraints.maxWidth - _gap * (_columns - 1)) / _columns;
+        final width =
+            (constraints.maxWidth - _columnGap * (_columns - 1)) / _columns;
         return Wrap(
-          spacing: _gap,
-          runSpacing: _gap,
+          spacing: _columnGap,
+          runSpacing: _rowGap,
           children: [
             for (final style in AppStyle.values)
               SizedBox(
                 width: width,
-                height: cardHeight,
                 child: _StyleCard(
                   style: style,
-                  palette: style.of(brightness),
+                  palette: style.paletteFor(brightness, accent),
                   selected: style == selected,
                   onTap: () => onSelected(style),
                 ),
@@ -145,6 +202,8 @@ class _StyleGrid extends StatelessWidget {
   }
 }
 
+/// 一張摺角書頁：閱讀紙色上一個「永」與幾條正文色細線，右上角摺起露出
+/// 主色；風格名稱寫在頁下。選中時書頁浮起、加主色外框、名稱變粗。
 class _StyleCard extends StatelessWidget {
   const _StyleCard({
     required this.style,
@@ -158,12 +217,32 @@ class _StyleCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  static const double _stripHeight = 30;
-  static const double _badgeSize = 18;
+  /// 選中時書頁往上浮起的距離。
+  static const double _lift = 2;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppMotion.menu;
+    final page = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 7, 0),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Text(
+          '永',
+          // 書頁是縮圖，字跟著頁面大小，不隨系統字級放大。
+          textScaler: TextScaler.noScaling,
+          style: AppTextStyles.uiMd.copyWith(
+            color: palette.readerText,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+          ),
+        ),
+      ),
+    );
     return Semantics(
       label: style.label,
       selected: selected,
@@ -174,110 +253,168 @@ class _StyleCard extends StatelessWidget {
       child: PressScale(
         scale: 0.96,
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: AppMotion.menu,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: AppRadius.cardMd,
-            border: Border.all(
-              color: selected
-                  ? scheme.primary
-                  : AppChrome.of(context).separator,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: Container(
-                      color: palette.readerBackground,
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.md,
-                        AppSpacing.sm,
-                        AppSpacing.md,
-                        0,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '永',
-                            style: AppTextStyles.titleSm.copyWith(
-                              color: palette.readerText,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '燈下的字',
-                            maxLines: 1,
-                            overflow: TextOverflow.clip,
-                            style: AppTextStyles.labelXs.copyWith(
-                              color: palette.readerText,
-                            ),
-                          ),
-                        ],
-                      ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AspectRatio(
+              aspectRatio: 3 / 4,
+              // 浮起、外框與陰影隨選取一起漸變（0 未選、1 選中）。
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: selected ? 1 : 0),
+                duration: duration,
+                curve: AppMotion.menuCurve,
+                child: page,
+                builder: (context, t, child) => Transform.translate(
+                  offset: Offset(0, -_lift * t),
+                  child: CustomPaint(
+                    painter: _FoldedPagePainter(
+                      paper: palette.readerBackground,
+                      ink: palette.readerText,
+                      fold: palette.primary,
+                      outline: Color.lerp(chrome.separator, scheme.primary, t)!,
+                      outlineWidth:
+                          AppGlass.hairline + (2 - AppGlass.hairline) * t,
+                      elevation: 1 + 3 * t,
                     ),
-                  ),
-                  Container(
-                    // 字級放大時色條跟著長高，標籤不被裁掉。
-                    constraints: const BoxConstraints(minHeight: _stripHeight),
-                    color: palette.surface,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(
-                            color: palette.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Flexible(
-                          child: Text(
-                            style.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.uiSm.copyWith(
-                              color: palette.text,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (selected)
-                Positioned(
-                  top: AppSpacing.sm,
-                  right: AppSpacing.sm,
-                  child: Container(
-                    width: _badgeSize,
-                    height: _badgeSize,
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: 13,
-                      color: scheme.onPrimary,
-                    ),
+                    child: child,
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              style.label,
+              // 窄螢幕加大字級時換行，不省略成「…」。
+              textAlign: TextAlign.center,
+              style: AppTextStyles.labelSm.copyWith(
+                color: selected ? scheme.onSurface : chrome.sectionText,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// 摺角書頁：紙面、陰影與外框都沿同一條頁形（右上角斜切），外框跟著
+/// 摺線走；紙上畫正文細線，摺過來的那一角是主色。
+class _FoldedPagePainter extends CustomPainter {
+  const _FoldedPagePainter({
+    required this.paper,
+    required this.ink,
+    required this.fold,
+    required this.outline,
+    required this.outlineWidth,
+    required this.elevation,
+  });
+
+  final Color paper;
+  final Color ink;
+  final Color fold;
+  final Color outline;
+  final double outlineWidth;
+  final double elevation;
+
+  static const double _foldSize = 14;
+
+  /// 左側是裝訂邊，圓角比右側小一點。
+  static const double _spineRadius = 4;
+  static const double _edgeRadius = 7;
+
+  /// 每行佔頁寬的比例；0 是段落間的空行。段首縮排一格。
+  static const List<double> _lines = [0.92, 1, 0.78, 0, 0.86, 1, 0.55, 0, 0.9];
+  static const Set<int> _paragraphStarts = {0, 4, 8};
+
+  static Path _pagePath(Size size) {
+    final w = size.width;
+    final h = size.height;
+    return Path()
+      ..moveTo(_spineRadius, 0)
+      ..lineTo(w - _foldSize, 0)
+      ..lineTo(w, _foldSize)
+      ..lineTo(w, h - _edgeRadius)
+      ..arcToPoint(
+        Offset(w - _edgeRadius, h),
+        radius: const Radius.circular(_edgeRadius),
+      )
+      ..lineTo(_spineRadius, h)
+      ..arcToPoint(
+        Offset(0, h - _spineRadius),
+        radius: const Radius.circular(_spineRadius),
+      )
+      ..lineTo(0, _spineRadius)
+      ..arcToPoint(
+        const Offset(_spineRadius, 0),
+        radius: const Radius.circular(_spineRadius),
+      )
+      ..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pagePath = _pagePath(size);
+    canvas.drawShadow(pagePath, Colors.black, elevation, false);
+    canvas.drawPath(pagePath, Paint()..color = paper);
+
+    final left = size.width * 0.13;
+    final right = size.width * 0.88;
+    final lineWidth = right - left;
+    const thickness = 2.5;
+    const lineGap = 6.5;
+    final paint = Paint()..color = ink.withValues(alpha: 0.33);
+    var top = size.height * 0.36;
+    for (var i = 0; i < _lines.length; i++) {
+      if (top + thickness > size.height - 4) break;
+      final factor = _lines[i];
+      if (factor > 0) {
+        final start = _paragraphStarts.contains(i)
+            ? left + lineWidth * 0.2
+            : left;
+        final end = left + lineWidth * factor;
+        if (end > start) {
+          canvas.drawRRect(
+            RRect.fromLTRBR(
+              start,
+              top,
+              end,
+              top + thickness,
+              const Radius.circular(thickness / 2),
+            ),
+            paint,
+          );
+        }
+      }
+      top += factor > 0 ? lineGap : lineGap * 0.6;
+    }
+
+    // 摺過來的那一角，貼在紙面上。
+    final w = size.width;
+    final flap = Path()
+      ..moveTo(w - _foldSize, 0)
+      ..lineTo(w, _foldSize)
+      ..lineTo(w - _foldSize, _foldSize)
+      ..close();
+    canvas.drawShadow(flap, Colors.black, 1.5, false);
+    canvas.drawPath(flap, Paint()..color = fold);
+
+    canvas.drawPath(
+      pagePath,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = outlineWidth
+        ..strokeJoin = StrokeJoin.round
+        ..color = outline,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FoldedPagePainter oldDelegate) =>
+      oldDelegate.paper != paper ||
+      oldDelegate.ink != ink ||
+      oldDelegate.fold != fold ||
+      oldDelegate.outline != outline ||
+      oldDelegate.outlineWidth != outlineWidth ||
+      oldDelegate.elevation != elevation;
 }

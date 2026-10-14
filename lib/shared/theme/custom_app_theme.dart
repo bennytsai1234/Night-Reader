@@ -10,12 +10,17 @@ ThemeData buildAppTheme(
   AppStyle style,
   Brightness brightness, {
   GlassStrength glassStrength = GlassStrength.frosted,
+  AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.paper,
 }) {
-  final colors = style.of(brightness);
+  final colors = style.paletteFor(brightness, accent);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
-  final inversePrimary =
-      (brightness == Brightness.light ? style.dark : style.light).primary;
+  final inversePrimary = style
+      .paletteFor(
+        brightness == Brightness.light ? Brightness.dark : Brightness.light,
+        accent,
+      )
+      .primary;
   final primaryContainer = Color.alphaBlend(
     colors.primary.withValues(
       alpha: brightness == Brightness.light ? 0.14 : 0.24,

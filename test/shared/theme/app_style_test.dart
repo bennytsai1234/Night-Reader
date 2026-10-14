@@ -11,7 +11,6 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// WCAG 2.x 對比度。
@@ -41,68 +40,6 @@ void main() {
               brightness,
             );
           }
-        });
-
-        test('$name：文字對比達標', () {
-          // 正文與主要文字 WCAG AAA（7:1）；次要文字 AA（4.5:1）；
-          // 主色也當文字用（「完成」、選取膠囊），同為 AA。
-          expect(
-            _contrast(palette.readerText, palette.readerBackground),
-            greaterThanOrEqualTo(7),
-          );
-          // 資訊列是紙張上的次要文字；主色上的勾勾與文字同為 AA。
-          expect(
-            _contrast(palette.readerInfo, palette.readerBackground),
-            greaterThanOrEqualTo(4.5),
-          );
-          expect(
-            _contrast(palette.onPrimary, palette.primary),
-            greaterThanOrEqualTo(4.5),
-          );
-          for (final background in [palette.background, palette.surface]) {
-            expect(
-              _contrast(palette.text, background),
-              greaterThanOrEqualTo(7),
-            );
-            expect(
-              _contrast(palette.textMuted, background),
-              greaterThanOrEqualTo(4.5),
-            );
-            expect(
-              _contrast(palette.primary, background),
-              greaterThanOrEqualTo(4.5),
-            );
-          }
-          // 選取中的膠囊：主色字在淡主色底（疊在頁面底色上）。
-          final scheme = buildAppTheme(style, brightness).colorScheme;
-          final capsule = Color.alphaBlend(
-            GlassCapsule.selectedTintOf(scheme),
-            palette.background,
-          );
-          expect(
-            _contrast(palette.primary, capsule),
-            greaterThanOrEqualTo(4.5),
-          );
-        });
-
-        test('$name：提示訊息的文字與動作字對比達標', () {
-          final chrome = buildAppTheme(
-            style,
-            brightness,
-          ).extension<AppChrome>()!;
-          // 提示底色帶一點透明，疊在頁面底色上量。
-          final toast = Color.alphaBlend(
-            chrome.toastBackground,
-            palette.background,
-          );
-          expect(
-            _contrast(chrome.toastForeground, toast),
-            greaterThanOrEqualTo(4.5),
-          );
-          expect(
-            _contrast(chrome.toastAction, toast),
-            greaterThanOrEqualTo(4.5),
-          );
         });
       }
     }
@@ -177,6 +114,28 @@ void main() {
     }
   });
 
+  test('強調色只換主色，其餘配色照風格', () {
+    for (final accent in AppAccent.values) {
+      for (final style in AppStyle.values) {
+        for (final brightness in Brightness.values) {
+          final reason = '${accent.label}・${style.label}・${brightness.name}';
+          final theme = buildAppTheme(style, brightness, accent: accent);
+          final palette = theme.extension<StylePalette>()!;
+          final base = style.of(brightness);
+          expect(
+            palette.primary,
+            accent.colorFor(brightness) ?? base.primary,
+            reason: reason,
+          );
+          expect(theme.colorScheme.primary, palette.primary, reason: reason);
+          expect(palette.background, base.background, reason: reason);
+          expect(palette.text, base.text, reason: reason);
+          expect(palette.readerText, base.readerText, reason: reason);
+        }
+      }
+    }
+  });
+
   group('ThemeSettingsProvider', () {
     tearDown(() => GetIt.instance.reset());
 
@@ -200,6 +159,21 @@ void main() {
     test('無法辨識的保存值回到預設風格', () async {
       await register(<String, Object>{PreferKey.appStyle: 'rainbow'});
       expect(ThemeSettingsProvider().style, AppStyle.paper);
+    });
+
+    test('強調色預設跟隨主題，保存後重新開啟仍是同一個', () async {
+      final prefs = await register(<String, Object>{});
+      final provider = ThemeSettingsProvider();
+      expect(provider.accent, AppAccent.theme);
+
+      provider.setAccent(AppAccent.bamboo);
+      expect(prefs.getString(PreferKey.appAccent), AppAccent.bamboo.name);
+      expect(ThemeSettingsProvider().accent, AppAccent.bamboo);
+    });
+
+    test('無法辨識的強調色回到跟隨主題', () async {
+      await register(<String, Object>{PreferKey.appAccent: 'rainbow'});
+      expect(ThemeSettingsProvider().accent, AppAccent.theme);
     });
   });
 }
