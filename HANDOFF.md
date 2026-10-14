@@ -1,12 +1,13 @@
 # 交接（2026-10-14 22:25）
 
-## 進行中：`feat/shelf-check-in-system-tools`（已推上，未合併）
+## 進行中：PR #61（`feat/shelf-check-in-system-tools`，已併入 `refactor/split-hybrid-reader-screen`）
 
-使用者說合併時照 AGENTS.md 開 PR。三個提交：
+使用者 2026-10-14 說兩條併成一個 PR 合併。內容：
 
 - **設定搬移**：「啟動時檢查書架更新」從「我的」移到「關於夜讀 → 系統工具」；ADR 0015 記下「我的」第一層只放入口、不放開關。
 - **掉幀修正（兩個 perf 提交）**：使用者回報開 App 後切頁卡頓，在使用者手機上逐情境量測後修。commit message 有每項的成因與改前改後數字。摘要（超過 16.7 ms 的幀／最慢一幀）：冷啟動切頁 8／36.8 ms → 1／16.9 ms；從備份還原 94／242 ms → 1／17 ms；發現書單 6／28 ms → 3／19 ms；搜尋 29／88 ms → 18／27 ms。主因不是書架重畫，而是背景書架檢查的解析與資料庫工作、書源分類掃整段 JS、繁簡轉換、搜尋合併與 JS 在主 isolate。
 - 搜尋剩下的成本主要是搜尋頁本身的重建與 TLS 握手；仍在主 isolate 的 JS 是用到網路、`java.put`、Cookie、快取這類的書源（見 `docs/research/source-engine-off-main-isolate.md` 最後一節）。最後一個建置（顯示文字的繁簡轉換快取）裝上手機了但沒量。
+- **拆 `HybridReaderScreen`**（原 `refactor/split-hybrid-reader-screen`）：2651 → 1540 行，行為不變、閱讀器測試全過。拆出 `geometry/text_geometry.dart`（`HybridTextGeometry`：字元 offset 與正文座標互換，選字、反白、朗讀高亮框、閱讀位置）與 `pipeline/`（`HybridLayoutPipeline`：一個排版世代一份，換代就整份 dispose 換新；`HybridLayoutDiskCache`：一本書的磁碟快取）。還原、跳章蓋紙、捲動與翻頁命令、build 刻意留在畫面：它們直接操作捲動控制器與 widget 狀態，再拆只會多一層全是回呼的薄殼。
 - 閃退回報（`glass_menu.dart:250` 的 `clamp`）在 #56 已修，beta.103 起就有，這次不用改。
 
 ## 手機量測（使用者 2026-10-14 說之後別再用他的手機量）
@@ -39,7 +40,6 @@ DESIGN.md 原本規定每個風格深淺都要過對比度門檻，測試會擋�
 
 ## 接下來
 
-- **拆 `HybridReaderScreen`**：已做完，在分支 `refactor/split-hybrid-reader-screen`（worktree `../Night-Reader-split`，已推上、CI 通過），2651 → 1540 行，行為不變，細節看該分支的提交與 HANDOFF。等使用者說合併時和本分支併成一條開 PR：兩條分支的程式碼互不衝突，只有 `HANDOFF.md` 要手動合。
 - 只做計算的 JS 已在背景解析；若用到網路、`java.put`、Cookie 的書源在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。
 - 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者若在手機上覺得捲動掉幀再重新開題。
 
