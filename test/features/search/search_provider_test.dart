@@ -105,6 +105,25 @@ void main() {
     });
   });
 
+  test('leaving search clears the stored results', () async {
+    final dao = GetIt.instance<SearchBookDao>();
+    await dao.insertList([
+      SearchBook(
+        bookUrl: 'https://b.example/夜讀',
+        name: '夜讀',
+        author: '作者',
+        origin: 'https://s.example',
+      ),
+    ]);
+    final provider = SearchProvider();
+    await pumpEventQueue();
+
+    provider.dispose();
+    await pumpEventQueue();
+
+    expect(await dao.getSearchBooks('夜讀', '作者'), isEmpty);
+  });
+
   test('the chosen search scope is remembered', () async {
     final provider = SearchProvider();
     addTearDown(provider.dispose);

@@ -8,6 +8,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -59,6 +60,10 @@ class DefaultData {
       // 清理超過 7 天的搜尋歷史 (對標 Android SearchKeywordDao.deleteOld)
       final sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
       await getIt<SearchHistoryDao>().clearOld(sevenDaysAgo);
+
+      // 搜尋結果只在搜尋頁開著時保留，離開時就清；這裡清掉 App 被中途
+      // 關掉時留下的。
+      await getIt<SearchBookDao>().clearAll();
 
       // 清理過期快取 (對標 Android CacheDao.clearDeadline)
       await getIt<CacheDao>().clearDeadline(now);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -504,6 +505,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _isSearching = false;
     _bookshelfTracker.dispose();
     _searchModel.dispose();
+    // 存下的搜尋結果只在搜尋頁開著時有用（從結果進詳情後，換源與換封面先
+    // 列出剛搜到的來源），離開搜尋頁就清掉，不在手機裡越積越多。
+    unawaited(getIt<SearchBookDao>().clearAll());
     super.dispose();
   }
 }
