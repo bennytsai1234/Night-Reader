@@ -757,6 +757,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
           final index = i - panels.length;
           final book = results[index];
           final key = _resultKey(book);
+          // 相關度排序時，每換一段就在那一段第一本書上方標出段名；順序固定
+          // 後接到尾端的書若是前面的段，尾端會再出現一次同名的段。
+          final tier = p.relevanceTierOf(book);
+          final startsTier =
+              tier != null &&
+              (index == 0 || tier != p.relevanceTierOf(results[index - 1]));
           return _ResultEntrance(
             // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
             // 留在原本的位置。
@@ -766,7 +772,9 @@ class _SearchPageContentState extends State<_SearchPageContent> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (index > 0)
+                if (startsTier)
+                  _RelevanceTierHeader(tier: tier, first: index == 0)
+                else if (index > 0)
                   const InsetSeparator(indent: ExploreBookItem.textIndent),
                 SearchResultItem(
                   result: AggregatedSearchBook(
@@ -784,6 +792,27 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       ),
     );
   }
+}
+
+/// 相關度分段的段名，接在該段第一本書上方。
+class _RelevanceTierHeader extends StatelessWidget {
+  const _RelevanceTierHeader({required this.tier, required this.first});
+
+  final int tier;
+  final bool first;
+
+  static const _labels = ['完全相符', '部分相符', '其他結果'];
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      AppGrouped.margin,
+      first ? AppSpacing.sm : AppSpacing.xl,
+      AppGrouped.margin,
+      0,
+    ),
+    child: GroupedSectionHeader(_labels[tier]),
+  );
 }
 
 /// 串流進來的搜尋結果第一次出現時，短暫淡入並微微上移。

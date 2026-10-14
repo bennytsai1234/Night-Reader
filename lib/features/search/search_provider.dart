@@ -224,6 +224,13 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     return [for (final identity in held) ?byIdentity[identity]];
   }
 
+  /// 相關度排序時這本書屬於哪一段（0 完全相符、1 部分相符、2 其他）；
+  /// 其他排序不分段，回傳 null。
+  int? relevanceTierOf(SearchBook book) =>
+      _sortMode == SearchResultSortMode.relevance
+      ? searchRelevanceRank(book, _lastSearchKey)
+      : null;
+
   /// 固定目前的結果順序；使用者開始捲動結果時由頁面呼叫。
   void holdResultOrder() {
     if (_heldOrder != null) return;

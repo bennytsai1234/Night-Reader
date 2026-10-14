@@ -130,6 +130,35 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('relevance order names each tier above its first book', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    await tester.runAsync(() => provider.search('夜讀'));
+
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('夜讀'), book('夜讀外傳'), book('別的書')]);
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+    expect(find.text('完全相符'), findsOneWidget);
+    expect(find.text('部分相符'), findsOneWidget);
+    expect(find.text('其他結果'), findsOneWidget);
+
+    provider.updateSortMode(SearchResultSortMode.name);
+    await tester.pumpAndSettle();
+    expect(find.text('完全相符'), findsNothing);
+  });
+
   testWidgets('results that arrive in the same frame as the finish still fade '
       'in', (tester) async {
     await tester.pumpWidget(
