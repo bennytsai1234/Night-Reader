@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -39,9 +40,14 @@ class ExploreBookItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final secondary = AppChrome.of(context).sectionText;
     final kinds = _kinds(context);
+    final wordCount = StringUtils.displayWordCount(
+      book.wordCount,
+      context.zh(book.kind ?? ''),
+    );
     final meta = [
       if (book.author != null && book.author!.isNotEmpty)
         context.zh(book.author!),
+      if (wordCount.isNotEmpty) wordCount,
       ...kinds,
     ].join(' · ');
 
@@ -143,13 +149,7 @@ class ExploreBookItem extends StatelessWidget {
 
   List<String> _kinds(BuildContext context) {
     if (book.kind == null || book.kind!.isEmpty) return const [];
-    return context
-        .zh(book.kind!)
-        .split(RegExp(r'[,，]'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .take(3)
-        .toList();
+    return StringUtils.kindLabels(context.zh(book.kind!)).take(3).toList();
   }
 
   void _navigateToDetail(BuildContext context) {

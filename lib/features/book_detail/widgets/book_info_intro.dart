@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
@@ -22,8 +23,8 @@ class BookInfoDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final kind = context.zh(book.kind ?? '').trim();
-    final wordCount = (book.wordCount ?? '').trim();
+    final kind = StringUtils.kindLabels(context.zh(book.kind ?? '')).join('、');
+    final wordCount = StringUtils.displayWordCount(book.wordCount, book.kind);
     final latest = context.zh(book.latestChapterTitle ?? '').trim();
     return GroupedSection(
       children: [

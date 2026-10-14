@@ -4,6 +4,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/utils/network_utils.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 
 class BookInfoParser {
   /// 規則不帶 JS 與變數存取時交給背景 isolate 解析（書架檢查更新時每本書都
@@ -25,6 +26,7 @@ class BookInfoParser {
       infoRule.coverUrl,
       infoRule.intro,
       infoRule.lastChapter,
+      infoRule.wordCount,
       infoRule.canReName,
     ]);
     if (fit != ParseWorkerFit.none) {
@@ -91,6 +93,9 @@ class BookInfoParser {
       final latestChapterTitle = await rule.getStringAsync(
         infoRule.lastChapter ?? '',
       );
+      final wordCount = StringUtils.wordCountFormat(
+        await rule.getStringAsync(infoRule.wordCount ?? ''),
+      );
       final normalizedTocUrl = _resolveFallbackTocUrl(
         tocUrl: tocUrl,
         body: body,
@@ -117,6 +122,7 @@ class BookInfoParser {
         latestChapterTitle: latestChapterTitle.isEmpty
             ? book.latestChapterTitle
             : latestChapterTitle,
+        wordCount: wordCount.isEmpty ? book.wordCount : wordCount,
         // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
         tocUrl: normalizedTocUrl,
       );

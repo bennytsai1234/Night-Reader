@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/search/models/search_scope.dart';
@@ -103,6 +104,36 @@ void main() {
 
       provider.updateSortMode(SearchResultSortMode.sourceCount);
       expect(names(provider), ['乙', '甲']);
+    });
+
+    test('a cover found on the detail page stays on the card until the next '
+        'search', () async {
+      final provider = await settledProvider();
+      final opened = book('甲');
+      provider.onSearchSuccess([opened, book('乙')]);
+      provider.rememberOpenedCard(opened);
+
+      // 詳情還沒回報封面，同一本書就換了代表來源（bookUrl 不同）。
+      final replaced = book('甲')..bookUrl = 'https://other.example/甲';
+      provider.onSearchSuccess([replaced, book('乙')]);
+      AppEventBus().fire(
+        AppEventBus.bookCover,
+        data: const BookCoverEvent(
+          bookUrl: 'https://b.example/甲',
+          cover: 'local:///covers/甲.jpg',
+        ),
+      );
+      await pumpEventQueue();
+      expect(provider.coverOf(replaced), 'local:///covers/甲.jpg');
+      expect(provider.coverOf(provider.results.last), isNull);
+
+      // 「只看有封面」看的是卡片實際顯示的封面。
+      provider.setOnlyWithCover(true);
+      expect(names(provider), ['甲']);
+      provider.setOnlyWithCover(false);
+
+      await provider.search('另一本');
+      expect(provider.coverOf(replaced), isNull);
     });
   });
 

@@ -148,26 +148,111 @@ class StringUtils {
     return List.filled(n, str).join();
   }
 
-  /// 格式化字數 (對標 wordCountFormat)
+  /// 格式化字數 (對標 wordCountFormat)。
+  ///
+  /// 書源給的字數各寫各的（123456、12.3萬字、56.8万、123.4K、字數：1.2M），
+  /// 一律換成同一種寫法：一萬以上「12.3萬字」，一千以上「3.5千字」，再少寫
+  /// 「850字」。格式化過的結果再格式化一次不變。整段不是一個字數（例如書源
+  /// 把更新時間或章數放在字數欄）時回傳空字串，不把別的資訊當成字數顯示。
   static String wordCountFormat(dynamic words) {
     if (words == null) return '';
-    if (words is String) {
-      if (int.tryParse(words) != null) {
-        return _formatIntWordCount(int.parse(words));
-      }
-      return words;
-    }
-    if (words is num) {
-      return _formatIntWordCount(words.toInt());
-    }
-    return words.toString();
+    if (words is num) return _formatIntWordCount(words.round());
+    return _formatIntWordCount(_parseWordCount(words.toString()) ?? 0);
+  }
+
+  /// 一整段就是一個字數：可有「字數：」「共」「約」這類前綴，數字可帶小數，
+  /// 後面可接單位、「字」與「+」。
+  static final _wordCountPattern = RegExp(
+    r'^(?:总字数|總字數|字数|字數|共|大约|大約|约|約)?\s*:?\s*'
+    r'(\d+(?:\.\d+)?)\s*(百万|百萬|千万|千萬|万|萬|千|[kwm])?\s*字?\s*\+?$',
+    caseSensitive: false,
+  );
+  static const _wordCountUnits = {
+    '百万': 1000000,
+    '百萬': 1000000,
+    'm': 1000000,
+    '千万': 10000000,
+    '千萬': 10000000,
+    '万': 10000,
+    '萬': 10000,
+    'w': 10000,
+    '千': 1000,
+    'k': 1000,
+  };
+
+  /// 數字裡的千分位逗號（後面剛好三位數）。
+  static final _thousandsSeparator = RegExp(r'(?<=\d),(?=\d{3}(?!\d))');
+
+  static int? _parseWordCount(String text) {
+    final value = fullToHalf(text).trim().replaceAll(_thousandsSeparator, '');
+    final match = _wordCountPattern.firstMatch(value);
+    if (match == null) return null;
+    final number = double.parse(match.group(1)!);
+    final unit = match.group(2)?.toLowerCase();
+    return (number * (unit == null ? 1 : _wordCountUnits[unit]!)).round();
   }
 
   static String _formatIntWordCount(int words) {
     if (words <= 0) return '';
-    if (words > 10000) {
-      return '${(words / 10000.0).toStringAsFixed(1)}萬字';
+    // 用整數四捨五入到一位小數：浮點數的 1.15 其實略小於 1.15，
+    // toStringAsFixed 會捨成 1.1。
+    String oneDecimal(int unit) {
+      final tenths = (words * 10 + unit ~/ 2) ~/ unit;
+      final whole = tenths ~/ 10;
+      final decimal = tenths % 10;
+      return decimal == 0 ? '$whole' : '$whole.$decimal';
     }
+
+    // 9950 以上四捨五入到 0.1 千就是十千，直接寫成萬。
+    if (words >= 9950) return '${oneDecimal(10000)}萬字';
+    if (words >= 1000) return '${oneDecimal(1000)}千字';
     return '$words字';
   }
+
+  /// 日期、時刻與「3 小時前」這類更新時間。
+  static final _datePattern = RegExp(
+    r'\d{4}\s*[-/年]\s*\d{1,2}|\d{4}\.\d{1,2}\.\d{1,2}|'
+    r'\d{1,2}\s*[-/月]\s*\d{1,2}|\d{1,2}:\d{2}|'
+    r'\d+\s*(?:秒|分钟|分鐘|小时|小時|天|日|周|週|星期|个月|個月|月|年)前|'
+    r'刚刚|剛剛|今天|昨天|前天|更新',
+  );
+
+  /// 分類標籤的分隔符；數字裡的千分位逗號不算。
+  static final _kindSeparator = RegExp(
+    r'(?<!\d)[,，]|[,，](?!\d{3}(?!\d))|[、|｜/／]',
+  );
+
+  static Iterable<String> _kindTokens(String kind) => kind
+      .split(_kindSeparator)
+      .map((token) => token.trim())
+      .where((token) => token.isNotEmpty);
+
+  /// 書源的分類拆成標籤，丟掉混進來的日期、更新時間與整段只是數字的標籤
+  /// （字數、點擊數），重複的只留一個。含數字的分類（例如「3D文字冒險」）
+  /// 照留。
+  static List<String> kindLabels(String? kind) {
+    if (kind == null || kind.trim().isEmpty) return const [];
+    return {
+      for (final label in _kindTokens(kind))
+        if (!_isKindNoise(label)) label,
+    }.toList();
+  }
+
+  /// 卡片上的字數：字數欄讀不出來時，再看分類裡有沒有寫成「…字」或
+  /// 「字數：…」的標籤（有些書源把字數放在分類欄）。只有數字、沒有「字」
+  /// 的標籤可能是點擊數，不拿來當字數。
+  static String displayWordCount(String? wordCount, String? kind) {
+    final formatted = wordCountFormat(wordCount);
+    if (formatted.isNotEmpty || kind == null) return formatted;
+    for (final label in _kindTokens(kind)) {
+      if (!label.contains('字')) continue;
+      final fromKind = wordCountFormat(label);
+      if (fromKind.isNotEmpty) return fromKind;
+    }
+    return '';
+  }
+
+  static bool _isKindNoise(String label) =>
+      _datePattern.hasMatch(fullToHalf(label)) ||
+      _parseWordCount(label) != null;
 }
