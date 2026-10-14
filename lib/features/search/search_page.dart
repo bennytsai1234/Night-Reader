@@ -198,13 +198,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   /// 清單頂端的狀態列；跟著結果或歷史一起捲動。
   List<Widget> _buildPanels(SearchProvider provider) {
     return [
-      if (provider.isSearching) _buildCurrentSourcePanel(provider),
-      if (!provider.isSearching && provider.failedSources > 0)
-        _buildFailedSourcesPanel(context, provider),
       if (provider.precisionSearch || !provider.searchScope.isAll)
         _buildFilterStatusPanel(provider),
-      if (provider.hasUnfilteredResults && !provider.isSearching)
-        _buildResultToolbar(context, provider),
+      if (provider.isSearching || provider.hasUnfilteredResults)
+        _buildStatusSlot(context, provider)
+      else if (provider.failedSources > 0)
+        _buildFailedSourcesPanel(context, provider),
     ];
   }
 
@@ -378,21 +377,36 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         ],
       );
 
-  Widget _buildCurrentSourcePanel(SearchProvider p) => Padding(
+  /// 搜尋中的進度與結束後的結果工具列輪流佔同一格、高度相同，搜尋結束時
+  /// 下面的結果不會被推動。
+  Widget _buildStatusSlot(BuildContext context, SearchProvider p) => Padding(
     padding: const EdgeInsets.fromLTRB(
-      AppGrouped.margin + AppGrouped.rowPadding,
+      AppGrouped.margin,
       AppSpacing.sm,
-      AppGrouped.margin + AppGrouped.rowPadding,
-      0,
+      AppGrouped.margin,
+      AppSpacing.xs,
     ),
-    child: Text(
-      '正在搜尋：${p.currentSource}（${p.progress * 100 ~/ 1}%）',
-      style: AppTextStyles.labelXs.copyWith(
-        height: 1.3,
-        color: AppChrome.of(context).sectionText,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: GlassCapsule.height),
+      child: p.isSearching
+          ? _buildSearchProgress(p)
+          : _buildResultToolbar(context, p),
+    ),
+  );
+
+  Widget _buildSearchProgress(SearchProvider p) => Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
+      child: Text(
+        '正在搜尋：${p.currentSource}（${p.progress * 100 ~/ 1}%）',
+        style: AppTextStyles.labelXs.copyWith(
+          height: 1.3,
+          color: AppChrome.of(context).sectionText,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
     ),
   );
 
@@ -417,13 +431,8 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   );
 
   Widget _buildResultToolbar(BuildContext context, SearchProvider p) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppGrouped.margin,
-        AppSpacing.sm,
-        AppGrouped.margin,
-        AppSpacing.xs,
-      ),
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -476,6 +485,16 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                 tooltip: '清除篩選',
                 blur: false,
                 onTap: p.clearResultFilters,
+              ),
+            ],
+            if (p.failedSources > 0) ...[
+              const SizedBox(width: AppSpacing.sm),
+              GlassCapsule(
+                label: '${p.failedSources} 個書源失敗',
+                icon: Icons.warning_amber_rounded,
+                foregroundColor: Theme.of(context).colorScheme.error,
+                blur: false,
+                onTap: () => _showFailureSheet(context),
               ),
             ],
           ],
@@ -716,42 +735,53 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     final results = p.results;
     final panels = _buildPanels(p);
     final padding = _bodyPadding;
-    return ListView.builder(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.only(
-        top: padding.top,
-        bottom: padding.bottom + AppSpacing.xl,
-      ),
-      itemCount: panels.length + results.length,
-      itemBuilder: (ctx, i) {
-        if (i < panels.length) return panels[i];
-        final index = i - panels.length;
-        final book = results[index];
-        final key = _resultKey(book);
-        return _ResultEntrance(
-          // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
-          // 留在原本的位置。
-          key: ValueKey(key),
-          animate: _arrivingResultKeys.contains(key),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (index > 0)
-                const InsetSeparator(indent: ExploreBookItem.textIndent),
-              SearchResultItem(
-                result: AggregatedSearchBook(
-                  book: book,
-                  sources: book.sourceLabels.isNotEmpty
-                      ? book.sourceLabels
-                      : [book.originName ?? '未知來源'],
-                ),
-                isInBookshelf: p.isInBookshelf(book),
-              ),
-            ],
-          ),
-        );
+    return NotificationListener<ScrollUpdateNotification>(
+      // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
+      onNotification: (notification) {
+        if (notification.depth == 0 &&
+            notification.dragDetails != null &&
+            notification.metrics.pixels > 0) {
+          p.holdResultOrder();
+        }
+        return false;
       },
+      child: ListView.builder(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.only(
+          top: padding.top,
+          bottom: padding.bottom + AppSpacing.xl,
+        ),
+        itemCount: panels.length + results.length,
+        itemBuilder: (ctx, i) {
+          if (i < panels.length) return panels[i];
+          final index = i - panels.length;
+          final book = results[index];
+          final key = _resultKey(book);
+          return _ResultEntrance(
+            // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
+            // 留在原本的位置。
+            key: ValueKey(key),
+            animate: _arrivingResultKeys.contains(key),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (index > 0)
+                  const InsetSeparator(indent: ExploreBookItem.textIndent),
+                SearchResultItem(
+                  result: AggregatedSearchBook(
+                    book: book,
+                    sources: book.sourceLabels.isNotEmpty
+                        ? book.sourceLabels
+                        : [book.originName ?? '未知來源'],
+                  ),
+                  isInBookshelf: p.isInBookshelf(book),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

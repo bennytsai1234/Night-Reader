@@ -84,8 +84,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   /// 篩選並排序後的結果。一次畫面更新會讀好幾次，算一次就快取；任何狀態
   /// 變更都會經過 [notifyListeners]，在那裡失效。
   List<SearchBook> get results =>
-      _resultsCache ??= _sortedResults(_filteredResults());
+      _resultsCache ??= _filteredResults(_orderedResults());
   List<SearchBook>? _resultsCache;
+
+  /// 使用者開始捲動後固定下來的結果順序（合併卡身分）。之後串流進來的書
+  /// 接在尾端，已經出現的書不再換位置；新的一次搜尋或重選排序時解除。
+  List<String>? _heldOrder;
 
   @override
   void notifyListeners() {
@@ -161,10 +165,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       ? book.sourceLabels
       : [book.originName ?? book.origin];
 
-  List<SearchBook> _filteredResults() {
+  List<SearchBook> _filteredResults(List<SearchBook> books) {
     final authorKey = normalizeSearchText(_authorFilter);
     final kindKey = normalizeSearchText(_kindFilter);
-    return _results.where((book) {
+    return books.where((book) {
       if (_sourceFilters.isNotEmpty) {
         final labels = _sourceLabelsFor(book).toSet();
         if (!_sourceFilters.any(labels.contains)) return false;
@@ -210,9 +214,38 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     return sorted;
   }
 
+  List<SearchBook> _orderedResults() {
+    final held = _heldOrder;
+    if (held == null) return _sortedResults(_results);
+    final byIdentity = {
+      for (final book in _results) searchResultIdentity(book): book,
+    };
+    return [for (final identity in held) ?byIdentity[identity]];
+  }
+
+  /// 固定目前的結果順序；使用者開始捲動結果時由頁面呼叫。
+  void holdResultOrder() {
+    if (_heldOrder != null) return;
+    _heldOrder = [
+      for (final book in _sortedResults(_results)) searchResultIdentity(book),
+    ];
+  }
+
+  /// 順序固定時，把這次新出現的書照目前的排序接到尾端。
+  void _appendToHeldOrder() {
+    final held = _heldOrder;
+    if (held == null) return;
+    final known = held.toSet();
+    for (final book in _sortedResults(_results)) {
+      final identity = searchResultIdentity(book);
+      if (known.add(identity)) held.add(identity);
+    }
+  }
+
+  /// 重選排序（包括選回同一種）都照新的排序重排，解除固定的順序。
   void updateSortMode(SearchResultSortMode mode) {
-    if (_sortMode == mode) return;
     _sortMode = mode;
+    _heldOrder = null;
     notifyListeners();
   }
 
@@ -312,6 +345,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (searchKey == null) return;
     _lastSearchKey = searchKey;
     _results = [];
+    _heldOrder = null;
     _sourceFailures.clear();
     _markSearchPending();
     clearResultFilters();
@@ -335,6 +369,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (searchKey == null) return;
     _lastSearchKey = searchKey;
     _results = [];
+    _heldOrder = null;
     _sourceFailures.clear();
     _markSearchPending();
     clearResultFilters();
@@ -432,6 +467,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   @override
   void onSearchSuccess(List<SearchBook> searchBooks) {
     _results = searchBooks;
+    _appendToHeldOrder();
     notifyListeners();
   }
 

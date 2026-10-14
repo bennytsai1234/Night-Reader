@@ -96,6 +96,40 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('after the user scrolls, new books join at the end', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    provider.updateSortMode(SearchResultSortMode.sourceCount);
+
+    final shown = [for (var i = 0; i < 20; i++) book('書$i')];
+    provider.onSearchStart();
+    provider.onSearchSuccess(shown);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
+    // 來源最多的新書照排序該排第一，但使用者已經在捲了。
+    final popular = book('熱門')..addOrigin('https://s2.example', name: '書源2');
+    provider.onSearchSuccess([popular, ...shown]);
+    await tester.pumpAndSettle();
+    expect(provider.results.first.name, '書0');
+    expect(provider.results.last.name, '熱門');
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('results that arrive in the same frame as the finish still fade '
       'in', (tester) async {
     await tester.pumpWidget(
