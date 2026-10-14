@@ -5,6 +5,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
@@ -99,7 +100,9 @@ class SearchModel {
   int _failedCount = 0;
   int _completedCount = 0;
   int _totalCount = 0;
-  String _currentSourceName = '';
+
+  /// 已經送出、還沒回來的書源名稱，照送出順序。
+  final List<String> _waitingSources = [];
 
   SearchModel({required this.callback});
 
@@ -152,6 +155,7 @@ class SearchModel {
     _searchBooks = _rebuild(key, precisionSearch);
     _failedCount = 0;
     _completedCount = 0;
+    _waitingSources.clear();
 
     callback.onSearchStart();
 
@@ -168,9 +172,10 @@ class SearchModel {
     );
     if (generation != _generation) return;
     final searchPool = Pool(threadCount);
+    final respondTimes = <String, int>{};
 
     final tasks = <Future<void>>[
-      for (final source in sources)
+      for (final source in _fastestFirst(sources))
         searchPool.withResource(() async {
           if (generation != _generation) return;
           await _searchSingleSource(
@@ -179,6 +184,7 @@ class SearchModel {
             precisionSearch,
             generation,
             cancelToken,
+            respondTimes,
           );
         }),
     ];
@@ -188,7 +194,29 @@ class SearchModel {
     if (generation == _generation) {
       callback.onSearchFinish(isEmpty: _searchBooks.isEmpty);
     }
+    unawaited(getIt<BookSourceDao>().updateRespondTimes(respondTimes));
   }
+
+  /// 上次搜尋回得快的書源先送，結果早點出現；還沒量過的照使用者排的
+  /// 書源順序排在後面。
+  static List<BookSource> _fastestFirst(List<BookSource> sources) {
+    // 0 是舊版書源校驗留下的值，180000 是預設值，兩者都代表沒量過。
+    int speed(BookSource source) =>
+        source.respondTime <= 0 ? _unmeasuredRespondTime : source.respondTime;
+    return [...sources]..sort((a, b) {
+      final bySpeed = speed(a).compareTo(speed(b));
+      return bySpeed != 0 ? bySpeed : a.customOrder.compareTo(b.customOrder);
+    });
+  }
+
+  static const _unmeasuredRespondTime = 180000;
+
+  /// 這次量到的時間與上次的平均，偶爾一次慢回應不會讓平常快的書源掉到
+  /// 最後；沒量過的直接取這次。
+  static int _smoothedRespondTime(int previous, int measured) =>
+      previous <= 0 || previous >= _unmeasuredRespondTime
+      ? measured
+      : (previous + measured) ~/ 2;
 
   Future<void> _searchSingleSource(
     BookSource source,
@@ -196,20 +224,21 @@ class SearchModel {
     bool precisionSearch,
     int generation,
     CancelToken cancelToken,
+    Map<String, int> respondTimes,
   ) async {
     bool stale() => generation != _generation;
     if (stale()) return;
 
-    _currentSourceName = source.bookSourceName;
-    callback.onSearchProgress(
-      currentSource: _currentSourceName,
-      completed: _completedCount,
-      total: _totalCount,
-      failed: _failedCount,
-    );
+    _waitingSources.add(source.bookSourceName);
+    _reportProgress();
 
     try {
+      final stopwatch = Stopwatch()..start();
       final books = await _searchKeyVariants(source, key, cancelToken);
+      respondTimes[source.bookSourceUrl] = _smoothedRespondTime(
+        source.respondTime,
+        stopwatch.elapsedMilliseconds,
+      );
 
       if (stale()) return;
 
@@ -243,15 +272,18 @@ class SearchModel {
     } finally {
       if (!stale()) {
         _completedCount++;
-        callback.onSearchProgress(
-          currentSource: _currentSourceName,
-          completed: _completedCount,
-          total: _totalCount,
-          failed: _failedCount,
-        );
+        _waitingSources.remove(source.bookSourceName);
+        _reportProgress();
       }
     }
   }
+
+  void _reportProgress() => callback.onSearchProgress(
+    waitingSources: List.unmodifiable(_waitingSources),
+    completed: _completedCount,
+    total: _totalCount,
+    failed: _failedCount,
+  );
 
   /// 在同一個書源同時搜關鍵字的每種寫法。有一種成功就算這個書源成功；
   /// 全部失敗才拋出第一個錯誤，照原本的失敗流程處理。
@@ -481,7 +513,7 @@ class _SilentCallback implements SearchModelCallback {
   void onSearchFinish({required bool isEmpty}) {}
   @override
   void onSearchProgress({
-    required String currentSource,
+    required List<String> waitingSources,
     required int completed,
     required int total,
     required int failed,
@@ -495,7 +527,7 @@ abstract class SearchModelCallback {
   void onSearchFailure(SearchFailure failure);
   void onSearchFinish({required bool isEmpty});
   void onSearchProgress({
-    required String currentSource,
+    required List<String> waitingSources,
     required int completed,
     required int total,
     required int failed,

@@ -394,21 +394,42 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     ),
   );
 
-  Widget _buildSearchProgress(SearchProvider p) => Align(
-    alignment: AlignmentDirectional.centerStart,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
-      child: Text(
-        '正在搜尋：${p.currentSource}（${p.progress * 100 ~/ 1}%）',
-        style: AppTextStyles.labelXs.copyWith(
-          height: 1.3,
-          color: AppChrome.of(context).sectionText,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+  /// 剩下的書源不超過這個數時，改列出還在等哪幾個並可略過；三個名稱
+  /// 大致排得進一行。
+  static const _namedWaitingLimit = 3;
+
+  Widget _buildSearchProgress(SearchProvider p) {
+    final remaining = p.totalSources - p.completedSources;
+    final waiting = p.waitingSources;
+    final namesWaiting =
+        p.totalSources > 0 &&
+        remaining <= _namedWaitingLimit &&
+        waiting.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(left: AppGrouped.rowPadding),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              namesWaiting
+                  ? '還在等：${waiting.join('、')}'
+                  : p.totalSources > 0
+                  ? '正在搜尋 ${p.completedSources}/${p.totalSources}'
+                  : '正在搜尋',
+              style: AppTextStyles.labelXs.copyWith(
+                height: 1.3,
+                color: AppChrome.of(context).sectionText,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (namesWaiting)
+            PlainTextAction(label: '略過', small: true, onPressed: p.stopSearch),
+        ],
       ),
-    ),
-  );
+    );
+  }
 
   Widget _buildFilterStatusPanel(SearchProvider p) => _noticeBar(
     color: context.warning,

@@ -61,7 +61,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   List<SearchKeyword> _history = [];
   List<SearchBook> _results = [];
   bool _isSearching = false;
-  String _currentSource = '';
+  List<String> _waitingSources = const [];
   String _lastSearchKey = '';
   int _failedSources = 0;
   int _totalSources = 0;
@@ -106,7 +106,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   int get resultCount => results.length;
   bool get hasUnfilteredResults => _results.isNotEmpty;
   bool get isSearching => _isSearching;
-  String get currentSource => _currentSource;
+
+  /// 已經送出、還沒回來的書源名稱。
+  List<String> get waitingSources => _waitingSources;
+  int get completedSources => _completedSources;
   String get lastSearchKey => _lastSearchKey;
   double get progress => _totalSources == 0
       ? 0
@@ -426,13 +429,13 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _completedSources = 0;
     _totalSources = 0;
     _failedSources = 0;
-    _currentSource = '';
+    _waitingSources = const [];
   }
 
   void stopSearch() {
     _searchModel.cancelSearch();
     _isSearching = false;
-    _currentSource = '已停止';
+    _waitingSources = const [];
     notifyListeners();
   }
 
@@ -467,7 +470,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _failedSources = 0;
     _completedSources = 0;
     _totalSources = 0;
-    _currentSource = '';
+    _waitingSources = const [];
     _sourceFailures.clear();
     notifyListeners();
   }
@@ -493,12 +496,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void onSearchProgress({
-    required String currentSource,
+    required List<String> waitingSources,
     required int completed,
     required int total,
     required int failed,
   }) {
-    _currentSource = currentSource;
+    _waitingSources = waitingSources;
     _completedSources = completed;
     _totalSources = total;
     _failedSources = failed;

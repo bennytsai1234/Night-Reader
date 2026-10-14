@@ -130,6 +130,46 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('the last few sources are named and can be skipped', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書')]);
+    provider.onSearchProgress(
+      waitingSources: const ['甲源', '乙源', '丙源', '丁源'],
+      completed: 6,
+      total: 10,
+      failed: 0,
+    );
+    await tester.pump();
+    expect(find.text('正在搜尋 6/10'), findsOneWidget);
+
+    provider.onSearchProgress(
+      waitingSources: const ['甲源', '乙源'],
+      completed: 8,
+      total: 10,
+      failed: 0,
+    );
+    await tester.pump();
+    expect(find.text('還在等：甲源、乙源'), findsOneWidget);
+
+    await tester.tap(find.text('略過'));
+    await tester.pumpAndSettle();
+    expect(provider.isSearching, isFalse);
+  });
+
   testWidgets('relevance order names each tier above its first book', (
     tester,
   ) async {
