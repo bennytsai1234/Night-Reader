@@ -255,6 +255,9 @@ class BookDetailProvider extends ChangeNotifier {
             author: searchBook.book.author ?? '未知',
             coverUrl: searchBook.book.coverUrl,
             intro: searchBook.book.intro,
+            kind: searchBook.book.kind,
+            wordCount: searchBook.book.wordCount,
+            latestChapterTitle: searchBook.book.latestChapterTitle,
             origin: searchBook.book.origin,
             originName: searchBook.book.originName ?? '發現',
             type: searchBook.book.type,
@@ -280,6 +283,7 @@ class BookDetailProvider extends ChangeNotifier {
       }
       await _loadSource();
       await _loadBookInfo();
+      _announceCover();
       await _loadChapters();
       _worldState = BookDetailWorldState.ready;
       unawaited(_storeDisplayCover());
@@ -909,10 +913,22 @@ class BookDetailProvider extends ChangeNotifier {
     try {
       await _coverStorage.ensureDisplayCoverStored(_book);
       await _bookDao.upsert(_book);
+      _announceCover();
       if (hasReadyWorld && !_disposed) notifyListeners();
     } catch (error) {
       AppLog.e('儲存顯示封面失敗: $error', error: error);
     }
+  }
+
+  /// 詳情頁常讀到搜尋結果沒有的封面，或已把封面存到手機；告訴搜尋頁，
+  /// 回去時同一本書的卡片沿用。
+  void _announceCover() {
+    final cover = _book.getDisplayCover();
+    if (cover == null || cover.isEmpty) return;
+    AppEventBus().fire(
+      AppEventBus.bookCover,
+      data: BookCoverEvent(bookUrl: _book.bookUrl, cover: cover),
+    );
   }
 
   @override

@@ -860,6 +860,8 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                         ? book.sourceLabels
                         : [book.originName ?? '未知來源'],
                   ),
+                  coverUrl: p.coverOf(book),
+                  onOpen: () => p.rememberOpenedCard(book),
                   isInBookshelf: p.isInBookshelf(book),
                 ),
               ],

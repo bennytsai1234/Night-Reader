@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -24,11 +25,12 @@ class BookDetailChangeSourceItem extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final secondary = AppChrome.of(context).sectionText;
     final author = context.zh(searchBook.author ?? '').trim();
+    final kind = context.zh(searchBook.kind ?? '');
     final meta = [
       if (author.isNotEmpty) author,
-      if ((searchBook.wordCount ?? '').isNotEmpty) searchBook.wordCount!,
-      if ((searchBook.kind ?? '').isNotEmpty) searchBook.kind!,
-    ].join(' · ');
+      StringUtils.displayWordCount(searchBook.wordCount, kind),
+      ...StringUtils.kindLabels(kind),
+    ].where((value) => value.isNotEmpty).join(' · ');
     final secondaryStyle = AppTextStyles.bodySm.copyWith(
       height: 1.35,
       color: secondary,

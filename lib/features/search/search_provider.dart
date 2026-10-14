@@ -5,10 +5,12 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/search_keyword.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/search_scope.dart';
@@ -168,7 +170,45 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
        _initialScope = initialScope {
     _searchModel = SearchModel(callback: this);
     _searchScope = initialScope ?? SearchScope();
+    _coverSubscription = AppEventBus()
+        .onName(AppEventBus.bookCover)
+        .listen((event) => _adoptDetailCover(event.data as BookCoverEvent));
     _init();
+  }
+
+  /// 從書籍詳情帶回來的封面，依合併卡身分記下；新的一次搜尋清掉。
+  final Map<String, String> _detailCovers = {};
+  StreamSubscription<AppEvent>? _coverSubscription;
+
+  /// 卡片要顯示的封面：進過書籍詳情的書用詳情頁的封面（搜尋結果常沒有
+  /// 封面，或只有載不到的網址），否則用搜尋結果的。
+  String? coverOf(SearchBook book) =>
+      _detailCovers[searchResultIdentity(book)] ?? book.coverUrl;
+
+  /// 點開詳情時的網址對應到哪張合併卡。詳情回報封面時，卡片的代表來源可能
+  /// 已經換了（網址跟著變），不同作者的兩張卡也可能同網址；所以在點開的
+  /// 當下記下身分，不用回報當時的結果去找。
+  final Map<String, String> _openedCards = {};
+
+  /// 搜尋頁點開一張卡、進書籍詳情之前呼叫。
+  void rememberOpenedCard(SearchBook book) {
+    _openedCards[book.bookUrl] = searchResultIdentity(book);
+  }
+
+  void _adoptDetailCover(BookCoverEvent event) {
+    // 在詳情裡換了源的書網址不同，不屬於任何一張卡，不帶回來。
+    final identity = _openedCards[event.bookUrl];
+    if (identity == null || _detailCovers[identity] == event.cover) return;
+    _detailCovers[identity] = event.cover;
+    notifyListeners();
+  }
+
+  /// 新的一次搜尋：結果換了一批，詳情帶回的封面不再適用，載入失敗過的
+  /// 封面也再試一次。
+  void _resetCovers() {
+    _detailCovers.clear();
+    _openedCards.clear();
+    BookCoverWidget.forgetFailedCovers();
   }
 
   Future<void> _init() async {
@@ -218,7 +258,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
         if (!_sourceFilters.any(labels.contains)) return false;
       }
       if (_onlyInBookshelf && !isInBookshelf(book)) return false;
-      if (_onlyWithCover && (book.coverUrl ?? '').trim().isEmpty) return false;
+      if (_onlyWithCover && (coverOf(book) ?? '').trim().isEmpty) return false;
       if (authorKey.isNotEmpty &&
           !normalizeSearchText(book.author).contains(authorKey)) {
         return false;
@@ -396,6 +436,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (searchKey == null) return;
     _lastSearchKey = searchKey;
     _results = [];
+    _resetCovers();
     _heldOrder = null;
     _sourceFailures.clear();
     _markSearchPending();
@@ -420,6 +461,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (searchKey == null) return;
     _lastSearchKey = searchKey;
     _results = [];
+    _resetCovers();
     _heldOrder = null;
     _sourceFailures.clear();
     _markSearchPending();
@@ -560,6 +602,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   @override
   void dispose() {
     _progressNotify?.cancel();
+    _coverSubscription?.cancel();
     _searchModel.cancelSearch();
     _isSearching = false;
     _bookshelfTracker.dispose();

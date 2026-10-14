@@ -293,5 +293,10 @@ class BookCoverWidget extends StatelessWidget {
     AppPalette.aubergine,
   ];
 
+  /// 載入失敗的封面：清單每次重建都會重新建立圖片，不記下來會一直重抓。
   static final Set<String> _failedCoverSources = <String>{};
+
+  /// 忘掉失敗過的封面，下次顯示時再試。搜尋時上百個書源同時連線，封面常
+  /// 只是一時逾時；每次新搜尋都重來一次，不會整個 App 開著都不再試。
+  static void forgetFailedCovers() => _failedCoverSources.clear();
 }
