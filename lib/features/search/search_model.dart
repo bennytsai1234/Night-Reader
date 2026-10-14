@@ -104,6 +104,9 @@ class SearchModel {
   /// 已經送出、還沒回來的書源名稱，照送出順序。
   final List<String> _waitingSources = [];
 
+  /// 暫停中時不為 null，[resume] 時完成。
+  Completer<void>? _resumed;
+
   SearchModel({required this.callback});
 
   /// 執行搜尋
@@ -177,6 +180,9 @@ class SearchModel {
     final tasks = <Future<void>>[
       for (final source in _fastestFirst(sources))
         searchPool.withResource(() async {
+          while (_resumed != null) {
+            await _resumed!.future;
+          }
           if (generation != _generation) return;
           await _searchSingleSource(
             source,
@@ -475,8 +481,23 @@ class SearchModel {
     _cancelToken = null;
   }
 
+  /// 暫停送出還沒開始的書源；已經送出的照常跑完，結果照常併入。搜尋頁被
+  /// 書籍詳情、閱讀器這類整頁蓋住時用：書源回應都在主 isolate 解析，會跟
+  /// 上面那一頁的載入與排版搶時間。
+  void pause() => _resumed ??= Completer<void>();
+
+  bool get isPaused => _resumed != null;
+
+  /// 接著送出剩下的書源。
+  void resume() {
+    _resumed?.complete();
+    _resumed = null;
+  }
+
   void dispose() {
     cancelSearch();
+    // 讓等著繼續的工作醒來，看到搜尋已取消就結束。
+    resume();
   }
 
   // ── 測試接縫（純邏輯層，便於 TDD 直接驅動重算式合併）──

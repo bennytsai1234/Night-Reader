@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -262,6 +263,42 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(fadingIn(tester, '甲書'), isTrue);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('search pauses under a full page, not under a dialog', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final pageContext = tester.element(find.byType(SearchAppBar));
+    final provider = Provider.of<SearchProvider>(pageContext, listen: false);
+    expect(provider.isSearchPaused, isFalse);
+
+    // 例如點進書籍詳情。
+    Navigator.of(pageContext)
+        .push(MaterialPageRoute<void>(builder: (_) => const Scaffold()));
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isTrue);
+
+    Navigator.of(pageContext).pop();
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isFalse);
+
+    unawaited(
+      showDialog<void>(
+        context: pageContext,
+        builder: (_) => const AlertDialog(content: Text('排序')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(provider.isSearchPaused, isFalse);
+    Navigator.of(pageContext).pop();
     await tester.pumpAndSettle();
   });
 }

@@ -460,6 +460,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _waitingSources = const [];
   }
 
+  /// 搜尋頁被整頁蓋住（書籍詳情、閱讀器）時暫停還沒送出的書源，回到搜尋頁
+  /// 再接著送。進度與結果照舊，不通知畫面。
+  void pauseSearch() => _searchModel.pause();
+
+  void resumeSearch() => _searchModel.resume();
+
+  bool get isSearchPaused => _searchModel.isPaused;
+
   void stopSearch() {
     _searchModel.cancelSearch();
     _isSearching = false;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -120,8 +121,32 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     }
   }
 
+  /// 頁面被不透明的整頁蓋住後，Overlay 會關掉這一頁的 TickerMode；跳出
+  /// 選單、對話框與底部面板時不會。用它決定搜尋要不要暫停。
+  ValueListenable<TickerModeData>? _tickerMode;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerMode = TickerMode.getValuesNotifier(context);
+    if (tickerMode == _tickerMode) return;
+    _tickerMode?.removeListener(_onTickerModeChanged);
+    _tickerMode = tickerMode..addListener(_onTickerModeChanged);
+    _onTickerModeChanged();
+  }
+
+  void _onTickerModeChanged() {
+    final provider = context.read<SearchProvider>();
+    if (_tickerMode!.value.enabled) {
+      provider.resumeSearch();
+    } else {
+      provider.pauseSearch();
+    }
+  }
+
   @override
   void dispose() {
+    _tickerMode?.removeListener(_onTickerModeChanged);
     _controller.dispose();
     _inputFocus.dispose();
     super.dispose();
