@@ -7746,29 +7746,27 @@ class $DownloadTasksTable extends DownloadTasks
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _startChapterIndexMeta = const VerificationMeta(
-    'startChapterIndex',
+  static const VerificationMeta _startChapterUrlMeta = const VerificationMeta(
+    'startChapterUrl',
   );
   @override
-  late final GeneratedColumn<int> startChapterIndex = GeneratedColumn<int>(
-    'startChapterIndex',
+  late final GeneratedColumn<String> startChapterUrl = GeneratedColumn<String>(
+    'startChapterUrl',
     aliasedName,
-    false,
-    type: DriftSqlType.int,
+    true,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
   );
-  static const VerificationMeta _endChapterIndexMeta = const VerificationMeta(
-    'endChapterIndex',
+  static const VerificationMeta _endChapterUrlMeta = const VerificationMeta(
+    'endChapterUrl',
   );
   @override
-  late final GeneratedColumn<int> endChapterIndex = GeneratedColumn<int>(
-    'endChapterIndex',
+  late final GeneratedColumn<String> endChapterUrl = GeneratedColumn<String>(
+    'endChapterUrl',
     aliasedName,
-    false,
-    type: DriftSqlType.int,
+    true,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
   );
   static const VerificationMeta _currentChapterIndexMeta =
       const VerificationMeta('currentChapterIndex');
@@ -7855,8 +7853,8 @@ class $DownloadTasksTable extends DownloadTasks
   List<GeneratedColumn> get $columns => [
     bookUrl,
     bookName,
-    startChapterIndex,
-    endChapterIndex,
+    startChapterUrl,
+    endChapterUrl,
     currentChapterIndex,
     totalCount,
     status,
@@ -7893,21 +7891,21 @@ class $DownloadTasksTable extends DownloadTasks
     } else if (isInserting) {
       context.missing(_bookNameMeta);
     }
-    if (data.containsKey('startChapterIndex')) {
+    if (data.containsKey('startChapterUrl')) {
       context.handle(
-        _startChapterIndexMeta,
-        startChapterIndex.isAcceptableOrUnknown(
-          data['startChapterIndex']!,
-          _startChapterIndexMeta,
+        _startChapterUrlMeta,
+        startChapterUrl.isAcceptableOrUnknown(
+          data['startChapterUrl']!,
+          _startChapterUrlMeta,
         ),
       );
     }
-    if (data.containsKey('endChapterIndex')) {
+    if (data.containsKey('endChapterUrl')) {
       context.handle(
-        _endChapterIndexMeta,
-        endChapterIndex.isAcceptableOrUnknown(
-          data['endChapterIndex']!,
-          _endChapterIndexMeta,
+        _endChapterUrlMeta,
+        endChapterUrl.isAcceptableOrUnknown(
+          data['endChapterUrl']!,
+          _endChapterUrlMeta,
         ),
       );
     }
@@ -7982,14 +7980,14 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.string,
         data['${effectivePrefix}bookName'],
       )!,
-      startChapterIndex: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}startChapterIndex'],
-      )!,
-      endChapterIndex: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}endChapterIndex'],
-      )!,
+      startChapterUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}startChapterUrl'],
+      ),
+      endChapterUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}endChapterUrl'],
+      ),
       currentChapterIndex: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currentChapterIndex'],
@@ -8030,8 +8028,8 @@ class $DownloadTasksTable extends DownloadTasks
 class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   final Value<String> bookUrl;
   final Value<String> bookName;
-  final Value<int> startChapterIndex;
-  final Value<int> endChapterIndex;
+  final Value<String?> startChapterUrl;
+  final Value<String?> endChapterUrl;
   final Value<int> currentChapterIndex;
   final Value<int> totalCount;
   final Value<int> status;
@@ -8043,8 +8041,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   const DownloadTasksCompanion({
     this.bookUrl = const Value.absent(),
     this.bookName = const Value.absent(),
-    this.startChapterIndex = const Value.absent(),
-    this.endChapterIndex = const Value.absent(),
+    this.startChapterUrl = const Value.absent(),
+    this.endChapterUrl = const Value.absent(),
     this.currentChapterIndex = const Value.absent(),
     this.totalCount = const Value.absent(),
     this.status = const Value.absent(),
@@ -8057,8 +8055,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   DownloadTasksCompanion.insert({
     required String bookUrl,
     required String bookName,
-    this.startChapterIndex = const Value.absent(),
-    this.endChapterIndex = const Value.absent(),
+    this.startChapterUrl = const Value.absent(),
+    this.endChapterUrl = const Value.absent(),
     this.currentChapterIndex = const Value.absent(),
     this.totalCount = const Value.absent(),
     this.status = const Value.absent(),
@@ -8072,8 +8070,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   static Insertable<DownloadTask> custom({
     Expression<String>? bookUrl,
     Expression<String>? bookName,
-    Expression<int>? startChapterIndex,
-    Expression<int>? endChapterIndex,
+    Expression<String>? startChapterUrl,
+    Expression<String>? endChapterUrl,
     Expression<int>? currentChapterIndex,
     Expression<int>? totalCount,
     Expression<int>? status,
@@ -8086,8 +8084,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     return RawValuesInsertable({
       if (bookUrl != null) 'bookUrl': bookUrl,
       if (bookName != null) 'bookName': bookName,
-      if (startChapterIndex != null) 'startChapterIndex': startChapterIndex,
-      if (endChapterIndex != null) 'endChapterIndex': endChapterIndex,
+      if (startChapterUrl != null) 'startChapterUrl': startChapterUrl,
+      if (endChapterUrl != null) 'endChapterUrl': endChapterUrl,
       if (currentChapterIndex != null)
         'currentChapterIndex': currentChapterIndex,
       if (totalCount != null) 'totalChapterCount': totalCount,
@@ -8103,8 +8101,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
   DownloadTasksCompanion copyWith({
     Value<String>? bookUrl,
     Value<String>? bookName,
-    Value<int>? startChapterIndex,
-    Value<int>? endChapterIndex,
+    Value<String?>? startChapterUrl,
+    Value<String?>? endChapterUrl,
     Value<int>? currentChapterIndex,
     Value<int>? totalCount,
     Value<int>? status,
@@ -8117,8 +8115,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     return DownloadTasksCompanion(
       bookUrl: bookUrl ?? this.bookUrl,
       bookName: bookName ?? this.bookName,
-      startChapterIndex: startChapterIndex ?? this.startChapterIndex,
-      endChapterIndex: endChapterIndex ?? this.endChapterIndex,
+      startChapterUrl: startChapterUrl ?? this.startChapterUrl,
+      endChapterUrl: endChapterUrl ?? this.endChapterUrl,
       currentChapterIndex: currentChapterIndex ?? this.currentChapterIndex,
       totalCount: totalCount ?? this.totalCount,
       status: status ?? this.status,
@@ -8139,11 +8137,11 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     if (bookName.present) {
       map['bookName'] = Variable<String>(bookName.value);
     }
-    if (startChapterIndex.present) {
-      map['startChapterIndex'] = Variable<int>(startChapterIndex.value);
+    if (startChapterUrl.present) {
+      map['startChapterUrl'] = Variable<String>(startChapterUrl.value);
     }
-    if (endChapterIndex.present) {
-      map['endChapterIndex'] = Variable<int>(endChapterIndex.value);
+    if (endChapterUrl.present) {
+      map['endChapterUrl'] = Variable<String>(endChapterUrl.value);
     }
     if (currentChapterIndex.present) {
       map['currentChapterIndex'] = Variable<int>(currentChapterIndex.value);
@@ -8177,8 +8175,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DownloadTask> {
     return (StringBuffer('DownloadTasksCompanion(')
           ..write('bookUrl: $bookUrl, ')
           ..write('bookName: $bookName, ')
-          ..write('startChapterIndex: $startChapterIndex, ')
-          ..write('endChapterIndex: $endChapterIndex, ')
+          ..write('startChapterUrl: $startChapterUrl, ')
+          ..write('endChapterUrl: $endChapterUrl, ')
           ..write('currentChapterIndex: $currentChapterIndex, ')
           ..write('totalCount: $totalCount, ')
           ..write('status: $status, ')
@@ -8200,8 +8198,8 @@ class _$DownloadTaskInsertable implements Insertable<DownloadTask> {
     return DownloadTasksCompanion(
       bookUrl: Value(_object.bookUrl),
       bookName: Value(_object.bookName),
-      startChapterIndex: Value(_object.startChapterIndex),
-      endChapterIndex: Value(_object.endChapterIndex),
+      startChapterUrl: Value(_object.startChapterUrl),
+      endChapterUrl: Value(_object.endChapterUrl),
       currentChapterIndex: Value(_object.currentChapterIndex),
       totalCount: Value(_object.totalCount),
       status: Value(_object.status),
@@ -13677,8 +13675,8 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
     DownloadTasksCompanion Function({
       required String bookUrl,
       required String bookName,
-      Value<int> startChapterIndex,
-      Value<int> endChapterIndex,
+      Value<String?> startChapterUrl,
+      Value<String?> endChapterUrl,
       Value<int> currentChapterIndex,
       Value<int> totalCount,
       Value<int> status,
@@ -13692,8 +13690,8 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
     DownloadTasksCompanion Function({
       Value<String> bookUrl,
       Value<String> bookName,
-      Value<int> startChapterIndex,
-      Value<int> endChapterIndex,
+      Value<String?> startChapterUrl,
+      Value<String?> endChapterUrl,
       Value<int> currentChapterIndex,
       Value<int> totalCount,
       Value<int> status,
@@ -13723,13 +13721,13 @@ class $$DownloadTasksTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get startChapterIndex => $composableBuilder(
-    column: $table.startChapterIndex,
+  ColumnFilters<String> get startChapterUrl => $composableBuilder(
+    column: $table.startChapterUrl,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get endChapterIndex => $composableBuilder(
-    column: $table.endChapterIndex,
+  ColumnFilters<String> get endChapterUrl => $composableBuilder(
+    column: $table.endChapterUrl,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13788,13 +13786,13 @@ class $$DownloadTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get startChapterIndex => $composableBuilder(
-    column: $table.startChapterIndex,
+  ColumnOrderings<String> get startChapterUrl => $composableBuilder(
+    column: $table.startChapterUrl,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get endChapterIndex => $composableBuilder(
-    column: $table.endChapterIndex,
+  ColumnOrderings<String> get endChapterUrl => $composableBuilder(
+    column: $table.endChapterUrl,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -13849,13 +13847,13 @@ class $$DownloadTasksTableAnnotationComposer
   GeneratedColumn<String> get bookName =>
       $composableBuilder(column: $table.bookName, builder: (column) => column);
 
-  GeneratedColumn<int> get startChapterIndex => $composableBuilder(
-    column: $table.startChapterIndex,
+  GeneratedColumn<String> get startChapterUrl => $composableBuilder(
+    column: $table.startChapterUrl,
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get endChapterIndex => $composableBuilder(
-    column: $table.endChapterIndex,
+  GeneratedColumn<String> get endChapterUrl => $composableBuilder(
+    column: $table.endChapterUrl,
     builder: (column) => column,
   );
 
@@ -13924,8 +13922,8 @@ class $$DownloadTasksTableTableManager
               ({
                 Value<String> bookUrl = const Value.absent(),
                 Value<String> bookName = const Value.absent(),
-                Value<int> startChapterIndex = const Value.absent(),
-                Value<int> endChapterIndex = const Value.absent(),
+                Value<String?> startChapterUrl = const Value.absent(),
+                Value<String?> endChapterUrl = const Value.absent(),
                 Value<int> currentChapterIndex = const Value.absent(),
                 Value<int> totalCount = const Value.absent(),
                 Value<int> status = const Value.absent(),
@@ -13937,8 +13935,8 @@ class $$DownloadTasksTableTableManager
               }) => DownloadTasksCompanion(
                 bookUrl: bookUrl,
                 bookName: bookName,
-                startChapterIndex: startChapterIndex,
-                endChapterIndex: endChapterIndex,
+                startChapterUrl: startChapterUrl,
+                endChapterUrl: endChapterUrl,
                 currentChapterIndex: currentChapterIndex,
                 totalCount: totalCount,
                 status: status,
@@ -13952,8 +13950,8 @@ class $$DownloadTasksTableTableManager
               ({
                 required String bookUrl,
                 required String bookName,
-                Value<int> startChapterIndex = const Value.absent(),
-                Value<int> endChapterIndex = const Value.absent(),
+                Value<String?> startChapterUrl = const Value.absent(),
+                Value<String?> endChapterUrl = const Value.absent(),
                 Value<int> currentChapterIndex = const Value.absent(),
                 Value<int> totalCount = const Value.absent(),
                 Value<int> status = const Value.absent(),
@@ -13965,8 +13963,8 @@ class $$DownloadTasksTableTableManager
               }) => DownloadTasksCompanion.insert(
                 bookUrl: bookUrl,
                 bookName: bookName,
-                startChapterIndex: startChapterIndex,
-                endChapterIndex: endChapterIndex,
+                startChapterUrl: startChapterUrl,
+                endChapterUrl: endChapterUrl,
                 currentChapterIndex: currentChapterIndex,
                 totalCount: totalCount,
                 status: status,

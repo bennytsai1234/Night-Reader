@@ -570,8 +570,6 @@ void main() {
         DownloadTask(
           bookUrl: oldBook.bookUrl,
           bookName: oldBook.name,
-          startChapterIndex: 0,
-          endChapterIndex: 2,
           status: DownloadTask.statusWaiting,
         ),
       );
@@ -683,8 +681,6 @@ void main() {
         DownloadTask(
           bookUrl: oldBook.bookUrl,
           bookName: oldBook.name,
-          startChapterIndex: 0,
-          endChapterIndex: 2,
           status: DownloadTask.statusWaiting,
         ),
       );

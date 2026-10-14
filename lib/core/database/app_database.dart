@@ -93,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -124,6 +124,20 @@ class AppDatabase extends _$AppDatabase {
           'DROP INDEX IF EXISTS idx_source_subscriptions_order',
         );
         await customStatement('DROP TABLE IF EXISTS source_subscriptions');
+      }
+      if (from < 6) {
+        // 下載任務的範圍從章節序號改記章節網址（ADR 0008）。既有任務兩端
+        // 都留空，也就是整本：絕大多數本來就是書架自動下載，已下載的章節
+        // 開跑時照樣跳過。
+        await m.alterTable(
+          TableMigration(
+            downloadTasks,
+            newColumns: [
+              downloadTasks.startChapterUrl,
+              downloadTasks.endChapterUrl,
+            ],
+          ),
+        );
       }
     },
     beforeOpen: (_) async {

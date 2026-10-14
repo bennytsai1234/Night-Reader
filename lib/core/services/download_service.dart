@@ -173,14 +173,14 @@ class DownloadService extends DownloadBase
 
     task
       ..status = DownloadTask.statusWaiting
-      ..currentChapterIndex = task.startChapterIndex
+      ..currentChapterIndex = 0
       ..successCount = 0
       ..errorCount = 0
       ..clearFailure();
     downloadDao.updateProgress(
       bookUrl,
       status: DownloadTask.statusWaiting,
-      currentChapterIndex: task.startChapterIndex,
+      currentChapterIndex: 0,
       successCount: 0,
       errorCount: 0,
     );
@@ -199,8 +199,8 @@ class DownloadService extends DownloadBase
     update();
   }
 
-  /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，任務的章節範圍
-  /// 在加入時就固定了，新章節要等這輪結束再排。值是這段期間有沒有從書源
+  /// 跑完後要再補一次的書：排進來時這本書的任務正在跑，這一輪要下載的
+  /// 章節在開跑時就定了，新章節要等這輪結束再排。值是這段期間有沒有從書源
   /// 抓到新章節，結束後照樣交給重試規則判斷。
   final Map<String, bool> _keepAfterRun = <String, bool>{};
 

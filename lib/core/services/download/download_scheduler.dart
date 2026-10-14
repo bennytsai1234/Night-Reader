@@ -35,23 +35,34 @@ mixin DownloadScheduler on DownloadBase {
     update();
   }
 
-  Future<void> addDownloadTask(Book book, List<BookChapter> chapters) async {
+  /// 使用者明確要下載的章節。[chapters] 是現在要下載的那幾章，決定進度的
+  /// 總數；[from]／[to] 是範圍的起訖章節，不給表示從第一章／到目錄最後
+  /// 一章，整本與「缺少的」兩端都不給。
+  Future<void> addDownloadTask(
+    Book book,
+    List<BookChapter> chapters, {
+    BookChapter? from,
+    BookChapter? to,
+  }) async {
     await _admitDownloadTask(
       book,
       chapters,
+      from: from,
+      to: to,
       intent: _DownloadTaskAdmissionIntent.userRequested,
     );
   }
 
-  /// 書架自動下載（ADR 0008）加入的任務：不會把使用者暫停的任務排回去；
-  /// 失敗的任務要不要再試由呼叫端依重試規則決定。[chapters] 是空的表示
-  /// 這本書還沒有目錄（例如匯入時沒附），整本交給任務開跑時先抓目錄。
+  /// 書架自動下載（ADR 0008）加入的整本任務：不會把使用者暫停的任務排
+  /// 回去；失敗的任務要不要再試由呼叫端依重試規則決定。[missing] 是目前
+  /// 缺的章節，空的表示這本書還沒有目錄（例如匯入時沒附），任務開跑時先
+  /// 抓目錄。
   ///
   /// Returns true only when a new waiting task was actually admitted.
-  Future<bool> queueShelfDownload(Book book, List<BookChapter> chapters) {
+  Future<bool> queueShelfDownload(Book book, List<BookChapter> missing) {
     return _admitDownloadTask(
       book,
-      chapters,
+      missing,
       intent: _DownloadTaskAdmissionIntent.shelfAuto,
     );
   }
@@ -59,6 +70,8 @@ mixin DownloadScheduler on DownloadBase {
   Future<bool> _admitDownloadTask(
     Book book,
     List<BookChapter> chapters, {
+    BookChapter? from,
+    BookChapter? to,
     required _DownloadTaskAdmissionIntent intent,
   }) async {
     if (chapters.isEmpty &&
@@ -91,8 +104,8 @@ mixin DownloadScheduler on DownloadBase {
       final task = DownloadTask(
         bookUrl: book.bookUrl,
         bookName: book.name,
-        startChapterIndex: chapters.isEmpty ? 0 : chapters.first.index,
-        endChapterIndex: chapters.isEmpty ? 0 : chapters.last.index,
+        startChapterUrl: from?.url,
+        endChapterUrl: to?.url,
         totalCount: chapters.length,
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
