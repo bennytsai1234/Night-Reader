@@ -7,18 +7,35 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:pool/pool.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/search_scope.dart';
 
+/// 比對用的書名、作者與關鍵字：全形轉半形、去空白、轉小寫，繁體轉成簡體，
+/// 繁體站與簡體站回傳的同一本書才會併成一張、照同樣的相關度排。
 String normalizeSearchText(String? value) {
-  if (value == null) return '';
-  return StringUtils.fullToHalf(value)
-      .replaceAll(RegExp(r'\s+'), '')
-      .toLowerCase();
+  if (value == null || value.isEmpty) return '';
+  return _normalizedText.putIfAbsent(
+    value,
+    () => ChineseUtils.t2s(
+      StringUtils.fullToHalf(value)
+          .replaceAll(RegExp(r'\s+'), '')
+          .toLowerCase(),
+    ),
+  );
 }
+
+/// 繁簡轉換一個書名要十幾微秒，合併每次重算都會對整份結果再做一次，所以把
+/// 結果記下來。每次新搜尋開始時清空，大小不超過一次搜尋碰到的文字數。
+final Map<String, String> _normalizedText = {};
+
+/// 書源多半是簡體站，也有繁體站：關鍵字照原文搜，轉成另一種寫法後不同時
+/// 也一起搜，輸入哪一種都找得到兩邊的書。
+List<String> searchKeyVariants(String key) =>
+    {key, ChineseUtils.t2s(key), ChineseUtils.s2t(key)}.toList();
 
 /// 一張搜尋合併卡的身分，與 [SearchModel] 分組用的鍵相同（正規化書名＋
 /// 作者）。代表書會隨書源陸續回傳而更換，bookUrl 跟著變，這個值不變。
@@ -129,6 +146,7 @@ class SearchModel {
     final generation = _generation;
     final cancelToken = CancelToken();
     _cancelToken = cancelToken;
+    _normalizedText.clear();
     _rawBooks.clear();
     _rawBooks.addAll(_expandInitialResults(initialResults));
     _searchBooks = _rebuild(key, precisionSearch);
@@ -191,11 +209,7 @@ class SearchModel {
     );
 
     try {
-      final books = await WebBook.searchBookAwait(
-        source,
-        key,
-        cancelToken: cancelToken,
-      ).timeout(const Duration(seconds: 30));
+      final books = await _searchKeyVariants(source, key, cancelToken);
 
       if (stale()) return;
 
@@ -237,6 +251,34 @@ class SearchModel {
         );
       }
     }
+  }
+
+  /// 在同一個書源同時搜關鍵字的每種寫法。有一種成功就算這個書源成功；
+  /// 全部失敗才拋出第一個錯誤，照原本的失敗流程處理。
+  Future<List<SearchBook>> _searchKeyVariants(
+    BookSource source,
+    String key,
+    CancelToken cancelToken,
+  ) async {
+    (Object, StackTrace)? firstError;
+    final found = await Future.wait([
+      for (final variant in searchKeyVariants(key))
+        WebBook.searchBookAwait(source, variant, cancelToken: cancelToken)
+            .timeout(const Duration(seconds: 30))
+            .then<List<SearchBook>?>(
+              (books) => books,
+              onError: (Object error, StackTrace stackTrace) {
+                firstError ??= (error, stackTrace);
+                return null;
+              },
+            ),
+    ]);
+    final succeeded = found.nonNulls;
+    if (succeeded.isEmpty) {
+      final (error, stackTrace) = firstError!;
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    return [for (final books in succeeded) ...books];
   }
 
   /// 合併單一書源剛回傳的結果。
