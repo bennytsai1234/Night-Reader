@@ -49,6 +49,40 @@ void main() {
     ]);
   });
 
+  test('a var declared by one chapter rule does not reach the next', () async {
+    // Legado 每次執行 JS 都是新的作用域；「還沒定義才算」的寫法每章都要
+    // 重新算，不能沿用前一章留下的值。
+    final source = BookSource.fromJson({
+      'bookSourceName': '共用引擎',
+      'bookSourceUrl': 'https://js.test',
+      'ruleToc': {
+        'chapterList': 'class.list@a',
+        'chapterName': 'a@text@js:if (typeof seen === "undefined") { var seen = result; } seen',
+        'chapterUrl': 'a@href',
+      },
+    });
+    final book = Book(
+      bookUrl: 'https://js.test/book/',
+      origin: 'https://js.test',
+      name: '共用引擎',
+      tocUrl: 'https://js.test/book/',
+    );
+    const html =
+        '<html><body><div class="list">'
+        '<a href="/book/1.html">第一章</a>'
+        '<a href="/book/2.html">第二章</a>'
+        '</div></body></html>';
+
+    final result = await ChapterListParser.parse(
+      source: source,
+      book: book,
+      body: html,
+      baseUrl: book.tocUrl,
+    );
+
+    expect(result.chapters.map((c) => c.title), ['第一章', '第二章']);
+  });
+
   test('each search result rule sees its own item', () async {
     final source = BookSource.fromJson({
       'bookSourceName': '共用引擎',

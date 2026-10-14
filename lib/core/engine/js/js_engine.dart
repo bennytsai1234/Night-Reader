@@ -380,11 +380,14 @@ class JsEngine {
     return trimmed;
   }
 
+  /// 規則 JS 包在函式裡用直接 eval 執行：規則裡 `var` 宣告的變數留在這次
+  /// 執行，不會掛到全域讓下一次（下一章、下一筆結果）看到，與 Legado 每次
+  /// 執行一個新作用域相同；非同步規則的 async IIFE 本來就是這樣。
   JsEvalResult _evaluateRuleScript(String jsCode) {
     final wrapped =
-        'typeof __lrNormalizeRuleResult === "function" '
+        '(function() { return typeof __lrNormalizeRuleResult === "function" '
         '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
-        ': eval(${jsonEncode(jsCode)})';
+        ': eval(${jsonEncode(jsCode)}); })()';
     final result = _runtime!.evaluate(wrapped);
     if (!result.isError) {
       return result;
@@ -411,7 +414,7 @@ class JsEngine {
     if (context == null) return;
     _bridgedElements.clear();
     _nextBridgeElementId = 0;
-    final script = StringBuffer();
+    final statements = <String>[];
     context.forEach((key, value) {
       switch (key) {
         case 'java':
@@ -420,7 +423,7 @@ class JsEngine {
           return;
         case 'source':
           final jsLiteral = _encodeContextValue(value);
-          script.writeln(
+          statements.add(
             'if (typeof source === "object" && source !== null) { '
             'Object.assign(source, $jsLiteral); '
             '} else { var source = $jsLiteral; }',
@@ -430,14 +433,22 @@ class JsEngine {
         case 'book':
         case 'chapter':
           final jsLiteral = _encodeScopedObject(key, value);
-          script.writeln('var $key = $jsLiteral;');
+          statements.add('var $key = $jsLiteral;');
           return;
         default:
           final jsLiteral = _encodeContextValue(value);
-          script.writeln('var $key = $jsLiteral;');
+          statements.add('var $key = $jsLiteral;');
       }
     });
-    if (script.isNotEmpty) _runtime!.evaluate(script.toString());
+    if (statements.isEmpty) return;
+    final batch = _runtime!.evaluate(statements.join('\n'));
+    if (!batch.isError) return;
+    // 合成的腳本中途出錯時，後面的變數會停在上一次執行的值；共用引擎時
+    // 那是上一章的。逐句再寫一次，壞掉的那句不影響其他。
+    AppLog.w('JS 脈絡注入失敗，改逐項寫入：${batch.stringResult}');
+    for (final statement in statements) {
+      _runtime!.evaluate(statement);
+    }
   }
 
   String _encodeContextValue(dynamic value) {
