@@ -110,7 +110,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
               builder: (bodyContext) =>
                   _buildMainContent(bodyContext, provider),
             ),
-            bottomNavigationBar: editing
+            // 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。
+            bottomNavigationBar: provider.totalSourceCount > 0
                 ? SelectActionBar(
                     provider: provider,
                     externallyBusy: _isImporting,

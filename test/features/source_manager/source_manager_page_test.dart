@@ -193,6 +193,20 @@ void main() {
     expect(remaining, hasLength(15));
   });
 
+  testWidgets('the batch toolbar stays at the bottom outside selection mode', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+
+    expect(find.text('反選'), findsOneWidget);
+    expect(find.text('0/3'), findsOneWidget);
+
+    await tester.tap(find.text('反選'));
+    await tester.pumpAndSettle();
+    expect(find.text('3/3'), findsOneWidget);
+    expect(find.text('已選 3 項'), findsOneWidget);
+  });
+
   testWidgets('toggling one source leaves the other rows usable', (
     tester,
   ) async {
