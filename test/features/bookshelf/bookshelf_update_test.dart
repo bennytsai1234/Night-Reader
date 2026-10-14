@@ -11,6 +11,8 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -98,6 +100,7 @@ void main() {
   setUp(() async {
     AppConfig.autoRefresh = true;
     await db.delete(db.books).go();
+    await db.delete(db.chapters).go();
     downloads.clear();
     timers.clear();
     provider = BookshelfProvider(
@@ -356,6 +359,56 @@ void main() {
 
       expect(results.map((r) => r.newChapterCount), [1, 1]);
       expect(downloads, [(book.bookUrl, true)]);
+    });
+
+    test('a check from book detail joins the running shelf check', () async {
+      final book = onlineBook()..totalChapterNum = 2;
+      await bookDao.upsert(book);
+      // 書籍詳情自己建一個實例，不經過書架的 provider。
+      final detail = BookUpdateService(
+        keepDownloaded: (url, {hasNewChapters = false}) async =>
+            downloads.add((url, hasNewChapters)),
+      );
+
+      final results = await Future.wait([
+        provider.checkBookUpdate(book),
+        detail.check(book.copyWith()),
+      ]);
+
+      expect(results.map((r) => r.newChapterCount), [1, 1]);
+      expect(downloads, [(book.bookUrl, true)]);
+    });
+
+    test('a book not on the shelf is written back', () async {
+      // 從搜尋或發現打開的詳情：書還不在書架上，也可能還沒存過。
+      final book = onlineBook()..isInBookshelf = false;
+
+      final result = await provider.checkBookUpdate(book);
+
+      expect(result.failed, isFalse);
+      final saved = (await bookDao.getByUrl(book.bookUrl))!;
+      expect(saved.isInBookshelf, isFalse);
+      expect(saved.totalChapterNum, 3);
+      expect(await ChapterDao(db).getByBook(book.bookUrl), hasLength(3));
+    });
+
+    test('chapters the source dropped leave the TOC', () async {
+      final book = onlineBook();
+      await bookDao.upsert(book);
+      await ChapterDao(db).insertChapters([
+        for (var i = 0; i < 4; i++)
+          BookChapter(
+            url: 'https://source.example/old/$i.html',
+            title: '舊第 $i 章',
+            bookUrl: book.bookUrl,
+            index: i,
+          ),
+      ]);
+
+      await provider.checkBookUpdate(book);
+
+      final toc = await ChapterDao(db).getByBook(book.bookUrl);
+      expect(toc.map((c) => c.title), ['第一章', '第二章', '第三章']);
     });
 
     test('a failed check queues no download', () async {

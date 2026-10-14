@@ -16,6 +16,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/book_storage_service.dart';
+import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/storage/reader_layout_cache.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -127,6 +128,7 @@ class BookDetailProvider extends ChangeNotifier {
   final BookCoverStorageService _coverStorage;
   late final SourceSwitchService _sourceSwitchService;
   late final BookStorageService _bookStorageService;
+  late final BookUpdateService _updates;
   DownloadService? _downloadService;
 
   late Book _book;
@@ -203,6 +205,7 @@ class BookDetailProvider extends ChangeNotifier {
     BookCoverStorageService? coverStorage,
     this._downloadService,
     BookStorageService? bookStorageService,
+    BookUpdateService? updates,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
        _chapterDao = chapterDao ?? getIt<ChapterDao>(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
@@ -221,6 +224,19 @@ class BookDetailProvider extends ChangeNotifier {
           operationQuiescer: (oldBook) =>
               _resolvedDownloadService.quiesceForSourceSwitch(oldBook),
           assetRetirer: _coverStorage.handoffSourceSwitchAssets,
+        );
+    _updates =
+        updates ??
+        BookUpdateService(
+          keepDownloaded: (bookUrl, {hasNewChapters = false}) =>
+              _resolvedDownloadService.keepShelfBookDownloaded(
+                bookUrl,
+                hasNewChapters: hasNewChapters,
+              ),
+          bookDao: _bookDao,
+          chapterDao: _chapterDao,
+          sourceDao: _sourceDao,
+          sourceService: _service,
         );
     _bookStorageService =
         bookStorageService ??
@@ -749,7 +765,6 @@ class BookDetailProvider extends ChangeNotifier {
 
     _isCheckingUpdate = true;
     notifyListeners();
-    final checkedAt = DateTime.now().millisecondsSinceEpoch;
     try {
       if (_currentSource == null) {
         await _loadSource();
@@ -759,86 +774,30 @@ class BookDetailProvider extends ChangeNotifier {
         throw StateError(_sourceIssueMessage ?? '找不到可閱讀書源');
       }
 
-      final oldBook = _book.copyWith();
-      final oldTotal = _allChapters.isNotEmpty
-          ? _allChapters.length
-          : math.max(0, oldBook.totalChapterNum);
-      final info = await _service.getBookInfo(source, oldBook);
-      final chapters = await _service.getChapterList(source, info);
-      for (var i = 0; i < chapters.length; i++) {
-        chapters[i].index = i;
-        chapters[i].bookUrl = oldBook.bookUrl;
+      // 和書架的檢查共用：書架正在查這本時接上同一次。寫回由共用的檢查
+      // 負責，這裡從資料庫重新讀出來顯示。
+      final result = await _updates.check(_book.copyWith());
+      final saved = await _bookDao.getByUrl(_book.bookUrl);
+      if (saved != null) {
+        _book = saved;
+        _isInBookshelf = saved.isInBookshelf;
       }
-
-      final newCount = chapters.length > oldTotal
-          ? chapters.length - oldTotal
-          : 0;
-      info.bookUrl = oldBook.bookUrl;
-      info.origin = oldBook.origin;
-      info.originName = oldBook.originName;
-      if (info.tocUrl.isEmpty) info.tocUrl = oldBook.tocUrl;
-      info.isInBookshelf = oldBook.isInBookshelf;
-      info.group = oldBook.group;
-      info.order = oldBook.order;
-      info.syncTime = oldBook.syncTime;
-      info.chapterIndex = oldBook.chapterIndex;
-      info.charOffset = oldBook.charOffset;
-      info.visualOffsetPx = oldBook.visualOffsetPx;
-      info.durChapterTitle = oldBook.durChapterTitle;
-      info.durChapterTime = oldBook.durChapterTime;
-      info.readerAnchorJson = oldBook.readerAnchorJson;
-      info.canUpdate = oldBook.canUpdate;
-      info.customCoverUrl = oldBook.customCoverUrl;
-      info.customCoverLocalPath = oldBook.customCoverLocalPath;
-      info.customIntro = oldBook.customIntro;
-      info.customTag = oldBook.customTag;
-      info.readConfig = oldBook.readConfig;
-      info.lastCheckTime = checkedAt;
-      info.lastCheckCount = newCount;
-      info.totalChapterNum = chapters.length;
-      if (chapters.isNotEmpty) {
-        info.latestChapterTitle = chapters.last.title;
-        if (newCount > 0) {
-          info.latestChapterTime = checkedAt;
-        }
-      }
-
-      _book = info;
-      _isInBookshelf = info.isInBookshelf;
-      _allChapters = chapters;
+      if (result.failed) throw result.error!;
+      _allChapters = await _chapterDao.getByBook(_book.bookUrl);
       _clearBookInfoDegradation();
-      await _chapterDao.deleteByBook(_book.bookUrl);
-      if (chapters.isNotEmpty) {
-        await _chapterDao.insertChapters(chapters);
-      }
-      await _bookDao.upsert(_book);
       await _refreshCacheStatus(notify: false);
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
-      if (_isInBookshelf) {
-        unawaited(
-          _resolvedDownloadService.keepShelfBookDownloaded(
-            _book.bookUrl,
-            hasNewChapters: newCount > 0,
-          ),
-        );
-      }
+      final newCount = result.newChapterCount;
+      final total = _allChapters.length;
       return BookDetailUpdateResult(
         success: true,
         newChapterCount: newCount,
-        totalChapterCount: chapters.length,
-        message: newCount > 0
-            ? '發現 $newCount 個新章節'
-            : '已是最新，總共 ${chapters.length} 章',
+        totalChapterCount: total,
+        message: newCount > 0 ? '發現 $newCount 個新章節' : '已是最新，總共 $total 章',
       );
     } catch (e) {
       AppLog.e('檢查書籍更新失敗: $e', error: e);
-      _book.lastCheckTime = checkedAt;
-      try {
-        await _bookDao.upsert(_book);
-      } catch (persistError) {
-        AppLog.e('記錄檢查更新時間失敗: $persistError', error: persistError);
-      }
       return BookDetailUpdateResult(
         success: false,
         newChapterCount: 0,
