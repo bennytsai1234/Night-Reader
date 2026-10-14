@@ -436,6 +436,145 @@ void main() {
     expect(runtime.state.visibleLocation.chapterIndex, 0);
   });
 
+  /// 第 7 章的正文等 [target] 才到，其餘章節立刻到。
+  Future<void> pumpReaderWaitingForChapter7(
+    WidgetTester tester,
+    Completer<String?> target,
+  ) => pumpReader(
+    tester,
+    customRuntime: _makeRuntime(
+      chapterCount: 8,
+      contentLoader: (index, chapter) =>
+          index == 7 ? target.future : Future.value(chapter.content),
+    ),
+  );
+
+  /// 等跳章的紙蓋上（紙比 runtime 通知晚一幀）。
+  Future<void> paperFalls(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(LoadingVeil), findsOneWidget);
+  }
+
+  /// 正文到了之後排版要等下一幀，邊推幀邊等跳章結束。
+  Future<void> finishJump(WidgetTester tester, Future<void> jump) async {
+    for (
+      var frame = 0;
+      frame < 2000 && runtime.stateMachine.currentOperation != null;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await jump;
+    await settle(tester);
+    await tester.pump(AppMotion.fade);
+  }
+
+  testWidgets('the jump paper stops a fling and still lets taps through', (
+    tester,
+  ) async {
+    final target = Completer<String?>();
+    await pumpReaderWaitingForChapter7(tester, target);
+    final position = scrollPosition(tester);
+    await tester.fling(
+      find.byType(CustomScrollView),
+      const Offset(0, -300),
+      3000,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(position.isScrollingNotifier.value, isTrue);
+
+    final jump = runtime.jumpToChapter(7);
+    await paperFalls(tester);
+    final coveredAt = position.pixels;
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(position.pixels, coveredAt, reason: '甩動的慣性不在紙下繼續跑');
+    final operation = runtime.stateMachine.currentOperation;
+    expect(operation, isNotNull);
+
+    await tester.tapAt(const Offset(200, 300));
+    await tester.pump();
+    expect(taps, hasLength(1), reason: '點紙不會被當成停住甩動而吞掉');
+    expect(identical(runtime.stateMachine.currentOperation, operation), isTrue);
+
+    target.completeError(
+      const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+    );
+    await jump;
+    await settle(tester);
+
+    expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+    expect(find.byType(LoadingVeil), findsNothing);
+    expect(position.pixels, coveredAt, reason: '掀紙回到蓋紙那一刻的位置');
+    expect(runtime.state.visibleLocation.chapterIndex, 0);
+  });
+
+  testWidgets('a finger down before the paper falls cannot drag under it', (
+    tester,
+  ) async {
+    final target = Completer<String?>();
+    await pumpReaderWaitingForChapter7(tester, target);
+    final position = scrollPosition(tester);
+    final start = position.pixels;
+    final gesture = await tester.startGesture(const Offset(200, 300));
+
+    final jump = runtime.jumpToChapter(7);
+    await paperFalls(tester);
+    final operation = runtime.stateMachine.currentOperation;
+    for (var step = 0; step < 6; step++) {
+      await gesture.moveBy(const Offset(0, -30));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+
+    expect(position.pixels, start, reason: '紙下的拖動作廢');
+    expect(
+      identical(runtime.stateMachine.currentOperation, operation),
+      isTrue,
+      reason: '拖動不取消跳章',
+    );
+
+    target.complete(_chapter(7).content);
+    await finishJump(tester, jump);
+    expect(tester.takeException(), isNull);
+    expect(runtime.state.visibleLocation.chapterIndex, 7);
+    expect(find.byType(LoadingVeil), findsNothing);
+  });
+
+  testWidgets('nothing moves the text under the jump paper', (tester) async {
+    final target = Completer<String?>();
+    await pumpReaderWaitingForChapter7(tester, target);
+    final position = scrollPosition(tester);
+    final start = position.pixels;
+    final jump = runtime.jumpToChapter(7);
+    await paperFalls(tester);
+    final operation = runtime.stateMachine.currentOperation;
+
+    final scrolled = viewport.continuousScrollBy!(60);
+    await tester.pump();
+    expect(await scrolled, isFalse, reason: '自動捲動不推動紙下的正文');
+    final turned = viewport.moveToNextPage!();
+    await settle(tester);
+    expect(await turned, isFalse, reason: '翻頁不推動紙下的正文');
+    final followed = viewport.ensureCharRangeVisible!(
+      chapterIndex: 3,
+      startCharOffset: 0,
+      endCharOffset: 4,
+    );
+    await settle(tester);
+    expect(await followed, isFalse, reason: '朗讀跟隨等跳章結束');
+
+    expect(position.pixels, start);
+    expect(find.byType(LoadingVeil), findsOneWidget, reason: '紙不會被提早掀開');
+    expect(identical(runtime.stateMachine.currentOperation, operation), isTrue);
+
+    target.complete(_chapter(7).content);
+    await finishJump(tester, jump);
+    expect(runtime.state.visibleLocation.chapterIndex, 7);
+    expect(find.byType(LoadingVeil), findsNothing);
+  });
+
   testWidgets('opening fades the text in from paper without a spinner', (
     tester,
   ) async {

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
+import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 
 /// 每一幀呼叫一次，帶著從開始算起的幀時間。
@@ -128,6 +129,11 @@ class ReaderV2AutoPageController extends ChangeNotifier {
 
   Future<bool> _step(int run, double seconds) async {
     bool current() => run == _run && !_paused;
+    // 等跳章正文時紙下的正文不動；這一步跳過，不當成到了書尾而停下。
+    if (runtime.stateMachine.currentOperation?.kind ==
+        ReaderV2OperationKind.jump) {
+      return true;
+    }
     final delta = _scrollDelta(seconds);
     if (delta > 0) {
       final continuousScrollBy = _viewportController?.continuousScrollBy;

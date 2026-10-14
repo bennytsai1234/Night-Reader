@@ -1,4 +1,4 @@
-# 交接（2026-10-14 17:25）
+# 交接（2026-10-14 18:50）
 
 ## 正在做：PR #59（分支 `fix/reader-jump-veil`，worktree `../Night-Reader-jump`）
 
@@ -9,16 +9,16 @@
 - `ReaderV2Runtime.isJumpingToAnotherChapter` → `reader_v2_page.dart` 的 `isLoading`，資訊列靠既有 `_InfoFadeIn` 淡入。
 - 測試：`hybrid_reader_interaction_test` 的「a jump covers the text with paper until its chapter arrives」（取代原本「拖動取消跳章」）、「a jump that cannot load lifts the paper off the old text」；`reader_v2_runtime_operation_test` 的「only a jump to another chapter counts as jumping chapters」。DESIGN.md「閱讀器載入」、CHANGELOG 已更新。
 
-Codex（gpt-6.1-sol）審過整個 PR（暫存已清），兩項 P2 都屬實，**修到一半**，以 WIP commit 推上（還沒跑 analyze／測試）：
+Codex（gpt-6.1-sol）審過整個 PR（暫存已清），兩項 P2 都屬實，已修好並補了回歸測試：
 1. 蓋紙只擋新的觸控，沒停住既有捲動：甩動中跳章，慣性在紙下繼續跑；先按下的手指在紙蓋好後才拖，仍會取消跳章；甩動中點紙會被 `_isUserFlingInProgress` 當成停住甩動而吞掉、不叫出選單。**已改**：`_holdScrollUnderJumpVeil`（蓋紙時記 `_jumpVeilOffset`、`position.jumpTo(pixels)` 結束捲動活動、清 `_dragging`／`_sawUserScroll`、pump 設 idle）；`_handleScrollNotification` 在 `_jumpVeil != null` 時一律 return false，遇到帶 dragDetails 的通知就 `scheduleMicrotask(_holdScrollUnderJumpVeilAgain)` 拉回 `_jumpVeilOffset`。
 2. 等跳章時自動翻頁（`continuousScrollBy`）與朗讀跟隨（`ensureCharRangeVisible` → `_restoreCore`）仍能移動正文，朗讀跟隨還會清掉 `_jumpVeil` 並提早掀紙。**已改**：`_captureCommandOwner` 的 admitted 與回傳的 closure 都加上 `_jumpVeil == null`。朗讀跟隨收到 false 會留著待辦（`ReaderV2TtsHighlightFollower`），跳章結束的 runtime 通知會重試，不用另外處理。
 
-接手要做：
-1. **還沒做**：自動翻頁收到 false 會當成到書尾而 `stop()`（`reader_v2_auto_page_controller.dart` 的 `_stepAsync`）。在 `_step` 開頭加：`runtime.stateMachine.currentOperation?.kind == ReaderV2OperationKind.jump` 時 `return true`（跳過這一步、不停），需 import `reader_v2_operation_token.dart`。
-2. 補回歸測試（Codex 建議，要檢查 token、捲動位置與點擊回呼，不只紙在不在）：fling → jump → 點紙（點擊回呼要收到）→ 下載失敗（位置是蓋紙那一刻）；pointer down → jump → 紙出現 → drag（跳章不取消、位置不動）；waiting jump → `viewport.continuousScrollBy!(60)` 回 false、位置不動；waiting jump → `ensureCharRangeVisible(chapterIndex: 3, …)` 回 false、紙還在；自動翻頁在 jump 中不停。測試注意：等跳章完成時要邊 `tester.pump` 邊等（排版要等下一幀），紙比 runtime 通知晚一幀出現（要 pump 兩次）。
-3. `flutter analyze`、全套測試，推上；用 `gh pr comment 59` 貼 Codex 審查摘要（兩項屬實、怎麼修的）。只審一次，不再派 Codex 複審。
-4. 併最新 `main`、`gh pr checks 59 --watch`、`gh pr merge 59 --squash`（標題與說明取 PR 的），`git pull --ff-only`，刪本機分支與 worktree `../Night-Reader-jump`。
-5. **發正式版**（使用者已要求，等 #59 合併後一起發）：目前已發布的正式版看 `gh release list`；推一個只改版號的 commit `release: bump version to X.Y.Z`：`pubspec.yaml` 的 `version` 升到尚未發布的版本，`CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留空的 `## 未發布`。照 AGENTS.md 這也要走分支＋PR。推上後確認 Android Release 開始建置即可。
+3. 自動翻頁收到 false 會當成到書尾而停下：`ReaderV2AutoPageController._step` 在 jump 操作進行中直接跳過這一步、不停。
+4. 回歸測試：`hybrid_reader_interaction_test` 的「the jump paper stops a fling and still lets taps through」「a finger down before the paper falls cannot drag under it」「nothing moves the text under the jump paper」，`reader_v2_auto_page_controller_test` 的「a jump waiting for its text pauses steps without ending」；退回修正前四項都會失敗。審查摘要已貼在 PR #59 留言。
+
+接手要做（合併與發版等使用者確認）：
+1. 併最新 `main`、`gh pr checks 59 --watch`、`gh pr merge 59 --squash`（標題與說明取 PR 的），`git pull --ff-only`，刪本機分支與 worktree `../Night-Reader-jump`。
+2. **發正式版**（使用者已要求，等 #59 合併後一起發）：目前已發布的正式版看 `gh release list`；推一個只改版號的 commit `release: bump version to X.Y.Z`：`pubspec.yaml` 的 `version` 升到尚未發布的版本，`CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留空的 `## 未發布`。照 AGENTS.md 這也要走分支＋PR。推上後確認 Android Release 開始建置即可。
 
 ## 也在進行中
 
