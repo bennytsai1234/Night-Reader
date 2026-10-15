@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
@@ -27,6 +28,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
@@ -44,8 +46,18 @@ class BookDetailPage extends StatefulWidget {
   final Book? book;
   final AggregatedSearchBook? searchBook;
 
-  const BookDetailPage({super.key, this.book, this.searchBook})
-    : assert(book != null || searchBook != null);
+  /// 從閱讀器的「更多」開啟：閱讀鈕與點目錄回到原本的閱讀器（點章節時以
+  /// 章節網址為結果 pop：這裡的目錄可能比閱讀器手上的新，序號對不上），
+  /// 不另開一個閱讀器；加入／移出書架與換源留給
+  /// 閱讀器自己處理，這裡不顯示，免得刪掉正在讀的正文或換掉書。
+  final bool fromReader;
+
+  const BookDetailPage({
+    super.key,
+    this.book,
+    this.searchBook,
+    this.fromReader = false,
+  }) : assert(book != null || searchBook != null);
 
   @override
   State<BookDetailPage> createState() => _BookDetailPageState();
@@ -130,12 +142,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
             bottomNavigationBar: BookReadCapsule(
               started: provider.book.hasStartedReading,
               visible: provider.hasReadyWorld,
-              onPressed: () => _navigateToReader(
-                context,
-                provider.book,
-                ReaderV2OpenTarget.resume(provider.book),
-                provider.allChapters,
-              ),
+              onPressed: widget.fromReader
+                  ? () => Navigator.of(context).pop()
+                  : () => _navigateToReader(
+                      context,
+                      provider.book,
+                      ReaderV2OpenTarget.resume(provider.book),
+                      provider.allChapters,
+                    ),
             ),
           );
         },
@@ -154,48 +168,79 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final padding = MediaQuery.paddingOf(context);
     final ambience = _ambienceOf(provider);
     final loading = provider.isLoading;
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        SliverToBoxAdapter(
-          child: Stack(
-            children: [
-              if (ambience != null)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  right: 0,
-                  // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
-                  height: padding.top + BookInfoHeader.titleTop,
-                  child: BookCoverAmbience(image: ambience),
+    final chapters = provider.filteredChapters;
+    return ChapterScrollbar(
+      itemCount: loading ? 0 : chapters.length,
+      visibleRange: () => _chapterListController.isAttached
+          ? _chapterListController.visibleRange
+          : null,
+      onJumpTo: (index) => _jumpToTocRow(context, index),
+      labelFor: (index) => context.zh(chapters[index].title),
+      padding: EdgeInsets.only(
+        top: _headerExtent(context),
+        bottom: padding.bottom,
+      ),
+      child: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Stack(
+              children: [
+                if (ambience != null)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
+                    height: padding.top + BookInfoHeader.titleTop,
+                    child: BookCoverAmbience(image: ambience),
+                  ),
+                Padding(
+                  padding: EdgeInsets.only(top: padding.top),
+                  child: BookInfoHeader(
+                    book: currentBook,
+                    provider: provider,
+                    loading: loading,
+                    showPhotoView: _showPhotoView,
+                    onToggleBookshelf: widget.fromReader
+                        ? null
+                        : () => _handleBookshelfToggle(context, provider),
+                    onChangeSource: currentBook.isLocal || widget.fromReader
+                        ? null
+                        : () => _showChangeSourceDialog(context, provider),
+                    onShowToc: _scrollToToc,
+                  ),
                 ),
-              Padding(
-                padding: EdgeInsets.only(top: padding.top),
-                child: BookInfoHeader(
-                  book: currentBook,
-                  provider: provider,
-                  loading: loading,
-                  showPhotoView: _showPhotoView,
-                  onToggleBookshelf: () =>
-                      _handleBookshelfToggle(context, provider),
-                  onChangeSource: currentBook.isLocal
-                      ? null
-                      : () => _showChangeSourceDialog(context, provider),
-                  onShowToc: _scrollToToc,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (loading)
-          const SliverToBoxAdapter(child: Skeleton(child: BookDetailSkeleton()))
-        else
-          ..._buildLoadedSlivers(context, provider),
-        // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
-        SliverPadding(
-          padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
-        ),
-      ],
+          if (loading)
+            const SliverToBoxAdapter(
+              child: Skeleton(child: BookDetailSkeleton()),
+            )
+          else
+            ..._buildLoadedSlivers(context, provider),
+          // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
+          SliverPadding(
+            padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 拖動目錄捲軸：第 [index] 列停在玻璃頁首下方。
+  void _jumpToTocRow(BuildContext context, int index) {
+    if (!_chapterListController.isAttached || !_scrollController.hasClients) {
+      return;
+    }
+    final viewport = _scrollController.position.viewportDimension;
+    _chapterListController.jumpToItem(
+      index: index,
+      scrollController: _scrollController,
+      alignment: viewport <= 0
+          ? 0
+          : (_headerExtent(context) / viewport).clamp(0.0, 0.5),
     );
   }
 
@@ -298,12 +343,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   title: ctx.zh(chapter.title),
                   isCurrent: isCurrent,
                   isLocked: chapter.isLocked,
-                  onTap: () => _navigateToReader(
-                    context,
-                    currentBook,
-                    ReaderV2OpenTarget.chapterStart(chapter.index),
-                    provider.allChapters,
-                  ),
+                  onTap: widget.fromReader
+                      ? () => Navigator.of(context).pop(chapter.url)
+                      : () => _navigateToReader(
+                          context,
+                          currentBook,
+                          ReaderV2OpenTarget.chapterStart(chapter.index),
+                          provider.allChapters,
+                        ),
                 ),
               );
             }, childCount: chapters.length),
@@ -556,7 +603,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
     } finally {
       if (mounted) setState(() => _exportProgress = null);
     }

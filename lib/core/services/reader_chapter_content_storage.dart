@@ -134,6 +134,8 @@ class ReaderChapterContentStorage {
       saveChapterMetadata: saveChapterMetadata,
       maxAttempts: maxAttempts,
     );
+    // 重抓失敗時存著的舊正文還在（失敗不蓋掉正文），但這次確實沒抓到。
+    if (materialized.isFailed) return materialized;
     return await _readStored(chapter) ?? materialized;
   }
 

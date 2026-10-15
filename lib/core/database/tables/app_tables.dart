@@ -438,6 +438,18 @@ class ReadRecords extends Table {
       integer().named('lastRead').withDefault(const Constant(0))();
 }
 
+// ───────────── ReadDays ─────────────
+/// 每本書每天讀了幾秒，閱讀統計的「今天／本週」用；[ReadRecords] 只有累計。
+/// [day] 是裝置當地日期 `yyyy-MM-dd`，字串順序就是日期順序。
+class ReadDays extends Table {
+  TextColumn get bookName => text().named('bookName')();
+  TextColumn get day => text()();
+  IntColumn get seconds => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {bookName, day};
+}
+
 // ───────────── Servers ─────────────
 @UseRowClass(Server, generateInsertable: true)
 class Servers extends Table {

@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -53,7 +54,7 @@ class _SourceDebugPageState extends State<SourceDebugPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('複製日誌失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('複製日誌', error))));
     }
   }
 

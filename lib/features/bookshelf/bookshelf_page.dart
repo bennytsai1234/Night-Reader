@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
@@ -20,6 +23,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -65,6 +69,11 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   /// 換排序、書移到最前面時書卡平滑換位，新加入的書淡入。
   late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(vsync: this);
+
+  /// 書架空著時才用到：還沒有書源時主按鈕改成匯入書源。
+  late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
+      ? getIt<BookSourceDao>().watchHasAny()
+      : Stream<bool>.value(true);
 
   @override
   void dispose() {
@@ -284,10 +293,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       case _ShelfMenuAction.search:
         _openSearch();
       case _ShelfMenuAction.addLocal:
-        final path = await AppFileSelectionService.instance.pickLocalBookPath();
-        if (path != null && mounted) {
-          await _importLocalBook(context, provider, path);
-        }
+        await _pickLocalBook(provider);
       case _ShelfMenuAction.importFile:
         await _handleBookshelfImport(context);
       case _ShelfMenuAction.importUrl:
@@ -336,15 +342,35 @@ class _BookshelfPageState extends State<BookshelfPage>
     if (provider.books.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: insets.top, bottom: insets.bottom),
-        child: AppStateView(
-          icon: Icons.auto_stories_outlined,
-          title: '書架還是空的',
-          description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
-          primaryAction: AppStateAction(
-            label: '搜尋書籍',
-            icon: Icons.search,
-            onPressed: _openSearch,
-          ),
+        child: StreamBuilder<bool>(
+          stream: _hasSources,
+          // 還沒查到前當作有書源，畫面跟以前一樣；全新安裝時很快就換掉。
+          builder: (context, snapshot) => snapshot.data ?? true
+              ? AppStateView(
+                  icon: Icons.auto_stories_outlined,
+                  title: '書架還是空的',
+                  description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
+                  primaryAction: AppStateAction(
+                    label: '搜尋書籍',
+                    icon: Icons.search,
+                    onPressed: _openSearch,
+                  ),
+                )
+              : AppStateView(
+                  icon: Icons.auto_stories_outlined,
+                  title: '書架還是空的',
+                  description: '匯入書源後就能搜尋網路小說，手機裡的 TXT 也能直接加入。',
+                  primaryAction: AppStateAction(
+                    label: '匯入書源',
+                    icon: Icons.download_rounded,
+                    onPressed: _openSourceManager,
+                  ),
+                  secondaryAction: AppStateAction(
+                    label: '加入本地書籍',
+                    icon: Icons.file_open_outlined,
+                    onPressed: () => unawaited(_pickLocalBook(provider)),
+                  ),
+                ),
         ),
       );
     }
@@ -447,7 +473,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
     }
   }
 
@@ -490,7 +516,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('書架網址匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('書架網址匯入', e))));
     }
   }
 
@@ -525,7 +551,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
     }
   }
 
@@ -541,7 +567,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
     }
   }
 
@@ -567,7 +593,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('批次下載', e))));
     }
   }
 
@@ -595,7 +621,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('整本書補下載失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('整本書補下載', e))));
     }
   }
 
@@ -625,7 +651,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('批次檢查更新', e))));
     }
   }
 
@@ -884,7 +910,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       );
     } catch (e) {
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text('檢查更新失敗: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(failureMessage('檢查更新', e))),
+      );
     } finally {
       _singleBookBusy.remove(book.bookUrl);
     }
@@ -904,7 +932,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           ),
         );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('設定失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('設定', e))));
     }
   }
 
@@ -923,7 +951,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('下載失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('下載', e))));
     } finally {
       _singleBookBusy.remove(book.bookUrl);
     }
@@ -945,7 +973,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       setState(() => _selectedUrls.remove(book.bookUrl));
       messenger.showSnackBar(const SnackBar(content: Text('已移出書架')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('移出書架失敗: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(failureMessage('移出書架', e))),
+      );
     }
   }
 
@@ -953,6 +983,21 @@ class _BookshelfPageState extends State<BookshelfPage>
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
+    );
+  }
+
+  Future<void> _pickLocalBook(BookshelfProvider provider) async {
+    final path = await AppFileSelectionService.instance.pickLocalBookPath();
+    if (path != null && mounted) {
+      await _importLocalBook(context, provider, path);
+    }
+  }
+
+  /// 書源管理在還沒有書源時，頁面中央就是匯入按鈕。
+  void _openSourceManager() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SourceManagerPage()),
     );
   }
 
@@ -1006,7 +1051,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       // 中途失敗時，已刪掉的書不再留在選取裡。
       final remaining = p.books.map((book) => book.bookUrl).toSet();
       setState(() => _selectedUrls.retainAll(remaining));
-      messenger.showSnackBar(SnackBar(content: Text('刪除失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('刪除', e))));
     }
   }
 }

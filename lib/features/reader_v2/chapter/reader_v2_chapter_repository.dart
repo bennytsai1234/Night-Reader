@@ -194,11 +194,20 @@ class ReaderV2ChapterRepository {
   /// async work cannot become current later. [contentGeneration] advances after
   /// a successful explicit refresh, or when a reacquired materialized chapter
   /// proves that its committed identity changed outside this repository.
-  Future<ReaderV2Content> reloadContent(int chapterIndex) {
+  ///
+  /// [refetch] 先向書源重抓這一章、成功才換掉存著的正文（書源回了擋爬蟲頁
+  /// 或不完整的正文時用）；抓不到就丟出 [ReaderV2ContentUnavailableException]，
+  /// 存著的正文與閱讀中的內容都不變。
+  Future<ReaderV2Content> reloadContent(
+    int chapterIndex, {
+    bool refetch = false,
+  }) {
     final result = Completer<ReaderV2Content>();
     _reloadTail = _reloadTail.then((_) async {
       try {
-        result.complete(await _reloadContentTransaction(chapterIndex));
+        result.complete(
+          await _reloadContentTransaction(chapterIndex, refetch: refetch),
+        );
       } catch (error, stackTrace) {
         result.completeError(error, stackTrace);
       }
@@ -206,7 +215,10 @@ class ReaderV2ChapterRepository {
     return result.future;
   }
 
-  Future<ReaderV2Content> _reloadContentTransaction(int chapterIndex) async {
+  Future<ReaderV2Content> _reloadContentTransaction(
+    int chapterIndex, {
+    required bool refetch,
+  }) async {
     await ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);
     final previousCache = Map<int, ReaderV2Content>.from(_contentCache);
@@ -227,6 +239,7 @@ class ReaderV2ChapterRepository {
 
     var materialized = false;
     try {
+      if (refetch) await _refetchStoredContent(safeIndex, refreshGeneration);
       final content = await loadContent(safeIndex);
       materialized = true;
       if (_contentCacheGeneration == refreshGeneration) {
@@ -357,21 +370,30 @@ class ReaderV2ChapterRepository {
     return source;
   }
 
-  Future<ReaderV2ProcessedChapter?> _loadViaV2ContentPipeline(
+  Future<void> _refetchStoredContent(
     int chapterIndex,
-    BookChapter chapter,
     int cacheGeneration,
   ) async {
-    final localExtension = localBookExtensionFromPath(book.bookUrl);
-    if (book.origin == 'local' &&
-        book.bookUrl.startsWith('local://') &&
-        localExtension.isNotEmpty &&
-        !isSupportedLocalBookPath(book.bookUrl)) {
-      throw const ReaderV2ContentUnavailableException('本地書格式不受支援，請使用 TXT 檔案');
+    final chapter = chapterAt(chapterIndex);
+    final storage = _contentStorage(cacheGeneration);
+    if (chapter == null || storage == null) return;
+    final fetched = await storage.read(
+      chapterIndex: chapterIndex,
+      chapter: chapter,
+      forceRefresh: true,
+      saveChapterMetadata: book.origin != 'local',
+    );
+    if (fetched.isFailed) {
+      throw ReaderV2ContentUnavailableException(
+        (fetched.failureMessage ?? fetched.content).trim(),
+      );
     }
+  }
+
+  ReaderChapterContentStorage? _contentStorage(int cacheGeneration) {
     final contentDao = this.contentDao;
     if (contentDao == null) return null;
-    final storage = ReaderChapterContentStorage.withMaterializer(
+    return ReaderChapterContentStorage.withMaterializer(
       book: book,
       contentStore: ReaderChapterContentStore(
         chapterDao: chapterDao,
@@ -388,6 +410,22 @@ class ReaderV2ChapterRepository {
       },
       resolveNextChapterUrl: (index) => chapterAt(index + 1)?.url,
     );
+  }
+
+  Future<ReaderV2ProcessedChapter?> _loadViaV2ContentPipeline(
+    int chapterIndex,
+    BookChapter chapter,
+    int cacheGeneration,
+  ) async {
+    final localExtension = localBookExtensionFromPath(book.bookUrl);
+    if (book.origin == 'local' &&
+        book.bookUrl.startsWith('local://') &&
+        localExtension.isNotEmpty &&
+        !isSupportedLocalBookPath(book.bookUrl)) {
+      throw const ReaderV2ContentUnavailableException('本地書格式不受支援，請使用 TXT 檔案');
+    }
+    final storage = _contentStorage(cacheGeneration);
+    if (storage == null) return null;
     final prepared = await storage.read(
       chapterIndex: chapterIndex,
       chapter: chapter,

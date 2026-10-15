@@ -1,4 +1,5 @@
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
@@ -43,6 +44,15 @@ class ReaderV2PrefsSnapshot {
   final ReaderV2HighlightColor highlightColor;
   final double highlightStrength;
 
+  /// 亮度跟隨系統；關閉時用 [brightness]。
+  final bool brightnessAuto;
+
+  /// 亮度條的位置（0–1），換算見 [ReaderV2Brightness]。
+  final double brightness;
+
+  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
+  final bool volumeKeyPage;
+
   const ReaderV2PrefsSnapshot({
     required this.fontSize,
     required this.titleFontSize,
@@ -64,6 +74,9 @@ class ReaderV2PrefsSnapshot {
     required this.footerInfo,
     required this.highlightColor,
     required this.highlightStrength,
+    required this.brightnessAuto,
+    required this.brightness,
+    required this.volumeKeyPage,
   });
 
   factory ReaderV2PrefsSnapshot.defaults() {
@@ -96,6 +109,9 @@ class ReaderV2PrefsSnapshot {
       ),
       highlightColor: ReaderV2HighlightColor.theme,
       highlightStrength: ReaderV2HighlightStrength.defaultValue,
+      brightnessAuto: true,
+      brightness: ReaderV2Brightness.defaultLevel,
+      volumeKeyPage: false,
     );
   }
 
@@ -120,6 +136,9 @@ class ReaderV2PrefsSnapshot {
     ReaderV2InfoSlots? footerInfo,
     ReaderV2HighlightColor? highlightColor,
     double? highlightStrength,
+    bool? brightnessAuto,
+    double? brightness,
+    bool? volumeKeyPage,
   }) {
     return ReaderV2PrefsSnapshot(
       fontSize: fontSize ?? this.fontSize,
@@ -142,6 +161,9 @@ class ReaderV2PrefsSnapshot {
       footerInfo: footerInfo ?? this.footerInfo,
       highlightColor: highlightColor ?? this.highlightColor,
       highlightStrength: highlightStrength ?? this.highlightStrength,
+      brightnessAuto: brightnessAuto ?? this.brightnessAuto,
+      brightness: brightness ?? this.brightness,
+      volumeKeyPage: volumeKeyPage ?? this.volumeKeyPage,
     );
   }
 }
@@ -238,6 +260,15 @@ class ReaderV2PrefsRepository {
       highlightStrength: ReaderV2HighlightStrength.normalize(
         prefs.getDouble(PreferKey.readerHighlightStrength),
       ),
+      brightnessAuto:
+          prefs.getBool(PreferKey.readerBrightnessAuto) ??
+          defaults.brightnessAuto,
+      brightness: ReaderV2Brightness.normalize(
+        prefs.getDouble(PreferKey.readerBrightness),
+      ),
+      volumeKeyPage:
+          prefs.getBool(PreferKey.readerVolumeKeyPage) ??
+          defaults.volumeKeyPage,
     );
     _latestSnapshot = snapshot;
     return snapshot;
@@ -334,6 +365,21 @@ class ReaderV2PrefsRepository {
       PreferKey.readerHighlightStrength,
       ReaderV2HighlightStrength.normalize(value),
     );
+  }
+
+  Future<void> saveBrightnessAuto(bool value) {
+    return _setBool(PreferKey.readerBrightnessAuto, value);
+  }
+
+  Future<void> saveBrightness(double value) {
+    return _setDouble(
+      PreferKey.readerBrightness,
+      ReaderV2Brightness.normalize(value),
+    );
+  }
+
+  Future<void> saveVolumeKeyPage(bool value) {
+    return _setBool(PreferKey.readerVolumeKeyPage, value);
   }
 
   List<int> parseClickActions(String? stored) {

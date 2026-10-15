@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
@@ -187,6 +188,33 @@ void main() {
     expect(reloaded.highlightColor, ReaderV2HighlightColor.blue);
     expect(reloaded.highlightStrength, closeTo(0.4, 1e-9));
   });
+
+  test(
+    'dragging the brightness bar leaves auto and saves once on release',
+    () async {
+      final defaults = await const ReaderV2PrefsRepository().load();
+      expect(defaults.brightnessAuto, isTrue);
+      expect(defaults.volumeKeyPage, isFalse);
+
+      final settings = ReaderV2SettingsController();
+      await settings.loadSettings();
+      settings.setBrightness(0.1, persist: false);
+      expect(settings.brightnessAuto, isFalse);
+      await pumpEventQueue();
+      final mid = await const ReaderV2PrefsRepository().load();
+      expect(mid.brightness, ReaderV2Brightness.defaultLevel);
+
+      settings.setBrightness(0.2);
+      settings.setVolumeKeyPage(true);
+      await pumpEventQueue();
+      settings.dispose();
+
+      final reloaded = await const ReaderV2PrefsRepository().load();
+      expect(reloaded.brightnessAuto, isFalse);
+      expect(reloaded.brightness, closeTo(0.2, 1e-9));
+      expect(reloaded.volumeKeyPage, isTrue);
+    },
+  );
 
   test('損毀或超出範圍的高亮設定回退到安全值', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{

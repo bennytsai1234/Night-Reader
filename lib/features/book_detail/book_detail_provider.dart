@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -570,7 +571,9 @@ class BookDetailProvider extends ChangeNotifier {
         Error.throwWithStackTrace(error, stackTrace);
       }
       AppLog.e('換源失敗: $error', error: error, stackTrace: stackTrace);
-      return BookDetailOperationResult.failure('換源失敗: $error');
+      return BookDetailOperationResult.failure(
+        '換源失敗：${userErrorReason(error)}',
+      );
     } finally {
       _isChangingSource = false;
       notifyListeners();
@@ -624,7 +627,9 @@ class BookDetailProvider extends ChangeNotifier {
         _isInBookshelf = previous;
         _book.isInBookshelf = previous;
         notifyListeners();
-        return BookDetailOperationResult.failure('加入書架失敗: $e');
+        return BookDetailOperationResult.failure(
+          '加入書架失敗：${userErrorReason(e)}',
+        );
       }
     } else {
       try {
@@ -634,7 +639,9 @@ class BookDetailProvider extends ChangeNotifier {
         _isInBookshelf = previous;
         _book.isInBookshelf = previous;
         notifyListeners();
-        return BookDetailOperationResult.failure('移出書架失敗: $e');
+        return BookDetailOperationResult.failure(
+          '移出書架失敗：${userErrorReason(e)}',
+        );
       }
     }
 
@@ -693,7 +700,9 @@ class BookDetailProvider extends ChangeNotifier {
       return BookDetailOperationResult.success('書籍資訊已儲存');
     } catch (error) {
       AppLog.e('儲存書籍資訊失敗: $error', error: error);
-      return BookDetailOperationResult.failure('儲存書籍資訊失敗: $error');
+      return BookDetailOperationResult.failure(
+        '儲存書籍資訊失敗：${userErrorReason(error)}',
+      );
     }
   }
 
@@ -709,7 +718,9 @@ class BookDetailProvider extends ChangeNotifier {
       );
     } catch (error) {
       AppLog.e('設定自動檢查更新失敗: $error', error: error);
-      return BookDetailOperationResult.failure('設定失敗: $error');
+      return BookDetailOperationResult.failure(
+        '設定失敗：${userErrorReason(error)}',
+      );
     }
   }
 
@@ -725,7 +736,9 @@ class BookDetailProvider extends ChangeNotifier {
       return BookDetailOperationResult.success('封面已更新');
     } catch (error) {
       AppLog.e('更新封面失敗: $error', error: error);
-      return BookDetailOperationResult.failure('更新封面失敗: $error');
+      return BookDetailOperationResult.failure(
+        '更新封面失敗：${userErrorReason(error)}',
+      );
     }
   }
 
@@ -758,7 +771,7 @@ class BookDetailProvider extends ChangeNotifier {
       return BookDetailOperationResult.success(message);
     } catch (e) {
       AppLog.e('清除本書快取失敗: $e', error: e);
-      return BookDetailOperationResult.failure('清除快取失敗: $e');
+      return BookDetailOperationResult.failure('清除快取失敗：${userErrorReason(e)}');
     }
   }
 
@@ -821,7 +834,7 @@ class BookDetailProvider extends ChangeNotifier {
         success: false,
         newChapterCount: 0,
         totalChapterCount: _allChapters.length,
-        message: '檢查更新失敗: $e',
+        message: failureMessage('檢查更新', e),
       );
     } finally {
       _isCheckingUpdate = false;

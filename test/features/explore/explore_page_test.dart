@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
@@ -22,6 +23,11 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 
   @override
   Stream<List<BookSource>> watchDiscoveryPart() => _sources;
+
+  bool hasAny = true;
+
+  @override
+  Stream<bool> watchHasAny() => Stream.value(hasAny);
 }
 
 void main() {
@@ -117,4 +123,39 @@ void main() {
     expect(find.text('書源甲'), findsOneWidget);
     expect(find.byType(SkeletonLine), findsNothing);
   });
+
+  for (final hasAny in [false, true]) {
+    testWidgets(
+      hasAny
+          ? 'sources without explore point to the source manager'
+          : 'with no source at all the empty page offers an import',
+      (tester) async {
+        final dao = _FakeSourceDao(const [])..hasAny = hasAny;
+        getIt.registerSingleton<BookSourceDao>(dao);
+        addTearDown(() => getIt.unregister<BookSourceDao>());
+        final provider = ExploreProvider(
+          sourceDao: dao,
+          kindsLoader: (_, {source}) async => const [],
+        );
+        addTearDown(provider.dispose);
+
+        await tester.pumpWidget(
+          ChangeNotifierProvider<ExploreProvider>.value(
+            value: provider,
+            child: MaterialApp(
+              theme: buildAppTheme(AppStyle.paper, Brightness.light),
+              home: const ExplorePage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('匯入書源'), hasAny ? findsNothing : findsOneWidget);
+        expect(
+          find.text('目前沒有可用的發現書源'),
+          hasAny ? findsOneWidget : findsNothing,
+        );
+      },
+    );
+  }
 }

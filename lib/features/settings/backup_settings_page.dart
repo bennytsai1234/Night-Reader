@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/core/services/backup_service.dart';
@@ -91,7 +92,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('備份出錯: $e')));
+            .showSnackBar(SnackBar(content: Text(failureMessage('備份', e))));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -132,7 +133,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('還原出錯: $e')));
+            .showSnackBar(SnackBar(content: Text(failureMessage('還原', e))));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
