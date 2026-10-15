@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/default_data.dart';
@@ -58,15 +57,8 @@ class _MainPageState extends State<MainPage> {
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
-  bool _nativeSplashReleaseScheduled = false;
-  bool _showStartupLoadingOverlay = false;
-  DateTime? _splashHeldAt;
-  BookshelfProvider? _splashShelfProvider;
-  VoidCallback? _splashShelfListener;
-  Timer? _splashTimeoutTimer;
-
-  static const _splashMinDisplay = Duration(milliseconds: 900);
-  static const _splashShelfTimeout = Duration(seconds: 2);
+  BookshelfProvider? _launchShelf;
+  VoidCallback? _launchShelfListener;
 
   late final PageController _pageController = PageController(
     initialPage: _currentIndex,
@@ -84,8 +76,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
-    _splashTimeoutTimer?.cancel();
-    _detachSplashShelfListener();
+    _detachLaunchShelfListener();
     _pageController.dispose();
     _tabBarHidden.dispose();
     super.dispose();
@@ -98,11 +89,8 @@ class _MainPageState extends State<MainPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_initDeferredStartupData());
-      final hasShelfProvider = context.read<BookshelfProvider?>() != null;
-      if (widget.destinations == null || hasShelfProvider) {
-        _releaseSplashWhenShelfReady();
-      }
       if (widget.destinations == null) {
+        _refreshShelfOnceLoaded();
         unawaited(_runAutomaticUpdateCheck());
       }
     });
@@ -149,41 +137,6 @@ class _MainPageState extends State<MainPage> {
                 builder: (context, _) => FloatingTabBarFade(
                   color: _fadeColor(context),
                   hidden: _tabBarHidden.value,
-                ),
-              ),
-            ),
-            // 啟動載入遮罩只蓋書架分頁；顯示時擋住點擊，不讓點擊穿到底下
-            // 看不見的按鈕。
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !(_showStartupLoadingOverlay && _currentIndex == 0),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: _showStartupLoadingOverlay && _currentIndex == 0
-                      ? ColoredBox(
-                          key: const ValueKey('startup-loading-overlay'),
-                          color: Theme.of(context).scaffoldBackgroundColor
-                              .withValues(alpha: 0.96),
-                          child: Center(
-                            child: Semantics(
-                              liveRegion: true,
-                              label: '正在載入書架',
-                              child: ExcludeSemantics(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    CircularProgressIndicator(),
-                                    SizedBox(height: AppSpacing.lg),
-                                    Text('正在載入書架…'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(
-                          key: ValueKey('startup-loading-overlay-hidden'),
-                        ),
                 ),
               ),
             ),
@@ -258,76 +211,31 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  void _releaseSplashWhenShelfReady() {
-    _splashHeldAt = DateTime.now();
+  /// 書架第一次讀完書才在背景補排下載、檢查書架更新，不和首幀與書架載入
+  /// 搶時間。
+  void _refreshShelfOnceLoaded() {
     final shelf = context.read<BookshelfProvider?>();
     if (shelf == null) return;
     if (!shelf.isLoading) {
-      _completeSplashShelfWait();
+      unawaited(_runAutomaticShelfRefresh(shelf));
       return;
     }
     void listener() {
-      if (!shelf.isLoading) _completeSplashShelfWait();
+      if (shelf.isLoading) return;
+      _detachLaunchShelfListener();
+      unawaited(_runAutomaticShelfRefresh(shelf));
     }
 
-    _splashShelfProvider = shelf;
-    _splashShelfListener = listener;
+    _launchShelf = shelf;
+    _launchShelfListener = listener;
     shelf.addListener(listener);
-    _splashTimeoutTimer?.cancel();
-    _splashTimeoutTimer = Timer(_splashShelfTimeout, _handleSplashShelfTimeout);
   }
 
-  void _handleSplashShelfTimeout() {
-    _splashTimeoutTimer = null;
-    final shelf = _splashShelfProvider;
-    if (shelf == null || !shelf.isLoading) {
-      _completeSplashShelfWait();
-      return;
-    }
-
-    if (!mounted) {
-      _releaseNativeSplashOnce();
-      return;
-    }
-    setState(() => _showStartupLoadingOverlay = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _releaseNativeSplashOnce();
-    });
-  }
-
-  void _completeSplashShelfWait() {
-    _splashTimeoutTimer?.cancel();
-    _splashTimeoutTimer = null;
-    _detachSplashShelfListener();
-    if (mounted && _showStartupLoadingOverlay) {
-      setState(() => _showStartupLoadingOverlay = false);
-    }
-    _releaseNativeSplashOnce();
-  }
-
-  void _releaseNativeSplashOnce() {
-    if (_nativeSplashReleaseScheduled) return;
-    _nativeSplashReleaseScheduled = true;
-    if (widget.destinations != null) return;
-    final heldAt = _splashHeldAt;
-    final remaining = heldAt == null
-        ? Duration.zero
-        : _splashMinDisplay - DateTime.now().difference(heldAt);
-    if (remaining > Duration.zero) {
-      Future<void>.delayed(remaining, _onShelfShown);
-    } else {
-      _onShelfShown();
-    }
-  }
-
-  /// 啟動畫面收起、書架露出後才在背景補排下載、檢查書架更新，不和首幀與
-  /// 書架載入搶時間。
-  void _onShelfShown() {
-    FlutterNativeSplash.remove();
-    if (!mounted) return;
-    final shelf = context.read<BookshelfProvider?>();
-    if (shelf == null) return;
-    unawaited(_runAutomaticShelfRefresh(shelf));
+  void _detachLaunchShelfListener() {
+    final listener = _launchShelfListener;
+    if (listener != null) _launchShelf?.removeListener(listener);
+    _launchShelf = null;
+    _launchShelfListener = null;
   }
 
   Future<void> _runAutomaticShelfRefresh(BookshelfProvider shelf) async {
@@ -336,16 +244,6 @@ class _MainPageState extends State<MainPage> {
     } catch (e, stack) {
       AppLog.e('Bookshelf refresh failed: $e', error: e, stackTrace: stack);
     }
-  }
-
-  void _detachSplashShelfListener() {
-    final provider = _splashShelfProvider;
-    final listener = _splashShelfListener;
-    if (provider != null && listener != null) {
-      provider.removeListener(listener);
-    }
-    _splashShelfProvider = null;
-    _splashShelfListener = null;
   }
 
   Future<void> _initDeferredStartupData() async {
