@@ -4,8 +4,8 @@
 
 ## 進行中
 
-- **`fix/reader-menu-layout`（已推上、未開 PR）**：閱讀選單上下墊漸隱底色、亮度條改到上下選單之間置中並撐長、正文字號每步 0.5。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-menu-layout`。
-- **`feat/tts-sleep-timer`（已推上、未開 PR）**：朗讀面板的定時（關閉、15～90 分、自訂分鐘數；章末已依使用者要求拿掉；時間到暫停、暫停時倒數停、記住上次選擇），加上閱讀選單上方第 4 顆圓鈕「定時朗讀」（按下照記住的定時開始朗讀、定時關閉時用 30 分，念著時按下停止，鈕上顯示剩餘分鐘）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-tts-timer`。
+- **`fix/reader-menu-layout`（已推上、未開 PR）**：閱讀選單墊底色、亮度條置中撐長、字號每步 0.5，加上整個 App 截圖掃描後使用者逐項同意的 17 項介面修整（面板開著時選單收起、正文上緣漸隱、朗讀面板卡片化、替換規則面板、書源管理卡片、空白頁按鈕等，細節見分支上 `fix(ui): polish pass…` 的 commit message），以及 `test/screens/` 的整個 App 截圖組。**已兩次併入 `feat/tts-sleep-timer`（最後到 `75f0079`）**：合併時開一個 PR 就好；定時分支之後若再有新提交，先併進這條再開 PR。worktree 在 repo 外的 `../Night-Reader-menu-layout`。
+- **`feat/tts-sleep-timer`（已推上、未開 PR）**：朗讀面板的定時（關閉、15～90 分、自訂分鐘數；章末已依使用者要求拿掉；時間到暫停、暫停時倒數停、記住上次選擇），加上閱讀選單上方第 4 顆圓鈕「定時朗讀」（按下照記住的定時開始朗讀、定時關閉時用 30 分，念著時按下停止，鈕上顯示剩餘分鐘）。內容已併進 `fix/reader-menu-layout`，合併時隨那個 PR 一起進、之後刪掉這條分支。worktree 在 repo 外的 `../Night-Reader-tts-timer`。
 - **`feat/launch-straight-to-shelf`（已推上、未開 PR）**：拿掉書月亮星星的開場畫面，系統啟動畫面只剩書架底色、跟著風格與深淺（Android 13 起下次開啟生效），第一幀就進書架骨架（ADR 0017）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-launch`。
 - **`fix/predictive-back-smoothing`（已推上、未開 PR）**：Android 手勢導覽慢慢返回時，系統送來的進度照 Flutter 觸控重新取樣的做法晚 38ms、逐格內插，不再一頓一頓。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-smooth-back`。
 - **`fix/reader-open-no-jank`（已推上、未開 PR）**：開書等換頁動畫與骨架淡入播完才載入、載入時排版每幀上限 4ms、目錄分批讀（ADR 0018）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-open-smooth`。照 ADR 0018 檢查出的其他動畫與重工作重疊處已回報使用者，等使用者挑要修哪些。
