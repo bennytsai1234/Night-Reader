@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
@@ -20,6 +22,7 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/features/search/search_page.dart';
+import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -65,6 +68,11 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   /// 換排序、書移到最前面時書卡平滑換位，新加入的書淡入。
   late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(vsync: this);
+
+  /// 書架空著時才用到：還沒有書源時主按鈕改成匯入書源。
+  late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
+      ? getIt<BookSourceDao>().watchHasAny()
+      : Stream<bool>.value(true);
 
   @override
   void dispose() {
@@ -284,10 +292,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       case _ShelfMenuAction.search:
         _openSearch();
       case _ShelfMenuAction.addLocal:
-        final path = await AppFileSelectionService.instance.pickLocalBookPath();
-        if (path != null && mounted) {
-          await _importLocalBook(context, provider, path);
-        }
+        await _pickLocalBook(provider);
       case _ShelfMenuAction.importFile:
         await _handleBookshelfImport(context);
       case _ShelfMenuAction.importUrl:
@@ -336,15 +341,35 @@ class _BookshelfPageState extends State<BookshelfPage>
     if (provider.books.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: insets.top, bottom: insets.bottom),
-        child: AppStateView(
-          icon: Icons.auto_stories_outlined,
-          title: '書架還是空的',
-          description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
-          primaryAction: AppStateAction(
-            label: '搜尋書籍',
-            icon: Icons.search,
-            onPressed: _openSearch,
-          ),
+        child: StreamBuilder<bool>(
+          stream: _hasSources,
+          // 還沒查到前當作有書源，畫面跟以前一樣；全新安裝時很快就換掉。
+          builder: (context, snapshot) => snapshot.data ?? true
+              ? AppStateView(
+                  icon: Icons.auto_stories_outlined,
+                  title: '書架還是空的',
+                  description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
+                  primaryAction: AppStateAction(
+                    label: '搜尋書籍',
+                    icon: Icons.search,
+                    onPressed: _openSearch,
+                  ),
+                )
+              : AppStateView(
+                  icon: Icons.auto_stories_outlined,
+                  title: '書架還是空的',
+                  description: '匯入書源後就能搜尋網路小說，手機裡的 TXT 也能直接加入。',
+                  primaryAction: AppStateAction(
+                    label: '匯入書源',
+                    icon: Icons.download_rounded,
+                    onPressed: _openSourceManager,
+                  ),
+                  secondaryAction: AppStateAction(
+                    label: '加入本地書籍',
+                    icon: Icons.file_open_outlined,
+                    onPressed: () => unawaited(_pickLocalBook(provider)),
+                  ),
+                ),
         ),
       );
     }
@@ -953,6 +978,21 @@ class _BookshelfPageState extends State<BookshelfPage>
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
+    );
+  }
+
+  Future<void> _pickLocalBook(BookshelfProvider provider) async {
+    final path = await AppFileSelectionService.instance.pickLocalBookPath();
+    if (path != null && mounted) {
+      await _importLocalBook(context, provider, path);
+    }
+  }
+
+  /// 書源管理在還沒有書源時，頁面中央就是匯入按鈕。
+  void _openSourceManager() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SourceManagerPage()),
     );
   }
 
