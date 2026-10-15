@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 import 'bookshelf_provider_base.dart';
 
@@ -11,6 +12,8 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     isGridView = prefs.getBool('bookshelf_is_grid') ?? isGridView;
     showLastUpdate =
         prefs.getBool('bookshelf_show_last_update') ?? showLastUpdate;
+    UnifiedCovers.enabled.value =
+        prefs.getBool(_unifiedCoversKey) ?? UnifiedCovers.enabled.value;
     final savedSort = prefs.getInt(PreferKey.bookshelfSort);
     if (savedSort != null &&
         savedSort >= 0 &&
@@ -24,6 +27,20 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     isGridView = value;
     SharedPreferences.getInstance().then(
       (p) => p.setBool('bookshelf_is_grid', isGridView),
+    );
+    notifyListeners();
+  }
+
+  static const String _unifiedCoversKey = 'bookshelf_unified_covers';
+
+  /// 統一封面：書架上的書一律畫預設封面（見 [UnifiedCovers]）。
+  bool get unifiedCovers => UnifiedCovers.enabled.value;
+
+  void setUnifiedCovers(bool value) {
+    if (unifiedCovers == value) return;
+    UnifiedCovers.enabled.value = value;
+    SharedPreferences.getInstance().then(
+      (p) => p.setBool(_unifiedCoversKey, value),
     );
     notifyListeners();
   }

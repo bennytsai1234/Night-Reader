@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 class BookCoverWidget extends StatelessWidget {
   final String? coverUrl;
@@ -120,11 +120,11 @@ class BookCoverWidget extends StatelessWidget {
   Widget _buildCover(BuildContext context, BoxConstraints constraints) {
     final source = coverUrl?.trim();
     if (source == null || source.isEmpty) {
-      return _buildTextCover();
+      return _buildDefaultCover();
     }
 
     if (_failedCoverSources.contains(source)) {
-      return _buildTextCover();
+      return _buildDefaultCover();
     }
 
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
@@ -147,7 +147,7 @@ class BookCoverWidget extends StatelessWidget {
               return _buildPlaceholder(context);
             }
             _failedCoverSources.add(source);
-            return _buildTextCover();
+            return _buildDefaultCover();
           }
           return Image.memory(
             bytes,
@@ -158,7 +158,7 @@ class BookCoverWidget extends StatelessWidget {
             cacheHeight: cacheHeight,
             errorBuilder: (context, error, stackTrace) {
               _failedCoverSources.add(source);
-              return _buildTextCover();
+              return _buildDefaultCover();
             },
           );
         },
@@ -178,7 +178,7 @@ class BookCoverWidget extends StatelessWidget {
         cacheHeight: cacheHeight,
         errorBuilder: (context, error, stackTrace) {
           _failedCoverSources.add(source);
-          return _buildTextCover();
+          return _buildDefaultCover();
         },
       );
     }
@@ -194,7 +194,7 @@ class BookCoverWidget extends StatelessWidget {
       placeholder: (context, url) => _buildPlaceholder(context),
       errorWidget: (context, url, error) {
         _failedCoverSources.add(source);
-        return _buildTextCover();
+        return _buildDefaultCover();
       },
     );
   }
@@ -206,92 +206,8 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  /// 實作文字封面 (經典精裝紙本書冊標籤質感)
-  Widget _buildTextCover() {
-    final int colorIndex = bookName.hashCode.abs() % _coverColors.length;
-    final Color color = _coverColors[colorIndex];
-    final Color foregroundColor = _readableForeground(color);
-    final String displayChar = bookName.isNotEmpty ? bookName[0] : '書';
-
-    return Container(
-      color: color,
-      child: Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: foregroundColor.withValues(alpha: 0.38),
-              width: 0.75,
-            ),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                displayChar,
-                style: AppTextStyles.titleSm.copyWith(
-                  color: foregroundColor,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Container(
-                width: 14,
-                height: 1,
-                color: foregroundColor.withValues(alpha: 0.4),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                bookName,
-                style: AppTextStyles.labelXs.copyWith(
-                  color: foregroundColor.withValues(alpha: 0.9),
-                  fontSize: 8,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _readableForeground(Color background) {
-    const lightForeground = AppPalette.paper50;
-    const darkForeground = AppPalette.ink700;
-
-    double contrastRatio(Color foreground) {
-      final lighter =
-          foreground.computeLuminance() > background.computeLuminance()
-          ? foreground.computeLuminance()
-          : background.computeLuminance();
-      final darker =
-          foreground.computeLuminance() > background.computeLuminance()
-          ? background.computeLuminance()
-          : foreground.computeLuminance();
-      return (lighter + 0.05) / (darker + 0.05);
-    }
-
-    return contrastRatio(darkForeground) >= contrastRatio(lightForeground)
-        ? darkForeground
-        : lightForeground;
-  }
-
-  static const List<Color> _coverColors = [
-    AppPalette.cinnabar,
-    AppPalette.rust,
-    AppPalette.tea,
-    AppPalette.gold,
-    AppPalette.azurite,
-    AppPalette.moss,
-    AppPalette.ink300,
-    AppPalette.aubergine,
-  ];
+  /// 沒有封面或載不到時畫預設封面（[DefaultBookCover]）。
+  Widget _buildDefaultCover() => DefaultBookCover(bookName: bookName);
 
   /// 載入失敗的封面：清單每次重建都會重新建立圖片，不記下來會一直重抓。
   static final Set<String> _failedCoverSources = <String>{};

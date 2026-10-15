@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -56,7 +57,7 @@ class BookInfoHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coverUrl = book.getDisplayCover();
+    final coverUrl = UnifiedCovers.coverOf(book);
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
     final author = context.zh(book.author).trim();

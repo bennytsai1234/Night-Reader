@@ -3,6 +3,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -221,13 +222,16 @@ class BookshelfListCard extends StatelessWidget {
     final name = context.zh(book.name);
     final author = context.zh(book.author).trim();
 
-    Widget cover = BookCoverWidget(
-      bookName: name,
-      author: book.author,
-      coverUrl: book.getDisplayCover(),
-      width: coverWidth,
-      height: coverHeight,
-      borderRadius: AppRadius.cardXs,
+    Widget cover = ValueListenableBuilder<bool>(
+      valueListenable: UnifiedCovers.enabled,
+      builder: (context, _, _) => BookCoverWidget(
+        bookName: name,
+        author: book.author,
+        coverUrl: UnifiedCovers.coverOf(book),
+        width: coverWidth,
+        height: coverHeight,
+        borderRadius: AppRadius.cardXs,
+      ),
     );
     cover = Stack(
       clipBehavior: Clip.none,
@@ -420,13 +424,16 @@ class BookshelfGridTile extends StatelessWidget {
                       scale: selected ? 0.92 : 1,
                       duration: AppMotion.spring,
                       curve: AppMotion.springCurve,
-                      child: BookCoverWidget(
-                        bookName: name,
-                        author: book.author,
-                        coverUrl: book.getDisplayCover(),
-                        width: double.infinity,
-                        height: double.infinity,
-                        borderRadius: AppRadius.cardXs,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: UnifiedCovers.enabled,
+                        builder: (context, _, _) => BookCoverWidget(
+                          bookName: name,
+                          author: book.author,
+                          coverUrl: UnifiedCovers.coverOf(book),
+                          width: double.infinity,
+                          height: double.infinity,
+                          borderRadius: AppRadius.cardXs,
+                        ),
                       ),
                     ),
                     Positioned(
