@@ -328,23 +328,16 @@ class ReaderV2TtsController extends ChangeNotifier
     super.notifyListeners();
   }
 
-  /// 定時到了：停在目前這句，播放鍵從這句開頭接著念。
+  /// 定時到了：停在目前這句，播放鍵從這句開頭接著念。用停止而不是引擎的
+  /// 暫停：句與句之間引擎沒有在念，暫停不會生效，下一句照樣會開始。
   void _pauseForSleep() {
     final segment = _currentSegment;
     if (segment == null) return;
-    _pauseAt(
-      ReaderV2Location(
-        chapterIndex: segment.chapterIndex,
-        charOffset: segment.startCharOffset,
-      ),
-    );
-  }
-
-  /// 停掉引擎並記下接著念的位置。用停止而不是引擎的暫停：句與句之間
-  /// 引擎沒有在念，暫停不會生效，下一句照樣會開始。
-  void _pauseAt(ReaderV2Location location) {
     _speechGeneration += 1;
-    _resumeLocation = location;
+    _resumeLocation = ReaderV2Location(
+      chapterIndex: segment.chapterIndex,
+      charOffset: segment.startCharOffset,
+    );
     unawaited(_tts.stop());
     notifyListeners();
   }
@@ -398,17 +391,6 @@ class ReaderV2TtsController extends ChangeNotifier
       final chapterIndex = completedSegment.chapterIndex + 1;
       if (chapterIndex >= runtime.chapterCount) {
         _finishSpeech(generation, notice: '已朗讀到書尾');
-        return;
-      }
-      if (sleepTimer.takeChapterEnd()) {
-        _clearSpeechStateWithoutNotify();
-        _pauseAt(
-          ReaderV2Location(
-            chapterIndex: chapterIndex,
-            charOffset: 0,
-            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
-          ),
-        );
         return;
       }
       await _speakFrom(

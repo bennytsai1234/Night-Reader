@@ -158,6 +158,16 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
               selected: timer.option,
               onChanged: (option) => unawaited(timer.choose(option)),
             ),
+            if (timer.option == ReaderV2TtsSleepOption.custom)
+              NumberStepperRow(
+                label: '分鐘',
+                value: timer.customMinutes.toDouble(),
+                min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
+                max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
+                step: 1,
+                onChanged: (value) =>
+                    unawaited(timer.setCustomMinutes(value.round())),
+              ),
             if (status != null)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.sm),
@@ -176,7 +186,6 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
   }
 
   static String? _status(ReaderV2TtsSleepTimer timer) {
-    if (timer.pausesAtChapterEnd) return '念完本章後暫停';
     final remaining = timer.remaining;
     if (remaining == null) return null;
     // 無條件進位到秒，剛開始倒數時顯示整數分鐘。

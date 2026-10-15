@@ -289,19 +289,41 @@ void main() {
       expect(tts.isPlaying, isFalse);
     });
 
-    testWidgets('chapter end pauses before the next chapter', (tester) async {
-      await open({0: '第一章。', 1: '第二章。'});
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.chapterEnd);
+    testWidgets('a custom timer counts down its own minutes', (tester) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.setCustomMinutes(20);
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
       await tts.startFromVisibleLocation();
-      engine.complete();
-      await tester.pump();
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 20));
 
-      expect(engine.spoken, ['第一章。']);
+      await elapse(tester, const Duration(minutes: 5));
+      await tts.sleepTimer.setCustomMinutes(10);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+
+      await elapse(tester, const Duration(minutes: 10));
+      expect(tts.isPlaying, isFalse);
       expect(tts.isPaused, isTrue);
+    });
 
-      await tts.toggle();
-      expect(engine.spoken.last, '第二章。');
-      expect(tts.sleepTimer.pausesAtChapterEnd, isTrue);
+    testWidgets('changing the custom minutes leaves a preset alone', (
+      tester,
+    ) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      await tts.sleepTimer.setCustomMinutes(40);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
+    });
+
+    testWidgets('custom minutes stay within range', (tester) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.setCustomMinutes(0);
+      expect(tts.sleepTimer.customMinutes, 1);
+      await tts.sleepTimer.setCustomMinutes(999);
+      expect(tts.sleepTimer.customMinutes, 180);
     });
 
     testWidgets('stopping clears the countdown but keeps the choice', (
@@ -364,14 +386,20 @@ void main() {
     });
 
     testWidgets('the last choice is remembered', (tester) async {
-      SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 45});
+      SharedPreferences.setMockInitialValues({
+        PreferKey.ttsTimer: 45,
+        PreferKey.ttsTimerCustomMinutes: 25,
+      });
       await open({0: '唯一的一句。'});
       await tts.loadSettings();
       expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes45);
+      expect(tts.sleepTimer.customMinutes, 25);
 
-      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.chapterEnd);
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
+      await tts.sleepTimer.setCustomMinutes(70);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getInt(PreferKey.ttsTimer), -1);
+      expect(prefs.getInt(PreferKey.ttsTimerCustomMinutes), 70);
     });
   });
 }
