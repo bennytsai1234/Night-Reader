@@ -277,7 +277,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
       style: TextButton.styleFrom(
         foregroundColor: menuStyle.foreground,
         disabledForegroundColor: menuStyle.foreground.withValues(alpha: 0.38),
-        textStyle: AppTextStyles.uiSm,
+        // 字級沿用 TextButton 預設的 labelLarge（主題裡就是 uiSm），自己帶
+        // textStyle 會蓋掉主題的字族。
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         minimumSize: const Size(AppGlass.buttonSize, AppGlass.buttonSize),
         shape: const StadiumBorder(),

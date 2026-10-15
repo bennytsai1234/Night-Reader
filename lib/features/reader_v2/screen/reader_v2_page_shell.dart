@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -232,6 +233,16 @@ class ReaderV2PageShell extends StatelessWidget {
       footerOffset: footerOffset,
     );
     final infoShown = infoState != ReaderV2InfoState.hidden;
+    // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 14（同 App 頁首
+    // 下緣）。邊距是 0 時沒有空隙，切口照舊。
+    final fadeTop = math.min(
+      layout.contentTop - layout.headerExtent,
+      AppGlass.headerFadeHeight,
+    );
+    final fadeBottom = math.min(
+      layout.contentBottom - layout.footerExtent,
+      AppGlass.headerFadeHeight,
+    );
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
     final autoPageInFooter = layout.showFooterInfo;
     return PopScope<void>(
@@ -252,24 +263,41 @@ class ReaderV2PageShell extends StatelessWidget {
           color: backgroundColor,
           child: Stack(
             children: [
+              // 正文上下緣常露出半行（ADR 0006）。正文區本身不動：跨在邊上
+              // 的那一行畫進正文與頁首頁尾之間的空隙，在空隙裡漸隱，不蓋到
+              // 頁首頁尾，也不淡掉正文區裡的字。
               Positioned.fill(
-                top: layout.contentTop,
-                bottom: layout.contentBottom,
-                child: content,
-              ),
-              // 正文上緣常露出半行（ADR 0006），切口加一段漸隱，同 App 頁首
-              // 下緣的做法。上緣那一行是翻頁保留的重疊行，已經讀過；下緣不加，
-              // 否則翻頁前要讀的最後一行會被淡掉。
-              Positioned(
-                top: layout.contentTop,
-                left: 0,
-                right: 0,
-                child: EdgeFade(
-                  edge: AxisDirection.up,
-                  height: AppGlass.headerFadeHeight,
-                  color: backgroundColor,
+                top: layout.contentTop - fadeTop,
+                bottom: layout.contentBottom - fadeBottom,
+                child: ClipRect(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: fadeTop, bottom: fadeBottom),
+                    child: content,
+                  ),
                 ),
               ),
+              if (fadeTop > 0)
+                Positioned(
+                  top: layout.contentTop - fadeTop,
+                  left: 0,
+                  right: 0,
+                  child: EdgeFade(
+                    edge: AxisDirection.up,
+                    height: fadeTop,
+                    color: backgroundColor,
+                  ),
+                ),
+              if (fadeBottom > 0)
+                Positioned(
+                  bottom: layout.contentBottom - fadeBottom,
+                  left: 0,
+                  right: 0,
+                  child: EdgeFade(
+                    edge: AxisDirection.down,
+                    height: fadeBottom,
+                    color: backgroundColor,
+                  ),
+                ),
               if (layout.headerExtent > 0)
                 Positioned(
                   top: 0,

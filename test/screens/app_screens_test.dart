@@ -149,6 +149,15 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
     const {'hideStatusBar': true, 'reader_header_info': '1,4'},
     (t) async => openReader(t),
   ),
+  // 上下邊距各 16：正文與頁首頁尾之間有空隙，跨邊的那一行在空隙裡漸隱。
+  'r12_reader_margins': (
+    const {
+      'reader_padding_top': 16.0,
+      'reader_padding_bottom': 16.0,
+      'reader_header_info': '1,4',
+    },
+    (t) async => openReader(t),
+  ),
   'r11_menu_hidden_bar': (
     const {'hideStatusBar': true, 'reader_header_info': '1,4'},
     openReaderMenu,

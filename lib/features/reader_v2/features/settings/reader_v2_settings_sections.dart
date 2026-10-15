@@ -43,7 +43,8 @@ class _ResetButton extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
         minimumSize: Size.zero,
-        textStyle: AppTextStyles.uiSm,
+        // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
+        // 會蓋掉主題的字族。
       ),
       child: const Text('恢復預設'),
     );
