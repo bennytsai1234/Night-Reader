@@ -111,21 +111,17 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   @override
   void initState() {
     super.initState();
-    if (!_opensBlank) _controller.text = widget.initialQuery ?? '';
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startAfterEntrance());
+    if (_opensBlank) return;
+    _controller.text = widget.initialQuery ?? '';
+    WidgetsBinding.instance.addPostFrameCallback((_) => _searchAfterEntrance());
   }
 
-  /// 進場動畫播完才升起鍵盤或開始搜尋：鍵盤升起時整頁每一幀都要重排，
-  /// 搜尋要解析書源，都不和換頁疊在一起（ADR 0018）。
-  Future<void> _startAfterEntrance() async {
+  /// 帶著關鍵字或書源進來時，進場動畫播完才開始搜尋：搜尋要解析書源，
+  /// 不和換頁疊在一起（ADR 0018）。
+  Future<void> _searchAfterEntrance() async {
     if (!mounted) return;
     await TransitionSettled.entered(context);
     if (!mounted) return;
-    // 從搜尋鈕進來的空白搜尋頁直接聚焦輸入框（Telegram 搜尋的進場方式）。
-    if (_opensBlank) {
-      _inputFocus.requestFocus();
-      return;
-    }
     final provider = context.read<SearchProvider>();
     if (widget.initialSource != null) {
       unawaited(

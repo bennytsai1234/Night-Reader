@@ -135,36 +135,6 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the keyboard comes up only after the page has slid in', (
-    tester,
-  ) async {
-    final navigator = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      MaterialApp(
-        navigatorKey: navigator,
-        theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: const SizedBox(),
-      ),
-    );
-    unawaited(
-      navigator.currentState!.push(
-        MaterialPageRoute<void>(builder: (_) => const SearchPage()),
-      ),
-    );
-    bool focused() => tester
-        .widget<EditableText>(find.byType(EditableText))
-        .focusNode
-        .hasFocus;
-
-    // 預設的平移換頁是 0.5 秒：播到一半還沒聚焦，鍵盤不和換頁一起動。
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(focused(), isFalse);
-
-    await tester.pumpAndSettle();
-    expect(focused(), isTrue);
-  });
-
   testWidgets('typing suggests matching history in either script', (
     tester,
   ) async {
