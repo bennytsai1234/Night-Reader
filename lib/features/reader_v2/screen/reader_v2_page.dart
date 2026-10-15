@@ -102,6 +102,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
     _host.settings.addListener(_applyWindowBrightness);
+    HardwareKeyboard.instance.addHandler(_handleVolumeKey);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
     unawaited(ReaderV2DeviceChannel.setKeepScreenOn(true));
@@ -145,6 +146,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _host.settings.removeListener(_applyWindowBrightness);
+    HardwareKeyboard.instance.removeHandler(_handleVolumeKey);
     unawaited(ReaderV2DeviceChannel.setKeepScreenOn(false));
     if (_backlightApplied) {
       unawaited(ReaderV2DeviceChannel.setWindowBrightness(null));
@@ -160,6 +162,30 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _drainRuntimeNotice();
     _coordinator.maybeFollowTtsHighlight();
     _scheduleRebuild();
+  }
+
+  /// 音量鍵翻頁。回傳 true 時這一下不會再交給系統調音量；選單開著、
+  /// 正在朗讀、上面蓋著別的頁面或面板，或設定關閉時照常調音量。
+  bool _handleVolumeKey(KeyEvent event) {
+    final forward = switch (event.logicalKey) {
+      LogicalKeyboardKey.audioVolumeDown => true,
+      LogicalKeyboardKey.audioVolumeUp => false,
+      _ => null,
+    };
+    if (forward == null) return false;
+    if (!mounted ||
+        !_host.settings.volumeKeyPage ||
+        _host.menu.controlsVisible ||
+        (_host.tts?.isPlaying ?? false) ||
+        !(ModalRoute.of(context)?.isCurrent ?? false) ||
+        (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+      return false;
+    }
+    // 按住不放的重複事件也翻頁；放開不做事，但一樣攔下，系統才不會調音量。
+    if (event is! KeyUpEvent) {
+      unawaited(_coordinator.movePage(forward: forward));
+    }
+    return true;
   }
 
   void _scheduleRebuild() {

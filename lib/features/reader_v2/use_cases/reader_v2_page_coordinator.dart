@@ -195,6 +195,9 @@ class ReaderV2PageCoordinator {
     );
   }
 
+  /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
+  Future<void> movePage({required bool forward}) => _movePage(forward: forward);
+
   Future<void> _movePage({required bool forward}) async {
     final command = forward
         ? _host.viewportController.moveToNextPage

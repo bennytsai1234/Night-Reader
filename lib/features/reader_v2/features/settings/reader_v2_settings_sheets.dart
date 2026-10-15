@@ -169,6 +169,7 @@ class _ReaderAdvancedSheet extends StatelessWidget {
         ReaderV2AutoPageSection(settings: settings),
         ReaderV2ChineseConvertSection(settings: settings),
         ReaderV2ClickActionSection(settings: settings),
+        ReaderV2VolumeKeySection(settings: settings),
       ],
     );
   }
