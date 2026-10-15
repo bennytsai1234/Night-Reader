@@ -187,8 +187,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
             provider: provider,
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
-            // 從搜尋鈕進來的空白搜尋頁直接聚焦輸入框（Telegram 搜尋的進場方式）。
-            autofocus: _opensBlank,
             onCancel: () => Navigator.maybePop(context),
           ),
           // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。

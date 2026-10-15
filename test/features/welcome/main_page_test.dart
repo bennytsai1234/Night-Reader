@@ -91,4 +91,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(fade(tester).color, _secondBackground);
   });
+
+  testWidgets('a tab that scrolls to top when left starts at the top again', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const MainPage(
+          destinations: [
+            MainDestination(
+              icon: Icons.book_outlined,
+              selectedIcon: Icons.book,
+              label: '一',
+              page: _ListPage('甲', _firstBackground),
+            ),
+            MainDestination(
+              icon: Icons.person_outline,
+              selectedIcon: Icons.person,
+              label: '二',
+              page: _ListPage('乙', _secondBackground),
+              scrollsToTopWhenLeft: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> swipePage(double dx) async {
+      await tester.fling(find.byType(PageView), Offset(dx, 0), 2000);
+      await tester.pumpAndSettle();
+    }
+
+    // 第一頁沒有設定，捲動位置照舊保留。
+    await tester.drag(find.text('甲3'), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await swipePage(-600);
+    await tester.drag(find.text('乙3'), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(find.text('乙0'), findsNothing);
+
+    await swipePage(600);
+    expect(find.text('甲0'), findsNothing);
+
+    await swipePage(-600);
+    expect(find.text('乙0'), findsOneWidget);
+  });
 }

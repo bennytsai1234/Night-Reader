@@ -40,6 +40,7 @@ const List<MainDestination> _defaultDestinations = [
     page: SettingsPage(),
     // 「我的」是 GroupedListView，底色是分組底色。
     background: _groupedBackground,
+    scrollsToTopWhenLeft: true,
   ),
 ];
 
@@ -82,10 +83,19 @@ class _MainPageState extends State<MainPage> {
   /// 分頁進入整頁編輯時由分頁設為 true（見 [FloatingTabBarScope]）。
   final ValueNotifier<bool> _tabBarHidden = ValueNotifier(false);
 
+  /// [MainDestination.scrollsToTopWhenLeft] 的分頁各自的捲動 controller。
+  late final Map<int, ScrollController> _scrollToTopControllers = {
+    for (var i = 0; i < _destinations.length; i++)
+      if (_destinations[i].scrollsToTopWhenLeft) i: ScrollController(),
+  };
+
   @override
   void dispose() {
     _splashTimeoutTimer?.cancel();
     _detachSplashShelfListener();
+    for (final controller in _scrollToTopControllers.values) {
+      controller.dispose();
+    }
     _pageController.dispose();
     _tabBarHidden.dispose();
     super.dispose();
@@ -95,6 +105,9 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     _tabBarHidden.addListener(() => setState(() {}));
+    if (_scrollToTopControllers.isNotEmpty) {
+      _pageController.addListener(_scrollLeftTabsToTop);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_initDeferredStartupData());
@@ -128,15 +141,20 @@ class _MainPageState extends State<MainPage> {
               onPageChanged: (idx) {
                 setState(() => _currentIndex = idx);
               },
-              children: List.generate(
-                _destinations.length,
-                (index) => _KeepAliveWrapper(
-                  child: FloatingTabBarScope(
-                    hidden: _tabBarHidden,
-                    child: _destinations[index].page,
-                  ),
-                ),
-              ),
+              children: List.generate(_destinations.length, (index) {
+                Widget page = FloatingTabBarScope(
+                  hidden: _tabBarHidden,
+                  child: _destinations[index].page,
+                );
+                final scroll = _scrollToTopControllers[index];
+                if (scroll != null) {
+                  page = PrimaryScrollController(
+                    controller: scroll,
+                    child: page,
+                  );
+                }
+                return _KeepAliveWrapper(child: page);
+              }),
             ),
             // 分頁列後方的漸隱帶，顏色跟著頁面位置在相鄰分頁的背景色間過渡。
             // 整頁編輯時收掉，由分頁墊在自己的編輯工具列後面。
@@ -244,6 +262,18 @@ class _MainPageState extends State<MainPage> {
       _destinations[upper].backgroundOf(context),
       position - lower,
     )!;
+  }
+
+  /// 分頁完全滑出畫面後才捲回頂端：下次滑進來就從頂端開始，跳動不會被看到。
+  void _scrollLeftTabsToTop() {
+    final position = _pagePosition();
+    _scrollToTopControllers.forEach((index, controller) {
+      if ((position - index).abs() >= 1 &&
+          controller.hasClients &&
+          controller.offset != 0) {
+        controller.jumpTo(0);
+      }
+    });
   }
 
   void _handleDoubleTap(int index) {
@@ -421,12 +451,17 @@ class MainDestination {
     required this.label,
     required this.page,
     this.background,
+    this.scrollsToTopWhenLeft = false,
   });
 
   final IconData icon;
   final IconData selectedIcon;
   final String label;
   final Widget page;
+
+  /// 離開這個分頁後捲回頂端，每次來到都從頂端開始。分頁裡沒有指定
+  /// controller 的直向清單會接上主頁提供的 [PrimaryScrollController]。
+  final bool scrollsToTopWhenLeft;
 
   /// 分頁的背景色，給分頁列後方的漸隱帶用；預設為 scaffold 背景色。
   final Color Function(BuildContext context)? background;
