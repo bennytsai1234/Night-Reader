@@ -48,7 +48,6 @@ class PreferKey {
   static const String prevKeys = 'prevKeyCodes';
   static const String nextKeys = 'nextKeyCodes';
   static const String enableReview = 'enableReview';
-  static const String bookshelfLayout = 'bookshelfLayout';
   static const String bookshelfSort = 'bookshelfSort';
 
   static const String bookExportFileName = 'bookExportFileName';
