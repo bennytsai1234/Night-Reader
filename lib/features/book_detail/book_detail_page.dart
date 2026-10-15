@@ -27,6 +27,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
+import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
@@ -165,49 +166,79 @@ class _BookDetailPageState extends State<BookDetailPage> {
     final padding = MediaQuery.paddingOf(context);
     final ambience = _ambienceOf(provider);
     final loading = provider.isLoading;
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        SliverToBoxAdapter(
-          child: Stack(
-            children: [
-              if (ambience != null)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  right: 0,
-                  // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
-                  height: padding.top + BookInfoHeader.titleTop,
-                  child: BookCoverAmbience(image: ambience),
+    final chapters = provider.filteredChapters;
+    return ChapterScrollbar(
+      itemCount: loading ? 0 : chapters.length,
+      visibleRange: () => _chapterListController.isAttached
+          ? _chapterListController.visibleRange
+          : null,
+      onJumpTo: (index) => _jumpToTocRow(context, index),
+      labelFor: (index) => context.zh(chapters[index].title),
+      padding: EdgeInsets.only(
+        top: _headerExtent(context),
+        bottom: padding.bottom,
+      ),
+      child: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Stack(
+              children: [
+                if (ambience != null)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
+                    height: padding.top + BookInfoHeader.titleTop,
+                    child: BookCoverAmbience(image: ambience),
+                  ),
+                Padding(
+                  padding: EdgeInsets.only(top: padding.top),
+                  child: BookInfoHeader(
+                    book: currentBook,
+                    provider: provider,
+                    loading: loading,
+                    showPhotoView: _showPhotoView,
+                    onToggleBookshelf: widget.fromReader
+                        ? null
+                        : () => _handleBookshelfToggle(context, provider),
+                    onChangeSource: currentBook.isLocal || widget.fromReader
+                        ? null
+                        : () => _showChangeSourceDialog(context, provider),
+                    onShowToc: _scrollToToc,
+                  ),
                 ),
-              Padding(
-                padding: EdgeInsets.only(top: padding.top),
-                child: BookInfoHeader(
-                  book: currentBook,
-                  provider: provider,
-                  loading: loading,
-                  showPhotoView: _showPhotoView,
-                  onToggleBookshelf: widget.fromReader
-                      ? null
-                      : () => _handleBookshelfToggle(context, provider),
-                  onChangeSource: currentBook.isLocal || widget.fromReader
-                      ? null
-                      : () => _showChangeSourceDialog(context, provider),
-                  onShowToc: _scrollToToc,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (loading)
-          const SliverToBoxAdapter(child: Skeleton(child: BookDetailSkeleton()))
-        else
-          ..._buildLoadedSlivers(context, provider),
-        // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
-        SliverPadding(
-          padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
-        ),
-      ],
+          if (loading)
+            const SliverToBoxAdapter(
+              child: Skeleton(child: BookDetailSkeleton()),
+            )
+          else
+            ..._buildLoadedSlivers(context, provider),
+          // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
+          SliverPadding(
+            padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 拖動目錄捲軸：第 [index] 列停在玻璃頁首下方。
+  void _jumpToTocRow(BuildContext context, int index) {
+    if (!_chapterListController.isAttached || !_scrollController.hasClients) {
+      return;
+    }
+    final viewport = _scrollController.position.viewportDimension;
+    _chapterListController.jumpToItem(
+      index: index,
+      scrollController: _scrollController,
+      alignment: viewport <= 0
+          ? 0
+          : (_headerExtent(context) / viewport).clamp(0.0, 0.5),
     );
   }
 
