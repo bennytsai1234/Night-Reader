@@ -7,8 +7,9 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 
-/// 換頁轉場：返回不是開啟倒著播；往右拖返回照 Telegram 的門檻與時長；
-/// Android 系統的預測返回跟手；「展開」從按下的卡片長出來。
+/// 換頁轉場：返回不是開啟倒著播；往右拖返回照選的那一種跟著拖曳走、放開
+/// 照 Telegram 的門檻與時長；Android 系統的預測返回跟手；「展開」從按下的
+/// 卡片長出來。
 void main() {
   late BuildContext home;
 
@@ -277,20 +278,70 @@ void main() {
       await gesture.up();
     }
 
-    testWidgets('the page follows the finger', (tester) async {
-      await pumpApp(tester, AppPageTransition.paper);
-      await push(tester);
+    /// 從左緣往右拖 220（頁寬 800 的 27.5%），手指不放。
+    Future<TestGesture> holdDrag(WidgetTester tester) async {
       final gesture = await tester.startGesture(const Offset(5, 300));
       await gesture.moveBy(const Offset(20, 0));
       await tester.pump();
       await gesture.moveBy(const Offset(200, 0));
       await tester.pump();
-      // 不論選哪一種動畫，拖曳中都是平移：新頁跟著手指往右（共 220）。
+      return gesture;
+    }
+
+    testWidgets('slide follows the finger', (tester) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      final gesture = await holdDrag(tester);
       expect(tester.getCenter(find.text('新頁')).dx, closeTo(620, 1));
       expect(find.text('主頁'), findsOneWidget);
       await gesture.up();
       await tester.pumpAndSettle();
     });
+
+    testWidgets('paper sinks and fades as far as the drag goes', (
+      tester,
+    ) async {
+      await pumpApp(tester, AppPageTransition.paper);
+      await push(tester);
+      final gesture = await holdDrag(tester);
+      // 照上浮的返回：不橫移，往下沉 4% × 27.5%，透明度剩 72.5%。
+      final [opacity, ..., left, top, _] = pose(tester);
+      expect(opacity, closeTo(72.5, 0.5));
+      final settledTop = 300 - tester.getSize(find.text('新頁')).height / 2;
+      expect(top - settledTop, closeTo(600 * 0.04 * 0.275, 0.5));
+      expect(
+        left + tester.getSize(find.text('新頁')).width / 2,
+        closeTo(400, 0.5),
+      );
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    for (final transition in AppPageTransition.values.where(
+      (t) => t != AppPageTransition.slide && t != AppPageTransition.slideCrisp,
+    )) {
+      testWidgets('${transition.name}: dragging back looks like its return', (
+        tester,
+      ) async {
+        await pumpApp(tester, transition);
+        await tester.tapAt(card.center);
+        await push(tester);
+        final settled = pose(tester);
+        final gesture = await holdDrag(tester);
+        final dragged = pose(tester);
+        // 不是平移（中心跟著手指到 620），但頁面確實跟著拖曳變了。
+        expect(tester.getCenter(find.text('新頁')).dx, lessThan(600));
+        expect(samePose(dragged, settled), isFalse);
+        expect(find.text('主頁'), findsOneWidget);
+
+        // 放回原處就回到整頁。
+        await gesture.moveBy(const Offset(-220, 0));
+        await tester.pump();
+        expect(samePose(pose(tester), settled), isTrue);
+        await gesture.up();
+        await tester.pumpAndSettle();
+      });
+    }
 
     testWidgets('past a fifth of the width it goes back within 0.2s', (
       tester,
@@ -352,7 +403,9 @@ void main() {
       // 進度照觸控重新取樣晚 38ms 才畫到。
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
-      expect(tester.getCenter(find.text('新頁')).dx, closeTo(800, 1));
+      // 照推進的返回：往右移 25% × 一半，淡到一半。
+      expect(tester.getCenter(find.text('新頁')).dx, closeTo(500, 1));
+      expect(pose(tester).first, closeTo(50, 0.5));
       expect(find.text('主頁'), findsOneWidget);
 
       await send(tester, 'commitBackGesture');
