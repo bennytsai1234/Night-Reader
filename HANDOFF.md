@@ -9,6 +9,7 @@
 - **`feat/launch-straight-to-shelf`（已推上、未開 PR）**：拿掉書月亮星星的開場畫面，系統啟動畫面只剩書架底色、跟著風格與深淺（Android 13 起下次開啟生效），第一幀就進書架骨架（ADR 0017）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-launch`。
 - **`fix/predictive-back-smoothing`（已推上、未開 PR）**：Android 手勢導覽慢慢返回時，系統送來的進度照 Flutter 觸控重新取樣的做法晚 38ms、逐格內插，不再一頓一頓。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-smooth-back`。
 - **`fix/reader-open-no-jank`（已推上、未開 PR）**：動畫不和重工作疊在一起（ADR 0018）：開書、書籍詳情、書源管理、搜尋頁等進場動畫播完才載入，回書架等返回動畫播完才重排，載入時排版每幀上限 4ms、目錄分批讀，背景下載與書架檢查更新等「動作閘門」（`MotionGate`）放開才做下一段，主題暈開等重建那一幀畫完才開始。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-open-smooth`。閱讀器內跳章仍是紙一蓋上就載入，使用者還沒說要不要也改。
+- **`t3code/smooth-tab-navigation`（已推上、未開 PR）**：點下方分頁直接換過去、不掠過中間分頁，播「外觀與主題 → 換頁動畫」選的那一種（往右像開新頁、往左像返回），手指滑動照舊跟手；「我的」離開後捲回頂端；點搜尋鈕進搜尋頁不再自動叫出鍵盤（使用者 2026-10-15 決定）。使用者說合併時照 Git 流程開 PR。worktree 在 `~/.t3/worktrees/Night-Reader/t3code-d384c4ee`。合併時注意：`fix/reader-open-no-jank` 把搜尋頁的自動聚焦改成進場動畫播完才 `requestFocus()`，跟這次的決定衝突，那一段要拿掉；`feat/launch-straight-to-shelf` 也改了 `main_page.dart`、`fix/predictive-back-smoothing` 也改了 `app_page_transition.dart`，可能要解衝突。
 - **`t3code/layout-fractional-pixel-tweaks`（已推上、未開 PR）**：「外觀與排版」拿掉「更多排版」收合、全部直接列出；「版面」新增「左右對齊」開關（預設開），把湊不滿一個字格的空隙攤進字距，正文左右兩緣貼齊頁首頁尾（ADR 0019）。使用者確認頁首頁尾目前的位置是對的，不要動；邊距步進維持 2 px（使用者決定不改成 1／0.5 px）。和 `fix/reader-menu-layout` 都改了 `reader_v2_settings_sections.dart`，合併時要解衝突。worktree 在 `~/.t3/worktrees/Night-Reader/t3code-6836f851`。
 
 ## 等使用者決定或動手
