@@ -293,6 +293,39 @@ void main() {
       expect(tester.getRect(infoText('第一章')), infoTitle);
     });
 
+    testWidgets('switching back before the fade starts moving keeps the info', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.ready);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pumpAndSettle();
+
+      // 兩次切換在同一個時間點：動畫已開始但濃淡還停在端點。
+      states.value = ReaderV2InfoState.loading;
+      await tester.pump();
+      states.value = ReaderV2InfoState.ready;
+      await tester.pump();
+      await tester.pump(AppMotion.fade * 2);
+
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(infoText('第一章'), findsOneWidget);
+      final opacity = tester.widget<FadeTransition>(
+        find
+            .ancestor(
+              of: infoText('第一章'),
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      );
+      expect(opacity.opacity.value, 1);
+    });
+
     testWidgets('nothing is drawn when the text is unavailable', (
       tester,
     ) async {

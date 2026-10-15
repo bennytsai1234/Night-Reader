@@ -431,7 +431,9 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   void _animate(AnimationController controller, double target) {
     if (_reduceMotion ?? false) {
       controller.value = target;
-    } else if (controller.value != target) {
+    } else {
+      // 濃淡停在目標上不代表動畫停了：剛開始往反方向走的動畫還沒動，
+      // 也要轉回來；已經在終點時 forward／reverse 不會動。
       unawaited(target == 1 ? controller.forward() : controller.reverse());
     }
   }

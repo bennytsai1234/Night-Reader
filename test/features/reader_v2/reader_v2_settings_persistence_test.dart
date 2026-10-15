@@ -71,6 +71,15 @@ void main() {
       settings.dispose();
     });
 
+    test('an unreadable saved value opens with the defaults', () async {
+      await usePrefs(<String, Object>{PreferKey.readerFontSize: '24'});
+
+      final settings = ReaderV2SettingsController();
+
+      expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
+      settings.dispose();
+    });
+
     test('a failed reload keeps the current settings', () async {
       await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
       final settings = ReaderV2SettingsController(

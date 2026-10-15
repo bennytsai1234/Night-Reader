@@ -15,11 +15,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
   /// 建構時就從已預載的 SharedPreferences 同步讀出使用者的設定：閱讀器第一幀
-  /// 就照這些設定畫出正文與頁首頁尾的骨架，不必先等一次非同步載入。
+  /// 就照這些設定畫出正文與頁首頁尾的骨架，不必先等一次非同步載入。讀不出來
+  /// （例如還原進來的值型別不對）就用預設值，閱讀器照樣打開。
   ReaderV2SettingsController({
     this._prefsRepository = const ReaderV2PrefsRepository(),
   }) {
-    _persisted = _prefsRepository.read(getIt<SharedPreferences>());
+    try {
+      _persisted = _prefsRepository.read(getIt<SharedPreferences>());
+    } catch (error, stackTrace) {
+      AppLog.e('閱讀設定讀取失敗: $error', error: error, stackTrace: stackTrace);
+      _persisted = ReaderV2PrefsSnapshot.defaults();
+    }
     _initFromCache(_persisted);
   }
 
