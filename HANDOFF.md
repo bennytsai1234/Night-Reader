@@ -4,13 +4,7 @@
 
 ## 進行中
 
-- **`fix/reader-menu-layout`（已推上、未開 PR）**：閱讀選單墊底色、亮度條置中撐長、字號每步 0.5，加上整個 App 截圖掃描後使用者逐項同意的 17 項介面修整（面板開著時選單收起、正文上緣漸隱、朗讀面板卡片化、替換規則面板、書源管理卡片、空白頁按鈕等，細節見分支上 `fix(ui): polish pass…` 的 commit message），以及 `test/screens/` 的整個 App 截圖組。**已兩次併入 `feat/tts-sleep-timer`（最後到 `75f0079`）**：合併時開一個 PR 就好；定時分支之後若再有新提交，先併進這條再開 PR。worktree 在 repo 外的 `../Night-Reader-menu-layout`。
-- **`feat/tts-sleep-timer`（已推上、未開 PR）**：朗讀面板的定時（關閉、15～90 分、自訂分鐘數；章末已依使用者要求拿掉；時間到暫停、暫停時倒數停、記住上次選擇），加上閱讀選單上方第 4 顆圓鈕「定時朗讀」（按下照記住的定時開始朗讀、定時關閉時用 30 分，念著時按下停止，鈕上顯示剩餘分鐘）。內容已併進 `fix/reader-menu-layout`，合併時隨那個 PR 一起進、之後刪掉這條分支。worktree 在 repo 外的 `../Night-Reader-tts-timer`。
-- **`feat/launch-straight-to-shelf`（已推上、未開 PR）**：拿掉書月亮星星的開場畫面，系統啟動畫面只剩書架底色、跟著風格與深淺（Android 13 起下次開啟生效），第一幀就進書架骨架（ADR 0017）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-launch`。
-- **`fix/predictive-back-smoothing`（已推上、未開 PR）**：Android 手勢導覽慢慢返回時，系統送來的進度照 Flutter 觸控重新取樣的做法晚 38ms、逐格內插，不再一頓一頓。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-smooth-back`。
-- **`fix/reader-open-no-jank`（已推上、未開 PR）**：動畫不和重工作疊在一起（ADR 0018）：開書、書籍詳情、書源管理、搜尋頁等進場動畫播完才載入，回書架等返回動畫播完才重排，載入時排版每幀上限 4ms、目錄分批讀，背景下載與書架檢查更新等「動作閘門」（`MotionGate`）放開才做下一段，主題暈開等重建那一幀畫完才開始。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-open-smooth`。從目錄跳章改成目錄與選單馬上收起、等收起與骨架淡入播完才載入（使用者定的設計）。
-- **`t3code/smooth-tab-navigation`（已推上、未開 PR）**：點下方分頁直接換過去、不掠過中間分頁，播「外觀與主題 → 換頁動畫」選的那一種（往右像開新頁、往左像返回），手指滑動照舊跟手；左緣右滑與 Android 手勢返回（含在「發現」「我的」返回書架）拖曳中也照選定的動畫走（ADR 0020，閱讀器的手勢返回與換源重開閱讀器照舊，使用者同意）；「我的」離開後捲回頂端；點搜尋鈕進搜尋頁不再自動叫出鍵盤（使用者 2026-10-15 決定）。使用者說合併時照 Git 流程開 PR。worktree 在 `~/.t3/worktrees/Night-Reader/t3code-d384c4ee`。合併時注意：`fix/reader-open-no-jank` 也拿掉了搜尋頁的自動聚焦（同樣照這次的決定），兩邊都改了 `search_page.dart`／`search_app_bar.dart`，合併時對一下；`feat/launch-straight-to-shelf` 也改了 `main_page.dart`、`fix/predictive-back-smoothing` 也改了 `app_page_transition.dart` 的預測返回（這條分支把放開後的收尾與觸控速度抽成 `BackSwipe`／`PredictiveBackVelocity`，主頁也用），一定要解衝突，重新取樣要讓主頁的預測返回也吃到。
-- **`t3code/layout-fractional-pixel-tweaks`（已推上、未開 PR）**：「外觀與排版」拿掉「更多排版」收合、全部直接列出；「版面」新增「左右對齊」開關（預設開），把湊不滿一個字格的空隙攤進字距，正文左右兩緣貼齊頁首頁尾（ADR 0019）。使用者確認頁首頁尾目前的位置是對的，不要動；邊距步進維持 2 px（使用者決定不改成 1／0.5 px）。和 `fix/reader-menu-layout` 都改了 `reader_v2_settings_sections.dart`，合併時要解衝突。worktree 在 `~/.t3/worktrees/Night-Reader/t3code-6836f851`。
+- **`t3code/smooth-tab-navigation`（已推上、未開 PR）**：點下方分頁直接換過去、不掠過中間分頁，播「外觀與主題 → 換頁動畫」選的那一種（往右像開新頁、往左像返回），手指滑動照舊跟手；左緣右滑與 Android 手勢返回（含在「發現」「我的」返回書架）拖曳中也照選定的動畫走（ADR 0020，閱讀器的手勢返回與換源重開閱讀器照舊，使用者同意）；「我的」離開後捲回頂端；點搜尋鈕進搜尋頁不再自動叫出鍵盤（使用者 2026-10-15 決定）。使用者說合併時照 Git 流程開 PR。worktree 在 `~/.t3/worktrees/Night-Reader/t3code-d384c4ee`。其他分支（閱讀選單、定時朗讀、開 App 直接進書架、預測返回內插、動畫不和重工作疊在一起、左右對齊）已合併進 `main`，合併前先把 `main` 併進這條。合併時注意：`main` 也拿掉了搜尋頁的自動聚焦（同樣照這次的決定），兩邊都改了 `search_page.dart`／`search_app_bar.dart`，合併時對一下；`main` 也改了 `main_page.dart`（開 App 直接進書架）與 `app_page_transition.dart` 的預測返回（重新取樣內插）（這條分支把放開後的收尾與觸控速度抽成 `BackSwipe`／`PredictiveBackVelocity`，主頁也用），一定要解衝突，重新取樣要讓主頁的預測返回也吃到。
 
 ## 等使用者決定或動手
 
