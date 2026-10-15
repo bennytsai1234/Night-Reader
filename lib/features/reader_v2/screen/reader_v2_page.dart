@@ -88,7 +88,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 開書的換頁動畫與骨架淡入都播完時完成；載入等它（ADR 0018）。
   final Completer<void> _entrance = Completer<void>();
 
-  /// 從目錄跳章時，等目錄收起的那一下；收起時完成。
+  /// 從目錄跳章時，等目錄收起的那一下；收到底、目錄從畫面上拿掉時完成。
   Completer<void>? _drawerClosed;
   bool _entranceWatched = false;
 
@@ -264,6 +264,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                 titleFor: _chapterTitleAt,
                 listenable: runtime,
                 onChapterTap: _jumpToChapterFromDrawer,
+                onClosed: _handleDrawerClosed,
               ),
               backgroundColor: palette.readerBackground,
               infoColor: palette.readerInfo,
@@ -292,7 +293,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               onSystemBack: _handleSystemBack,
               onMore: () => unawaited(_showMore()),
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-              onDrawerChanged: _handleDrawerChanged,
               onTts: () => _openPanel(_showTts),
               onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
               onInterface: () => _openPanel(
@@ -480,8 +480,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  void _handleDrawerChanged(bool open) {
-    if (open) return;
+  void _handleDrawerClosed() {
     _drawerClosed?.complete();
     _drawerClosed = null;
   }

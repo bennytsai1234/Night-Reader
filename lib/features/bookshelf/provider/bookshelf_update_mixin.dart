@@ -104,8 +104,6 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       results = await Future.wait([
         for (final book in targets)
           pool.withResource(() async {
-            // 有動畫在播時先等，書源解析不和動畫搶幀（ADR 0018）。
-            await MotionGate.instance.idle;
             try {
               return await checkBookUpdate(book);
             } catch (_) {
@@ -138,9 +136,13 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   }
 
   /// 抓書源上的詳情與目錄寫回這本書；同一本書已在檢查（包括書籍詳情發起
-  /// 的）時接上同一次。
-  Future<BookUpdateCheckResult> checkBookUpdate(Book book) =>
-      updates.check(book);
+  /// 的）時接上同一次。書架的每一種檢查（啟動、下拉、單本、多選）都從這裡
+  /// 進來：有動畫在播時先等，書源解析不和動畫搶幀（ADR 0018）。
+  Future<BookUpdateCheckResult> checkBookUpdate(Book book) async {
+    // 沒動畫時當下就開始，同一本書接著進來的檢查才接得上這一次。
+    if (MotionGate.instance.isMoving) await MotionGate.instance.idle;
+    return updates.check(book);
+  }
 
   /// 這本書是否參與下拉與啟動時的書架更新；明確對它按「檢查更新」時照查。
   Future<void> setBookCanUpdate(Book book, bool value) async {

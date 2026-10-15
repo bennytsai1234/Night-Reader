@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -17,6 +18,7 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     required this.currentChapterIndex,
     required this.titleFor,
     required this.onChapterTap,
+    this.onClosed,
     this.listenable,
   });
 
@@ -26,6 +28,10 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
 
   /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
   final ValueChanged<int> onChapterTap;
+
+  /// 目錄收到底、從畫面上拿掉時呼叫。Scaffold 的抽屜收完才卸下內容；
+  /// [Scaffold.onDrawerChanged] 在收起動畫一開始就發，不能當成收完。
+  final VoidCallback? onClosed;
   final Listenable? listenable;
 
   @override
@@ -41,9 +47,14 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
 
+  /// 目錄從滑出、捲動到收完都持有動作閘門：抽屜不是路由，路由的觀察者
+  /// 管不到它（ADR 0018）。
+  final MotionHold _motion = MotionHold();
+
   @override
   void initState() {
     super.initState();
+    _motion.moving = true;
     widget.listenable?.addListener(_handleChanged);
   }
 
@@ -68,6 +79,8 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   void dispose() {
     widget.listenable?.removeListener(_handleChanged);
     _scrollController.dispose();
+    _motion.release();
+    widget.onClosed?.call();
     super.dispose();
   }
 

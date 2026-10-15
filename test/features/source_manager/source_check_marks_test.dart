@@ -60,6 +60,21 @@ void main() {
     return provider;
   }
 
+  test('counts as loading while the page is still sliding in', () async {
+    final entrance = Completer<void>();
+    final provider = SourceManagerProvider(entrance: entrance.future);
+    addTearDown(provider.dispose);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // 還沒讀書源：不能當成「尚未加入書源」。
+    expect(provider.isLoading, isTrue);
+
+    entrance.complete();
+    while (provider.isLoading) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(provider.totalSourceCount, 3);
+  });
+
   test(
     'clearing every mark restores marked sources and keeps user data',
     () async {
