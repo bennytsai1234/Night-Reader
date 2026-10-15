@@ -374,9 +374,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   }
 }
 
-/// 定時朗讀鍵：倒數中顯示剩餘分鐘（無條件進位）、「念完本章」時顯示章末，
-/// 兩者都以強調色標出；沒有定時在跑時是計時器圖示。倒數不逐秒通知，這裡
-/// 只在顯示的分鐘數要變的那一刻重建。
+/// 定時朗讀鍵：倒數中以強調色顯示剩餘分鐘（無條件進位），沒有在倒數時是
+/// 計時器圖示。倒數不逐秒通知，這裡只在顯示的分鐘數要變的那一刻重建。
 class _SleepTimerButton extends StatefulWidget {
   const _SleepTimerButton({
     required this.timer,
@@ -449,11 +448,7 @@ class _SleepTimerButtonState extends State<_SleepTimerButton> {
     final timer = widget.timer;
     final menuStyle = widget.menuStyle;
     final remaining = timer.remaining;
-    final label = remaining != null
-        ? '${_ceilMinutes(remaining)}分'
-        : timer.pausesAtChapterEnd
-        ? '章末'
-        : null;
+    final label = remaining != null ? '${_ceilMinutes(remaining)}分' : null;
     final tint = menuStyle.glassTintOf(context);
     return GlassIconButton(
       icon: Icons.timer_outlined,

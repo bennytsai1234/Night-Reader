@@ -253,17 +253,6 @@ void main() {
       await tester.pump();
       expect(find.text('14分'), findsNothing);
     });
-
-    testWidgets('shows chapter end when pausing at the chapter end', (
-      tester,
-    ) async {
-      await pumpShell(tester, controlsVisible: true, sleepTimer: timer);
-      await timer.choose(ReaderV2TtsSleepOption.chapterEnd);
-      timer.sync(active: true, running: true);
-      await tester.pump();
-      expect(find.text('章末'), findsOneWidget);
-      timer.sync(active: false, running: false);
-    });
   });
 
   group('info rows while the text is loading', () {
