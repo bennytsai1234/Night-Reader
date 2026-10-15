@@ -267,7 +267,7 @@ class _AppTransition extends StatefulWidget {
 }
 
 class _AppTransitionState extends State<_AppTransition>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   /// iOS 的左緣感應寬度（Flutter 的 Cupertino 返回手勢同樣是 20）。
   static const double _edgeWidth = 20;
 
@@ -299,7 +299,14 @@ class _AppTransitionState extends State<_AppTransition>
 
   /// 系統預測返回：最近的觸控位置與時間，放開時估速度。
   final List<({Offset at, Duration time})> _touches = [];
-  final Stopwatch _clock = Stopwatch()..start();
+
+  /// 測試裡跟著假時間走（同 Flutter 的觸控重新取樣）。
+  final Stopwatch _clock = GestureBinding.instance.samplingClock.stopwatch()
+    ..start();
+
+  /// 系統預測返回：拖曳中每一格把頁面放到重新取樣後的進度。
+  late final Ticker _backTicker;
+  final _ProgressResampler _resampler = _ProgressResampler();
 
   @override
   void initState() {
@@ -312,6 +319,7 @@ class _AppTransitionState extends State<_AppTransition>
     _finish = AnimationController(vsync: this)
       ..addListener(_onFinishTick)
       ..addStatusListener(_onFinishStatus);
+    _backTicker = createTicker(_onBackTick);
     _listen(widget.animation, _top.update);
     _listen(widget.secondaryAnimation, _onCoveredStatus);
     WidgetsBinding.instance.addObserver(this);
@@ -356,6 +364,7 @@ class _AppTransitionState extends State<_AppTransition>
     widget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
     _drag.dispose();
     _finish.dispose();
+    _backTicker.dispose();
     if (_tracking) {
       // 手勢途中頁面被程式關掉。卸載時整棵樹鎖著，通知 Navigator 會讓其他
       // 頁面重建，要等這一格畫完。
@@ -416,7 +425,10 @@ class _AppTransitionState extends State<_AppTransition>
     if (backEvent.isButtonEvent || !_canStart) return false;
     _begin();
     _record(backEvent);
+    _resampler.clear();
+    _resampler.add(_clock.elapsed, 1 - backEvent.progress);
     _route.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+    _backTicker.start();
     return true;
   }
 
@@ -424,7 +436,15 @@ class _AppTransitionState extends State<_AppTransition>
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
     if (!_tracking || _finish.isAnimating) return;
     _record(backEvent);
-    _route.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+    _resampler.add(_clock.elapsed, 1 - backEvent.progress);
+  }
+
+  void _onBackTick(Duration _) {
+    if (!_route.isCurrent || _finish.isAnimating) return;
+    final progress = _resampler.at(_clock.elapsed);
+    if (progress != null) {
+      _route.handleUpdateBackGestureProgress(progress: progress);
+    }
   }
 
   // 返回與否由系統決定；這裡只照 Telegram 的時長送完或彈回。
@@ -487,6 +507,8 @@ class _AppTransitionState extends State<_AppTransition>
   void _cancel() => _runFinish(to: 1, duration: _cancelDuration);
 
   void _runFinish({required double to, required Duration duration}) {
+    if (_backTicker.isActive) _backTicker.stop();
+    _resampler.clear();
     _finishFrom = _progress;
     _finishTo = to;
     _finish
@@ -567,6 +589,44 @@ class _AppTransitionState extends State<_AppTransition>
         ),
       ],
     );
+  }
+}
+
+/// 系統預測返回的進度，補成每一格都動。
+///
+/// 手指慢的時候，系統只在觸控座標變動時才送一次進度，間隔可長到數十毫秒；
+/// 直接套用的話頁面停幾格、跳一下，看起來像掉到 60 或 30 幀。這裡照 Flutter
+/// 觸控重新取樣（[GestureBinding.resamplingEnabled]）的做法：每一格取
+/// [_delay] 之前那一刻，在前後兩筆進度之間內插。App 自己的左緣拖曳走觸控
+/// 事件，已經經過同樣的取樣。
+class _ProgressResampler {
+  /// 與 Flutter 觸控重新取樣的預設延遲相同（`GestureBinding.samplingOffset`）。
+  static const Duration _delay = Duration(milliseconds: 38);
+
+  final List<({Duration time, double value})> _samples = [];
+
+  void add(Duration time, double value) =>
+      _samples.add((time: time, value: value));
+
+  void clear() => _samples.clear();
+
+  /// [now] 這一格該畫的進度；還沒有任何一筆時為 null。
+  double? at(Duration now) {
+    if (_samples.isEmpty) return null;
+    final time = now - _delay;
+    // 只留取樣時間之前的最後一筆和之後的。
+    while (_samples.length > 1 && _samples[1].time <= time) {
+      _samples.removeAt(0);
+    }
+    final before = _samples.first;
+    if (_samples.length == 1 || time <= before.time) return before.value;
+    final after = _samples[1];
+    final span = (after.time - before.time).inMicroseconds;
+    return lerpDouble(
+      before.value,
+      after.value,
+      (time - before.time).inMicroseconds / span,
+    )!;
   }
 }
 
