@@ -261,7 +261,7 @@ void main() {
       expect(tester.getRect(infoText('第一章')), skeletonTitle);
     });
 
-    testWidgets('a jump hides the info at once and fades the skeleton in', (
+    testWidgets('a jump turns the info into skeleton bars in place', (
       tester,
     ) async {
       final states = ValueNotifier(ReaderV2InfoState.ready);
@@ -274,16 +274,23 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
+      final infoTitle = tester.getRect(infoText('第一章'));
 
       states.value = ReaderV2InfoState.loading;
       await tester.pump();
-      // 真正的資訊直接收掉，只剩骨架裡不畫出的那一份。
+      await tester.pump(AppMotion.fade ~/ 2);
+      // 淡出中的資訊與淡入中的骨架同時在畫面上，骨架就在資訊的位置。
+      expect(infoText('第一章'), findsNWidgets(2));
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
+
+      await tester.pump(AppMotion.fade);
+      // 資訊淡出完就移出畫面，只剩骨架裡不畫出的那一份。
       expect(infoText('第一章'), findsOneWidget);
       expect(
         find.ancestor(of: infoText('第一章'), matching: find.byType(Visibility)),
         findsOneWidget,
       );
-      expect(find.byType(SkeletonBox), findsNWidgets(3));
+      expect(tester.getRect(infoText('第一章')), infoTitle);
     });
 
     testWidgets('nothing is drawn when the text is unavailable', (

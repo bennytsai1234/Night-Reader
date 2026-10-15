@@ -349,19 +349,19 @@ class ReaderV2PageShell extends StatelessWidget {
 
 /// 頁首頁尾資訊列目前要畫什麼。
 enum ReaderV2InfoState {
-  /// 不畫：設定還沒讀完，或正文取不到（正文區改顯示錯誤）。
+  /// 不畫：開書取不到正文（正文區改顯示錯誤）。
   hidden,
 
-  /// 正文還沒排好（開書、跳到別章）：每個欄位畫成骨架。
+  /// 正文還沒排好（開書、跳到別章、改排版或重載內容）：每個欄位畫成骨架。
   loading,
 
   /// 正文已排好：顯示真正的資訊。
   ready,
 }
 
-/// 資訊列在骨架與真正資訊之間切換，節奏同正文上的紙（`LoadingVeil`）：
-/// 載入一開始資訊直接收掉、骨架以 [AppMotion.fade] 淡入；正文排好後骨架
-/// 淡出、資訊淡入。系統關閉動畫時直接到位。
+/// 資訊列在骨架與真正資訊之間以 [AppMotion.fade] 交叉淡換：骨架照資訊的
+/// 寬度畫在同一個位置，看起來是文字變成長條、長條再變回文字。開書時原本
+/// 沒有資訊，就是骨架淡入。系統關閉動畫時直接到位。
 class _InfoLayer extends StatefulWidget {
   const _InfoLayer({required this.state, required this.builder});
 
@@ -378,11 +378,11 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   late final AnimationController _skeleton = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
-  )..addStatusListener(_onSkeletonStatus);
+  )..addStatusListener(_onFadeStatus);
   late final AnimationController _info = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
-  );
+  )..addStatusListener(_onFadeStatus);
   late final Animation<double> _skeletonOpacity = CurvedAnimation(
     parent: _skeleton,
     curve: AppMotion.fadeCurve,
@@ -418,19 +418,11 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   }
 
   void _sync() {
-    final loading = widget.state == ReaderV2InfoState.loading;
-    if (loading) {
-      // 資訊直接收掉，骨架從目前的濃淡繼續淡入（淡出途中再載入不會先閃空）。
-      _info.value = 0;
-      _animate(_skeleton, 1);
-    } else {
-      _animate(_skeleton, 0);
-      if (widget.state == ReaderV2InfoState.ready) {
-        _animate(_info, 1);
-      } else {
-        _info.value = 0;
-      }
-    }
+    // 骨架與資訊在同一個位置交叉淡換，兩者都從目前的濃淡接著走，切換途中
+    // 再切回來不會先閃空。
+    final state = widget.state;
+    _animate(_skeleton, state == ReaderV2InfoState.loading ? 1 : 0);
+    _animate(_info, state == ReaderV2InfoState.ready ? 1 : 0);
   }
 
   void _animate(AnimationController controller, double target) {
@@ -441,20 +433,21 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     }
   }
 
-  void _onSkeletonStatus(AnimationStatus status) {
-    // 骨架淡出後移出畫面，呼吸動畫跟著停。
+  void _onFadeStatus(AnimationStatus status) {
+    // 淡出完的一層移出畫面（骨架的呼吸動畫跟著停）。
     if (status == AnimationStatus.dismissed && mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final ready = widget.state == ReaderV2InfoState.ready;
+    final state = widget.state;
+    final showInfo = state == ReaderV2InfoState.ready || !_info.isDismissed;
     final showSkeleton =
-        widget.state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
+        state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
     return Stack(
       alignment: Alignment.center,
       children: [
-        if (ready)
+        if (showInfo)
           FadeTransition(opacity: _infoOpacity, child: widget.builder(false)),
         if (showSkeleton)
           FadeTransition(

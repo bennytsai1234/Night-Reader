@@ -162,17 +162,15 @@ class ReaderV2PrefsRepository {
   static const double minChapterSpacing = 0.0;
   static const double maxChapterSpacing = 5.0;
 
-  static ReaderV2PrefsSnapshot? _latestSnapshot;
+  Future<ReaderV2PrefsSnapshot> load() async =>
+      read(await SharedPreferences.getInstance());
 
-  static ReaderV2PrefsSnapshot get cachedSnapshot =>
-      _latestSnapshot ?? ReaderV2PrefsSnapshot.defaults();
-
-  Future<ReaderV2PrefsSnapshot> load() async {
-    final prefs = await SharedPreferences.getInstance();
+  /// 從已經取得的 [SharedPreferences] 同步讀出設定。
+  ReaderV2PrefsSnapshot read(SharedPreferences prefs) {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     final fontSize =
         prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize;
-    final snapshot = ReaderV2PrefsSnapshot(
+    return ReaderV2PrefsSnapshot(
       fontSize: fontSize,
       titleFontSize:
           prefs.getDouble(PreferKey.readerTitleFontSize) ??
@@ -239,8 +237,6 @@ class ReaderV2PrefsRepository {
         prefs.getDouble(PreferKey.readerHighlightStrength),
       ),
     );
-    _latestSnapshot = snapshot;
-    return snapshot;
   }
 
   Future<void> saveFontSize(double value) {

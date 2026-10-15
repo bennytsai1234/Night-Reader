@@ -86,6 +86,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         target.chapterIndex != state.visibleLocation.chapterIndex;
   }
 
+  /// 正文正在照新的排版設定重排，或照新的內容設定（繁簡轉換、替換規則等）
+  /// 重新載入，還沒排好。
+  bool get isRebuildingText {
+    final kind = stateMachine.currentOperation?.kind;
+    return kind == ReaderV2OperationKind.presentation ||
+        kind == ReaderV2OperationKind.contentReload;
+  }
+
   ReaderV2State get state => stateMachine.state;
 
   int get chapterCount => repository.chapterCount;

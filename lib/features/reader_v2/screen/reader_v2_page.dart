@@ -255,11 +255,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final mediaPadding = MediaQuery.paddingOf(context);
         _lastViewportSize = size;
 
-        // 設定讀完才開書（通常只差幾毫秒）；用預設值先開，設定到了會再重排
-        // 一次，正文出現後又轉圈、跳到別的位置。
-        if (!_host.settings.isLoaded) {
-          return ColoredBox(color: StylePalette.of(context).readerBackground);
-        }
         final style = _host.settings.readStyleFor(
           mediaPadding,
           topInfoReservedExternally: true,
@@ -564,19 +559,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     return _host.bookStorageService.discardBook(widget.book);
   }
 
-  /// 頁首頁尾資訊列跟著正文：正文區蓋著紙時畫骨架，取不到正文時不畫。
-  /// 同一章內的跳轉與重新排版時資訊列留在原處。設定讀完前正文區是空白的
-  /// 紙，資訊列也不畫，免得先照預設欄位畫出骨架。
+  /// 頁首頁尾資訊列跟著正文：開書、跳到別章、改排版與重載內容時畫骨架，
+  /// 開書取不到正文時不畫。同一章內的跳轉（例如拖進度條預覽）資訊列留在
+  /// 原處。
   ReaderV2InfoState _infoStateOf(ReaderV2Runtime? runtime) {
-    if (!_host.settings.isLoaded) return ReaderV2InfoState.hidden;
     if (runtime == null) return ReaderV2InfoState.loading;
     if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
       return ReaderV2InfoState.hidden;
     }
-    if (runtime.isJumpingToAnotherChapter) return ReaderV2InfoState.loading;
-    return runtime.state.hasStableWorld
-        ? ReaderV2InfoState.ready
-        : ReaderV2InfoState.loading;
+    if (!runtime.state.hasStableWorld ||
+        runtime.isJumpingToAnotherChapter ||
+        runtime.isRebuildingText) {
+      return ReaderV2InfoState.loading;
+    }
+    return ReaderV2InfoState.ready;
   }
 
   int _currentChapterIndex(ReaderV2Runtime? runtime) {

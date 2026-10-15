@@ -39,7 +39,6 @@ class ReaderV2ControllerHost {
       contentDao: dependencies.readerChapterContentDao,
     );
     _appliedContentSettingsGeneration = settings.contentSettingsGeneration;
-    unawaited(settings.loadSettings());
     // Reader session visibility belongs to the host, not the viewport.
     // Leaving the visible app stops viewport motion and persists the latest
     // captured location through the Runtime owner.
@@ -110,8 +109,6 @@ class ReaderV2ControllerHost {
     }
   }
 
-  /// 呼叫前要確認 [settings] 已經載入（[ReaderV2SettingsController.isLoaded]），
-  /// 開書才會直接用使用者的設定排版。
   ReaderV2Runtime ensureRuntime(Size size, ReaderV2Style style) {
     _lastViewportSize = size;
     final existing = runtime;
