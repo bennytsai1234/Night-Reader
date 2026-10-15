@@ -538,11 +538,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (mounted && succeeded) _showNotice('已重新取得本章');
   }
 
-  /// 從閱讀器開的詳情：點章節回來跳到那一章，按閱讀鈕直接回來。
-  ///
-  /// 閱讀器整段閱讀都用開書時的目錄；詳情頁讀的是資料庫裡的目錄，可能
-  /// 已經被書架檢查或詳情的「檢查更新」換過，所以兩邊用章節網址對應：
-  /// 閱讀器的目錄裡有這一章就直接跳，沒有（新章節）就用最新目錄重開。
+  /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
+  /// 按閱讀鈕直接回來。
   Future<void> _showBookDetail() async {
     final flushed = await _host.flushProgress();
     if (!mounted) return;
@@ -564,21 +561,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
     if (!mounted || targetUrl == null) return;
     _host.menu.dismissControls();
-    final chapters = _host.runtime?.chapters ?? widget.initialChapters;
-    final target = chapters.indexWhere((c) => c.url == targetUrl);
-    if (target >= 0) {
-      await _coordinator.jumpToChapter(target);
+    final target = await resolveDetailChapter(
+      url: targetUrl,
+      readerChapters: _host.runtime?.chapters ?? widget.initialChapters,
+      loadLatest: () async {
+        await _host.flushProgress();
+        return chapterDao.getByBook(widget.book.bookUrl);
+      },
+    );
+    if (!mounted || target == null) return;
+    final latest = target.latest;
+    if (latest == null) {
+      await _coordinator.jumpToChapter(target.index);
       return;
     }
-    await _host.flushProgress();
-    final latest = await chapterDao.getByBook(widget.book.bookUrl);
-    final latestIndex = latest.indexWhere((c) => c.url == targetUrl);
-    if (!mounted || latestIndex < 0) return;
     unawaited(
       Navigator.of(context).pushReplacement(
         BookOpenRoute(
           book: widget.book,
-          openTarget: ReaderV2OpenTarget.chapterStart(latestIndex),
+          openTarget: ReaderV2OpenTarget.chapterStart(target.index),
           initialChapters: latest,
         ),
       ),
@@ -742,6 +743,27 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (index < 0 || index >= widget.initialChapters.length) return '';
     return widget.initialChapters[index].url;
   }
+}
+
+/// 從閱讀器開的詳情點了章節 [url]，閱讀器要開哪一章。
+///
+/// 閱讀器整段閱讀都用開書時的目錄 [readerChapters]；詳情頁讀的是資料庫裡
+/// 的目錄，可能已經被書架檢查或詳情的「檢查更新」換過，序號對不上，所以
+/// 兩邊用章節網址對應：閱讀器的目錄裡有這一章就原地跳（`latest` 為 null）；
+/// 沒有（新章節）就到 [loadLatest] 讀到的最新目錄裡找，找到就用最新目錄
+/// 重開；都沒有回傳 null。
+@visibleForTesting
+Future<({int index, List<BookChapter>? latest})?> resolveDetailChapter({
+  required String url,
+  required List<BookChapter> readerChapters,
+  required Future<List<BookChapter>> Function() loadLatest,
+}) async {
+  final index = readerChapters.indexWhere((c) => c.url == url);
+  if (index >= 0) return (index: index, latest: null);
+  final latest = await loadLatest();
+  final latestIndex = latest.indexWhere((c) => c.url == url);
+  if (latestIndex < 0) return null;
+  return (index: latestIndex, latest: latest);
 }
 
 enum _ReaderMoreAction {

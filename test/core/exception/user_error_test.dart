@@ -51,6 +51,15 @@ void main() {
     expect(userErrorReason(NetworkException('書源回應異常')), '書源回應異常');
     expect(userErrorReason(Exception('找不到可匯入的資料')), '找不到可匯入的資料');
     expect(userErrorReason(StateError('找不到可閱讀書源')), '找不到可閱讀書源');
+    expect(userErrorReason(ParsingException('目錄規則沒有結果')), '目錄規則沒有結果');
+  });
+
+  test('app errors wrapping English text do not show it', () {
+    expect(
+      userErrorReason(ParsingException('FormatException: Unexpected end')),
+      '書源解析失敗',
+    );
+    expect(userErrorReason(NetworkException('Connection reset')), '發生未預期的錯誤');
   });
 
   test('anything else does not leak an English stack of words', () {

@@ -12,6 +12,17 @@ void main() {
     expect(days, {'2026-10-14': 600, '2026-10-15': 1200});
   });
 
+  test('split seconds add up to the total even with milliseconds', () {
+    final start = DateTime(2026, 10, 14, 23, 59, 59, 500);
+    final end = DateTime(2026, 10, 15, 0, 0, 0, 500);
+    final days = ReadRecordDao.secondsByDay(start, end);
+    expect(
+      days.values.fold<int>(0, (sum, seconds) => sum + seconds),
+      end.difference(start).inSeconds,
+    );
+    expect(days, {'2026-10-15': 1});
+  });
+
   test('today and this week (from Monday) add up across books', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);

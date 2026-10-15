@@ -4,10 +4,7 @@
 
 ## 進行中
 
-- **PR #66（分支 `t3code/reader-menu-and-controls`，worktree `C:\Users\045650\.t3\worktrees\Night-Reader\t3code-43d7569f`）合併做到一半**：使用者已說可以合併（音量鍵翻頁改成預設關閉）。PR 已開、已連結這個對話；Codex 審查已跑完，五項核對都屬實，修正在最後一個 commit，**還沒寫測試、也還沒跑全套**（只跑過新的 `reader_v2_window_settings_test` 與 `flutter analyze`）。接手要做：
-  1. 補測試並跑全套：(1) 從閱讀器開的詳情點章節，回傳章節網址，閱讀器目錄裡有就跳、沒有就用資料庫最新目錄重開（`reader_v2_page.dart` `_showBookDetail`）；(2) 還原時閱讀紀錄累計與每日一起換（`RestoreService._restoreReadingStats`、`ReadRecordDao.restoreReadingStats`，不受 ZIP 檔案順序影響，舊備份沒有每日資料時那本書的每日清空）；(4) `ParsingException` 包著英文時寫「書源解析失敗」，其他英文 `AppException` 寫「發生未預期的錯誤」；(5) 跨午夜含毫秒時各天秒數加總等於累計（例 23:59:59.500→00:00:00.500 應記 1 秒）。
-  2. 用 `gh pr comment 66` 貼審查摘要：Codex 找到 4 中 1 低——詳情頁更新目錄後以新序號跳進閱讀器舊目錄、還原後總計被覆寫但每日留著舊資料、閱讀器被整頁蓋住時仍常亮且套用自訂亮度、解析錯誤仍顯示英文、跨午夜截秒差 1 秒；全部修了。第 3 項改成 `ReaderV2WindowSettings` 依 `TickerMode` 判斷（整頁蓋住才恢復系統設定，選單、面板、對話框不算）。
-  3. 把本檔改成合併後的狀態、`git fetch` 併最新 `main`、`gh pr checks 66 --watch` 等 CI、`gh pr merge 66 --squash`，合併後 `git pull --ff-only`、刪本機分支。
+- **`feat/reader-info-skeleton`（未合併）**：閱讀器等正文時頁首頁尾也畫骨架，閱讀設定改成建構時同步讀取；狀態與使用者沒選的項目寫在該分支的 `HANDOFF.md`。
 
 ## 等使用者決定或動手
 
