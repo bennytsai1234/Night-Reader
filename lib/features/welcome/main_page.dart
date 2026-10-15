@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +14,7 @@ import 'package:night_reader/features/explore/explore_page.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
@@ -54,7 +57,8 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage>
+    with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
@@ -74,8 +78,21 @@ class _MainPageState extends State<MainPage> {
   );
 
   static const _exitBackInterval = Duration(seconds: 2);
-  static const _tabAnimationDuration = AppMotion.spring;
-  static const _tabAnimationCurve = AppMotion.springCurve;
+
+  /// 分頁的 [PageView]；點分頁換頁時搬進 [AppTransitionSwitch]，靠這個 key
+  /// 保住各分頁的狀態，也從這裡拍下換頁前的畫面。
+  final GlobalKey _pagesKey = GlobalKey();
+
+  /// 點分頁換頁的進度；換頁中 [_outgoing] 是換頁前畫面的快照。
+  late final AnimationController _switch = AnimationController(vsync: this)
+    ..addStatusListener((status) {
+      if (status.isCompleted) _endSwitch();
+    });
+  ui.Image? _outgoing;
+  late Color _outgoingBackground;
+  late Color _outgoingFade;
+  bool _switchForward = true;
+  int _switchCount = 0;
 
   late final List<MainDestination> _destinations =
       widget.destinations ?? _defaultDestinations;
@@ -96,6 +113,8 @@ class _MainPageState extends State<MainPage> {
     for (final controller in _scrollToTopControllers.values) {
       controller.dispose();
     }
+    _switch.dispose();
+    _outgoing?.dispose();
     _pageController.dispose();
     _tabBarHidden.dispose();
     super.dispose();
@@ -123,6 +142,30 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final outgoing = _outgoing;
+    final pages = RepaintBoundary(
+      key: _pagesKey,
+      child: PageView(
+        controller: _pageController,
+        physics: _tabBarHidden.value
+            ? const NeverScrollableScrollPhysics()
+            : null,
+        onPageChanged: (idx) {
+          setState(() => _currentIndex = idx);
+        },
+        children: List.generate(_destinations.length, (index) {
+          Widget page = FloatingTabBarScope(
+            hidden: _tabBarHidden,
+            child: _destinations[index].page,
+          );
+          final scroll = _scrollToTopControllers[index];
+          if (scroll != null) {
+            page = PrimaryScrollController(controller: scroll, child: page);
+          }
+          return _KeepAliveWrapper(child: page);
+        }),
+      ),
+    );
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -133,29 +176,25 @@ class _MainPageState extends State<MainPage> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            PageView(
-              controller: _pageController,
-              physics: _tabBarHidden.value
-                  ? const NeverScrollableScrollPhysics()
-                  : null,
-              onPageChanged: (idx) {
-                setState(() => _currentIndex = idx);
-              },
-              children: List.generate(_destinations.length, (index) {
-                Widget page = FloatingTabBarScope(
-                  hidden: _tabBarHidden,
-                  child: _destinations[index].page,
-                );
-                final scroll = _scrollToTopControllers[index];
-                if (scroll != null) {
-                  page = PrimaryScrollController(
-                    controller: scroll,
-                    child: page,
-                  );
-                }
-                return _KeepAliveWrapper(child: page);
-              }),
-            ),
+            if (outgoing == null)
+              pages
+            else
+              IgnorePointer(
+                child: AppTransitionSwitch(
+                  key: ValueKey(_switchCount),
+                  transition: AppPageTransition.of(context),
+                  animation: _switch,
+                  forward: _switchForward,
+                  outgoing: ExcludeSemantics(
+                    child: RawImage(image: outgoing, fit: BoxFit.fill),
+                  ),
+                  incoming: pages,
+                  outgoingBackground: _outgoingBackground,
+                  incomingBackground: _destinations[_currentIndex].backgroundOf(
+                    context,
+                  ),
+                ),
+              ),
             // 分頁列後方的漸隱帶，顏色跟著頁面位置在相鄰分頁的背景色間過渡。
             // 整頁編輯時收掉，由分頁墊在自己的編輯工具列後面。
             Positioned(
@@ -163,7 +202,7 @@ class _MainPageState extends State<MainPage> {
               right: 0,
               bottom: 0,
               child: AnimatedBuilder(
-                animation: _pageController,
+                animation: Listenable.merge([_pageController, _switch]),
                 builder: (context, _) => FloatingTabBarFade(
                   color: _fadeColor(context),
                   hidden: _tabBarHidden.value,
@@ -209,7 +248,8 @@ class _MainPageState extends State<MainPage> {
         ),
         extendBody: true,
         bottomNavigationBar: FloatingTabBar(
-          controller: _pageController,
+          // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
+          controller: outgoing == null ? _pageController : null,
           currentIndex: _currentIndex,
           hidden: _tabBarHidden.value,
           items: [
@@ -230,15 +270,52 @@ class _MainPageState extends State<MainPage> {
               _lastTapTime = DateTime.now();
               return;
             }
-            _pageController.animateToPage(
-              index,
-              duration: _tabAnimationDuration,
-              curve: _tabAnimationCurve,
-            );
+            _switchTo(index);
           },
         ),
       ),
     );
+  }
+
+  /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
+  /// 「外觀與主題 → 換頁動畫」選的那一種；往右邊的分頁像開新頁，往左像
+  /// 返回。手指左右滑動照舊跟手。
+  void _switchTo(int index) {
+    _endSwitch();
+    final boundary = _pagesKey.currentContext?.findRenderObject();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        boundary is! RenderRepaintBoundary ||
+        !boundary.hasSize) {
+      _pageController.jumpToPage(index);
+      return;
+    }
+    // 換頁前的畫面不會再變，拍成一張圖給轉場用，不必兩頁同時活著。點擊
+    // 在兩幀之間處理，分頁剛畫完，拍到的就是螢幕上的樣子。
+    final image = boundary.toImageSync(
+      pixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
+    final from = _pagePosition();
+    final fade = _fadeColor(context);
+    setState(() {
+      _outgoing = image;
+      _outgoingBackground = _destinations[from.round()].backgroundOf(context);
+      _outgoingFade = fade;
+      _switchForward = index > from;
+      _switchCount++;
+      _currentIndex = index;
+    });
+    _pageController.jumpToPage(index);
+    _switch
+      ..duration = AppPageTransition.of(context).duration
+      ..forward(from: 0);
+  }
+
+  void _endSwitch() {
+    final outgoing = _outgoing;
+    if (outgoing == null) return;
+    _switch.stop();
+    setState(() => _outgoing = null);
+    outgoing.dispose();
   }
 
   /// 頁面位置（以分頁索引為單位，滑動中是小數）。
@@ -251,6 +328,13 @@ class _MainPageState extends State<MainPage> {
   }
 
   Color _fadeColor(BuildContext context) {
+    if (_outgoing != null) {
+      return Color.lerp(
+        _outgoingFade,
+        _destinations[_currentIndex].backgroundOf(context),
+        _switch.value,
+      )!;
+    }
     final position = _pagePosition().clamp(
       0.0,
       (_destinations.length - 1).toDouble(),
@@ -417,11 +501,7 @@ class _MainPageState extends State<MainPage> {
     // 返回鍵留給分頁的 PopScope 退出編輯。
     if (_tabBarHidden.value) return;
     if (_currentIndex != 0) {
-      _pageController.animateToPage(
-        0,
-        duration: _tabAnimationDuration,
-        curve: _tabAnimationCurve,
-      );
+      _switchTo(0);
       return;
     }
 

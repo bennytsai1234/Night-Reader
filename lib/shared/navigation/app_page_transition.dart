@@ -47,6 +47,14 @@ enum AppPageTransition {
 
   static AppPageTransition fromStorage(String? name) =>
       values.where((value) => value.name == name).firstOrNull ?? slide;
+
+  /// 主題目前選的換頁動畫（掛在 [PageTransitionsTheme]）；沒掛時用預設的
+  /// [slide]。
+  static AppPageTransition of(BuildContext context) {
+    final theme = Theme.of(context);
+    final builder = theme.pageTransitionsTheme.builders[theme.platform];
+    return builder is AppPageTransitionsBuilder ? builder.transition : slide;
+  }
 }
 
 /// 把 [AppPageTransition] 掛到 [PageTransitionsTheme]，所有
@@ -568,6 +576,66 @@ class _AppTransitionState extends State<_AppTransition>
       ],
     );
   }
+}
+
+/// 不經過路由、在同一處把一個畫面換成另一個時播選定的換頁動畫，例如點
+/// 主頁的分頁。[forward] 時 [incoming] 像新開的頁蓋上 [outgoing]；否則
+/// [outgoing] 像返回一樣離開、露出 [incoming]。
+///
+/// [animation] 是這一趟的時間比例 0→1，曲線由各動畫自己套。「展開」從
+/// 這個元件建立時最後按下的地方長出來（返回時縮回去），每一趟要給新的
+/// key。[incoming] 在換頁前後要保留狀態時，給它 [GlobalKey]。
+class AppTransitionSwitch extends StatefulWidget {
+  const AppTransitionSwitch({
+    super.key,
+    required this.transition,
+    required this.animation,
+    required this.forward,
+    required this.outgoing,
+    required this.incoming,
+    required this.outgoingBackground,
+    required this.incomingBackground,
+  });
+
+  final AppPageTransition transition;
+  final Animation<double> animation;
+  final bool forward;
+  final Widget outgoing;
+  final Widget incoming;
+
+  /// 墊在淡掉的底下那一頁後面的顏色（見 [_UnderPose.wrap]）。
+  final Color outgoingBackground;
+  final Color incomingBackground;
+
+  @override
+  State<AppTransitionSwitch> createState() => _AppTransitionSwitchState();
+}
+
+class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
+  final TransitionSourceRect? _origin = TransitionOrigin._last;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.animation,
+    builder: (context, _) {
+      final size = MediaQuery.sizeOf(context);
+      final trip = (closing: !widget.forward, time: widget.animation.value);
+      final top = _TopPose.of(
+        widget.transition,
+        trip: trip,
+        size: size,
+        origin: _origin,
+      );
+      final under = _UnderPose.of(widget.transition, trip: trip);
+      final (upper, lower, lowerBackground) = widget.forward
+          ? (widget.incoming, widget.outgoing, widget.outgoingBackground)
+          : (widget.outgoing, widget.incoming, widget.incomingBackground);
+      return Stack(
+        fit: StackFit.expand,
+        children: [under.wrap(lower, lowerBackground), top.wrap(upper, size)],
+      );
+    },
+  );
 }
 
 /// 一趟轉場（開啟或返回）走到哪：[time] 為這一趟的時間比例 0→1。中途反向
