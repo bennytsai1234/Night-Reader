@@ -5,6 +5,7 @@
 ## 進行中
 
 - **`fix/reader-menu-layout`（已推上、未開 PR）**：閱讀選單上下墊漸隱底色、亮度條改到上下選單之間置中並撐長、正文字號每步 0.5。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-menu-layout`。
+- **`feat/tts-sleep-timer`（已推上、未開 PR）**：朗讀面板的定時（關閉、15～90 分、章末；時間到暫停、暫停時倒數停、記住上次選擇）。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-tts-timer`。
 
 ## 等使用者決定或動手
 
