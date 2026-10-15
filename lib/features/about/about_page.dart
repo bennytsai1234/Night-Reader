@@ -92,7 +92,7 @@ class _AboutPageState extends State<AboutPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const GlassNavHeader(title: '關於'),
+      appBar: const GlassNavHeader(title: '關於夜讀'),
       body: GroupedListView(
         children: [
           _buildAppLogo(context),
@@ -105,7 +105,7 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.ink,
                 ),
                 title: 'GitHub 開源位址',
-                subtitle: 'github.com/bennytsai1234/Night-Reader',
+                subtitle: 'bennytsai1234/Night-Reader',
                 onTap: () => launchExternalUrlWithFeedback(
                   context,
                   'https://github.com/bennytsai1234/Night-Reader',
@@ -144,7 +144,8 @@ class _AboutPageState extends State<AboutPage> {
                   tint: AppTint.moss,
                 ),
                 title: '檢查更新',
-                value: _checkingUpdate ? '檢查中…' : _versionLabel,
+                // 目前版本寫在頁頂圖示下方，這裡只在檢查時顯示狀態。
+                value: _checkingUpdate ? '檢查中…' : null,
                 trailing: _checkingUpdate
                     ? const SizedBox.square(
                         dimension: 18,

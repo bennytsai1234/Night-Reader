@@ -102,7 +102,8 @@ void main() {
     expect(settings.fontSize, initial);
 
     await tester.pump(const Duration(milliseconds: 150));
-    expect(settings.fontSize, initial + 2);
+    // 字號每步 0.5。
+    expect(settings.fontSize, initial + 1);
     expect(notifications, 1);
   });
 

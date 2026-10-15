@@ -1,0 +1,5 @@
+tags:
+  # 整個 App 的截圖（test/screens/），要看畫面時才跑：
+  # flutter test --run-skipped -t screens test/screens
+  screens:
+    skip: "截圖用，平常不跑"

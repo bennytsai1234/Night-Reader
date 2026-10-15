@@ -15,6 +15,9 @@
 // [screenshotDir]（系統暫存區，不在 repo 裡）。看完把臨時測試刪掉：pre-push
 // hook 跑全套測試時也會跑到這個資料夾。
 //
+// 要拍整個 App（記憶體資料庫加假的書與書源）的固定一組畫面、改介面前後
+// 對照，用 `test/screens/app_screens_test.dart`（用法寫在該檔檔頭）。
+//
 // 中文用系統字型代替手機字型，字形會跟手機略有不同；網路圖片在測試裡不會載入。
 import 'dart:io';
 import 'dart:ui' as ui;

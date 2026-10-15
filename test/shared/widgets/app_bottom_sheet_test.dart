@@ -72,7 +72,6 @@ void main() {
                 controlsVisible: true,
                 bookName: '書名',
                 chapterTitle: '第一章 開始',
-                chapterUrl: 'https://s.example/1',
                 originName: '🔥 筆趣閣（優+發現）[2024.05 更新] 精品書源合集',
                 showReadTitleAddition: true,
                 onBack: () {},

@@ -36,6 +36,7 @@ final class HybridScrollView extends StatelessWidget {
     this.horizontalPadding = EdgeInsets.zero,
     this.physics = const HybridScrollPhysics(),
     this.textColor = const Color(0xFF000000),
+    this.clipBehavior = Clip.hardEdge,
   });
 
   /// center sliver 的 key。必須由呼叫端持有並跨 rebuild 穩定——
@@ -55,6 +56,10 @@ final class HybridScrollView extends StatelessWidget {
   final ScrollPhysics physics;
   final Color textColor;
 
+  /// [Clip.none] 讓跨在上下緣的段落整段畫出視窗外，由外層決定露出多少
+  /// （閱讀頁在正文與頁首頁尾之間的空隙做漸隱）。
+  final Clip clipBehavior;
+
   @override
   Widget build(BuildContext context) {
     // D4：原生 Scrollbar 停用；無回彈由 HybridScrollPhysics（Clamping 基底）保證。
@@ -65,6 +70,7 @@ final class HybridScrollView extends StatelessWidget {
         controller: controller,
         center: centerKey,
         physics: physics,
+        clipBehavior: clipBehavior,
         scrollCacheExtent: cacheExtent == null
             ? null
             : ScrollCacheExtent.pixels(cacheExtent!),

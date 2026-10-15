@@ -79,27 +79,34 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         child: Row(
           children: [
-            Flexible(
-              child: GlassCapsule(
-                label: scopeDisplay,
-                icon: Icons.layers_outlined,
-                trailingIcon: Icons.expand_more_rounded,
-                selected: !provider.searchScope.isAll,
-                tooltip: '選擇搜尋範圍：$scopeDisplay',
-                onTap: onScopePressed,
+            // 範圍膠囊是左半邊唯一能縮的，放得下就照原寬（不和右側留白
+            // 平分空間），範圍名稱太長才截斷。
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: GlassCapsule(
+                      label: scopeDisplay,
+                      icon: Icons.layers_outlined,
+                      trailingIcon: Icons.expand_more_rounded,
+                      selected: !provider.searchScope.isAll,
+                      tooltip: '選擇搜尋範圍：$scopeDisplay',
+                      onTap: onScopePressed,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  GlassCapsule(
+                    label: '精準搜尋',
+                    icon: provider.precisionSearch
+                        ? Icons.check_rounded
+                        : Icons.text_fields_rounded,
+                    selected: provider.precisionSearch,
+                    tooltip: '精準搜尋（完全匹配）',
+                    onTap: provider.togglePrecisionSearch,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            GlassCapsule(
-              label: '精準搜尋',
-              icon: provider.precisionSearch
-                  ? Icons.check_rounded
-                  : Icons.text_fields_rounded,
-              selected: provider.precisionSearch,
-              tooltip: '精準搜尋（完全匹配）',
-              onTap: provider.togglePrecisionSearch,
-            ),
-            const Spacer(),
             const SizedBox(width: AppSpacing.sm),
             GlassCapsule(
               label: provider.isSearching ? '停止' : '搜尋',

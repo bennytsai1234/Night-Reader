@@ -7,6 +7,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 /// 閱讀選單左側的亮度條：上方一顆「自動」鈕，下方一條直立膠囊，亮度從下
 /// 往上填滿。膠囊中的細線以下是加暗段（[ReaderV2Brightness.dimZone]），
 /// 填色換成主色。跟隨系統時膠囊變淡，一拖就改成自己的亮度。
+///
+/// 膠囊撐滿父層給的高度（減去自動鈕），由選單決定整條多長。
 class ReaderV2BrightnessBar extends StatelessWidget {
   const ReaderV2BrightnessBar({
     super.key,
@@ -23,14 +25,27 @@ class ReaderV2BrightnessBar extends StatelessWidget {
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
 
-  static const double pillHeight = 180;
+  /// 自動鈕加間距之外，膠囊至少要有的高度（兩顆按鈕高）；給不到這麼高時
+  /// 整條不畫。
+  static const double minPillHeight = AppGlass.buttonSize * 2;
+
+  /// 整條亮度條至少要的高度。
+  static const double minHeight =
+      AppGlass.buttonSize + AppSpacing.md + minPillHeight;
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxHeight < minHeight
+          ? const SizedBox.shrink()
+          : _buildBar(context),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
     final tint = menuStyle.glassTintOf(context);
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
         GlassIconButton(
           icon: Icons.brightness_auto_rounded,
@@ -40,13 +55,15 @@ class ReaderV2BrightnessBar extends StatelessWidget {
           onPressed: () => onAutoChanged(!auto),
         ),
         const SizedBox(height: AppSpacing.md),
-        _BrightnessPill(
-          auto: auto,
-          level: level,
-          tint: tint,
-          menuStyle: menuStyle,
-          onChanged: onChanged,
-          onChangeEnd: onChangeEnd,
+        Expanded(
+          child: _BrightnessPill(
+            auto: auto,
+            level: level,
+            tint: tint,
+            menuStyle: menuStyle,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+          ),
         ),
       ],
     );
@@ -75,10 +92,10 @@ class _BrightnessPill extends StatefulWidget {
 }
 
 class _BrightnessPillState extends State<_BrightnessPill> {
-  static const double _height = ReaderV2BrightnessBar.pillHeight;
   static const double _step = 0.05;
   static const double _iconSize = 22;
   double? _dragLevel;
+  double _height = ReaderV2BrightnessBar.minPillHeight;
 
   double _levelAt(double dy) => (1 - dy / _height).clamp(0.0, 1.0).toDouble();
 
@@ -103,6 +120,15 @@ class _BrightnessPillState extends State<_BrightnessPill> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _height = constraints.maxHeight;
+        return _buildPill();
+      },
+    );
+  }
+
+  Widget _buildPill() {
     final menuStyle = widget.menuStyle;
     final level = _dragLevel ?? widget.level;
     final inDimZone = level < ReaderV2Brightness.dimZone;
@@ -129,7 +155,6 @@ class _BrightnessPillState extends State<_BrightnessPill> {
         onVerticalDragCancel: _end,
         child: SizedBox(
           width: AppGlass.buttonSize,
-          height: _height,
           child: GlassSurface(
             borderRadius: AppRadius.pillShape,
             tint: widget.tint,

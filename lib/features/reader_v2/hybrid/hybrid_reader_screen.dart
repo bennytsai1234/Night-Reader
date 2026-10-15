@@ -1405,10 +1405,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               right: state.layoutSpec.textPaddingRight,
             ),
             physics: _physics,
+            // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
+            // 之間那段空隙，並在那裡漸隱（ReaderV2PageShell）。
+            clipBehavior: Clip.none,
           ),
         );
         final readerStack = Stack(
           fit: StackFit.expand,
+          clipBehavior: Clip.none,
           children: <Widget>[
             visualContent,
             if (highlight != null && highlight.isValid)

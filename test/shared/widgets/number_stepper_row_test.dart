@@ -27,6 +27,7 @@ void main() {
     int fractionDigits = 0,
     double displayScale = 1,
     String unit = '',
+    bool trimZeroFraction = false,
   }) async {
     final changes = <double>[];
     await tester.pumpWidget(
@@ -42,6 +43,7 @@ void main() {
               fractionDigits: fractionDigits,
               displayScale: displayScale,
               unit: unit,
+              trimZeroFraction: trimZeroFraction,
               onChanged: (next) {
                 changes.add(next);
                 setState(() => value = next);
@@ -138,5 +140,34 @@ void main() {
     await tester.tap(find.text('確定'));
     await tester.pumpAndSettle();
     expect(changes, [0.45]);
+  });
+
+  testWidgets('whole values drop the decimals when asked', (tester) async {
+    await pumpRow(
+      tester,
+      value: 18,
+      step: 0.5,
+      fractionDigits: 1,
+      trimZeroFraction: true,
+    );
+    expect(find.text('18'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pump();
+    expect(find.text('18.5'), findsOneWidget);
+  });
+
+  testWidgets('units other than percent sit one space after the number', (
+    tester,
+  ) async {
+    await pumpRow(
+      tester,
+      value: 1,
+      min: 0.5,
+      max: 3,
+      step: 0.1,
+      fractionDigits: 1,
+      unit: '倍',
+    );
+    expect(find.text('1.0 倍'), findsOneWidget);
   });
 }

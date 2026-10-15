@@ -44,7 +44,6 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       body: GroupedListView(
         children: [
           GroupedSection(
-            header: '本地備份與還原',
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(

@@ -420,7 +420,10 @@ class DownloadManagerPage extends StatelessWidget {
     }
     final active = task.isDownloading || task.isWaiting;
     if (task.isFailed || (task.errorCount > 0 && !active)) {
-      return '下載失敗 ${task.successCount}/${task.totalCount} 章，失敗 ${task.errorCount} 章';
+      // 還沒有目錄（例如抓目錄就失敗）時章數都是 0，不寫「0/0 章」。
+      if (task.totalCount <= 0) return '下載失敗';
+      final failed = task.errorCount > 0 ? '，${task.errorCount} 章失敗' : '';
+      return '下載失敗：已下載 ${task.successCount}/${task.totalCount} 章$failed';
     }
     if (globallyPaused) {
       return '已暫停全部 ${task.successCount}/${task.totalCount} 章';

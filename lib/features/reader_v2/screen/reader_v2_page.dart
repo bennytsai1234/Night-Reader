@@ -233,7 +233,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               showReadTitleAddition: settings.showReadTitleAddition,
               infoState: _infoStateOf(runtime),
               chapterTitle: _chapterTitleAt(chapterIndex),
-              chapterUrl: _chapterUrlAt(chapterIndex),
               originName: widget.book.originName,
               progressListenable: _progress,
               navigation: navigation,
@@ -253,14 +252,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               onSystemBack: _handleSystemBack,
               onMore: () => unawaited(_showMore()),
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-              onTts: _showTts,
-              onInterface: () => ReaderV2SettingsSheets.showInterfaceSettings(
-                context,
-                settings,
+              onTts: () => _openPanel(_showTts),
+              onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
+              onInterface: () => _openPanel(
+                () => ReaderV2SettingsSheets.showInterfaceSettings(
+                  context,
+                  settings,
+                ),
               ),
-              onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
-                context,
-                settings,
+              onSettings: () => _openPanel(
+                () => ReaderV2SettingsSheets.showAdvancedSettings(
+                  context,
+                  settings,
+                ),
               ),
               onAutoPage: _coordinator.toggleAutoPage,
               // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
@@ -269,7 +273,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   isDarkBackground ? ThemeMode.light : ThemeMode.dark,
                 ),
               ),
-              onReplaceRule: () => _coordinator.openReplaceRule(context),
+              onReplaceRule: () =>
+                  _openPanel(() => _coordinator.openReplaceRule(context)),
               onShowControls: menu.showControls,
               onDismissControls: menu.dismissControls,
               onPrevChapter: () =>
@@ -295,6 +300,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       onChangeEnd: settings.setBrightness,
                     )
                   : null,
+              sleepTimer: _host.tts?.sleepTimer,
+              isTtsPlaying: _host.tts?.isPlaying ?? false,
               showTts: true,
               showAutoPage: true,
               showReplaceRule: true,
@@ -323,6 +330,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final palette = StylePalette.of(context);
         return Stack(
           fit: StackFit.expand,
+          // 正文會畫出這一區，由閱讀頁框架裁切（見 HybridReaderScreen）。
+          clipBehavior: Clip.none,
           children: [
             HybridReaderScreen(
               runtime: runtime,
@@ -574,10 +583,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
   }
 
-  void _showTts() {
+  /// 從選單開面板：開著時上下選單與亮度條收起，正文整頁露出來（排版面板
+  /// 沒有暗色遮罩，邊調邊看）；面板關掉後回到選單打開的樣子。
+  void _openPanel(Future<void> Function() open) {
+    _host.menu.dismissControls();
+    unawaited(
+      open().whenComplete(() {
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        _host.menu.showControls();
+      }),
+    );
+  }
+
+  Future<void> _showTts() async {
     final tts = _host.tts;
     if (tts == null) return;
-    ReaderV2MenuSheet.show<void>(
+    await ReaderV2MenuSheet.show<void>(
       context,
       settings: _host.settings,
       builder: (_) => ReaderV2TtsPanel(tts: tts, settings: _host.settings),

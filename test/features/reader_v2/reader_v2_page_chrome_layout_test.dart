@@ -18,7 +18,7 @@ void main() {
     bool showFooterInfo = true,
     double paddingTop = 0,
     double paddingBottom = 16,
-    double? footerOffset,
+    double footerOffset = 4,
   }) {
     return ReaderV2PageChromeLayout.resolve(
       mediaPadding: EdgeInsets.only(top: statusInset, bottom: navInset),
@@ -65,15 +65,6 @@ void main() {
   });
 
   group('bottom', () {
-    test('footer follows the system inset by default', () {
-      final layout = resolve(navInset: 20);
-      expect(layout.footerRowBottom, 20 + kReaderFooterAutoSpacing);
-      expect(
-        layout.footerExtent,
-        20 + kReaderFooterAutoSpacing + kReaderFooterRowHeight,
-      );
-    });
-
     test('footer offset is measured from the screen bottom', () {
       final layout = resolve(navInset: 20, footerOffset: 0);
       expect(layout.footerRowBottom, 0);

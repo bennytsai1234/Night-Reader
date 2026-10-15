@@ -5,7 +5,6 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_acti
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -43,7 +42,8 @@ class _ResetButton extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
         minimumSize: Size.zero,
-        textStyle: AppTextStyles.uiSm,
+        // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
+        // 會蓋掉主題的字族。
       ),
       child: const Text('恢復預設'),
     );
@@ -206,7 +206,9 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           value: _fontSize,
           min: 14,
           max: 40,
-          step: 1,
+          step: 0.5,
+          fractionDigits: 1,
+          trimZeroFraction: true,
           onChanged: (value) {
             setState(() => _fontSize = value);
             _fontSizeDirty = true;
@@ -531,7 +533,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(horizontal: value),
               ),
             ),
@@ -542,7 +543,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(top: value),
               ),
             ),
@@ -553,7 +553,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(bottom: value),
               ),
             ),
@@ -561,17 +560,10 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
               _stepperRow(
                 NumberStepperRow(
                   label: '頁尾位置',
-                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。系統
-                  // 內距從 View 取：面板外層的 SafeArea 已經把 MediaQuery 的
-                  // 底部內距扣成 0，閱讀頁排版用的卻是系統內距。
-                  value:
-                      settings.footerOffset ??
-                      MediaQueryData.fromView(View.of(context)).padding.bottom +
-                          kReaderFooterAutoSpacing,
+                  value: settings.footerOffset,
                   min: ReaderV2SettingsController.minPagePadding,
                   max: ReaderV2SettingsController.maxPagePadding,
                   step: _paddingStep,
-                  unit: ' px',
                   onChanged: settings.setFooterOffset,
                 ),
               ),

@@ -32,8 +32,8 @@ class ReaderV2PrefsSnapshot {
   /// 正文與頁尾資訊列之間的距離（px）；沒有頁尾時與畫面底部之間。
   final double paddingBottom;
 
-  /// 頁尾資訊列底部到畫面底部的距離（px）；null 表示跟隨系統底部內距。
-  final double? footerOffset;
+  /// 頁尾資訊列底部到畫面底部的距離（px）。
+  final double footerOffset;
 
   /// 閱讀時隱藏系統狀態列（時間、訊號、電量）。
   final bool hideStatusBar;
@@ -68,7 +68,7 @@ class ReaderV2PrefsSnapshot {
     required this.paddingHorizontal,
     required this.paddingTop,
     required this.paddingBottom,
-    this.footerOffset,
+    required this.footerOffset,
     required this.hideStatusBar,
     required this.headerInfo,
     required this.footerInfo,
@@ -83,19 +83,20 @@ class ReaderV2PrefsSnapshot {
     return ReaderV2PrefsSnapshot(
       fontSize: 18.0,
       titleFontSize: 18.0 + kReaderV2DefaultTitleSizeDelta,
-      lineHeight: 1.5,
-      paragraphSpacing: 1.0,
-      chapterSpacing: 1.0,
-      letterSpacing: 0.0,
+      // 排版與邊距的預設照使用者自己讀書用的設定（2026-10-15）。
+      lineHeight: 1.4,
+      paragraphSpacing: 0.0,
+      chapterSpacing: 0.5,
+      letterSpacing: 0.2,
       textIndent: 2,
       autoPageSpeed: 0.16,
       chineseConvert: 0,
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
-      paddingHorizontal: 16.0,
+      paddingHorizontal: 12.0,
       paddingTop: 0.0,
-      // 等同舊版頁尾上方固定的 12px 加上資訊列文字上方的空白。
-      paddingBottom: 16.0,
+      paddingBottom: 4.0,
+      footerOffset: 4.0,
       hideStatusBar: false,
       // 頁首預設關閉：狀態列顯示時多一條頁首只會重複系統時鐘；
       // 隱藏狀態列後由使用者決定鏡頭那一行放什麼。
@@ -130,7 +131,7 @@ class ReaderV2PrefsSnapshot {
     double? paddingHorizontal,
     double? paddingTop,
     double? paddingBottom,
-    double? Function()? footerOffset,
+    double? footerOffset,
     bool? hideStatusBar,
     ReaderV2InfoSlots? headerInfo,
     ReaderV2InfoSlots? footerInfo,
@@ -155,7 +156,7 @@ class ReaderV2PrefsSnapshot {
       paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
       paddingTop: paddingTop ?? this.paddingTop,
       paddingBottom: paddingBottom ?? this.paddingBottom,
-      footerOffset: footerOffset == null ? this.footerOffset : footerOffset(),
+      footerOffset: footerOffset ?? this.footerOffset,
       hideStatusBar: hideStatusBar ?? this.hideStatusBar,
       headerInfo: headerInfo ?? this.headerInfo,
       footerInfo: footerInfo ?? this.footerInfo,
@@ -236,8 +237,9 @@ class ReaderV2PrefsRepository {
         prefs.getDouble(PreferKey.readerPaddingBottom),
         defaults.paddingBottom,
       ),
-      footerOffset: _normalizeOptionalPagePadding(
+      footerOffset: _normalizePagePadding(
         prefs.getDouble(PreferKey.readerFooterOffset),
+        defaults.footerOffset,
       ),
       hideStatusBar:
           prefs.getBool(PreferKey.readerHideStatusBar) ??
@@ -330,14 +332,8 @@ class ReaderV2PrefsRepository {
     return _setDouble(PreferKey.readerPaddingBottom, value);
   }
 
-  /// null 表示恢復跟隨系統底部內距。
-  Future<void> saveFooterOffset(double? value) async {
-    if (value != null) return _setDouble(PreferKey.readerFooterOffset, value);
-    final prefs = await SharedPreferences.getInstance();
-    _ensureSaved(
-      PreferKey.readerFooterOffset,
-      await prefs.remove(PreferKey.readerFooterOffset),
-    );
+  Future<void> saveFooterOffset(double value) {
+    return _setDouble(PreferKey.readerFooterOffset, value);
   }
 
   Future<void> saveHideStatusBar(bool value) {
@@ -428,11 +424,6 @@ class ReaderV2PrefsRepository {
 
   double _normalizePagePadding(double? value, double fallback) {
     if (value == null || !value.isFinite) return fallback;
-    return value.clamp(minPagePadding, maxPagePadding).toDouble();
-  }
-
-  double? _normalizeOptionalPagePadding(double? value) {
-    if (value == null || !value.isFinite) return null;
     return value.clamp(minPagePadding, maxPagePadding).toDouble();
   }
 

@@ -68,6 +68,8 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
+      // 正文會畫出這一區，由閱讀頁框架裁切（見 HybridReaderScreen）。
+      clipBehavior: Clip.none,
       children: <Widget>[
         widget.child,
         ListenableBuilder(

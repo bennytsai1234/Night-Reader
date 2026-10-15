@@ -81,6 +81,7 @@ class _ViewportHarness extends StatelessWidget {
       showFooterInfo: false,
       paddingTop: 0,
       paddingBottom: 0,
+      footerOffset: 4,
     );
 
     return Stack(

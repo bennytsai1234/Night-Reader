@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -174,14 +176,13 @@ class ReaderV2PageCoordinator {
     _ttsFollower.update(_host.tts?.currentHighlight);
   }
 
-  void openReplaceRule(BuildContext context) {
-    _host.menu.dismissControls();
+  Future<void> openReplaceRule(BuildContext context) async {
     final replaceDao = _host.dependencies.replaceDao;
     if (replaceDao == null) {
       _showNotice('替換規則資料庫不可用');
       return;
     }
-    AppBottomSheet.showCustom(
+    await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => ReaderV2ReplaceRuleSheet(
@@ -191,8 +192,36 @@ class ReaderV2PageCoordinator {
         onReload: () async {
           await _host.runtime?.reloadContentPreservingLocation();
         },
+        loadTestSample: _replaceTestSample,
       ),
     );
+  }
+
+  /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（套用替換規則之前，
+  /// 規則才測得出效果）。原文存在手機裡才有；取不到時回傳 null。
+  Future<String?> _replaceTestSample() async {
+    final runtime = _host.runtime;
+    final contentDao = _host.dependencies.readerChapterContentDao;
+    if (runtime == null || contentDao == null) return null;
+    final location = runtime.state.visibleLocation;
+    final chapter = runtime.chapterAt(location.chapterIndex);
+    if (chapter == null) return null;
+    final raw = await ReaderChapterContentStore(
+      chapterDao: _host.dependencies.chapterDao,
+      contentDao: contentDao,
+    ).getRawContent(book: _host.book, chapter: chapter);
+    if (raw == null) return null;
+    final paragraphs = ReaderV2Content.fromRaw(
+      chapterIndex: location.chapterIndex,
+      title: '',
+      rawText: raw,
+    ).paragraphs;
+    if (paragraphs.isEmpty) return null;
+    final shown = runtime.repository.cachedContent(location.chapterIndex);
+    final index = shown == null
+        ? 0
+        : paragraphIndexAt(shown, location.charOffset);
+    return paragraphs[index.clamp(0, paragraphs.length - 1)];
   }
 
   /// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
@@ -205,4 +234,17 @@ class ReaderV2PageCoordinator {
     if (command == null) return;
     await command();
   }
+}
+
+/// [content] 的 `displayText` 位置 [charOffset] 落在第幾段正文；在章節標題上
+/// 時是第一段。替換規則一般不增刪段落，所以這個序號也能拿來找原文的同一段。
+@visibleForTesting
+int paragraphIndexAt(ReaderV2Content content, int charOffset) {
+  var end = content.bodyStartOffset;
+  for (var i = 0; i < content.paragraphs.length; i++) {
+    // 段落之間以兩個換行相接。
+    end += content.paragraphs[i].length + 2;
+    if (charOffset < end) return i;
+  }
+  return content.paragraphs.isEmpty ? 0 : content.paragraphs.length - 1;
 }
