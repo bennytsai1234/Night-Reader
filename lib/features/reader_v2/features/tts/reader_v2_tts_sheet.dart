@@ -5,11 +5,13 @@ import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
@@ -20,6 +22,7 @@ abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPaused;
   double get rate;
   double get pitch;
+  ReaderV2TtsSleepTimer get sleepTimer;
 
   Future<void> toggle();
   Future<void> stop();
@@ -76,6 +79,8 @@ class ReaderV2TtsPanel extends StatelessWidget {
                 ),
               ],
             ),
+            const SheetSection(title: '定時'),
+            _SleepTimerSection(timer: tts.sleepTimer),
             const SheetSection(title: '朗讀參數'),
             NumberStepperRow(
               label: '語速',
@@ -104,6 +109,81 @@ class ReaderV2TtsPanel extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// 定時選項與倒數。倒數不靠定時器逐秒通知，這裡自己每秒重讀剩餘時間，
+/// 只重建這一小塊。
+class _SleepTimerSection extends StatefulWidget {
+  const _SleepTimerSection({required this.timer});
+
+  final ReaderV2TtsSleepTimer timer;
+
+  @override
+  State<_SleepTimerSection> createState() => _SleepTimerSectionState();
+}
+
+class _SleepTimerSectionState extends State<_SleepTimerSection> {
+  late final Timer _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (widget.timer.remaining != null) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.timer,
+      builder: (context, _) {
+        final timer = widget.timer;
+        final status = _status(timer);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GlassSegmented<ReaderV2TtsSleepOption>(
+              segments: [
+                for (final option in ReaderV2TtsSleepOption.values)
+                  GlassSegment(option, option.label),
+              ],
+              selected: timer.option,
+              onChanged: (option) => unawaited(timer.choose(option)),
+            ),
+            if (status != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Text(
+                  status,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String? _status(ReaderV2TtsSleepTimer timer) {
+    if (timer.pausesAtChapterEnd) return '念完本章後暫停';
+    final remaining = timer.remaining;
+    if (remaining == null) return null;
+    // 無條件進位到秒，剛開始倒數時顯示整數分鐘。
+    final seconds = (remaining.inMilliseconds + 999) ~/ 1000;
+    final mm = (seconds ~/ 60).toString().padLeft(2, '0');
+    final ss = (seconds % 60).toString().padLeft(2, '0');
+    return '$mm:$ss 後暫停';
   }
 }
 

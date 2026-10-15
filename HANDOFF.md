@@ -4,11 +4,11 @@
 
 ## 進行中
 
-沒有未合併的工作分支。
+- **`fix/reader-menu-layout`（已推上、未開 PR）**：閱讀選單上下墊漸隱底色、亮度條改到上下選單之間置中並撐長、正文字號每步 0.5。使用者說合併時照 Git 流程開 PR。worktree 在 repo 外的 `../Night-Reader-menu-layout`。
 
 ## 等使用者決定或動手
 
-- **網站曝光（#60，只能使用者做，已告知）**：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
+- **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。
 - **測試日誌**：`download_service_test` 有一批「`_dio` 尚未初始化」的下載失敗日誌（測試沒準備網路層，只檢查排隊與範圍），不是警告；使用者要的話再補假的網路層。
 

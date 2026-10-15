@@ -137,9 +137,13 @@ class GlassIconButton extends StatelessWidget {
     this.size = AppGlass.buttonSize,
     this.iconSize = 22,
     this.onLongPress,
+    this.label,
   });
 
   final IconData icon;
+
+  /// 有值時在圓鈕中央顯示這段短字，取代圖示（例如倒數的剩餘分鐘）。
+  final String? label;
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
   final String? tooltip;
@@ -152,6 +156,9 @@ class GlassIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
+    final foreground = (color ?? scheme.onSurface).withValues(
+      alpha: enabled ? 1 : 0.38,
+    );
     Widget button = PressScale(
       onTap: onPressed,
       onLongPress: onLongPress,
@@ -162,13 +169,17 @@ class GlassIconButton extends StatelessWidget {
           tint: tint,
           shadow: false,
           child: Center(
-            child: Icon(
-              icon,
-              size: iconSize,
-              color: (color ?? scheme.onSurface).withValues(
-                alpha: enabled ? 1 : 0.38,
+            child: switch (label) {
+              final text? => Text(
+                text,
+                maxLines: 1,
+                style: AppTextStyles.uiSm.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+              null => Icon(icon, size: iconSize, color: foreground),
+            },
           ),
         ),
       ),

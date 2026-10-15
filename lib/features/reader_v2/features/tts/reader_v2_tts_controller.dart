@@ -7,6 +7,7 @@ import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_segmenter.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,9 +85,13 @@ class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
 
 class ReaderV2TtsController extends ChangeNotifier
     implements ReaderV2TtsSheetController {
-  ReaderV2TtsController({required this.runtime, ReaderV2TtsEngine? tts})
-    : _tts = tts ?? ReaderV2SystemTtsEngine(),
-      _ownsTtsEngine = tts == null {
+  ReaderV2TtsController({
+    required this.runtime,
+    ReaderV2TtsEngine? tts,
+    @visibleForTesting DateTime Function()? now,
+  }) : _tts = tts ?? ReaderV2SystemTtsEngine(),
+       _ownsTtsEngine = tts == null {
+    sleepTimer = ReaderV2TtsSleepTimer(onExpired: _pauseForSleep, now: now);
     _observedContentGeneration = runtime.state.contentGeneration;
     runtime.addListener(_handleRuntimeChanged);
     _tts.addListener(_handleTtsChanged);
@@ -105,11 +110,19 @@ class ReaderV2TtsController extends ChangeNotifier
   bool _handlingCompletion = false;
   bool _disposed = false;
 
+  /// 定時暫停後，播放鍵從這裡接著念；暫停時已停掉引擎，只剩這個位置。
+  ReaderV2Location? _resumeLocation;
+
+  @override
+  late final ReaderV2TtsSleepTimer sleepTimer;
+
   @override
   bool get isPlaying => _tts.isPlaying;
 
   @override
-  bool get isPaused => !_tts.isPlaying && _tts.currentSpokenText.isNotEmpty;
+  bool get isPaused =>
+      _resumeLocation != null ||
+      (!_tts.isPlaying && _tts.currentSpokenText.isNotEmpty);
 
   @override
   double get rate => _tts.rate;
@@ -137,6 +150,7 @@ class ReaderV2TtsController extends ChangeNotifier
     if (savedLanguage != null && savedLanguage.isNotEmpty) {
       await _tts.setLanguage(savedLanguage);
     }
+    await sleepTimer.load();
     notifyListeners();
   }
 
@@ -146,11 +160,30 @@ class ReaderV2TtsController extends ChangeNotifier
       await _tts.pause();
       return;
     }
+    final resumeLocation = _resumeLocation;
+    if (resumeLocation != null) {
+      _resumeLocation = null;
+      await _speakFrom(resumeLocation, generation: ++_speechGeneration);
+      return;
+    }
     if (isPaused) {
       await _tts.resume();
       return;
     }
     await startFromVisibleLocation();
+  }
+
+  /// 選單上的定時鍵：正在念就停止；否則照記住的定時開始朗讀（定時是關閉
+  /// 時改用 30 分），暫停中則從暫停處接著念。
+  Future<void> toggleTimed() async {
+    if (_tts.isPlaying) {
+      await stop();
+      return;
+    }
+    if (sleepTimer.option == ReaderV2TtsSleepOption.off) {
+      await sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+    }
+    await toggle();
   }
 
   Future<void> startFromVisibleLocation() async {
@@ -167,6 +200,7 @@ class ReaderV2TtsController extends ChangeNotifier
     final wasPlaying = _tts.isPlaying;
     if (!wasPlaying &&
         _currentSegment == null &&
+        _resumeLocation == null &&
         _tts.currentSpokenText.isEmpty) {
       return;
     }
@@ -282,6 +316,39 @@ class ReaderV2TtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// 每次通知前把播放狀態告訴定時；朗讀中引擎每個字都會通知，
+  /// [ReaderV2TtsSleepTimer.sync] 在狀態沒變時不做事。
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    sleepTimer.sync(
+      active: _currentSegment != null || _resumeLocation != null,
+      running: _currentSegment != null && !isPaused,
+    );
+    super.notifyListeners();
+  }
+
+  /// 定時到了：停在目前這句，播放鍵從這句開頭接著念。
+  void _pauseForSleep() {
+    final segment = _currentSegment;
+    if (segment == null) return;
+    _pauseAt(
+      ReaderV2Location(
+        chapterIndex: segment.chapterIndex,
+        charOffset: segment.startCharOffset,
+      ),
+    );
+  }
+
+  /// 停掉引擎並記下接著念的位置。用停止而不是引擎的暫停：句與句之間
+  /// 引擎沒有在念，暫停不會生效，下一句照樣會開始。
+  void _pauseAt(ReaderV2Location location) {
+    _speechGeneration += 1;
+    _resumeLocation = location;
+    unawaited(_tts.stop());
+    notifyListeners();
+  }
+
   void _handleRuntimeChanged() {
     final contentGeneration = runtime.state.contentGeneration;
     if (contentGeneration == _observedContentGeneration) return;
@@ -314,7 +381,8 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   Future<void> _handleSpeechCompleted() async {
-    if (_handlingCompletion || _disposed) return;
+    // 定時暫停時停掉了引擎，引擎事後補報的完成不能讓朗讀接著念下去。
+    if (_handlingCompletion || _disposed || _resumeLocation != null) return;
     final completedSegment = _currentSegment;
     if (completedSegment == null) {
       notifyListeners();
@@ -330,6 +398,17 @@ class ReaderV2TtsController extends ChangeNotifier
       final chapterIndex = completedSegment.chapterIndex + 1;
       if (chapterIndex >= runtime.chapterCount) {
         _finishSpeech(generation, notice: '已朗讀到書尾');
+        return;
+      }
+      if (sleepTimer.takeChapterEnd()) {
+        _clearSpeechStateWithoutNotify();
+        _pauseAt(
+          ReaderV2Location(
+            chapterIndex: chapterIndex,
+            charOffset: 0,
+            visualOffsetPx: runtime.state.layoutSpec.anchorOffsetInViewport,
+          ),
+        );
         return;
       }
       await _speakFrom(
@@ -395,6 +474,7 @@ class ReaderV2TtsController extends ChangeNotifier
   }
 
   void _clearSpeechStateWithoutNotify() {
+    _resumeLocation = null;
     _speechStartLocation = null;
     _segments = const <ReaderV2TtsSegment>[];
     _segmentIndex = -1;
@@ -422,6 +502,7 @@ class ReaderV2TtsController extends ChangeNotifier
     _tts.removeListener(_handleTtsChanged);
     unawaited(_tts.stop());
     if (_ownsTtsEngine) _tts.dispose();
+    sleepTimer.dispose();
     super.dispose();
   }
 }

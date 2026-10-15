@@ -12,6 +12,7 @@ import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_br
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
@@ -135,6 +136,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onMore,
     required this.onOpenDrawer,
     required this.onTts,
+    required this.onTimedTts,
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
@@ -148,6 +150,8 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubbing,
     required this.onScrubEnd,
     this.brightnessControl,
+    this.sleepTimer,
+    this.isTtsPlaying = false,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -195,6 +199,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onMore;
   final VoidCallback onOpenDrawer;
   final VoidCallback onTts;
+  final VoidCallback onTimedTts;
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
@@ -208,6 +213,8 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueChanged<double> onScrubbing;
   final ValueChanged<double> onScrubEnd;
   final Widget? brightnessControl;
+  final ReaderV2TtsSleepTimer? sleepTimer;
+  final bool isTtsPlaying;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -336,6 +343,7 @@ class ReaderV2PageShell extends StatelessWidget {
                         dayNightTooltip: dayNightTooltip,
                         onOpenDrawer: onOpenDrawer,
                         onTts: onTts,
+                        onTimedTts: onTimedTts,
                         onInterface: onInterface,
                         onSettings: onSettings,
                         onAutoPage: onAutoPage,
@@ -347,6 +355,8 @@ class ReaderV2PageShell extends StatelessWidget {
                         onScrubbing: onScrubbing,
                         onScrubEnd: onScrubEnd,
                         progressListenable: progressListenable,
+                        sleepTimer: sleepTimer,
+                        isTtsPlaying: isTtsPlaying,
                         showTts: showTts,
                         showAutoPage: showAutoPage,
                         showReplaceRule: showReplaceRule,
