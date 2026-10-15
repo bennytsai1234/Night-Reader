@@ -52,7 +52,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onScrubbing,
     required this.onScrubEnd,
     this.progressListenable,
-    this.brightnessControl,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -79,9 +78,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 章內進度的窄通道；未拖動時拖動條跟隨此值即時顯示。
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
 
-  /// 左側的亮度條，放在自動翻頁鈕正上方（右側是系統音量面板出現的位置）；
-  /// 平台不支援時為 null。
-  final Widget? brightnessControl;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -90,17 +86,15 @@ class ReaderV2BottomMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        ignoring: !controlsVisible,
-        child: AnimatedSlide(
-          duration: AppMotion.menu,
-          curve: AppMotion.menuCurve,
-          offset: controlsVisible ? Offset.zero : const Offset(0, 1.15),
-          // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+    return IgnorePointer(
+      ignoring: !controlsVisible,
+      child: AnimatedSlide(
+        duration: AppMotion.menu,
+        curve: AppMotion.menuCurve,
+        offset: controlsVisible ? Offset.zero : const Offset(0, 1.15),
+        // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+        child: ReaderV2MenuBackdrop(
+          edge: AxisDirection.down,
           child: Theme(
             data: menuStyle.toSheetTheme(Theme.of(context)),
             child: Padding(
@@ -113,10 +107,6 @@ class ReaderV2BottomMenu extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (brightnessControl case final control?) ...[
-                    Align(alignment: Alignment.centerLeft, child: control),
-                    const SizedBox(height: AppSpacing.md),
-                  ],
                   _buildFloatingButtons(context, menuStyle),
                   const SizedBox(height: AppSpacing.md),
                   GlassSurface(

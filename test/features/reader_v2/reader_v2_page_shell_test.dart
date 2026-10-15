@@ -27,6 +27,7 @@ void main() {
       left: ReaderV2InfoItem.none,
       right: ReaderV2InfoItem.none,
     ),
+    Widget? brightnessControl,
   }) async {
     showControls = 0;
     dismissControls = 0;
@@ -110,6 +111,7 @@ void main() {
             onScrubStart: noopPercent,
             onScrubbing: noopPercent,
             onScrubEnd: noopPercent,
+            brightnessControl: brightnessControl,
           ),
         ),
       ),
@@ -158,6 +160,25 @@ void main() {
 
     expect(dismissControls, 1);
     expect(showControls, 0);
+  });
+
+  testWidgets('the brightness bar fills the gap between the menus, centred', (
+    tester,
+  ) async {
+    const barKey = Key('brightness');
+    await pumpShell(
+      tester,
+      controlsVisible: true,
+      brightnessControl: const SizedBox.expand(key: barKey),
+    );
+    await tester.pumpAndSettle();
+
+    final bar = tester.getRect(find.byKey(barKey));
+    final top = tester.getRect(find.byType(ReaderV2TopMenu));
+    final bottom = tester.getRect(find.byType(ReaderV2BottomMenu));
+    expect(bar.top - top.bottom, AppSpacing.xl);
+    expect(bottom.top - bar.bottom, AppSpacing.xl);
+    expect(bar.left, AppGrouped.margin);
   });
 
   testWidgets('system back is handed to the page, not the exit flow', (

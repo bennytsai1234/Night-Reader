@@ -33,18 +33,16 @@ class ReaderV2TopMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
     final topInset = MediaQuery.paddingOf(context).top;
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        ignoring: !controlsVisible,
-        child: AnimatedSlide(
-          duration: AppMotion.menu,
-          curve: AppMotion.menuCurve,
-          // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
-          offset: controlsVisible ? Offset.zero : const Offset(0, -1.3),
-          // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+    return IgnorePointer(
+      ignoring: !controlsVisible,
+      child: AnimatedSlide(
+        duration: AppMotion.menu,
+        curve: AppMotion.menuCurve,
+        // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
+        offset: controlsVisible ? Offset.zero : const Offset(0, -1.3),
+        // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+        child: ReaderV2MenuBackdrop(
+          edge: AxisDirection.up,
           child: Theme(
             data: menuStyle.toSheetTheme(Theme.of(context)),
             child: Padding(

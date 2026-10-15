@@ -206,7 +206,8 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           value: _fontSize,
           min: 14,
           max: 40,
-          step: 1,
+          step: 0.5,
+          fractionDigits: 1,
           onChanged: (value) {
             setState(() => _fontSize = value);
             _fontSizeDirty = true;

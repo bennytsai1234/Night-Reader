@@ -8,7 +8,9 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
@@ -307,39 +309,71 @@ class ReaderV2PageShell extends StatelessWidget {
                     onDismiss: onDismissControls,
                   ),
                 ),
-              ReaderV2TopMenu(
-                controlsVisible: controlsVisible,
-                bookName: context.zh(book.name),
-                chapterTitle: chapterTitle,
-                chapterUrl: chapterUrl,
-                originName: originName,
-                showReadTitleAddition: showReadTitleAddition,
-                onBack: onExitIntent,
-                onMore: onMore,
-              ),
-              ReaderV2BottomMenu(
-                controlsVisible: controlsVisible,
-                navigation: navigation,
-                isAutoPaging: isAutoPaging,
-                dayNightIcon: dayNightIcon,
-                dayNightTooltip: dayNightTooltip,
-                onOpenDrawer: onOpenDrawer,
-                onTts: onTts,
-                onInterface: onInterface,
-                onSettings: onSettings,
-                onAutoPage: onAutoPage,
-                onToggleDayNight: onToggleDayNight,
-                onReplaceRule: onReplaceRule,
-                onPrevChapter: onPrevChapter,
-                onNextChapter: onNextChapter,
-                onScrubStart: onScrubStart,
-                onScrubbing: onScrubbing,
-                onScrubEnd: onScrubEnd,
-                progressListenable: progressListenable,
-                brightnessControl: brightnessControl,
-                showTts: showTts,
-                showAutoPage: showAutoPage,
-                showReplaceRule: showReplaceRule,
+              Positioned.fill(
+                child: CustomMultiChildLayout(
+                  delegate: _MenuLayoutDelegate(),
+                  children: [
+                    LayoutId(
+                      id: _MenuSlot.top,
+                      child: ReaderV2TopMenu(
+                        controlsVisible: controlsVisible,
+                        bookName: context.zh(book.name),
+                        chapterTitle: chapterTitle,
+                        chapterUrl: chapterUrl,
+                        originName: originName,
+                        showReadTitleAddition: showReadTitleAddition,
+                        onBack: onExitIntent,
+                        onMore: onMore,
+                      ),
+                    ),
+                    LayoutId(
+                      id: _MenuSlot.bottom,
+                      child: ReaderV2BottomMenu(
+                        controlsVisible: controlsVisible,
+                        navigation: navigation,
+                        isAutoPaging: isAutoPaging,
+                        dayNightIcon: dayNightIcon,
+                        dayNightTooltip: dayNightTooltip,
+                        onOpenDrawer: onOpenDrawer,
+                        onTts: onTts,
+                        onInterface: onInterface,
+                        onSettings: onSettings,
+                        onAutoPage: onAutoPage,
+                        onToggleDayNight: onToggleDayNight,
+                        onReplaceRule: onReplaceRule,
+                        onPrevChapter: onPrevChapter,
+                        onNextChapter: onNextChapter,
+                        onScrubStart: onScrubStart,
+                        onScrubbing: onScrubbing,
+                        onScrubEnd: onScrubEnd,
+                        progressListenable: progressListenable,
+                        showTts: showTts,
+                        showAutoPage: showAutoPage,
+                        showReplaceRule: showReplaceRule,
+                      ),
+                    ),
+                    if (brightnessControl case final control?)
+                      LayoutId(
+                        id: _MenuSlot.brightness,
+                        child: IgnorePointer(
+                          ignoring: !controlsVisible,
+                          child: AnimatedSlide(
+                            duration: AppMotion.menu,
+                            curve: AppMotion.menuCurve,
+                            // 往左滑出，多移一段讓漫射陰影也離開畫面。
+                            offset: controlsVisible
+                                ? Offset.zero
+                                : const Offset(-1.6, 0),
+                            child: Theme(
+                              data: ReaderV2MenuStyle.of(context)
+                                  .toSheetTheme(Theme.of(context)),
+                              child: control,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -348,6 +382,39 @@ class ReaderV2PageShell extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _MenuSlot { top, bottom, brightness }
+
+/// 上下選單貼齊畫面上下緣；亮度條靠左，撐滿兩者之間的空間、上下各留
+/// [AppSpacing.xl]，在上下選單之間置中。空間不夠時亮度條自己不畫
+/// （[ReaderV2BrightnessBar.minHeight]）。
+class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
+  @override
+  void performLayout(Size size) {
+    final loose = BoxConstraints.loose(size).copyWith(minWidth: size.width);
+    final top = layoutChild(_MenuSlot.top, loose);
+    positionChild(_MenuSlot.top, Offset.zero);
+    final bottom = layoutChild(_MenuSlot.bottom, loose);
+    positionChild(_MenuSlot.bottom, Offset(0, size.height - bottom.height));
+    if (!hasChild(_MenuSlot.brightness)) return;
+    final available =
+        size.height - top.height - bottom.height - AppSpacing.xl * 2;
+    layoutChild(
+      _MenuSlot.brightness,
+      BoxConstraints.tightFor(
+        width: AppGlass.buttonSize,
+        height: available < 0 ? 0 : available,
+      ),
+    );
+    positionChild(
+      _MenuSlot.brightness,
+      Offset(AppGrouped.margin, top.height + AppSpacing.xl),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_MenuLayoutDelegate oldDelegate) => false;
 }
 
 /// 頁首頁尾資訊列目前要畫什麼。
