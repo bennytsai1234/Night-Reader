@@ -54,6 +54,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   double letterSpacing = 0.0;
   int textIndent = 2;
   double paddingHorizontal = 16.0;
+  bool justifyText = ReaderV2PrefsSnapshot.defaults().justifyText;
   double paddingTop = 0.0;
   double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
   double? footerOffset;
@@ -117,6 +118,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
     clickActions = List<int>.from(snapshot.clickActions);
     paddingHorizontal = snapshot.paddingHorizontal;
+    justifyText = snapshot.justifyText;
     paddingTop = snapshot.paddingTop;
     paddingBottom = snapshot.paddingBottom;
     footerOffset = snapshot.footerOffset;
@@ -190,6 +192,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingBottom: bottom,
       paddingLeft: paddingHorizontal,
       paddingRight: paddingHorizontal,
+      justify: justifyText,
       bold: false,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
@@ -491,7 +494,19 @@ class ReaderV2SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 將邊距、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
+  void setJustifyText(bool value) {
+    if (justifyText == value) return;
+    justifyText = value;
+    _persist(
+      'justifyText',
+      () => _prefsRepository.saveJustifyText(value),
+      onSaved: (p) => p.copyWith(justifyText: value),
+      restore: (p) => justifyText = p.justifyText,
+    );
+    notifyListeners();
+  }
+
+  /// 將邊距、左右對齊、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
   void resetPageLayout() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setPagePadding(
@@ -499,6 +514,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       top: defaults.paddingTop,
       bottom: defaults.paddingBottom,
     );
+    setJustifyText(defaults.justifyText);
     setFooterOffset(defaults.footerOffset);
     setHideStatusBar(defaults.hideStatusBar);
     setHeaderInfo(defaults.headerInfo);
@@ -508,6 +524,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool get isPageLayoutDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return paddingHorizontal == defaults.paddingHorizontal &&
+        justifyText == defaults.justifyText &&
         paddingTop == defaults.paddingTop &&
         paddingBottom == defaults.paddingBottom &&
         footerOffset == defaults.footerOffset &&

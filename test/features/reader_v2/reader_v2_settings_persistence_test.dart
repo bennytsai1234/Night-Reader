@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -187,6 +188,30 @@ void main() {
       expect(settings.footerOffset, isNull);
       expect(prefs.containsKey(PreferKey.readerFooterOffset), isFalse);
       expect(settings.isPageLayoutDefault, isTrue);
+      settings.dispose();
+    },
+  );
+
+  test(
+    'justify text is on by default, persists and reaches the style',
+    () async {
+      final settings = ReaderV2SettingsController();
+      await settings.loadSettings();
+      expect(settings.justifyText, isTrue);
+      expect(settings.readStyleFor(EdgeInsets.zero).justify, isTrue);
+
+      settings.setJustifyText(false);
+      await pumpEventQueue();
+      expect(
+        (await const ReaderV2PrefsRepository().load()).justifyText,
+        isFalse,
+      );
+      expect(settings.readStyleFor(EdgeInsets.zero).justify, isFalse);
+      expect(settings.isPageLayoutDefault, isFalse);
+
+      settings.resetPageLayout();
+      await pumpEventQueue();
+      expect(settings.justifyText, isTrue);
       settings.dispose();
     },
   );

@@ -368,18 +368,30 @@ class ReaderV2ControllerHost {
     // cellWidth 只描述全形字 advance 的 typography metric。
     // ReaderV2LayoutSpec 可用它推導置中的內部 text frame，但不得用它
     // 裁切或重定義 viewport 擁有的實體 contentWidth。
-    final cellWidth = const ReaderParagraphLayout().measureCellWidth(
-      fontSize: style.fontSize,
-      letterSpacing: style.letterSpacing,
-      bold: style.bold,
-    );
+    double? measureCell(double letterSpacing) =>
+        const ReaderParagraphLayout().measureCellWidth(
+          fontSize: style.fontSize,
+          letterSpacing: letterSpacing,
+          bold: style.bold,
+        );
+    var letterSpacing = style.letterSpacing;
+    var cellWidth = measureCell(letterSpacing);
+    if (style.justify && cellWidth != null) {
+      // 左右對齊：剩下的空隙攤進字距後重量字格，文字框就撐滿內容寬。
+      letterSpacing = ReaderV2TextLayoutFrame.justifiedLetterSpacing(
+        contentWidth: size.width - style.paddingLeft - style.paddingRight,
+        cellWidth: cellWidth,
+        letterSpacing: letterSpacing,
+      );
+      cellWidth = measureCell(letterSpacing);
+    }
     return ReaderV2LayoutSpec.fromViewport(
       viewportSize: size,
       cellWidth: cellWidth,
       style: ReaderV2LayoutStyle(
         fontSize: style.fontSize,
         lineHeight: style.lineHeight,
-        letterSpacing: style.letterSpacing,
+        letterSpacing: letterSpacing,
         paragraphSpacing: style.paragraphSpacing,
         chapterSpacing: style.chapterSpacing,
         paddingTop: style.paddingTop,

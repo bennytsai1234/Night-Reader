@@ -475,6 +475,11 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 onChanged: (value) => _schedule(horizontal: value),
               ),
             ),
+            GroupedSwitchRow(
+              title: '左右對齊',
+              value: settings.justifyText,
+              onChanged: settings.setJustifyText,
+            ),
             _stepperRow(
               NumberStepperRow(
                 label: '上邊距',

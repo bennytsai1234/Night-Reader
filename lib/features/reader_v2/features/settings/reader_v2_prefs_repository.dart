@@ -26,6 +26,9 @@ class ReaderV2PrefsSnapshot {
   /// 正文左右邊距（px）。
   final double paddingHorizontal;
 
+  /// 左右對齊：一行湊不滿一個字格的空隙攤進字距，正文左右兩緣貼齊邊距。
+  final bool justifyText;
+
   /// 正文與頁首之間的距離（px）；隱藏狀態列時從鏡頭挖孔下緣算起。
   final double paddingTop;
 
@@ -66,6 +69,7 @@ class ReaderV2PrefsSnapshot {
     required this.showAddToShelfAlert,
     required this.clickActions,
     required this.paddingHorizontal,
+    required this.justifyText,
     required this.paddingTop,
     required this.paddingBottom,
     this.footerOffset,
@@ -93,6 +97,7 @@ class ReaderV2PrefsSnapshot {
       showAddToShelfAlert: true,
       clickActions: ReaderV2TapAction.defaultGrid(),
       paddingHorizontal: 16.0,
+      justifyText: true,
       paddingTop: 0.0,
       // 等同舊版頁尾上方固定的 12px 加上資訊列文字上方的空白。
       paddingBottom: 16.0,
@@ -128,6 +133,7 @@ class ReaderV2PrefsSnapshot {
     bool? showAddToShelfAlert,
     List<int>? clickActions,
     double? paddingHorizontal,
+    bool? justifyText,
     double? paddingTop,
     double? paddingBottom,
     double? Function()? footerOffset,
@@ -153,6 +159,7 @@ class ReaderV2PrefsSnapshot {
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
       paddingHorizontal: paddingHorizontal ?? this.paddingHorizontal,
+      justifyText: justifyText ?? this.justifyText,
       paddingTop: paddingTop ?? this.paddingTop,
       paddingBottom: paddingBottom ?? this.paddingBottom,
       footerOffset: footerOffset == null ? this.footerOffset : footerOffset(),
@@ -228,6 +235,8 @@ class ReaderV2PrefsRepository {
         prefs.getDouble(PreferKey.readerPaddingHorizontal),
         defaults.paddingHorizontal,
       ),
+      justifyText:
+          prefs.getBool(PreferKey.readerJustifyText) ?? defaults.justifyText,
       paddingTop: _normalizePagePadding(
         prefs.getDouble(PreferKey.readerPaddingTop),
         defaults.paddingTop,
@@ -338,6 +347,10 @@ class ReaderV2PrefsRepository {
       PreferKey.readerFooterOffset,
       await prefs.remove(PreferKey.readerFooterOffset),
     );
+  }
+
+  Future<void> saveJustifyText(bool value) {
+    return _setBool(PreferKey.readerJustifyText, value);
   }
 
   Future<void> saveHideStatusBar(bool value) {
