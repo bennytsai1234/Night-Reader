@@ -26,7 +26,7 @@
 
 ## 接下來
 
-- 若用到網路、`java.put`、Cookie 的書源在手機上仍會卡，就照 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五評估整套搬進背景。搜尋剩下的成本主要是搜尋頁本身的重建與 TLS 握手。
+- **下一次的研究題目：書源引擎搬進背景 isolate**（使用者 2026-10-15 排定）。照 ADR 0018，帶 JS 的書源在主執行緒一口氣解析，是剩下唯一會把動畫卡掉、又切不開的工作：閱讀時背景下載、書架檢查更新時的流光、開書抓沒下載過的章節都會碰到。之前研究過很久沒做成，起點是 `docs/research/source-engine-off-main-isolate.md` 的阻礙一到五（WebView 只能在主 isolate、資料庫多 isolate 共用連線、Cookie 單一擁有者、16 個呼叫端）。開工前先跟使用者確認範圍。
 - 閱讀器審查清單的「第 2 項」已結案（維持 `RenderCachedBlock.isRepaintBoundary => true`），使用者若在手機上覺得捲動掉幀再重新開題。
 
 ## 注意
