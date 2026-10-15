@@ -52,6 +52,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onScrubbing,
     required this.onScrubEnd,
     this.progressListenable,
+    this.brightnessControl,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -77,6 +78,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
 
   /// 章內進度的窄通道；未拖動時拖動條跟隨此值即時顯示。
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
+
+  /// 左側的亮度條，放在自動翻頁鈕正上方（右側是系統音量面板出現的位置）；
+  /// 平台不支援時為 null。
+  final Widget? brightnessControl;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -108,6 +113,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (brightnessControl case final control?) ...[
+                    Align(alignment: Alignment.centerLeft, child: control),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                   _buildFloatingButtons(context, menuStyle),
                   const SizedBox(height: AppSpacing.md),
                   GlassSurface(

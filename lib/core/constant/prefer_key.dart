@@ -113,7 +113,6 @@ class PreferKey {
   static const String defaultToRead = 'defaultToRead';
   static const String exportCharset = 'exportCharset';
   static const String exportUseReplace = 'exportUseReplace';
-  static const String nightBrightness = 'nightBrightness';
   static const String doublePageHorizontal = 'doubleHorizontalPage';
   static const String readUrlOpenInBrowser = 'readUrlInBrowser';
   static const String defaultBookTreeUri = 'defaultBookTreeUri';
@@ -142,7 +141,6 @@ class PreferKey {
   static const String showLastUpdateTime = 'showLastUpdateTime';
   static const String showWaitUpCount = 'showWaitUpCount';
   static const String clearWebViewData = 'clearWebViewData';
-  static const String brightnessVwPos = 'brightnessVwPos';
   static const String shrinkDatabase = 'shrinkDatabase';
   static const String batchChangeSourceDelay = 'batchChangeSourceDelay';
   static const String openBookInfoByClickTitle = 'openBookInfoByClickTitle';
@@ -194,6 +192,13 @@ class PreferKey {
   static const String readerHideStatusBar = 'reader_hide_status_bar';
   static const String readerHeaderInfo = 'reader_header_info';
   static const String readerFooterInfo = 'reader_footer_info';
+
+  /// 閱讀器亮度跟隨系統；關閉時用 [readerBrightness]。
+  static const String readerBrightnessAuto = 'reader_brightness_auto';
+
+  /// 閱讀器亮度條的位置（0–1，見 `ReaderV2Brightness`）。
+  static const String readerBrightness = 'reader_brightness';
+  static const String readerVolumeKeyPage = 'reader_volume_key_page';
 
   // Explore settings
   static const String exploreLastSource = 'explore_last_source';

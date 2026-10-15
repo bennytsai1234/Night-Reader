@@ -19,6 +19,8 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host
 import 'package:night_reader/features/reader_v2/use_cases/reader_v2_page_coordinator.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_page_exit_coordinator.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
@@ -98,8 +100,31 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       showNotice: _showNotice,
     );
     _settingsSaveFailures = _host.settings.saveFailures.listen(_showNotice);
+    _host.settings.addListener(_applyWindowBrightness);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
+    unawaited(ReaderV2DeviceChannel.setKeepScreenOn(true));
+    _applyWindowBrightness();
+  }
+
+  /// 最後一次送給原生端的背光；null 是跟隨系統。避免每次設定變動都呼叫。
+  double? _appliedBacklight;
+  bool _backlightApplied = false;
+
+  /// 依亮度設定調整這個視窗的背光（不改系統設定）。設定還沒讀到前不動，
+  /// 免得先用預設值閃一下。
+  void _applyWindowBrightness() {
+    final settings = _host.settings;
+    if (!settings.isLoaded || !ReaderV2DeviceChannel.supportsWindowBrightness) {
+      return;
+    }
+    final backlight = settings.brightnessAuto
+        ? null
+        : ReaderV2Brightness.backlightFor(settings.brightness);
+    if (_backlightApplied && backlight == _appliedBacklight) return;
+    _backlightApplied = true;
+    _appliedBacklight = backlight;
+    unawaited(ReaderV2DeviceChannel.setWindowBrightness(backlight));
   }
 
   @override
@@ -118,6 +143,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _host.settings.removeListener(_applyWindowBrightness);
+    unawaited(ReaderV2DeviceChannel.setKeepScreenOn(false));
+    if (_backlightApplied) {
+      unawaited(ReaderV2DeviceChannel.setWindowBrightness(null));
+    }
     unawaited(_settingsSaveFailures?.cancel());
     _coordinator.dispose();
     _progress.dispose();
@@ -157,6 +187,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       titleFor: _chapterTitleAt,
     );
 
+    final dim = settings.isLoaded && !settings.brightnessAuto
+        ? ReaderV2Brightness.dimFor(settings.brightness)
+        : 0.0;
     return StatusBarHidden(
       hidden: settings.hideStatusBar,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -173,80 +206,94 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               ? Brightness.light
               : Brightness.dark,
         ),
-        child: ReaderV2PageShell(
-          book: widget.book,
-          scaffoldKey: _scaffoldKey,
-          content: _buildContent(context),
-          drawer: ReaderV2ChaptersDrawer(
-            chapters: runtime?.chapters ?? widget.initialChapters,
-            currentChapterIndex: chapterIndex,
-            titleFor: _chapterTitleAt,
-            listenable: runtime,
-            onChapterTap: _jumpToChapterFromDrawer,
-          ),
-          backgroundColor: palette.readerBackground,
-          infoColor: palette.readerInfo,
-          controlsVisible: menu.controlsVisible,
-          showReadTitleAddition: settings.showReadTitleAddition,
-          hasVisibleContent: runtime != null && runtime.state.hasStableWorld,
-          // 跳到別章時頁首頁尾跟正文一起收起，正文排好再淡入。
-          isLoading:
-              runtime == null ||
-              !runtime.state.hasStableWorld ||
-              runtime.isJumpingToAnotherChapter,
-          chapterTitle: _chapterTitleAt(chapterIndex),
-          chapterUrl: _chapterUrlAt(chapterIndex),
-          originName: widget.book.originName,
-          progressListenable: _progress,
-          navigation: navigation,
-          isAutoPaging: _host.autoPage?.isRunning ?? false,
-          hideStatusBar: settings.hideStatusBar,
-          headerInfo: settings.headerInfo,
-          footerInfo: settings.footerInfo,
-          paddingTop: settings.paddingTop,
-          paddingBottom: settings.paddingBottom,
-          footerOffset: settings.footerOffset,
-          topCutoutExtent: _topCutoutExtent,
-          dayNightIcon: isDarkBackground
-              ? Icons.light_mode_rounded
-              : Icons.dark_mode_rounded,
-          dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
-          onExitIntent: _handleExitIntent,
-          onSystemBack: _handleSystemBack,
-          onMore: () => unawaited(_showMore()),
-          onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-          onTts: _showTts,
-          onInterface: () =>
-              ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
-          onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
-            context,
-            settings,
-            onChangeSource: widget.book.isLocal ? null : _showChangeSource,
-          ),
-          onAutoPage: _coordinator.toggleAutoPage,
-          // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
-          onToggleDayNight: () => ThemeRevealScope.of(context).run(
-            change: () => context.read<SettingsProvider>().setThemeMode(
-              isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+        child: _DimOverlay(
+          dim: ReaderV2DeviceChannel.supportsWindowBrightness ? dim : 0,
+          child: ReaderV2PageShell(
+            book: widget.book,
+            scaffoldKey: _scaffoldKey,
+            content: _buildContent(context),
+            drawer: ReaderV2ChaptersDrawer(
+              chapters: runtime?.chapters ?? widget.initialChapters,
+              currentChapterIndex: chapterIndex,
+              titleFor: _chapterTitleAt,
+              listenable: runtime,
+              onChapterTap: _jumpToChapterFromDrawer,
             ),
+            backgroundColor: palette.readerBackground,
+            infoColor: palette.readerInfo,
+            controlsVisible: menu.controlsVisible,
+            showReadTitleAddition: settings.showReadTitleAddition,
+            hasVisibleContent: runtime != null && runtime.state.hasStableWorld,
+            // 跳到別章時頁首頁尾跟正文一起收起，正文排好再淡入。
+            isLoading:
+                runtime == null ||
+                !runtime.state.hasStableWorld ||
+                runtime.isJumpingToAnotherChapter,
+            chapterTitle: _chapterTitleAt(chapterIndex),
+            chapterUrl: _chapterUrlAt(chapterIndex),
+            originName: widget.book.originName,
+            progressListenable: _progress,
+            navigation: navigation,
+            isAutoPaging: _host.autoPage?.isRunning ?? false,
+            hideStatusBar: settings.hideStatusBar,
+            headerInfo: settings.headerInfo,
+            footerInfo: settings.footerInfo,
+            paddingTop: settings.paddingTop,
+            paddingBottom: settings.paddingBottom,
+            footerOffset: settings.footerOffset,
+            topCutoutExtent: _topCutoutExtent,
+            dayNightIcon: isDarkBackground
+                ? Icons.light_mode_rounded
+                : Icons.dark_mode_rounded,
+            dayNightTooltip: isDarkBackground ? '切換淺色模式' : '切換深色模式',
+            onExitIntent: _handleExitIntent,
+            onSystemBack: _handleSystemBack,
+            onMore: () => unawaited(_showMore()),
+            onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+            onTts: _showTts,
+            onInterface: () =>
+                ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
+            onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
+              context,
+              settings,
+              onChangeSource: widget.book.isLocal ? null : _showChangeSource,
+            ),
+            onAutoPage: _coordinator.toggleAutoPage,
+            // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
+            onToggleDayNight: () => ThemeRevealScope.of(context).run(
+              change: () => context.read<SettingsProvider>().setThemeMode(
+                isDarkBackground ? ThemeMode.light : ThemeMode.dark,
+              ),
+            ),
+            onReplaceRule: () => _coordinator.openReplaceRule(context),
+            onShowControls: menu.showControls,
+            onDismissControls: menu.dismissControls,
+            onPrevChapter: () =>
+                unawaited(_coordinator.jumpRelativeChapter(-1)),
+            onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
+            onScrubStart: menu.onScrubStart,
+            onScrubbing: (percent) {
+              menu.onScrubbing(percent);
+              _coordinator.previewChapterPercent(percent);
+            },
+            onScrubEnd: (percent) {
+              menu.onScrubEnd(percent);
+              unawaited(_coordinator.commitChapterPercent(percent));
+            },
+            brightnessControl: ReaderV2DeviceChannel.supportsWindowBrightness
+                ? ReaderV2BrightnessBar(
+                    auto: settings.brightnessAuto,
+                    level: settings.brightness,
+                    onAutoChanged: settings.setBrightnessAuto,
+                    onChanged: (level) =>
+                        settings.setBrightness(level, persist: false),
+                    onChangeEnd: settings.setBrightness,
+                  )
+                : null,
+            showTts: true,
+            showAutoPage: true,
+            showReplaceRule: true,
           ),
-          onReplaceRule: () => _coordinator.openReplaceRule(context),
-          onShowControls: menu.showControls,
-          onDismissControls: menu.dismissControls,
-          onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
-          onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
-          onScrubStart: menu.onScrubStart,
-          onScrubbing: (percent) {
-            menu.onScrubbing(percent);
-            _coordinator.previewChapterPercent(percent);
-          },
-          onScrubEnd: (percent) {
-            menu.onScrubEnd(percent);
-            unawaited(_coordinator.commitChapterPercent(percent));
-          },
-          showTts: true,
-          showAutoPage: true,
-          showReplaceRule: true,
         ),
       ),
     );
@@ -600,3 +647,25 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 }
 
 enum _ReaderMoreAction { globalSettings }
+
+/// 亮度拉進加暗段時疊在整個閱讀畫面（含選單）上的黑色；不攔點擊。
+class _DimOverlay extends StatelessWidget {
+  const _DimOverlay({required this.dim, required this.child});
+
+  final double dim;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (dim <= 0) return child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        IgnorePointer(
+          child: ColoredBox(color: Colors.black.withValues(alpha: dim)),
+        ),
+      ],
+    );
+  }
+}
