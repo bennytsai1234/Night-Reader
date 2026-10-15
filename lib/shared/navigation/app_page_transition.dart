@@ -10,8 +10,9 @@ import 'package:flutter/services.dart';
 /// 全 App 換頁共用的轉場，在「外觀與主題 → 換頁動畫」選擇。
 ///
 /// 每一種都照來源 App 的參數：開啟與返回各自用減速曲線（先快後慢），返回
-/// 不是開啟倒著播。往右拖返回（左緣右滑、Android 系統的預測返回）不分
-/// 哪一種，一律是 [slide] 的跟手平移，放開後照 Telegram 的門檻與時長收尾。
+/// 不是開啟倒著播。往右拖返回（左緣右滑、Android 系統的預測返回）也照選的
+/// 那一種返回的樣子跟著拖曳進度走（ADR 0020），放開後照 Telegram 的門檻與
+/// 時長收尾。
 enum AppPageTransition {
   /// 新頁從下方上浮 4% 並淡入，底下的頁面微暗 6%。
   paper('上浮', Duration(milliseconds: 280)),
@@ -537,21 +538,30 @@ class _AppTransitionState extends State<_AppTransition>
       ]),
       child: widget.child,
       builder: (context, child) {
-        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手平移。
+        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
         final gesturing = _route.popGestureInProgress;
         if (still && !gesturing) return child!;
         final size = MediaQuery.sizeOf(context);
         final background = Theme.of(context).scaffoldBackgroundColor;
+        final origin = TransitionOrigin.of(_route);
         final top = gesturing
-            ? _TopPose.slide(widget.animation.value)
+            ? _TopPose.follow(
+                widget.transition,
+                widget.animation.value,
+                size: size,
+                origin: origin,
+              )
             : _TopPose.of(
                 widget.transition,
                 trip: _top.of(widget.animation),
                 size: size,
-                origin: TransitionOrigin.of(_route),
+                origin: origin,
               );
         final under = gesturing
-            ? _UnderPose.slide(widget.secondaryAnimation.value)
+            ? _UnderPose.follow(
+                widget.transition,
+                widget.secondaryAnimation.value,
+              )
             : _UnderPose.of(
                 widget.transition,
                 trip: _under.of(widget.secondaryAnimation),
@@ -746,18 +756,64 @@ class _TopPose {
                 opacity: _interval(time, 0.3, 1, Easing.legacyDecelerate),
               );
       case AppPageTransition.expand:
-        final v = shown(_Curves.telegramSpring);
-        final full = Offset.zero & size;
-        final from = origin ?? TransitionOrigin._around(full.center);
-        return _TopPose(
-          frame: v >= 1
-              ? null
-              : (
-                  rect: Rect.lerp(from.rect, full, v)!,
-                  radius: lerpDouble(from.radius, ScreenCorner.radius, v)!,
-                ),
+        return _TopPose.expand(
+          shown(_Curves.telegramSpring),
+          size: size,
+          origin: origin,
         );
     }
+  }
+
+  /// 拖曳返回中露出 [shown]（1 為整頁）時的樣子：照這一種返回的幾何，位置、
+  /// 縮放與透明度都和拖曳進度成正比，不套時間曲線，頁面才會跟著手指走。
+  factory _TopPose.follow(
+    AppPageTransition transition,
+    double shown, {
+    required Size size,
+    required TransitionSourceRect? origin,
+  }) {
+    final gone = 1 - shown;
+    switch (transition) {
+      case AppPageTransition.paper:
+        return _TopPose(
+          fractionalOffset: Offset(0, 0.04 * gone),
+          opacity: shown,
+        );
+      case AppPageTransition.slide:
+      case AppPageTransition.slideCrisp:
+        return _TopPose.slide(shown);
+      case AppPageTransition.glide:
+        return _TopPose(offset: Offset(48 * gone, 0), opacity: shown);
+      case AppPageTransition.forward:
+        return _TopPose(
+          fractionalOffset: Offset(0.25 * gone, 0),
+          opacity: shown,
+        );
+      case AppPageTransition.cover:
+      case AppPageTransition.zoom:
+        return _TopPose(scale: 1 - 0.2 * gone, opacity: shown);
+      case AppPageTransition.expand:
+        return _TopPose.expand(shown, size: size, origin: origin);
+    }
+  }
+
+  /// iOS 18 縮放：整頁等比縮在起點裡，從那裡長成整頁、圓角由起點變成螢幕
+  /// 圓角。
+  factory _TopPose.expand(
+    double shown, {
+    required Size size,
+    required TransitionSourceRect? origin,
+  }) {
+    final full = Offset.zero & size;
+    final from = origin ?? TransitionOrigin._around(full.center);
+    return _TopPose(
+      frame: shown >= 1
+          ? null
+          : (
+              rect: Rect.lerp(from.rect, full, shown)!,
+              radius: lerpDouble(from.radius, ScreenCorner.radius, shown)!,
+            ),
+    );
   }
 
   final Offset offset;
@@ -896,6 +952,30 @@ class _UnderPose {
               );
       case AppPageTransition.expand:
         return _UnderPose(dim: 0.12 * covered(_Curves.telegramSpring));
+    }
+  }
+
+  /// 拖曳返回中被蓋住 [covered]（1 為完全蓋住）時的樣子，和
+  /// [_TopPose.follow] 一樣照這一種返回的幾何、和拖曳進度成正比。
+  factory _UnderPose.follow(AppPageTransition transition, double covered) {
+    switch (transition) {
+      case AppPageTransition.paper:
+        return _UnderPose(dim: 0.06 * covered);
+      case AppPageTransition.slide:
+      case AppPageTransition.slideCrisp:
+        return _UnderPose.slide(covered);
+      case AppPageTransition.glide:
+        return const _UnderPose();
+      case AppPageTransition.forward:
+      case AppPageTransition.cover:
+        return _UnderPose(
+          fractionalOffset: Offset(-0.25 * covered, 0),
+          opacity: 1 - covered,
+        );
+      case AppPageTransition.zoom:
+        return _UnderPose(scale: 1 + 0.1 * covered, opacity: 1 - covered);
+      case AppPageTransition.expand:
+        return _UnderPose(dim: 0.12 * covered);
     }
   }
 
