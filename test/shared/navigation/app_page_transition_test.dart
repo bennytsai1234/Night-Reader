@@ -349,7 +349,9 @@ void main() {
       await push(tester);
       await send(tester, 'startBackGesture', event(0, 0));
       await send(tester, 'updateBackGestureProgress', event(200, 0.5));
+      // 進度照觸控重新取樣晚 38ms 才畫到。
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
       expect(tester.getCenter(find.text('新頁')).dx, closeTo(800, 1));
       expect(find.text('主頁'), findsOneWidget);
 
@@ -359,6 +361,32 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200 + 16));
       await tester.pump();
       expect(find.text('新頁'), findsNothing);
+    });
+
+    testWidgets('a slow gesture moves the page every frame', (tester) async {
+      await pumpApp(tester, AppPageTransition.slide);
+      await push(tester);
+      await send(tester, 'startBackGesture', event(0, 0));
+      // 手指慢：系統每 32ms 才送一次，一次 1%（8px）；畫面每 8ms 一格。
+      final xs = <double>[];
+      for (var i = 1; i <= 12; i++) {
+        await send(
+          tester,
+          'updateBackGestureProgress',
+          event(8.0 * i, 0.01 * i),
+        );
+        for (var frame = 0; frame < 4; frame++) {
+          await tester.pump(const Duration(milliseconds: 8));
+          xs.add(tester.getCenter(find.text('新頁')).dx);
+        }
+      }
+      // 開頭留一段給取樣延遲，之後每一格都往右移、步幅一樣。
+      final steps = [for (var i = 8; i < xs.length; i++) xs[i] - xs[i - 1]];
+      for (final step in steps) {
+        expect(step, closeTo(8 / 4, 0.01));
+      }
+      await send(tester, 'cancelBackGesture');
+      await tester.pumpAndSettle();
     });
 
     testWidgets('a cancelled gesture puts the page back', (tester) async {
