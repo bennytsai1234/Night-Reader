@@ -9,6 +9,7 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
@@ -36,6 +37,7 @@ enum _BookshelfBatchAction { download, ensureComplete, checkUpdate, delete }
 enum _ShelfMenuAction {
   gridView,
   listView,
+  unifiedCovers,
   select,
   export,
   search,
@@ -231,6 +233,12 @@ class _BookshelfPageState extends State<BookshelfPage>
         icon: Icons.view_list_outlined,
         checked: !provider.isGridView,
       ),
+      GlassMenuItem(
+        value: _ShelfMenuAction.unifiedCovers,
+        label: '統一封面',
+        icon: Icons.nights_stay_outlined,
+        checked: provider.unifiedCovers,
+      ),
       const GlassMenuDivider(),
       for (final mode in BookshelfSortMode.values)
         GlassMenuItem(
@@ -288,6 +296,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(true);
       case _ShelfMenuAction.listView:
         provider.setGridView(false);
+      case _ShelfMenuAction.unifiedCovers:
+        provider.setUnifiedCovers(!provider.unifiedCovers);
       case _ShelfMenuAction.select:
         _enterEditMode();
       case _ShelfMenuAction.search:
@@ -813,7 +823,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         ? BookCoverWidget(
             bookName: context.zh(book.name),
             author: book.author,
-            coverUrl: book.getDisplayCover(),
+            coverUrl: UnifiedCovers.coverOf(book),
             width: sourceRect.width,
             height: sourceRect.height,
             borderRadius: AppRadius.cardXs,

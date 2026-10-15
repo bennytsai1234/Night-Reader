@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
@@ -157,16 +158,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
-  /// 封面氛圍的圖；沒有封面時為 null，頁首也就維持實色。
-  ImageProvider? _ambienceOf(BookDetailProvider provider) =>
-      BookCoverAmbience.imageOf(provider.book.getDisplayCover());
+  /// 有沒有封面氛圍；沒有時頁首維持實色。
+  bool _hasAmbience(BookDetailProvider provider) =>
+      BookCoverAmbience.supports(UnifiedCovers.coverOf(provider.book));
 
   /// 書名、作者與封面一進頁就畫出，載入中只有
   /// 動作按鈕與頁首以下顯示骨架；資料到了以淡入取代。
   Widget _buildContent(BuildContext context, BookDetailProvider provider) {
     final currentBook = provider.book;
     final padding = MediaQuery.paddingOf(context);
-    final ambience = _ambienceOf(provider);
+    final ambience = _hasAmbience(provider);
     final loading = provider.isLoading;
     final chapters = provider.filteredChapters;
     return ChapterScrollbar(
@@ -186,14 +187,17 @@ class _BookDetailPageState extends State<BookDetailPage> {
           SliverToBoxAdapter(
             child: Stack(
               children: [
-                if (ambience != null)
+                if (ambience)
                   Positioned(
                     left: 0,
                     top: 0,
                     right: 0,
                     // 書名之前完全漸隱成底色，書名與作者畫在純底色上。
                     height: padding.top + BookInfoHeader.titleTop,
-                    child: BookCoverAmbience(image: ambience),
+                    child: BookCoverAmbience(
+                      coverUrl: UnifiedCovers.coverOf(currentBook),
+                      bookName: context.zh(currentBook.name),
+                    ),
                   ),
                 Padding(
                   padding: EdgeInsets.only(top: padding.top),
@@ -386,7 +390,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     GlassNavHeader header(Color background) =>
         _buildNavHeader(context, provider, background, failed: failed);
     // 沒有封面氛圍時頁首維持實色；有的話跟著捲動由透明轉實色。
-    if (failed || _ambienceOf(provider) == null) return header(background);
+    if (failed || !_hasAmbience(provider)) return header(background);
     return PreferredSize(
       preferredSize: header(background).preferredSize,
       child: ValueListenableBuilder<double>(

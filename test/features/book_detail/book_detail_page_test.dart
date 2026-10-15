@@ -9,6 +9,8 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/book_cover_ambience.dart';
 import 'package:night_reader/features/book_detail/widgets/book_info_header.dart';
@@ -113,8 +115,8 @@ void main() {
           of: find.byType(BookInfoHeader),
           matching: find.text('夜讀測試書'),
         ),
-        // 書名一次，沒有封面圖時的文字封面一次。
-        findsNWidgets(2),
+        // 沒有封面圖時的預設封面不放文字，書名只出現一次。
+        findsOneWidget,
       );
       expect(find.text('某作者'), findsOneWidget);
       expect(find.byType(SkeletonBox), findsWidgets);
@@ -221,15 +223,71 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('without a cover there is no ambience and the header is solid', (
+  testWidgets('without a cover the ambience comes from the default cover', (
     tester,
   ) async {
     await pumpDetail(tester, bookWith());
 
-    expect(find.byType(BookCoverAmbience), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(BookCoverAmbience),
+        matching: find.byType(DefaultBookCover),
+      ),
+      findsOneWidget,
+    );
     final header = tester.widget<GlassNavHeader>(find.byType(GlassNavHeader));
-    expect(header.backgroundColor!.a, 1);
+    expect(header.backgroundColor!.a, 0);
 
+    bookDao.gate.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'a cover only held in memory has no ambience and a solid header',
+    (tester) async {
+      await pumpDetail(tester, bookWith(coverUrl: 'memory://cover'));
+
+      expect(find.byType(BookCoverAmbience), findsNothing);
+      final header = tester.widget<GlassNavHeader>(find.byType(GlassNavHeader));
+      expect(header.backgroundColor!.a, 1);
+
+      bookDao.gate.complete();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('unified covers draw the default cover for shelf books only', (
+    tester,
+  ) async {
+    UnifiedCovers.enabled.value = true;
+    addTearDown(() => UnifiedCovers.enabled.value = false);
+    const cover = 'file:///no/such/cover.jpg';
+
+    String? headerCover() => tester
+        .widget<BookCoverWidget>(
+          find.descendant(
+            of: find.byType(BookInfoHeader),
+            matching: find.byType(BookCoverWidget),
+          ),
+        )
+        .coverUrl;
+
+    await pumpDetail(tester, bookWith(coverUrl: cover));
+    expect(headerCover(), isNull);
+    expect(
+      find.descendant(
+        of: find.byType(BookCoverAmbience),
+        matching: find.byType(DefaultBookCover),
+      ),
+      findsOneWidget,
+    );
+    bookDao.gate.complete();
+    await tester.pumpAndSettle();
+
+    // 換一本不在書架上的書：先拆掉上一頁，免得沿用它的 provider。
+    await tester.pumpWidget(const SizedBox());
+    await pumpDetail(tester, bookWith(coverUrl: cover)..isInBookshelf = false);
+    expect(headerCover(), cover);
     bookDao.gate.complete();
     await tester.pumpAndSettle();
   });
