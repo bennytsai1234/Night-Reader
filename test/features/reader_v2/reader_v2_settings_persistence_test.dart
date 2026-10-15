@@ -194,7 +194,7 @@ void main() {
     () async {
       final defaults = await const ReaderV2PrefsRepository().load();
       expect(defaults.brightnessAuto, isTrue);
-      expect(defaults.volumeKeyPage, isTrue);
+      expect(defaults.volumeKeyPage, isFalse);
 
       final settings = ReaderV2SettingsController();
       await settings.loadSettings();
@@ -205,14 +205,14 @@ void main() {
       expect(mid.brightness, ReaderV2Brightness.defaultLevel);
 
       settings.setBrightness(0.2);
-      settings.setVolumeKeyPage(false);
+      settings.setVolumeKeyPage(true);
       await pumpEventQueue();
       settings.dispose();
 
       final reloaded = await const ReaderV2PrefsRepository().load();
       expect(reloaded.brightnessAuto, isFalse);
       expect(reloaded.brightness, closeTo(0.2, 1e-9));
-      expect(reloaded.volumeKeyPage, isFalse);
+      expect(reloaded.volumeKeyPage, isTrue);
     },
   );
 

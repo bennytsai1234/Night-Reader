@@ -111,7 +111,7 @@ class ReaderV2PrefsSnapshot {
       highlightStrength: ReaderV2HighlightStrength.defaultValue,
       brightnessAuto: true,
       brightness: ReaderV2Brightness.defaultLevel,
-      volumeKeyPage: true,
+      volumeKeyPage: false,
     );
   }
 
