@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,17 +39,21 @@ void main() {
     expect(calls, ['setKeepScreenOn(true)', 'setWindowBrightness(0.3)']);
 
     calls.clear();
-    showModalBottomSheet<void>(
-      context: navigator.currentContext!,
-      builder: (_) => const SizedBox(height: 200),
+    unawaited(
+      showModalBottomSheet<void>(
+        context: navigator.currentContext!,
+        builder: (_) => const SizedBox(height: 200),
+      ),
     );
     await tester.pumpAndSettle();
     expect(calls, isEmpty, reason: 'a sheet over the reader is still reading');
     navigator.currentState!.pop();
     await tester.pumpAndSettle();
 
-    navigator.currentState!.push(
-      MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+    unawaited(
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+      ),
     );
     await tester.pumpAndSettle();
     expect(calls, ['setKeepScreenOn(false)', 'setWindowBrightness(null)']);
