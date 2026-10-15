@@ -10,6 +10,7 @@ import 'package:night_reader/core/services/book_cover_storage_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
+import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
@@ -253,11 +254,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
             onTts: _showTts,
             onInterface: () =>
                 ReaderV2SettingsSheets.showInterfaceSettings(context, settings),
-            onSettings: () => ReaderV2SettingsSheets.showAdvancedSettings(
-              context,
-              settings,
-              onChangeSource: widget.book.isLocal ? null : _showChangeSource,
-            ),
+            onSettings: () =>
+                ReaderV2SettingsSheets.showAdvancedSettings(context, settings),
             onAutoPage: _coordinator.toggleAutoPage,
             // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
             onToggleDayNight: () => ThemeRevealScope.of(context).run(
@@ -464,10 +462,28 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 
   Future<void> _showMore() async {
+    final isLocal = widget.book.isLocal;
     final action = await showAppActionSheet<_ReaderMoreAction>(
       context: context,
-      actions: const [
-        AppSheetAction(
+      actions: [
+        if (!isLocal) ...const [
+          AppSheetAction(
+            label: '換源',
+            icon: Icons.swap_horiz_rounded,
+            value: _ReaderMoreAction.changeSource,
+          ),
+          AppSheetAction(
+            label: '重新取得本章',
+            icon: Icons.refresh_rounded,
+            value: _ReaderMoreAction.refetchChapter,
+          ),
+        ],
+        const AppSheetAction(
+          label: '書籍詳情',
+          icon: Icons.info_outline_rounded,
+          value: _ReaderMoreAction.bookDetail,
+        ),
+        const AppSheetAction(
           label: '全域系統設定',
           icon: Icons.settings_suggest_rounded,
           value: _ReaderMoreAction.globalSettings,
@@ -476,6 +492,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     );
     if (!mounted || action == null) return;
     switch (action) {
+      case _ReaderMoreAction.changeSource:
+        _host.menu.dismissControls();
+        await _showChangeSource();
+      case _ReaderMoreAction.refetchChapter:
+        _host.menu.dismissControls();
+        await _refetchCurrentChapter();
+      case _ReaderMoreAction.bookDetail:
+        await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
         await Navigator.push(
           context,
@@ -485,6 +509,37 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
         if (mounted) unawaited(_host.settings.loadSettings());
     }
+  }
+
+  /// 書源回了擋爬蟲頁或不完整的正文時，向書源重抓這一章、停在原位；
+  /// 抓不到時保留原本的正文並顯示原因。
+  Future<void> _refetchCurrentChapter() async {
+    final runtime = _host.runtime;
+    if (runtime == null || !runtime.state.hasStableWorld) return;
+    _showNotice('正在重新取得本章…');
+    final succeeded = await runtime.reloadContentPreservingLocation(
+      refetch: true,
+    );
+    if (mounted && succeeded) _showNotice('已重新取得本章');
+  }
+
+  /// 從閱讀器開的詳情：點章節回來跳到那一章，按閱讀鈕直接回來。
+  Future<void> _showBookDetail() async {
+    final flushed = await _host.flushProgress();
+    if (!mounted) return;
+    final index = flushed?.chapterIndex ?? _currentChapterIndex(_host.runtime);
+    final book = widget.book.copyWith(
+      chapterIndex: index,
+      durChapterTitle: _rawChapterTitleAt(index),
+    );
+    final target = await Navigator.of(context).push<int>(
+      MaterialPageRoute(
+        builder: (_) => BookDetailPage(book: book, fromReader: true),
+      ),
+    );
+    if (!mounted || target == null) return;
+    _host.menu.dismissControls();
+    await _coordinator.jumpToChapter(target);
   }
 
   void _showTts() {
@@ -646,7 +701,12 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   }
 }
 
-enum _ReaderMoreAction { globalSettings }
+enum _ReaderMoreAction {
+  changeSource,
+  refetchChapter,
+  bookDetail,
+  globalSettings,
+}
 
 /// 亮度拉進加暗段時疊在整個閱讀畫面（含選單）上的黑色；不攔點擊。
 class _DimOverlay extends StatelessWidget {

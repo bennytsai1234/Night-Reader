@@ -44,8 +44,17 @@ class BookDetailPage extends StatefulWidget {
   final Book? book;
   final AggregatedSearchBook? searchBook;
 
-  const BookDetailPage({super.key, this.book, this.searchBook})
-    : assert(book != null || searchBook != null);
+  /// 從閱讀器的「更多」開啟：閱讀鈕與點目錄回到原本的閱讀器（點章節時以
+  /// 章節序號為結果 pop），不另開一個閱讀器；加入／移出書架與換源留給
+  /// 閱讀器自己處理，這裡不顯示，免得刪掉正在讀的正文或換掉書。
+  final bool fromReader;
+
+  const BookDetailPage({
+    super.key,
+    this.book,
+    this.searchBook,
+    this.fromReader = false,
+  }) : assert(book != null || searchBook != null);
 
   @override
   State<BookDetailPage> createState() => _BookDetailPageState();
@@ -130,12 +139,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
             bottomNavigationBar: BookReadCapsule(
               started: provider.book.hasStartedReading,
               visible: provider.hasReadyWorld,
-              onPressed: () => _navigateToReader(
-                context,
-                provider.book,
-                ReaderV2OpenTarget.resume(provider.book),
-                provider.allChapters,
-              ),
+              onPressed: widget.fromReader
+                  ? () => Navigator.of(context).pop()
+                  : () => _navigateToReader(
+                      context,
+                      provider.book,
+                      ReaderV2OpenTarget.resume(provider.book),
+                      provider.allChapters,
+                    ),
             ),
           );
         },
@@ -176,9 +187,10 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   provider: provider,
                   loading: loading,
                   showPhotoView: _showPhotoView,
-                  onToggleBookshelf: () =>
-                      _handleBookshelfToggle(context, provider),
-                  onChangeSource: currentBook.isLocal
+                  onToggleBookshelf: widget.fromReader
+                      ? null
+                      : () => _handleBookshelfToggle(context, provider),
+                  onChangeSource: currentBook.isLocal || widget.fromReader
                       ? null
                       : () => _showChangeSourceDialog(context, provider),
                   onShowToc: _scrollToToc,
@@ -298,12 +310,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   title: ctx.zh(chapter.title),
                   isCurrent: isCurrent,
                   isLocked: chapter.isLocked,
-                  onTap: () => _navigateToReader(
-                    context,
-                    currentBook,
-                    ReaderV2OpenTarget.chapterStart(chapter.index),
-                    provider.allChapters,
-                  ),
+                  onTap: widget.fromReader
+                      ? () => Navigator.of(context).pop(chapter.index)
+                      : () => _navigateToReader(
+                          context,
+                          currentBook,
+                          ReaderV2OpenTarget.chapterStart(chapter.index),
+                          provider.allChapters,
+                        ),
                 ),
               );
             }, childCount: chapters.length),

@@ -3,12 +3,10 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_she
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
-import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
-import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
@@ -30,16 +28,12 @@ class ReaderV2SettingsSheets {
 
   static void showAdvancedSettings(
     BuildContext context,
-    ReaderV2SettingsController settings, {
-    VoidCallback? onChangeSource,
-  }) {
+    ReaderV2SettingsController settings,
+  ) {
     ReaderV2MenuSheet.show<void>(
       context,
       settings: settings,
-      builder: (_) => _ReaderAdvancedSheet(
-        settings: settings,
-        onChangeSource: onChangeSource,
-      ),
+      builder: (_) => _ReaderAdvancedSheet(settings: settings),
     );
   }
 }
@@ -163,36 +157,15 @@ class _ReaderStyleSelector extends StatelessWidget {
 }
 
 class _ReaderAdvancedSheet extends StatelessWidget {
-  const _ReaderAdvancedSheet({required this.settings, this.onChangeSource});
+  const _ReaderAdvancedSheet({required this.settings});
 
   final ReaderV2SettingsController settings;
-  final VoidCallback? onChangeSource;
 
   @override
   Widget build(BuildContext context) {
-    final changeSource = onChangeSource;
     return ReaderV2SheetScaffold(
       title: '進階設定',
       children: [
-        if (changeSource != null)
-          // 和下方各區塊一樣用分組卡片，不用 DESIGN 已不使用的 ListTile。
-          GroupedSection(
-            header: '書源',
-            margin: EdgeInsets.zero,
-            children: [
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.swap_horiz_rounded,
-                  tint: AppTint.azurite,
-                ),
-                title: '換源',
-                onTap: () {
-                  Navigator.pop(context);
-                  changeSource();
-                },
-              ),
-            ],
-          ),
         ReaderV2AutoPageSection(settings: settings),
         ReaderV2ChineseConvertSection(settings: settings),
         ReaderV2ClickActionSection(settings: settings),
