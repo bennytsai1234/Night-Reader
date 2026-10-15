@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 各風格的系統啟動畫面（Android 13 起由 MainActivity.setLaunchTheme 選用）：
+         LaunchTheme.<風格> 跟隨系統深淺，.Light／.Dark 給 App 內固定深淺時用。
+         圖示與其他屬性繼承 LaunchTheme。 -->
+    <style name="LaunchTheme.Paper">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper</item>
+    </style>
+    <style name="LaunchTheme.Paper.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_light</item>
+    </style>
+    <style name="LaunchTheme.Paper.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_paper_dark</item>
+    </style>
+    <style name="LaunchTheme.Bamboo">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo</item>
+    </style>
+    <style name="LaunchTheme.Bamboo.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_light</item>
+    </style>
+    <style name="LaunchTheme.Bamboo.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_bamboo_dark</item>
+    </style>
+    <style name="LaunchTheme.Azurite">
+        <item name="android:windowSplashScreenBackground">@color/launch_azurite</item>
+    </style>
+    <style name="LaunchTheme.Azurite.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_azurite_light</item>
+    </style>
+    <style name="LaunchTheme.Azurite.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_azurite_dark</item>
+    </style>
+    <style name="LaunchTheme.Tea">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea</item>
+    </style>
+    <style name="LaunchTheme.Tea.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_light</item>
+    </style>
+    <style name="LaunchTheme.Tea.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_tea_dark</item>
+    </style>
+    <style name="LaunchTheme.Plain">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain</item>
+    </style>
+    <style name="LaunchTheme.Plain.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_light</item>
+    </style>
+    <style name="LaunchTheme.Plain.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_plain_dark</item>
+    </style>
+    <style name="LaunchTheme.Rouge">
+        <item name="android:windowSplashScreenBackground">@color/launch_rouge</item>
+    </style>
+    <style name="LaunchTheme.Rouge.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_rouge_light</item>
+    </style>
+    <style name="LaunchTheme.Rouge.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_rouge_dark</item>
+    </style>
+    <style name="LaunchTheme.Lotus">
+        <item name="android:windowSplashScreenBackground">@color/launch_lotus</item>
+    </style>
+    <style name="LaunchTheme.Lotus.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_lotus_light</item>
+    </style>
+    <style name="LaunchTheme.Lotus.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_lotus_dark</item>
+    </style>
+    <style name="LaunchTheme.Scroll">
+        <item name="android:windowSplashScreenBackground">@color/launch_scroll</item>
+    </style>
+    <style name="LaunchTheme.Scroll.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_scroll_light</item>
+    </style>
+    <style name="LaunchTheme.Scroll.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_scroll_dark</item>
+    </style>
+    <style name="LaunchTheme.Amber">
+        <item name="android:windowSplashScreenBackground">@color/launch_amber</item>
+    </style>
+    <style name="LaunchTheme.Amber.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_amber_light</item>
+    </style>
+    <style name="LaunchTheme.Amber.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_amber_dark</item>
+    </style>
+    <style name="LaunchTheme.Frost">
+        <item name="android:windowSplashScreenBackground">@color/launch_frost</item>
+    </style>
+    <style name="LaunchTheme.Frost.Light">
+        <item name="android:windowSplashScreenBackground">@color/launch_frost_light</item>
+    </style>
+    <style name="LaunchTheme.Frost.Dark">
+        <item name="android:windowSplashScreenBackground">@color/launch_frost_dark</item>
+    </style>
+</resources>

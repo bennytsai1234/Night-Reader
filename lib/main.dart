@@ -25,6 +25,7 @@ import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
 import 'shared/widgets/theme_reveal_scope.dart';
 import 'features/association/association_handler_service.dart';
+import 'features/settings/launch_screen_theme_sync.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
@@ -33,8 +34,6 @@ import 'core/engine/web_book/parse_worker.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
-
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 Future<bool> runBackgroundTask<T>({
   required Future<void> Function() initialize,
@@ -90,9 +89,8 @@ void main() {
 }
 
 Future<void> _startApp() async {
-  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   GestureBinding.instance.resamplingEnabled = true;
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   AppLog.i('WidgetsFlutterBinding Initialized');
   // 啟動失敗後的重試會再跑一次 _startApp；授權只註冊一次，授權頁才不會重複。
   if (!_punctLicenseRegistered) {
@@ -119,9 +117,6 @@ Future<void> _startApp() async {
     AppLog.i('Dependencies Configured Successfully');
 
     FlutterError.onError = (details) {
-      // Ensure a Flutter build/provider failure cannot leave the native splash
-      // covering the ErrorWidget returned above.
-      FlutterNativeSplash.remove();
       FlutterError.presentError(details);
       AppLog.e(
         'Flutter Error: ${details.exception}',
@@ -136,7 +131,7 @@ Future<void> _startApp() async {
     runApp(
       MultiProvider(
         providers: AppProviders.providers,
-        child: const ReaderApp(),
+        child: const LaunchScreenThemeSync(child: ReaderApp()),
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -145,20 +140,11 @@ Future<void> _startApp() async {
   } catch (e, stack) {
     AppLog.e('Startup Critical Error: $e', error: e, stackTrace: stack);
     CrashHandler.recordError(e, stack);
-    // configureDependencies 失敗時 MainPage 不會建立，不能依賴它釋放原生
-    // Splash；否則錯誤頁會被永久蓋住，看起來像 App 卡在開啟畫面。
-    FlutterNativeSplash.remove();
     runApp(_StartupFailureApp(error: e, stackTrace: stack));
   }
 }
 
-Widget buildFlutterErrorWidget(
-  FlutterErrorDetails details, {
-  VoidCallback? releaseNativeSplash,
-}) {
-  // A provider/widget build failure can happen after runApp(), so the
-  // dependency try/catch cannot release the native splash for this path.
-  (releaseNativeSplash ?? FlutterNativeSplash.remove)();
+Widget buildFlutterErrorWidget(FlutterErrorDetails details) {
   // 會被換進任何位置（清單列、Row、整個 App），所以不能撐滿上層：在沒有
   // 上限的方向限制大小，也不依賴主題或 Directionality。詳情已記到 AppLog 與
   // CrashHandler，畫面上只放一句說明。
