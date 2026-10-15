@@ -51,6 +51,20 @@ jobs:
             echo "::error::Workflows pin different Flutter versions; update ci.yml and android-release.yml together."
             exit 1
           fi
+      - name: Check ADR numbers are unique
+        # 平行的分支各自新增 ADR 時可能取到同一個編號；檔名不同，Git 合併不會報衝突。
+        # 檔名不是「四位數-標題.md」的先擋下，編號才比得準（五位數、少補零、備份檔）。
+        run: |
+          misnamed=$(ls docs/adr | grep -v '^[0-9]\{4\}-[^/]*\.md$' || true)
+          if [ -n "$misnamed" ]; then
+            echo "::error::ADR file names must be NNNN-title.md: $misnamed"
+            exit 1
+          fi
+          duplicates=$(ls docs/adr | cut -c1-4 | sort | uniq -d)
+          if [ -n "$duplicates" ]; then
+            echo "::error::Duplicate ADR numbers: $duplicates. Renumber the newer ADR and the links to it."
+            exit 1
+          fi
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'

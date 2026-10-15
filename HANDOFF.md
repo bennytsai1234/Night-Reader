@@ -4,7 +4,7 @@
 
 ## 進行中
 
-- **`chore/retro-guardrails`（未合併，不是這輪的工作）**：截圖輔助 `test/support/screenshot.dart`、CI 檢查 ADR 編號不重複、AGENTS.md 改成全套交給 pre-push hook。還沒開 PR，使用者說合併時再處理。
+沒有未合併的工作分支。
 
 ## 等使用者決定或動手
 
@@ -31,7 +31,6 @@
 - 新開的 worktree 跑 `flutter test` 時，sqlite3 的 native asset 下載可能被公司網路改掉、雜湊不符而失敗；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就會直接用快取。
 - Codex 審查的暫存 `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時會擋掉 Codex 最後一次連線，`codex exec` 因此回非零，但報告通常已經寫好；先看報告檔再判斷要不要重跑。
 - Bash 工具裡用 heredoc 跑的 Python，字串中的 `\n`、`￼` 這類跳脫有時會被換成真的字元，寫進 Dart 檔變成語法錯誤；含反斜線跳脫的內容改用 Write／Edit 工具寫。Windows 上 Python 寫檔要給 `newline='\n'`，不然會寫成 CRLF。
-- 要看 Flutter 實際畫出來的頁面：寫一個暫時的 widget 測試，把頁面包在 `RepaintBoundary` 裡，`pumpAndSettle` 後在 `tester.runAsync` 裡 `toImage` 存成 PNG 到 repo 外，看完刪掉測試檔。測試字型會把字畫成方塊，看的是形狀與顏色。`AppearanceSettingsPage` 用到的 `SettingsProvider` 會在畫完後丟 path_provider 的 `MissingPluginException`，不影響圖片。
 - Flutter 測試環境的預設字型每個字一樣寬，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderV2PunctFontFamily)` 載入，範例在 `test/features/reader_v2/hybrid/half_cell_layout_test.dart`）。
 - 重新產生 `NightReaderPunct`：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
 - `SwipeActions` 的拖動辨識沒有讀 `MediaQuery` 的觸控門檻（用 Flutter 預設 18，`PageView` 用裝置的，Android 約 8），放進可左右滑動的容器會搶輸搶贏不定；書架因此拿掉了左滑（DESIGN.md）。
