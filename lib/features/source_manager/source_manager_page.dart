@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
@@ -667,7 +669,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       messenger.showSnackBar(SnackBar(content: Text('已刪除 $count 個書源')));
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(failureMessage('刪除書源', error))),
+      );
     }
   }
 
@@ -708,7 +712,11 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             } catch (error) {
               if (pageContext.mounted) {
                 ScaffoldMessenger.of(pageContext).showSnackBar(
-                  SnackBar(content: Text('${remove ? '移出' : '加入'}分組失敗：$error')),
+                  SnackBar(
+                    content: Text(
+                      failureMessage('${remove ? '移出' : '加入'}分組', error),
+                    ),
+                  ),
                 );
               }
             }
@@ -833,7 +841,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       }
     } catch (e) {
       if (context.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+        messenger.showSnackBar(
+          SnackBar(content: Text(failureMessage('匯入', e))),
+        );
       }
     }
   }
@@ -919,10 +929,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     setState(() => _isImporting = true);
     try {
       await operation();
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppLog.e('$errorPrefix: $error', error: error, stackTrace: stackTrace);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$errorPrefix: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$errorPrefix：${userErrorReason(error)}')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isImporting = false);
@@ -952,10 +964,12 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   }) async {
     try {
       await operation();
-    } catch (error) {
+    } catch (error, stackTrace) {
+      AppLog.e('$errorPrefix: $error', error: error, stackTrace: stackTrace);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$errorPrefix：$error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$errorPrefix：${userErrorReason(error)}')),
+      );
     }
   }
 }

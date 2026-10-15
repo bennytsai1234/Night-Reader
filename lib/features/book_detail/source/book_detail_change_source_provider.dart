@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -196,7 +197,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     } catch (e) {
       if (!_isSearchActive(searchId)) return;
       isSearching = false;
-      status = '搜尋出錯: $e';
+      status = failureMessage('搜尋', e);
       _notifySafely();
     }
   }

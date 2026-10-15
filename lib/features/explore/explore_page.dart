@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
@@ -454,7 +455,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('書源操作', error))));
     }
   }
 
@@ -475,7 +476,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('刪除書源', error))));
     }
   }
 

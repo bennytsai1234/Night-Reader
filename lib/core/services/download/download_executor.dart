@@ -3,6 +3,7 @@ import 'dart:async';
 import 'download_base.dart';
 import 'download_scheduler.dart';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -231,10 +232,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 AppLog.w('Download chapter failed ${chapter.title}: $error');
                 task.errorCount++;
                 consecutiveFailures++;
-                final message = error.toString();
+                // 分類看原文（英文例外名稱也算數），畫面上的原因用白話。
                 task.setFailure(
-                  reason: classifyDownloadFailureReason(message),
-                  message: message,
+                  reason: classifyDownloadFailureReason(error.toString()),
+                  message: userErrorReason(error),
                   chapterIndex: chapter.index,
                 );
                 poolCount--;
@@ -270,10 +271,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         stackTrace: stack,
       );
       if (task.status != DownloadTask.statusPaused) {
-        final message = e.toString();
         task.setFailure(
-          reason: classifyDownloadFailureReason(message),
-          message: message,
+          reason: classifyDownloadFailureReason(e.toString()),
+          message: userErrorReason(e),
         );
         task.status = DownloadTask.statusFailed;
         task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -124,11 +125,11 @@ class ExploreShowProvider extends ChangeNotifier {
       if (_isDisposed || requestId != _requestSerial) return;
       if (error.type == DioExceptionType.cancel) return;
       AppLog.e('探索載入失敗', error: error);
-      _errorMessage = error.message ?? '載入失敗';
+      _errorMessage = userErrorReason(error);
     } catch (error) {
       if (_isDisposed || requestId != _requestSerial) return;
       AppLog.e('探索載入失敗', error: error);
-      _errorMessage = error.toString();
+      _errorMessage = userErrorReason(error);
     } finally {
       final shouldFinalize = !_isDisposed && requestId == _requestSerial;
       if (shouldFinalize) {

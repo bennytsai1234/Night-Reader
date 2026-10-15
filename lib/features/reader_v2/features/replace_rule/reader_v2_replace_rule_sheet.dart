@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -94,8 +95,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('更新替換規則設定失敗：$error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failureMessage('更新替換規則設定', error))),
+      );
     } finally {
       if (mounted) setState(() => _updatingToggle = false);
     }
@@ -120,7 +122,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('執行測試失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('執行測試', error))));
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -258,7 +260,9 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                       } catch (error) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('重載內容失敗：$error')),
+                          SnackBar(
+                            content: Text(failureMessage('重載內容', error)),
+                          ),
                         );
                       }
                     },

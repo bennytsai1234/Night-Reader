@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
@@ -601,7 +602,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
     } finally {
       if (mounted) setState(() => _exportProgress = null);
     }

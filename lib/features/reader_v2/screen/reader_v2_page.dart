@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -640,7 +641,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       return (success: true, message: '已切換到 ${prepared.source.bookSourceName}');
     } catch (error) {
       if (!isSourceSwitchUnavailable(error)) rethrow;
-      return (success: false, message: '換源失敗: $error');
+      return (success: false, message: failureMessage('換源', error));
     }
   }
 

@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/read_record_dao.dart';
@@ -80,7 +81,7 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
             return AppStateView(
               icon: Icons.error_outline,
               title: '閱讀統計載入失敗',
-              description: snapshot.error.toString(),
+              description: userErrorReason(snapshot.error!),
               tone: AppStateTone.error,
               primaryAction: AppStateAction(
                 label: '重新載入',

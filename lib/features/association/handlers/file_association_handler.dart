@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -76,8 +77,9 @@ mixin FileAssociationHandler on AssociationBase {
     } catch (e) {
       AppLog.e('搬移並匯入書籍失敗: $e', error: e);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯入書籍失敗：$e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('匯入書籍失敗：${userErrorReason(e)}')));
     }
   }
 

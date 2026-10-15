@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -472,7 +473,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
     }
   }
 
@@ -515,7 +516,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('書架網址匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('書架網址匯入', e))));
     }
   }
 
@@ -550,7 +551,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯入', e))));
     }
   }
 
@@ -566,7 +567,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('匯出', e))));
     }
   }
 
@@ -592,7 +593,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('批次下載', e))));
     }
   }
 
@@ -620,7 +621,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('整本書補下載失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('整本書補下載', e))));
     }
   }
 
@@ -650,7 +651,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('批次檢查更新', e))));
     }
   }
 
@@ -909,7 +910,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       );
     } catch (e) {
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text('檢查更新失敗: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(failureMessage('檢查更新', e))),
+      );
     } finally {
       _singleBookBusy.remove(book.bookUrl);
     }
@@ -929,7 +932,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           ),
         );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('設定失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('設定', e))));
     }
   }
 
@@ -948,7 +951,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('下載失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('下載', e))));
     } finally {
       _singleBookBusy.remove(book.bookUrl);
     }
@@ -970,7 +973,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       setState(() => _selectedUrls.remove(book.bookUrl));
       messenger.showSnackBar(const SnackBar(content: Text('已移出書架')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('移出書架失敗: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(failureMessage('移出書架', e))),
+      );
     }
   }
 
@@ -1046,7 +1051,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       // 中途失敗時，已刪掉的書不再留在選取裡。
       final remaining = p.books.map((book) => book.bookUrl).toSet();
       setState(() => _selectedUrls.retainAll(remaining));
-      messenger.showSnackBar(SnackBar(content: Text('刪除失敗: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(failureMessage('刪除', e))));
     }
   }
 }
