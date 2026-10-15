@@ -47,8 +47,7 @@ final class ReaderV2PageChromeLayout {
   });
 
   /// [topCutoutExtent] 為 null 表示尚未取得挖孔高度，暫以系統內距代替。
-  /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統
-  /// 底部內距。
+  /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離。
   factory ReaderV2PageChromeLayout.resolve({
     required EdgeInsets mediaPadding,
     double? topCutoutExtent,
@@ -57,7 +56,7 @@ final class ReaderV2PageChromeLayout {
     required bool showFooterInfo,
     required double paddingTop,
     required double paddingBottom,
-    double? footerOffset,
+    required double footerOffset,
   }) {
     final top = hideStatusBar
         ? topCutoutExtent ?? mediaPadding.top
@@ -74,8 +73,7 @@ final class ReaderV2PageChromeLayout {
       headerExtent = top + kReaderInfoRowHeight;
       headerRowTop = top;
     }
-    final footerRowBottom =
-        footerOffset ?? mediaPadding.bottom + kReaderFooterAutoSpacing;
+    final footerRowBottom = footerOffset;
     final footerExtent = showFooterInfo
         ? footerRowBottom + kReaderFooterRowHeight
         : mediaPadding.bottom;
@@ -128,7 +126,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.footerInfo,
     required this.paddingTop,
     required this.paddingBottom,
-    this.footerOffset,
+    required this.footerOffset,
     this.topCutoutExtent,
     required this.dayNightIcon,
     required this.dayNightTooltip,
@@ -183,8 +181,8 @@ class ReaderV2PageShell extends StatelessWidget {
   final double paddingTop;
   final double paddingBottom;
 
-  /// 頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統底部內距。
-  final double? footerOffset;
+  /// 頁尾資訊列底部到畫面底部的距離。
+  final double footerOffset;
 
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；null 表示尚未取得。
   final double? topCutoutExtent;

@@ -96,6 +96,7 @@ void main() {
             ),
             paddingTop: 0,
             paddingBottom: 0,
+            footerOffset: 4,
             dayNightIcon: Icons.dark_mode_rounded,
             dayNightTooltip: '切換深色模式',
             onExitIntent: () => exitIntents += 1,
