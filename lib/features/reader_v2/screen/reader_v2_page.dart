@@ -15,6 +15,7 @@ import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -34,6 +35,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
@@ -60,7 +62,7 @@ class ReaderV2Page extends StatefulWidget {
 }
 
 class _ReaderV2PageState extends State<ReaderV2Page>
-    with WidgetsBindingObserver
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
@@ -83,6 +85,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；隱藏狀態列時頁首只依它決定。
   double? _topCutoutExtent;
 
+  /// 開書的換頁動畫與骨架淡入都播完時完成；載入等它（ADR 0018）。
+  final Completer<void> _entrance = Completer<void>();
+
+  /// 從目錄跳章時，等目錄收起的那一下；收起時完成。
+  Completer<void>? _drawerClosed;
+  bool _entranceWatched = false;
+
+  /// 只拿來計骨架淡入的時長（正文骨架與頁首頁尾骨架都是 [AppMotion.fade]）：
+  /// 開書時和這一頁的第一幀同時開始，從目錄跳章時和蓋紙同時開始。
+  late final AnimationController _skeletonFadeIn = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +111,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       book: widget.book,
       initialChapters: widget.initialChapters,
       openTarget: widget.openTarget,
+      entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
     );
@@ -106,6 +123,27 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     HardwareKeyboard.instance.addHandler(_handleVolumeKey);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceWatched) return;
+    _entranceWatched = true;
+    unawaited(_awaitEntrance());
+  }
+
+  /// 開書的換頁動畫與骨架淡入都播完才放行載入：載入在主執行緒上的工作
+  /// 不和這兩段動畫搶同一幀。系統關閉動畫時骨架直接到位，只等換頁。
+  Future<void> _awaitEntrance() async {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!reduceMotion) unawaited(_skeletonFadeIn.forward());
+    await Future.wait([
+      TransitionSettled.entered(context),
+      if (!reduceMotion)
+        TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
+    ]);
+    if (mounted && !_entrance.isCompleted) _entrance.complete();
   }
 
   @override
@@ -129,6 +167,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
+    _skeletonFadeIn.dispose();
     super.dispose();
   }
 
@@ -252,6 +291,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               onSystemBack: _handleSystemBack,
               onMore: () => unawaited(_showMore()),
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+              onDrawerChanged: _handleDrawerChanged,
               onTts: () => _openPanel(_showTts),
               onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
               onInterface: () => _openPanel(
@@ -416,16 +456,33 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _handleExitIntent();
   }
 
-  Future<bool> _jumpToChapterFromDrawer(int index) async {
-    final runtime = _host.runtime;
-    if (runtime == null) return false;
-    await _coordinator.jumpToChapter(index);
-    final succeeded =
-        mounted &&
-        identical(_host.runtime, runtime) &&
-        runtime.state.hasStableWorld &&
-        runtime.state.visibleLocation.chapterIndex == index;
-    return succeeded;
+  /// 點目錄的一章：目錄與選單馬上收起、紙蓋上淡入骨架，這幾段動畫都播完
+  /// 才開始載入（ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  void _jumpToChapterFromDrawer(int index) {
+    final scaffold = _scaffoldKey.currentState;
+    final drawerClosed = scaffold != null && scaffold.isDrawerOpen
+        ? (_drawerClosed ??= Completer<void>()).future
+        : Future<void>.value();
+    scaffold?.closeDrawer();
+    _host.menu.dismissControls();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
+    unawaited(
+      _coordinator.jumpToChapter(
+        index,
+        settled: Future.wait([
+          drawerClosed,
+          if (!reduceMotion)
+            TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
+        ]),
+      ),
+    );
+  }
+
+  void _handleDrawerChanged(bool open) {
+    if (open) return;
+    _drawerClosed?.complete();
+    _drawerClosed = null;
   }
 
   void _drainRuntimeNotice() {

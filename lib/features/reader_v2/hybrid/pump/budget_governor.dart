@@ -91,13 +91,13 @@ final class BudgetGovernor {
   /// frame still permits one bounded transaction rather than stopping supply.
   int frameBudgetMicros(PumpState state) {
     final slice = ballisticSliceBudget.inMicroseconds;
-    // 上限是為了捲動不掉幀；載入畫面沒有正文，只扣安全邊際與非 pump 工作，
-    // 仍不超過一幀，轉圈維持裝置原本的更新率。
+    // 上限是為了畫面上的動畫不掉幀。載入時正文雖然蓋著，骨架在呼吸、開書
+    // 時換頁也可能還在收尾，和甩動捲動一樣用 [_ballisticCapMicros]：慢一點
+    // 排好，換骨架全程不掉幀（ADR 0018）。
     final cap = switch (state) {
       PumpState.dragging => slice,
-      PumpState.ballistic => _ballisticCapMicros,
+      PumpState.ballistic || PumpState.loading => _ballisticCapMicros,
       PumpState.rebuilding || PumpState.idle => _rebuildingCapMicros,
-      PumpState.loading => framePeriodMicros.round(),
     };
     return math.max(slice, _headroomMicros(capMicros: cap));
   }

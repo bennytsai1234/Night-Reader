@@ -361,15 +361,22 @@ class SourceManagerProvider with ChangeNotifier {
   List<String> _allGroups = [];
   List<String> get allGroups => List<String>.unmodifiable(_allGroups);
 
+  /// [entrance] 是書源管理頁的進場動畫；播完才讀書源（ADR 0018）。
   SourceManagerProvider({
+    required Future<void> entrance,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
-    loadSources();
-    checkService.loadConfig();
+    unawaited(
+      entrance.then((_) {
+        if (_disposed) return;
+        loadSources();
+        checkService.loadConfig();
+      }),
+    );
   }
 
   void _handleCheckServiceChanged() {

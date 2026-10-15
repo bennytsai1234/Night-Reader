@@ -1,7 +1,5 @@
 import 'dart:math' as math;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
@@ -25,7 +23,9 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   final List<BookChapter> chapters;
   final int currentChapterIndex;
   final String Function(int index) titleFor;
-  final Future<bool> Function(int index) onChapterTap;
+
+  /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
+  final ValueChanged<int> onChapterTap;
   final Listenable? listenable;
 
   @override
@@ -40,7 +40,6 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
-  int? _pendingChapterIndex;
 
   @override
   void initState() {
@@ -72,45 +71,6 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     super.dispose();
   }
 
-  Future<void> _handleChapterTap(int index) async {
-    if (_pendingChapterIndex != null) return;
-    setState(() => _pendingChapterIndex = index);
-
-    late final bool succeeded;
-    try {
-      succeeded = await widget.onChapterTap(index);
-    } finally {
-      if (mounted) {
-        setState(() => _pendingChapterIndex = null);
-      }
-    }
-
-    // 只收自己的抽屜。用 Navigator.pop 的話，使用者在跳轉途中已經關上
-    // 抽屜時會改成關掉閱讀頁。
-    if (!mounted || !succeeded) return;
-    Scaffold.maybeOf(context)?.closeDrawer();
-  }
-
-  Widget _buildPendingIndicator(String chapterTitle) {
-    return Semantics(
-      container: true,
-      label: '正在跳轉至$chapterTitle',
-      child: ExcludeSemantics(
-        child: SizedBox.square(
-          dimension: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
-  }
-
-  VoidCallback? _chapterTapHandler(int index) {
-    if (_pendingChapterIndex != null) return null;
-    return () {
-      unawaited(_handleChapterTap(index));
-    };
-  }
-
   /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
   /// 目前章節以主色加粗並在右側打勾，付費還沒買的章節右側鎖頭，列間以
   /// 髮絲線分隔。
@@ -118,10 +78,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
     final isCurrentChapter = widget.currentChapterIndex == index;
-    final isPending = _pendingChapterIndex == index;
-    final Widget? trailing = isPending
-        ? _buildPendingIndicator(chapterTitle)
-        : isCurrentChapter
+    final Widget? trailing = isCurrentChapter
         ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
         : index < widget.chapters.length && widget.chapters[index].isLocked
         ? const LockedChapterIcon()
@@ -146,7 +103,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
               ),
               trailing: trailing,
               showChevron: false,
-              onTap: _chapterTapHandler(index),
+              onTap: () => widget.onChapterTap(index),
             ),
           ),
         ),

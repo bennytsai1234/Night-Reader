@@ -12,6 +12,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/services/download_service.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 void main() {
@@ -163,6 +164,59 @@ void main() {
     expect(finished.successCount, 0);
     // 停下時已在抓的章節（最多 5 章）照樣跑完。
     expect(finished.errorCount, inInclusiveRange(10, 15));
+  });
+
+  testWidgets('a run waits while an animation is playing', (tester) async {
+    const origin = 'https://waiting.example';
+    final book = Book(
+      bookUrl: '$origin/book/1',
+      origin: origin,
+      name: '等動畫的書',
+      isInBookshelf: true,
+    );
+    final service = DownloadService();
+    final task = DownloadTask(
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: 3,
+    );
+    await tester.runAsync(() async {
+      await GetIt.instance<BookSourceDao>().upsert(
+        BookSource.fromJson({'bookSourceName': '等', 'bookSourceUrl': origin}),
+      );
+      await GetIt.instance<BookDao>().upsert(book);
+      // 測試裡沒有初始化網路服務：每章都立刻失敗，不會真的連網。
+      await GetIt.instance<ChapterDao>().insertChapters([
+        for (var i = 0; i < 3; i++)
+          BookChapter(
+            url: 'unsupported://waiting/$i',
+            title: '第 $i 章',
+            index: i,
+            bookUrl: book.bookUrl,
+          ),
+      ]);
+    });
+    service.tasks.add(task);
+    service.isDownloading = true;
+    addTearDown(() {
+      service.isDownloading = false;
+      service.tasks.removeWhere((t) => t.bookUrl == book.bookUrl);
+    });
+
+    // 畫面上有動畫在播：一章都還沒開始抓。
+    final release = MotionGate.instance.hold();
+    late Future<void> run;
+    await tester.runAsync(() async {
+      run = service.processTask(task);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    expect(task.errorCount + task.successCount, 0);
+
+    // 動畫播完（再等一幀確定沒有下一段接上）才接著抓。
+    release();
+    await tester.pump();
+    await tester.runAsync(() => run);
+    expect(task.errorCount, 3);
   });
 
   group('the range of a task', () {

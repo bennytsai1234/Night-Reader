@@ -6,10 +6,11 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 import 'bookshelf_provider_base.dart';
 
-/// BookshelfProvider 的更新與網絡同步邏輯擴展
+///BookshelfProvider 的更新與網絡同步邏輯擴展
 mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 書架更新同時檢查的書數，與目錄多頁抓取的並行數（4）相同：書架上
   /// 幾十本書不會一起發請求、一起在 UI isolate 上解析目錄。
@@ -103,6 +104,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       results = await Future.wait([
         for (final book in targets)
           pool.withResource(() async {
+            // 有動畫在播時先等，書源解析不和動畫搶幀（ADR 0018）。
+            await MotionGate.instance.idle;
             try {
               return await checkBookUpdate(book);
             } catch (_) {

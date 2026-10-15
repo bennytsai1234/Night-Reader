@@ -16,6 +16,10 @@ _Avoid_: beta 分支、預覽版、nightly
 App 裡所有換頁共用的轉場，使用者在「外觀與主題」的選單從八種選一種（`AppPageTransition`）：上浮、平移（預設，Telegram iOS）、俐落平移（Telegram iOS 26）、滑入（Telegram Android）、推進（Android 系統）、覆蓋（Legado）、縮放（Material 共享 Z 軸）、展開（iOS 18 縮放）。返回不是開啟倒著播，一律先快後慢；往右拖返回一律是平移的跟手樣子。
 _Avoid_: 轉場效果、頁面動畫、Hero（封面共享元素轉場已移除）
 
+**動作閘門**：
+畫面上有動畫在播時關上的閘門（`MotionGate`）；背景下載與書架檢查更新每做一段之前等它打開，不和動畫搶主執行緒（ADR 0018）。換頁、載入骨架、閱讀器捲動、主題暈開與書卡移位播放時關上。
+_Avoid_: 動畫鎖、暫停下載
+
 **更新紀錄**：
 「關於夜讀」裡列出各版更新說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
 _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什麼

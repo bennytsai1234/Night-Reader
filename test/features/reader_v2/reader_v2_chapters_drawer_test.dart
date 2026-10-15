@@ -20,7 +20,7 @@ void main() {
             chapters: chapters,
             currentChapterIndex: 3,
             titleFor: (index) => chapters[index].title,
-            onChapterTap: (_) async => false,
+            onChapterTap: (_) {},
           ),
         ),
       ),

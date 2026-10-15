@@ -20,7 +20,6 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
   final ValueChanged<String> onSearch;
   final VoidCallback? onScopePressed;
   final VoidCallback onCancel;
-  final bool autofocus;
 
   const SearchAppBar({
     super.key,
@@ -30,7 +29,6 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSearch,
     required this.onCancel,
     this.onScopePressed,
-    this.autofocus = false,
   });
 
   static const double _bottomHeight = GlassCapsule.height + AppSpacing.sm;
@@ -60,7 +58,6 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
                 controller: controller,
                 focusNode: focusNode,
                 hintText: '搜尋書名或作者',
-                autofocus: autofocus,
                 onSubmitted: onSearch,
               ),
             ),

@@ -69,7 +69,7 @@ void main() {
               chapters: const [],
               currentChapterIndex: 0,
               titleFor: (_) => '',
-              onChapterTap: (_) async => false,
+              onChapterTap: (_) {},
             ),
             backgroundColor: Colors.white,
             infoColor: Colors.black,

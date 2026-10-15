@@ -422,11 +422,15 @@ void main() {
       },
     );
 
-    test('loading screen budget fills the frame instead of the scroll cap', () {
+    test('the loading skeleton keeps the same headroom as a fling', () {
       final governor = BudgetGovernor();
       // No vsync samples yet: the period defaults to 120Hz (8333us).
       expect(governor.frameBudgetMicros(PumpState.rebuilding), 6000);
-      expect(governor.frameBudgetMicros(PumpState.loading), 8333 - 1200);
+      expect(
+        governor.frameBudgetMicros(PumpState.loading),
+        governor.frameBudgetMicros(PumpState.ballistic),
+      );
+      expect(governor.frameBudgetMicros(PumpState.loading), 4000);
     });
 
     testWidgets('repeated awaits cannot mint a second frame budget', (
