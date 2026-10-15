@@ -50,3 +50,6 @@ android/build/
 # Tools
 .codex
 android/.kotlin/
+
+# 給使用者看畫面的臨時截圖測試（test/support/screenshot.dart）
+/test/_screens/
