@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:dio/dio.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -390,14 +391,14 @@ class SearchModel {
       if (e.type == DioExceptionType.cancel || stale()) return;
       _failedCount++;
       callback.onSearchFailure(
-        SearchFailure(source: source, message: e.message ?? e.toString()),
+        SearchFailure(source: source, message: userErrorReason(e)),
       );
       AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } catch (e) {
       if (stale()) return;
       _failedCount++;
       callback.onSearchFailure(
-        SearchFailure(source: source, message: e.toString()),
+        SearchFailure(source: source, message: userErrorReason(e)),
       );
       AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } finally {

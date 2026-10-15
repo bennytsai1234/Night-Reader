@@ -32,6 +32,15 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
     return _partQuery(discoveryOnly: true).map(_readPartSource).watch();
   }
 
+  /// 有沒有任何書源；只查一列，不把整份書源讀出來。書架與發現頁的空狀態
+  /// 據此決定要帶去搜尋還是匯入書源。
+  Stream<bool> watchHasAny() {
+    final query = selectOnly(bookSources)
+      ..addColumns([bookSources.bookSourceUrl])
+      ..limit(1);
+    return query.watch().map((rows) => rows.isNotEmpty);
+  }
+
   Future<List<BookSource>> getEnabled() {
     return (select(bookSources)..where((t) => t.enabled.equals(true))).get();
   }

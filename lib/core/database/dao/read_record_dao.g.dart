@@ -5,6 +5,7 @@ part of 'read_record_dao.dart';
 // ignore_for_file: type=lint
 mixin _$ReadRecordDaoMixin on DatabaseAccessor<AppDatabase> {
   $ReadRecordsTable get readRecords => attachedDatabase.readRecords;
+  $ReadDaysTable get readDays => attachedDatabase.readDays;
   ReadRecordDaoManager get managers => ReadRecordDaoManager(this);
 }
 
@@ -13,4 +14,6 @@ class ReadRecordDaoManager {
   ReadRecordDaoManager(this._db);
   $$ReadRecordsTableTableManager get readRecords =>
       $$ReadRecordsTableTableManager(_db.attachedDatabase, _db.readRecords);
+  $$ReadDaysTableTableManager get readDays =>
+      $$ReadDaysTableTableManager(_db.attachedDatabase, _db.readDays);
 }

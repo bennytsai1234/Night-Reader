@@ -145,6 +145,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
+    this.brightnessControl,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -204,6 +205,7 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueChanged<double> onScrubStart;
   final ValueChanged<double> onScrubbing;
   final ValueChanged<double> onScrubEnd;
+  final Widget? brightnessControl;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -334,6 +336,7 @@ class ReaderV2PageShell extends StatelessWidget {
                 onScrubbing: onScrubbing,
                 onScrubEnd: onScrubEnd,
                 progressListenable: progressListenable,
+                brightnessControl: brightnessControl,
                 showTts: showTts,
                 showAutoPage: showAutoPage,
                 showReplaceRule: showReplaceRule,

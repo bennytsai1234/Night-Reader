@@ -95,6 +95,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                       ReaderV2AutoPageSection(settings: _settings),
                       ReaderV2ChineseConvertSection(settings: _settings),
                       ReaderV2ClickActionSection(settings: _settings),
+                      ReaderV2VolumeKeySection(settings: _settings),
                     ],
                   ),
                 ),

@@ -30,8 +30,19 @@ import UIKit
       }
     FlutterEventChannel(name: "night_reader/battery", binaryMessenger: messenger)
       .setStreamHandler(BatteryStreamHandler())
-    // 狀態列與挖孔高度（system_bars 的 statusBarExtent、reader_device）不實作：iOS
-    // 隱藏狀態列時安全區域不變，Flutter 的上緣內距已經是穩定值。App 內更新只在 Android。
+    // reader_device 只實作螢幕常亮。挖孔高度不實作：iOS 隱藏狀態列時安全區域不變，
+    // Flutter 的上緣內距已經是穩定值。視窗亮度不實作：iOS 只能改整台裝置的亮度，
+    // 離開 App 也不會恢復，閱讀器因此在 iOS 不顯示亮度條。
+    FlutterMethodChannel(name: "night_reader/reader_device", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "setKeepScreenOn" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        UIApplication.shared.isIdleTimerDisabled = call.arguments as? Bool ?? false
+        result(nil)
+      }
+    // 狀態列高度（system_bars 的 statusBarExtent）不實作，理由同上。App 內更新只在 Android。
     FlutterMethodChannel(name: "night_reader/system_bars", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
         guard call.method == "screenCornerRadius" else {

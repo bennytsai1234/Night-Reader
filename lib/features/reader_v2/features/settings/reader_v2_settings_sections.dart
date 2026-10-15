@@ -698,6 +698,30 @@ class ReaderV2AutoPageSection extends StatelessWidget {
 }
 
 /// 繁簡轉換。
+/// 音量鍵翻頁：音量下是下一頁、音量上是上一頁。
+class ReaderV2VolumeKeySection extends StatelessWidget {
+  const ReaderV2VolumeKeySection({super.key, required this.settings});
+
+  final ReaderV2SettingsController settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) => GroupedSection(
+        margin: _sectionMargin,
+        children: [
+          GroupedSwitchRow(
+            title: '音量鍵翻頁',
+            value: settings.volumeKeyPage,
+            onChanged: settings.setVolumeKeyPage,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ReaderV2ChineseConvertSection extends StatelessWidget {
   const ReaderV2ChineseConvertSection({super.key, required this.settings});
 

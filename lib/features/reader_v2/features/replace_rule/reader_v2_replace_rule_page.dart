@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -75,7 +76,7 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('刪除規則失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('刪除規則', error))));
     }
   }
 
@@ -85,8 +86,9 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
       await _loadRules();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('更新規則狀態失敗：$error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failureMessage('更新規則狀態', error))));
     }
   }
 

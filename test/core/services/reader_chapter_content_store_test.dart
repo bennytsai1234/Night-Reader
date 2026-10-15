@@ -88,6 +88,28 @@ void main() {
     },
   );
 
+  test('a failed refetch keeps the stored text', () async {
+    final a = chapter(0, '/c/a.html');
+    await ChapterDao(db).insertChapters([a]);
+    await store.saveRawContent(book: book, chapter: a, content: '甲');
+
+    await store.saveFailure(book: book, chapter: a, message: '伺服器回應 503');
+
+    final entry = await store.getContentEntry(book: book, chapter: a);
+    expect(entry?.isFailed, isFalse);
+    expect(entry?.content, '甲');
+  });
+
+  test('a failure is still recorded when nothing was stored', () async {
+    final a = chapter(0, '/c/a.html');
+    await ChapterDao(db).insertChapters([a]);
+
+    await store.saveFailure(book: book, chapter: a, message: '伺服器回應 503');
+
+    final entry = await store.getContentEntry(book: book, chapter: a);
+    expect(entry?.isFailed, isTrue);
+  });
+
   test('volume headings and chapters without a URL are never missing', () {
     final missing = chaptersMissingContent([
       chapter(0, '第一卷', isVolume: true),

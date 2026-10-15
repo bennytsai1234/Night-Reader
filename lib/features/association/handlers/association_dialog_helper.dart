@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -132,7 +133,7 @@ mixin AssociationDialogHelper on AssociationBase {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$label失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage(label, error))));
     }
   }
 

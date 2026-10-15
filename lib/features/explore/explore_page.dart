@@ -1,7 +1,10 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:provider/provider.dart';
 
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -45,6 +48,11 @@ enum _SourceAction { edit, top, search, refresh, delete }
 
 class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
+
+  /// 沒有發現書源時用到：連一個書源都沒有時改成帶去匯入。
+  late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
+      ? getIt<BookSourceDao>().watchHasAny()
+      : Stream<bool>.value(true);
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
   final Map<String, GlobalKey> _kindsKeys = <String, GlobalKey>{};
 
@@ -155,27 +163,54 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
       return _padState(
-        AppStateView(
-          icon: Icons.travel_explore_outlined,
-          title: '目前沒有可用的發現書源',
-          description: '到書源管理啟用支援發現功能的書源。',
-          primaryAction: AppStateAction(
-            label: '管理書源',
-            icon: Icons.source_outlined,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SourceManagerPage()),
-            ),
-          ),
-          secondaryAction: AppStateAction(
-            label: '重新整理',
-            icon: Icons.refresh,
-            onPressed: provider.refresh,
-          ),
+        StreamBuilder<bool>(
+          stream: _hasSources,
+          builder: (context, snapshot) => snapshot.data ?? true
+              ? _buildNoExploreSources(provider)
+              : AppStateView(
+                  icon: Icons.travel_explore_outlined,
+                  title: '還沒有書源',
+                  description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
+                  primaryAction: AppStateAction(
+                    label: '匯入書源',
+                    icon: Icons.download_rounded,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SourceManagerPage(),
+                      ),
+                    ),
+                  ),
+                ),
         ),
       );
     }
+    return _buildFilteredSourceList(provider);
+  }
 
+  /// 有書源、但沒有一個支援發現。
+  Widget _buildNoExploreSources(ExploreProvider provider) {
+    return AppStateView(
+      icon: Icons.travel_explore_outlined,
+      title: '目前沒有可用的發現書源',
+      description: '到書源管理啟用支援發現功能的書源。',
+      primaryAction: AppStateAction(
+        label: '管理書源',
+        icon: Icons.source_outlined,
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+        ),
+      ),
+      secondaryAction: AppStateAction(
+        label: '重新整理',
+        icon: Icons.refresh,
+        onPressed: provider.refresh,
+      ),
+    );
+  }
+
+  Widget _buildFilteredSourceList(ExploreProvider provider) {
     if (provider.isEmpty) {
       return _padState(
         AppStateView(
@@ -420,7 +455,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('書源操作失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('書源操作', error))));
     }
   }
 
@@ -441,7 +476,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('刪除書源失敗：$error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('刪除書源', error))));
     }
   }
 

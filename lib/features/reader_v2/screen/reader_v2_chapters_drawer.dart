@@ -8,6 +8,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_pal
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
 
@@ -173,6 +174,26 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     _scrollController.jumpTo(safeOffset);
   }
 
+  /// 列高固定，畫面上的列直接由捲動位置換算。
+  (int, int)? _visibleRange() {
+    if (!_scrollController.hasClients || widget.chapters.isEmpty) return null;
+    final position = _scrollController.position;
+    final first = (position.pixels / _tileExtent).floor();
+    final last =
+        ((position.pixels + position.viewportDimension) / _tileExtent).ceil() -
+        1;
+    final maxIndex = widget.chapters.length - 1;
+    return (first.clamp(0, maxIndex), last.clamp(0, maxIndex));
+  }
+
+  void _jumpToChapterRow(int index) {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    _scrollController.jumpTo(
+      (index * _tileExtent).clamp(0.0, position.maxScrollExtent),
+    );
+  }
+
   void _handleChanged() {
     _scheduleScrollToCurrentChapter();
   }
@@ -237,14 +258,23 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
             ),
             Container(height: AppGlass.hairline, color: chrome.separator),
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
+              child: ChapterScrollbar(
+                itemCount: widget.chapters.length,
+                visibleRange: _visibleRange,
+                onJumpTo: _jumpToChapterRow,
+                labelFor: widget.titleFor,
                 padding: EdgeInsets.only(
                   bottom: MediaQuery.paddingOf(context).bottom,
                 ),
-                itemCount: widget.chapters.length,
-                itemExtent: _tileExtent,
-                itemBuilder: _buildChapterTile,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.paddingOf(context).bottom,
+                  ),
+                  itemCount: widget.chapters.length,
+                  itemExtent: _tileExtent,
+                  itemBuilder: _buildChapterTile,
+                ),
               ),
             ),
           ],

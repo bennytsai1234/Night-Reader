@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
@@ -166,8 +167,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await p.shareSourcesByUrls(urls, fileName: '$groupName.legado');
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('分享分組失敗：$error')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failureMessage('分享分組', error))));
       }
     }
   }
@@ -211,8 +213,9 @@ class SourceGroupManagePage extends StatelessWidget {
             }
           } catch (error) {
             if (pageContext.mounted) {
-              ScaffoldMessenger.of(pageContext)
-                  .showSnackBar(SnackBar(content: Text('儲存分組失敗：$error')));
+              ScaffoldMessenger.of(pageContext).showSnackBar(
+                SnackBar(content: Text(failureMessage('儲存分組', error))),
+              );
             }
           }
         },
@@ -251,8 +254,9 @@ class SourceGroupManagePage extends StatelessWidget {
       await provider.deleteGroup(name);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('刪除分組失敗：$error')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failureMessage('刪除分組', error))));
       }
     }
   }
