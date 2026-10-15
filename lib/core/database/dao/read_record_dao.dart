@@ -73,14 +73,17 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
     return '$year-${two(time.month)}-${two(time.day)}';
   }
 
-  /// 把一段閱讀時間依當地午夜切開，算出每天的秒數。
+  /// 把一段閱讀時間依當地午夜切開，算出每天的秒數。每段都從整段的起點
+  /// 換算整秒再相減，各天加起來正好等於累計加上的秒數。
   static Map<String, int> secondsByDay(DateTime start, DateTime end) {
     final result = <String, int>{};
     var cursor = start;
     while (cursor.isBefore(end)) {
       final midnight = DateTime(cursor.year, cursor.month, cursor.day + 1);
       final segmentEnd = midnight.isBefore(end) ? midnight : end;
-      final seconds = segmentEnd.difference(cursor).inSeconds;
+      final seconds =
+          segmentEnd.difference(start).inSeconds -
+          cursor.difference(start).inSeconds;
       if (seconds > 0) {
         result.update(
           dayKey(cursor),
@@ -115,9 +118,24 @@ class ReadRecordDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<ReadDay>> getAllDays() => select(readDays).get();
 
-  /// 還原備份：同一本書同一天以備份的秒數為準。
-  Future<void> restoreDay(ReadDay day) {
-    return into(readDays).insertOnConflictUpdate(day);
+  /// 還原備份的閱讀紀錄：備份裡有的書，累計與每日秒數一起換成備份的值
+  /// （備份沒有每日資料時，那本書的每日從空的開始），兩者才對得起來；
+  /// 備份裡沒有的書不動。
+  Future<void> restoreReadingStats({
+    required List<ReadRecord> records,
+    required List<ReadDay> days,
+  }) {
+    return transaction(() async {
+      for (final record in records) {
+        await restoreByBookName(record);
+        await (delete(
+          readDays,
+        )..where((t) => t.bookName.equals(record.bookName))).go();
+      }
+      for (final day in days) {
+        await into(readDays).insertOnConflictUpdate(day);
+      }
+    });
   }
 
   Future<void> _addToTotal({

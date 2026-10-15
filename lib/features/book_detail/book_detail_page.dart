@@ -47,7 +47,8 @@ class BookDetailPage extends StatefulWidget {
   final AggregatedSearchBook? searchBook;
 
   /// 從閱讀器的「更多」開啟：閱讀鈕與點目錄回到原本的閱讀器（點章節時以
-  /// 章節序號為結果 pop），不另開一個閱讀器；加入／移出書架與換源留給
+  /// 章節網址為結果 pop：這裡的目錄可能比閱讀器手上的新，序號對不上），
+  /// 不另開一個閱讀器；加入／移出書架與換源留給
   /// 閱讀器自己處理，這裡不顯示，免得刪掉正在讀的正文或換掉書。
   final bool fromReader;
 
@@ -343,7 +344,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   isCurrent: isCurrent,
                   isLocked: chapter.isLocked,
                   onTap: widget.fromReader
-                      ? () => Navigator.of(context).pop(chapter.index)
+                      ? () => Navigator.of(context).pop(chapter.url)
                       : () => _navigateToReader(
                           context,
                           currentBook,

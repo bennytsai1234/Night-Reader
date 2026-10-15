@@ -87,7 +87,15 @@ class RestoreService {
 
     var restoredAny = false;
     final failedFiles = <String>[];
-    for (final (:fileName, :decoded, :error) in backup.files) {
+    // 閱讀紀錄的累計與每日秒數要一起還原，不受 ZIP 裡的檔案順序影響；
+    // 先收起來，其他檔案還原完再處理。
+    final readStatsFiles = <_DecodedFile>[];
+    for (final file in backup.files) {
+      final (:fileName, :decoded, :error) = file;
+      if (_readStatsFiles.contains(fileName)) {
+        readStatsFiles.add(file);
+        continue;
+      }
       try {
         if (error != null) throw error;
         if (decoded is List<dynamic>) {
@@ -104,7 +112,40 @@ class RestoreService {
         failedFiles.add(fileName);
       }
     }
+    if (readStatsFiles.isNotEmpty) {
+      try {
+        restoredAny = await _restoreReadingStats(readStatsFiles) || restoredAny;
+      } catch (e) {
+        AppLog.e('Restore failed for reading stats: $e', error: e);
+        failedFiles.addAll(readStatsFiles.map((file) => file.fileName));
+      }
+    }
     return RestoreResult(restoredAny: restoredAny, failedFiles: failedFiles);
+  }
+
+  static const Set<String> _readStatsFiles = {
+    'readRecord.json',
+    'readRecords.json',
+    'readDay.json',
+  };
+
+  /// 任一檔讀不出來就整組不還原，免得累計與每日只換了一半。
+  Future<bool> _restoreReadingStats(List<_DecodedFile> files) async {
+    final records = <ReadRecord>[];
+    final days = <ReadDay>[];
+    for (final (:fileName, :decoded, :error) in files) {
+      if (error != null) throw error;
+      if (decoded is! List<dynamic>) throw FormatException(fileName);
+      for (final item in decoded.whereType<Map<String, dynamic>>()) {
+        if (fileName == 'readDay.json') {
+          days.add(ReadDay.fromJson(item));
+        } else {
+          records.add(ReadRecord.fromJson(item));
+        }
+      }
+    }
+    await _readRecordDao.restoreReadingStats(records: records, days: days);
+    return records.isNotEmpty || days.isNotEmpty;
   }
 
   /// 在背景 isolate 讀檔、解壓縮並解析每個 JSON 檔。不是 zip 或沒有檔案時
@@ -167,9 +208,6 @@ class RestoreService {
       'downloadTasks.json',
       'readerChapterContent.json',
       'readerChapterContents.json',
-      'readRecord.json',
-      'readRecords.json',
-      'readDay.json',
     };
     if (!supportedFiles.contains(fileName)) return false;
 
@@ -214,13 +252,6 @@ class RestoreService {
             await _chapterContentDao.upsertEntry(
               ReaderChapterContentEntry.fromJson(item),
             );
-            break;
-          case 'readRecord.json':
-          case 'readRecords.json':
-            await _readRecordDao.restoreByBookName(ReadRecord.fromJson(item));
-            break;
-          case 'readDay.json':
-            await _readRecordDao.restoreDay(ReadDay.fromJson(item));
             break;
         }
       }

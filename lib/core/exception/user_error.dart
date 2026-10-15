@@ -18,12 +18,14 @@ String failureMessage(String action, Object error, [StackTrace? stackTrace]) {
 
 /// 給使用者看的一句錯誤原因。
 ///
-/// 書源與 App 自己丟出的錯誤本來就是中文，照原文；網路、檔案、格式與
+/// 書源與 App 自己丟出的錯誤本來就是中文，照原文（解析錯誤常把英文的
+/// 底層錯誤包進來，那種寫「書源解析失敗」）；網路、檔案、格式與
 /// 資料庫這類系統錯誤的原文是英文技術訊息，換成固定的白話說法；其他
 /// 認不出的一律「發生未預期的錯誤」，細節看日誌。
 String userErrorReason(Object error) {
   return switch (error) {
-    AppException(:final message) => message,
+    ParsingException(:final message) => _chinese(message) ?? '書源解析失敗',
+    AppException(:final message) => _chinese(message) ?? '發生未預期的錯誤',
     DioException() => _networkReason(error),
     SocketException() || HttpException() || HandshakeException() => '網路連線失敗',
     TimeoutException() => '連線逾時',
@@ -57,8 +59,10 @@ String _networkReason(DioException error) {
 
 /// 程式裡 `throw Exception('中文')`、`StateError('中文')` 這類訊息：去掉
 /// Dart 加上的英文前綴後，有中文就照用。
-String? _chineseMessage(Object error) {
-  final text = error.toString().replaceFirst(_dartPrefix, '').trim();
+String? _chineseMessage(Object error) => _chinese(error.toString());
+
+String? _chinese(String message) {
+  final text = message.replaceFirst(_dartPrefix, '').trim();
   return _cjk.hasMatch(text) ? text : null;
 }
 
