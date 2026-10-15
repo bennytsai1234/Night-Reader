@@ -82,6 +82,11 @@ class BackupService {
         'readRecord.json',
         await getIt<ReadRecordDao>().getAll(),
       );
+      await _writeJson(
+        backupFolder,
+        'readDay.json',
+        await getIt<ReadRecordDao>().getAllDays(),
+      );
 
       // 2. 導出偏好設定 (對標 config.xml)
       final prefs = await SharedPreferences.getInstance();

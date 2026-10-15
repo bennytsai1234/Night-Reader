@@ -39,6 +39,11 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
         .get();
   }
 
+  /// 書名相同的書；閱讀統計只記書名，點書名時用它找回那本書。
+  Future<List<Book>> getByName(String name) {
+    return (select(books)..where((t) => t.name.equals(name))).get();
+  }
+
   Future<Book?> getByUrl(String url) {
     return (select(
       books,

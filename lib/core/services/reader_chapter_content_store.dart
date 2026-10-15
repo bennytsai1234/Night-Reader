@@ -92,6 +92,14 @@ class ReaderChapterContentStore {
   }) async {
     if (message.isEmpty) return;
     await _unlessLocked(chapter, () async {
+      // 重抓失敗不蓋掉已經存好的正文：正文只在使用者明確的動作中刪除
+      // （ADR 0008）。
+      final existing = await getContentEntry(book: book, chapter: chapter);
+      if (existing != null &&
+          existing.hasDisplayContent &&
+          !existing.isFailed) {
+        return;
+      }
       if (saveChapterMetadata) {
         await chapterDao.updateFetchedChapter(chapter);
       }

@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 void main() {
   late int showControls;
@@ -18,6 +22,11 @@ void main() {
   Future<ScrollController> pumpShell(
     WidgetTester tester, {
     required bool controlsVisible,
+    ValueListenable<ReaderV2InfoState>? infoStates,
+    ReaderV2InfoSlots headerInfo = const ReaderV2InfoSlots(
+      left: ReaderV2InfoItem.none,
+      right: ReaderV2InfoItem.none,
+    ),
   }) async {
     showControls = 0;
     dismissControls = 0;
@@ -30,76 +39,78 @@ void main() {
     void noopPercent(double _) {}
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderV2PageShell(
-          book: Book(
-            bookUrl: 'http://shell.test',
-            name: '殼層測試書',
-            author: '作者',
-            origin: 'local',
+        home: ValueListenableBuilder<ReaderV2InfoState>(
+          valueListenable:
+              infoStates ??
+              ValueNotifier<ReaderV2InfoState>(ReaderV2InfoState.ready),
+          builder: (context, infoState, _) => ReaderV2PageShell(
+            book: Book(
+              bookUrl: 'http://shell.test',
+              name: '殼層測試書',
+              author: '作者',
+              origin: 'local',
+              originName: '本地',
+            ),
+            scaffoldKey: scaffoldKey,
+            content: ListView.builder(
+              key: contentKey,
+              controller: scroll,
+              itemCount: 200,
+              itemBuilder: (_, index) =>
+                  SizedBox(height: 40, child: Text('第 $index 行')),
+            ),
+            drawer: ReaderV2ChaptersDrawer(
+              chapters: const [],
+              currentChapterIndex: 0,
+              titleFor: (_) => '',
+              onChapterTap: (_) async => false,
+            ),
+            backgroundColor: Colors.white,
+            infoColor: Colors.black,
+            textColor: Colors.black,
+            controlsVisible: controlsVisible,
+            showReadTitleAddition: true,
+            infoState: infoState,
+            chapterTitle: '第一章',
+            chapterUrl: '',
             originName: '本地',
+            navigation: ReaderV2ChapterNavigationState(
+              chapterCount: 3,
+              currentIndex: 0,
+              isScrubbing: false,
+              scrubPercent: 0,
+              titleFor: (_) => '',
+            ),
+            isAutoPaging: false,
+            hideStatusBar: true,
+            topCutoutExtent: 40,
+            headerInfo: headerInfo,
+            footerInfo: const ReaderV2InfoSlots(
+              left: ReaderV2InfoItem.bookName,
+              right: ReaderV2InfoItem.none,
+            ),
+            paddingTop: 0,
+            paddingBottom: 0,
+            dayNightIcon: Icons.dark_mode_rounded,
+            dayNightTooltip: '切換深色模式',
+            onExitIntent: () => exitIntents += 1,
+            onSystemBack: () => systemBacks += 1,
+            onMore: noop,
+            onOpenDrawer: noop,
+            onTts: noop,
+            onInterface: noop,
+            onSettings: noop,
+            onAutoPage: noop,
+            onToggleDayNight: noop,
+            onReplaceRule: noop,
+            onShowControls: () => showControls += 1,
+            onDismissControls: () => dismissControls += 1,
+            onPrevChapter: noop,
+            onNextChapter: noop,
+            onScrubStart: noopPercent,
+            onScrubbing: noopPercent,
+            onScrubEnd: noopPercent,
           ),
-          scaffoldKey: scaffoldKey,
-          content: ListView.builder(
-            key: contentKey,
-            controller: scroll,
-            itemCount: 200,
-            itemBuilder: (_, index) =>
-                SizedBox(height: 40, child: Text('第 $index 行')),
-          ),
-          drawer: ReaderV2ChaptersDrawer(
-            chapters: const [],
-            currentChapterIndex: 0,
-            titleFor: (_) => '',
-            onChapterTap: (_) async => false,
-          ),
-          backgroundColor: Colors.white,
-          infoColor: Colors.black,
-          controlsVisible: controlsVisible,
-          showReadTitleAddition: true,
-          hasVisibleContent: true,
-          isLoading: false,
-          chapterTitle: '第一章',
-          chapterUrl: '',
-          originName: '本地',
-          navigation: ReaderV2ChapterNavigationState(
-            chapterCount: 3,
-            currentIndex: 0,
-            isScrubbing: false,
-            scrubPercent: 0,
-            titleFor: (_) => '',
-          ),
-          isAutoPaging: false,
-          hideStatusBar: true,
-          topCutoutExtent: 40,
-          headerInfo: const ReaderV2InfoSlots(
-            left: ReaderV2InfoItem.none,
-            right: ReaderV2InfoItem.none,
-          ),
-          footerInfo: const ReaderV2InfoSlots(
-            left: ReaderV2InfoItem.bookName,
-            right: ReaderV2InfoItem.none,
-          ),
-          paddingTop: 0,
-          paddingBottom: 0,
-          dayNightIcon: Icons.dark_mode_rounded,
-          dayNightTooltip: '切換深色模式',
-          onExitIntent: () => exitIntents += 1,
-          onSystemBack: () => systemBacks += 1,
-          onMore: noop,
-          onOpenDrawer: noop,
-          onTts: noop,
-          onInterface: noop,
-          onSettings: noop,
-          onAutoPage: noop,
-          onToggleDayNight: noop,
-          onReplaceRule: noop,
-          onShowControls: () => showControls += 1,
-          onDismissControls: () => dismissControls += 1,
-          onPrevChapter: noop,
-          onNextChapter: noop,
-          onScrubStart: noopPercent,
-          onScrubbing: noopPercent,
-          onScrubEnd: noopPercent,
         ),
       ),
     );
@@ -176,5 +187,156 @@ void main() {
     expect(find.byType(ReaderV2PageShell), findsOneWidget);
     expect(systemBacks, 0);
     expect(exitIntents, 0);
+  });
+
+  group('info rows while the text is loading', () {
+    const headerInfo = ReaderV2InfoSlots(
+      left: ReaderV2InfoItem.chapterTitle,
+      right: ReaderV2InfoItem.bookProgress,
+    );
+
+    /// 資訊列裡的文字；頂部選單也有章名與書名，不算。
+    Finder infoText(String text) => find.byElementPredicate(
+      (element) =>
+          element.widget is Text &&
+          (element.widget as Text).data == text &&
+          element.findAncestorWidgetOfExactType<ReaderV2TopMenu>() == null,
+    );
+
+    Future<ValueNotifier<ReaderV2InfoState>> pumpLoading(
+      WidgetTester tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.loading);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pump(AppMotion.fade);
+      return states;
+    }
+
+    testWidgets('every item is a skeleton bar as wide as its text', (
+      tester,
+    ) async {
+      await pumpLoading(tester);
+
+      // 頁首章名、全書進度，頁尾書名。
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
+      for (final text in ['第一章', '…%', '殼層測試書']) {
+        final bar = find.descendant(
+          of: find
+              .ancestor(of: infoText(text), matching: find.byType(Stack))
+              .first,
+          matching: find.byType(SkeletonBox),
+        );
+        expect(
+          tester.getSize(bar).width,
+          tester.getSize(infoText(text)).width,
+          reason: text,
+        );
+        expect(
+          tester.getCenter(bar).dy,
+          moreOrLessEquals(tester.getCenter(infoText(text)).dy),
+          reason: text,
+        );
+      }
+    });
+
+    testWidgets('the info fades in where its skeleton was', (tester) async {
+      final states = await pumpLoading(tester);
+      final skeletonTitle = tester.getRect(infoText('第一章'));
+
+      states.value = ReaderV2InfoState.ready;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      // 淡出中的骨架與淡入中的資訊同時在畫面上。
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
+      expect(infoText('第一章'), findsNWidgets(2));
+
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(tester.getRect(infoText('第一章')), skeletonTitle);
+    });
+
+    testWidgets('a jump turns the info into skeleton bars in place', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.ready);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonBox), findsNothing);
+      final infoTitle = tester.getRect(infoText('第一章'));
+
+      states.value = ReaderV2InfoState.loading;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      // 淡出中的資訊與淡入中的骨架同時在畫面上，骨架就在資訊的位置。
+      expect(infoText('第一章'), findsNWidgets(2));
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
+
+      await tester.pump(AppMotion.fade);
+      // 資訊淡出完就移出畫面，只剩骨架裡不畫出的那一份。
+      expect(infoText('第一章'), findsOneWidget);
+      expect(
+        find.ancestor(of: infoText('第一章'), matching: find.byType(Visibility)),
+        findsOneWidget,
+      );
+      expect(tester.getRect(infoText('第一章')), infoTitle);
+    });
+
+    testWidgets('switching back before the fade starts moving keeps the info', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.ready);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pumpAndSettle();
+
+      // 兩次切換在同一個時間點：動畫已開始但濃淡還停在端點。
+      states.value = ReaderV2InfoState.loading;
+      await tester.pump();
+      states.value = ReaderV2InfoState.ready;
+      await tester.pump();
+      await tester.pump(AppMotion.fade * 2);
+
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(infoText('第一章'), findsOneWidget);
+      final opacity = tester.widget<FadeTransition>(
+        find
+            .ancestor(
+              of: infoText('第一章'),
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      );
+      expect(opacity.opacity.value, 1);
+    });
+
+    testWidgets('nothing is drawn when the text is unavailable', (
+      tester,
+    ) async {
+      final states = await pumpLoading(tester);
+
+      states.value = ReaderV2InfoState.hidden;
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(infoText('第一章'), findsNothing);
+      expect(infoText('殼層測試書'), findsNothing);
+    });
   });
 }

@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.RoundedCorner
 import android.view.WindowInsets
+import android.view.WindowManager
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -31,6 +32,14 @@ class MainActivity : AudioServiceActivity() {
         MethodChannel(messenger, "night_reader/reader_device").setMethodCallHandler { call, result ->
             when (call.method) {
                 "topCutoutExtent" -> result.success(topCutoutExtent())
+                "setKeepScreenOn" -> {
+                    setKeepScreenOn(call.arguments as? Boolean ?: false)
+                    result.success(null)
+                }
+                "setWindowBrightness" -> {
+                    setWindowBrightness((call.arguments as? Number)?.toFloat())
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -135,6 +144,24 @@ class MainActivity : AudioServiceActivity() {
         } catch (_: Exception) {
             // 拿不到 display 或 OEM 拒絕時維持系統預設，不影響啟動。
         }
+    }
+
+    // 閱讀器開著時保持螢幕常亮；只作用在這個視窗，離開 App 系統照常熄屏。
+    private fun setKeepScreenOn(on: Boolean) {
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // 這個視窗自己的背光亮度（0–1），不改系統設定；null 恢復跟隨系統
+    // （包括系統的自動亮度）。
+    private fun setWindowBrightness(value: Float?) {
+        val attributes = window.attributes
+        attributes.screenBrightness = value?.coerceIn(0f, 1f)
+            ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = attributes
     }
 
     // 畫面上緣被鏡頭挖孔或曲面邊緣佔掉的高度（邏輯像素），與狀態列是否

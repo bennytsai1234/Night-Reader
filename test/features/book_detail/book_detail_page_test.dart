@@ -68,7 +68,11 @@ void main() {
     getIt.registerSingleton<T>(instance);
   }
 
-  Future<void> pumpDetail(WidgetTester tester, Book book) async {
+  Future<void> pumpDetail(
+    WidgetTester tester,
+    Book book, {
+    Widget? home,
+  }) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -89,7 +93,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: BookDetailPage(book: book),
+        home: home ?? BookDetailPage(book: book),
       ),
     );
     await tester.pump();
@@ -163,6 +167,38 @@ void main() {
         .top;
     expect(capsule(tester).visible, isTrue);
     expect(tester.getRect(find.text('第40章')).bottom, lessThan(capsuleTop));
+  });
+
+  testWidgets('opened from the reader, a chapter returns its URL', (
+    tester,
+  ) async {
+    final result = Completer<String?>();
+    final book = bookWith();
+    await pumpDetail(
+      tester,
+      book,
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => result.complete(
+            Navigator.of(context).push<String>(
+              MaterialPageRoute(
+                builder: (_) => BookDetailPage(book: book, fromReader: true),
+              ),
+            ),
+          ),
+          child: const Text('閱讀器'),
+        ),
+      ),
+    );
+    bookDao.gate.complete();
+    await tester.tap(find.text('閱讀器'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('第3章'));
+    await tester.pumpAndSettle();
+
+    // 回傳網址而不是序號：詳情的目錄可能比閱讀器手上的新。
+    expect(await result.future, '$bookUrl/2');
   });
 
   testWidgets('the cover ambience fades out before the title', (tester) async {

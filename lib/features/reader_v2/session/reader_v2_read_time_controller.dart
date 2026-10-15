@@ -30,12 +30,11 @@ class ReaderV2ReadTimeController {
 
     _startedAt = null;
     final stoppedAt = _now();
-    final seconds = stoppedAt.difference(startedAt).inSeconds;
-    if (seconds <= 0) return;
+    if (stoppedAt.difference(startedAt).inSeconds <= 0) return;
 
     final write = _writeTail.then<void>(
-      (_) => _persist(seconds, stoppedAt),
-      onError: (Object _, StackTrace _) => _persist(seconds, stoppedAt),
+      (_) => _persist(startedAt, stoppedAt),
+      onError: (Object _, StackTrace _) => _persist(startedAt, stoppedAt),
     );
     _writeTail = write;
     await write;
@@ -48,12 +47,12 @@ class ReaderV2ReadTimeController {
     await _writeTail;
   }
 
-  Future<void> _persist(int seconds, DateTime stoppedAt) async {
+  Future<void> _persist(DateTime startedAt, DateTime stoppedAt) async {
     try {
       await readRecordDao.recordReadActivity(
         bookName: bookName,
-        seconds: seconds,
-        lastRead: stoppedAt.millisecondsSinceEpoch,
+        startedAt: startedAt,
+        stoppedAt: stoppedAt,
       );
     } catch (e, stack) {
       AppLog.e('寫入閱讀時間失敗: $e', error: e, stackTrace: stack);

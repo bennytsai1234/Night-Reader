@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
@@ -35,30 +37,58 @@ class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
 }
 
 void main() {
-  setUp(() async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    await SharedPreferences.getInstance();
-  });
+  Future<void> usePrefs(Map<String, Object> values) async {
+    SharedPreferences.setMockInitialValues(values);
+    final getIt = GetIt.instance;
+    if (getIt.isRegistered<SharedPreferences>()) {
+      getIt.unregister<SharedPreferences>();
+    }
+    getIt.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+  }
 
-  group('loading before the reader opens', () {
-    test('is not loaded until the first load ends', () async {
+  setUp(() => usePrefs(<String, Object>{}));
+  tearDown(GetIt.instance.reset);
+
+  group('loading', () {
+    test('a new controller already has the saved settings', () async {
+      await usePrefs(<String, Object>{
+        PreferKey.readerFontSize: 24.0,
+        PreferKey.readerHeaderInfo: '3,6',
+      });
+
       final settings = ReaderV2SettingsController();
-      expect(settings.isLoaded, isFalse);
 
-      await settings.loadSettings();
-
-      expect(settings.isLoaded, isTrue);
+      expect(settings.fontSize, 24.0);
+      expect(
+        settings.headerInfo,
+        const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.chapterTitle,
+          right: ReaderV2InfoItem.bookProgress,
+        ),
+      );
       settings.dispose();
     });
 
-    test('a failed load still counts as loaded, so the reader opens', () async {
+    test('an unreadable saved value opens with the defaults', () async {
+      await usePrefs(<String, Object>{PreferKey.readerFontSize: '24'});
+
+      final settings = ReaderV2SettingsController();
+
+      expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
+      settings.dispose();
+    });
+
+    test('a failed reload keeps the current settings', () async {
+      await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
       final settings = ReaderV2SettingsController(
         prefsRepository: const _BrokenLoadRepository(),
       );
 
       await settings.loadSettings();
 
-      expect(settings.isLoaded, isTrue);
+      expect(settings.fontSize, 24.0);
       settings.dispose();
     });
   });
@@ -120,9 +150,7 @@ void main() {
   });
 
   test('unsaved title size keeps the old body + 4 appearance', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      PreferKey.readerFontSize: 24.0,
-    });
+    await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
     final snapshot = await const ReaderV2PrefsRepository().load();
     expect(snapshot.titleFontSize, 28.0);
 
@@ -187,6 +215,33 @@ void main() {
     expect(reloaded.highlightColor, ReaderV2HighlightColor.blue);
     expect(reloaded.highlightStrength, closeTo(0.4, 1e-9));
   });
+
+  test(
+    'dragging the brightness bar leaves auto and saves once on release',
+    () async {
+      final defaults = await const ReaderV2PrefsRepository().load();
+      expect(defaults.brightnessAuto, isTrue);
+      expect(defaults.volumeKeyPage, isFalse);
+
+      final settings = ReaderV2SettingsController();
+      await settings.loadSettings();
+      settings.setBrightness(0.1, persist: false);
+      expect(settings.brightnessAuto, isFalse);
+      await pumpEventQueue();
+      final mid = await const ReaderV2PrefsRepository().load();
+      expect(mid.brightness, ReaderV2Brightness.defaultLevel);
+
+      settings.setBrightness(0.2);
+      settings.setVolumeKeyPage(true);
+      await pumpEventQueue();
+      settings.dispose();
+
+      final reloaded = await const ReaderV2PrefsRepository().load();
+      expect(reloaded.brightnessAuto, isFalse);
+      expect(reloaded.brightness, closeTo(0.2, 1e-9));
+      expect(reloaded.volumeKeyPage, isTrue);
+    },
+  );
 
   test('損毀或超出範圍的高亮設定回退到安全值', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{

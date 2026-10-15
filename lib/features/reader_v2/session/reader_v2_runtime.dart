@@ -86,6 +86,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         target.chapterIndex != state.visibleLocation.chapterIndex;
   }
 
+  /// 正文正在照新的排版設定重排，或照新的內容設定（繁簡轉換、替換規則等）
+  /// 重新載入，還沒排好。
+  bool get isRebuildingText {
+    final kind = stateMachine.currentOperation?.kind;
+    return kind == ReaderV2OperationKind.presentation ||
+        kind == ReaderV2OperationKind.contentReload;
+  }
+
   ReaderV2State get state => stateMachine.state;
 
   int get chapterCount => repository.chapterCount;
@@ -223,7 +231,10 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<bool> reloadContentPreservingLocation() async {
+  /// 重新整理目前這一章並停在原位。[refetch] 先向書源重抓（見
+  /// [ReaderV2ChapterRepository.reloadContent]）；抓不到時保留原本的正文，
+  /// 並把原因交給頁面顯示。
+  Future<bool> reloadContentPreservingLocation({bool refetch = false}) async {
     final location =
         pendingLocation ??
         viewportBridge.captureVisibleLocation() ??
@@ -236,6 +247,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         location: location,
         previousContent: previousContent,
         token: token,
+        refetch: refetch,
       );
       if (!isCurrentOperationToken(token)) return true;
       await _positionViewport(location: remappedLocation, token: token);
@@ -252,10 +264,14 @@ class ReaderV2Runtime extends ChangeNotifier {
     required ReaderV2Location location,
     required ReaderV2Content? previousContent,
     required ReaderV2OperationToken token,
+    required bool refetch,
   }) async {
     late final ReaderV2Content after;
     try {
-      after = await repository.reloadContent(location.chapterIndex);
+      after = await repository.reloadContent(
+        location.chapterIndex,
+        refetch: refetch,
+      );
     } finally {
       _publishRepositoryContentGeneration();
     }

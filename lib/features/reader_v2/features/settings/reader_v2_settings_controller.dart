@@ -1,20 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ReaderV2SettingsController extends ChangeNotifier {
+  /// 建構時就從已預載的 SharedPreferences 同步讀出使用者的設定：閱讀器第一幀
+  /// 就照這些設定畫出正文與頁首頁尾的骨架，不必先等一次非同步載入。讀不出來
+  /// （例如還原進來的值型別不對）就用預設值，閱讀器照樣打開。
   ReaderV2SettingsController({
     this._prefsRepository = const ReaderV2PrefsRepository(),
   }) {
-    _initFromCache(ReaderV2PrefsRepository.cachedSnapshot);
+    try {
+      _persisted = _prefsRepository.read(getIt<SharedPreferences>());
+    } catch (error, stackTrace) {
+      AppLog.e('閱讀設定讀取失敗: $error', error: error, stackTrace: stackTrace);
+      _persisted = ReaderV2PrefsSnapshot.defaults();
+    }
+    _initFromCache(_persisted);
   }
 
   static const double minReadableLineHeight =
@@ -55,10 +67,13 @@ class ReaderV2SettingsController extends ChangeNotifier {
   ReaderV2HighlightColor highlightColor =
       ReaderV2PrefsSnapshot.defaults().highlightColor;
   double highlightStrength = ReaderV2PrefsSnapshot.defaults().highlightStrength;
+  bool brightnessAuto = ReaderV2PrefsSnapshot.defaults().brightnessAuto;
+  double brightness = ReaderV2PrefsSnapshot.defaults().brightness;
+  bool volumeKeyPage = ReaderV2PrefsSnapshot.defaults().volumeKeyPage;
   int _contentSettingsGeneration = 0;
 
   /// 最後一次確定落地（載入或保存成功）的設定；保存失敗時據此還原。
-  ReaderV2PrefsSnapshot _persisted = ReaderV2PrefsRepository.cachedSnapshot;
+  late ReaderV2PrefsSnapshot _persisted;
   final Map<String, int> _saveGenerations = <String, int>{};
   final StreamController<String> _saveFailures =
       StreamController<String>.broadcast();
@@ -70,12 +85,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int get contentSettingsGeneration => _contentSettingsGeneration;
   bool get showReadTitleAddition => true;
 
-  /// 第一次 [loadSettings] 已結束（成功或失敗）。在這之前的值是上次載入的
-  /// 快取，App 啟動後第一次開書時則是預設值；閱讀器要等它才開書，否則會
-  /// 先用預設值排出正文，設定到了再重排、重載一次。
-  bool get isLoaded => _loaded;
-  bool _loaded = false;
-
+  /// 重新讀一次設定，接上別處（例如「閱讀偏好」頁）寫入的改動。
   Future<void> loadSettings() async {
     try {
       final snapshot = await _prefsRepository.load();
@@ -87,10 +97,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
       _initFromCache(snapshot);
       ChineseDisplay.mode.value = chineseConvert;
     } catch (error, stackTrace) {
-      // 讀不到就用目前的值開書，不讓閱讀器卡在載入中。
+      // 讀不到就沿用目前的值。
       AppLog.e('閱讀設定載入失敗: $error', error: error, stackTrace: stackTrace);
     } finally {
-      _loaded = true;
       if (!_disposed) notifyListeners();
     }
   }
@@ -116,6 +125,9 @@ class ReaderV2SettingsController extends ChangeNotifier {
     footerInfo = snapshot.footerInfo;
     highlightColor = snapshot.highlightColor;
     highlightStrength = snapshot.highlightStrength;
+    brightnessAuto = snapshot.brightnessAuto;
+    brightness = snapshot.brightness;
+    volumeKeyPage = snapshot.volumeKeyPage;
   }
 
   @override
@@ -335,6 +347,49 @@ class ReaderV2SettingsController extends ChangeNotifier {
       () => _prefsRepository.saveHighlightStrength(normalized),
       onSaved: (p) => p.copyWith(highlightStrength: normalized),
       restore: (p) => highlightStrength = p.highlightStrength,
+    );
+    notifyListeners();
+  }
+
+  /// 亮度改回跟隨系統，或改用自己的亮度（沿用上次調的位置）。
+  void setBrightnessAuto(bool value) {
+    if (brightnessAuto == value) return;
+    brightnessAuto = value;
+    _persist(
+      'brightnessAuto',
+      () => _prefsRepository.saveBrightnessAuto(value),
+      onSaved: (p) => p.copyWith(brightnessAuto: value),
+      restore: (p) => brightnessAuto = p.brightnessAuto,
+    );
+    notifyListeners();
+  }
+
+  /// 拖動亮度條：改用自己的亮度並立刻套用。拖動中 [persist] 為 false，
+  /// 放開時再寫入一次，不在每一格都寫偏好設定。
+  void setBrightness(double value, {bool persist = true}) {
+    final normalized = ReaderV2Brightness.normalize(value);
+    final changed = brightness != normalized || brightnessAuto;
+    brightness = normalized;
+    if (brightnessAuto) setBrightnessAuto(false);
+    if (persist) {
+      _persist(
+        'brightness',
+        () => _prefsRepository.saveBrightness(normalized),
+        onSaved: (p) => p.copyWith(brightness: normalized),
+        restore: (p) => brightness = p.brightness,
+      );
+    }
+    if (changed) notifyListeners();
+  }
+
+  void setVolumeKeyPage(bool value) {
+    if (volumeKeyPage == value) return;
+    volumeKeyPage = value;
+    _persist(
+      'volumeKeyPage',
+      () => _prefsRepository.saveVolumeKeyPage(value),
+      onSaved: (p) => p.copyWith(volumeKeyPage: value),
+      restore: (p) => volumeKeyPage = p.volumeKeyPage,
     );
     notifyListeners();
   }

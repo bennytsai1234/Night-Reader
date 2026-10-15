@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -164,8 +165,9 @@ class SourceManagerDialogs {
         }
       } catch (error) {
         if (pageContext.mounted) {
-          ScaffoldMessenger.of(pageContext)
-              .showSnackBar(SnackBar(content: Text('校驗啟動失敗：$error')));
+          ScaffoldMessenger.of(pageContext).showSnackBar(
+            SnackBar(content: Text(failureMessage('校驗啟動', error))),
+          );
         }
       }
     }
@@ -327,7 +329,7 @@ class SourceManagerDialogs {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('清理失敗：$error')));
+            .showSnackBar(SnackBar(content: Text(failureMessage('清理', error))));
       }
     }
   }
@@ -356,8 +358,9 @@ class SourceManagerDialogs {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('清除校驗標記失敗：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failureMessage('清除校驗標記', error))),
+        );
       }
     }
   }
@@ -382,8 +385,9 @@ class SourceManagerDialogs {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('刪除非小說源失敗：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failureMessage('刪除非小說源', error))),
+        );
       }
     }
   }

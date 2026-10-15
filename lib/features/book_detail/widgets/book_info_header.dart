@@ -22,7 +22,9 @@ class BookInfoHeader extends StatelessWidget {
   final Book book;
   final BookDetailProvider provider;
   final void Function(BuildContext context, String url) showPhotoView;
-  final VoidCallback onToggleBookshelf;
+
+  /// null 時不顯示加入／移出書架（從閱讀器開的詳情，見 BookDetailPage）。
+  final VoidCallback? onToggleBookshelf;
 
   /// 書籍資料還在載入：書架狀態等還不確定，動作按鈕先畫骨架。
   final bool loading;
@@ -123,7 +125,10 @@ class BookInfoHeader extends StatelessWidget {
     );
   }
 
-  int get _actionCount => onChangeSource == null ? 2 : 3;
+  int get _actionCount =>
+      1 +
+      (onToggleBookshelf == null ? 0 : 1) +
+      (onChangeSource == null ? 0 : 1);
 
   Widget _actionRow(List<Widget> buttons) => Row(
     children: [
@@ -135,14 +140,15 @@ class BookInfoHeader extends StatelessWidget {
   );
 
   List<Widget> _actionButtons() => [
-    _ActionButton(
-      icon: provider.isInBookshelf
-          ? Icons.library_add_check_rounded
-          : Icons.library_add_outlined,
-      label: provider.isInBookshelf ? '已在書架' : '加入書架',
-      tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
-      onTap: onToggleBookshelf,
-    ),
+    if (onToggleBookshelf case final toggle?)
+      _ActionButton(
+        icon: provider.isInBookshelf
+            ? Icons.library_add_check_rounded
+            : Icons.library_add_outlined,
+        label: provider.isInBookshelf ? '已在書架' : '加入書架',
+        tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
+        onTap: toggle,
+      ),
     if (onChangeSource != null)
       _ActionButton(
         icon: Icons.swap_horiz_rounded,

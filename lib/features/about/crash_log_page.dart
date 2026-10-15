@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -106,7 +107,7 @@ class _CrashLogPageState extends State<CrashLogPage> {
         return AppStateView(
           icon: Icons.error_outline,
           title: '崩潰日誌載入失敗',
-          description: _loadError.toString(),
+          description: userErrorReason(_loadError!),
           tone: AppStateTone.error,
           primaryAction: AppStateAction(
             label: '重試',
@@ -188,7 +189,9 @@ class _CrashLogPageState extends State<CrashLogPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('清除崩潰日誌失敗：$error')));
+        ..showSnackBar(
+          SnackBar(content: Text('清除崩潰日誌失敗：${userErrorReason(error)}')),
+        );
     } finally {
       if (mounted) setState(() => _isClearing = false);
     }

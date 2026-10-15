@@ -18,8 +18,11 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     // 與正式環境一致：啟動時已初始化，後續 fire-and-forget 寫入依序完成。
-    await SharedPreferences.getInstance();
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
   });
+  tearDown(GetIt.instance.reset);
 
   group('ReaderV2SettingsController resets', () {
     test('resetTypography restores and persists defaults', () async {
@@ -163,10 +166,6 @@ void main() {
     tester.view.physicalSize = const Size(280, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    GetIt.instance.registerSingleton<SharedPreferences>(
-      await SharedPreferences.getInstance(),
-    );
-    addTearDown(GetIt.instance.reset);
     final themeSettings = ThemeSettingsProvider();
     final settings = ReaderV2SettingsController();
 

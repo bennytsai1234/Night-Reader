@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:night_reader/core/constant/app_pattern.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
@@ -967,7 +968,7 @@ class ReaderV2ContentTransformWorker {
       });
     } catch (error) {
       _pending.remove(id);
-      throw ReaderV2ContentTransformException('章節內容處理失敗：$error');
+      throw ReaderV2ContentTransformException(failureMessage('章節內容處理', error));
     }
     return completer.future;
   }
@@ -1027,7 +1028,7 @@ class ReaderV2ContentTransformWorker {
     } catch (error) {
       final failure = error is ReaderV2ContentTransformException
           ? error
-          : ReaderV2ContentTransformException('無法啟動內容轉換：$error');
+          : ReaderV2ContentTransformException(failureMessage('啟動內容轉換', error));
       if (identical(_responses, responses)) _reset(failure);
       throw failure;
     }

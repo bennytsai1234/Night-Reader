@@ -1,3 +1,4 @@
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -158,7 +159,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('操作失敗: $error')));
+          .showSnackBar(SnackBar(content: Text(failureMessage('操作', error))));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -190,7 +191,7 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage>
             children: [
               GroupedRow(
                 title: '權限狀態載入失敗',
-                subtitle: snapshot.error.toString(),
+                subtitle: userErrorReason(snapshot.error!),
                 maxSubtitleLines: 4,
                 value: '重試',
                 showChevron: false,
