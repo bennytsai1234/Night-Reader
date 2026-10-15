@@ -94,9 +94,7 @@ final class ReaderV2TextLayoutFrame {
     // measured full-width advances. A tiny paragraph slack protects native
     // layout from float accumulation without allowing the frame to escape the
     // physical content box.
-    const cellCountEpsilon = 0.01;
-    const paragraphSlack = 0.05;
-    final cells = ((contentWidth + cellCountEpsilon) / cellWidth).floor();
+    final cells = _cellCount(contentWidth, cellWidth);
     if (cells < 1) {
       return ReaderV2TextLayoutFrame(
         width: contentWidth,
@@ -105,7 +103,7 @@ final class ReaderV2TextLayoutFrame {
       );
     }
 
-    final width = (cells * cellWidth + paragraphSlack)
+    final width = (cells * cellWidth + _paragraphSlack)
         .clamp(1.0, contentWidth)
         .toDouble();
     final residual = (contentWidth - width)
@@ -117,6 +115,30 @@ final class ReaderV2TextLayoutFrame {
       leftInset: leftInset,
       rightInset: residual - leftInset,
     );
+  }
+
+  static const _cellCountEpsilon = 0.01;
+  static const _paragraphSlack = 0.05;
+
+  static int _cellCount(double contentWidth, double cellWidth) =>
+      ((contentWidth + _cellCountEpsilon) / cellWidth).floor();
+
+  /// 左右對齊用的字距：把 [contentWidth] 湊整數個字格後剩下的空隙平均攤進
+  /// 每一格（[cellWidth] 是含 [letterSpacing] 的實測字格寬），只留下
+  /// paragraph slack，用新字距量出的字格排成的文字框就撐滿整個內容寬，
+  /// 正文左右兩緣貼齊邊距，字格仍然等寬、直行照樣對齊。放不下一格時照舊。
+  static double justifiedLetterSpacing({
+    required double contentWidth,
+    required double cellWidth,
+    required double letterSpacing,
+  }) {
+    if (!contentWidth.isFinite || !cellWidth.isFinite || cellWidth <= 0) {
+      return letterSpacing;
+    }
+    final cells = _cellCount(contentWidth, cellWidth);
+    if (cells < 1) return letterSpacing;
+    final spread = (contentWidth - _paragraphSlack - cells * cellWidth) / cells;
+    return spread > 0 ? letterSpacing + spread : letterSpacing;
   }
 
   /// Drawable paragraph width inside the physical content box.

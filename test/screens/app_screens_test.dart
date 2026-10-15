@@ -110,14 +110,6 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
       await tapText(t, '排版');
     },
   ),
-  'r05_layout_more': (
-    const {},
-    (t) async {
-      await openReaderMenu(t);
-      await tapText(t, '排版');
-      await tapText(t, '更多排版');
-    },
-  ),
   'r06_advanced': (
     const {},
     (t) async {

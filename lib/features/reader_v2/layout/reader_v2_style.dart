@@ -15,6 +15,7 @@ class ReaderV2Style {
     required this.paddingBottom,
     required this.paddingLeft,
     required this.paddingRight,
+    this.justify = false,
     this.bold = false,
     this.textIndent = 0,
     double? titleFontSize,
@@ -32,6 +33,10 @@ class ReaderV2Style {
   final double paddingBottom;
   final double paddingLeft;
   final double paddingRight;
+
+  /// 左右對齊：排版時把一行湊不滿一個字格的空隙攤進字距，
+  /// 見 `ReaderV2TextLayoutFrame.justifiedLetterSpacing`。
+  final bool justify;
   final bool bold;
   final int textIndent;
 
@@ -55,6 +60,7 @@ class ReaderV2Style {
     double? paddingBottom,
     double? paddingLeft,
     double? paddingRight,
+    bool? justify,
     bool? bold,
     int? textIndent,
     double? titleFontSize,
@@ -69,6 +75,7 @@ class ReaderV2Style {
       paddingBottom: paddingBottom ?? this.paddingBottom,
       paddingLeft: paddingLeft ?? this.paddingLeft,
       paddingRight: paddingRight ?? this.paddingRight,
+      justify: justify ?? this.justify,
       bold: bold ?? this.bold,
       textIndent: textIndent ?? this.textIndent,
       titleFontSize: titleFontSize ?? this.titleFontSize,
@@ -87,6 +94,7 @@ class ReaderV2Style {
         other.paddingBottom == paddingBottom &&
         other.paddingLeft == paddingLeft &&
         other.paddingRight == paddingRight &&
+        other.justify == justify &&
         other.bold == bold &&
         other.textIndent == textIndent &&
         other.titleFontSize == titleFontSize;
@@ -103,6 +111,7 @@ class ReaderV2Style {
     paddingBottom,
     paddingLeft,
     paddingRight,
+    justify,
     bold,
     textIndent,
     titleFontSize,

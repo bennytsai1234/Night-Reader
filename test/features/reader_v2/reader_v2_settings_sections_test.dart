@@ -66,19 +66,13 @@ void main() {
     });
   });
 
-  Future<ReaderV2SettingsController> pumpSection(
-    WidgetTester tester, {
-    bool collapsible = false,
-  }) async {
+  Future<ReaderV2SettingsController> pumpSection(WidgetTester tester) async {
     final settings = ReaderV2SettingsController();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: ReaderV2TypographySection(
-              settings: settings,
-              collapsible: collapsible,
-            ),
+            child: ReaderV2TypographySection(settings: settings),
           ),
         ),
       ),
@@ -124,19 +118,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
     expect(resetButton().onPressed, isNull);
-  });
-
-  testWidgets('collapsible section hides secondary rows until expanded', (
-    tester,
-  ) async {
-    await pumpSection(tester, collapsible: true);
-    expect(find.text('字號'), findsOneWidget);
-    expect(find.text('字距'), findsNothing);
-
-    await tester.tap(find.text('更多排版'));
-    await tester.pumpAndSettle();
-    expect(find.text('字距'), findsOneWidget);
-    expect(find.text('首行縮排'), findsOneWidget);
   });
 
   test('menu sheet theme follows menu palette colors', () {

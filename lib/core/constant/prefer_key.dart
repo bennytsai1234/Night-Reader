@@ -190,6 +190,7 @@ class PreferKey {
   static const String readerPaddingBottom = 'reader_padding_bottom';
   static const String readerFooterOffset = 'reader_footer_offset';
   static const String readerHideStatusBar = 'reader_hide_status_bar';
+  static const String readerJustifyText = 'reader_justify_text';
   static const String readerHeaderInfo = 'reader_header_info';
   static const String readerFooterInfo = 'reader_footer_info';
 

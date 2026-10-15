@@ -53,7 +53,6 @@ class _ReaderInterfaceSheet extends StatelessWidget {
         const _ReaderStyleSelector(),
         ReaderV2TypographySection(
           settings: settings,
-          collapsible: true,
           moreChildren: [ReaderV2PageLayoutSection(settings: settings)],
         ),
       ],
