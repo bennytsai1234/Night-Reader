@@ -57,6 +57,7 @@ part 'app_database.g.dart';
     DictRules,
     HttpTtsTable,
     ReadRecords,
+    ReadDays,
     Servers,
     TxtTocRules,
     CacheTable,
@@ -93,7 +94,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -138,6 +139,11 @@ class AppDatabase extends _$AppDatabase {
             ],
           ),
         );
+      }
+      if (from < 7) {
+        // 閱讀統計的「今天／本週」改記每天的秒數；之前只有累計，
+        // 所以這兩個數字從升級後開始算。
+        await m.createTable(readDays);
       }
     },
     beforeOpen: (_) async {

@@ -169,6 +169,7 @@ class RestoreService {
       'readerChapterContents.json',
       'readRecord.json',
       'readRecords.json',
+      'readDay.json',
     };
     if (!supportedFiles.contains(fileName)) return false;
 
@@ -217,6 +218,9 @@ class RestoreService {
           case 'readRecord.json':
           case 'readRecords.json':
             await _readRecordDao.restoreByBookName(ReadRecord.fromJson(item));
+            break;
+          case 'readDay.json':
+            await _readRecordDao.restoreDay(ReadDay.fromJson(item));
             break;
         }
       }

@@ -6145,6 +6145,266 @@ extension ReadRecordToInsertable on ReadRecord {
   }
 }
 
+class $ReadDaysTable extends ReadDays with TableInfo<$ReadDaysTable, ReadDay> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReadDaysTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _bookNameMeta = const VerificationMeta(
+    'bookName',
+  );
+  @override
+  late final GeneratedColumn<String> bookName = GeneratedColumn<String>(
+    'bookName',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<String> day = GeneratedColumn<String>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _secondsMeta = const VerificationMeta(
+    'seconds',
+  );
+  @override
+  late final GeneratedColumn<int> seconds = GeneratedColumn<int>(
+    'seconds',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [bookName, day, seconds];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'read_days';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReadDay> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('bookName')) {
+      context.handle(
+        _bookNameMeta,
+        bookName.isAcceptableOrUnknown(data['bookName']!, _bookNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookNameMeta);
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('seconds')) {
+      context.handle(
+        _secondsMeta,
+        seconds.isAcceptableOrUnknown(data['seconds']!, _secondsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {bookName, day};
+  @override
+  ReadDay map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReadDay(
+      bookName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bookName'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}day'],
+      )!,
+      seconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}seconds'],
+      )!,
+    );
+  }
+
+  @override
+  $ReadDaysTable createAlias(String alias) {
+    return $ReadDaysTable(attachedDatabase, alias);
+  }
+}
+
+class ReadDay extends DataClass implements Insertable<ReadDay> {
+  final String bookName;
+  final String day;
+  final int seconds;
+  const ReadDay({
+    required this.bookName,
+    required this.day,
+    required this.seconds,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['bookName'] = Variable<String>(bookName);
+    map['day'] = Variable<String>(day);
+    map['seconds'] = Variable<int>(seconds);
+    return map;
+  }
+
+  ReadDaysCompanion toCompanion(bool nullToAbsent) {
+    return ReadDaysCompanion(
+      bookName: Value(bookName),
+      day: Value(day),
+      seconds: Value(seconds),
+    );
+  }
+
+  factory ReadDay.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReadDay(
+      bookName: serializer.fromJson<String>(json['bookName']),
+      day: serializer.fromJson<String>(json['day']),
+      seconds: serializer.fromJson<int>(json['seconds']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'bookName': serializer.toJson<String>(bookName),
+      'day': serializer.toJson<String>(day),
+      'seconds': serializer.toJson<int>(seconds),
+    };
+  }
+
+  ReadDay copyWith({String? bookName, String? day, int? seconds}) => ReadDay(
+    bookName: bookName ?? this.bookName,
+    day: day ?? this.day,
+    seconds: seconds ?? this.seconds,
+  );
+  ReadDay copyWithCompanion(ReadDaysCompanion data) {
+    return ReadDay(
+      bookName: data.bookName.present ? data.bookName.value : this.bookName,
+      day: data.day.present ? data.day.value : this.day,
+      seconds: data.seconds.present ? data.seconds.value : this.seconds,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReadDay(')
+          ..write('bookName: $bookName, ')
+          ..write('day: $day, ')
+          ..write('seconds: $seconds')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(bookName, day, seconds);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReadDay &&
+          other.bookName == this.bookName &&
+          other.day == this.day &&
+          other.seconds == this.seconds);
+}
+
+class ReadDaysCompanion extends UpdateCompanion<ReadDay> {
+  final Value<String> bookName;
+  final Value<String> day;
+  final Value<int> seconds;
+  final Value<int> rowid;
+  const ReadDaysCompanion({
+    this.bookName = const Value.absent(),
+    this.day = const Value.absent(),
+    this.seconds = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReadDaysCompanion.insert({
+    required String bookName,
+    required String day,
+    this.seconds = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : bookName = Value(bookName),
+       day = Value(day);
+  static Insertable<ReadDay> custom({
+    Expression<String>? bookName,
+    Expression<String>? day,
+    Expression<int>? seconds,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (bookName != null) 'bookName': bookName,
+      if (day != null) 'day': day,
+      if (seconds != null) 'seconds': seconds,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReadDaysCompanion copyWith({
+    Value<String>? bookName,
+    Value<String>? day,
+    Value<int>? seconds,
+    Value<int>? rowid,
+  }) {
+    return ReadDaysCompanion(
+      bookName: bookName ?? this.bookName,
+      day: day ?? this.day,
+      seconds: seconds ?? this.seconds,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (bookName.present) {
+      map['bookName'] = Variable<String>(bookName.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<String>(day.value);
+    }
+    if (seconds.present) {
+      map['seconds'] = Variable<int>(seconds.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReadDaysCompanion(')
+          ..write('bookName: $bookName, ')
+          ..write('day: $day, ')
+          ..write('seconds: $seconds, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -8431,6 +8691,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DictRulesTable dictRules = $DictRulesTable(this);
   late final $HttpTtsTableTable httpTtsTable = $HttpTtsTableTable(this);
   late final $ReadRecordsTable readRecords = $ReadRecordsTable(this);
+  late final $ReadDaysTable readDays = $ReadDaysTable(this);
   late final $ServersTable servers = $ServersTable(this);
   late final $TxtTocRulesTable txtTocRules = $TxtTocRulesTable(this);
   late final $CacheTableTable cacheTable = $CacheTableTable(this);
@@ -8483,6 +8744,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dictRules,
     httpTtsTable,
     readRecords,
+    readDays,
     servers,
     txtTocRules,
     cacheTable,
@@ -12484,6 +12746,169 @@ typedef $$ReadRecordsTableProcessedTableManager =
       ReadRecord,
       PrefetchHooks Function()
     >;
+typedef $$ReadDaysTableCreateCompanionBuilder = ReadDaysCompanion Function({
+  required String bookName,
+  required String day,
+  Value<int> seconds,
+  Value<int> rowid,
+});
+typedef $$ReadDaysTableUpdateCompanionBuilder = ReadDaysCompanion Function({
+  Value<String> bookName,
+  Value<String> day,
+  Value<int> seconds,
+  Value<int> rowid,
+});
+
+class $$ReadDaysTableFilterComposer
+    extends Composer<_$AppDatabase, $ReadDaysTable> {
+  $$ReadDaysTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get bookName => $composableBuilder(
+    column: $table.bookName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get seconds => $composableBuilder(
+    column: $table.seconds,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ReadDaysTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReadDaysTable> {
+  $$ReadDaysTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get bookName => $composableBuilder(
+    column: $table.bookName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get seconds => $composableBuilder(
+    column: $table.seconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ReadDaysTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReadDaysTable> {
+  $$ReadDaysTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get bookName =>
+      $composableBuilder(column: $table.bookName, builder: (column) => column);
+
+  GeneratedColumn<String> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<int> get seconds =>
+      $composableBuilder(column: $table.seconds, builder: (column) => column);
+}
+
+class $$ReadDaysTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReadDaysTable,
+          ReadDay,
+          $$ReadDaysTableFilterComposer,
+          $$ReadDaysTableOrderingComposer,
+          $$ReadDaysTableAnnotationComposer,
+          $$ReadDaysTableCreateCompanionBuilder,
+          $$ReadDaysTableUpdateCompanionBuilder,
+          (ReadDay, BaseReferences<_$AppDatabase, $ReadDaysTable, ReadDay>),
+          ReadDay,
+          PrefetchHooks Function()
+        > {
+  $$ReadDaysTableTableManager(_$AppDatabase db, $ReadDaysTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReadDaysTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReadDaysTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReadDaysTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> bookName = const Value.absent(),
+                Value<String> day = const Value.absent(),
+                Value<int> seconds = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReadDaysCompanion(
+                bookName: bookName,
+                day: day,
+                seconds: seconds,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String bookName,
+                required String day,
+                Value<int> seconds = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReadDaysCompanion.insert(
+                bookName: bookName,
+                day: day,
+                seconds: seconds,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ReadDaysTable, ReadDay>(table),
+                  BaseReferences<_$AppDatabase, $ReadDaysTable, ReadDay>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ReadDaysTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReadDaysTable,
+      ReadDay,
+      $$ReadDaysTableFilterComposer,
+      $$ReadDaysTableOrderingComposer,
+      $$ReadDaysTableAnnotationComposer,
+      $$ReadDaysTableCreateCompanionBuilder,
+      $$ReadDaysTableUpdateCompanionBuilder,
+      (ReadDay, BaseReferences<_$AppDatabase, $ReadDaysTable, ReadDay>),
+      ReadDay,
+      PrefetchHooks Function()
+    >;
 typedef $$ServersTableCreateCompanionBuilder = ServersCompanion Function({
   Value<int> id,
   required String name,
@@ -14209,6 +14634,8 @@ class $AppDatabaseManager {
       $$HttpTtsTableTableTableManager(_db, _db.httpTtsTable);
   $$ReadRecordsTableTableManager get readRecords =>
       $$ReadRecordsTableTableManager(_db, _db.readRecords);
+  $$ReadDaysTableTableManager get readDays =>
+      $$ReadDaysTableTableManager(_db, _db.readDays);
   $$ServersTableTableManager get servers =>
       $$ServersTableTableManager(_db, _db.servers);
   $$TxtTocRulesTableTableManager get txtTocRules =>
