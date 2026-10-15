@@ -91,15 +91,20 @@ class SkeletonBox extends StatelessWidget {
     this.width,
     this.height,
     this.borderRadius = AppRadius.cardXs,
+    this.color,
   });
 
   final double? width;
   final double? height;
   final BorderRadius borderRadius;
 
+  /// 佔位底色；null 時取 [Skeleton.colorOf]。不從 App 主題取色的畫面
+  /// （例如閱讀器）傳 [Skeleton.tint] 算好的顏色。
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
-    final base = Skeleton.colorOf(context);
+    final base = color ?? Skeleton.colorOf(context);
     final pulse = _SkeletonScope.maybeOf(context);
     Widget box(Color color) => SizedBox(
       width: width,

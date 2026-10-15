@@ -1368,8 +1368,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                     ),
                   ),
                 )
-              // 載入中不放轉圈與文字：先是一張空白的紙，等久了才浮出正文
-              // 骨架（見 [LoadingVeilController]）。
+              // 載入中不放轉圈與文字：紙一蓋上就淡入正文骨架（見
+              // [LoadingVeilController] 與 ADR 0016）。
               : _buildVeil(state),
         ),
       ),

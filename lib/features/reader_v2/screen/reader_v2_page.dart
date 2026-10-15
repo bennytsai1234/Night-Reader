@@ -188,9 +188,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       titleFor: _chapterTitleAt,
     );
 
-    // 設定還沒讀到前跟隨系統，免得先用預設值閃一下。
     final customBrightness =
-        settings.isLoaded &&
         !settings.brightnessAuto &&
         ReaderV2DeviceChannel.supportsWindowBrightness;
     return StatusBarHidden(
@@ -230,15 +228,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               ),
               backgroundColor: palette.readerBackground,
               infoColor: palette.readerInfo,
+              textColor: palette.readerText,
               controlsVisible: menu.controlsVisible,
               showReadTitleAddition: settings.showReadTitleAddition,
-              hasVisibleContent:
-                  runtime != null && runtime.state.hasStableWorld,
-              // 跳到別章時頁首頁尾跟正文一起收起，正文排好再淡入。
-              isLoading:
-                  runtime == null ||
-                  !runtime.state.hasStableWorld ||
-                  runtime.isJumpingToAnotherChapter,
+              infoState: _infoStateOf(runtime),
               chapterTitle: _chapterTitleAt(chapterIndex),
               chapterUrl: _chapterUrlAt(chapterIndex),
               originName: widget.book.originName,
@@ -319,11 +312,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         final mediaPadding = MediaQuery.paddingOf(context);
         _lastViewportSize = size;
 
-        // 設定讀完才開書（通常只差幾毫秒）；用預設值先開，設定到了會再重排
-        // 一次，正文出現後又轉圈、跳到別的位置。
-        if (!_host.settings.isLoaded) {
-          return ColoredBox(color: StylePalette.of(context).readerBackground);
-        }
         final style = _host.settings.readStyleFor(
           mediaPadding,
           topInfoReservedExternally: true,
@@ -712,6 +700,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   Future<void> discardUnkeptBookStorage() {
     return _host.bookStorageService.discardBook(widget.book);
+  }
+
+  /// 頁首頁尾資訊列跟著正文：開書、跳到別章、改排版與重載內容時畫骨架，
+  /// 開書取不到正文時不畫。同一章內的跳轉（例如拖進度條預覽）資訊列留在
+  /// 原處。
+  ReaderV2InfoState _infoStateOf(ReaderV2Runtime? runtime) {
+    if (runtime == null) return ReaderV2InfoState.loading;
+    if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      return ReaderV2InfoState.hidden;
+    }
+    if (!runtime.state.hasStableWorld ||
+        runtime.isJumpingToAnotherChapter ||
+        runtime.isRebuildingText) {
+      return ReaderV2InfoState.loading;
+    }
+    return ReaderV2InfoState.ready;
   }
 
   int _currentChapterIndex(ReaderV2Runtime? runtime) {

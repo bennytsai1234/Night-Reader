@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -36,30 +37,58 @@ class _FlakyPrefsRepository extends ReaderV2PrefsRepository {
 }
 
 void main() {
-  setUp(() async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    await SharedPreferences.getInstance();
-  });
+  Future<void> usePrefs(Map<String, Object> values) async {
+    SharedPreferences.setMockInitialValues(values);
+    final getIt = GetIt.instance;
+    if (getIt.isRegistered<SharedPreferences>()) {
+      getIt.unregister<SharedPreferences>();
+    }
+    getIt.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+  }
 
-  group('loading before the reader opens', () {
-    test('is not loaded until the first load ends', () async {
+  setUp(() => usePrefs(<String, Object>{}));
+  tearDown(GetIt.instance.reset);
+
+  group('loading', () {
+    test('a new controller already has the saved settings', () async {
+      await usePrefs(<String, Object>{
+        PreferKey.readerFontSize: 24.0,
+        PreferKey.readerHeaderInfo: '3,6',
+      });
+
       final settings = ReaderV2SettingsController();
-      expect(settings.isLoaded, isFalse);
 
-      await settings.loadSettings();
-
-      expect(settings.isLoaded, isTrue);
+      expect(settings.fontSize, 24.0);
+      expect(
+        settings.headerInfo,
+        const ReaderV2InfoSlots(
+          left: ReaderV2InfoItem.chapterTitle,
+          right: ReaderV2InfoItem.bookProgress,
+        ),
+      );
       settings.dispose();
     });
 
-    test('a failed load still counts as loaded, so the reader opens', () async {
+    test('an unreadable saved value opens with the defaults', () async {
+      await usePrefs(<String, Object>{PreferKey.readerFontSize: '24'});
+
+      final settings = ReaderV2SettingsController();
+
+      expect(settings.fontSize, ReaderV2PrefsSnapshot.defaults().fontSize);
+      settings.dispose();
+    });
+
+    test('a failed reload keeps the current settings', () async {
+      await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
       final settings = ReaderV2SettingsController(
         prefsRepository: const _BrokenLoadRepository(),
       );
 
       await settings.loadSettings();
 
-      expect(settings.isLoaded, isTrue);
+      expect(settings.fontSize, 24.0);
       settings.dispose();
     });
   });
@@ -121,9 +150,7 @@ void main() {
   });
 
   test('unsaved title size keeps the old body + 4 appearance', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      PreferKey.readerFontSize: 24.0,
-    });
+    await usePrefs(<String, Object>{PreferKey.readerFontSize: 24.0});
     final snapshot = await const ReaderV2PrefsRepository().load();
     expect(snapshot.titleFontSize, 28.0);
 

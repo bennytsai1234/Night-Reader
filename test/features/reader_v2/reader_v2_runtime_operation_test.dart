@@ -314,6 +314,34 @@ void main() {
     expect(runtime.state.visibleLocation.chapterIndex, 1);
   });
 
+  test('relayout and content reload count as rebuilding the text', () async {
+    final runtime = makeRuntime([chapter(0)]);
+    addTearDown(runtime.dispose);
+    Completer<bool>? heldRestore;
+    var holdRestores = false;
+    runtime.registerViewportRestore(Object(), (_) {
+      if (!holdRestores) return Future.value(true);
+      return (heldRestore = Completer<bool>()).future;
+    });
+    await runtime.openBook();
+    expect(runtime.isRebuildingText, isFalse);
+
+    holdRestores = true;
+    final relayout = runtime.applyPresentation(spec: specWithFontSize(22));
+    expect(runtime.isRebuildingText, isTrue);
+    await pumpEventQueue();
+    heldRestore!.complete(true);
+    await relayout;
+    expect(runtime.isRebuildingText, isFalse);
+
+    final reload = runtime.reloadContentPreservingLocation();
+    expect(runtime.isRebuildingText, isTrue);
+    await pumpEventQueue();
+    heldRestore!.complete(true);
+    await reload;
+    expect(runtime.isRebuildingText, isFalse);
+  });
+
   test(
     'target content unavailable leaves the existing Reader world intact',
     () async {
@@ -636,6 +664,9 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final getIt = GetIt.instance;
       await getIt.reset();
+      getIt.registerSingleton<SharedPreferences>(
+        await SharedPreferences.getInstance(),
+      );
       getIt.registerSingleton<BookDao>(_FakeBookDao());
       getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
       getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
@@ -760,6 +791,9 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final getIt = GetIt.instance;
       await getIt.reset();
+      getIt.registerSingleton<SharedPreferences>(
+        await SharedPreferences.getInstance(),
+      );
       getIt.registerSingleton<BookDao>(_FakeBookDao());
       getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
       getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
