@@ -44,11 +44,7 @@ class TTSService extends ChangeNotifier {
   String? _selectedEngine;
   Map<String, String>? _selectedVoice;
 
-  Timer? _sleepTimer;
-  int _remainingMinutes = 0;
-
   bool get isPlaying => _isPlaying;
-  int get remainingMinutes => _remainingMinutes;
   double get pitch => _pitch;
   double get volume => _volume;
   double get rate => _rate;
@@ -327,9 +323,6 @@ class TTSService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
-    _sleepTimer?.cancel();
-    _sleepTimer = null;
-    _remainingMinutes = 0;
     await _speechCoordinator.stop(
       stop: () async {
         try {
@@ -379,26 +372,6 @@ class TTSService extends ChangeNotifier {
         await _flutterTts.speak(remaining);
       }
     }
-  }
-
-  void setSleepTimer(int minutes) {
-    _sleepTimer?.cancel();
-    _sleepTimer = null;
-    _remainingMinutes = minutes > 0 ? minutes : 0;
-    if (_remainingMinutes > 0) {
-      _sleepTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-        _remainingMinutes--;
-        if (_remainingMinutes <= 0) {
-          _remainingMinutes = 0;
-          timer.cancel();
-          notifyListeners();
-          unawaited(stop());
-          return;
-        }
-        notifyListeners();
-      });
-    }
-    notifyListeners();
   }
 
   Future<void> setLanguage(String lang) async {
