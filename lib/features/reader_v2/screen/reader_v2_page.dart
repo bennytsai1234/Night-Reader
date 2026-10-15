@@ -186,14 +186,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           ),
           backgroundColor: palette.readerBackground,
           infoColor: palette.readerInfo,
+          textColor: palette.readerText,
           controlsVisible: menu.controlsVisible,
           showReadTitleAddition: settings.showReadTitleAddition,
-          hasVisibleContent: runtime != null && runtime.state.hasStableWorld,
-          // 跳到別章時頁首頁尾跟正文一起收起，正文排好再淡入。
-          isLoading:
-              runtime == null ||
-              !runtime.state.hasStableWorld ||
-              runtime.isJumpingToAnotherChapter,
+          infoState: _infoStateOf(runtime),
           chapterTitle: _chapterTitleAt(chapterIndex),
           chapterUrl: _chapterUrlAt(chapterIndex),
           originName: widget.book.originName,
@@ -566,6 +562,21 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   @override
   Future<void> discardUnkeptBookStorage() {
     return _host.bookStorageService.discardBook(widget.book);
+  }
+
+  /// 頁首頁尾資訊列跟著正文：正文區蓋著紙時畫骨架，取不到正文時不畫。
+  /// 同一章內的跳轉與重新排版時資訊列留在原處。設定讀完前正文區是空白的
+  /// 紙，資訊列也不畫，免得先照預設欄位畫出骨架。
+  ReaderV2InfoState _infoStateOf(ReaderV2Runtime? runtime) {
+    if (!_host.settings.isLoaded) return ReaderV2InfoState.hidden;
+    if (runtime == null) return ReaderV2InfoState.loading;
+    if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable) {
+      return ReaderV2InfoState.hidden;
+    }
+    if (runtime.isJumpingToAnotherChapter) return ReaderV2InfoState.loading;
+    return runtime.state.hasStableWorld
+        ? ReaderV2InfoState.ready
+        : ReaderV2InfoState.loading;
   }
 
   int _currentChapterIndex(ReaderV2Runtime? runtime) {

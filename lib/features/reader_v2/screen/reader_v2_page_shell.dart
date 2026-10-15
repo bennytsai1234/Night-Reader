@@ -16,6 +16,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///
@@ -108,10 +109,10 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.drawer,
     required this.backgroundColor,
     required this.infoColor,
+    required this.textColor,
     required this.controlsVisible,
     required this.showReadTitleAddition,
-    required this.hasVisibleContent,
-    required this.isLoading,
+    required this.infoState,
     required this.chapterTitle,
     required this.chapterUrl,
     required this.originName,
@@ -157,10 +158,12 @@ class ReaderV2PageShell extends StatelessWidget {
 
   /// 頁首／頁尾資訊列的文字與圖示色。
   final Color infoColor;
+
+  /// 正文色：資訊列的載入骨架與正文骨架同色。
+  final Color textColor;
   final bool controlsVisible;
   final bool showReadTitleAddition;
-  final bool hasVisibleContent;
-  final bool isLoading;
+  final ReaderV2InfoState infoState;
   final String chapterTitle;
   final String chapterUrl;
   final String originName;
@@ -218,7 +221,7 @@ class ReaderV2PageShell extends StatelessWidget {
       paddingBottom: paddingBottom,
       footerOffset: footerOffset,
     );
-    final infoVisible = hasVisibleContent && !isLoading;
+    final infoShown = infoState != ReaderV2InfoState.hidden;
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
     final autoPageInFooter = layout.showFooterInfo;
     return PopScope<void>(
@@ -257,18 +260,20 @@ class ReaderV2PageShell extends StatelessWidget {
                     onTap: controlsVisible ? null : onShowControls,
                     child: ColoredBox(
                       color: backgroundColor,
-                      child: layout.showHeaderInfo && infoVisible
-                          ? _InfoFadeIn(
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  top: layout.headerRowTop,
-                                ),
-                                child: Center(
-                                  child: _InfoRow(
+                      child: layout.showHeaderInfo && infoShown
+                          ? Padding(
+                              padding: EdgeInsets.only(
+                                top: layout.headerRowTop,
+                              ),
+                              child: Center(
+                                child: _InfoLayer(
+                                  state: infoState,
+                                  builder: (skeleton) => _InfoRow(
                                     shell: this,
                                     slots: headerInfo,
                                     showAutoPage:
                                         isAutoPaging && !autoPageInFooter,
+                                    skeleton: skeleton,
                                   ),
                                 ),
                               ),
@@ -277,7 +282,7 @@ class ReaderV2PageShell extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (layout.showFooterInfo && infoVisible)
+              if (layout.showFooterInfo && infoShown)
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -288,11 +293,9 @@ class ReaderV2PageShell extends StatelessWidget {
                     // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
                     // 選單開著時由收起層處理。
                     onTap: controlsVisible ? null : onShowControls,
-                    child: _InfoFadeIn(
-                      child: _PermanentInfoBar(
-                        shell: this,
-                        rowBottom: layout.footerRowBottom,
-                      ),
+                    child: _PermanentInfoBar(
+                      shell: this,
+                      rowBottom: layout.footerRowBottom,
                     ),
                   ),
                 ),
@@ -344,24 +347,121 @@ class ReaderV2PageShell extends StatelessWidget {
   }
 }
 
-/// 頁首、頁尾資訊列出現時以 [AppMotion.fade] 淡入，與正文浮現同步；
-/// 載入時直接收掉，跟正文一起消失。
-class _InfoFadeIn extends StatelessWidget {
-  const _InfoFadeIn({required this.child});
+/// 頁首頁尾資訊列目前要畫什麼。
+enum ReaderV2InfoState {
+  /// 不畫：設定還沒讀完，或正文取不到（正文區改顯示錯誤）。
+  hidden,
 
-  final Widget child;
+  /// 正文還沒排好（開書、跳到別章）：每個欄位畫成骨架。
+  loading,
+
+  /// 正文已排好：顯示真正的資訊。
+  ready,
+}
+
+/// 資訊列在骨架與真正資訊之間切換，節奏同正文上的紙（`LoadingVeil`）：
+/// 載入一開始資訊直接收掉、骨架以 [AppMotion.fade] 淡入；正文排好後骨架
+/// 淡出、資訊淡入。系統關閉動畫時直接到位。
+class _InfoLayer extends StatefulWidget {
+  const _InfoLayer({required this.state, required this.builder});
+
+  final ReaderV2InfoState state;
+
+  /// 畫出資訊列；`skeleton` 為 true 時每個欄位畫成骨架。
+  final Widget Function(bool skeleton) builder;
+
+  @override
+  State<_InfoLayer> createState() => _InfoLayerState();
+}
+
+class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
+  late final AnimationController _skeleton = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+  )..addStatusListener(_onSkeletonStatus);
+  late final AnimationController _info = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+  );
+  late final Animation<double> _skeletonOpacity = CurvedAnimation(
+    parent: _skeleton,
+    curve: AppMotion.fadeCurve,
+  );
+  late final Animation<double> _infoOpacity = CurvedAnimation(
+    parent: _info,
+    curve: AppMotion.fadeCurve,
+  );
+
+  /// null 表示還沒讀過 MediaQuery，第一次讀到時才開始同步狀態。
+  bool? _reduceMotion;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion == reduceMotion) return;
+    _reduceMotion = reduceMotion;
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_InfoLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) _sync();
+  }
+
+  @override
+  void dispose() {
+    _skeleton.dispose();
+    _info.dispose();
+    super.dispose();
+  }
+
+  void _sync() {
+    final loading = widget.state == ReaderV2InfoState.loading;
+    if (loading) {
+      // 資訊直接收掉，骨架從目前的濃淡繼續淡入（淡出途中再載入不會先閃空）。
+      _info.value = 0;
+      _animate(_skeleton, 1);
+    } else {
+      _animate(_skeleton, 0);
+      if (widget.state == ReaderV2InfoState.ready) {
+        _animate(_info, 1);
+      } else {
+        _info.value = 0;
+      }
+    }
+  }
+
+  void _animate(AnimationController controller, double target) {
+    if (_reduceMotion ?? false) {
+      controller.value = target;
+    } else if (controller.value != target) {
+      unawaited(target == 1 ? controller.forward() : controller.reverse());
+    }
+  }
+
+  void _onSkeletonStatus(AnimationStatus status) {
+    // 骨架淡出後移出畫面，呼吸動畫跟著停。
+    if (status == AnimationStatus.dismissed && mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : AppMotion.fade,
-      curve: AppMotion.fadeCurve,
-      builder: (context, opacity, child) =>
-          Opacity(opacity: opacity, child: child),
-      child: child,
+    final ready = widget.state == ReaderV2InfoState.ready;
+    final showSkeleton =
+        widget.state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (ready)
+          FadeTransition(opacity: _infoOpacity, child: widget.builder(false)),
+        if (showSkeleton)
+          FadeTransition(
+            opacity: _skeletonOpacity,
+            child: Skeleton(child: widget.builder(true)),
+          ),
+      ],
     );
   }
 }
@@ -391,11 +491,15 @@ class _PermanentInfoBar extends StatelessWidget {
         padding: EdgeInsets.only(bottom: rowBottom),
         child: Align(
           alignment: Alignment.topCenter,
-          child: _InfoRow(
-            shell: shell,
-            slots: shell.footerInfo,
-            showAutoPage: shell.isAutoPaging,
-            rowHeight: kReaderFooterRowHeight,
+          child: _InfoLayer(
+            state: shell.infoState,
+            builder: (skeleton) => _InfoRow(
+              shell: shell,
+              slots: shell.footerInfo,
+              showAutoPage: shell.isAutoPaging,
+              rowHeight: kReaderFooterRowHeight,
+              skeleton: skeleton,
+            ),
           ),
         ),
       ),
@@ -410,12 +514,16 @@ class _InfoRow extends StatelessWidget {
     required this.slots,
     required this.showAutoPage,
     this.rowHeight = kReaderInfoRowHeight,
+    this.skeleton = false,
   });
 
   final ReaderV2PageShell shell;
   final ReaderV2InfoSlots slots;
   final bool showAutoPage;
   final double rowHeight;
+
+  /// 每個欄位畫成骨架（見 [_InfoItemSkeleton]），不提供語意。
+  final bool skeleton;
 
   @override
   Widget build(BuildContext context) {
@@ -429,13 +537,30 @@ class _InfoRow extends StatelessWidget {
 
   Widget _buildRow(BuildContext context, HybridProgressSnapshot? progress) {
     final infoColor = shell.infoColor;
-    final left = _itemWidget(context, slots.left, progress, TextAlign.left);
-    final right = _itemWidget(context, slots.right, progress, TextAlign.right);
-    final semantics = [
-      if (showAutoPage) '自動翻頁中',
-      ?_itemSemantics(context, slots.left, progress),
-      ?_itemSemantics(context, slots.right, progress),
-    ].join('，');
+    final skeletonColor = skeleton
+        ? Skeleton.tint(
+            shell.textColor,
+            dark:
+                ThemeData.estimateBrightnessForColor(shell.backgroundColor) ==
+                Brightness.dark,
+          )
+        : null;
+    Widget? masked(Widget? child) => skeletonColor == null || child == null
+        ? child
+        : _InfoItemSkeleton(color: skeletonColor, child: child);
+    final left = masked(
+      _itemWidget(context, slots.left, progress, TextAlign.left),
+    );
+    final right = masked(
+      _itemWidget(context, slots.right, progress, TextAlign.right),
+    );
+    final semantics = skeleton
+        ? ''
+        : [
+            if (showAutoPage) '自動翻頁中',
+            ?_itemSemantics(context, slots.left, progress),
+            ?_itemSemantics(context, slots.right, progress),
+          ].join('，');
     return Semantics(
       container: true,
       label: semantics,
@@ -457,10 +582,12 @@ class _InfoRow extends StatelessWidget {
               child: Row(
                 children: [
                   if (showAutoPage) ...[
-                    Icon(
-                      Icons.auto_stories_outlined,
-                      size: 13,
-                      color: infoColor,
+                    ?masked(
+                      Icon(
+                        Icons.auto_stories_outlined,
+                        size: 13,
+                        color: infoColor,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                   ],
@@ -554,6 +681,36 @@ class _InfoRow extends StatelessWidget {
         progress?.chapterProgressLabel ?? '本章 …',
       ReaderV2InfoItem.bookProgress => progress?.bookPercentLabel ?? '…%',
     };
+  }
+}
+
+/// 載入中的一個資訊欄位：照真正內容排版但不畫出，在它佔的寬度上畫一條
+/// 約字身高的圓角條（同 [SkeletonLine]），資訊淡入時位置不動。
+class _InfoItemSkeleton extends StatelessWidget {
+  const _InfoItemSkeleton({required this.color, required this.child});
+
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final fontSize = MediaQuery.textScalerOf(context)
+        .scale(DefaultTextStyle.of(context).style.fontSize ?? 14);
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Visibility.maintain(visible: false, child: child),
+        Positioned.fill(
+          child: Center(
+            child: SkeletonBox(
+              width: double.infinity,
+              height: fontSize * 0.75,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
