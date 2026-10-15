@@ -95,9 +95,11 @@ class _BrightnessPillState extends State<_BrightnessPill> {
     widget.onChangeEnd(level);
   }
 
-  void _nudge(double delta) {
-    widget.onChangeEnd((widget.level + delta).clamp(0.0, 1.0).toDouble());
-  }
+  static double _clamp(double level) => level.clamp(0.0, 1.0).toDouble();
+
+  static String _percent(double level) => '${(level * 100).round()}%';
+
+  void _nudge(double delta) => widget.onChangeEnd(_clamp(widget.level + delta));
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +114,9 @@ class _BrightnessPillState extends State<_BrightnessPill> {
     return Semantics(
       slider: true,
       label: '亮度',
-      value: widget.auto ? '跟隨系統' : '${(level * 100).round()}%',
+      value: widget.auto ? '跟隨系統' : _percent(level),
+      increasedValue: _percent(_clamp(widget.level + _step)),
+      decreasedValue: _percent(_clamp(widget.level - _step)),
       onIncrease: () => _nudge(_step),
       onDecrease: () => _nudge(-_step),
       child: GestureDetector(
