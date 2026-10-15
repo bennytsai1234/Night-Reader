@@ -155,7 +155,10 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   // -- Reader commands --
 
-  Future<void> jumpToChapter(int chapterIndex) => _jumpToChapter(chapterIndex);
+  /// 跳到 [chapterIndex] 章首。一開始就蓋紙；[settled] 給了的話，等它完成
+  /// （例如收起目錄與紙蓋上的動畫播完）才開始載入（ADR 0018）。
+  Future<void> jumpToChapter(int chapterIndex, {Future<void>? settled}) =>
+      _jumpToChapter(chapterIndex, settled: settled);
 
   Future<void> jumpToLocation(
     ReaderV2Location location, {
@@ -441,7 +444,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     }
   }
 
-  Future<void> _jumpToChapter(int chapterIndex) {
+  Future<void> _jumpToChapter(int chapterIndex, {Future<void>? settled}) {
     return _jumpToLocation(
       ReaderV2Location(
         chapterIndex: chapterIndex,
@@ -449,12 +452,14 @@ class ReaderV2Runtime extends ChangeNotifier {
         visualOffsetPx: state.layoutSpec.anchorOffsetInViewport,
       ),
       immediateSave: true,
+      settled: settled,
     );
   }
 
   Future<void> _jumpToLocation(
     ReaderV2Location location, {
     required bool immediateSave,
+    Future<void>? settled,
   }) async {
     final token = beginJumpOperation(location: location);
     AppLog.d(
@@ -462,6 +467,10 @@ class ReaderV2Runtime extends ChangeNotifier {
       'target=${location.chapterIndex}',
     );
     try {
+      if (settled != null) {
+        await settled;
+        if (!isCurrentOperationToken(token)) return;
+      }
       final positioned = await _positionViewport(
         location: location,
         token: token,

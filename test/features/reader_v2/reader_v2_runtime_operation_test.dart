@@ -287,6 +287,36 @@ void main() {
     },
   );
 
+  test(
+    'a jump from the contents covers at once and loads once settled',
+    () async {
+      final loads = <int>[];
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        contentLoader: (index, chapter) async {
+          loads.add(index);
+          return chapter.content;
+        },
+      );
+      addTearDown(runtime.dispose);
+      runtime.registerViewportRestore(Object(), (_) async => true);
+      await runtime.openBook();
+      loads.clear();
+
+      // 目錄收起、紙蓋上的動畫還在播：紙已經蓋上（算跳章中），還沒開始載入。
+      final settled = Completer<void>();
+      final jump = runtime.jumpToChapter(1, settled: settled.future);
+      expect(runtime.isJumpingToAnotherChapter, isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(loads, isEmpty);
+
+      settled.complete();
+      await jump;
+      expect(loads, [1]);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+    },
+  );
+
   test('only a jump to another chapter counts as jumping chapters', () async {
     final target = Completer<String?>();
     final runtime = makeRuntime(

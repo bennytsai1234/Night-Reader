@@ -132,6 +132,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onSystemBack,
     required this.onMore,
     required this.onOpenDrawer,
+    this.onDrawerChanged,
     required this.onTts,
     required this.onInterface,
     required this.onSettings,
@@ -192,6 +193,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onSystemBack;
   final VoidCallback onMore;
   final VoidCallback onOpenDrawer;
+
+  /// 目錄完全打開或完全收起時呼叫（同 [Scaffold.onDrawerChanged]）。
+  final DrawerCallback? onDrawerChanged;
   final VoidCallback onTts;
   final VoidCallback onInterface;
   final VoidCallback onSettings;
@@ -240,6 +244,7 @@ class ReaderV2PageShell extends StatelessWidget {
       },
       child: Scaffold(
         key: scaffoldKey,
+        onDrawerChanged: onDrawerChanged,
         body: Container(
           color: backgroundColor,
           child: Stack(

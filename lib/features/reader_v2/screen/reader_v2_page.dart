@@ -87,10 +87,13 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 開書的換頁動畫與骨架淡入都播完時完成；載入等它（ADR 0018）。
   final Completer<void> _entrance = Completer<void>();
+
+  /// 從目錄跳章時，等目錄收起的那一下；收起時完成。
+  Completer<void>? _drawerClosed;
   bool _entranceWatched = false;
 
-  /// 只拿來計骨架淡入的時長（正文骨架與頁首頁尾骨架都是 [AppMotion.fade]，
-  /// 和這一頁的第一幀同時開始）。
+  /// 只拿來計骨架淡入的時長（正文骨架與頁首頁尾骨架都是 [AppMotion.fade]）：
+  /// 開書時和這一頁的第一幀同時開始，從目錄跳章時和蓋紙同時開始。
   late final AnimationController _skeletonFadeIn = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
@@ -289,6 +292,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               onSystemBack: _handleSystemBack,
               onMore: () => unawaited(_showMore()),
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+              onDrawerChanged: _handleDrawerChanged,
               onTts: _showTts,
               onInterface: () => ReaderV2SettingsSheets.showInterfaceSettings(
                 context,
@@ -443,16 +447,33 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _handleExitIntent();
   }
 
-  Future<bool> _jumpToChapterFromDrawer(int index) async {
-    final runtime = _host.runtime;
-    if (runtime == null) return false;
-    await _coordinator.jumpToChapter(index);
-    final succeeded =
-        mounted &&
-        identical(_host.runtime, runtime) &&
-        runtime.state.hasStableWorld &&
-        runtime.state.visibleLocation.chapterIndex == index;
-    return succeeded;
+  /// 點目錄的一章：目錄與選單馬上收起、紙蓋上淡入骨架，這幾段動畫都播完
+  /// 才開始載入（ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  void _jumpToChapterFromDrawer(int index) {
+    final scaffold = _scaffoldKey.currentState;
+    final drawerClosed = scaffold != null && scaffold.isDrawerOpen
+        ? (_drawerClosed ??= Completer<void>()).future
+        : Future<void>.value();
+    scaffold?.closeDrawer();
+    _host.menu.dismissControls();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!reduceMotion) unawaited(_skeletonFadeIn.forward(from: 0));
+    unawaited(
+      _coordinator.jumpToChapter(
+        index,
+        settled: Future.wait([
+          drawerClosed,
+          if (!reduceMotion)
+            TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
+        ]),
+      ),
+    );
+  }
+
+  void _handleDrawerChanged(bool open) {
+    if (open) return;
+    _drawerClosed?.complete();
+    _drawerClosed = null;
   }
 
   void _drainRuntimeNotice() {

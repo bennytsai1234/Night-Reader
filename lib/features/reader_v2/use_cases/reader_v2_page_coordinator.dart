@@ -84,13 +84,14 @@ class ReaderV2PageCoordinator {
     await jumpToChapter(target);
   }
 
-  Future<void> jumpToChapter(int index) async {
+  /// [settled] 見 [ReaderV2Runtime.jumpToChapter]。
+  Future<void> jumpToChapter(int index, {Future<void>? settled}) async {
     final runtime = _host.runtime;
     if (runtime == null) return;
     final safeIndex = index
         .clamp(0, (runtime.chapterCount - 1).clamp(0, 1 << 20))
         .toInt();
-    await runtime.jumpToChapter(safeIndex);
+    await runtime.jumpToChapter(safeIndex, settled: settled);
     if (runtime.state.visibleLocation.chapterIndex == safeIndex) {
       await _host.tts?.followManualJump();
     }
