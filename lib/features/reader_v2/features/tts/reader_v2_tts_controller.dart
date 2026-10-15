@@ -173,6 +173,19 @@ class ReaderV2TtsController extends ChangeNotifier
     await startFromVisibleLocation();
   }
 
+  /// 選單上的定時鍵：正在念就停止；否則照記住的定時開始朗讀（定時是關閉
+  /// 時改用 30 分），暫停中則從暫停處接著念。
+  Future<void> toggleTimed() async {
+    if (_tts.isPlaying) {
+      await stop();
+      return;
+    }
+    if (sleepTimer.option == ReaderV2TtsSleepOption.off) {
+      await sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+    }
+    await toggle();
+  }
+
   Future<void> startFromVisibleLocation() async {
     final generation = ++_speechGeneration;
     final location = runtime.state.visibleLocation.normalized(

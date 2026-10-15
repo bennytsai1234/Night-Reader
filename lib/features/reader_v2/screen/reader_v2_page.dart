@@ -254,6 +254,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               onMore: () => unawaited(_showMore()),
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
               onTts: _showTts,
+              onTimedTts: () => unawaited(_host.tts?.toggleTimed()),
               onInterface: () => ReaderV2SettingsSheets.showInterfaceSettings(
                 context,
                 settings,
@@ -295,6 +296,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                       onChangeEnd: settings.setBrightness,
                     )
                   : null,
+              sleepTimer: _host.tts?.sleepTimer,
+              isTtsPlaying: _host.tts?.isPlaying ?? false,
               showTts: true,
               showAutoPage: true,
               showReplaceRule: true,

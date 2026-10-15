@@ -5,16 +5,19 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late int showControls;
   late int dismissControls;
   late int systemBacks;
   late int exitIntents;
+  late int timedTtsTaps;
   late GlobalKey<ScaffoldState> scaffoldKey;
 
   const contentKey = Key('reader-content');
@@ -27,8 +30,10 @@ void main() {
       left: ReaderV2InfoItem.none,
       right: ReaderV2InfoItem.none,
     ),
+    ReaderV2TtsSleepTimer? sleepTimer,
   }) async {
     showControls = 0;
+    timedTtsTaps = 0;
     dismissControls = 0;
     systemBacks = 0;
     exitIntents = 0;
@@ -98,6 +103,7 @@ void main() {
             onMore: noop,
             onOpenDrawer: noop,
             onTts: noop,
+            onTimedTts: () => timedTtsTaps += 1,
             onInterface: noop,
             onSettings: noop,
             onAutoPage: noop,
@@ -110,6 +116,7 @@ void main() {
             onScrubStart: noopPercent,
             onScrubbing: noopPercent,
             onScrubEnd: noopPercent,
+            sleepTimer: sleepTimer,
           ),
         ),
       ),
@@ -187,6 +194,56 @@ void main() {
     expect(find.byType(ReaderV2PageShell), findsOneWidget);
     expect(systemBacks, 0);
     expect(exitIntents, 0);
+  });
+
+  group('timer key above the menu', () {
+    late DateTime now;
+    late ReaderV2TtsSleepTimer timer;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      now = DateTime(2026, 10, 15, 23);
+      timer = ReaderV2TtsSleepTimer(onExpired: () {}, now: () => now);
+    });
+
+    tearDown(() => timer.dispose());
+
+    Future<void> elapse(WidgetTester tester, Duration duration) async {
+      now = now.add(duration);
+      await tester.pump(duration);
+    }
+
+    testWidgets('shows the minutes left, rounded up', (tester) async {
+      await pumpShell(tester, controlsVisible: true, sleepTimer: timer);
+      expect(find.byTooltip('定時朗讀'), findsOneWidget);
+
+      await timer.choose(ReaderV2TtsSleepOption.minutes15);
+      timer.sync(active: true, running: true);
+      await tester.pump();
+      expect(find.text('15分'), findsOneWidget);
+
+      await elapse(tester, const Duration(seconds: 59));
+      expect(find.text('15分'), findsOneWidget);
+      await elapse(tester, const Duration(seconds: 1));
+      expect(find.text('14分'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('定時朗讀'));
+      expect(timedTtsTaps, 1);
+      timer.sync(active: false, running: false);
+      await tester.pump();
+      expect(find.text('14分'), findsNothing);
+    });
+
+    testWidgets('shows chapter end when pausing at the chapter end', (
+      tester,
+    ) async {
+      await pumpShell(tester, controlsVisible: true, sleepTimer: timer);
+      await timer.choose(ReaderV2TtsSleepOption.chapterEnd);
+      timer.sync(active: true, running: true);
+      await tester.pump();
+      expect(find.text('章末'), findsOneWidget);
+      timer.sync(active: false, running: false);
+    });
   });
 
   group('info rows while the text is loading', () {

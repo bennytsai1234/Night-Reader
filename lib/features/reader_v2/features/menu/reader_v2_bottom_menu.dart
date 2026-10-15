@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -41,6 +44,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.dayNightTooltip,
     required this.onOpenDrawer,
     required this.onTts,
+    required this.onTimedTts,
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
@@ -53,6 +57,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
     required this.onScrubEnd,
     this.progressListenable,
     this.brightnessControl,
+    this.sleepTimer,
+    this.isTtsPlaying = false,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -65,6 +71,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final String dayNightTooltip;
   final VoidCallback onOpenDrawer;
   final VoidCallback onTts;
+
+  /// 定時鍵：正在念就停止，否則照記住的定時開始朗讀。
+  final VoidCallback onTimedTts;
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
@@ -82,6 +91,10 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 左側的亮度條，放在自動翻頁鈕正上方（右側是系統音量面板出現的位置）；
   /// 平台不支援時為 null。
   final Widget? brightnessControl;
+
+  /// 朗讀定時；朗讀還沒準備好時為 null，不顯示定時鍵。
+  final ReaderV2TtsSleepTimer? sleepTimer;
+  final bool isTtsPlaying;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -149,7 +162,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     );
   }
 
-  /// 膠囊上方的圓形玻璃按鈕（自動翻頁、替換規則、日夜切換）。
+  /// 膠囊上方的圓形玻璃按鈕（自動翻頁、替換規則、定時朗讀、日夜切換）。
   Widget _buildFloatingButtons(
     BuildContext context,
     ReaderV2MenuStyle menuStyle,
@@ -173,6 +186,13 @@ class ReaderV2BottomMenu extends StatelessWidget {
           tint: tint,
           color: menuStyle.foreground,
           onPressed: onReplaceRule,
+        ),
+      if (sleepTimer case final timer? when showTts)
+        _SleepTimerButton(
+          timer: timer,
+          isPlaying: isTtsPlaying,
+          menuStyle: menuStyle,
+          onPressed: onTimedTts,
         ),
       GlassIconButton(
         icon: dayNightIcon,
@@ -362,5 +382,106 @@ class ReaderV2BottomMenu extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 定時朗讀鍵：倒數中顯示剩餘分鐘（無條件進位）、「念完本章」時顯示章末，
+/// 兩者都以強調色標出；沒有定時在跑時是計時器圖示。倒數不逐秒通知，這裡
+/// 只在顯示的分鐘數要變的那一刻重建。
+class _SleepTimerButton extends StatefulWidget {
+  const _SleepTimerButton({
+    required this.timer,
+    required this.isPlaying,
+    required this.menuStyle,
+    required this.onPressed,
+  });
+
+  final ReaderV2TtsSleepTimer timer;
+  final bool isPlaying;
+  final ReaderV2MenuStyle menuStyle;
+  final VoidCallback onPressed;
+
+  @override
+  State<_SleepTimerButton> createState() => _SleepTimerButtonState();
+}
+
+class _SleepTimerButtonState extends State<_SleepTimerButton> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.timer.addListener(_refresh);
+    _scheduleTick();
+  }
+
+  @override
+  void didUpdateWidget(_SleepTimerButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.timer == widget.timer) return;
+    oldWidget.timer.removeListener(_refresh);
+    widget.timer.addListener(_refresh);
+    _scheduleTick();
+  }
+
+  @override
+  void dispose() {
+    widget.timer.removeListener(_refresh);
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {});
+    _scheduleTick();
+  }
+
+  /// 排到剩餘時間跨過下一個整分鐘的那一刻。
+  void _scheduleTick() {
+    _tick?.cancel();
+    _tick = null;
+    final remaining = widget.timer.remaining;
+    if (remaining == null || remaining == Duration.zero) return;
+    final intoMinute =
+        remaining.inMicroseconds % Duration.microsecondsPerMinute;
+    _tick = Timer(
+      Duration(
+        microseconds: intoMinute == 0
+            ? Duration.microsecondsPerMinute
+            : intoMinute,
+      ),
+      _refresh,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timer = widget.timer;
+    final menuStyle = widget.menuStyle;
+    final remaining = timer.remaining;
+    final label = remaining != null
+        ? '${_ceilMinutes(remaining)}分'
+        : timer.pausesAtChapterEnd
+        ? '章末'
+        : null;
+    final tint = menuStyle.glassTintOf(context);
+    return GlassIconButton(
+      icon: Icons.timer_outlined,
+      label: label,
+      tooltip: widget.isPlaying ? '停止朗讀' : '定時朗讀',
+      tint: label != null
+          ? Color.alphaBlend(menuStyle.accentMuted, tint)
+          : tint,
+      color: label != null ? menuStyle.accent : menuStyle.foreground,
+      onPressed: widget.onPressed,
+    );
+  }
+
+  static int _ceilMinutes(Duration remaining) {
+    final minutes =
+        (remaining.inMicroseconds + Duration.microsecondsPerMinute - 1) ~/
+        Duration.microsecondsPerMinute;
+    return minutes < 1 ? 1 : minutes;
   }
 }

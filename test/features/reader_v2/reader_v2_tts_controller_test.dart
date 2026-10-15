@@ -320,6 +320,49 @@ void main() {
       await tts.stop();
     });
 
+    testWidgets('the timer key reads aloud with the remembered timer', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 45});
+      await open({0: '唯一的一句。'});
+      await tts.loadSettings();
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['唯一的一句。']);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 45));
+
+      await tts.toggleTimed();
+      expect(tts.isPlaying, isFalse);
+      expect(tts.isPaused, isFalse);
+      expect(tts.sleepTimer.remaining, isNull);
+    });
+
+    testWidgets('the timer key uses 30 minutes when the timer is off', (
+      tester,
+    ) async {
+      await open({0: '唯一的一句。'});
+
+      await tts.toggleTimed();
+      expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes30);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 30));
+      await tts.stop();
+    });
+
+    testWidgets('the timer key resumes after the timer paused reading', (
+      tester,
+    ) async {
+      await open({0: '第一句。第二句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 15));
+      expect(tts.isPaused, isTrue);
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['第一句。', '第一句。']);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 15));
+      await tts.stop();
+    });
+
     testWidgets('the last choice is remembered', (tester) async {
       SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 45});
       await open({0: '唯一的一句。'});
