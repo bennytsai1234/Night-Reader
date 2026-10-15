@@ -32,6 +32,7 @@ void main() {
     ),
     Widget? brightnessControl,
     ReaderV2TtsSleepTimer? sleepTimer,
+    double paddingHorizontal = 12,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -94,6 +95,7 @@ void main() {
               left: ReaderV2InfoItem.bookName,
               right: ReaderV2InfoItem.none,
             ),
+            paddingHorizontal: paddingHorizontal,
             paddingTop: 0,
             paddingBottom: 0,
             footerOffset: 4,
@@ -125,6 +127,23 @@ void main() {
     );
     return scroll;
   }
+
+  testWidgets('the info rows use the same side margin as the body text', (
+    tester,
+  ) async {
+    for (final padding in const [12.0, 24.0]) {
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        paddingHorizontal: padding,
+      );
+      // 頁尾左欄是書名，從左邊距起排（選單收著時上方選單的書名另有一份）。
+      final footerName = find.byWidgetPredicate(
+        (w) => w is Text && w.data == '殼層測試書' && w.textAlign == TextAlign.left,
+      );
+      expect(tester.getTopLeft(footerName).dx, padding);
+    }
+  });
 
   testWidgets('header and footer open the menu only on a finished tap', (
     tester,

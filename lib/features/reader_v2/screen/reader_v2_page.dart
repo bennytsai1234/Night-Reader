@@ -279,6 +279,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               hideStatusBar: settings.hideStatusBar,
               headerInfo: settings.headerInfo,
               footerInfo: settings.footerInfo,
+              paddingHorizontal: settings.paddingHorizontal,
               paddingTop: settings.paddingTop,
               paddingBottom: settings.paddingBottom,
               footerOffset: settings.footerOffset,

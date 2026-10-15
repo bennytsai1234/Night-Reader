@@ -124,6 +124,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.hideStatusBar,
     required this.headerInfo,
     required this.footerInfo,
+    required this.paddingHorizontal,
     required this.paddingTop,
     required this.paddingBottom,
     required this.footerOffset,
@@ -179,6 +180,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool hideStatusBar;
   final ReaderV2InfoSlots headerInfo;
   final ReaderV2InfoSlots footerInfo;
+
+  /// 正文的左右邊距；頁首頁尾資訊列的左右內距也用它。
+  final double paddingHorizontal;
   final double paddingTop;
   final double paddingBottom;
 
@@ -683,7 +687,9 @@ class _InfoRow extends StatelessWidget {
       label: semantics,
       child: ExcludeSemantics(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          // 與正文同一個左右邊距：開「左右對齊」時正文兩緣與資訊列貼齊
+          // （ADR 0019）。
+          padding: EdgeInsets.symmetric(horizontal: shell.paddingHorizontal),
           child: DefaultTextStyle(
             style: AppTextStyles.uiXs.copyWith(
               color: infoColor,
