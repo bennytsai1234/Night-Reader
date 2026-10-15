@@ -23,6 +23,7 @@ class ReaderV2ControllerHost {
     required this.book,
     required this.initialChapters,
     required this.openTarget,
+    required this._entrance,
     required this._onChanged,
     required this._isMounted,
   }) {
@@ -50,6 +51,9 @@ class ReaderV2ControllerHost {
   final Book book;
   final List<BookChapter> initialChapters;
   final ReaderV2OpenTarget? openTarget;
+
+  /// 開書的換頁動畫與骨架淡入都播完時完成；開書載入等它（ADR 0018）。
+  final Future<void> _entrance;
   final VoidCallback _onChanged;
   final bool Function() _isMounted;
 
@@ -146,7 +150,7 @@ class ReaderV2ControllerHost {
     tts = nextTts;
     autoPage = nextAutoPage;
     unawaited(nextTts.loadSettings());
-    _openRuntimeAfterFirstFrame(nextRuntime);
+    _openRuntimeAfterEntrance(nextRuntime);
     return nextRuntime;
   }
 
@@ -397,13 +401,15 @@ class ReaderV2ControllerHost {
     return runtime?.flushProgress();
   }
 
-  void _openRuntimeAfterFirstFrame(ReaderV2Runtime runtime) {
+  void _openRuntimeAfterEntrance(ReaderV2Runtime runtime) {
     if (_opening) return;
     _opening = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isMounted()) return;
-      unawaited(runtime.openBook().whenComplete(() => _opening = false));
-    });
+    unawaited(
+      _entrance.then((_) {
+        if (!_isMounted() || runtime.disposed) return;
+        unawaited(runtime.openBook().whenComplete(() => _opening = false));
+      }),
+    );
   }
 
   void dispose() {

@@ -34,6 +34,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
@@ -60,7 +61,7 @@ class ReaderV2Page extends StatefulWidget {
 }
 
 class _ReaderV2PageState extends State<ReaderV2Page>
-    with WidgetsBindingObserver
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin
     implements ReaderV2ExitFlowDelegate {
   static const ReaderV2SessionFacade _sessionFacade = ReaderV2SessionFacade();
 
@@ -83,6 +84,17 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；隱藏狀態列時頁首只依它決定。
   double? _topCutoutExtent;
 
+  /// 開書的換頁動畫與骨架淡入都播完時完成；載入等它（ADR 0018）。
+  final Completer<void> _entrance = Completer<void>();
+  bool _entranceWatched = false;
+
+  /// 只拿來計骨架淡入的時長（正文骨架與頁首頁尾骨架都是 [AppMotion.fade]，
+  /// 和這一頁的第一幀同時開始）。
+  late final AnimationController _skeletonFadeIn = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +107,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       book: widget.book,
       initialChapters: widget.initialChapters,
       openTarget: widget.openTarget,
+      entrance: _entrance.future,
       onChanged: _handleControllerChanged,
       isMounted: () => mounted,
     );
@@ -106,6 +119,40 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     HardwareKeyboard.instance.addHandler(_handleVolumeKey);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_refreshTopCutoutExtent());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceWatched) return;
+    _entranceWatched = true;
+    unawaited(_awaitEntrance());
+  }
+
+  /// 開書的換頁動畫與骨架淡入都播完才放行載入：載入在主執行緒上的工作
+  /// 不和這兩段動畫搶同一幀。系統關閉動畫時骨架直接到位，只等換頁。
+  Future<void> _awaitEntrance() async {
+    final route = ModalRoute.of(context)?.animation;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!reduceMotion) unawaited(_skeletonFadeIn.forward());
+    await Future.wait([
+      if (route != null) _untilCompleted(route),
+      if (!reduceMotion) _untilCompleted(_skeletonFadeIn),
+    ]);
+    if (mounted && !_entrance.isCompleted) _entrance.complete();
+  }
+
+  static Future<void> _untilCompleted(Animation<double> animation) {
+    if (animation.isCompleted) return Future<void>.value();
+    final done = Completer<void>();
+    void listener(AnimationStatus status) {
+      if (!status.isCompleted) return;
+      animation.removeStatusListener(listener);
+      done.complete();
+    }
+
+    animation.addStatusListener(listener);
+    return done.future;
   }
 
   @override
@@ -129,6 +176,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
+    _skeletonFadeIn.dispose();
     super.dispose();
   }
 

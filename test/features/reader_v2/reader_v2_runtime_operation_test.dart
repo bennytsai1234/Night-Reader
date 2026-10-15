@@ -658,6 +658,73 @@ void main() {
     },
   );
 
+  testWidgets('host starts opening the book only after the entrance', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final getIt = GetIt.instance;
+    await getIt.reset();
+    getIt.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+    getIt.registerSingleton<BookDao>(_FakeBookDao());
+    getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
+    getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
+
+    final entrance = Completer<void>();
+    final host = ReaderV2ControllerHost(
+      book: Book(
+        bookUrl: 'http://entrance.test',
+        name: '進場測試書',
+        author: '作者',
+        origin: 'local',
+        originName: '本地',
+      ),
+      initialChapters: [chapter(0), chapter(1)],
+      openTarget: null,
+      entrance: entrance.future,
+      onChanged: () {},
+      isMounted: () => true,
+    );
+    addTearDown(() async {
+      host.dispose();
+      await getIt.reset();
+    });
+
+    final runtime = host.ensureRuntime(
+      const Size(220, 180),
+      const ReaderV2Style(
+        fontSize: 18,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 0.8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+        textIndent: 2,
+      ),
+    );
+    runtime.registerViewportRestore(Object(), (_) async => true);
+    var opened = false;
+    runtime.addListener(() {
+      if (runtime.stateMachine.currentOperation?.kind ==
+          ReaderV2OperationKind.open) {
+        opened = true;
+      }
+    });
+
+    // 換頁動畫與骨架淡入還在播：幾幀過去都不開始載入。
+    for (var frame = 0; frame < 5; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(opened, isFalse);
+
+    entrance.complete();
+    await tester.pump();
+    expect(opened, isTrue);
+  });
+
   testWidgets(
     'host reconciles desired presentation after an in-flight request is abandoned',
     (tester) async {
@@ -682,6 +749,7 @@ void main() {
         book: book,
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
+        entrance: Future<void>.value(),
         onChanged: () {},
         isMounted: () => true,
       );
@@ -809,6 +877,7 @@ void main() {
         book: book,
         initialChapters: [chapter(0), chapter(1)],
         openTarget: null,
+        entrance: Future<void>.value(),
         onChanged: () {},
         isMounted: () => true,
       );
