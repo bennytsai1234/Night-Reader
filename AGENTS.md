@@ -24,7 +24,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 這一節與發布流程照 ADR 0014；要改流程先改那份 ADR。
 
-- 所有改動都在分支上做，文件這類小改動也不直接推 `main`：不急的就在分支上累積，跟下一次較大的更新一起合併。
+- 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `main` 上改、提交、推上去，不開分支、不審。
+- 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在分支上做，照下面的流程開 PR 合併；跟著功能一起改的文件放在同一個 PR。
 - 使用者說合併時，把這次要合併的分支併成一條、推上去、開一個 PR（PR 說明照 `pr` 技能寫）。開 PR 後派 Codex 審整個 PR 一次（`codex-review` 技能），核對屬實的問題修在同一個 PR，再用 `gh pr comment` 把審查摘要貼成 PR 留言（發現了什麼、核對結果、修了哪些、沒修的為什麼）；在同一個 PR 把 `HANDOFF.md` 改成合併後的狀態，合併後不另外補交接；合併前 `git fetch` 把最新的 `main` 併進分支，有新提交就解完衝突推上去，讓 CI 在合併後的狀態重跑；CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，PR 的分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `main`，刪掉本機分支，併進這個 PR 的其他分支也連同遠端一起刪掉。
 - `HANDOFF.md` 只寫查不到的事：還沒合併的工作在哪、等使用者決定的事、還沒寫進其他文件的決定、環境上的坑；合併了什麼看 PR，發版看 GitHub Actions。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
