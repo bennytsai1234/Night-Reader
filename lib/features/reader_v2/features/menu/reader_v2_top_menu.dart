@@ -13,7 +13,6 @@ class ReaderV2TopMenu extends StatelessWidget {
     required this.controlsVisible,
     required this.bookName,
     required this.chapterTitle,
-    required this.chapterUrl,
     required this.originName,
     required this.showReadTitleAddition,
     required this.onBack,
@@ -23,7 +22,6 @@ class ReaderV2TopMenu extends StatelessWidget {
   final bool controlsVisible;
   final String bookName;
   final String chapterTitle;
-  final String chapterUrl;
   final String originName;
   final bool showReadTitleAddition;
   final VoidCallback onBack;
@@ -132,27 +130,13 @@ class ReaderV2TopMenu extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    chapterTitle,
-                    style: AppTextStyles.labelSm.copyWith(
-                      color: menuStyle.foreground,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (chapterUrl.isNotEmpty)
-                    Text(
-                      chapterUrl,
-                      style: AppTextStyles.micro.copyWith(
-                        color: menuStyle.mutedForeground,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
+              child: Text(
+                chapterTitle,
+                style: AppTextStyles.labelSm.copyWith(
+                  color: menuStyle.foreground,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (originName.isNotEmpty) ...[

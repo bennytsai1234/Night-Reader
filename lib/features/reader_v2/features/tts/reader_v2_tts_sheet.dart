@@ -10,7 +10,6 @@ import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
@@ -79,38 +78,65 @@ class ReaderV2TtsPanel extends StatelessWidget {
                 ),
               ],
             ),
-            const SheetSection(title: '定時'),
-            _SleepTimerSection(timer: tts.sleepTimer),
-            const SheetSection(title: '朗讀參數'),
-            NumberStepperRow(
-              label: '語速',
-              value: tts.rate,
-              min: TTSService.minRate,
-              max: TTSService.maxRate,
-              step: TTSService.rateStep,
-              fractionDigits: 1,
-              unit: 'x',
-              onChanged: (value) =>
-                  _reportSaveFailure(context, tts.setRate(value)),
+            GroupedSection(
+              margin: EdgeInsets.zero,
+              header: '定時',
+              children: [
+                GroupedContent(
+                  child: _SleepTimerSection(timer: tts.sleepTimer),
+                ),
+              ],
             ),
-            NumberStepperRow(
-              label: '音調',
-              value: tts.pitch,
-              min: TTSService.minPitch,
-              max: TTSService.maxPitch,
-              step: TTSService.pitchStep,
-              fractionDigits: 1,
-              onChanged: (value) =>
-                  _reportSaveFailure(context, tts.setPitch(value)),
+            GroupedSection(
+              margin: EdgeInsets.zero,
+              header: '朗讀參數',
+              children: [
+                _stepperRow(
+                  NumberStepperRow(
+                    label: '語速',
+                    value: tts.rate,
+                    min: TTSService.minRate,
+                    max: TTSService.maxRate,
+                    step: TTSService.rateStep,
+                    fractionDigits: 1,
+                    unit: '倍',
+                    onChanged: (value) =>
+                        _reportSaveFailure(context, tts.setRate(value)),
+                  ),
+                ),
+                _stepperRow(
+                  NumberStepperRow(
+                    label: '音調',
+                    value: tts.pitch,
+                    min: TTSService.minPitch,
+                    max: TTSService.maxPitch,
+                    step: TTSService.pitchStep,
+                    fractionDigits: 1,
+                    onChanged: (value) =>
+                        _reportSaveFailure(context, tts.setPitch(value)),
+                  ),
+                ),
+              ],
             ),
-            const SheetSection(title: '朗讀高亮'),
-            _HighlightSection(settings: settings),
+            GroupedSection(
+              margin: EdgeInsets.zero,
+              header: '朗讀高亮',
+              children: [
+                GroupedContent(child: _HighlightSection(settings: settings)),
+              ],
+            ),
           ],
         );
       },
     );
   }
 }
+
+/// 數值步進列放進卡片時只補列的左右內距，同其他閱讀器面板。
+Widget _stepperRow(Widget stepper) => GroupedContent(
+  padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
+  child: stepper,
+);
 
 /// 定時選項與倒數。倒數不靠定時器逐秒通知，這裡自己每秒重讀剩餘時間，
 /// 只重建這一小塊。
@@ -151,6 +177,7 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             GlassSegmented<ReaderV2TtsSleepOption>(
+              dense: true,
               segments: [
                 for (final option in ReaderV2TtsSleepOption.values)
                   GlassSegment(option, option.label),
@@ -327,11 +354,19 @@ class _HighlightColorRow extends StatelessWidget {
                         width: option == settings.highlightColor ? 2.5 : 1,
                       ),
                     ),
+                    // 「跟隨主題」在有些風格剛好和某個固定色同色，沒選時也畫
+                    // 一個調色盤，看得出它不是單一顏色。
                     child: option == settings.highlightColor
                         ? Icon(
                             Icons.check_rounded,
                             size: 18,
                             color: Colors.black.withValues(alpha: 0.7),
+                          )
+                        : option == ReaderV2HighlightColor.theme
+                        ? Icon(
+                            Icons.palette_outlined,
+                            size: 16,
+                            color: Colors.black.withValues(alpha: 0.55),
                           )
                         : null,
                   ),

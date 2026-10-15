@@ -78,7 +78,6 @@ void main() {
             showReadTitleAddition: true,
             infoState: infoState,
             chapterTitle: '第一章',
-            chapterUrl: '',
             originName: '本地',
             navigation: ReaderV2ChapterNavigationState(
               chapterCount: 3,

@@ -208,6 +208,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           max: 40,
           step: 0.5,
           fractionDigits: 1,
+          trimZeroFraction: true,
           onChanged: (value) {
             setState(() => _fontSize = value);
             _fontSizeDirty = true;
@@ -532,7 +533,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(horizontal: value),
               ),
             ),
@@ -543,7 +543,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(top: value),
               ),
             ),
@@ -554,7 +553,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(bottom: value),
               ),
             ),
@@ -572,7 +570,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                   min: ReaderV2SettingsController.minPagePadding,
                   max: ReaderV2SettingsController.maxPagePadding,
                   step: _paddingStep,
-                  unit: ' px',
                   onChanged: settings.setFooterOffset,
                 ),
               ),

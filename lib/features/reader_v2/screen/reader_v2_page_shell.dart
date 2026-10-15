@@ -19,6 +19,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
@@ -117,7 +118,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.showReadTitleAddition,
     required this.infoState,
     required this.chapterTitle,
-    required this.chapterUrl,
     required this.originName,
     this.progressListenable,
     required this.navigation,
@@ -172,7 +172,6 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool showReadTitleAddition;
   final ReaderV2InfoState infoState;
   final String chapterTitle;
-  final String chapterUrl;
   final String originName;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
@@ -258,6 +257,19 @@ class ReaderV2PageShell extends StatelessWidget {
                 bottom: layout.contentBottom,
                 child: content,
               ),
+              // 正文上緣常露出半行（ADR 0006），切口加一段漸隱，同 App 頁首
+              // 下緣的做法。上緣那一行是翻頁保留的重疊行，已經讀過；下緣不加，
+              // 否則翻頁前要讀的最後一行會被淡掉。
+              Positioned(
+                top: layout.contentTop,
+                left: 0,
+                right: 0,
+                child: EdgeFade(
+                  edge: AxisDirection.up,
+                  height: AppGlass.headerFadeHeight,
+                  color: backgroundColor,
+                ),
+              ),
               if (layout.headerExtent > 0)
                 Positioned(
                   top: 0,
@@ -326,7 +338,6 @@ class ReaderV2PageShell extends StatelessWidget {
                         controlsVisible: controlsVisible,
                         bookName: context.zh(book.name),
                         chapterTitle: chapterTitle,
-                        chapterUrl: chapterUrl,
                         originName: originName,
                         showReadTitleAddition: showReadTitleAddition,
                         onBack: onExitIntent,

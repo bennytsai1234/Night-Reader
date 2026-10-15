@@ -37,8 +37,12 @@ class SourceItemTile extends StatelessWidget {
   final bool showHostHeader;
   final String hostLabel;
 
-  /// 列底是否畫分隔線（同組最後一列不畫）。
+  /// 列底是否畫分隔線（同組最後一列不畫）；不畫時也是卡片的最後一列，
+  /// 帶下圓角。
   final bool showSeparator;
+
+  /// 分組卡片的第一列，帶上圓角。
+  final bool firstInGroup;
   final bool mutationEnabled;
 
   const SourceItemTile({
@@ -57,6 +61,7 @@ class SourceItemTile extends StatelessWidget {
     this.showHostHeader = false,
     this.hostLabel = '',
     this.showSeparator = true,
+    this.firstInGroup = false,
     this.mutationEnabled = true,
   });
 
@@ -122,7 +127,7 @@ class SourceItemTile extends StatelessWidget {
       },
     );
 
-    final tile = SwipeActions(
+    final swipe = SwipeActions(
       enabled: !editing && mutationEnabled,
       leading: [
         SwipeAction(
@@ -148,6 +153,19 @@ class SourceItemTile extends StatelessWidget {
         ),
       ],
       child: row,
+    );
+    // 和其他分組清單一樣是左右內縮的圓角卡片，一列一列接起來（同
+    // GroupedSliceItem）；滑出的動作也收在卡片裡。
+    const corner = Radius.circular(AppGrouped.radius);
+    final tile = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
+      child: ClipRRect(
+        borderRadius: BorderRadius.vertical(
+          top: firstInGroup ? corner : Radius.zero,
+          bottom: showSeparator ? Radius.zero : corner,
+        ),
+        child: swipe,
+      ),
     );
 
     if (!showHostHeader) return tile;
@@ -243,7 +261,7 @@ class _SourceRowContent extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        _displayNameGroup(),
+                        source.bookSourceName,
                         style: AppTextStyles.bodyBase.copyWith(
                           height: 1.3,
                           fontWeight: FontWeight.w500,
@@ -253,6 +271,11 @@ class _SourceRowContent extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (_groupLabel case final group?)
+                      Padding(
+                        padding: const EdgeInsets.only(left: AppSpacing.sm),
+                        child: _GroupCapsule(group),
+                      ),
                     if (source.hasExploreUrl)
                       Padding(
                         padding: const EdgeInsets.only(left: AppSpacing.sm),
@@ -346,12 +369,10 @@ class _SourceRowContent extends StatelessWidget {
     );
   }
 
-  String _displayNameGroup() {
-    final group = source.bookSourceGroup;
-    if (group != null && group.isNotEmpty) {
-      return '${source.bookSourceName} [$group]';
-    }
-    return source.bookSourceName;
+  /// 書源名稱旁的分組小膠囊；多個分組照原樣以逗號相接。
+  String? get _groupLabel {
+    final group = source.bookSourceGroup?.trim();
+    return group == null || group.isEmpty ? null : group;
   }
 
   Widget _buildStatusTag(BuildContext context, SourceRuntimeHealth health) {
@@ -469,6 +490,41 @@ class _SourceRowContent extends StatelessWidget {
       }
     }
     return null;
+  }
+}
+
+/// 書源名稱旁的分組名稱，取代原本的「[分組]」括號字。
+class _GroupCapsule extends StatelessWidget {
+  const _GroupCapsule(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    return ConstrainedBox(
+      // 分組名稱可能很長，限寬才不會把書源名稱擠掉。
+      constraints: const BoxConstraints(maxWidth: 120),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: 2,
+        ),
+        decoration: BoxDecoration(
+          color: chrome.sectionText.withValues(alpha: 0.1),
+          borderRadius: AppRadius.pillShape,
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.labelXs.copyWith(
+            height: 1.15,
+            color: chrome.sectionText,
+          ),
+        ),
+      ),
+    );
   }
 }
 

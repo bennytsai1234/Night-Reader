@@ -30,6 +30,7 @@ class GlassSegmented<T> extends StatefulWidget {
     required this.selected,
     required this.onChanged,
     this.expand = true,
+    this.dense = false,
   }) : assert(segments.length > 0);
 
   final List<GlassSegment<T>> segments;
@@ -38,6 +39,10 @@ class GlassSegmented<T> extends StatefulWidget {
 
   /// true 時撐滿可用寬度；false 時以最寬標籤決定等寬分段的寬度。
   final bool expand;
+
+  /// 分段多、每段很窄時（例如朗讀定時的七個選項）縮小標籤左右留白，兩個字的
+  /// 標籤才不會被截成「關…」。
+  final bool dense;
 
   @override
   State<GlassSegmented<T>> createState() => _GlassSegmentedState<T>();
@@ -200,6 +205,7 @@ class _GlassSegmentedState<T> extends State<GlassSegmented<T>>
               segment: widget.segments[i],
               selected: i == selectedIndex,
               emphasized: i == emphasized,
+              dense: widget.dense,
               color: scheme.onSurface,
               onTap: () => _select(i),
             ),
@@ -246,6 +252,7 @@ class _SegmentLabel extends StatelessWidget {
     required this.segment,
     required this.selected,
     required this.emphasized,
+    required this.dense,
     required this.color,
     required this.onTap,
   });
@@ -253,6 +260,7 @@ class _SegmentLabel extends StatelessWidget {
   final GlassSegment<Object?> segment;
   final bool selected;
   final bool emphasized;
+  final bool dense;
   final Color color;
   final VoidCallback onTap;
 
@@ -276,7 +284,9 @@ class _SegmentLabel extends StatelessWidget {
       inMutuallyExclusiveGroup: true,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        padding: EdgeInsets.symmetric(
+          horizontal: dense ? AppSpacing.xs : AppSpacing.md,
+        ),
         child: Center(
           child: icon == null
               ? text

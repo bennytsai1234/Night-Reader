@@ -31,6 +31,7 @@ class NumberStepperRow extends StatefulWidget {
     this.fractionDigits = 0,
     this.displayScale = 1,
     this.unit = '',
+    this.trimZeroFraction = false,
   }) : assert(min < max),
        assert(step > 0),
        assert(displayScale > 0);
@@ -48,8 +49,17 @@ class NumberStepperRow extends StatefulWidget {
   /// 儲存值轉顯示值的倍率，例如 0.12 以 `12%` 呈現時為 100。
   final double displayScale;
 
-  /// 顯示單位，例如 `%`、`x`。
+  /// 顯示單位，例如 `%`、`倍`；除了 `%` 都和數字隔一格。
   final String unit;
+
+  /// 數值剛好是整數時不寫小數（18、18.5），而不是固定 [fractionDigits] 位。
+  final bool trimZeroFraction;
+
+  /// 數字接上單位：`%` 緊貼，其他單位隔一格（`1.5 倍`、`2 行`）。
+  static String withUnit(String number, String unit) {
+    if (unit.isEmpty) return number;
+    return unit == '%' ? '$number%' : '$number $unit';
+  }
 
   /// 將任意值對齊到 [step] 格點並限制在範圍內。
   static double snap(double value, double min, double max, double step) {
@@ -110,10 +120,18 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
   bool get _canDecrease => _value > widget.min;
   bool get _canIncrease => _value < widget.max;
 
-  String _format(double value) =>
-      (value * widget.displayScale).toStringAsFixed(widget.fractionDigits);
+  String _format(double value) {
+    final scaled = value * widget.displayScale;
+    if (widget.trimZeroFraction && scaled == scaled.roundToDouble()) {
+      return scaled.toStringAsFixed(0);
+    }
+    return scaled.toStringAsFixed(widget.fractionDigits);
+  }
 
-  String get _displayText => '${_format(_value)}${widget.unit}';
+  String _withUnit(String number) =>
+      NumberStepperRow.withUnit(number, widget.unit);
+
+  String get _displayText => _withUnit(_format(_value));
 
   void _setValue(double next) {
     final normalized = _normalized(next);
@@ -184,12 +202,8 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
     return Semantics(
       label: widget.label,
       value: _displayText,
-      increasedValue: _canIncrease
-          ? '${_format(increased)}${widget.unit}'
-          : null,
-      decreasedValue: _canDecrease
-          ? '${_format(decreased)}${widget.unit}'
-          : null,
+      increasedValue: _canIncrease ? _withUnit(_format(increased)) : null,
+      decreasedValue: _canDecrease ? _withUnit(_format(decreased)) : null,
       onIncrease: _canIncrease ? () => _stepBy(1) : null,
       onDecrease: _canDecrease ? () => _stepBy(-1) : null,
       child: Padding(
@@ -369,8 +383,10 @@ class _NumberInputDialogState extends State<_NumberInputDialog> {
     super.dispose();
   }
 
-  String get _rangeText =>
-      '${widget.format(widget.min)}–${widget.format(widget.max)}${widget.unit}';
+  String get _rangeText => NumberStepperRow.withUnit(
+    '${widget.format(widget.min)}–${widget.format(widget.max)}',
+    widget.unit,
+  );
 
   void _submit() {
     final parsed = double.tryParse(_controller.text.trim());

@@ -55,7 +55,7 @@ class TtsSettingsPage extends StatelessWidget {
                       max: TTSService.maxRate,
                       step: TTSService.rateStep,
                       fractionDigits: 1,
-                      unit: 'x',
+                      unit: '倍',
                       onChanged: (value) =>
                           _reportSaveFailure(context, tts.setRate(value)),
                     ),

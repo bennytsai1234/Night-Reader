@@ -361,13 +361,16 @@ class BookshelfGridTile extends StatelessWidget {
   /// 一格的實際高度：封面、兩行書名（跟著系統字級放大）與進度線，
   /// 網格據此決定列高，字級放大時才不會溢出。
   static double heightFor(double width, TextScaler textScaler) {
-    final titleHeight = textScaler.scale(_titleFontSize) * _titleLineHeight * 2;
     return width / coverAspectRatio +
         AppSpacing.sm * 2 +
-        titleHeight +
+        _titleHeightFor(textScaler) +
         BookshelfProgressLine.height +
         1; // 字形度量取整的餘裕。
   }
+
+  /// 書名區固定兩行高：一行的書名下方留白，同一列的進度線才對齊。
+  static double _titleHeightFor(TextScaler textScaler) =>
+      textScaler.scale(_titleFontSize) * _titleLineHeight * 2;
 
   final Book book;
   final bool selecting;
@@ -449,11 +452,14 @@ class BookshelfGridTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: titleStyle.copyWith(color: scheme.onSurface),
+              SizedBox(
+                height: _titleHeightFor(MediaQuery.textScalerOf(context)),
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle.copyWith(color: scheme.onSurface),
+                ),
               ),
               const SizedBox(height: AppSpacing.sm),
               BookshelfProgressLine(book: book),

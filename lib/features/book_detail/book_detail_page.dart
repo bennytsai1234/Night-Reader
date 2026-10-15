@@ -27,6 +27,7 @@ import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 import 'package:night_reader/shared/widgets/locked_chapter_icon.dart';
@@ -135,9 +136,26 @@ class _BookDetailPageState extends State<BookDetailPage> {
             // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度，
             // bottom 才包含底部的浮動閱讀鈕。
             body: Builder(
-              builder: (bodyContext) => provider.loadErrorMessage != null
-                  ? _buildLoadError(bodyContext, provider)
-                  : _buildContent(bodyContext, provider),
+              builder: (bodyContext) => Stack(
+                children: [
+                  Positioned.fill(
+                    child: provider.loadErrorMessage != null
+                        ? _buildLoadError(bodyContext, provider)
+                        : _buildContent(bodyContext, provider),
+                  ),
+                  // 閱讀鈕後方墊一條漸隱帶，同主頁分頁列：簡介與目錄捲到
+                  // 膠囊之前就淡出，不會從它上下透出來。
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: FloatingTabBarFade(
+                      color: chrome.groupedBackground,
+                      hidden: !provider.hasReadyWorld,
+                    ),
+                  ),
+                ],
+              ),
             ),
             bottomNavigationBar: BookReadCapsule(
               started: provider.book.hasStartedReading,

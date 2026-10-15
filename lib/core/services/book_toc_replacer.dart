@@ -4,7 +4,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 
-/// 用書源最新的目錄換掉一本書已存的目錄：檢查更新與「整本補下載」共用。
+/// 用書源最新的目錄換掉一本書已存的目錄（檢查更新用）。
 class BookTocReplacer {
   BookTocReplacer({required this.chapterDao, this.contentDao});
 

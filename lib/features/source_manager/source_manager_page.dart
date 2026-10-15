@@ -292,12 +292,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     return GlassNavHeader(
       title: '書源管理',
       actions: [
-        SourceManagerMenus.buildSortMenu(context, provider),
-        SourceManagerMenus.buildGroupMenu(
-          context,
-          provider,
-          onManageGroups: () => _openGroupManagePage(nav, provider),
-        ),
         SourceManagerMenus.buildMoreMenu(
           context,
           provider,
@@ -429,6 +423,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         editing: editing,
         showHostHeader: !canReorder && startsHostGroup(i),
         hostLabel: groupByHost ? hostLabels[i] : '',
+        firstInGroup: i == 0 || startsHostGroup(i),
         showSeparator: !isLastInGroup,
       );
     }
@@ -503,6 +498,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     required bool editing,
     required bool showHostHeader,
     required String hostLabel,
+    required bool firstInGroup,
     required bool showSeparator,
   }) {
     return SourceItemTile(
@@ -513,6 +509,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       editing: editing,
       showHostHeader: showHostHeader,
       hostLabel: hostLabel,
+      firstInGroup: firstInGroup,
       showSeparator: showSeparator,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       mutationEnabled: !_isImporting && !p.isSourceLocked(s.bookSourceUrl),
