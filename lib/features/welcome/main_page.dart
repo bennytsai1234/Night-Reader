@@ -57,8 +57,11 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
+/// 在其他分頁用 Android 手勢返回回書架時，換頁跟著拖曳走到哪一段。
+enum _Follow { none, dragging, committing, cancelling }
+
 class _MainPageState extends State<MainPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
@@ -83,16 +86,21 @@ class _MainPageState extends State<MainPage>
   /// 保住各分頁的狀態，也從這裡拍下換頁前的畫面。
   final GlobalKey _pagesKey = GlobalKey();
 
-  /// 點分頁換頁的進度；換頁中 [_outgoing] 是換頁前畫面的快照。
+  /// 換頁的進度；換頁中 [_outgoing] 是換頁前畫面的快照。跟著返回手勢時
+  /// 進度由手勢寫入，結束由 [handleCommitBackGesture]／
+  /// [handleCancelBackGesture] 處理。
   late final AnimationController _switch = AnimationController(vsync: this)
     ..addStatusListener((status) {
-      if (status.isCompleted) _endSwitch();
+      if (status.isCompleted && _follow == _Follow.none) _endSwitch();
     });
   ui.Image? _outgoing;
   late Color _outgoingBackground;
   late Color _outgoingFade;
+  int _outgoingIndex = 0;
   bool _switchForward = true;
   int _switchCount = 0;
+  _Follow _follow = _Follow.none;
+  final PredictiveBackVelocity _backTouches = PredictiveBackVelocity();
 
   late final List<MainDestination> _destinations =
       widget.destinations ?? _defaultDestinations;
@@ -108,6 +116,7 @@ class _MainPageState extends State<MainPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _splashTimeoutTimer?.cancel();
     _detachSplashShelfListener();
     for (final controller in _scrollToTopControllers.values) {
@@ -123,6 +132,7 @@ class _MainPageState extends State<MainPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabBarHidden.addListener(() => setState(() {}));
     if (_scrollToTopControllers.isNotEmpty) {
       _pageController.addListener(_scrollLeftTabsToTop);
@@ -189,6 +199,7 @@ class _MainPageState extends State<MainPage>
                     child: RawImage(image: outgoing, fit: BoxFit.fill),
                   ),
                   incoming: pages,
+                  follow: _follow != _Follow.none,
                   outgoingBackground: _outgoingBackground,
                   incomingBackground: _destinations[_currentIndex].backgroundOf(
                     context,
@@ -250,7 +261,11 @@ class _MainPageState extends State<MainPage>
         bottomNavigationBar: FloatingTabBar(
           // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
           controller: outgoing == null ? _pageController : null,
-          currentIndex: _currentIndex,
+          // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
+          currentIndex:
+              _follow == _Follow.dragging || _follow == _Follow.cancelling
+              ? _outgoingIndex
+              : _currentIndex,
           hidden: _tabBarHidden.value,
           items: [
             for (final destination in _destinations)
@@ -282,15 +297,26 @@ class _MainPageState extends State<MainPage>
   /// 返回。手指左右滑動照舊跟手。
   void _switchTo(int index) {
     _endSwitch();
+    if (!_beginSwitch(index)) {
+      _pageController.jumpToPage(index);
+      return;
+    }
+    _switch
+      ..duration = AppPageTransition.of(context).duration
+      ..forward(from: 0);
+  }
+
+  /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；
+  /// 關閉動畫或還沒畫出來時不開始，回傳 false。
+  bool _beginSwitch(int index, {bool follow = false}) {
     final boundary = _pagesKey.currentContext?.findRenderObject();
     if (MediaQuery.disableAnimationsOf(context) ||
         boundary is! RenderRepaintBoundary ||
         !boundary.hasSize) {
-      _pageController.jumpToPage(index);
-      return;
+      return false;
     }
     // 換頁前的畫面不會再變，拍成一張圖給轉場用，不必兩頁同時活著。點擊
-    // 在兩幀之間處理，分頁剛畫完，拍到的就是螢幕上的樣子。
+    // 與返回手勢在兩幀之間處理，分頁剛畫完，拍到的就是螢幕上的樣子。
     final image = boundary.toImageSync(
       pixelRatio: MediaQuery.devicePixelRatioOf(context),
     );
@@ -298,24 +324,93 @@ class _MainPageState extends State<MainPage>
     final fade = _fadeColor(context);
     setState(() {
       _outgoing = image;
-      _outgoingBackground = _destinations[from.round()].backgroundOf(context);
+      _outgoingIndex = from.round();
+      _outgoingBackground = _destinations[_outgoingIndex].backgroundOf(context);
       _outgoingFade = fade;
       _switchForward = index > from;
       _switchCount++;
       _currentIndex = index;
+      _follow = follow ? _Follow.dragging : _Follow.none;
     });
     _pageController.jumpToPage(index);
-    _switch
-      ..duration = AppPageTransition.of(context).duration
-      ..forward(from: 0);
+    return true;
   }
 
   void _endSwitch() {
     final outgoing = _outgoing;
     if (outgoing == null) return;
     _switch.stop();
-    setState(() => _outgoing = null);
+    setState(() {
+      _outgoing = null;
+      _follow = _Follow.none;
+    });
     outgoing.dispose();
+    // 跟著手勢時暫停的回頂，換頁結束後補做。
+    _scrollLeftTabsToTop();
+  }
+
+  // ---------- 在其他分頁用 Android 手勢返回回書架 ----------
+  //
+  // 和一般頁面的預測返回一樣，拖曳中照選定的換頁動畫跟著進度走，返回與否
+  // 由系統決定，放開後照 [BackSwipe] 的時長送完或彈回。
+
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    if (backEvent.isButtonEvent ||
+        _currentIndex == 0 ||
+        _tabBarHidden.value ||
+        _outgoing != null ||
+        !(ModalRoute.isCurrentOf(context) ?? true)) {
+      return false;
+    }
+    if (!_beginSwitch(0, follow: true)) return false;
+    _backTouches
+      ..clear()
+      ..record(backEvent, MediaQuery.devicePixelRatioOf(context));
+    _switch.value = backEvent.progress;
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (_follow != _Follow.dragging) return;
+    _backTouches.record(backEvent, MediaQuery.devicePixelRatioOf(context));
+    _switch.value = backEvent.progress;
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    if (_follow != _Follow.dragging) return;
+    setState(() => _follow = _Follow.committing);
+    _switch
+        .animateTo(
+          1,
+          duration: BackSwipe.finishDuration(
+            distance: (1 - _switch.value) * MediaQuery.sizeOf(context).width,
+            velocity: _backTouches.pixelsPerSecond,
+          ),
+          curve: BackSwipe.curve,
+        )
+        .whenCompleteOrCancel(() {
+          if (_follow == _Follow.committing) _endSwitch();
+        });
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    if (_follow != _Follow.dragging) return;
+    setState(() => _follow = _Follow.cancelling);
+    _switch
+        .animateBack(
+          0,
+          duration: BackSwipe.cancelDuration,
+          curve: BackSwipe.curve,
+        )
+        .whenCompleteOrCancel(() {
+          if (_follow != _Follow.cancelling) return;
+          _pageController.jumpToPage(_outgoingIndex);
+          _endSwitch();
+        });
   }
 
   /// 頁面位置（以分頁索引為單位，滑動中是小數）。
@@ -350,6 +445,8 @@ class _MainPageState extends State<MainPage>
 
   /// 分頁完全滑出畫面後才捲回頂端：下次滑進來就從頂端開始，跳動不會被看到。
   void _scrollLeftTabsToTop() {
+    // 返回手勢可能取消、回到原分頁，結束前不動它的捲動位置。
+    if (_follow != _Follow.none) return;
     final position = _pagePosition();
     _scrollToTopControllers.forEach((index, controller) {
       if ((position - index).abs() >= 1 &&

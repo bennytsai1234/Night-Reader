@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
@@ -93,38 +94,39 @@ void main() {
     expect(fade(tester).color, _secondBackground);
   });
 
-  group('tapping a tab', () {
-    Widget threeTabs({bool disableAnimations = false}) => MaterialApp(
-      theme: buildAppTheme(AppStyle.paper, Brightness.light),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(disableAnimations: disableAnimations),
-        child: child!,
-      ),
-      home: const MainPage(
-        destinations: [
-          MainDestination(
-            icon: Icons.book_outlined,
-            selectedIcon: Icons.book,
-            label: '一',
-            page: _ListPage('甲', _firstBackground),
-          ),
-          MainDestination(
-            icon: Icons.explore_outlined,
-            selectedIcon: Icons.explore,
-            label: '二',
-            page: _ListPage('乙', _secondBackground),
-          ),
-          MainDestination(
-            icon: Icons.person_outline,
-            selectedIcon: Icons.person,
-            label: '三',
-            page: _ListPage('丙', _firstBackground),
-          ),
-        ],
-      ),
-    );
+  Widget threeTabs({bool disableAnimations = false}) => MaterialApp(
+    theme: buildAppTheme(AppStyle.paper, Brightness.light),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(disableAnimations: disableAnimations),
+      child: child!,
+    ),
+    home: const MainPage(
+      destinations: [
+        MainDestination(
+          icon: Icons.book_outlined,
+          selectedIcon: Icons.book,
+          label: '一',
+          page: _ListPage('甲', _firstBackground),
+        ),
+        MainDestination(
+          icon: Icons.explore_outlined,
+          selectedIcon: Icons.explore,
+          label: '二',
+          page: _ListPage('乙', _secondBackground),
+        ),
+        MainDestination(
+          icon: Icons.person_outline,
+          selectedIcon: Icons.person,
+          label: '三',
+          page: _ListPage('丙', _firstBackground),
+          scrollsToTopWhenLeft: true,
+        ),
+      ],
+    ),
+  );
 
+  group('tapping a tab', () {
     testWidgets('plays the chosen transition without passing the middle tab', (
       tester,
     ) async {
@@ -169,6 +171,92 @@ void main() {
       await tester.pump();
       expect(find.byType(AppTransitionSwitch), findsNothing);
       expect(find.text('丙0'), findsOneWidget);
+    });
+  });
+
+  group('Android predictive back on another tab', () {
+    Future<void> send(
+      WidgetTester tester,
+      String method, [
+      Map<String, Object?>? arguments,
+    ]) => tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      SystemChannels.backGesture.name,
+      SystemChannels.backGesture.codec.encodeMethodCall(
+        MethodCall(method, arguments),
+      ),
+      (_) {},
+    );
+
+    Map<String, Object?> event(double x, double progress) => {
+      'touchOffset': [x, 300.0],
+      'progress': progress,
+      'swipeEdge': 0,
+    };
+
+    int selectedTab(WidgetTester tester) =>
+        tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).currentIndex;
+
+    Future<void> openThirdTab(WidgetTester tester) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('三'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.text('丙3'), const Offset(0, -600));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the shelf comes back as far as the gesture goes', (
+      tester,
+    ) async {
+      await openThirdTab(tester);
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(200, 0.5));
+      await tester.pump();
+
+      // 預設的平移：這一頁的快照跟著進度往右移一半，底下露出書架。
+      expect(find.byType(AppTransitionSwitch), findsOneWidget);
+      expect(tester.getRect(find.byType(RawImage)).left, closeTo(400, 1));
+      expect(find.text('甲0'), findsOneWidget);
+      expect(find.text('乙0'), findsNothing);
+      // 還沒確定返回，膠囊留在原本的分頁。
+      expect(selectedTab(tester), 2);
+
+      await send(tester, 'commitBackGesture');
+      await tester.pumpAndSettle();
+      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(selectedTab(tester), 0);
+      expect(find.text('甲0'), findsOneWidget);
+      expect(find.text('丙0'), findsNothing);
+    });
+
+    testWidgets('a cancelled gesture stays on the tab where it was', (
+      tester,
+    ) async {
+      await openThirdTab(tester);
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(100, 0.3));
+      await tester.pump();
+      await send(tester, 'cancelBackGesture');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(selectedTab(tester), 2);
+      // 捲動位置還在，沒有因為途中露出書架而捲回頂端。
+      expect(find.text('丙0'), findsNothing);
+      expect(find.text('丙10'), findsOneWidget);
+    });
+
+    testWidgets('on the shelf the gesture is left to the system', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+      await send(tester, 'startBackGesture', event(0, 0));
+      await send(tester, 'updateBackGestureProgress', event(100, 0.3));
+      await tester.pump();
+      expect(find.byType(AppTransitionSwitch), findsNothing);
+      await send(tester, 'cancelBackGesture');
+      await tester.pumpAndSettle();
     });
   });
 
