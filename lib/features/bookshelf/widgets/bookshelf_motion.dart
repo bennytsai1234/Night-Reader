@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 書架清單的版面動畫：換排序、或書因閱讀移到最前面時，書卡從舊位置平滑
@@ -22,11 +23,13 @@ class BookshelfLayoutMotion {
     _controller
       ..addListener(_repaintAnimated)
       ..addStatusListener((status) {
+        _hold.moving = status.isAnimating;
         if (status == AnimationStatus.completed) _finish();
       });
   }
 
   final AnimationController _controller;
+  final MotionHold _hold = MotionHold();
   final Set<_RenderBookshelfMotionItem> _items = {};
 
   /// 這一輪開始前每張書卡在螢幕上的位置。
@@ -94,6 +97,8 @@ class BookshelfLayoutMotion {
   }
 
   void _finish() {
+    // 中途停下不會發出狀態變化，在這裡一起放開。
+    _hold.release();
     _before = const {};
     for (final item in _items) {
       if (item._animated) item.markNeedsPaint();
@@ -106,7 +111,10 @@ class BookshelfLayoutMotion {
     _finish();
   }
 
-  void dispose() => _controller.dispose();
+  void dispose() {
+    _hold.release();
+    _controller.dispose();
+  }
 }
 
 /// 書架上的一張書卡；[id] 是書的 bookUrl。

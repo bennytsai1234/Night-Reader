@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_reading_state.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/services/export_book_service.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
 import 'package:night_reader/features/source_manager/source_debug_page.dart';
@@ -88,10 +89,19 @@ class _BookDetailPageState extends State<BookDetailPage> {
   /// 到氛圍離開頁首時變回實色底（0 透明、1 實色）。
   final ValueNotifier<double> _headerSolidity = ValueNotifier(0);
 
+  /// 進場動畫播完時完成；詳情等它才開始載入（ADR 0018）。
+  Future<void>? _entrance;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entrance ??= TransitionSettled.entered(context);
   }
 
   @override
@@ -123,6 +133,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       create: (_) => BookDetailProvider(
         widget.searchBook ??
             AggregatedSearchBook(book: widget.book!, sources: []),
+        entrance: _entrance!,
       ),
       child: Consumer<BookDetailProvider>(
         builder: (context, provider, child) {

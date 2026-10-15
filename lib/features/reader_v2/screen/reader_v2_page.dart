@@ -15,6 +15,7 @@ import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -132,27 +133,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 開書的換頁動畫與骨架淡入都播完才放行載入：載入在主執行緒上的工作
   /// 不和這兩段動畫搶同一幀。系統關閉動畫時骨架直接到位，只等換頁。
   Future<void> _awaitEntrance() async {
-    final route = ModalRoute.of(context)?.animation;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (!reduceMotion) unawaited(_skeletonFadeIn.forward());
     await Future.wait([
-      if (route != null) _untilCompleted(route),
-      if (!reduceMotion) _untilCompleted(_skeletonFadeIn),
+      TransitionSettled.entered(context),
+      if (!reduceMotion)
+        TransitionSettled.until(_skeletonFadeIn, (s) => s.isCompleted),
     ]);
     if (mounted && !_entrance.isCompleted) _entrance.complete();
-  }
-
-  static Future<void> _untilCompleted(Animation<double> animation) {
-    if (animation.isCompleted) return Future<void>.value();
-    final done = Completer<void>();
-    void listener(AnimationStatus status) {
-      if (!status.isCompleted) return;
-      animation.removeStatusListener(listener);
-      done.complete();
-    }
-
-    animation.addStatusListener(listener);
-    return done.future;
   }
 
   @override

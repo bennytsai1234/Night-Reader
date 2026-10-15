@@ -11,6 +11,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -172,6 +173,9 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           stoppedEarly = true;
           break;
         }
+        // 畫面上有動畫在播時先等：帶 JS 的書源在主執行緒解析正文，會把
+        // 動畫卡掉（ADR 0018）。已經在抓的章節照常做完。
+        await MotionGate.instance.idle;
 
         if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
           task.successCount++;

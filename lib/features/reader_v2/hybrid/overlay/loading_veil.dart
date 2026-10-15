@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -26,6 +27,7 @@ class LoadingVeilController {
         duration: AppMotion.skeletonPulse,
       ) {
     _cover.addStatusListener(_onCoverStatus);
+    _skeleton.addStatusListener((_) => _syncHold());
   }
 
   /// 紙完全淡出時呼叫，呼叫端據此把 [LoadingVeil] 移出畫面。
@@ -48,6 +50,9 @@ class LoadingVeilController {
   );
   int _attachedVeils = 0;
   bool _reduceMotion = false;
+
+  /// 紙淡入淡出、骨架淡入與呼吸時持有 [MotionGate]（ADR 0018）。
+  final MotionHold _hold = MotionHold();
 
   /// 系統要求減少動態（`MediaQuery.disableAnimations`）時，紙與骨架直接到位，
   /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點。
@@ -85,12 +90,14 @@ class LoadingVeilController {
   }
 
   void dispose() {
+    _hold.release();
     _cover.dispose();
     _skeleton.dispose();
     _pulse.dispose();
   }
 
   void _onCoverStatus(AnimationStatus status) {
+    _syncHold();
     if (status != AnimationStatus.dismissed) return;
     _skeleton.value = 0;
     _syncPulse();
@@ -122,6 +129,12 @@ class LoadingVeilController {
         ..stop()
         ..value = 0;
     }
+    _syncHold();
+  }
+
+  void _syncHold() {
+    _hold.moving =
+        _pulse.isAnimating || _cover.isAnimating || _skeleton.isAnimating;
   }
 }
 

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 import '../theme/app_tokens.dart';
 
@@ -57,8 +59,12 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
   late final AnimationController _controller =
       AnimationController(vsync: this, duration: AppMotion.themeReveal)
         ..addStatusListener((status) {
+          _hold.moving = status.isAnimating;
           if (status == AnimationStatus.completed) _clear();
         });
+
+  /// 暈開（含等第一幀的那一下）時持有 [MotionGate]（ADR 0018）。
+  final MotionHold _hold = MotionHold();
   late final CurvedAnimation _progress = CurvedAnimation(
     parent: _controller,
     curve: AppMotion.themeRevealCurve,
@@ -73,6 +79,7 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
 
   @override
   void dispose() {
+    _hold.release();
     _progress.dispose();
     _controller.dispose();
     _snapshot?.dispose();
@@ -120,7 +127,15 @@ class _ThemeRevealScopeState extends State<ThemeRevealScope>
         local.dy.clamp(0, size.height),
       );
     });
-    _controller.forward(from: 0);
+    // 換色會讓整個 App 重建，這一幀可能很久；圓從這一幀畫完才開始計時，
+    // 不然一開始就跳一段（ADR 0018）。這一幀蓋圖整張蓋著，看起來沒動。
+    _controller.value = 0;
+    _hold.moving = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_snapshot, snapshot)) {
+        unawaited(_controller.forward(from: 0));
+      }
+    });
   }
 
   void _clear() {

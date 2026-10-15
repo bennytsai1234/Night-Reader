@@ -15,6 +15,7 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
@@ -1019,7 +1020,10 @@ class _BookshelfPageState extends State<BookshelfPage>
       context,
       BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
-    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新進度線。
+    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新
+    // 進度線。返回動畫播完才重排，書卡移位不和返回疊在一起（ADR 0018）。
+    if (!mounted) return;
+    await TransitionSettled.uncovered(context);
     if (mounted) await provider.loadBooks();
   }
 
