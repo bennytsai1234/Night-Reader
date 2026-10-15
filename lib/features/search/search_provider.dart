@@ -163,7 +163,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     return labels.toList()..sort();
   }
 
+  /// [entrance] 是搜尋頁的進場動畫；播完才讀書架、分組與搜尋紀錄（ADR 0018）。
   SearchProvider({
+    required Future<void> entrance,
     BookshelfStateTracker? bookshelfTracker,
     SearchScope? initialScope,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
@@ -173,8 +175,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _coverSubscription = AppEventBus()
         .onName(AppEventBus.bookCover)
         .listen((event) => _adoptDetailCover(event.data as BookCoverEvent));
-    _init();
+    ready = entrance.then((_) => _disposed ? null : _init());
   }
+
+  /// 進場動畫播完、搜尋範圍與書架都讀好時完成；帶關鍵字進來的搜尋等它。
+  late final Future<void> ready;
+  bool _disposed = false;
 
   /// 從書籍詳情帶回來的封面，依合併卡身分記下；新的一次搜尋清掉。
   final Map<String, String> _detailCovers = {};
@@ -601,6 +607,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void dispose() {
+    _disposed = true;
     _progressNotify?.cancel();
     _coverSubscription?.cancel();
     _searchModel.cancelSearch();

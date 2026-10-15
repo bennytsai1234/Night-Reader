@@ -10,8 +10,9 @@ import 'package:flutter/services.dart';
 /// 全 App 換頁共用的轉場，在「外觀與主題 → 換頁動畫」選擇。
 ///
 /// 每一種都照來源 App 的參數：開啟與返回各自用減速曲線（先快後慢），返回
-/// 不是開啟倒著播。往右拖返回（左緣右滑、Android 系統的預測返回）不分
-/// 哪一種，一律是 [slide] 的跟手平移，放開後照 Telegram 的門檻與時長收尾。
+/// 不是開啟倒著播。往右拖返回（左緣右滑、Android 系統的預測返回）也照選的
+/// 那一種返回的樣子跟著拖曳進度走（ADR 0020），放開後照 Telegram 的門檻與
+/// 時長收尾。
 enum AppPageTransition {
   /// 新頁從下方上浮 4% 並淡入，底下的頁面微暗 6%。
   paper('上浮', Duration(milliseconds: 280)),
@@ -47,6 +48,14 @@ enum AppPageTransition {
 
   static AppPageTransition fromStorage(String? name) =>
       values.where((value) => value.name == name).firstOrNull ?? slide;
+
+  /// 主題目前選的換頁動畫（掛在 [PageTransitionsTheme]）；沒掛時用預設的
+  /// [slide]。
+  static AppPageTransition of(BuildContext context) {
+    final theme = Theme.of(context);
+    final builder = theme.pageTransitionsTheme.builders[theme.platform];
+    return builder is AppPageTransitionsBuilder ? builder.transition : slide;
+  }
 }
 
 /// 把 [AppPageTransition] 掛到 [PageTransitionsTheme]，所有
@@ -92,9 +101,6 @@ abstract final class _Curves {
 
   /// Android DecelerateInterpolator(1.5)：1 - (1 - t)^3。
   static const Curve decelerate = _Decelerate(1.5);
-
-  /// Telegram 放開手指後收尾用的 easeInOut。
-  static const Curve settle = Curves.easeInOut;
 
   /// 推進：開啟照 Android 系統的 emphasized（先慢後快再慢）；返回換成同一
   /// 系列只減速的 emphasizedDecelerate，先快後慢。
@@ -247,6 +253,110 @@ class TransitionSource extends StatelessWidget {
   );
 }
 
+/// 往右拖返回放開後的收尾，照 Telegram。頁面的拖曳返回與主頁分頁的預測
+/// 返回共用。
+abstract final class BackSwipe {
+  /// 拖過 20% 或往右快過 1000pt/s 就返回。
+  static const double _popFraction = 0.2;
+  static const double _popVelocity = 1000;
+
+  /// 剩下的距離 / 放開時的速度，夾在 0.05–0.2 秒；彈回固定 0.1 秒。
+  static const double _minFinishSeconds = 0.05;
+  static const double _maxFinishSeconds = 0.2;
+  static const Duration cancelDuration = Duration(milliseconds: 100);
+
+  /// 送完或彈回的曲線（Telegram 的 easeInOut）。
+  static const Curve curve = Curves.easeInOut;
+
+  /// 拖走了 [dismissed]（0–1）、放開時往右 [velocity] px/s，算不算返回。
+  static bool goesBack({required double dismissed, required double velocity}) =>
+      velocity > _popVelocity || dismissed > _popFraction;
+
+  /// 剩下 [distance] px、放開時 [velocity] px/s，送完要多久。
+  static Duration finishDuration({
+    required double distance,
+    required double velocity,
+  }) {
+    final seconds = velocity.abs() < 1e-6
+        ? _maxFinishSeconds
+        : (distance / velocity.abs()).clamp(
+            _minFinishSeconds,
+            _maxFinishSeconds,
+          );
+    return Duration(microseconds: (seconds * 1e6).round());
+  }
+}
+
+/// 系統預測返回的紀錄，頁面的預測返回與主頁分頁的預測返回共用：觸控留
+/// 最近 100ms，放開時估速度；進度補成每一格都動。
+///
+/// 手指慢的時候，系統只在觸控座標變動時才送一次進度，間隔可長到數十毫秒；
+/// 直接套用的話頁面停幾格、跳一下，看起來像掉到 60 或 30 幀。[progress] 照
+/// Flutter 觸控重新取樣（[GestureBinding.resamplingEnabled]）的做法：取
+/// [_delay] 之前那一刻，在前後兩筆進度之間內插。呼叫端拖曳中每一格讀一次。
+/// App 自己的左緣拖曳走觸控事件，已經經過同樣的取樣。
+class PredictiveBackTracker {
+  /// 與 Flutter 觸控重新取樣的預設延遲相同（`GestureBinding.samplingOffset`）。
+  static const Duration _delay = Duration(milliseconds: 38);
+
+  final List<({Offset at, Duration time})> _touches = [];
+  final List<({Duration time, double value})> _progress = [];
+
+  /// 測試裡跟著假時間走（同 Flutter 的觸控重新取樣）。
+  final Stopwatch _clock = GestureBinding.instance.samplingClock.stopwatch()
+    ..start();
+
+  void clear() {
+    _touches.clear();
+    _progress.clear();
+  }
+
+  /// 記下一筆事件的觸控位置與進度（[PredictiveBackEvent.progress]）。
+  /// Android 送來的是實體像素，除以 [devicePixelRatio] 換成和頁寬一樣的
+  /// 邏輯像素。
+  void record(PredictiveBackEvent event, double devicePixelRatio) {
+    final now = _clock.elapsed;
+    _progress.add((time: now, value: event.progress));
+    final at = event.touchOffset;
+    if (at == null) return;
+    _touches
+      ..add((at: at / devicePixelRatio, time: now))
+      ..removeWhere(
+        (touch) => now - touch.time > const Duration(milliseconds: 100),
+      );
+  }
+
+  /// 這一格該畫的進度（同 [PredictiveBackEvent.progress]）；還沒有任何一筆
+  /// 時為 null。
+  double? get progress {
+    if (_progress.isEmpty) return null;
+    final time = _clock.elapsed - _delay;
+    // 只留取樣時間之前的最後一筆和之後的。
+    while (_progress.length > 1 && _progress[1].time <= time) {
+      _progress.removeAt(0);
+    }
+    final before = _progress.first;
+    if (_progress.length == 1 || time <= before.time) return before.value;
+    final after = _progress[1];
+    final span = (after.time - before.time).inMicroseconds;
+    return lerpDouble(
+      before.value,
+      after.value,
+      (time - before.time).inMicroseconds / span,
+    )!;
+  }
+
+  /// 最近 100ms 的水平速度（px/s）；左緣拖往右、右緣拖往左都算成把頁面
+  /// 送走的方向。
+  double get pixelsPerSecond {
+    if (_touches.length < 2) return 0;
+    final first = _touches.first, last = _touches.last;
+    final seconds = (last.time - first.time).inMicroseconds / 1e6;
+    if (seconds <= 0) return 0;
+    return ((last.at.dx - first.at.dx) / seconds).abs();
+  }
+}
+
 class _AppTransition extends StatefulWidget {
   const _AppTransition({
     required this.transition,
@@ -267,18 +377,9 @@ class _AppTransition extends StatefulWidget {
 }
 
 class _AppTransitionState extends State<_AppTransition>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   /// iOS 的左緣感應寬度（Flutter 的 Cupertino 返回手勢同樣是 20）。
   static const double _edgeWidth = 20;
-
-  /// Telegram：拖過 20% 或往右快過 1000pt/s 就返回。
-  static const double _popFraction = 0.2;
-  static const double _popVelocity = 1000;
-
-  /// Telegram：剩下的距離 / 放開時的速度，夾在 0.05–0.2 秒；彈回固定 0.1 秒。
-  static const double _minFinishSeconds = 0.05;
-  static const double _maxFinishSeconds = 0.2;
-  static const Duration _cancelDuration = Duration(milliseconds: 100);
 
   final _Trip _top = _Trip();
   final _Trip _under = _Trip();
@@ -297,9 +398,11 @@ class _AppTransitionState extends State<_AppTransition>
   /// 手勢改它的進度）；蓋上來的頁關掉後要把這一頁補回整頁。
   bool _stranded = false;
 
-  /// 系統預測返回：最近的觸控位置與時間，放開時估速度。
-  final List<({Offset at, Duration time})> _touches = [];
-  final Stopwatch _clock = Stopwatch()..start();
+  /// 系統預測返回：觸控速度與重新取樣的進度。
+  final PredictiveBackTracker _back = PredictiveBackTracker();
+
+  /// 系統預測返回：拖曳中每一格把頁面放到重新取樣後的進度。
+  late final Ticker _backTicker;
 
   @override
   void initState() {
@@ -312,6 +415,7 @@ class _AppTransitionState extends State<_AppTransition>
     _finish = AnimationController(vsync: this)
       ..addListener(_onFinishTick)
       ..addStatusListener(_onFinishStatus);
+    _backTicker = createTicker(_onBackTick);
     _listen(widget.animation, _top.update);
     _listen(widget.secondaryAnimation, _onCoveredStatus);
     WidgetsBinding.instance.addObserver(this);
@@ -356,6 +460,7 @@ class _AppTransitionState extends State<_AppTransition>
     widget.secondaryAnimation.removeStatusListener(_onCoveredStatus);
     _drag.dispose();
     _finish.dispose();
+    _backTicker.dispose();
     if (_tracking) {
       // 手勢途中頁面被程式關掉。卸載時整棵樹鎖著，通知 Navigator 會讓其他
       // 頁面重建，要等這一格畫完。
@@ -398,7 +503,7 @@ class _AppTransitionState extends State<_AppTransition>
     if (!_tracking || _finish.isAnimating) return;
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dismissed = 1 - _progress;
-    if (velocity > _popVelocity || dismissed > _popFraction) {
+    if (BackSwipe.goesBack(dismissed: dismissed, velocity: velocity)) {
       _completeWith(velocity);
     } else {
       _cancel();
@@ -415,49 +520,39 @@ class _AppTransitionState extends State<_AppTransition>
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
     if (backEvent.isButtonEvent || !_canStart) return false;
     _begin();
-    _record(backEvent);
+    _back
+      ..clear()
+      ..record(backEvent, MediaQuery.devicePixelRatioOf(context));
     _route.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+    _backTicker.start();
     return true;
   }
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
     if (!_tracking || _finish.isAnimating) return;
-    _record(backEvent);
-    _route.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+    _back.record(backEvent, MediaQuery.devicePixelRatioOf(context));
+  }
+
+  void _onBackTick(Duration _) {
+    if (!_route.isCurrent || _finish.isAnimating) return;
+    final progress = _back.progress;
+    if (progress != null) {
+      _route.handleUpdateBackGestureProgress(progress: 1 - progress);
+    }
   }
 
   // 返回與否由系統決定；這裡只照 Telegram 的時長送完或彈回。
   @override
   void handleCommitBackGesture() {
-    if (_tracking && !_finish.isAnimating) _completeWith(_touchVelocity());
+    if (_tracking && !_finish.isAnimating) {
+      _completeWith(_back.pixelsPerSecond);
+    }
   }
 
   @override
   void handleCancelBackGesture() {
     if (_tracking && !_finish.isAnimating) _cancel();
-  }
-
-  void _record(PredictiveBackEvent event) {
-    // Android 送來的是實體像素，換成和頁寬一樣的邏輯像素。
-    final at = event.touchOffset;
-    if (at == null) return;
-    final now = _clock.elapsed;
-    _touches
-      ..add((at: at / MediaQuery.devicePixelRatioOf(context), time: now))
-      ..removeWhere(
-        (touch) => now - touch.time > const Duration(milliseconds: 100),
-      );
-  }
-
-  /// 最近 100ms 的水平速度（px/s，往右為正）；左緣拖往右、右緣拖往左都
-  /// 算成把頁面送走的方向。
-  double _touchVelocity() {
-    if (_touches.length < 2) return 0;
-    final first = _touches.first, last = _touches.last;
-    final seconds = (last.time - first.time).inMicroseconds / 1e6;
-    if (seconds <= 0) return 0;
-    return ((last.at.dx - first.at.dx) / seconds).abs();
   }
 
   // ---------- 共用 ----------
@@ -466,27 +561,23 @@ class _AppTransitionState extends State<_AppTransition>
 
   void _begin() {
     _tracking = true;
-    _touches.clear();
+    _back.clear();
     _route.handleStartBackGesture(progress: _progress);
   }
 
-  void _completeWith(double velocity) {
-    final distance = _progress * _width;
-    final seconds = velocity.abs() < 1e-6
-        ? _maxFinishSeconds
-        : (distance / velocity.abs()).clamp(
-            _minFinishSeconds,
-            _maxFinishSeconds,
-          );
-    _runFinish(
-      to: 0,
-      duration: Duration(microseconds: (seconds * 1e6).round()),
-    );
-  }
+  void _completeWith(double velocity) => _runFinish(
+    to: 0,
+    duration: BackSwipe.finishDuration(
+      distance: _progress * _width,
+      velocity: velocity,
+    ),
+  );
 
-  void _cancel() => _runFinish(to: 1, duration: _cancelDuration);
+  void _cancel() => _runFinish(to: 1, duration: BackSwipe.cancelDuration);
 
   void _runFinish({required double to, required Duration duration}) {
+    if (_backTicker.isActive) _backTicker.stop();
+    _back.clear();
     _finishFrom = _progress;
     _finishTo = to;
     _finish
@@ -500,7 +591,7 @@ class _AppTransitionState extends State<_AppTransition>
       progress: lerpDouble(
         _finishFrom,
         _finishTo,
-        _Curves.settle.transform(_finish.value),
+        BackSwipe.curve.transform(_finish.value),
       )!,
     );
   }
@@ -508,7 +599,7 @@ class _AppTransitionState extends State<_AppTransition>
   void _onFinishStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
     _tracking = false;
-    _touches.clear();
+    _back.clear();
     _stranded = !_route.isCurrent;
     if (_finishTo == 0) {
       _route.handleCommitBackGesture();
@@ -529,21 +620,30 @@ class _AppTransitionState extends State<_AppTransition>
       ]),
       child: widget.child,
       builder: (context, child) {
-        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手平移。
+        // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
         final gesturing = _route.popGestureInProgress;
         if (still && !gesturing) return child!;
         final size = MediaQuery.sizeOf(context);
         final background = Theme.of(context).scaffoldBackgroundColor;
+        final origin = TransitionOrigin.of(_route);
         final top = gesturing
-            ? _TopPose.slide(widget.animation.value)
+            ? _TopPose.follow(
+                widget.transition,
+                widget.animation.value,
+                size: size,
+                origin: origin,
+              )
             : _TopPose.of(
                 widget.transition,
                 trip: _top.of(widget.animation),
                 size: size,
-                origin: TransitionOrigin.of(_route),
+                origin: origin,
               );
         final under = gesturing
-            ? _UnderPose.slide(widget.secondaryAnimation.value)
+            ? _UnderPose.follow(
+                widget.transition,
+                widget.secondaryAnimation.value,
+              )
             : _UnderPose.of(
                 widget.transition,
                 trip: _under.of(widget.secondaryAnimation),
@@ -568,6 +668,88 @@ class _AppTransitionState extends State<_AppTransition>
       ],
     );
   }
+}
+
+/// 不經過路由、在同一處把一個畫面換成另一個時播選定的換頁動畫，例如點
+/// 主頁的分頁。[forward] 時 [incoming] 像新開的頁蓋上 [outgoing]；否則
+/// [outgoing] 像返回一樣離開、露出 [incoming]。
+///
+/// [animation] 是這一趟的時間比例 0→1，曲線由各動畫自己套；[follow] 時
+/// 是拖曳返回的進度，照拖曳返回的樣子和進度成正比。「展開」從這個元件
+/// 建立時最後按下的地方長出來（返回時縮回去），每一趟要給新的 key。
+/// [incoming] 在換頁前後要保留狀態時，給它 [GlobalKey]。
+class AppTransitionSwitch extends StatefulWidget {
+  const AppTransitionSwitch({
+    super.key,
+    required this.transition,
+    required this.animation,
+    required this.forward,
+    required this.outgoing,
+    required this.incoming,
+    required this.outgoingBackground,
+    required this.incomingBackground,
+    this.follow = false,
+  });
+
+  final AppPageTransition transition;
+  final Animation<double> animation;
+  final bool forward;
+  final bool follow;
+  final Widget outgoing;
+  final Widget incoming;
+
+  /// 墊在淡掉的底下那一頁後面的顏色（見 [_UnderPose.wrap]）。
+  final Color outgoingBackground;
+  final Color incomingBackground;
+
+  @override
+  State<AppTransitionSwitch> createState() => _AppTransitionSwitchState();
+}
+
+class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
+  // 系統的返回手勢不經過 App 的按下，上一次按下的地方跟這一趟無關，
+  // 「展開」改縮回畫面中央。
+  late final TransitionSourceRect? _origin = widget.follow
+      ? null
+      : TransitionOrigin._last;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.animation,
+    builder: (context, _) {
+      final size = MediaQuery.sizeOf(context);
+      final t = widget.animation.value;
+      final _TopPose top;
+      final _UnderPose under;
+      if (widget.follow) {
+        // 上面那頁露出、底下那頁被蓋住的比例：開啟時隨進度增加，返回時減少。
+        final shown = widget.forward ? t : 1 - t;
+        top = _TopPose.follow(
+          widget.transition,
+          shown,
+          size: size,
+          origin: _origin,
+        );
+        under = _UnderPose.follow(widget.transition, shown);
+      } else {
+        final trip = (closing: !widget.forward, time: t);
+        top = _TopPose.of(
+          widget.transition,
+          trip: trip,
+          size: size,
+          origin: _origin,
+        );
+        under = _UnderPose.of(widget.transition, trip: trip);
+      }
+      final (upper, lower, lowerBackground) = widget.forward
+          ? (widget.incoming, widget.outgoing, widget.outgoingBackground)
+          : (widget.outgoing, widget.incoming, widget.incomingBackground);
+      return Stack(
+        fit: StackFit.expand,
+        children: [under.wrap(lower, lowerBackground), top.wrap(upper, size)],
+      );
+    },
+  );
 }
 
 /// 一趟轉場（開啟或返回）走到哪：[time] 為這一趟的時間比例 0→1。中途反向
@@ -678,18 +860,64 @@ class _TopPose {
                 opacity: _interval(time, 0.3, 1, Easing.legacyDecelerate),
               );
       case AppPageTransition.expand:
-        final v = shown(_Curves.telegramSpring);
-        final full = Offset.zero & size;
-        final from = origin ?? TransitionOrigin._around(full.center);
-        return _TopPose(
-          frame: v >= 1
-              ? null
-              : (
-                  rect: Rect.lerp(from.rect, full, v)!,
-                  radius: lerpDouble(from.radius, ScreenCorner.radius, v)!,
-                ),
+        return _TopPose.expand(
+          shown(_Curves.telegramSpring),
+          size: size,
+          origin: origin,
         );
     }
+  }
+
+  /// 拖曳返回中露出 [shown]（1 為整頁）時的樣子：照這一種返回的幾何，位置、
+  /// 縮放與透明度都和拖曳進度成正比，不套時間曲線，頁面才會跟著手指走。
+  factory _TopPose.follow(
+    AppPageTransition transition,
+    double shown, {
+    required Size size,
+    required TransitionSourceRect? origin,
+  }) {
+    final gone = 1 - shown;
+    switch (transition) {
+      case AppPageTransition.paper:
+        return _TopPose(
+          fractionalOffset: Offset(0, 0.04 * gone),
+          opacity: shown,
+        );
+      case AppPageTransition.slide:
+      case AppPageTransition.slideCrisp:
+        return _TopPose.slide(shown);
+      case AppPageTransition.glide:
+        return _TopPose(offset: Offset(48 * gone, 0), opacity: shown);
+      case AppPageTransition.forward:
+        return _TopPose(
+          fractionalOffset: Offset(0.25 * gone, 0),
+          opacity: shown,
+        );
+      case AppPageTransition.cover:
+      case AppPageTransition.zoom:
+        return _TopPose(scale: 1 - 0.2 * gone, opacity: shown);
+      case AppPageTransition.expand:
+        return _TopPose.expand(shown, size: size, origin: origin);
+    }
+  }
+
+  /// iOS 18 縮放：整頁等比縮在起點裡，從那裡長成整頁、圓角由起點變成螢幕
+  /// 圓角。
+  factory _TopPose.expand(
+    double shown, {
+    required Size size,
+    required TransitionSourceRect? origin,
+  }) {
+    final full = Offset.zero & size;
+    final from = origin ?? TransitionOrigin._around(full.center);
+    return _TopPose(
+      frame: shown >= 1
+          ? null
+          : (
+              rect: Rect.lerp(from.rect, full, shown)!,
+              radius: lerpDouble(from.radius, ScreenCorner.radius, shown)!,
+            ),
+    );
   }
 
   final Offset offset;
@@ -828,6 +1056,30 @@ class _UnderPose {
               );
       case AppPageTransition.expand:
         return _UnderPose(dim: 0.12 * covered(_Curves.telegramSpring));
+    }
+  }
+
+  /// 拖曳返回中被蓋住 [covered]（1 為完全蓋住）時的樣子，和
+  /// [_TopPose.follow] 一樣照這一種返回的幾何、和拖曳進度成正比。
+  factory _UnderPose.follow(AppPageTransition transition, double covered) {
+    switch (transition) {
+      case AppPageTransition.paper:
+        return _UnderPose(dim: 0.06 * covered);
+      case AppPageTransition.slide:
+      case AppPageTransition.slideCrisp:
+        return _UnderPose.slide(covered);
+      case AppPageTransition.glide:
+        return const _UnderPose();
+      case AppPageTransition.forward:
+      case AppPageTransition.cover:
+        return _UnderPose(
+          fractionalOffset: Offset(-0.25 * covered, 0),
+          opacity: 1 - covered,
+        );
+      case AppPageTransition.zoom:
+        return _UnderPose(scale: 1 + 0.1 * covered, opacity: 1 - covered);
+      case AppPageTransition.expand:
+        return _UnderPose(dim: 0.12 * covered);
     }
   }
 

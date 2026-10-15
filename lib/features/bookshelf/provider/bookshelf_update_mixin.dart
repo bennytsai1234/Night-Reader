@@ -3,32 +3,14 @@ import 'dart:async';
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/models/book_source.dart';
-import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
-import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/book_toc_replacer.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
-import 'package:night_reader/core/services/download_service.dart';
-import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 import 'bookshelf_provider_base.dart';
 
-class BookshelfBatchDownloadResult {
-  const BookshelfBatchDownloadResult({
-    required this.queuedBooks,
-    required this.queuedChapters,
-    required this.skippedBooks,
-  });
-
-  final int queuedBooks;
-  final int queuedChapters;
-  final int skippedBooks;
-}
-
-/// BookshelfProvider 的更新與網絡同步邏輯擴展
+///BookshelfProvider 的更新與網絡同步邏輯擴展
 mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 書架更新同時檢查的書數，與目錄多頁抓取的並行數（4）相同：書架上
   /// 幾十本書不會一起發請求、一起在 UI isolate 上解析目錄。
@@ -154,9 +136,13 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   }
 
   /// 抓書源上的詳情與目錄寫回這本書；同一本書已在檢查（包括書籍詳情發起
-  /// 的）時接上同一次。
-  Future<BookUpdateCheckResult> checkBookUpdate(Book book) =>
-      updates.check(book);
+  /// 的）時接上同一次。書架的每一種檢查（啟動、下拉、單本、多選）都從這裡
+  /// 進來：有動畫在播時先等，書源解析不和動畫搶幀（ADR 0018）。
+  Future<BookUpdateCheckResult> checkBookUpdate(Book book) async {
+    // 沒動畫時當下就開始，同一本書接著進來的檢查才接得上這一次。
+    if (MotionGate.instance.isMoving) await MotionGate.instance.idle;
+    return updates.check(book);
+  }
 
   /// 這本書是否參與下拉與啟動時的書架更新；明確對它按「檢查更新」時照查。
   Future<void> setBookCanUpdate(Book book, bool value) async {
@@ -189,165 +175,6 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       updatingCount -= remaining;
       notifyListeners();
     }
-  }
-
-  Future<BookshelfBatchDownloadResult> batchDownload(Set<String> urls) async {
-    final selected = await _booksForUrls(urls);
-    final contentDao = getIt.isRegistered<ReaderChapterContentDao>()
-        ? getIt<ReaderChapterContentDao>()
-        : null;
-    final downloadService = DownloadService();
-    var queuedBooks = 0;
-    var queuedChapters = 0;
-    var skippedBooks = 0;
-
-    for (final book in selected) {
-      if (book.isLocal) {
-        skippedBooks++;
-        continue;
-      }
-      final source = await sourceDao.getByUrl(book.origin);
-      if (source == null || !source.isReadingEnabledByRuntime) {
-        skippedBooks++;
-        continue;
-      }
-
-      var chapters = await chapterDao.getByBook(book.bookUrl);
-      if (chapters.isEmpty) {
-        // 一本書抓不到目錄只略過這本，不中斷整批（前面的書已經加入佇列）。
-        try {
-          chapters = await service.getChapterList(source, book);
-        } catch (error, stackTrace) {
-          AppLog.e(
-            '批次下載取得目錄失敗: ${book.name}',
-            error: error,
-            stackTrace: stackTrace,
-          );
-          skippedBooks++;
-          continue;
-        }
-        for (var i = 0; i < chapters.length; i++) {
-          chapters[i].index = i;
-          chapters[i].bookUrl = book.bookUrl;
-        }
-        await chapterDao.insertChapters(chapters);
-      }
-      if (chapters.isEmpty) {
-        skippedBooks++;
-        continue;
-      }
-
-      var toDownload = chapters.where(chapterIsDownloadable).toList();
-      if (contentDao != null) {
-        toDownload = await ReaderChapterContentStore(
-          chapterDao: chapterDao,
-          contentDao: contentDao,
-        ).missingChapters(book: book, chapters: chapters);
-      }
-      if (toDownload.isEmpty) {
-        skippedBooks++;
-        continue;
-      }
-      // 整本任務：總數算整本，已下載的章節開跑時直接算完成。
-      await downloadService.addDownloadTask(book, chapters);
-      queuedBooks++;
-      queuedChapters += toDownload.length;
-    }
-
-    return BookshelfBatchDownloadResult(
-      queuedBooks: queuedBooks,
-      queuedChapters: queuedChapters,
-      skippedBooks: skippedBooks,
-    );
-  }
-
-  Future<BookshelfBatchDownloadResult> batchEnsureComplete(
-    Set<String> urls,
-  ) async {
-    final selected = await _booksForUrls(urls);
-    final contentDao = getIt.isRegistered<ReaderChapterContentDao>()
-        ? getIt<ReaderChapterContentDao>()
-        : null;
-    final downloadService = DownloadService();
-    var queuedBooks = 0;
-    var queuedChapters = 0;
-    var skippedBooks = 0;
-
-    for (final book in selected) {
-      if (book.isLocal) {
-        skippedBooks++;
-        continue;
-      }
-      final source = await sourceDao.getByUrl(book.origin);
-      if (source == null || !source.isReadingEnabledByRuntime) {
-        skippedBooks++;
-        continue;
-      }
-
-      // 永遠重抓最新章節目錄；失敗時 fallback 到本地快取。抓到的目錄會換掉
-      // 舊的，所以目錄分頁要全部抓到。
-      List<BookChapter> chapters;
-      try {
-        final fetched = await service.getChapterList(
-          source,
-          book,
-          requireComplete: true,
-        );
-        chapters = await _replaceToc(book, fetched, contentDao);
-      } catch (e) {
-        AppLog.w('整本書補下載：取得章節目錄失敗 ${book.name}: $e');
-        chapters = await chapterDao.getByBook(book.bookUrl);
-      }
-
-      if (chapters.isEmpty) {
-        skippedBooks++;
-        continue;
-      }
-
-      var toDownload = chapters.where(chapterIsDownloadable).toList();
-      if (contentDao != null) {
-        toDownload = await ReaderChapterContentStore(
-          chapterDao: chapterDao,
-          contentDao: contentDao,
-        ).missingChapters(book: book, chapters: chapters);
-      }
-      if (toDownload.isEmpty) {
-        skippedBooks++;
-        continue;
-      }
-
-      // 整本任務：總數算整本，已下載的章節開跑時直接算完成。
-      await downloadService.addDownloadTask(book, chapters);
-      queuedBooks++;
-      queuedChapters += toDownload.length;
-    }
-
-    return BookshelfBatchDownloadResult(
-      queuedBooks: queuedBooks,
-      queuedChapters: queuedChapters,
-      skippedBooks: skippedBooks,
-    );
-  }
-
-  /// 換上新目錄並回傳寫入的目錄。閱讀進度以資料庫裡最新的一筆為準，抓目錄
-  /// 期間閱讀器可能寫了新進度。
-  Future<List<BookChapter>> _replaceToc(
-    Book book,
-    List<BookChapter> fetched,
-    ReaderChapterContentDao? contentDao,
-  ) {
-    return bookDao.transaction(() async {
-      final stored = await bookDao.getByUrl(book.bookUrl);
-      if (stored == null || stored.origin != book.origin) {
-        throw StateError('抓目錄期間這本書已換源或移除');
-      }
-      final result = await BookTocReplacer(
-        chapterDao: chapterDao,
-        contentDao: contentDao,
-      ).replace(stored, fetched);
-      if (result.progressMoved) await bookDao.upsert(stored);
-      return result.chapters;
-    });
   }
 
   Future<List<Book>> _booksForUrls(Set<String> urls) async {

@@ -13,6 +13,7 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -139,6 +140,33 @@ void main() {
 
       expect(results, hasLength(1));
       expect(await lastCheckTimeOf('https://a.example/2'), greaterThan(0));
+    });
+
+    testWidgets('an explicit check waits while an animation plays', (
+      tester,
+    ) async {
+      const url = 'https://a.example/picked';
+      await tester.runAsync(() => bookDao.upsert(shelfBook(url)));
+
+      // 長按單本或多選的「檢查更新」也和自動檢查一樣先等動畫。
+      final release = MotionGate.instance.hold();
+      late Future<void> check;
+      var checkedWhileMoving = -1;
+      await tester.runAsync(() async {
+        check = provider.batchCheckUpdate({url});
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        checkedWhileMoving = await lastCheckTimeOf(url);
+      });
+      expect(checkedWhileMoving, 0);
+
+      release();
+      await tester.pump();
+      var checked = 0;
+      await tester.runAsync(() async {
+        await check;
+        checked = await lastCheckTimeOf(url);
+      });
+      expect(checked, greaterThan(0));
     });
 
     test('pulling down while a refresh runs joins it', () async {

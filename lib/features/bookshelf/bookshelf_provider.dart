@@ -16,8 +16,6 @@ export 'provider/bookshelf_provider_base.dart'
 export 'package:night_reader/core/services/book_update_service.dart'
     show BookUpdateCheckResult;
 
-export 'provider/bookshelf_update_mixin.dart' show BookshelfBatchDownloadResult;
-
 class BookshelfProvider extends BookshelfProviderBase
     with BookshelfLogicMixin, BookshelfUpdateMixin, BookshelfImportMixin {
   BookshelfProvider({

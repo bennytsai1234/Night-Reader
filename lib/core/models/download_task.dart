@@ -52,17 +52,19 @@ class DownloadTask {
   bool get isFailed => status == statusFailed;
   bool get hasFailures => errorCount > 0 || isFailed;
 
+  /// 失敗的原因（例如「網路錯誤，第 3 章：連線逾時」）。狀態列已經寫了
+  /// 「下載失敗」，這裡不再重複；分不出類別的「下載失敗」也不寫。沒有記錄
+  /// 任何原因時為 null。
   String? get failureSummary {
     if (!hasFailures && (lastErrorMessage ?? '').isEmpty) return null;
-    final reason = lastErrorReason ?? '下載失敗';
-    final chapter = lastErrorChapterIndex == null
-        ? ''
-        : '，第 ${lastErrorChapterIndex! + 1} 章';
-    final message = lastErrorMessage;
-    if (message == null || message.isEmpty) {
-      return '$reason$chapter';
-    }
-    return '$reason$chapter：$message';
+    final reason = lastErrorReason == '下載失敗' ? null : lastErrorReason;
+    final head = [
+      ?reason,
+      if (lastErrorChapterIndex != null) '第 ${lastErrorChapterIndex! + 1} 章',
+    ].join('，');
+    final message = lastErrorMessage ?? '';
+    if (head.isEmpty) return message.isEmpty ? null : message;
+    return message.isEmpty ? head : '$head：$message';
   }
 
   void setFailure({

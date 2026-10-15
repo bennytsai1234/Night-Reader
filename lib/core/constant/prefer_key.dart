@@ -48,7 +48,6 @@ class PreferKey {
   static const String prevKeys = 'prevKeyCodes';
   static const String nextKeys = 'nextKeyCodes';
   static const String enableReview = 'enableReview';
-  static const String bookshelfLayout = 'bookshelfLayout';
   static const String bookshelfSort = 'bookshelfSort';
 
   static const String bookExportFileName = 'bookExportFileName';
@@ -136,6 +135,7 @@ class PreferKey {
   static const String progressBarBehavior = 'progressBarBehavior';
   static const String sourceEditMaxLine = 'sourceEditMaxLine';
   static const String ttsTimer = 'ttsTimer';
+  static const String ttsTimerCustomMinutes = 'ttsTimerCustomMinutes';
   static const String audioPlayWakeLock = 'audioPlayWakeLock';
   static const String readAloudWakeLock = 'readAloudWakeLock';
   static const String showLastUpdateTime = 'showLastUpdateTime';
@@ -190,6 +190,7 @@ class PreferKey {
   static const String readerPaddingBottom = 'reader_padding_bottom';
   static const String readerFooterOffset = 'reader_footer_offset';
   static const String readerHideStatusBar = 'reader_hide_status_bar';
+  static const String readerJustifyText = 'reader_justify_text';
   static const String readerHeaderInfo = 'reader_header_info';
   static const String readerFooterInfo = 'reader_footer_info';
 

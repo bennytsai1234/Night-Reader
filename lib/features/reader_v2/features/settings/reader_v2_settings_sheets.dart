@@ -14,11 +14,11 @@ class ReaderV2SettingsSheets {
   const ReaderV2SettingsSheets._();
 
   /// 排版面板：半高、不加暗色遮罩，調整時可直接看到正文變化。
-  static void showInterfaceSettings(
+  static Future<void> showInterfaceSettings(
     BuildContext context,
     ReaderV2SettingsController settings,
   ) {
-    ReaderV2MenuSheet.show<void>(
+    return ReaderV2MenuSheet.show<void>(
       context,
       settings: settings,
       barrierColor: Colors.transparent,
@@ -26,11 +26,11 @@ class ReaderV2SettingsSheets {
     );
   }
 
-  static void showAdvancedSettings(
+  static Future<void> showAdvancedSettings(
     BuildContext context,
     ReaderV2SettingsController settings,
   ) {
-    ReaderV2MenuSheet.show<void>(
+    return ReaderV2MenuSheet.show<void>(
       context,
       settings: settings,
       builder: (_) => _ReaderAdvancedSheet(settings: settings),
@@ -53,7 +53,6 @@ class _ReaderInterfaceSheet extends StatelessWidget {
         const _ReaderStyleSelector(),
         ReaderV2TypographySection(
           settings: settings,
-          collapsible: true,
           moreChildren: [ReaderV2PageLayoutSection(settings: settings)],
         ),
       ],

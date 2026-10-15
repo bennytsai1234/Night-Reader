@@ -5,7 +5,6 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_acti
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
-import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -43,29 +42,25 @@ class _ResetButton extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
         minimumSize: Size.zero,
-        textStyle: AppTextStyles.uiSm,
+        // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
+        // 會蓋掉主題的字族。
       ),
       child: const Text('恢復預設'),
     );
   }
 }
 
-/// 排版區塊：字號、行高為常用項；字距、段距、縮排與進階排版為次要項。
-///
-/// [collapsible] 為 true 時次要項收合在「更多排版」之下，
-/// 讓閱讀器內的面板維持低高度、正文保持可見。
+/// 排版區塊：字號、行高、字距、段距與縮排。
 class ReaderV2TypographySection extends StatefulWidget {
   const ReaderV2TypographySection({
     super.key,
     required this.settings,
-    this.collapsible = false,
     this.moreChildren = const <Widget>[],
   });
 
   final ReaderV2SettingsController settings;
-  final bool collapsible;
 
-  /// 附加在次要項之後的內容（例如閱讀器面板的頁面佈局）。
+  /// 附加在排版卡片之後的內容（例如閱讀器面板的頁面佈局）。
   final List<Widget> moreChildren;
 
   @override
@@ -90,7 +85,6 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   late double _letterSpacing;
   late double _paragraphSpacing;
   late double _chapterSpacing;
-  bool _expanded = false;
 
   @override
   void initState() {
@@ -199,106 +193,7 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
-    final primary = <Widget>[
-      _stepperRow(
-        NumberStepperRow(
-          label: '字號',
-          value: _fontSize,
-          min: 14,
-          max: 40,
-          step: 1,
-          onChanged: (value) {
-            setState(() => _fontSize = value);
-            _fontSizeDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-      _stepperRow(
-        NumberStepperRow(
-          label: '標題字號',
-          value: _titleFontSize,
-          min: 14,
-          max: 48,
-          step: 1,
-          onChanged: (value) {
-            setState(() => _titleFontSize = value);
-            _titleFontSizeDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-      _stepperRow(
-        NumberStepperRow(
-          label: '行高',
-          value: _lineHeight,
-          min: ReaderV2SettingsController.minReadableLineHeight,
-          max: ReaderV2SettingsController.maxReadableLineHeight,
-          step: 0.1,
-          fractionDigits: 1,
-          onChanged: (value) {
-            setState(() => _lineHeight = value);
-            _lineHeightDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-    ];
-    final secondary = <Widget>[
-      _stepperRow(
-        NumberStepperRow(
-          label: '字距',
-          value: _letterSpacing,
-          min: 0.0,
-          max: 4.0,
-          step: 0.1,
-          fractionDigits: 1,
-          onChanged: (value) {
-            setState(() => _letterSpacing = value);
-            _letterSpacingDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-      _stepperRow(
-        NumberStepperRow(
-          label: '段距',
-          value: _paragraphSpacing,
-          min: 0.0,
-          max: 3.0,
-          step: 0.1,
-          fractionDigits: 1,
-          onChanged: (value) {
-            setState(() => _paragraphSpacing = value);
-            _paragraphSpacingDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-      _stepperRow(
-        NumberStepperRow(
-          label: '章節間距',
-          value: _chapterSpacing,
-          min: ReaderV2SettingsController.minChapterSpacing,
-          max: ReaderV2SettingsController.maxChapterSpacing,
-          step: 0.5,
-          fractionDigits: 1,
-          unit: '行',
-          onChanged: (value) {
-            setState(() => _chapterSpacing = value);
-            _chapterSpacingDirty = true;
-            _scheduleTypographyCommit();
-          },
-        ),
-      ),
-      _TextIndentSelector(
-        value: settings.textIndent,
-        onChanged: settings.setTextIndent,
-      ),
-    ];
-    final showSecondary = !widget.collapsible || _expanded;
-
-    final content = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GroupedSection(
@@ -306,62 +201,105 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
           header: '排版',
           headerTrailing: _ResetButton(onPressed: _isDefault ? null : _reset),
           children: [
-            ...primary,
-            if (showSecondary) ...secondary,
-            if (widget.collapsible)
-              _ExpandToggle(
-                label: '更多排版',
-                expanded: _expanded,
-                onTap: () => setState(() => _expanded = !_expanded),
+            _stepperRow(
+              NumberStepperRow(
+                label: '字號',
+                value: _fontSize,
+                min: 14,
+                max: 40,
+                step: 0.5,
+                fractionDigits: 1,
+                trimZeroFraction: true,
+                onChanged: (value) {
+                  setState(() => _fontSize = value);
+                  _fontSizeDirty = true;
+                  _scheduleTypographyCommit();
+                },
               ),
+            ),
+            _stepperRow(
+              NumberStepperRow(
+                label: '標題字號',
+                value: _titleFontSize,
+                min: 14,
+                max: 48,
+                step: 1,
+                onChanged: (value) {
+                  setState(() => _titleFontSize = value);
+                  _titleFontSizeDirty = true;
+                  _scheduleTypographyCommit();
+                },
+              ),
+            ),
+            _stepperRow(
+              NumberStepperRow(
+                label: '行高',
+                value: _lineHeight,
+                min: ReaderV2SettingsController.minReadableLineHeight,
+                max: ReaderV2SettingsController.maxReadableLineHeight,
+                step: 0.1,
+                fractionDigits: 1,
+                onChanged: (value) {
+                  setState(() => _lineHeight = value);
+                  _lineHeightDirty = true;
+                  _scheduleTypographyCommit();
+                },
+              ),
+            ),
+            _stepperRow(
+              NumberStepperRow(
+                label: '字距',
+                value: _letterSpacing,
+                min: 0.0,
+                max: 4.0,
+                step: 0.1,
+                fractionDigits: 1,
+                onChanged: (value) {
+                  setState(() => _letterSpacing = value);
+                  _letterSpacingDirty = true;
+                  _scheduleTypographyCommit();
+                },
+              ),
+            ),
+            _stepperRow(
+              NumberStepperRow(
+                label: '段距',
+                value: _paragraphSpacing,
+                min: 0.0,
+                max: 3.0,
+                step: 0.1,
+                fractionDigits: 1,
+                onChanged: (value) {
+                  setState(() => _paragraphSpacing = value);
+                  _paragraphSpacingDirty = true;
+                  _scheduleTypographyCommit();
+                },
+              ),
+            ),
+            _stepperRow(
+              NumberStepperRow(
+                label: '章節間距',
+                value: _chapterSpacing,
+                min: ReaderV2SettingsController.minChapterSpacing,
+                max: ReaderV2SettingsController.maxChapterSpacing,
+                step: 0.5,
+                fractionDigits: 1,
+                unit: '行',
+                onChanged: (value) {
+                  setState(() => _chapterSpacing = value);
+                  _chapterSpacingDirty = true;
+                  _scheduleTypographyCommit();
+                },
+              ),
+            ),
+            _TextIndentSelector(
+              value: settings.textIndent,
+              onChanged: settings.setTextIndent,
+            ),
           ],
         ),
-        if (showSecondary) ...widget.moreChildren,
+        ...widget.moreChildren,
       ],
-    );
-    if (!widget.collapsible) return content;
-    return AnimatedSize(
-      duration: AppMotion.menu,
-      curve: AppMotion.menuCurve,
-      alignment: Alignment.topCenter,
-      child: content,
-    );
-  }
-}
-
-/// 卡片底部的展開／收合列。
-class _ExpandToggle extends StatelessWidget {
-  const _ExpandToggle({
-    required this.label,
-    required this.expanded,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool expanded;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      expanded: expanded,
-      child: GroupedRow(
-        title: label,
-        accent: true,
-        showChevron: false,
-        onTap: onTap,
-        trailing: AnimatedRotation(
-          turns: expanded ? 0.5 : 0,
-          duration: AppMotion.menu,
-          curve: AppMotion.menuCurve,
-          child: Icon(
-            Icons.expand_more_rounded,
-            size: 22,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-      ),
     );
   }
 }
@@ -411,17 +349,21 @@ class _LabeledRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.bodyBase.copyWith(
-                  height: 1.3,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+            Text(
+              label,
+              style: AppTextStyles.bodyBase.copyWith(
+                height: 1.3,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
-            child,
+            // 窄螢幕放不下時整個控件等比縮小，不溢出卡片。
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(fit: BoxFit.scaleDown, child: child),
+              ),
+            ),
           ],
         ),
       ),
@@ -531,9 +473,13 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(horizontal: value),
               ),
+            ),
+            GroupedSwitchRow(
+              title: '左右對齊',
+              value: settings.justifyText,
+              onChanged: settings.setJustifyText,
             ),
             _stepperRow(
               NumberStepperRow(
@@ -542,7 +488,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(top: value),
               ),
             ),
@@ -553,7 +498,6 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 min: ReaderV2SettingsController.minPagePadding,
                 max: ReaderV2SettingsController.maxPagePadding,
                 step: _paddingStep,
-                unit: ' px',
                 onChanged: (value) => _schedule(bottom: value),
               ),
             ),
@@ -561,17 +505,10 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
               _stepperRow(
                 NumberStepperRow(
                   label: '頁尾位置',
-                  // 未調整時顯示目前跟隨系統的實際距離，從那裡開始增減。系統
-                  // 內距從 View 取：面板外層的 SafeArea 已經把 MediaQuery 的
-                  // 底部內距扣成 0，閱讀頁排版用的卻是系統內距。
-                  value:
-                      settings.footerOffset ??
-                      MediaQueryData.fromView(View.of(context)).padding.bottom +
-                          kReaderFooterAutoSpacing,
+                  value: settings.footerOffset,
                   min: ReaderV2SettingsController.minPagePadding,
                   max: ReaderV2SettingsController.maxPagePadding,
                   step: _paddingStep,
-                  unit: ' px',
                   onChanged: settings.setFooterOffset,
                 ),
               ),

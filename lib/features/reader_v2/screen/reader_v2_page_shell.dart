@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
@@ -8,14 +9,18 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
+import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
@@ -42,8 +47,7 @@ final class ReaderV2PageChromeLayout {
   });
 
   /// [topCutoutExtent] 為 null 表示尚未取得挖孔高度，暫以系統內距代替。
-  /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統
-  /// 底部內距。
+  /// [footerOffset] 為頁尾資訊列底部到畫面底部的距離。
   factory ReaderV2PageChromeLayout.resolve({
     required EdgeInsets mediaPadding,
     double? topCutoutExtent,
@@ -52,7 +56,7 @@ final class ReaderV2PageChromeLayout {
     required bool showFooterInfo,
     required double paddingTop,
     required double paddingBottom,
-    double? footerOffset,
+    required double footerOffset,
   }) {
     final top = hideStatusBar
         ? topCutoutExtent ?? mediaPadding.top
@@ -69,8 +73,7 @@ final class ReaderV2PageChromeLayout {
       headerExtent = top + kReaderInfoRowHeight;
       headerRowTop = top;
     }
-    final footerRowBottom =
-        footerOffset ?? mediaPadding.bottom + kReaderFooterAutoSpacing;
+    final footerRowBottom = footerOffset;
     final footerExtent = showFooterInfo
         ? footerRowBottom + kReaderFooterRowHeight
         : mediaPadding.bottom;
@@ -114,7 +117,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.showReadTitleAddition,
     required this.infoState,
     required this.chapterTitle,
-    required this.chapterUrl,
     required this.originName,
     this.progressListenable,
     required this.navigation,
@@ -122,9 +124,10 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.hideStatusBar,
     required this.headerInfo,
     required this.footerInfo,
+    required this.paddingHorizontal,
     required this.paddingTop,
     required this.paddingBottom,
-    this.footerOffset,
+    required this.footerOffset,
     this.topCutoutExtent,
     required this.dayNightIcon,
     required this.dayNightTooltip,
@@ -133,6 +136,7 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onMore,
     required this.onOpenDrawer,
     required this.onTts,
+    required this.onTimedTts,
     required this.onInterface,
     required this.onSettings,
     required this.onAutoPage,
@@ -146,6 +150,8 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onScrubbing,
     required this.onScrubEnd,
     this.brightnessControl,
+    this.sleepTimer,
+    this.isTtsPlaying = false,
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
@@ -166,7 +172,6 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool showReadTitleAddition;
   final ReaderV2InfoState infoState;
   final String chapterTitle;
-  final String chapterUrl;
   final String originName;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
   final ReaderV2ChapterNavigationState navigation;
@@ -174,11 +179,14 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool hideStatusBar;
   final ReaderV2InfoSlots headerInfo;
   final ReaderV2InfoSlots footerInfo;
+
+  /// 正文的左右邊距；頁首頁尾資訊列的左右內距也用它。
+  final double paddingHorizontal;
   final double paddingTop;
   final double paddingBottom;
 
-  /// 頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統底部內距。
-  final double? footerOffset;
+  /// 頁尾資訊列底部到畫面底部的距離。
+  final double footerOffset;
 
   /// 鏡頭挖孔與曲面邊緣佔掉的上緣高度；null 表示尚未取得。
   final double? topCutoutExtent;
@@ -192,7 +200,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onSystemBack;
   final VoidCallback onMore;
   final VoidCallback onOpenDrawer;
+
   final VoidCallback onTts;
+  final VoidCallback onTimedTts;
   final VoidCallback onInterface;
   final VoidCallback onSettings;
   final VoidCallback onAutoPage;
@@ -206,6 +216,8 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueChanged<double> onScrubbing;
   final ValueChanged<double> onScrubEnd;
   final Widget? brightnessControl;
+  final ReaderV2TtsSleepTimer? sleepTimer;
+  final bool isTtsPlaying;
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
@@ -224,6 +236,16 @@ class ReaderV2PageShell extends StatelessWidget {
       footerOffset: footerOffset,
     );
     final infoShown = infoState != ReaderV2InfoState.hidden;
+    // 正文與頁首、頁尾之間的空隙（上下邊距）裡的漸隱，最多 14（同 App 頁首
+    // 下緣）。邊距是 0 時沒有空隙，切口照舊。
+    final fadeTop = math.min(
+      layout.contentTop - layout.headerExtent,
+      AppGlass.headerFadeHeight,
+    );
+    final fadeBottom = math.min(
+      layout.contentBottom - layout.footerExtent,
+      AppGlass.headerFadeHeight,
+    );
     // 自動翻頁提示放在頁尾；頁尾關閉時改放頁首。
     final autoPageInFooter = layout.showFooterInfo;
     return PopScope<void>(
@@ -244,11 +266,41 @@ class ReaderV2PageShell extends StatelessWidget {
           color: backgroundColor,
           child: Stack(
             children: [
+              // 正文上下緣常露出半行（ADR 0006）。正文區本身不動：跨在邊上
+              // 的那一行畫進正文與頁首頁尾之間的空隙，在空隙裡漸隱，不蓋到
+              // 頁首頁尾，也不淡掉正文區裡的字。
               Positioned.fill(
-                top: layout.contentTop,
-                bottom: layout.contentBottom,
-                child: content,
+                top: layout.contentTop - fadeTop,
+                bottom: layout.contentBottom - fadeBottom,
+                child: ClipRect(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: fadeTop, bottom: fadeBottom),
+                    child: content,
+                  ),
+                ),
               ),
+              if (fadeTop > 0)
+                Positioned(
+                  top: layout.contentTop - fadeTop,
+                  left: 0,
+                  right: 0,
+                  child: EdgeFade(
+                    edge: AxisDirection.up,
+                    height: fadeTop,
+                    color: backgroundColor,
+                  ),
+                ),
+              if (fadeBottom > 0)
+                Positioned(
+                  bottom: layout.contentBottom - fadeBottom,
+                  left: 0,
+                  right: 0,
+                  child: EdgeFade(
+                    edge: AxisDirection.down,
+                    height: fadeBottom,
+                    color: backgroundColor,
+                  ),
+                ),
               if (layout.headerExtent > 0)
                 Positioned(
                   top: 0,
@@ -307,39 +359,73 @@ class ReaderV2PageShell extends StatelessWidget {
                     onDismiss: onDismissControls,
                   ),
                 ),
-              ReaderV2TopMenu(
-                controlsVisible: controlsVisible,
-                bookName: context.zh(book.name),
-                chapterTitle: chapterTitle,
-                chapterUrl: chapterUrl,
-                originName: originName,
-                showReadTitleAddition: showReadTitleAddition,
-                onBack: onExitIntent,
-                onMore: onMore,
-              ),
-              ReaderV2BottomMenu(
-                controlsVisible: controlsVisible,
-                navigation: navigation,
-                isAutoPaging: isAutoPaging,
-                dayNightIcon: dayNightIcon,
-                dayNightTooltip: dayNightTooltip,
-                onOpenDrawer: onOpenDrawer,
-                onTts: onTts,
-                onInterface: onInterface,
-                onSettings: onSettings,
-                onAutoPage: onAutoPage,
-                onToggleDayNight: onToggleDayNight,
-                onReplaceRule: onReplaceRule,
-                onPrevChapter: onPrevChapter,
-                onNextChapter: onNextChapter,
-                onScrubStart: onScrubStart,
-                onScrubbing: onScrubbing,
-                onScrubEnd: onScrubEnd,
-                progressListenable: progressListenable,
-                brightnessControl: brightnessControl,
-                showTts: showTts,
-                showAutoPage: showAutoPage,
-                showReplaceRule: showReplaceRule,
+              Positioned.fill(
+                child: CustomMultiChildLayout(
+                  delegate: _MenuLayoutDelegate(),
+                  children: [
+                    LayoutId(
+                      id: _MenuSlot.top,
+                      child: ReaderV2TopMenu(
+                        controlsVisible: controlsVisible,
+                        bookName: context.zh(book.name),
+                        chapterTitle: chapterTitle,
+                        originName: originName,
+                        showReadTitleAddition: showReadTitleAddition,
+                        onBack: onExitIntent,
+                        onMore: onMore,
+                      ),
+                    ),
+                    LayoutId(
+                      id: _MenuSlot.bottom,
+                      child: ReaderV2BottomMenu(
+                        controlsVisible: controlsVisible,
+                        navigation: navigation,
+                        isAutoPaging: isAutoPaging,
+                        dayNightIcon: dayNightIcon,
+                        dayNightTooltip: dayNightTooltip,
+                        onOpenDrawer: onOpenDrawer,
+                        onTts: onTts,
+                        onTimedTts: onTimedTts,
+                        onInterface: onInterface,
+                        onSettings: onSettings,
+                        onAutoPage: onAutoPage,
+                        onToggleDayNight: onToggleDayNight,
+                        onReplaceRule: onReplaceRule,
+                        onPrevChapter: onPrevChapter,
+                        onNextChapter: onNextChapter,
+                        onScrubStart: onScrubStart,
+                        onScrubbing: onScrubbing,
+                        onScrubEnd: onScrubEnd,
+                        progressListenable: progressListenable,
+                        sleepTimer: sleepTimer,
+                        isTtsPlaying: isTtsPlaying,
+                        showTts: showTts,
+                        showAutoPage: showAutoPage,
+                        showReplaceRule: showReplaceRule,
+                      ),
+                    ),
+                    if (brightnessControl case final control?)
+                      LayoutId(
+                        id: _MenuSlot.brightness,
+                        child: IgnorePointer(
+                          ignoring: !controlsVisible,
+                          child: AnimatedSlide(
+                            duration: AppMotion.menu,
+                            curve: AppMotion.menuCurve,
+                            // 往左滑出，多移一段讓漫射陰影也離開畫面。
+                            offset: controlsVisible
+                                ? Offset.zero
+                                : const Offset(-1.6, 0),
+                            child: Theme(
+                              data: ReaderV2MenuStyle.of(context)
+                                  .toSheetTheme(Theme.of(context)),
+                              child: control,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -348,6 +434,39 @@ class ReaderV2PageShell extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _MenuSlot { top, bottom, brightness }
+
+/// 上下選單貼齊畫面上下緣；亮度條靠左，撐滿兩者之間的空間、上下各留
+/// [AppSpacing.xl]，在上下選單之間置中。空間不夠時亮度條自己不畫
+/// （[ReaderV2BrightnessBar.minHeight]）。
+class _MenuLayoutDelegate extends MultiChildLayoutDelegate {
+  @override
+  void performLayout(Size size) {
+    final loose = BoxConstraints.loose(size).copyWith(minWidth: size.width);
+    final top = layoutChild(_MenuSlot.top, loose);
+    positionChild(_MenuSlot.top, Offset.zero);
+    final bottom = layoutChild(_MenuSlot.bottom, loose);
+    positionChild(_MenuSlot.bottom, Offset(0, size.height - bottom.height));
+    if (!hasChild(_MenuSlot.brightness)) return;
+    final available =
+        size.height - top.height - bottom.height - AppSpacing.xl * 2;
+    layoutChild(
+      _MenuSlot.brightness,
+      BoxConstraints.tightFor(
+        width: AppGlass.buttonSize,
+        height: available < 0 ? 0 : available,
+      ),
+    );
+    positionChild(
+      _MenuSlot.brightness,
+      Offset(AppGrouped.margin, top.height + AppSpacing.xl),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_MenuLayoutDelegate oldDelegate) => false;
 }
 
 /// 頁首頁尾資訊列目前要畫什麼。
@@ -564,7 +683,9 @@ class _InfoRow extends StatelessWidget {
       label: semantics,
       child: ExcludeSemantics(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          // 與正文同一個左右邊距：開「左右對齊」時正文兩緣與資訊列貼齊
+          // （ADR 0019）。
+          padding: EdgeInsets.symmetric(horizontal: shell.paddingHorizontal),
           child: DefaultTextStyle(
             style: AppTextStyles.uiXs.copyWith(
               color: infoColor,

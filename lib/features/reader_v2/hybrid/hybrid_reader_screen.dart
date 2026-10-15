@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
@@ -146,6 +147,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     },
   );
   bool _dragging = false;
+
+  /// 正文捲動中（拖動、甩動、翻頁動畫）持有 [MotionGate]（ADR 0018）。
+  final MotionHold _scrollHold = MotionHold();
   bool _sawUserScroll = false;
   bool _rebuildQueued = false;
   bool _captureFramePending = false;
@@ -236,6 +240,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   @override
   void dispose() {
+    _scrollHold.release();
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
@@ -469,6 +474,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification) _scrollHold.moving = true;
+    if (notification is ScrollEndNotification) _scrollHold.moving = false;
     if (_jumpVeil != null) {
       // 紙蓋上前就按下的手指，在紙下開始拖動：不算使用者接手、不取消
       // 跳章，拖動作廢並回到蓋紙那一刻的位置。
@@ -1405,10 +1412,14 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               right: state.layoutSpec.textPaddingRight,
             ),
             physics: _physics,
+            // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
+            // 之間那段空隙，並在那裡漸隱（ReaderV2PageShell）。
+            clipBehavior: Clip.none,
           ),
         );
         final readerStack = Stack(
           fit: StackFit.expand,
+          clipBehavior: Clip.none,
           children: <Widget>[
             visualContent,
             if (highlight != null && highlight.isValid)

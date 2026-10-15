@@ -52,13 +52,28 @@ void main() {
   });
 
   Future<SourceManagerProvider> loadedProvider() async {
-    final provider = SourceManagerProvider();
+    final provider = SourceManagerProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
     while (provider.isLoading || provider.totalSourceCount == 0) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     return provider;
   }
+
+  test('counts as loading while the page is still sliding in', () async {
+    final entrance = Completer<void>();
+    final provider = SourceManagerProvider(entrance: entrance.future);
+    addTearDown(provider.dispose);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // 還沒讀書源：不能當成「尚未加入書源」。
+    expect(provider.isLoading, isTrue);
+
+    entrance.complete();
+    while (provider.isLoading) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(provider.totalSourceCount, 3);
+  });
 
   test(
     'clearing every mark restores marked sources and keeps user data',
@@ -95,11 +110,11 @@ void main() {
   test(
     'closing the source manager leaves the shared check service alive',
     () async {
-      final first = SourceManagerProvider();
+      final first = SourceManagerProvider(entrance: Future<void>.value());
       final service = first.checkService;
       first.dispose();
 
-      final second = SourceManagerProvider();
+      final second = SourceManagerProvider(entrance: Future<void>.value());
       addTearDown(second.dispose);
 
       expect(second.checkService, same(service));
@@ -147,10 +162,12 @@ void main() {
       GetIt.instance.unregister<BookSourceDao>();
       GetIt.instance.registerSingleton<BookSourceDao>(gated);
 
-      final provider = SourceManagerProvider();
+      final provider = SourceManagerProvider(entrance: Future<void>.value());
       addTearDown(provider.dispose);
       final countsSeen = <int>[];
       provider.addListener(() => countsSeen.add(provider.totalSourceCount));
+      // 進場（這裡已經完成）之後才開始初次載入。
+      await Future<void>.delayed(Duration.zero);
       expect(provider.isLoading, isTrue);
 
       // 校驗結束時在背景重新讀取，蓋過還沒讀完的初次載入。

@@ -56,7 +56,7 @@ void main() {
         );
       }
     });
-    final provider = SourceManagerProvider();
+    final provider = SourceManagerProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
     await tester.pumpWidget(
       ChangeNotifierProvider<SourceManagerProvider>.value(

@@ -8,11 +8,14 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
+import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBookDao extends Fake implements BookDao {}
 
@@ -102,6 +105,9 @@ void main() {
   late ReaderV2Runtime runtime;
   late _FakeTtsEngine engine;
   late ReaderV2TtsController tts;
+  var now = DateTime(2026, 10, 15, 23);
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Future<void> open(Map<int, String?> contents) async {
     final book = Book(
@@ -160,7 +166,13 @@ void main() {
     runtime.registerViewportRestore(Object(), (_) async => true);
     await runtime.openBook();
     engine = _FakeTtsEngine();
-    tts = ReaderV2TtsController(runtime: runtime, tts: engine);
+    tts = ReaderV2TtsController(runtime: runtime, tts: engine, now: () => now);
+  }
+
+  /// 讓時間前進：同時推進測試的時鐘與定時器。
+  Future<void> elapse(WidgetTester tester, Duration duration) async {
+    now = now.add(duration);
+    await tester.pump(duration);
   }
 
   tearDown(() {
@@ -235,5 +247,159 @@ void main() {
 
     expect(tts.currentHighlight, isNull);
     expect(runtime.takeUserNotice(), '已朗讀到書尾');
+  });
+
+  group('sleep timer', () {
+    testWidgets('pauses on the sentence being read when time is up', (
+      tester,
+    ) async {
+      await open({0: '第一句。第二句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      engine.complete();
+      await tester.pump();
+      expect(engine.spoken.last, '第二句。');
+      final sentenceStart = tts.currentHighlight?.sentenceStart;
+
+      await elapse(tester, const Duration(minutes: 15));
+
+      expect(tts.isPlaying, isFalse);
+      expect(tts.isPaused, isTrue);
+      expect(tts.currentHighlight?.sentenceStart, sentenceStart);
+
+      await tts.toggle();
+      expect(engine.spoken.last, '第二句。');
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 15));
+      await tts.stop();
+    });
+
+    testWidgets('does not count down while paused', (tester) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      await tts.toggle();
+      await elapse(tester, const Duration(hours: 1));
+      expect(tts.isPaused, isTrue);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+
+      await tts.toggle();
+      await elapse(tester, const Duration(minutes: 10));
+      expect(tts.isPlaying, isFalse);
+    });
+
+    testWidgets('a custom timer counts down its own minutes', (tester) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.setCustomMinutes(20);
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
+      await tts.startFromVisibleLocation();
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 20));
+
+      await elapse(tester, const Duration(minutes: 5));
+      await tts.sleepTimer.setCustomMinutes(10);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+
+      await elapse(tester, const Duration(minutes: 10));
+      expect(tts.isPlaying, isFalse);
+      expect(tts.isPaused, isTrue);
+    });
+
+    testWidgets('changing the custom minutes leaves a preset alone', (
+      tester,
+    ) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 5));
+
+      await tts.sleepTimer.setCustomMinutes(40);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 10));
+      await tts.stop();
+    });
+
+    testWidgets('custom minutes stay within range', (tester) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.setCustomMinutes(0);
+      expect(tts.sleepTimer.customMinutes, 1);
+      await tts.sleepTimer.setCustomMinutes(999);
+      expect(tts.sleepTimer.customMinutes, 180);
+    });
+
+    testWidgets('stopping clears the countdown but keeps the choice', (
+      tester,
+    ) async {
+      await open({0: '唯一的一句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes30);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 10));
+
+      await tts.stop();
+      expect(tts.sleepTimer.remaining, isNull);
+
+      await tts.startFromVisibleLocation();
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 30));
+      await tts.stop();
+    });
+
+    testWidgets('the timer key reads aloud with the remembered timer', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({PreferKey.ttsTimer: 45});
+      await open({0: '唯一的一句。'});
+      await tts.loadSettings();
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['唯一的一句。']);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 45));
+
+      await tts.toggleTimed();
+      expect(tts.isPlaying, isFalse);
+      expect(tts.isPaused, isFalse);
+      expect(tts.sleepTimer.remaining, isNull);
+    });
+
+    testWidgets('the timer key uses 30 minutes when the timer is off', (
+      tester,
+    ) async {
+      await open({0: '唯一的一句。'});
+
+      await tts.toggleTimed();
+      expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes30);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 30));
+      await tts.stop();
+    });
+
+    testWidgets('the timer key resumes after the timer paused reading', (
+      tester,
+    ) async {
+      await open({0: '第一句。第二句。'});
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.minutes15);
+      await tts.startFromVisibleLocation();
+      await elapse(tester, const Duration(minutes: 15));
+      expect(tts.isPaused, isTrue);
+
+      await tts.toggleTimed();
+      expect(engine.spoken, ['第一句。', '第一句。']);
+      expect(tts.sleepTimer.remaining, const Duration(minutes: 15));
+      await tts.stop();
+    });
+
+    testWidgets('the last choice is remembered', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        PreferKey.ttsTimer: 45,
+        PreferKey.ttsTimerCustomMinutes: 25,
+      });
+      await open({0: '唯一的一句。'});
+      await tts.loadSettings();
+      expect(tts.sleepTimer.option, ReaderV2TtsSleepOption.minutes45);
+      expect(tts.sleepTimer.customMinutes, 25);
+
+      await tts.sleepTimer.choose(ReaderV2TtsSleepOption.custom);
+      await tts.sleepTimer.setCustomMinutes(70);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(PreferKey.ttsTimer), -1);
+      expect(prefs.getInt(PreferKey.ttsTimerCustomMinutes), 70);
+    });
   });
 }

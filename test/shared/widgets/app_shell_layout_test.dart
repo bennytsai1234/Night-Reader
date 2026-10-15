@@ -19,8 +19,7 @@ void main() {
     tester,
   ) async {
     final previous = ErrorWidget.builder;
-    ErrorWidget.builder = (details) =>
-        buildFlutterErrorWidget(details, releaseNativeSplash: () {});
+    ErrorWidget.builder = buildFlutterErrorWidget;
     final errors = <Object>[];
     final previousOnError = FlutterError.onError;
     FlutterError.onError = (details) => errors.add(details.exception);

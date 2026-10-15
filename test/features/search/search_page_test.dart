@@ -59,6 +59,38 @@ void main() {
       )
       .any((fade) => fade.opacity.value < 1);
 
+  testWidgets('nothing is read until the page has slid in', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SizedBox(),
+      ),
+    );
+    unawaited(
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(builder: (_) => const SearchPage()),
+      ),
+    );
+    SearchProvider provider() => Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+
+    // 預設的平移換頁是 0.5 秒：播到一半，搜尋範圍、書架與紀錄都還沒讀。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    expect(provider().scopeLoaded, isFalse);
+
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => provider().ready);
+    expect(provider().scopeLoaded, isTrue);
+  });
+
   testWidgets('streamed results fade in once; reordering does not replay it', (
     tester,
   ) async {

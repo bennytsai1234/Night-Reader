@@ -11,6 +11,7 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -162,13 +163,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
         // 章節一章章打完（書架自動下載何時再試見 ADR 0008）。
         if (consecutiveFailures >= _maxConsecutiveFailures) break;
-        if (!isDownloading ||
-            task.status == DownloadTask.statusPaused ||
-            isTaskRetiring(task.bookUrl)) {
-          stoppedEarly = true;
-          break;
-        }
-        if (!await waitUntilTaskRunnable(task.bookUrl)) {
+        if (!await _mayContinue(task)) {
           stoppedEarly = true;
           break;
         }
@@ -191,7 +186,8 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
             !isTaskRetiring(task.bookUrl)) {
           await Future.delayed(const Duration(milliseconds: 500));
         }
-        if (isTaskRetiring(task.bookUrl)) {
+        // 等名額時可能有新的動畫開始，所以開抓前才等動畫（ADR 0018）。
+        if (!await _clearToStartChapter(task)) {
           stoppedEarly = true;
           break;
         }
@@ -295,6 +291,30 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   /// 連續失敗幾章就停下整個任務：同時最多抓 [maxChapterConcurrent]（5）章，
   /// 10 章是連續兩輪全部失敗（每章已各自重試 [_maxRetries] 次）。
   static const int _maxConsecutiveFailures = 10;
+
+  /// 整個下載沒停、這本沒暫停也沒退役；全域暫停時等到繼續。
+  Future<bool> _mayContinue(DownloadTask task) async {
+    if (!isDownloading ||
+        task.status == DownloadTask.statusPaused ||
+        isTaskRetiring(task.bookUrl)) {
+      return false;
+    }
+    return waitUntilTaskRunnable(task.bookUrl);
+  }
+
+  /// 開抓下一章之前等畫面上的動畫播完：帶 JS 的書源在主執行緒解析正文，
+  /// 會把動畫卡掉（ADR 0018）；已經在抓的章節照常做完。等的時候退役（換
+  /// 源）馬上放行去收尾，等完再看一次期間有沒有被暫停。
+  Future<bool> _clearToStartChapter(DownloadTask task) async {
+    while (true) {
+      if (!await _mayContinue(task)) return false;
+      if (!MotionGate.instance.isMoving) return true;
+      await Future.any<void>([
+        MotionGate.instance.idle,
+        retirementSignal(task.bookUrl),
+      ]);
+    }
+  }
 
   Future<DownloadChapterResult> _downloadChapter({
     required ReaderChapterContentStorage contentStorage,

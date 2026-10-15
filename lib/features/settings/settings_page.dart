@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
@@ -17,8 +16,8 @@ import 'backup_settings_page.dart';
 
 import 'package:night_reader/features/about/about_page.dart';
 
-/// 「我的」分頁：Telegram 設定頁的結構——置中的 App 頁首，下方為帶上色圖示
-/// 的分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）。
+/// 「我的」分頁：頁首置中標題「我的」（同書架、發現），下方為帶上色圖示的
+/// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）。
 ///
 /// 圖示顏料依意義固定：硃砂＝閱讀、點金＝紀錄、石青＝網路與書源、
 /// 茄紫＝外觀、苔綠＝聲音、茶褐＝資料、墨＝App 資訊。
@@ -33,16 +32,16 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      // 當「我的」分頁時是根路由，頁首只留狀態列與漸隱，不留工具列的高度；
       // 從閱讀器推入時才有返回鈕。
       appBar: GlassNavHeader(
+        title: '我的',
         automaticallyImplyLeading:
             ModalRoute.of(context)?.impliesAppBarDismissal ?? false,
       ),
       body: GroupedListView(
         children: [
-          const _ProfileHeader(),
           GroupedSection(
+            topGap: AppSpacing.lg,
             children: [
               GroupedRow(
                 leading: const GroupedIconTile(
@@ -129,61 +128,6 @@ class SettingsPage extends StatelessWidget {
                 onTap: () => _push(context, const AboutPage()),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 置中的 App 頁首（Telegram 個人資料頁首的位置）。
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader();
-
-  static const double _iconSize = 88;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final chrome = AppChrome.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppGrouped.margin,
-        AppSpacing.md,
-        AppGrouped.margin,
-        0,
-      ),
-      child: Column(
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: AppRadius.cardXl,
-              boxShadow: [
-                BoxShadow(
-                  color: chrome.glassShadow,
-                  blurRadius: 24,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: AppRadius.cardXl,
-              child: Image.asset(
-                'assets/ui/app_icon.webp',
-                width: _iconSize,
-                height: _iconSize,
-                fit: BoxFit.cover,
-                semanticLabel: '夜讀應用程式圖示',
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            '夜讀',
-            style: AppTextStyles.titleXl.copyWith(
-              letterSpacing: 1.6,
-              color: scheme.onSurface,
-            ),
           ),
         ],
       ),

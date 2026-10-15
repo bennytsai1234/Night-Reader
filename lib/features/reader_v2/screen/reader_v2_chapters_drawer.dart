@@ -1,9 +1,8 @@
 import 'dart:math' as math;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -19,13 +18,20 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
     required this.currentChapterIndex,
     required this.titleFor,
     required this.onChapterTap,
+    this.onClosed,
     this.listenable,
   });
 
   final List<BookChapter> chapters;
   final int currentChapterIndex;
   final String Function(int index) titleFor;
-  final Future<bool> Function(int index) onChapterTap;
+
+  /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
+  final ValueChanged<int> onChapterTap;
+
+  /// 目錄收到底、從畫面上拿掉時呼叫。Scaffold 的抽屜收完才卸下內容；
+  /// [Scaffold.onDrawerChanged] 在收起動畫一開始就發，不能當成收完。
+  final VoidCallback? onClosed;
   final Listenable? listenable;
 
   @override
@@ -40,11 +46,15 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
-  int? _pendingChapterIndex;
+
+  /// 目錄從滑出、捲動到收完都持有動作閘門：抽屜不是路由，路由的觀察者
+  /// 管不到它（ADR 0018）。
+  final MotionHold _motion = MotionHold();
 
   @override
   void initState() {
     super.initState();
+    _motion.moving = true;
     widget.listenable?.addListener(_handleChanged);
   }
 
@@ -69,46 +79,9 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   void dispose() {
     widget.listenable?.removeListener(_handleChanged);
     _scrollController.dispose();
+    _motion.release();
+    widget.onClosed?.call();
     super.dispose();
-  }
-
-  Future<void> _handleChapterTap(int index) async {
-    if (_pendingChapterIndex != null) return;
-    setState(() => _pendingChapterIndex = index);
-
-    late final bool succeeded;
-    try {
-      succeeded = await widget.onChapterTap(index);
-    } finally {
-      if (mounted) {
-        setState(() => _pendingChapterIndex = null);
-      }
-    }
-
-    // 只收自己的抽屜。用 Navigator.pop 的話，使用者在跳轉途中已經關上
-    // 抽屜時會改成關掉閱讀頁。
-    if (!mounted || !succeeded) return;
-    Scaffold.maybeOf(context)?.closeDrawer();
-  }
-
-  Widget _buildPendingIndicator(String chapterTitle) {
-    return Semantics(
-      container: true,
-      label: '正在跳轉至$chapterTitle',
-      child: ExcludeSemantics(
-        child: SizedBox.square(
-          dimension: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
-  }
-
-  VoidCallback? _chapterTapHandler(int index) {
-    if (_pendingChapterIndex != null) return null;
-    return () {
-      unawaited(_handleChapterTap(index));
-    };
   }
 
   /// Telegram 式平面列：固定高度（捲動定位依賴 [_tileExtent]），
@@ -118,10 +91,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
     final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
     final isCurrentChapter = widget.currentChapterIndex == index;
-    final isPending = _pendingChapterIndex == index;
-    final Widget? trailing = isPending
-        ? _buildPendingIndicator(chapterTitle)
-        : isCurrentChapter
+    final Widget? trailing = isCurrentChapter
         ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
         : index < widget.chapters.length && widget.chapters[index].isLocked
         ? const LockedChapterIcon()
@@ -146,7 +116,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
               ),
               trailing: trailing,
               showChevron: false,
-              onTap: _chapterTapHandler(index),
+              onTap: () => widget.onChapterTap(index),
             ),
           ),
         ),

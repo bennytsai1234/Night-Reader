@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
@@ -169,24 +170,45 @@ void main() {
     expect(snapshot.chapterSpacing, ReaderV2PrefsRepository.maxChapterSpacing);
   });
 
+  test('footer offset persists and reset returns to the default', () async {
+    final settings = ReaderV2SettingsController();
+    await settings.loadSettings();
+    final defaults = ReaderV2PrefsSnapshot.defaults();
+    expect(settings.footerOffset, defaults.footerOffset);
+
+    settings.setFooterOffset(0);
+    await pumpEventQueue();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble(PreferKey.readerFooterOffset), 0);
+    expect((await const ReaderV2PrefsRepository().load()).footerOffset, 0);
+
+    settings.resetPageLayout();
+    await pumpEventQueue();
+    expect(settings.footerOffset, defaults.footerOffset);
+    expect(settings.isPageLayoutDefault, isTrue);
+    settings.dispose();
+  });
+
   test(
-    'footer offset persists and reset returns to following the system',
+    'justify text is on by default, persists and reaches the style',
     () async {
       final settings = ReaderV2SettingsController();
       await settings.loadSettings();
-      expect(settings.footerOffset, isNull);
+      expect(settings.justifyText, isTrue);
+      expect(settings.readStyleFor(EdgeInsets.zero).justify, isTrue);
 
-      settings.setFooterOffset(0);
+      settings.setJustifyText(false);
       await pumpEventQueue();
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getDouble(PreferKey.readerFooterOffset), 0);
-      expect((await const ReaderV2PrefsRepository().load()).footerOffset, 0);
+      expect(
+        (await const ReaderV2PrefsRepository().load()).justifyText,
+        isFalse,
+      );
+      expect(settings.readStyleFor(EdgeInsets.zero).justify, isFalse);
+      expect(settings.isPageLayoutDefault, isFalse);
 
       settings.resetPageLayout();
       await pumpEventQueue();
-      expect(settings.footerOffset, isNull);
-      expect(prefs.containsKey(PreferKey.readerFooterOffset), isFalse);
-      expect(settings.isPageLayoutDefault, isTrue);
+      expect(settings.justifyText, isTrue);
       settings.dispose();
     },
   );

@@ -11,4 +11,4 @@ iOS：2026-10-10 曾移除 `ios/`，因為三個 fork 只剩 Android 實作、CI
 - iOS 的 JS 引擎是系統的 JavaScriptCore（`flutter_js` 的 `getJavascriptRuntime()` 依平台選擇），Android 與測試用 QuickJS；書源 JS 在兩邊的行為差異沒有測試涵蓋。
 - iOS 原生端只實作長按斷詞與電量（`ios/Runner/AppDelegate.swift`）。狀態列與挖孔高度不需要：iOS 隱藏狀態列時安全區域不變。App 內更新、分享進 App（需要 Share Extension）與用檔案開啟書籍（需要宣告文件類型）在 iOS 上沒有。
 - iOS 建置失敗不會擋下 Android 發布：IPA 排在 APK 之後，Release 已經建立時只是少一個附件。
-- 啟動畫面底色在 `ios/Runner/Assets.xcassets/LaunchBackground.colorset` 手動設定，`flutter_native_splash` 的 `ios` 維持 `false`，免得重跑時覆寫。
+- 啟動畫面底色在 `ios/Runner/Assets.xcassets/LaunchBackground.colorset` 手動設定，固定紙墨，不跟著風格（Android 的做法見 ADR 0017）。

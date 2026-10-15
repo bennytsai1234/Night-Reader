@@ -6,6 +6,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -33,13 +34,27 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
-class SourceManagerPage extends StatelessWidget {
+class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
+
+  @override
+  State<SourceManagerPage> createState() => _SourceManagerPageState();
+}
+
+class _SourceManagerPageState extends State<SourceManagerPage> {
+  /// 進場動畫播完時完成；書源等它才讀（ADR 0018）。
+  Future<void>? _entrance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entrance ??= TransitionSettled.entered(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => SourceManagerProvider(),
+      create: (_) => SourceManagerProvider(entrance: _entrance!),
       child: const _SourceManagerPageContent(),
     );
   }
@@ -292,12 +307,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     return GlassNavHeader(
       title: '書源管理',
       actions: [
-        SourceManagerMenus.buildSortMenu(context, provider),
-        SourceManagerMenus.buildGroupMenu(
-          context,
-          provider,
-          onManageGroups: () => _openGroupManagePage(nav, provider),
-        ),
         SourceManagerMenus.buildMoreMenu(
           context,
           provider,
@@ -429,6 +438,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         editing: editing,
         showHostHeader: !canReorder && startsHostGroup(i),
         hostLabel: groupByHost ? hostLabels[i] : '',
+        firstInGroup: i == 0 || startsHostGroup(i),
         showSeparator: !isLastInGroup,
       );
     }
@@ -503,6 +513,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     required bool editing,
     required bool showHostHeader,
     required String hostLabel,
+    required bool firstInGroup,
     required bool showSeparator,
   }) {
     return SourceItemTile(
@@ -513,6 +524,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       editing: editing,
       showHostHeader: showHostHeader,
       hostLabel: hostLabel,
+      firstInGroup: firstInGroup,
       showSeparator: showSeparator,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       mutationEnabled: !_isImporting && !p.isSourceLocked(s.bookSourceUrl),

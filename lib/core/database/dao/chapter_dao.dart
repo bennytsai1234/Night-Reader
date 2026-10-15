@@ -10,11 +10,30 @@ part 'chapter_dao.g.dart';
 class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   ChapterDao(super.db);
 
+  /// [getByBook] 一批最多讀這麼多章。查詢在背景執行緒，但結果傳回主執行緒
+  /// 轉成章節是一口氣做完：五千章在電腦上一次就佔住主執行緒 3–10ms，手機
+  /// 上會掉好幾幀；兩百章一批在手機上約 1–2ms（ADR 0018）。
+  static const int _readBatch = 200;
+
+  /// 整本目錄，照序號排。分批讀，包在同一個交易裡，讀到的是同一個時間點
+  /// 的目錄。
   Future<List<BookChapter>> getByBook(String bookUrl) {
-    return (select(chapters)
-          ..where((t) => t.bookUrl.equals(bookUrl))
-          ..orderBy([(t) => OrderingTerm(expression: t.index)]))
-        .get();
+    return transaction(() async {
+      final all = <BookChapter>[];
+      while (true) {
+        final batch =
+            await (select(chapters)
+                  ..where((t) => t.bookUrl.equals(bookUrl))
+                  ..orderBy([
+                    (t) => OrderingTerm(expression: t.index),
+                    (t) => OrderingTerm(expression: t.url),
+                  ])
+                  ..limit(_readBatch, offset: all.length))
+                .get();
+        all.addAll(batch);
+        if (batch.length < _readBatch) return all;
+      }
+    });
   }
 
   Stream<List<BookChapter>> watchByBook(String bookUrl) {

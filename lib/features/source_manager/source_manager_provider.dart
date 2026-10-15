@@ -327,8 +327,10 @@ class SourceManagerProvider with ChangeNotifier {
     return list;
   }
 
-  bool _isLoading = false;
-  bool _loadOwnsLoading = false;
+  // 一建立就算載入中：書源等進場動畫播完才讀，這段期間不能當成沒有書源。
+  // 第一次讀取收尾時一起收掉。
+  bool _isLoading = true;
+  bool _loadOwnsLoading = true;
   bool get isLoading => _isLoading;
   bool _isBatchOperationInProgress = false;
   bool get isBatchOperationInProgress => _isBatchOperationInProgress;
@@ -361,15 +363,22 @@ class SourceManagerProvider with ChangeNotifier {
   List<String> _allGroups = [];
   List<String> get allGroups => List<String>.unmodifiable(_allGroups);
 
+  /// [entrance] 是書源管理頁的進場動畫；播完才讀書源（ADR 0018）。
   SourceManagerProvider({
+    required Future<void> entrance,
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
-    loadSources();
-    checkService.loadConfig();
+    unawaited(
+      entrance.then((_) {
+        if (_disposed) return;
+        loadSources();
+        checkService.loadConfig();
+      }),
+    );
   }
 
   void _handleCheckServiceChanged() {

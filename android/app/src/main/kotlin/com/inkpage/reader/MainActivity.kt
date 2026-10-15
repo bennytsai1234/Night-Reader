@@ -71,6 +71,14 @@ class MainActivity : AudioServiceActivity() {
                 result.error("install_failed", e.message, null)
             }
         }
+        MethodChannel(messenger, "night_reader/launch_screen").setMethodCallHandler { call, result ->
+            if (call.method != "setTheme") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            setLaunchTheme(call.argument<String>("style"), call.argument<String>("mode"))
+            result.success(null)
+        }
         EventChannel(messenger, "night_reader/battery")
             .setStreamHandler(BatteryStreamHandler(applicationContext))
         MethodChannel(messenger, "com.inkpage.reader/word_segmenter").setMethodCallHandler { call, result ->
@@ -84,6 +92,20 @@ class MainActivity : AudioServiceActivity() {
                 if (text == null || offset == null) null else wordAt(text, offset),
             )
         }
+    }
+
+    // 下次冷啟動時系統啟動畫面用哪個風格的底色；系統會記住，Android 13 起才有。
+    // mode 是 App 的深淺設定：light／dark 固定，其他跟隨系統。
+    private fun setLaunchTheme(style: String?, mode: String?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val themes = launchThemes[style] ?: return
+        splashScreen.setSplashScreenTheme(
+            when (mode) {
+                "light" -> themes.light
+                "dark" -> themes.dark
+                else -> themes.system
+            },
+        )
     }
 
     // App 內更新：開系統安裝程式安裝 APK。Android 一律要使用者在系統畫面
@@ -212,6 +234,22 @@ class MainActivity : AudioServiceActivity() {
         return corner.radius / resources.displayMetrics.density.toDouble()
     }
 }
+
+// AppStyle.name → 該風格的啟動畫面主題（res/values-v31/launch_themes.xml）。
+private class LaunchThemes(val system: Int, val light: Int, val dark: Int)
+
+private val launchThemes = mapOf(
+    "paper" to LaunchThemes(R.style.LaunchTheme_Paper, R.style.LaunchTheme_Paper_Light, R.style.LaunchTheme_Paper_Dark),
+    "bamboo" to LaunchThemes(R.style.LaunchTheme_Bamboo, R.style.LaunchTheme_Bamboo_Light, R.style.LaunchTheme_Bamboo_Dark),
+    "azurite" to LaunchThemes(R.style.LaunchTheme_Azurite, R.style.LaunchTheme_Azurite_Light, R.style.LaunchTheme_Azurite_Dark),
+    "tea" to LaunchThemes(R.style.LaunchTheme_Tea, R.style.LaunchTheme_Tea_Light, R.style.LaunchTheme_Tea_Dark),
+    "plain" to LaunchThemes(R.style.LaunchTheme_Plain, R.style.LaunchTheme_Plain_Light, R.style.LaunchTheme_Plain_Dark),
+    "rouge" to LaunchThemes(R.style.LaunchTheme_Rouge, R.style.LaunchTheme_Rouge_Light, R.style.LaunchTheme_Rouge_Dark),
+    "lotus" to LaunchThemes(R.style.LaunchTheme_Lotus, R.style.LaunchTheme_Lotus_Light, R.style.LaunchTheme_Lotus_Dark),
+    "scroll" to LaunchThemes(R.style.LaunchTheme_Scroll, R.style.LaunchTheme_Scroll_Light, R.style.LaunchTheme_Scroll_Dark),
+    "amber" to LaunchThemes(R.style.LaunchTheme_Amber, R.style.LaunchTheme_Amber_Light, R.style.LaunchTheme_Amber_Dark),
+    "frost" to LaunchThemes(R.style.LaunchTheme_Frost, R.style.LaunchTheme_Frost_Light, R.style.LaunchTheme_Frost_Dark),
+)
 
 // 電量與充電狀態；只在 Dart 端有訂閱時才註冊系統廣播。
 private class BatteryStreamHandler(private val context: Context) : EventChannel.StreamHandler {

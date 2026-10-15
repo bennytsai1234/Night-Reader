@@ -65,7 +65,9 @@ void main() {
     await tester.pump(AppMotion.themeReveal ~/ 2);
     expect(overlay(), findsOneWidget);
 
+    // 圓從換色那一幀畫完才開始計時，多等一幀才播完。
     await tester.pump(AppMotion.themeReveal);
+    await tester.pump(const Duration(milliseconds: 16));
     await tester.pump();
     expect(overlay(), findsNothing);
     expect(find.text('dark'), findsOneWidget);

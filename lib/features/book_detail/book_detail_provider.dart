@@ -197,6 +197,7 @@ class BookDetailProvider extends ChangeNotifier {
 
   BookDetailProvider(
     AggregatedSearchBook searchBook, {
+    required Future<void> entrance,
     BookDao? bookDao,
     ChapterDao? chapterDao,
     BookSourceDao? sourceDao,
@@ -263,7 +264,9 @@ class BookDetailProvider extends ChangeNotifier {
             originName: searchBook.book.originName ?? '發現',
             type: searchBook.book.type,
           );
-    _init();
+    // 進場動畫播完才讀資料庫、向書源抓資料（ADR 0018）；這之前照傳進來
+    // 的書畫。
+    unawaited(entrance.then((_) => _init()));
   }
 
   Future<void> retryInitialization() => _init();

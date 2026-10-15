@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -29,22 +32,38 @@ import 'widgets/search_suggestion_view.dart';
 
 /// SearchPage - 搜尋頁面
 /// (對標 Legado SearchActivity)
-class SearchPage extends StatelessWidget {
+class SearchPage extends StatefulWidget {
   final String? initialQuery;
   final BookSource? initialSource;
 
   const SearchPage({super.key, this.initialQuery, this.initialSource});
 
   @override
+  State<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends State<SearchPage> {
+  /// 進場動畫播完時完成；書架、分組與搜尋紀錄等它才讀（ADR 0018）。
+  Future<void>? _entrance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entrance ??= TransitionSettled.entered(context);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final initialSource = widget.initialSource;
     return ChangeNotifierProvider(
       create: (_) => SearchProvider(
+        entrance: _entrance!,
         initialScope: initialSource != null
-            ? SearchScope.fromSource(initialSource!)
+            ? SearchScope.fromSource(initialSource)
             : null,
       ),
       child: _SearchPageContent(
-        initialQuery: initialQuery,
+        initialQuery: widget.initialQuery,
         initialSource: initialSource,
       ),
     );
@@ -108,16 +127,23 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   @override
   void initState() {
     super.initState();
-    if (!_opensBlank) {
-      _controller.text = widget.initialQuery ?? '';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final provider = context.read<SearchProvider>();
-        if (widget.initialSource != null) {
-          provider.searchInSource(widget.initialSource!, _controller.text);
-        } else if (_controller.text.isNotEmpty) {
-          provider.search(_controller.text);
-        }
-      });
+    if (_opensBlank) return;
+    _controller.text = widget.initialQuery ?? '';
+    unawaited(_searchWhenReady());
+  }
+
+  /// 帶著關鍵字或書源進來時，進場動畫播完、搜尋範圍讀好才開始搜尋：搜尋
+  /// 要解析書源，不和換頁疊在一起（ADR 0018）。
+  Future<void> _searchWhenReady() async {
+    final provider = context.read<SearchProvider>();
+    await provider.ready;
+    if (!mounted) return;
+    if (widget.initialSource != null) {
+      unawaited(
+        provider.searchInSource(widget.initialSource!, _controller.text),
+      );
+    } else if (_controller.text.isNotEmpty) {
+      unawaited(provider.search(_controller.text));
     }
   }
 
@@ -187,8 +213,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
             provider: provider,
             onSearch: _onSearch,
             onScopePressed: _openScopeSheet,
-            // 從搜尋鈕進來的空白搜尋頁直接聚焦輸入框（Telegram 搜尋的進場方式）。
-            autofocus: _opensBlank,
             onCancel: () => Navigator.maybePop(context),
           ),
           // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。

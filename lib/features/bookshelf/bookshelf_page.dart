@@ -9,12 +9,14 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
@@ -29,13 +31,14 @@ import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
-enum _BookshelfBatchAction { download, ensureComplete, checkUpdate, delete }
+enum _BookshelfBatchAction { checkUpdate, delete }
 
 /// 頁首兩個選單的非排序項目；排序項目直接用 [BookshelfSortMode]。
 /// 左邊「整理」管書架怎麼看、怎麼排，右邊「加入」把書帶進書架。
 enum _ShelfMenuAction {
   gridView,
   listView,
+  unifiedCovers,
   select,
   export,
   search,
@@ -45,14 +48,7 @@ enum _ShelfMenuAction {
 }
 
 /// 長按書籍的情境選單項目。
-enum _BookMenuAction {
-  detail,
-  select,
-  checkUpdate,
-  autoUpdate,
-  download,
-  remove,
-}
+enum _BookMenuAction { detail, select, checkUpdate, autoUpdate, remove }
 
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
@@ -231,6 +227,12 @@ class _BookshelfPageState extends State<BookshelfPage>
         icon: Icons.view_list_outlined,
         checked: !provider.isGridView,
       ),
+      GlassMenuItem(
+        value: _ShelfMenuAction.unifiedCovers,
+        label: '統一封面',
+        icon: Icons.nights_stay_outlined,
+        checked: provider.unifiedCovers,
+      ),
       const GlassMenuDivider(),
       for (final mode in BookshelfSortMode.values)
         GlassMenuItem(
@@ -288,6 +290,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         provider.setGridView(true);
       case _ShelfMenuAction.listView:
         provider.setGridView(false);
+      case _ShelfMenuAction.unifiedCovers:
+        provider.setUnifiedCovers(!provider.unifiedCovers);
       case _ShelfMenuAction.select:
         _enterEditMode();
       case _ShelfMenuAction.search:
@@ -430,18 +434,6 @@ class _BookshelfPageState extends State<BookshelfPage>
           : _batchProgressTitle(provider),
       actions: [
         BookshelfToolbarAction(
-          label: '下載',
-          icon: Icons.download_outlined,
-          onPressed: enabled ? () => _batchDownload(context, provider) : null,
-        ),
-        BookshelfToolbarAction(
-          label: '補下載',
-          icon: Icons.cloud_download_outlined,
-          onPressed: enabled
-              ? () => _batchEnsureComplete(context, provider)
-              : null,
-        ),
-        BookshelfToolbarAction(
           label: '檢查更新',
           icon: Icons.update,
           onPressed: enabled
@@ -571,60 +563,6 @@ class _BookshelfPageState extends State<BookshelfPage>
     }
   }
 
-  Future<void> _batchDownload(
-    BuildContext context,
-    BookshelfProvider provider,
-  ) async {
-    try {
-      final result = await _runBatchAction(
-        _BookshelfBatchAction.download,
-        provider.batchDownload,
-      );
-      if (result == null) return;
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '已加入 ${result.queuedBooks} 本、${result.queuedChapters} 章；略過 ${result.skippedBooks} 本',
-          ),
-        ),
-      );
-      _exitEditMode();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('批次下載', e))));
-    }
-  }
-
-  Future<void> _batchEnsureComplete(
-    BuildContext context,
-    BookshelfProvider provider,
-  ) async {
-    try {
-      final result = await _runBatchAction(
-        _BookshelfBatchAction.ensureComplete,
-        provider.batchEnsureComplete,
-      );
-      if (result == null) return;
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.queuedBooks > 0
-                ? '已加入 ${result.queuedBooks} 本、${result.queuedChapters} 章補下載；略過 ${result.skippedBooks} 本'
-                : '所有選取書籍已下載完整',
-          ),
-        ),
-      );
-      _exitEditMode();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(failureMessage('整本書補下載', e))));
-    }
-  }
-
   Future<void> _batchCheckUpdate(
     BuildContext context,
     BookshelfProvider provider,
@@ -673,8 +611,6 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   String _batchProgressTitle(BookshelfProvider provider) {
     return switch (_batchAction) {
-      _BookshelfBatchAction.download => '正在加入下載佇列…',
-      _BookshelfBatchAction.ensureComplete => '正在檢查缺失章節…',
       _BookshelfBatchAction.checkUpdate =>
         provider.updatingCount > 0
             ? '正在檢查更新（剩 ${provider.updatingCount} 本）'
@@ -813,7 +749,7 @@ class _BookshelfPageState extends State<BookshelfPage>
         ? BookCoverWidget(
             bookName: context.zh(book.name),
             author: book.author,
-            coverUrl: book.getDisplayCover(),
+            coverUrl: UnifiedCovers.coverOf(book),
             width: sourceRect.width,
             height: sourceRect.height,
             borderRadius: AppRadius.cardXs,
@@ -849,12 +785,6 @@ class _BookshelfPageState extends State<BookshelfPage>
             icon: Icons.autorenew_rounded,
             checked: book.canUpdate,
           ),
-          GlassMenuItem(
-            value: _BookMenuAction.download,
-            label: '下載',
-            icon: Icons.download_outlined,
-            enabled: !busy,
-          ),
         ],
         const GlassMenuDivider(),
         const GlassMenuItem(
@@ -875,14 +805,12 @@ class _BookshelfPageState extends State<BookshelfPage>
         await _checkUpdateOne(provider, book);
       case _BookMenuAction.autoUpdate:
         await _toggleAutoUpdate(provider, book);
-      case _BookMenuAction.download:
-        await _downloadOne(provider, book);
       case _BookMenuAction.remove:
         await _confirmRemoveOne(provider, book);
     }
   }
 
-  /// 正在單獨檢查更新或加入下載的書；同一本進行中時忽略重複觸發。
+  /// 正在單獨檢查更新的書；同一本進行中時忽略重複觸發。
   final Set<String> _singleBookBusy = <String>{};
 
   Future<void> _checkUpdateOne(BookshelfProvider provider, Book book) async {
@@ -933,27 +861,6 @@ class _BookshelfPageState extends State<BookshelfPage>
         );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(failureMessage('設定', e))));
-    }
-  }
-
-  Future<void> _downloadOne(BookshelfProvider provider, Book book) async {
-    if (_batchAction != null || !_singleBookBusy.add(book.bookUrl)) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final result = await provider.batchDownload({book.bookUrl});
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.queuedBooks > 0
-                ? '已加入 ${result.queuedChapters} 章下載'
-                : '沒有加入下載：章節已下載或書源無法使用',
-          ),
-        ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(failureMessage('下載', e))));
-    } finally {
-      _singleBookBusy.remove(book.bookUrl);
     }
   }
 
@@ -1019,7 +926,10 @@ class _BookshelfPageState extends State<BookshelfPage>
       context,
       BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
-    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新進度線。
+    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新
+    // 進度線。返回動畫播完才重排，書卡移位不和返回疊在一起（ADR 0018）。
+    if (!mounted) return;
+    await TransitionSettled.uncovered(context);
     if (mounted) await provider.loadBooks();
   }
 

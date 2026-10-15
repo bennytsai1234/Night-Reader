@@ -48,15 +48,16 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   double fontSize = 18.0;
   double titleFontSize = 18.0 + kReaderV2DefaultTitleSizeDelta;
-  double lineHeight = 1.5;
-  double paragraphSpacing = 1.0;
-  double chapterSpacing = 1.0;
-  double letterSpacing = 0.0;
+  double lineHeight = ReaderV2PrefsSnapshot.defaults().lineHeight;
+  double paragraphSpacing = ReaderV2PrefsSnapshot.defaults().paragraphSpacing;
+  double chapterSpacing = ReaderV2PrefsSnapshot.defaults().chapterSpacing;
+  double letterSpacing = ReaderV2PrefsSnapshot.defaults().letterSpacing;
   int textIndent = 2;
-  double paddingHorizontal = 16.0;
-  double paddingTop = 0.0;
+  double paddingHorizontal = ReaderV2PrefsSnapshot.defaults().paddingHorizontal;
+  bool justifyText = ReaderV2PrefsSnapshot.defaults().justifyText;
+  double paddingTop = ReaderV2PrefsSnapshot.defaults().paddingTop;
   double paddingBottom = ReaderV2PrefsSnapshot.defaults().paddingBottom;
-  double? footerOffset;
+  double footerOffset = ReaderV2PrefsSnapshot.defaults().footerOffset;
   bool hideStatusBar = false;
   ReaderV2InfoSlots headerInfo = ReaderV2PrefsSnapshot.defaults().headerInfo;
   ReaderV2InfoSlots footerInfo = ReaderV2PrefsSnapshot.defaults().footerInfo;
@@ -117,6 +118,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
     clickActions = List<int>.from(snapshot.clickActions);
     paddingHorizontal = snapshot.paddingHorizontal;
+    justifyText = snapshot.justifyText;
     paddingTop = snapshot.paddingTop;
     paddingBottom = snapshot.paddingBottom;
     footerOffset = snapshot.footerOffset;
@@ -190,6 +192,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       paddingBottom: bottom,
       paddingLeft: paddingHorizontal,
       paddingRight: paddingHorizontal,
+      justify: justifyText,
       bold: false,
       textIndent: textIndent,
       titleFontSize: titleFontSize,
@@ -477,21 +480,33 @@ class ReaderV2SettingsController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// 頁尾資訊列底部到畫面底部的距離；null 表示跟隨系統底部內距。
-  void setFooterOffset(double? value) {
-    final normalized = value == null ? null : _normalizePagePadding(value);
+  /// 頁尾資訊列底部到畫面底部的距離。
+  void setFooterOffset(double value) {
+    final normalized = _normalizePagePadding(value);
     if (footerOffset == normalized) return;
     footerOffset = normalized;
     _persist(
       'footerOffset',
       () => _prefsRepository.saveFooterOffset(normalized),
-      onSaved: (p) => p.copyWith(footerOffset: () => normalized),
+      onSaved: (p) => p.copyWith(footerOffset: normalized),
       restore: (p) => footerOffset = p.footerOffset,
     );
     notifyListeners();
   }
 
-  /// 將邊距、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
+  void setJustifyText(bool value) {
+    if (justifyText == value) return;
+    justifyText = value;
+    _persist(
+      'justifyText',
+      () => _prefsRepository.saveJustifyText(value),
+      onSaved: (p) => p.copyWith(justifyText: value),
+      restore: (p) => justifyText = p.justifyText,
+    );
+    notifyListeners();
+  }
+
+  /// 將邊距、左右對齊、頁尾位置、狀態列與頁首／頁尾恢復為預設值。
   void resetPageLayout() {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     setPagePadding(
@@ -499,6 +514,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
       top: defaults.paddingTop,
       bottom: defaults.paddingBottom,
     );
+    setJustifyText(defaults.justifyText);
     setFooterOffset(defaults.footerOffset);
     setHideStatusBar(defaults.hideStatusBar);
     setHeaderInfo(defaults.headerInfo);
@@ -508,6 +524,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
   bool get isPageLayoutDefault {
     final defaults = ReaderV2PrefsSnapshot.defaults();
     return paddingHorizontal == defaults.paddingHorizontal &&
+        justifyText == defaults.justifyText &&
         paddingTop == defaults.paddingTop &&
         paddingBottom == defaults.paddingBottom &&
         footerOffset == defaults.footerOffset &&

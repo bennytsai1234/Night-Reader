@@ -158,7 +158,10 @@ void main() {
     });
     await pumpPage(tester);
 
-    await tester.tap(find.bySemanticsLabel('分組與篩選'));
+    // 分組與篩選在「更多」選單的第一層，點了接著開出第二層。
+    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分組與篩選'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text(abnormalSourceGroupTag), findsOneWidget);

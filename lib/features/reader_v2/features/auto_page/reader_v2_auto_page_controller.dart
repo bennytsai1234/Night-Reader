@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_operation_token.dart';
@@ -18,7 +19,13 @@ typedef ReaderV2FrameSource = VoidCallback Function(
 VoidCallback _tickerFrameSource(ReaderV2FrameCallback onFrame) {
   final ticker = Ticker(onFrame, debugLabel: 'ReaderV2AutoPage');
   unawaited(ticker.start());
-  return ticker.dispose;
+  // 正文在捲時持有 [MotionGate]（ADR 0018）；每一幀的 jumpTo 各自發出捲動
+  // 開始與結束，接不成一整段，所以由這裡持有到停下。
+  final release = MotionGate.instance.hold();
+  return () {
+    release();
+    ticker.dispose();
+  };
 }
 
 /// 自動捲動。每一幀依幀時間推進正文，跟著螢幕的更新率走（120Hz 螢幕
@@ -48,6 +55,7 @@ class ReaderV2AutoPageController extends ChangeNotifier {
   final ReaderV2FrameSource _frameSource;
   VoidCallback? _stopFrames;
   Duration? _lastFrame;
+
   bool _running = false;
   bool _stepping = false;
 

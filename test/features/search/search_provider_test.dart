@@ -35,7 +35,7 @@ void main() {
   });
 
   test('a submitted search is in progress before the engine starts', () async {
-    final provider = SearchProvider();
+    final provider = SearchProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
 
     final searching = provider.search('斗羅');
@@ -67,7 +67,7 @@ void main() {
 
     /// 等建構時的非同步載入跑完，測試結束關掉資料庫後才不會再去讀。
     Future<SearchProvider> settledProvider() async {
-      final provider = SearchProvider();
+      final provider = SearchProvider(entrance: Future<void>.value());
       addTearDown(provider.dispose);
       await pumpEventQueue();
       return provider;
@@ -150,7 +150,7 @@ void main() {
           isInBookshelf: true,
         ),
     ]);
-    final provider = SearchProvider();
+    final provider = SearchProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
     await pumpEventQueue();
 
@@ -170,7 +170,7 @@ void main() {
         origin: 'https://s.example',
       ),
     ]);
-    final provider = SearchProvider();
+    final provider = SearchProvider(entrance: Future<void>.value());
     await pumpEventQueue();
 
     provider.dispose();
@@ -180,7 +180,7 @@ void main() {
   });
 
   test('the chosen search scope is remembered', () async {
-    final provider = SearchProvider();
+    final provider = SearchProvider(entrance: Future<void>.value());
     addTearDown(provider.dispose);
 
     provider.updateSearchScope(SearchScope.fromGroups(['精選']));
