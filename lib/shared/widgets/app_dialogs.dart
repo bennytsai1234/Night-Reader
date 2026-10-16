@@ -90,20 +90,12 @@ Future<T?> _showAlertRoute<T>({
     barrierColor: AppChrome.of(context).barrier,
     transitionDuration: AppMotion.menu,
     pageBuilder: (context, _, _) => builder(context),
-    transitionBuilder: (context, animation, _, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: AppMotion.springCurve,
-        reverseCurve: Curves.easeInCubic.flipped,
-      );
-      return FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 1.08, end: 1).animate(curved),
-          child: child,
-        ),
-      );
-    },
+    // 提示框在原地出現，只淡入不縮放；是玻璃，所以由玻璃自己連同模糊一起
+    // 淡（ADR 0022）。
+    transitionBuilder: (context, animation, _, child) => GlassReveal(
+      animation: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),
+      child: child,
+    ),
   );
 }
 

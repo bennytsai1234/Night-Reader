@@ -12,6 +12,10 @@ import '../theme/app_tokens.dart';
 /// 色調本身約 84% 不透明，即使模糊被降級仍像一張紙面，不會變成透明。
 /// 模糊走 [BackdropFilter.grouped]，同一 [BackdropGroup] 下的多塊玻璃共用
 /// 一次背景取樣。
+///
+/// 不要包在 [Opacity]、[FadeTransition] 或 [AnimatedOpacity] 裡（ADR 0022）：
+/// 透明度不到 1 時模糊取不到底下的畫面，到 1 的那一幀才突然糊上去。玻璃
+/// 進出場用 [GlassSlide] 滑動；要淡入淡出時包 [GlassReveal]。
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
@@ -39,17 +43,42 @@ class GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reveal = GlassReveal._of(context);
+    // 裡面的玻璃不再跟著淡：內容已經整塊淡入，再淡一次會變成平方。
+    if (reveal == null) return _build(context, 1, child);
+    final inner = GlassReveal._reset(child: child);
+    return AnimatedBuilder(
+      animation: reveal,
+      // 內容跟著淡入。只在淡入的玻璃包 Opacity：透明度 1 時它仍會多開一層
+      // 圖層，平常的玻璃不必付這個成本。
+      builder: (context, _) => _build(
+        context,
+        reveal.value,
+        Opacity(opacity: reveal.value, child: inner),
+      ),
+    );
+  }
+
+  /// [shown] 0→1：色調、亮邊、模糊強度與陰影一起從無到有；每個 [shown]
+  /// 建出的元件樹相同，進出場中內容的狀態不會丟。
+  Widget _build(BuildContext context, double shown, Widget child) {
     final chrome = AppChrome.of(context);
     final radius = shape == BoxShape.circle ? null : borderRadius;
+    final color = tint ?? chrome.glassTint;
     final decoration = BoxDecoration(
-      color: tint ?? chrome.glassTint,
+      color: color.withValues(alpha: color.a * shown),
       shape: shape,
       borderRadius: radius,
-      border: Border.all(color: chrome.glassBorder, width: AppGlass.hairline),
+      border: Border.all(
+        color: chrome.glassBorder.withValues(
+          alpha: chrome.glassBorder.a * shown,
+        ),
+        width: AppGlass.hairline,
+      ),
     );
     Widget content = DecoratedBox(decoration: decoration, child: child);
-    final sigma = chrome.glassStrength.blur;
-    if (blur && sigma > 0) {
+    final sigma = chrome.glassStrength.blur * shown;
+    if (blur && chrome.glassStrength.blur > 0) {
       final filter = ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
       content = grouped
           ? BackdropFilter.grouped(filter: filter, child: content)
@@ -65,13 +94,77 @@ class GlassSurface extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: chrome.glassShadow,
+            color: chrome.glassShadow.withValues(
+              alpha: chrome.glassShadow.a * shown,
+            ),
             blurRadius: 24,
             offset: const Offset(0, 6),
           ),
         ],
       ),
       child: content,
+    );
+  }
+}
+
+/// 讓底下最近的一塊 [GlassSurface] 隨 [animation]（0→1）淡入淡出：色調、
+/// 亮邊、模糊強度與陰影一起變，內容跟著淡，最後一幀就是靜止的玻璃
+/// （ADR 0022）。用在原地出現、不從畫面外滑進來的玻璃（提示框）。
+class GlassReveal extends InheritedWidget {
+  const GlassReveal({
+    super.key,
+    required Animation<double> this.animation,
+    required super.child,
+  });
+
+  const GlassReveal._reset({required super.child}) : animation = null;
+
+  final Animation<double>? animation;
+
+  static Animation<double>? _of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GlassReveal>()?.animation;
+
+  @override
+  bool updateShouldNotify(GlassReveal oldWidget) =>
+      animation != oldWidget.animation;
+}
+
+/// 玻璃從畫面 [edge] 那一側滑進滑出，不淡（ADR 0022）。
+///
+/// [shown] 為 0 時完全在畫面外：移開自身大小，再加上離螢幕邊緣的 [gap] 與
+/// 陰影伸出的 [AppGlass.shadowReach]；這時不畫、不接點擊也不進讀屏。
+class GlassSlide extends StatelessWidget {
+  const GlassSlide({
+    super.key,
+    required this.shown,
+    required this.edge,
+    this.gap = 0,
+    required this.child,
+  });
+
+  final double shown;
+  final AxisDirection edge;
+  final double gap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final away = 1 - shown;
+    final unit = switch (edge) {
+      AxisDirection.up => const Offset(0, -1),
+      AxisDirection.down => const Offset(0, 1),
+      AxisDirection.left => const Offset(-1, 0),
+      AxisDirection.right => const Offset(1, 0),
+    };
+    return Visibility(
+      visible: shown > 0,
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
+      child: Transform.translate(
+        offset: unit * ((gap + AppGlass.shadowReach) * away),
+        child: FractionalTranslation(translation: unit * away, child: child),
+      ),
     );
   }
 }

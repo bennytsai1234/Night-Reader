@@ -185,7 +185,8 @@ class BookshelfProgressLine extends StatelessWidget {
 }
 
 /// 列表視圖的書：一本一張小紙卡，只放封面、書名、作者與細進度線。
-/// 編輯模式時勾選圓圈從左側滑入，選取的卡片帶淡主色底。
+/// 編輯模式時封面往右讓出位置、勾選圓圈在讓出的位置淡入（各做一件事，
+/// ADR 0022），選取的卡片帶淡主色底。
 class BookshelfListCard extends StatelessWidget {
   const BookshelfListCard({
     super.key,
@@ -249,9 +250,12 @@ class BookshelfListCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
+          // 圓圈只在讓出的位置夠寬（≥ 22/34，約 65%）時看得到，不會被邊緣
+          // 削一半像在滑動：進場讓位減速、65% 在 30% 的時間到，圓圈從那時
+          // 淡入；收起讓位加速、70% 的時間前都還夠寬，圓圈在那之前淡完。
           AnimatedContainer(
             duration: AppMotion.menu,
-            curve: AppMotion.menuCurve,
+            curve: selecting ? AppMotion.menuCurve : Curves.easeInCubic,
             width: slot,
             height: BookshelfCheckMark.size,
             child: ClipRect(
@@ -261,6 +265,9 @@ class BookshelfListCard extends StatelessWidget {
                 maxWidth: _checkSlot,
                 child: AnimatedOpacity(
                   duration: AppMotion.menu,
+                  curve: selecting
+                      ? const Interval(0.3, 1)
+                      : const Interval(0, 0.7),
                   opacity: selecting ? 1 : 0,
                   child: Align(
                     alignment: Alignment.centerLeft,

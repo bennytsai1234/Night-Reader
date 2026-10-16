@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
-/// 閱讀選單一塊（上方選單、下方選單、亮度條）的進場與收起：從 [hiddenOffset]
-/// 那一側滑入並淡入（[AppMotion.readerMenuIn]，減速），收起時滑出並淡出
-/// （[AppMotion.readerMenuOut]，加速）。[delay] 只用在進場，讓幾塊錯開出發。
+/// 閱讀選單一塊（上方選單、下方選單、亮度條）的進場與收起：從 [edge]
+/// 那一側滑入（[AppMotion.readerMenuIn]，減速），收起時滑出
+/// （[AppMotion.readerMenuOut]，加速）。只滑動不淡入（ADR 0022）：選單是
+/// 玻璃，淡入時模糊到最後一幀才突然糊上去。[delay] 只用在進場，讓幾塊錯開
+/// 出發。
 ///
 /// 播放中持有 [MotionGate]（ADR 0018），背景下載不會在這幾幀解析章節。
 /// 收起時不接點擊；系統關閉動畫時直接到位。
@@ -12,16 +15,19 @@ class ReaderV2MenuEntrance extends StatefulWidget {
   const ReaderV2MenuEntrance({
     super.key,
     required this.visible,
-    required this.hiddenOffset,
+    required this.edge,
+    this.gap = 0,
     this.delay = Duration.zero,
     required this.child,
   });
 
   final bool visible;
 
-  /// 收起時的位移，以自身大小為單位；多移出一段，讓浮動玻璃的漫射陰影
-  /// 也一起離開畫面。
-  final Offset hiddenOffset;
+  /// 從哪一側滑出去。
+  final AxisDirection edge;
+
+  /// 這一塊離 [edge] 那側螢幕邊緣的距離（見 [GlassSlide.gap]）。
+  final double gap;
   final Duration delay;
   final Widget child;
 
@@ -43,11 +49,6 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
     curve: Interval(_delayFraction, 1, curve: Curves.easeOutCubic),
     reverseCurve: Curves.easeInCubic.flipped,
   );
-
-  late final Animation<Offset> _slide = Tween<Offset>(
-    begin: widget.hiddenOffset,
-    end: Offset.zero,
-  ).animate(_progress);
 
   final MotionHold _hold = MotionHold();
 
@@ -85,9 +86,15 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
   Widget build(BuildContext context) {
     return IgnorePointer(
       ignoring: !widget.visible,
-      child: SlideTransition(
-        position: _slide,
-        child: FadeTransition(opacity: _progress, child: widget.child),
+      child: AnimatedBuilder(
+        animation: _progress,
+        child: widget.child,
+        builder: (context, child) => GlassSlide(
+          shown: _progress.value,
+          edge: widget.edge,
+          gap: widget.gap,
+          child: child!,
+        ),
       ),
     );
   }
