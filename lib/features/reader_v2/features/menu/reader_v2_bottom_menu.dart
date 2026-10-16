@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
+import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
 
 class ReaderV2ChapterNavigationState {
@@ -98,53 +99,47 @@ class ReaderV2BottomMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return IgnorePointer(
-      ignoring: !controlsVisible,
-      child: AnimatedSlide(
-        duration: AppMotion.menu,
-        curve: AppMotion.menuCurve,
-        offset: controlsVisible ? Offset.zero : const Offset(0, 1.15),
-        // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
-        child: ReaderV2MenuBackdrop(
-          edge: AxisDirection.down,
-          child: Theme(
-            data: menuStyle.toSheetTheme(Theme.of(context)),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppGrouped.margin,
-                0,
-                AppGrouped.margin,
-                bottomInset + AppSpacing.sm,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildFloatingButtons(context, menuStyle),
-                  const SizedBox(height: AppSpacing.md),
-                  GlassSurface(
-                    borderRadius: AppRadius.cardXl,
-                    tint: menuStyle.glassTintOf(context),
-                    grouped: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.sm,
-                        AppSpacing.md,
-                        AppSpacing.sm,
-                        AppSpacing.sm,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildChapterSlider(context, menuStyle),
-                          const SizedBox(height: AppSpacing.xs),
-                          _buildMainActions(menuStyle),
-                        ],
-                      ),
-                    ),
+    return ReaderV2MenuEntrance(
+      visible: controlsVisible,
+      // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
+      hiddenOffset: const Offset(0, 1.15),
+      // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+      child: Theme(
+        data: menuStyle.toSheetTheme(Theme.of(context)),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            0,
+            AppGrouped.margin,
+            bottomInset + AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildFloatingButtons(context, menuStyle),
+              const SizedBox(height: AppSpacing.md),
+              GlassSurface(
+                borderRadius: AppRadius.cardXl,
+                tint: menuStyle.glassTintOf(context),
+                grouped: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
                   ),
-                ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildChapterSlider(context, menuStyle),
+                      const SizedBox(height: AppSpacing.xs),
+                      _buildMainActions(menuStyle),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

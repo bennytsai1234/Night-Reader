@@ -155,6 +155,13 @@ class AppMotion {
   static const Duration menu = Duration(milliseconds: 200);
   static const Curve menuCurve = Curves.easeOutCubic;
 
+  /// 閱讀選單（上、下、亮度條）進場：滑入並淡入，比 [menu] 長，蓋在正文
+  /// 上的大塊選單看得出從邊緣進來；收起比進場短、改用加速曲線（Material
+  /// 動態「離場比進場快」）。亮度條晚 [readerMenuStagger] 出發，三塊錯開。
+  static const Duration readerMenuIn = Duration(milliseconds: 320);
+  static const Duration readerMenuOut = Duration(milliseconds: 200);
+  static const Duration readerMenuStagger = Duration(milliseconds: 60);
+
   /// 分頁選取指示、按壓回彈等彈簧動畫（Telegram spring 0.4s）。
   static const Duration spring = Duration(milliseconds: 400);
   static const Curve springCurve = AppSpringCurve();
