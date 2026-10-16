@@ -41,7 +41,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
   late final CurvedAnimation _progress = CurvedAnimation(
     parent: _controller,
     curve: Interval(_delayFraction, 1, curve: Curves.easeOutCubic),
-    reverseCurve: Curves.easeInCubic,
+    reverseCurve: Curves.easeInCubic.flipped,
   );
 
   late final Animation<Offset> _slide = Tween<Offset>(

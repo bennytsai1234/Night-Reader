@@ -88,7 +88,13 @@ void main() {
   testWidgets('hides faster than it enters and ignores taps', (tester) async {
     await pumpEntrance(tester, visible: true);
     await pumpEntrance(tester, visible: false);
-    await tester.pump(AppMotion.readerMenuOut);
+    // Exits accelerate: slow at first, fastest at the end.
+    await tester.pump(AppMotion.readerMenuOut ~/ 2);
+    expect(
+      opacityOf(tester),
+      closeTo(1 - Curves.easeInCubic.transform(0.5), 0.01),
+    );
+    await tester.pump(AppMotion.readerMenuOut ~/ 2);
     expect(opacityOf(tester), 0);
     expect(
       tester
