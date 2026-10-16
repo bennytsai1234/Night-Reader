@@ -25,7 +25,8 @@ void main() {
 
   Future<ScrollController> pumpShell(
     WidgetTester tester, {
-    required bool controlsVisible,
+    bool controlsVisible = false,
+    ValueListenable<bool>? controls,
     ValueListenable<ReaderV2InfoState>? infoStates,
     ReaderV2InfoSlots headerInfo = const ReaderV2InfoSlots(
       left: ReaderV2InfoItem.none,
@@ -48,11 +49,9 @@ void main() {
     void noopPercent(double _) {}
     await tester.pumpWidget(
       MaterialApp(
-        home: ValueListenableBuilder<ReaderV2InfoState>(
-          valueListenable:
-              infoStates ??
-              ValueNotifier<ReaderV2InfoState>(ReaderV2InfoState.ready),
-          builder: (context, infoState, _) => ReaderV2PageShell(
+        home: ListenableBuilder(
+          listenable: Listenable.merge([controls, infoStates]),
+          builder: (context, _) => ReaderV2PageShell(
             book: Book(
               bookUrl: 'http://shell.test',
               name: '殼層測試書',
@@ -78,9 +77,9 @@ void main() {
             backgroundColor: Colors.white,
             infoColor: Colors.black,
             textColor: Colors.black,
-            controlsVisible: controlsVisible,
+            controlsVisible: controls?.value ?? controlsVisible,
             showReadTitleAddition: true,
-            infoState: infoState,
+            infoState: infoStates?.value ?? ReaderV2InfoState.ready,
             chapterTitle: '第一章',
             originName: '本地',
             navigation: ReaderV2ChapterNavigationState(
@@ -174,6 +173,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(closed, 1);
     expect(MotionGate.instance.isMoving, isFalse);
+  });
+
+  testWidgets('the menus slide in and out instead of popping', (tester) async {
+    final controls = ValueNotifier(false);
+    addTearDown(controls.dispose);
+    await pumpShell(tester, controls: controls);
+    double opacityOf(Type menu) => tester
+        .widget<FadeTransition>(
+          find
+              .descendant(
+                of: find.byType(menu),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+
+    // 開關選單時收起層進出 Stack；選單不能因此被重建、直接跳到終點。
+    controls.value = true;
+    await tester.pump();
+    await tester.pump(AppMotion.readerMenuIn ~/ 2);
+    expect(opacityOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
+    expect(opacityOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    expect(opacityOf(ReaderV2BottomMenu), 1);
+
+    controls.value = false;
+    await tester.pump();
+    await tester.pump(AppMotion.readerMenuOut ~/ 2);
+    expect(opacityOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
+    expect(opacityOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    expect(opacityOf(ReaderV2BottomMenu), 0);
   });
 
   testWidgets('header and footer open the menu only on a finished tap', (

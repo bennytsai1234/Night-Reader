@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
 
 import 'package:night_reader/core/services/motion_gate.dart';
+
+import 'cover_reveal.dart';
 
 /// 骨架載入：資料還沒到時，以淡紙色的形狀標出內容將出現的位置（封面方塊、
 /// 文字條），取代置中的轉圈。
@@ -167,35 +171,109 @@ class SkeletonLine extends StatelessWidget {
 ///
 /// 兩者都撐滿父層（呼叫端給的是整頁內容區）。[builder] 只在載入完成後
 /// 才呼叫。
-class SkeletonSwitcher extends StatelessWidget {
+class SkeletonSwitcher extends StatefulWidget {
   const SkeletonSwitcher({
     super.key,
     required this.loading,
     required this.skeleton,
     required this.builder,
+    this.waitForCovers = false,
   });
 
   final bool loading;
   final Widget skeleton;
   final WidgetBuilder builder;
 
+  /// 資料到了先在骨架底下建好內容，等畫面上的封面解碼好（最多
+  /// [AppMotion.revealCoverWait]），再以 [AppMotion.reveal] 連同封面一次
+  /// 淡入；不會先出現空白的書卡、封面再一張張浮出來。
+  final bool waitForCovers;
+
+  @override
+  State<SkeletonSwitcher> createState() => _SkeletonSwitcherState();
+}
+
+class _SkeletonSwitcherState extends State<SkeletonSwitcher>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.waitForCovers ? AppMotion.reveal : AppMotion.fade,
+    value: widget.loading ? 0 : 1,
+  )..addStatusListener((_) => setState(() {}));
+  late final Animation<double> _content = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.fadeCurve,
+  );
+  late final Animation<double> _skeleton = ReverseAnimation(_content);
+
+  /// 淡入前等封面的那一輪；等完或重新載入就換掉。
+  CoverReveal? _reveal;
+
+  /// 重新載入、淡回骨架時，淡出中的內容沿用上一次建好的樣子。
+  Widget? _lastContent;
+
+  @override
+  void didUpdateWidget(SkeletonSwitcher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loading == oldWidget.loading) return;
+    _reveal = null;
+    if (widget.loading) {
+      _controller.reverse();
+    } else if (widget.waitForCovers) {
+      // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。
+      _controller.value = 0;
+      final reveal = _reveal = CoverReveal();
+      unawaited(
+        reveal.settle(AppMotion.revealCoverWait).whenComplete(() {
+          if (mounted && identical(_reveal, reveal)) _controller.forward();
+        }),
+      );
+    } else {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: AppMotion.fade,
-      switchInCurve: AppMotion.fadeCurve,
-      switchOutCurve: AppMotion.fadeCurve,
-      layoutBuilder: (current, previous) =>
-          Stack(fit: StackFit.expand, children: [...previous, ?current]),
-      child: loading
-          ? KeyedSubtree(
-              key: const ValueKey('skeleton'),
-              child: Skeleton(child: skeleton),
-            )
-          : KeyedSubtree(
-              key: const ValueKey('content'),
-              child: Builder(builder: builder),
+    final reveal = _reveal;
+    final hidden = widget.loading || reveal != null && reveal.waiting;
+    Widget? content = _lastContent;
+    if (!widget.loading) {
+      content = _lastContent = reveal == null
+          ? Builder(builder: widget.builder)
+          : CoverRevealScope(
+              notifier: reveal,
+              child: Builder(builder: widget.builder),
+            );
+    }
+    // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (!_controller.isCompleted)
+          FadeTransition(
+            key: const ValueKey('skeleton'),
+            opacity: _skeleton,
+            child: Skeleton(child: widget.skeleton),
+          ),
+        // 等封面時內容已經建在骨架底下，只是還全透明。
+        if (content != null && (!_controller.isDismissed || reveal != null))
+          FadeTransition(
+            key: const ValueKey('content'),
+            opacity: _content,
+            // 還沒淡入或正在淡出的內容不接點擊、不給讀屏念。
+            child: IgnorePointer(
+              ignoring: hidden,
+              child: ExcludeSemantics(excluding: hidden, child: content),
             ),
+          ),
+      ],
     );
   }
 }
