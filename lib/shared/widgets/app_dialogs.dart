@@ -94,7 +94,7 @@ Future<T?> _showAlertRoute<T>({
       final curved = CurvedAnimation(
         parent: animation,
         curve: AppMotion.springCurve,
-        reverseCurve: Curves.easeInCubic,
+        reverseCurve: Curves.easeInCubic.flipped,
       );
       return FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve),

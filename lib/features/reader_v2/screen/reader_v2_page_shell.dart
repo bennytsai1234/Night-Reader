@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_constants.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
@@ -407,20 +408,16 @@ class ReaderV2PageShell extends StatelessWidget {
                     if (brightnessControl case final control?)
                       LayoutId(
                         id: _MenuSlot.brightness,
-                        child: IgnorePointer(
-                          ignoring: !controlsVisible,
-                          child: AnimatedSlide(
-                            duration: AppMotion.menu,
-                            curve: AppMotion.menuCurve,
-                            // 往左滑出，多移一段讓漫射陰影也離開畫面。
-                            offset: controlsVisible
-                                ? Offset.zero
-                                : const Offset(-1.6, 0),
-                            child: Theme(
-                              data: ReaderV2MenuStyle.of(context)
-                                  .toSheetTheme(Theme.of(context)),
-                              child: control,
-                            ),
+                        child: ReaderV2MenuEntrance(
+                          visible: controlsVisible,
+                          // 往左滑出，多移一段讓漫射陰影也離開畫面。
+                          hiddenOffset: const Offset(-1.6, 0),
+                          // 比上下選單晚一點出發，三塊錯開。
+                          delay: AppMotion.readerMenuStagger,
+                          child: Theme(
+                            data: ReaderV2MenuStyle.of(context)
+                                .toSheetTheme(Theme.of(context)),
+                            child: control,
                           ),
                         ),
                       ),

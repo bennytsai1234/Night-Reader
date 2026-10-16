@@ -266,7 +266,7 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
     final curved = CurvedAnimation(
       parent: animation,
       curve: AppMotion.springCurve,
-      reverseCurve: Curves.easeInCubic,
+      reverseCurve: Curves.easeInCubic.flipped,
     );
     final fade = CurvedAnimation(parent: animation, curve: AppMotion.fadeCurve);
 

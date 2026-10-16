@@ -3,6 +3,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
+import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
 
 /// 閱讀器上方選單：浮在狀態列下方的玻璃列——兩側圓形玻璃按鈕、中間書名膠囊，
@@ -31,36 +32,29 @@ class ReaderV2TopMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
     final topInset = MediaQuery.paddingOf(context).top;
-    return IgnorePointer(
-      ignoring: !controlsVisible,
-      child: AnimatedSlide(
-        duration: AppMotion.menu,
-        curve: AppMotion.menuCurve,
-        // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
-        offset: controlsVisible ? Offset.zero : const Offset(0, -1.3),
-        // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
-        child: ReaderV2MenuBackdrop(
-          edge: AxisDirection.up,
-          child: Theme(
-            data: menuStyle.toSheetTheme(Theme.of(context)),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppGrouped.margin,
-                topInset + AppSpacing.xs,
-                AppGrouped.margin,
-                0,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildAppBar(context, menuStyle),
-                  if (showReadTitleAddition) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    _buildAdditionInfo(context, menuStyle),
-                  ],
-                ],
-              ),
-            ),
+    return ReaderV2MenuEntrance(
+      visible: controlsVisible,
+      // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
+      hiddenOffset: const Offset(0, -1.3),
+      // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
+      child: Theme(
+        data: menuStyle.toSheetTheme(Theme.of(context)),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppGrouped.margin,
+            topInset + AppSpacing.xs,
+            AppGrouped.margin,
+            0,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAppBar(context, menuStyle),
+              if (showReadTitleAddition) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _buildAdditionInfo(context, menuStyle),
+              ],
+            ],
           ),
         ),
       ),

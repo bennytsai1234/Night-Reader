@@ -2,10 +2,6 @@
 
 只寫從 repo 與 GitHub 查不到的事（ADR 0014）。合併了什麼看 PR 頁面與 `git log`，發版紀錄看 `gh run list --workflow android-release.yml`。
 
-## 進行中
-
-- **`t3/polish-loading-menu-covers`（做完，等使用者說合併）**：封面拿掉書脊線、檔案封面淡入（ADR 0021）；閱讀選單拿掉 #69 加的閱讀底色墊層、改回玻璃直接浮在正文上，上下與亮度條改成滑入＋淡入、錯開的進場。使用者否決過的選單做法：墊層改深一階、半透明暗幕（全畫面或只在選單區）。
-
 ## 等使用者決定或動手
 
 - **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。

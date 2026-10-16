@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
 
 /// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
 class ReaderV2MenuStyle {
@@ -123,51 +121,6 @@ class ReaderV2MenuStyle {
               base.extension<AppChrome>()?.glassStrength ??
               GlassStrength.frosted,
         ),
-      ],
-    );
-  }
-}
-
-/// 墊在上下選單後方的閱讀底色：從畫面邊緣到選單內緣是實色，再往正文方向
-/// [AppGlass.headerFadeHeight] 漸隱成透明，正文不會從玻璃元件之間透出來。
-/// 與 App 頁首、浮動分頁列的漸隱同一種做法；跟著選單一起滑進滑出。
-class ReaderV2MenuBackdrop extends StatelessWidget {
-  const ReaderV2MenuBackdrop({
-    super.key,
-    required this.edge,
-    required this.child,
-  });
-
-  /// [AxisDirection.up] 為上方選單（往下漸隱），[AxisDirection.down] 為
-  /// 下方選單（往上漸隱）。
-  final AxisDirection edge;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    const fade = AppGlass.headerFadeHeight;
-    final top = edge == AxisDirection.up;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          top: top ? 0 : -fade,
-          bottom: top ? -fade : 0,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final height = constraints.maxHeight;
-              return EdgeFade(
-                edge: edge,
-                height: height,
-                color: StylePalette.of(context).readerBackground,
-                solidFraction: height <= fade ? 0 : (height - fade) / height,
-              );
-            },
-          ),
-        ),
-        child,
       ],
     );
   }

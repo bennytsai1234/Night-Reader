@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:night_reader/core/services/resource_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 class BookCoverWidget extends StatelessWidget {
   final String? coverUrl;
@@ -61,55 +62,13 @@ class BookCoverWidget extends StatelessWidget {
               ),
             ],
           ),
+          // 只畫圖片本身，不疊書脊陰影或亮線（ADR 0021）。
           child: ClipRRect(
             borderRadius: effectiveBorderRadius,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // 網格以 double.infinity 撐滿格子，解碼尺寸要用實際版面大小。
-                LayoutBuilder(
-                  builder: (context, constraints) =>
-                      _buildCover(context, constraints),
-                ),
-                // Book Spine and tactile lighting overlay
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: effectiveBorderRadius,
-                        gradient: const LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Color(0x33000000), // Left spine dark edge
-                            Color(0x14000000), // Spine crease
-                            Color(0x00000000), // Main book face
-                            Color(0x00000000), // Main book face
-                            Color(0x0F000000), // Right page edge shadow
-                          ],
-                          stops: [0.0, 0.05, 0.16, 0.94, 1.0],
-                        ),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Subtle spine hinge highlight line (1px white glint near left edge)
-                Positioned(
-                  left: 3.0,
-                  top: 0,
-                  bottom: 0,
-                  width: 0.75,
-                  child: IgnorePointer(
-                    child: Container(
-                      color: Colors.white.withValues(alpha: 0.20),
-                    ),
-                  ),
-                ),
-              ],
+            // 網格以 double.infinity 撐滿格子，解碼尺寸要用實際版面大小。
+            child: LayoutBuilder(
+              builder: (context, constraints) =>
+                  _buildCover(context, constraints),
             ),
           ),
         ),
@@ -156,6 +115,7 @@ class BookCoverWidget extends StatelessWidget {
             height: height,
             cacheWidth: cacheWidth,
             cacheHeight: cacheHeight,
+            frameBuilder: _fadeInFrame,
             errorBuilder: (context, error, stackTrace) {
               _failedCoverSources.add(source);
               return _buildDefaultCover();
@@ -176,6 +136,7 @@ class BookCoverWidget extends StatelessWidget {
         height: height,
         cacheWidth: cacheWidth,
         cacheHeight: cacheHeight,
+        frameBuilder: _fadeInFrame,
         errorBuilder: (context, error, stackTrace) {
           _failedCoverSources.add(source);
           return _buildDefaultCover();
@@ -190,7 +151,8 @@ class BookCoverWidget extends StatelessWidget {
       height: height,
       memCacheWidth: cacheWidth,
       memCacheHeight: cacheHeight,
-      fadeInDuration: const Duration(milliseconds: 200),
+      fadeInDuration: AppMotion.fade,
+      fadeOutDuration: AppMotion.fade,
       placeholder: (context, url) => _buildPlaceholder(context),
       errorWidget: (context, url, error) {
         _failedCoverSources.add(source);
@@ -199,10 +161,35 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  /// 載入中只鋪一層安靜的紙色，不在每張縮圖上轉圈。
+  /// 載入中鋪一層與載入骨架同色的底（[Skeleton.colorOf]），不在每張縮圖上
+  /// 轉圈；骨架換成書卡時封面位置的顏色不跳。
   Widget _buildPlaceholder(BuildContext context) {
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    return ColoredBox(color: Skeleton.colorOf(context));
+  }
+
+  /// 檔案與記憶體封面要非同步解碼，解碼好之前什麼都不畫，圖一到就突然
+  /// 跳出來；改成先鋪 [_buildPlaceholder]，圖以 [AppMotion.fade] 淡入，
+  /// 與網路封面一樣。已經在快取、同一幀就畫得出來的不淡入。
+  Widget _fadeInFrame(
+    BuildContext context,
+    Widget child,
+    int? frame,
+    bool wasSynchronouslyLoaded,
+  ) {
+    if (wasSynchronouslyLoaded) return child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildPlaceholder(context),
+        AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppMotion.fade,
+          curve: AppMotion.fadeCurve,
+          child: child,
+        ),
+      ],
     );
   }
 
