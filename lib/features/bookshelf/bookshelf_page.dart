@@ -308,8 +308,8 @@ class _BookshelfPageState extends State<BookshelfPage>
     }
   }
 
-  /// 初次載入時顯示與目前檢視同形的骨架；書到了等畫面上的封面解碼好，
-  /// 書卡連同封面一次淡入。
+  /// 初次載入時顯示與目前檢視同形、本數與上次相同的骨架；書到了等畫面上
+  /// 的封面解碼好，書卡連同封面一次淡入。
   Widget _buildContent(BuildContext context, BookshelfProvider provider) {
     final insets = MediaQuery.paddingOf(context);
     return SkeletonSwitcher(
@@ -317,6 +317,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       waitForCovers: true,
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
+        bookCount: provider.lastBookCount,
         padding: EdgeInsets.fromLTRB(
           AppGrouped.margin,
           insets.top + AppSpacing.xs,

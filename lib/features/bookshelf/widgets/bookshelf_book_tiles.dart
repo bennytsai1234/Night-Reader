@@ -295,18 +295,18 @@ class BookshelfListCard extends StatelessWidget {
                     color: scheme.onSurface,
                   ),
                 ),
-                if (author.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.3,
-                      color: chrome.sectionText,
-                    ),
+                // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
+                // 載入骨架（不知道哪本沒有作者）才對得上。
+                const SizedBox(height: 2),
+                Text(
+                  author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySm.copyWith(
+                    height: 1.3,
+                    color: chrome.sectionText,
                   ),
-                ],
+                ),
                 const SizedBox(height: AppSpacing.md),
                 BookshelfProgressLine(book: book),
               ],
@@ -375,13 +375,13 @@ class BookshelfGridTile extends StatelessWidget {
   static double heightFor(double width, TextScaler textScaler) {
     return width / coverAspectRatio +
         AppSpacing.sm * 2 +
-        _titleHeightFor(textScaler) +
+        titleHeightFor(textScaler) +
         BookshelfProgressLine.height +
         1; // 字形度量取整的餘裕。
   }
 
   /// 書名區固定兩行高：一行的書名下方留白，同一列的進度線才對齊。
-  static double _titleHeightFor(TextScaler textScaler) =>
+  static double titleHeightFor(TextScaler textScaler) =>
       textScaler.scale(_titleFontSize) * _titleLineHeight * 2;
 
   final Book book;
@@ -468,7 +468,7 @@ class BookshelfGridTile extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               SizedBox(
-                height: _titleHeightFor(MediaQuery.textScalerOf(context)),
+                height: titleHeightFor(MediaQuery.textScalerOf(context)),
                 child: Text(
                   name,
                   maxLines: 2,

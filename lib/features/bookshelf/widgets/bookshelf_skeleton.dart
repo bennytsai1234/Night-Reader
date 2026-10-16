@@ -7,14 +7,20 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 書架初次載入的骨架：依目前的網格或列表畫出同樣幾何的封面與書名佔位，
 /// 書到了之後換成真的書卡時版面不跳動。放在 [Skeleton] 底下才會呼吸。
+///
+/// 畫 [bookCount] 本（超出畫面的不畫）；不知道有幾本時鋪滿畫面。
 class BookshelfSkeleton extends StatelessWidget {
   const BookshelfSkeleton({
     super.key,
     required this.grid,
     required this.padding,
+    this.bookCount,
   });
 
   final bool grid;
+
+  /// 上次書架上的本數；null 表示不知道。
+  final int? bookCount;
 
   /// 與書架清單相同的內距（讓出玻璃頁首與底部浮動列）。
   final EdgeInsets padding;
@@ -58,7 +64,7 @@ class BookshelfSkeleton extends StatelessWidget {
         crossAxisSpacing: AppSpacing.lg,
         mainAxisSpacing: AppSpacing.md,
       ),
-      itemCount: rows * _gridColumns,
+      itemCount: _limit(rows * _gridColumns),
       itemBuilder: (context, index) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -67,10 +73,21 @@ class BookshelfSkeleton extends StatelessWidget {
             child: SkeletonBox(),
           ),
           const SizedBox(height: AppSpacing.sm),
-          SkeletonLine(
-            style: BookshelfGridTile.titleStyle,
-            widthFactor: _titleWidths[index % _titleWidths.length],
+          // 書名區與真的書卡一樣固定兩行高，進度線才落在同一個位置。
+          SizedBox(
+            height: BookshelfGridTile.titleHeightFor(
+              MediaQuery.textScalerOf(context),
+            ),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SkeletonLine(
+                style: BookshelfGridTile.titleStyle,
+                widthFactor: _titleWidths[index % _titleWidths.length],
+              ),
+            ),
           ),
+          const SizedBox(height: AppSpacing.sm),
+          const _ProgressLineSkeleton(),
         ],
       ),
     );
@@ -85,7 +102,7 @@ class BookshelfSkeleton extends StatelessWidget {
     return ListView.builder(
       physics: const NeverScrollableScrollPhysics(),
       padding: padding,
-      itemCount: count,
+      itemCount: _limit(count),
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: _ListCardSkeleton(
@@ -93,6 +110,12 @@ class BookshelfSkeleton extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 鋪滿畫面要 [fill] 個；知道本數時不超過本數。
+  int _limit(int fill) {
+    final count = bookCount;
+    return count == null || count > fill ? fill : count;
   }
 
   static int _countToFill(double extent, double itemExtent) =>
@@ -137,6 +160,8 @@ class _ListCardSkeleton extends StatelessWidget {
                     style: AppTextStyles.bodySm.copyWith(height: 1.3),
                     widthFactor: 0.3,
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  const _ProgressLineSkeleton(),
                 ],
               ),
             ),
@@ -145,4 +170,18 @@ class _ListCardSkeleton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 書名下方細進度線（[BookshelfProgressLine]）的佔位，同高、撐滿寬度。
+class _ProgressLineSkeleton extends StatelessWidget {
+  const _ProgressLineSkeleton();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    width: double.infinity,
+    child: SkeletonBox(
+      height: BookshelfProgressLine.height,
+      borderRadius: AppRadius.pillShape,
+    ),
+  );
 }
