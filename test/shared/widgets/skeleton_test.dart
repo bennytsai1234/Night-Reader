@@ -149,6 +149,23 @@ void main() {
       expect(find.byType(SkeletonBox), findsNothing);
     });
 
+    testWidgets('a reload that finishes mid-fade still waits fully hidden', (
+      tester,
+    ) async {
+      decoded.value = true;
+      await tester.pumpWidget(switcher(false));
+      decoded.value = false;
+      await tester.pumpWidget(switcher(true));
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pumpWidget(switcher(false));
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(contentOpacity(tester), 0);
+
+      decoded.value = true;
+      await tester.pumpAndSettle();
+      expect(contentOpacity(tester), 1);
+    });
+
     testWidgets('a cover that never decodes stops holding the page', (
       tester,
     ) async {

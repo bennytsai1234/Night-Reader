@@ -146,32 +146,21 @@ class BookCoverWidget extends StatelessWidget {
       );
     }
 
-    // 等待一次淡入時解碼好的封面直接顯示；等待結束時這裡會重建，之後才
-    // 到的封面照常淡入。
-    final reveal = CoverRevealScope.waitingOf(context);
-    return CachedNetworkImage(
-      imageUrl: source,
+    // 與檔案、記憶體封面走同一條淡入（[_fadeInFrame]）；磁碟快取照舊由
+    // CachedNetworkImageProvider 負責。
+    return Image(
+      image: ResizeImage.resizeIfNeeded(
+        cacheWidth,
+        cacheHeight,
+        CachedNetworkImageProvider(source),
+      ),
       fit: BoxFit.cover,
       width: width,
       height: height,
-      memCacheWidth: cacheWidth,
-      memCacheHeight: cacheHeight,
-      fadeInDuration: reveal == null ? AppMotion.fade : Duration.zero,
-      fadeOutDuration: reveal == null ? AppMotion.fade : Duration.zero,
-      placeholder: (context, url) {
-        reveal?.add(source);
-        return _buildPlaceholder(context);
-      },
-      imageBuilder: (context, image) {
-        reveal?.remove(source);
-        return Image(
-          image: image,
-          fit: BoxFit.cover,
-          width: width,
-          height: height,
-        );
-      },
-      errorWidget: (context, url, error) => _buildFailedCover(context, source),
+      frameBuilder: (context, child, frame, sync) =>
+          _fadeInFrame(context, source, child, frame, sync),
+      errorBuilder: (context, error, stackTrace) =>
+          _buildFailedCover(context, source),
     );
   }
 
@@ -181,10 +170,10 @@ class BookCoverWidget extends StatelessWidget {
     return ColoredBox(color: Skeleton.colorOf(context));
   }
 
-  /// 檔案與記憶體封面要非同步解碼，解碼好之前什麼都不畫，圖一到就突然
-  /// 跳出來；改成先鋪 [_buildPlaceholder]，圖以 [AppMotion.fade] 淡入，
-  /// 與網路封面一樣。已經在快取、同一幀就畫得出來的不淡入；在等待一次
-  /// 淡入（[CoverRevealScope]）時解碼好的也不淡入，跟著整頁一起出現。
+  /// 封面要非同步解碼，解碼好之前什麼都不畫，圖一到就突然跳出來；改成
+  /// 先鋪 [_buildPlaceholder]，圖以 [AppMotion.fade] 淡入。已經在快取、同一
+  /// 幀就畫得出來的不淡入；在等待一次淡入（[CoverRevealScope]）時解碼好的
+  /// 也不淡入，跟著整頁一起出現。
   Widget _fadeInFrame(
     BuildContext context,
     String source,

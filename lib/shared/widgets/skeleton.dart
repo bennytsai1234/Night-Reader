@@ -220,6 +220,8 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     if (widget.loading) {
       _controller.reverse();
     } else if (widget.waitForCovers) {
+      // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。
+      _controller.value = 0;
       final reveal = _reveal = CoverReveal();
       unawaited(
         reveal.settle(AppMotion.revealCoverWait).whenComplete(() {
