@@ -53,6 +53,9 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   bool isLoading = false;
   String? loadErrorMessage;
 
+  /// 上次書架讀完時的本數，初次載入的骨架畫一樣多本；從沒讀過時為 null。
+  int? lastBookCount;
+
   bool isGridView = true;
   bool showLastUpdate = false;
   BookshelfSortMode sortMode = BookshelfSortMode.recentRead;

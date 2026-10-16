@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -20,6 +22,16 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
         savedSort < BookshelfSortMode.values.length) {
       sortMode = BookshelfSortMode.values[savedSort];
     }
+    lastBookCount = prefs.getInt(_bookCountKey);
+  }
+
+  static const String _bookCountKey = 'bookshelf_book_count';
+
+  /// 記下書架上的本數，下次開 App 的骨架畫一樣多本。
+  void rememberBookCount(int count) {
+    if (lastBookCount == count) return;
+    lastBookCount = count;
+    unawaited(getIt<SharedPreferences>().setInt(_bookCountKey, count));
   }
 
   void setGridView(bool value) {
