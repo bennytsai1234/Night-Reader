@@ -140,14 +140,15 @@ class _BookshelfPageState extends State<BookshelfPage>
                     duration: AppMotion.menu,
                     switchInCurve: AppMotion.menuCurve,
                     switchOutCurve: Curves.easeInCubic,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.4),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
+                    // 跟分頁列一樣從畫面外滑上來，不淡（ADR 0022）。
+                    transitionBuilder: (child, animation) => AnimatedBuilder(
+                      animation: animation,
+                      child: child,
+                      builder: (context, child) => GlassSlide(
+                        shown: animation.value,
+                        edge: AxisDirection.down,
+                        gap: slot.bottom,
+                        child: child!,
                       ),
                     ),
                     child: _isMultiSelect
@@ -409,14 +410,9 @@ class _BookshelfPageState extends State<BookshelfPage>
             ?current,
           ],
         ),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            // 和按壓書卡的微縮同一個幅度：看得出換了版面，又不像換頁。
-            scale: Tween<double>(begin: 0.96, end: 1).animate(animation),
-            child: child,
-          ),
-        ),
+        // 版面是內容，只交叉淡化、不縮放（ADR 0022）。
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
         child: KeyedSubtree(
           key: ValueKey(grid),
           child: grid

@@ -41,6 +41,9 @@ class BookInfoTocBar extends StatelessWidget {
         iconSize: 18,
         color: color,
         onPressed: onPressed,
+        // 組標題在頁面底色上、跟著目錄淡入：模糊不會有差別，只會在淡入的
+        // 最後一幀才糊上（ADR 0022）。
+        blur: false,
       ),
     );
 

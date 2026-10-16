@@ -413,8 +413,8 @@ class ReaderV2PageShell extends StatelessWidget {
                         id: _MenuSlot.brightness,
                         child: ReaderV2MenuEntrance(
                           visible: controlsVisible,
-                          // 往左滑出，多移一段讓漫射陰影也離開畫面。
-                          hiddenOffset: const Offset(-1.6, 0),
+                          edge: AxisDirection.left,
+                          gap: AppGrouped.margin,
                           // 比上下選單晚一點出發，三塊錯開。
                           delay: AppMotion.readerMenuStagger,
                           child: Theme(

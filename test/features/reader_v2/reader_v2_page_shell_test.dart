@@ -13,6 +13,8 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/glass_motion.dart';
+
 void main() {
   late int showControls;
   late int dismissControls;
@@ -179,34 +181,40 @@ void main() {
     final controls = ValueNotifier(false);
     addTearDown(controls.dispose);
     await pumpShell(tester, controls: controls);
-    double opacityOf(Type menu) => tester
-        .widget<FadeTransition>(
+
+    /// 選單離停好的位置還差多少（以自身大小為單位）。
+    double awayOf(Type menu) => tester
+        .widget<FractionalTranslation>(
           find
               .descendant(
                 of: find.byType(menu),
-                matching: find.byType(FadeTransition),
+                matching: find.byType(FractionalTranslation),
               )
               .first,
         )
-        .opacity
-        .value;
+        .translation
+        .distance;
 
     // 開關選單時收起層進出 Stack；選單不能因此被重建、直接跳到終點。
     controls.value = true;
     await tester.pump();
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
-    expect(opacityOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
-    expect(opacityOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    // 只滑不淡：玻璃上方沒有半透明圖層，模糊不會到最後一幀才糊上。
+    expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
-    expect(opacityOf(ReaderV2BottomMenu), 1);
+    expect(awayOf(ReaderV2TopMenu), 0);
+    expect(awayOf(ReaderV2BottomMenu), 0);
 
     controls.value = false;
     await tester.pump();
     await tester.pump(AppMotion.readerMenuOut ~/ 2);
-    expect(opacityOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
-    expect(opacityOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderV2TopMenu), inExclusiveRange(0, 1));
+    expect(awayOf(ReaderV2BottomMenu), inExclusiveRange(0, 1));
+    expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
-    expect(opacityOf(ReaderV2BottomMenu), 0);
+    expect(awayOf(ReaderV2BottomMenu), 1);
   });
 
   testWidgets('header and footer open the menu only on a finished tap', (

@@ -295,19 +295,31 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).pop(),
-            child: FadeTransition(
-              opacity: fade,
-              child: hasPreview
-                  ? BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                      child: ColoredBox(color: chrome.barrier),
-                    )
-                  : ColoredBox(
+            child: hasPreview
+                // 模糊強度與底色一起淡入，不包 FadeTransition：透明度不到 1
+                // 時模糊取不到底下的畫面，最後一幀才突然糊上（ADR 0022）。
+                ? AnimatedBuilder(
+                    animation: fade,
+                    builder: (context, _) => BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: 8 * fade.value,
+                        sigmaY: 8 * fade.value,
+                      ),
+                      child: ColoredBox(
+                        color: chrome.barrier.withValues(
+                          alpha: chrome.barrier.a * fade.value,
+                        ),
+                      ),
+                    ),
+                  )
+                : FadeTransition(
+                    opacity: fade,
+                    child: ColoredBox(
                       color: chrome.barrier.withValues(
                         alpha: chrome.barrier.a * 0.4,
                       ),
                     ),
-            ),
+                  ),
           ),
         ),
         if (hasPreview)
@@ -343,13 +355,12 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
         Positioned(
           left: menuLeft,
           top: menuTop,
-          child: FadeTransition(
-            opacity: fade,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.85, end: 1).animate(curved),
-              alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
-              child: menu,
-            ),
+          // 從靠錨點的那個角長出來，不淡（ADR 0022）：選單是玻璃，淡入時
+          // 模糊到最後一幀才突然糊上去；從 0 長大，第一幀也不會整塊冒出來。
+          child: ScaleTransition(
+            scale: curved,
+            alignment: Alignment(alignRight ? 1 : -1, menuBelow ? -1 : 1),
+            child: menu,
           ),
         ),
       ],

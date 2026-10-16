@@ -24,7 +24,7 @@ class BookReadCapsule extends StatelessWidget {
   /// 讀過的書顯示「繼續閱讀」。
   final bool started;
 
-  /// 載入完成才出現；隱藏時仍佔著位置，清單底部不會跟著跳動。
+  /// 載入完成才從底部滑上來；隱藏時仍佔著位置，清單底部不會跟著跳動。
   final bool visible;
   final VoidCallback onPressed;
 
@@ -35,10 +35,17 @@ class BookReadCapsule extends StatelessWidget {
     final label = started ? '繼續閱讀' : '開始閱讀';
     return Padding(
       padding: slot,
-      child: AnimatedOpacity(
-        opacity: visible ? 1 : 0,
-        duration: AppMotion.fade,
-        curve: AppMotion.fadeCurve,
+      // 跟分頁列一樣從畫面外滑上來，不淡（ADR 0022）。
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: visible ? 1 : 0),
+        duration: AppMotion.menu,
+        curve: visible ? AppMotion.menuCurve : Curves.easeInCubic,
+        builder: (context, shown, child) => GlassSlide(
+          shown: shown,
+          edge: AxisDirection.down,
+          gap: slot.bottom,
+          child: child!,
+        ),
         child: IgnorePointer(
           ignoring: !visible,
           child: Center(

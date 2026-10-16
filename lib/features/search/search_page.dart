@@ -918,10 +918,10 @@ class _RelevanceTierHeader extends StatelessWidget {
   );
 }
 
-/// 串流進來的搜尋結果第一次出現時，短暫淡入並微微上移。
+/// 串流進來的搜尋結果第一次出現時短暫淡入；結果是內容，只淡不移（ADR 0022）。
 ///
 /// 要不要播在建立時就決定：同一列之後重建、或捲出畫面回收後再出現，都不再
-/// 播。播完後透明度為 1、位移為 0，不再多出圖層。
+/// 播。播完後透明度為 1，不再多出圖層。
 class _ResultEntrance extends StatefulWidget {
   const _ResultEntrance({
     super.key,
@@ -940,7 +940,6 @@ class _ResultEntranceState extends State<_ResultEntrance>
     with SingleTickerProviderStateMixin {
   AnimationController? _controller;
   late final Animation<double> _opacity;
-  late final Animation<double> _rise;
 
   @override
   void initState() {
@@ -952,7 +951,6 @@ class _ResultEntranceState extends State<_ResultEntrance>
     );
     _controller = controller;
     _opacity = CurvedAnimation(parent: controller, curve: AppMotion.fadeCurve);
-    _rise = CurvedAnimation(parent: controller, curve: AppMotion.menuCurve);
   }
 
   @override
@@ -980,16 +978,6 @@ class _ResultEntranceState extends State<_ResultEntrance>
   @override
   Widget build(BuildContext context) {
     if (_controller == null) return widget.child;
-    return FadeTransition(
-      opacity: _opacity,
-      child: AnimatedBuilder(
-        animation: _rise,
-        child: widget.child,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, AppSpacing.md * (1 - _rise.value)),
-          child: child,
-        ),
-      ),
-    );
+    return FadeTransition(opacity: _opacity, child: widget.child);
   }
 }

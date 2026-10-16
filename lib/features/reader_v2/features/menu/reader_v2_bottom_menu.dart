@@ -101,8 +101,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return ReaderV2MenuEntrance(
       visible: controlsVisible,
-      // 多移出一段，讓浮動玻璃的漫射陰影也一起離開畫面。
-      hiddenOffset: const Offset(0, 1.15),
+      edge: AxisDirection.down,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
       child: Theme(
         data: menuStyle.toSheetTheme(Theme.of(context)),

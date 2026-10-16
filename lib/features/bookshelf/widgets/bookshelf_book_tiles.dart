@@ -185,7 +185,8 @@ class BookshelfProgressLine extends StatelessWidget {
 }
 
 /// 列表視圖的書：一本一張小紙卡，只放封面、書名、作者與細進度線。
-/// 編輯模式時勾選圓圈從左側滑入，選取的卡片帶淡主色底。
+/// 編輯模式時封面往右讓出位置、勾選圓圈在讓出的位置淡入（各做一件事，
+/// ADR 0022），選取的卡片帶淡主色底。
 class BookshelfListCard extends StatelessWidget {
   const BookshelfListCard({
     super.key,
@@ -249,22 +250,29 @@ class BookshelfListCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
+          // 圓圈的濃淡由此刻讓出的寬度決定：寬度不到圓圈本身（22）時完全
+          // 透明，讓滿（34）時不透明，不會被邊緣削一半像在滑動。進場途中
+          // 退出也從當下的寬度接著收，不另跑一條淡入淡出。
           AnimatedContainer(
             duration: AppMotion.menu,
             curve: AppMotion.menuCurve,
             width: slot,
             height: BookshelfCheckMark.size,
             child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.centerLeft,
-                minWidth: _checkSlot,
-                maxWidth: _checkSlot,
-                child: AnimatedOpacity(
-                  duration: AppMotion.menu,
-                  opacity: selecting ? 1 : 0,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: BookshelfCheckMark(selected: selected),
+              child: LayoutBuilder(
+                builder: (context, constraints) => OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  minWidth: _checkSlot,
+                  maxWidth: _checkSlot,
+                  child: Opacity(
+                    opacity:
+                        ((constraints.maxWidth - BookshelfCheckMark.size) /
+                                (_checkSlot - BookshelfCheckMark.size))
+                            .clamp(0.0, 1.0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: BookshelfCheckMark(selected: selected),
+                    ),
                   ),
                 ),
               ),

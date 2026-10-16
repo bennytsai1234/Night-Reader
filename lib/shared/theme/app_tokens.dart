@@ -138,6 +138,11 @@ class AppGlass {
   /// 模糊與色調透明度由使用者選擇的 `GlassStrength`（app_chrome.dart）決定。
   static const double hairline = 0.5;
 
+  /// 玻璃漫射陰影伸出外框的最遠距離：`GlassSurface` 的陰影模糊半徑 24
+  /// 換成 σ ≈ 14.4，3σ ≈ 43，加上往下 6 的位移。滑出畫面的玻璃多移這一段，
+  /// 陰影才不會留在螢幕邊緣。
+  static const double shadowReach = 50.0;
+
   /// 情境選單寬度與列高。
   static const double menuWidth = 250.0;
   static const double menuRowHeight = 44.0;
@@ -163,7 +168,7 @@ class AppMotion {
   static const Duration menu = Duration(milliseconds: 200);
   static const Curve menuCurve = Curves.easeOutCubic;
 
-  /// 閱讀選單（上、下、亮度條）進場：滑入並淡入，比 [menu] 長，蓋在正文
+  /// 閱讀選單（上、下、亮度條）進場：只滑入，比 [menu] 長，蓋在正文
   /// 上的大塊選單看得出從邊緣進來；收起比進場短、改用加速曲線（Material
   /// 動態「離場比進場快」）。亮度條晚 [readerMenuStagger] 出發，三塊錯開。
   static const Duration readerMenuIn = Duration(milliseconds: 320);

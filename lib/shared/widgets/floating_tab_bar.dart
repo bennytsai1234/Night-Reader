@@ -48,7 +48,7 @@ class FloatingTabBarScope extends InheritedWidget {
 ///
 /// 貼齊底部放在延伸到分頁列底下（`extendBody: true`）的內容上方；高度取
 /// `MediaQuery.paddingOf(context).bottom`，那段已含分頁列與系統手勢區。
-/// [hidden] 時跟分頁列一樣沉下並淡出。
+/// [hidden] 時跟分頁列一樣沉下。
 class FloatingTabBarFade extends StatelessWidget {
   const FloatingTabBarFade({
     super.key,
@@ -73,13 +73,13 @@ class FloatingTabBarFade extends StatelessWidget {
           curve: hidden ? Curves.easeInCubic : AppMotion.menuCurve,
           builder: (context, shown, _) {
             if (shown <= 0) return const SizedBox.shrink();
-            // 以顏色透明度淡出，不用 Opacity 另開圖層。
+            // 跟分頁列一樣只滑動，不淡（ADR 0022）。
             return FractionalTranslation(
               translation: Offset(0, 1 - shown),
               child: EdgeFade(
                 edge: AxisDirection.down,
                 height: height,
-                color: color.withValues(alpha: color.a * shown),
+                color: color,
                 solidFraction: solid / height,
               ),
             );
@@ -201,17 +201,16 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
       ),
     );
 
+    // 只滑動不淡（ADR 0022）；bar 本身已含到螢幕底緣的內距。
     return IgnorePointer(
       ignoring: widget.hidden,
-      child: AnimatedSlide(
-        offset: widget.hidden ? const Offset(0, 1) : Offset.zero,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: widget.hidden ? 0 : 1),
         duration: AppMotion.menu,
         curve: widget.hidden ? Curves.easeInCubic : AppMotion.menuCurve,
-        child: AnimatedOpacity(
-          opacity: widget.hidden ? 0 : 1,
-          duration: AppMotion.menu,
-          child: bar,
-        ),
+        child: bar,
+        builder: (context, shown, child) =>
+            GlassSlide(shown: shown, edge: AxisDirection.down, child: child!),
       ),
     );
   }

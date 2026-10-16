@@ -5,6 +5,8 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_ent
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
+  const menu = Key('menu');
+
   Future<void> pumpEntrance(
     WidgetTester tester, {
     required bool visible,
@@ -12,58 +14,54 @@ void main() {
   }) {
     return tester.pumpWidget(
       MaterialApp(
-        home: Center(
+        home: Align(
+          alignment: Alignment.topCenter,
           child: ReaderV2MenuEntrance(
             visible: visible,
-            hiddenOffset: const Offset(0, -1.3),
+            edge: AxisDirection.up,
             delay: delay,
-            child: const SizedBox(key: Key('menu'), width: 100, height: 50),
+            child: const SizedBox(key: menu, width: 100, height: 50),
           ),
         ),
       ),
     );
   }
 
-  double opacityOf(WidgetTester tester) => tester
-      .widget<FadeTransition>(
-        find
-            .ancestor(
-              of: find.byKey(const Key('menu')),
-              matching: find.byType(FadeTransition),
-            )
-            .first,
-      )
-      .opacity
-      .value;
+  double topOf(WidgetTester tester) => tester.getTopLeft(find.byKey(menu)).dy;
 
-  Offset slideOf(WidgetTester tester) => tester
-      .widget<SlideTransition>(
-        find
-            .ancestor(
-              of: find.byKey(const Key('menu')),
-              matching: find.byType(SlideTransition),
-            )
-            .first,
-      )
-      .position
-      .value;
+  /// 收起時移開自身高度，再加上陰影伸出的距離。
+  const hiddenTop = -50 - AppGlass.shadowReach;
 
-  testWidgets('slides and fades in over readerMenuIn, holding the gate', (
+  bool painted(WidgetTester tester) => tester
+      .widget<Visibility>(
+        find.ancestor(of: find.byKey(menu), matching: find.byType(Visibility)),
+      )
+      .visible;
+
+  testWidgets('slides in over readerMenuIn without fading, holding the gate', (
     tester,
   ) async {
     await pumpEntrance(tester, visible: false);
-    expect(opacityOf(tester), 0);
-    expect(slideOf(tester), const Offset(0, -1.3));
+    expect(topOf(tester), hiddenTop);
+    expect(painted(tester), isFalse);
 
     await pumpEntrance(tester, visible: true);
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
-    expect(opacityOf(tester), inExclusiveRange(0, 1));
-    expect(slideOf(tester).dy, inExclusiveRange(-1.3, 0));
+    expect(topOf(tester), inExclusiveRange(hiddenTop, 0));
+    expect(painted(tester), isTrue);
     expect(MotionGate.instance.isMoving, isTrue);
+    for (final fade in [Opacity, FadeTransition]) {
+      expect(
+        find.descendant(
+          of: find.byType(ReaderV2MenuEntrance),
+          matching: find.byType(fade),
+        ),
+        findsNothing,
+      );
+    }
 
     await tester.pumpAndSettle();
-    expect(opacityOf(tester), 1);
-    expect(slideOf(tester), Offset.zero);
+    expect(topOf(tester), 0);
     expect(MotionGate.instance.isMoving, isFalse);
   });
 
@@ -79,10 +77,10 @@ void main() {
       delay: AppMotion.readerMenuStagger,
     );
     await tester.pump(AppMotion.readerMenuStagger ~/ 2);
-    expect(opacityOf(tester), 0);
+    expect(topOf(tester), hiddenTop);
 
     await tester.pumpAndSettle();
-    expect(opacityOf(tester), 1);
+    expect(topOf(tester), 0);
   });
 
   testWidgets('hides faster than it enters and ignores taps', (tester) async {
@@ -91,17 +89,18 @@ void main() {
     // Exits accelerate: slow at first, fastest at the end.
     await tester.pump(AppMotion.readerMenuOut ~/ 2);
     expect(
-      opacityOf(tester),
-      closeTo(1 - Curves.easeInCubic.transform(0.5), 0.01),
+      topOf(tester),
+      closeTo(hiddenTop * Curves.easeInCubic.transform(0.5), 0.01),
     );
     await tester.pump(AppMotion.readerMenuOut ~/ 2);
-    expect(opacityOf(tester), 0);
+    expect(topOf(tester), hiddenTop);
+    expect(painted(tester), isFalse);
     expect(
       tester
           .widget<IgnorePointer>(
             find
                 .ancestor(
-                  of: find.byKey(const Key('menu')),
+                  of: find.byKey(menu),
                   matching: find.byType(IgnorePointer),
                 )
                 .first,
