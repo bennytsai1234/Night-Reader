@@ -295,18 +295,18 @@ class BookshelfListCard extends StatelessWidget {
                     color: scheme.onSurface,
                   ),
                 ),
-                if (author.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySm.copyWith(
-                      height: 1.3,
-                      color: chrome.sectionText,
-                    ),
+                // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
+                // 載入骨架（不知道哪本沒有作者）才對得上。
+                const SizedBox(height: 2),
+                Text(
+                  author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySm.copyWith(
+                    height: 1.3,
+                    color: chrome.sectionText,
                   ),
-                ],
+                ),
                 const SizedBox(height: AppSpacing.md),
                 BookshelfProgressLine(book: book),
               ],

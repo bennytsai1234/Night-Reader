@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 
 import 'bookshelf_provider_base.dart';
@@ -22,16 +23,32 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
         savedSort < BookshelfSortMode.values.length) {
       sortMode = BookshelfSortMode.values[savedSort];
     }
-    lastBookCount = prefs.getInt(_bookCountKey);
+    lastBookCount = _savedBookCount = prefs.getInt(_bookCountKey);
   }
 
   static const String _bookCountKey = 'bookshelf_book_count';
 
-  /// 記下書架上的本數，下次開 App 的骨架畫一樣多本。
+  /// 確定寫進偏好設定的本數；寫入失敗時不更新，下次載入書架再寫一次。
+  int? _savedBookCount;
+
+  /// 記下書架上的本數，下次開 App 的骨架畫一樣多本。寫入在背景進行，
+  /// 失敗只記日誌，不算書架載入失敗。
   void rememberBookCount(int count) {
-    if (lastBookCount == count) return;
     lastBookCount = count;
-    unawaited(getIt<SharedPreferences>().setInt(_bookCountKey, count));
+    if (_savedBookCount == count) return;
+    unawaited(_saveBookCount(count));
+  }
+
+  Future<void> _saveBookCount(int count) async {
+    try {
+      if (await getIt<SharedPreferences>().setInt(_bookCountKey, count)) {
+        _savedBookCount = count;
+      } else {
+        AppLog.w('書架本數沒有寫進偏好設定');
+      }
+    } catch (error, stackTrace) {
+      AppLog.e('書架本數寫入失敗: $error', error: error, stackTrace: stackTrace);
+    }
   }
 
   void setGridView(bool value) {

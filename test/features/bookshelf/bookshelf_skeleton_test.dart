@@ -86,42 +86,57 @@ void main() {
     expect(covers().length, lessThan(30));
   });
 
-  // 骨架淡成書時版面不能跳：第一本書的進度線要落在骨架的進度線上。
+  // 骨架淡成書時版面不能跳：第四本書（網格第二列、列表第四張，看得出
+  // 前面累積的偏差）的進度線要落在骨架的進度線上；系統字級放大、書沒有
+  // 作者時也一樣。
   for (final grid in [true, false]) {
-    testWidgets(
-      '${grid ? 'grid' : 'list'} skeleton progress line sits where the real one does',
-      (tester) async {
-        await pump(tester, grid: grid);
-        final skeletonLine = tester.getRect(
-          find
-              .byWidgetPredicate(
-                (widget) =>
-                    widget is SkeletonBox &&
-                    widget.height == BookshelfProgressLine.height,
-              )
-              .first,
-        );
+    for (final scale in [1.0, 2.0]) {
+      for (final author in ['作者', '']) {
+        testWidgets(
+          '${grid ? 'grid' : 'list'} skeleton progress line sits where the '
+          'real one does (text x$scale, author "$author")',
+          (tester) async {
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            await pump(tester, grid: grid);
+            final skeletonLine = tester.getRect(
+              find
+                  .byWidgetPredicate(
+                    (widget) =>
+                        widget is SkeletonBox &&
+                        widget.height == BookshelfProgressLine.height,
+                  )
+                  .at(3),
+            );
 
-        await pumpReal(tester, grid: grid);
-        final realLine = tester.getRect(
-          find.byType(BookshelfProgressLine).first,
-        );
+            await pumpReal(tester, grid: grid, author: author);
+            final realLine = tester.getRect(
+              find.byType(BookshelfProgressLine).at(3),
+            );
 
-        // 文字行高取整會差零點幾像素，看不出來。
-        expect(skeletonLine.left, realLine.left);
-        expect(skeletonLine.width, realLine.width);
-        expect(skeletonLine.top, closeTo(realLine.top, 1));
-      },
-    );
+            // 文字行高取整會差零點幾像素，看不出來。
+            expect(skeletonLine.left, realLine.left);
+            expect(skeletonLine.width, realLine.width);
+            expect(skeletonLine.top, closeTo(realLine.top, 1));
+          },
+        );
+      }
+    }
   }
 }
 
 /// 與書架頁同樣排法的真書卡（左右內距與 [pump] 的骨架相同）。
-Future<void> pumpReal(WidgetTester tester, {required bool grid}) async {
+Future<void> pumpReal(
+  WidgetTester tester, {
+  required bool grid,
+  String author = '作者',
+}) async {
   const padding = EdgeInsets.symmetric(horizontal: 16);
   final books = [
     for (var i = 0; i < 6; i++)
-      Book(bookUrl: 'u$i', origin: 'o', name: '書$i', author: '作者$i'),
+      Book(bookUrl: 'u$i', origin: 'o', name: '書$i', author: author),
   ];
   await tester.pumpWidget(
     MaterialApp(
