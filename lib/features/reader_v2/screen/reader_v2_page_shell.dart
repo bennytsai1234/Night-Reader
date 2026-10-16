@@ -360,7 +360,10 @@ class ReaderV2PageShell extends StatelessWidget {
                     onDismiss: onDismissControls,
                   ),
                 ),
+              // 收起層隨選單開關進出，前面的子元件會錯位；有 key 選單才會
+              // 留在原處播動畫，不被重建成終點狀態。
               Positioned.fill(
+                key: const ValueKey('reader-menus'),
                 child: CustomMultiChildLayout(
                   delegate: _MenuLayoutDelegate(),
                   children: [
