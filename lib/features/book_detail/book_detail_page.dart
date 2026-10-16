@@ -355,6 +355,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
                   GlassTextButton(
                     label: '清除搜尋',
                     onPressed: provider.clearTocSearch,
+                    // 同目錄組標題的按鈕：在頁面底色上跟著淡入，不模糊。
+                    blur: false,
                   ),
                 ],
               ),

@@ -250,28 +250,29 @@ class BookshelfListCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
-          // 圓圈只在讓出的位置夠寬（≥ 22/34，約 65%）時看得到，不會被邊緣
-          // 削一半像在滑動：進場讓位減速、65% 在 30% 的時間到，圓圈從那時
-          // 淡入；收起讓位加速、70% 的時間前都還夠寬，圓圈在那之前淡完。
+          // 圓圈的濃淡由此刻讓出的寬度決定：寬度不到圓圈本身（22）時完全
+          // 透明，讓滿（34）時不透明，不會被邊緣削一半像在滑動。進場途中
+          // 退出也從當下的寬度接著收，不另跑一條淡入淡出。
           AnimatedContainer(
             duration: AppMotion.menu,
-            curve: selecting ? AppMotion.menuCurve : Curves.easeInCubic,
+            curve: AppMotion.menuCurve,
             width: slot,
             height: BookshelfCheckMark.size,
             child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.centerLeft,
-                minWidth: _checkSlot,
-                maxWidth: _checkSlot,
-                child: AnimatedOpacity(
-                  duration: AppMotion.menu,
-                  curve: selecting
-                      ? const Interval(0.3, 1)
-                      : const Interval(0, 0.7),
-                  opacity: selecting ? 1 : 0,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: BookshelfCheckMark(selected: selected),
+              child: LayoutBuilder(
+                builder: (context, constraints) => OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  minWidth: _checkSlot,
+                  maxWidth: _checkSlot,
+                  child: Opacity(
+                    opacity:
+                        ((constraints.maxWidth - BookshelfCheckMark.size) /
+                                (_checkSlot - BookshelfCheckMark.size))
+                            .clamp(0.0, 1.0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: BookshelfCheckMark(selected: selected),
+                    ),
                   ),
                 ),
               ),

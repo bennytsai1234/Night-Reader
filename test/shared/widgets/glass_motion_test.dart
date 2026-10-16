@@ -41,6 +41,24 @@ void main() {
     expect(() => expectNoGlassUnderFade(tester), throwsA(isA<TestFailure>()));
   });
 
+  testWidgets('the check catches glass in a fading sliver', (tester) async {
+    await tester.pumpWidget(
+      app(
+        const CustomScrollView(
+          slivers: [
+            SliverOpacity(
+              opacity: 0.5,
+              sliver: SliverToBoxAdapter(
+                child: GlassSurface(child: SizedBox(width: 80, height: 40)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(() => expectNoGlassUnderFade(tester), throwsA(isA<TestFailure>()));
+  });
+
   group('GlassSlide', () {
     const box = Key('box');
 

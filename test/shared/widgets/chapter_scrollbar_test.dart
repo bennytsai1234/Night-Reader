@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
 
+import '../../support/glass_motion.dart';
+
 void main() {
   const extent = 50.0;
 
@@ -62,6 +64,23 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(find.textContaining('章'), findsNothing);
+  });
+
+  testWidgets('dragging while the thumb fades in keeps the bubble out of it', (
+    tester,
+  ) async {
+    await pumpList(tester, 1000);
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+
+    final gesture = await tester.startGesture(tester.getCenter(thumb()));
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    expect(find.textContaining('章'), findsOneWidget);
+    // 章名泡泡是玻璃，拖曳鈕還在淡入也不能包在淡入裡（ADR 0022）。
+    expectNoGlassUnderFade(tester);
+    await gesture.up();
   });
 
   testWidgets('a short list never shows the thumb', (tester) async {

@@ -231,9 +231,14 @@ class GlassIconButton extends StatelessWidget {
     this.iconSize = 22,
     this.onLongPress,
     this.label,
+    this.blur = true,
   });
 
   final IconData icon;
+
+  /// 放在不透明底上、跟著內容淡入時傳 false：不取樣背景，淡入中也沒有
+  /// 模糊會在最後一幀才糊上（ADR 0022）。
+  final bool blur;
 
   /// 有值時在圓鈕中央顯示這段短字，取代圖示（例如倒數的剩餘分鐘）。
   final String? label;
@@ -261,6 +266,7 @@ class GlassIconButton extends StatelessWidget {
           shape: BoxShape.circle,
           tint: tint,
           shadow: false,
+          blur: blur,
           child: Center(
             child: switch (label) {
               final text? => Text(
@@ -300,6 +306,7 @@ class GlassTextButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.emphasized = false,
+    this.blur = true,
   });
 
   final String label;
@@ -307,6 +314,9 @@ class GlassTextButton extends StatelessWidget {
 
   /// 主要動作用主色字並加粗。
   final bool emphasized;
+
+  /// 見 [GlassIconButton.blur]。
+  final bool blur;
 
   @override
   Widget build(BuildContext context) {
@@ -323,6 +333,7 @@ class GlassTextButton extends StatelessWidget {
           child: GlassSurface(
             borderRadius: AppRadius.pillShape,
             shadow: false,
+            blur: blur,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Center(

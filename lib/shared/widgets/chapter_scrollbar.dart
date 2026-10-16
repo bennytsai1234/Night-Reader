@@ -130,49 +130,56 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
                   opacity: _visible ? 1 : 0,
                   duration: AppMotion.fade,
                   curve: AppMotion.fadeCurve,
-                  child: LayoutBuilder(builder: _buildTrack),
+                  child: LayoutBuilder(builder: _buildThumb),
                 ),
               ),
+            ),
+          // 章名泡泡是玻璃，放在淡入的拖曳鈕外面（ADR 0022）：拖曳鈕還在淡入
+          // 時就開始拖，泡泡也不會到淡入結束才突然糊上。
+          if (_long && _dragging)
+            Positioned(
+              key: const ValueKey('bubble'),
+              top: widget.padding.top,
+              bottom: widget.padding.bottom,
+              right: 0,
+              left: 0,
+              child: IgnorePointer(child: LayoutBuilder(builder: _buildBubble)),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildTrack(BuildContext context, BoxConstraints constraints) {
+  Widget _buildBubble(BuildContext context, BoxConstraints constraints) {
     final scheme = Theme.of(context).colorScheme;
     final travel = math.max(0.0, constraints.maxHeight - _thumbHeight);
     final top = travel * _fraction;
     return Stack(
       children: [
-        // 有 key：泡泡插進來時拖曳鈕的元件不能被換掉，否則拖到一半手勢就斷了。
-        if (_dragging)
-          Positioned(
-            key: const ValueKey('bubble'),
-            top: top + (_thumbHeight - AppGlass.buttonSize) / 2,
-            right: _touchWidth + AppSpacing.xs,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: math.min(260, constraints.maxWidth * 0.7),
-              ),
-              child: SizedBox(
-                height: AppGlass.buttonSize,
-                child: GlassSurface(
-                  borderRadius: AppRadius.pillShape,
-                  grouped: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg,
-                    ),
-                    child: Center(
-                      widthFactor: 1,
-                      child: Text(
-                        widget.labelFor(_dragIndex),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.uiMd.copyWith(
-                          color: scheme.onSurface,
-                        ),
+        Positioned(
+          top: top + (_thumbHeight - AppGlass.buttonSize) / 2,
+          right: _touchWidth + AppSpacing.xs,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.min(260, constraints.maxWidth * 0.7),
+            ),
+            child: SizedBox(
+              height: AppGlass.buttonSize,
+              child: GlassSurface(
+                borderRadius: AppRadius.pillShape,
+                grouped: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                  ),
+                  child: Center(
+                    widthFactor: 1,
+                    child: Text(
+                      widget.labelFor(_dragIndex),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.uiMd.copyWith(
+                        color: scheme.onSurface,
                       ),
                     ),
                   ),
@@ -180,8 +187,18 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThumb(BuildContext context, BoxConstraints constraints) {
+    final scheme = Theme.of(context).colorScheme;
+    final travel = math.max(0.0, constraints.maxHeight - _thumbHeight);
+    final top = travel * _fraction;
+    return Stack(
+      children: [
         Positioned(
-          key: const ValueKey('thumb'),
           top: top,
           right: 0,
           width: _touchWidth,

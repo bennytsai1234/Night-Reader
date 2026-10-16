@@ -21,6 +21,8 @@ void expectNoGlassUnderFade(WidgetTester tester) {
       final opacity = switch (node) {
         RenderOpacity(:final opacity) => opacity,
         RenderAnimatedOpacity(:final opacity) => opacity.value,
+        RenderSliverOpacity(:final opacity) => opacity,
+        RenderSliverAnimatedOpacity(:final opacity) => opacity.value,
         _ => 1.0,
       };
       expect(
