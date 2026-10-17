@@ -229,4 +229,45 @@ void main() {
     );
     await tester.pump();
   });
+
+  testWidgets('the text area widens continuously when the switch fades out', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    // 篩選中沒有排序把手：進入選取時列尾從開關換成空的，文字區要多出
+    // 整個開關的寬度。
+    await tester.enterText(find.byType(TextField), 'example');
+    await tester.pumpAndSettle();
+    final textArea = find
+        .ancestor(
+          of: find.text('https://s0.example'),
+          matching: find.byType(Column),
+        )
+        .first;
+    final restWidth = tester.getSize(textArea).width;
+
+    await tester.tap(find.text('全選'));
+    await tester.pump();
+    final widths = <double>[];
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      widths.add(tester.getSize(textArea).width);
+    }
+    await tester.pumpAndSettle();
+    final settled = tester.getSize(textArea).width;
+
+    expect(find.byType(GroupedSwitch), findsNothing);
+    // 勾選圈佔掉的比開關讓出的少，文字區最後比原本寬。
+    expect(settled, greaterThan(restWidth + 10));
+    var previous = restWidth;
+    for (final width in widths) {
+      expect(
+        (width - previous).abs(),
+        lessThan(12),
+        reason: '文字區每一幀只變一點，不在淡換結束時一口氣跳寬',
+      );
+      previous = width;
+    }
+    expect(widths.last, moreOrLessEquals(settled, epsilon: 0.01));
+  });
 }
