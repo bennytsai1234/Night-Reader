@@ -81,6 +81,9 @@ class LoadingVeilController {
   /// 骨架還在淡入或淡出。
   bool get isSkeletonFading => _skeleton.isAnimating;
 
+  /// 紙上還看得到骨架（含淡出中）。
+  bool get hasSkeleton => !_skeleton.isDismissed;
+
   /// 蓋上整張紙。[skeleton] 為 true 時骨架從目前的濃淡繼續淡入（淡出途中
   /// 再蓋上不會先閃空）；false 時紙先空著，等 [showSkeleton]，已經畫著的
   /// 骨架淡掉。

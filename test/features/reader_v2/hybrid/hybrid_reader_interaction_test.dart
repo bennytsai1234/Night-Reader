@@ -1069,5 +1069,142 @@ void main() {
       expect(runtime.state.visibleLocation.chapterIndex, 1);
       expectSameLines(await linesOnLeaving(tester), veil.lines!);
     });
+
+    /// 一幀一幀推進到紙掀完，回傳紙上最後畫的那組行。
+    Future<List<Rect>> lastLinesUntilVeilGone(WidgetTester tester) async {
+      List<Rect>? last;
+      for (
+        var frame = 0;
+        frame < 2000 && find.byType(LoadingVeil).evaluate().isNotEmpty;
+        frame++
+      ) {
+        last = veilLines(tester) ?? last;
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byType(LoadingVeil), findsNothing);
+      return last!;
+    }
+
+    testWidgets('a jump during the first-page fade-in gets its own page', (
+      tester,
+    ) async {
+      await pumpReader(tester, skeletonPages: store, waitForOpen: false);
+      await untilVeilLines(tester);
+      unawaited(runtime.jumpToChapter(1));
+      final last = await lastLinesUntilVeilGone(tester);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expectSameLines(await linesOnLeaving(tester), last);
+    });
+
+    testWidgets('a layout change during the fade-in measures the page again', (
+      tester,
+    ) async {
+      await pumpReader(tester, skeletonPages: store, waitForOpen: false);
+      final first = (await untilVeilLines(tester)).lines!;
+      final larger = ReaderV2LayoutSpec.fromViewport(
+        viewportSize: _viewport,
+        style: ReaderV2LayoutStyle(
+          fontSize: 26,
+          lineHeight: _style.lineHeight,
+          letterSpacing: _style.letterSpacing,
+          paragraphSpacing: _style.paragraphSpacing,
+          paddingTop: _style.paddingTop,
+          paddingBottom: _style.paddingBottom,
+          paddingLeft: _style.paddingLeft,
+          paddingRight: _style.paddingRight,
+          textIndent: _style.textIndent,
+        ),
+      );
+      unawaited(runtime.applyPresentation(spec: larger));
+      final last = await lastLinesUntilVeilGone(tester);
+      expect(last, isNot(first));
+      expectSameLines(await linesOnLeaving(tester), last);
+    });
+
+    testWidgets('an old skeleton fades out completely before it is replaced', (
+      tester,
+    ) async {
+      // 舊骨架完整淡入後正文才到；正文很短，第一頁比舊骨架淡完還快排好。
+      final text = Completer<String?>();
+      final custom = _makeRuntime(
+        paragraphs: 1,
+        contentLoader: (index, chapter) =>
+            index == 0 ? text.future : Future.value(chapter.content),
+      );
+      const stale = [Rect.fromLTRB(12, 10, 200, 28)];
+      await store.write(
+        bookUrl,
+        ReaderSkeletonPage(
+          chapterIndex: 0,
+          charOffset: 0,
+          visualOffsetPx: 0,
+          layout: ReaderSkeletonPage.layoutKeyOf(custom.state.layoutSpec),
+          contentHash: '替換規則改過之前的正文',
+          lines: stale,
+        ),
+      );
+      await pumpReader(
+        tester,
+        customRuntime: custom,
+        skeletonPages: store,
+        waitForOpen: false,
+      );
+      await tester.pump(SkeletonReveal.defaultDuration);
+      text.complete(_chapter(0, paragraphs: 1).content);
+      final noBars = paintsExactlyCountTimes(#drawRRect, 0);
+      var paintedBars = true;
+      for (
+        var frame = 0;
+        frame < 2000 && listEquals(veilLines(tester), stale);
+        frame++
+      ) {
+        paintedBars = !noBars.matches(find.byType(LoadingVeil), {});
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(veilLines(tester), isNot(stale));
+      expect(paintedBars, isFalse, reason: '換成新的行之前，舊骨架已經淡完');
+      await untilVeilGone(tester);
+    });
+
+    testWidgets('at a short last chapter the skeleton sits where it stops', (
+      tester,
+    ) async {
+      await pumpReader(
+        tester,
+        customRuntime: _makeRuntime(
+          paragraphs: 1,
+          initialLocation: const ReaderV2Location(
+            chapterIndex: 2,
+            charOffset: 0,
+          ),
+        ),
+        skeletonPages: store,
+        waitForOpen: false,
+      );
+      final last = await lastLinesUntilVeilGone(tester);
+      expectSameLines(await linesOnLeaving(tester), last);
+    });
+
+    testWidgets('with the previous chapter unavailable the skeleton sits '
+        'where the scroll stops', (tester) async {
+      await pumpReader(
+        tester,
+        customRuntime: _makeRuntime(
+          initialLocation: const ReaderV2Location(
+            chapterIndex: 1,
+            charOffset: 0,
+          ),
+          contentLoader: (index, chapter) => index == 0
+              ? Future.error(
+                  const ReaderV2ContentUnavailableException('第 0 章暫時取不到'),
+                )
+              : Future.value(chapter.content),
+        ),
+        skeletonPages: store,
+        waitForOpen: false,
+      );
+      final last = await lastLinesUntilVeilGone(tester);
+      expectSameLines(await linesOnLeaving(tester), last);
+    });
   });
 }
