@@ -9,9 +9,11 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/hybrid_reader_screen.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/reader_skeleton_page.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/tts_highlight_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/text_preprocessor.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
@@ -21,6 +23,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_progress_contr
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -138,6 +141,8 @@ void main() {
     ReaderV2Runtime? customRuntime,
     bool waitForOpen = true,
     ReaderV2TtsHighlight? ttsHighlight,
+    ReaderSkeletonPageStore? skeletonPages,
+    ValueNotifier<HybridProgressSnapshot?>? progress,
   }) async {
     tester.view.physicalSize = _viewport;
     tester.view.devicePixelRatio = 1;
@@ -156,6 +161,9 @@ void main() {
           style: _style,
           viewportController: viewport,
           ttsHighlight: ttsHighlight,
+          bookUrl: skeletonPages == null ? null : 'http://interaction.test',
+          skeletonPages: skeletonPages,
+          progressListenable: progress,
           enableDiskCache: false,
           preprocessor: const TextPreprocessor(useIsolate: false),
           onContentTapUp: (details) {
@@ -186,6 +194,125 @@ void main() {
         .state<ScrollableState>(find.byType(Scrollable).first)
         .position;
   }
+
+  group('開書骨架照上次那一頁畫', () {
+    late ReaderSkeletonPageStore store;
+    late ValueNotifier<HybridProgressSnapshot?> progress;
+    setUp(() async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      store = ReaderSkeletonPageStore(await SharedPreferences.getInstance());
+      progress = ValueNotifier(null);
+    });
+
+    /// 紀錄存到小數一位，兩次記下的同一行最多差 0.1。
+    void expectSameLines(List<Rect> actual, List<Rect> expected) {
+      expect(actual.length, expected.length);
+      for (var i = 0; i < expected.length; i++) {
+        for (final (a, e) in [
+          (actual[i].left, expected[i].left),
+          (actual[i].top, expected[i].top),
+          (actual[i].right, expected[i].right),
+          (actual[i].bottom, expected[i].bottom),
+        ]) {
+          expect(a, closeTo(e, 0.11), reason: '第 $i 行');
+        }
+      }
+    }
+
+    /// 推進到骨架換場播完（同 [settle]，它定義在後面）。
+    Future<void> settleReveal(WidgetTester tester) async {
+      final frames = SkeletonReveal.defaultDuration.inMilliseconds ~/ 16 + 8;
+      for (var frame = 0; frame < frames; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    Future<ReaderSkeletonPage> leaveMidChapter(WidgetTester tester) async {
+      await pumpReader(tester, skeletonPages: store, progress: progress);
+      await settleReveal(tester);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -437));
+      await settleReveal(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+      return store.read('http://interaction.test')!;
+    }
+
+    ReaderV2Runtime reopenAt(ReaderSkeletonPage page) => _makeRuntime(
+      initialLocation: ReaderV2Location(
+        chapterIndex: page.chapterIndex,
+        charOffset: page.charOffset,
+        visualOffsetPx: page.visualOffsetPx,
+      ),
+    );
+
+    testWidgets('leaving remembers every line on screen', (tester) async {
+      final page = await leaveMidChapter(tester);
+      expect(page.lines.length, greaterThan(10));
+      for (final line in page.lines) {
+        expect(line.bottom, greaterThan(0));
+        expect(line.top, lessThan(_viewport.height));
+        expect(line.left, greaterThanOrEqualTo(_style.paddingLeft));
+      }
+      expect(page.progress, isNotNull);
+    });
+
+    testWidgets('reopening there draws those lines, where the text lands', (
+      tester,
+    ) async {
+      final page = await leaveMidChapter(tester);
+
+      progress.value = null;
+      await pumpReader(
+        tester,
+        customRuntime: reopenAt(page),
+        skeletonPages: store,
+        progress: progress,
+        waitForOpen: false,
+      );
+      expect(
+        tester.widget<LoadingVeil>(find.byType(LoadingVeil)).lines,
+        page.lines,
+        reason: '第一幀的紙就照記下的行畫',
+      );
+      await tester.pump();
+      expect(
+        progress.value?.chapterPercent,
+        page.progress!.chapterPercent,
+        reason: '頁尾的進度骨架照當時的字樣量寬度',
+      );
+
+      // 排好之後再記一次：正文的每一行就落在骨架的那一行上。
+      for (
+        var frame = 0;
+        frame < 2000 && find.byType(LoadingVeil).evaluate().isNotEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      expectSameLines(store.read('http://interaction.test')!.lines, page.lines);
+    });
+
+    testWidgets('opening somewhere else keeps the plain skeleton', (
+      tester,
+    ) async {
+      final page = await leaveMidChapter(tester);
+      await pumpReader(
+        tester,
+        customRuntime: _makeRuntime(
+          initialLocation: ReaderV2Location(
+            chapterIndex: page.chapterIndex,
+            charOffset: page.charOffset + 40,
+          ),
+        ),
+        skeletonPages: store,
+        waitForOpen: false,
+      );
+      expect(
+        tester.widget<LoadingVeil>(find.byType(LoadingVeil)).lines,
+        isNull,
+      );
+    });
+  });
 
   testWidgets('tapping to stop a fling only stops it', (tester) async {
     await pumpReader(tester);

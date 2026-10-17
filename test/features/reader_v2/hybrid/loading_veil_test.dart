@@ -37,7 +37,11 @@ void main() {
       ..cover();
   }
 
-  Future<void> pumpVeil(WidgetTester tester, {bool mounted = true}) {
+  Future<void> pumpVeil(
+    WidgetTester tester, {
+    bool mounted = true,
+    List<Rect>? lines,
+  }) {
     return tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
@@ -45,6 +49,7 @@ void main() {
             ? LoadingVeil(
                 controller: veil,
                 spec: spec,
+                lines: lines,
                 backgroundColor: const Color(0xFFF6F1E7),
                 textColor: const Color(0xFF2B2622),
               )
@@ -190,6 +195,34 @@ void main() {
     expect(hiddenCount, 1);
     await tester.pump();
     expect(tester.hasRunningAnimations, isFalse);
+    await finish(tester);
+  });
+
+  testWidgets('remembered lines are drawn where each line of text was', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    // 兩行正文、一行比正文高的章名。
+    await pumpVeil(
+      tester,
+      lines: const [
+        Rect.fromLTRB(20, 10, 300, 40),
+        Rect.fromLTRB(56, 60, 380, 78),
+        Rect.fromLTRB(20, 90, 200, 108),
+      ],
+    );
+    await advance(tester, AppMotion.fade);
+    // 正文的長條是字級的 0.75（18 → 13.5），章名照字框高度等比放大。
+    final radius = AppRadius.cardXs.topLeft;
+    expect(
+      find.byType(LoadingVeil),
+      paints
+        ..rect()
+        ..rrect(rrect: RRect.fromLTRBR(20, 25 - 11.25, 300, 25 + 11.25, radius))
+        ..rrect(rrect: RRect.fromLTRBR(56, 69 - 6.75, 380, 69 + 6.75, radius))
+        ..rrect(rrect: RRect.fromLTRBR(20, 99 - 6.75, 200, 99 + 6.75, radius)),
+    );
+    expect(find.byType(LoadingVeil), paintsExactlyCountTimes(#drawRRect, 3));
     await finish(tester);
   });
 }

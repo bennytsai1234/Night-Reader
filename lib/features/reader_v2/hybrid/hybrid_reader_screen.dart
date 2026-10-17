@@ -24,6 +24,7 @@ import 'geometry/text_geometry.dart';
 import 'measure/document_index.dart';
 import 'measure/measurement_store.dart';
 import 'overlay/loading_veil.dart';
+import 'overlay/reader_skeleton_page.dart';
 import 'overlay/selection_service.dart';
 import 'overlay/text_selection_overlay.dart';
 import 'overlay/tts_highlight_overlay.dart';
@@ -53,6 +54,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
     this.bookUrl,
+    this.skeletonPages,
     this.preprocessor = const TextPreprocessor(),
     this.enableDiskCache = true,
     this.paragraphCacheCapacity = 512,
@@ -76,6 +78,10 @@ class HybridReaderScreen extends StatefulWidget {
   final double highlightStrength;
   final ValueNotifier<HybridProgressSnapshot?>? progressListenable;
   final String? bookUrl;
+
+  /// 每本書上一次離開時的那一頁（ADR 0024）：開書時從同一處打開就照它畫
+  /// 骨架；離開閱讀器或 App 切到背景時記下目前這一頁。
+  final ReaderSkeletonPageStore? skeletonPages;
   final HybridTextPreprocessor preprocessor;
   final bool enableDiskCache;
   final int paragraphCacheCapacity;
@@ -144,9 +150,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
     onHidden: () {
+      // 開書的紙掀完了；之後跳章、重新排版蓋上的紙不在記下的那一頁上。
+      _openingPage = null;
       if (mounted) setState(() {});
     },
   );
+
+  /// 開書的位置與版面都和上次記下的那一頁相同時，開書的紙照它畫骨架。
+  ReaderSkeletonPage? _openingPage;
+
+  /// App 切到背景時記下目前這一頁（之後可能被系統關掉，不會再走到
+  /// [dispose]）。
+  late final AppLifecycleListener _lifecycle;
   bool _dragging = false;
 
   /// 正文捲動中（拖動、甩動、翻頁動畫）持有 [MotionGate]（ADR 0018）。
@@ -178,7 +193,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _windowCenter = widget.runtime.state.visibleLocation.chapterIndex;
     _registerRuntime();
     _attachController();
+    _openingPage = _rememberedPageForOpening();
     _veil.cover();
+    _lifecycle = AppLifecycleListener(onHide: _rememberPage);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _restoreAttachedRuntime();
@@ -239,8 +256,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
+  /// 離開閱讀器時記下目前這一頁。在 [dispose] 時正文的捲動位置已經拆掉，
+  /// 這裡子樹都還在。
+  @override
+  void deactivate() {
+    _rememberPage();
+    super.deactivate();
+  }
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     _scrollHold.release();
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
@@ -1335,12 +1361,99 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return controller.position.isScrollingNotifier.value && _sawUserScroll;
   }
 
-  Widget _buildVeil(ReaderV2State state) => LoadingVeil(
-    controller: _veil,
-    spec: state.layoutSpec,
-    backgroundColor: widget.backgroundColor,
-    textColor: widget.textColor,
-  );
+  Widget _buildVeil(ReaderV2State state) {
+    final page = _openingPage;
+    return LoadingVeil(
+      controller: _veil,
+      spec: state.layoutSpec,
+      // 紙還沒掀開前版面就變了（例如轉向），記下的行對不上，改畫固定樣式。
+      lines:
+          page != null &&
+              page.layout == ReaderSkeletonPage.layoutKeyOf(state.layoutSpec)
+          ? page.lines
+          : null,
+      backgroundColor: widget.backgroundColor,
+      textColor: widget.textColor,
+    );
+  }
+
+  /// 上次離開這本書時的那一頁，開書的位置與版面都相同時才用。當時的進度
+  /// 先放進進度通道，頁尾的進度骨架就照「本章 3/10」這類字樣的寬度畫；
+  /// 排好後換成重算的進度（同一個位置，數字相同）。
+  ReaderSkeletonPage? _rememberedPageForOpening() {
+    final store = widget.skeletonPages;
+    final bookUrl = widget.bookUrl;
+    if (store == null || bookUrl == null) return null;
+    final state = widget.runtime.state;
+    final page = store.read(bookUrl);
+    if (page == null ||
+        !page.matches(state.visibleLocation, state.layoutSpec)) {
+      return null;
+    }
+    final progress = page.progress;
+    final notifier = widget.progressListenable;
+    if (progress != null && notifier != null) {
+      // 建構中不能通知別的元件重建，等這一幀畫完；這時骨架才剛開始淡入，
+      // 看不出寬度換了。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && notifier.value == null) notifier.value = progress;
+      });
+    }
+    return page;
+  }
+
+  /// 記下畫面上這一頁每一行字的位置與進度，下次從這裡開書時骨架照它畫。
+  /// 正文還沒排好、紙還蓋著（跳章中）時不記：畫面上不是要記的那一頁。
+  void _rememberPage() {
+    final store = widget.skeletonPages;
+    final bookUrl = widget.bookUrl;
+    if (store == null || bookUrl == null) return;
+    if (!_initialRestoreCompleted || _jumpVeil != null) return;
+    final location = _captureVisibleLocation();
+    final offset = _effectiveScrollOffset();
+    if (location == null || offset == null) return;
+    final lines = <Rect>[];
+    final ranges = <int, (int, int)>{};
+    for (final key in _documentIndex.keysInRange(
+      offset,
+      offset + _viewportSize.height,
+    )) {
+      final blocks = _pipeline.blocksOf(key.chapterIndex);
+      if (blocks == null) continue;
+      final range = blocks
+          .blockForCharOffset(blocks.blockStartOffset(key))
+          .charRange;
+      final previous = ranges[key.chapterIndex];
+      ranges[key.chapterIndex] = previous == null
+          ? (range.start, range.end)
+          : (
+              math.min(previous.$1, range.start),
+              math.max(previous.$2, range.end),
+            );
+    }
+    for (final MapEntry(key: chapter, value: (start, end)) in ranges.entries) {
+      for (final box in _lineBoxes(chapter, start, end)) {
+        if (box.bottom <= 0 || box.top >= _viewportSize.height) continue;
+        lines.add(Rect.fromLTRB(box.left, box.top, box.right, box.bottom));
+      }
+    }
+    if (lines.isEmpty) return;
+    unawaited(
+      store.write(
+        bookUrl,
+        ReaderSkeletonPage(
+          chapterIndex: location.chapterIndex,
+          charOffset: location.charOffset,
+          visualOffsetPx: location.visualOffsetPx,
+          layout: ReaderSkeletonPage.layoutKeyOf(
+            widget.runtime.state.layoutSpec,
+          ),
+          lines: lines,
+          progress: widget.progressListenable?.value,
+        ),
+      ),
+    );
+  }
 
   Widget _buildLoading(ReaderV2State state) {
     final unavailable = state.lifecycle == ReaderV2Lifecycle.unavailable;

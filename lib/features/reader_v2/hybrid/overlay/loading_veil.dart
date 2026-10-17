@@ -153,6 +153,7 @@ class LoadingVeil extends StatefulWidget {
     required this.spec,
     required this.backgroundColor,
     required this.textColor,
+    this.lines,
   });
 
   final LoadingVeilController controller;
@@ -161,6 +162,10 @@ class LoadingVeil extends StatefulWidget {
   final ReaderV2LayoutSpec spec;
   final Color backgroundColor;
   final Color textColor;
+
+  /// 上次在這個位置看到的每一行字（[ReaderSkeletonPage.lines]）；有的話
+  /// 骨架照它們畫，沒有時照 [spec] 畫固定的段落樣式。
+  final List<Rect>? lines;
 
   @override
   State<LoadingVeil> createState() => _LoadingVeilState();
@@ -200,6 +205,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
           pulse: controller._pulseCurve,
           sweep: () => controller._sweep,
           spec: widget.spec,
+          lines: widget.lines,
           backgroundColor: widget.backgroundColor,
           textColor: widget.textColor,
         ),
@@ -215,6 +221,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.pulse,
     required this.sweep,
     required this.spec,
+    required this.lines,
     required this.backgroundColor,
     required this.textColor,
   }) : super(repaint: Listenable.merge([cover, skeleton, pulse]));
@@ -226,6 +233,7 @@ class _LoadingVeilPainter extends CustomPainter {
   /// 掀紙是不是由左而右；紙蓋著時不影響畫面。
   final bool Function() sweep;
   final ReaderV2LayoutSpec spec;
+  final List<Rect>? lines;
   final Color backgroundColor;
   final Color textColor;
 
@@ -292,6 +300,10 @@ class _LoadingVeilPainter extends CustomPainter {
     final barHeight = style.fontSize * _barHeightFactor;
     final barInset = (lineExtent - barHeight) / 2;
     final radius = AppRadius.cardXs.topLeft;
+    if (lines case final lines? when lines.isNotEmpty) {
+      _paintLines(canvas, lines, barHeight, radius, paint);
+      return;
+    }
     final indent = style.textIndent * (spec.cellWidth ?? style.fontSize);
     final paragraphGap = lineExtent * style.paragraphSpacing;
 
@@ -322,12 +334,36 @@ class _LoadingVeilPainter extends CustomPainter {
     }
   }
 
+  /// 照記下的每一行畫：長條與那一行字同寬、置中在那一行上；正文的長條
+  /// 是 [barHeight]，比正文高的行（章名）照字框高度等比放大。
+  static void _paintLines(
+    Canvas canvas,
+    List<Rect> lines,
+    double barHeight,
+    Radius radius,
+    Paint paint,
+  ) {
+    final heights = [for (final line in lines) line.height]..sort();
+    final bodyHeight = heights[heights.length ~/ 2];
+    for (final line in lines) {
+      final height = bodyHeight <= 0
+          ? barHeight
+          : barHeight * (line.height / bodyHeight).clamp(1.0, 3.0);
+      final top = line.center.dy - height / 2;
+      canvas.drawRRect(
+        RRect.fromLTRBR(line.left, top, line.right, top + height, radius),
+        paint,
+      );
+    }
+  }
+
   @override
   bool shouldRepaint(_LoadingVeilPainter oldDelegate) =>
       oldDelegate.cover != cover ||
       oldDelegate.skeleton != skeleton ||
       oldDelegate.pulse != pulse ||
       oldDelegate.spec != spec ||
+      !identical(oldDelegate.lines, lines) ||
       oldDelegate.backgroundColor != backgroundColor ||
       oldDelegate.textColor != textColor;
 }
