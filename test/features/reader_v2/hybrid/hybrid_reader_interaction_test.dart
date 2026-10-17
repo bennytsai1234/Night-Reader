@@ -566,6 +566,101 @@ void main() {
     expect(runtime.state.visibleLocation.chapterIndex, 0);
   });
 
+  group('the paper fades in over the old text before the relayout', () {
+    LoadingVeilController? veilOf(WidgetTester tester) {
+      final veil = find.byType(LoadingVeil);
+      return veil.evaluate().isEmpty
+          ? null
+          : tester.widget<LoadingVeil>(veil).controller;
+    }
+
+    /// 一幀一幀推進，直到紙開始淡入；淡入途中每一幀舊正文都還在紙下，
+    /// 紙蓋滿後才拿掉。回傳淡入了幾幀。
+    Future<int> expectOldTextUntilCovered(WidgetTester tester) async {
+      var frame = 0;
+      while (frame < 200 && veilOf(tester) == null) {
+        await tester.pump(const Duration(milliseconds: 16));
+        frame++;
+      }
+      final veil = veilOf(tester)!;
+      var fading = 0;
+      while (!veil.isCovered) {
+        expect(veil.isVisible, isTrue);
+        expect(
+          find.byType(CustomScrollView),
+          findsOneWidget,
+          reason: '紙還沒蓋滿，舊正文留在紙下',
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        fading++;
+        expect(fading, lessThan(100));
+      }
+      return fading;
+    }
+
+    testWidgets('a jump keeps the old text until the paper covers it', (
+      tester,
+    ) async {
+      await pumpReader(tester, customRuntime: _makeRuntime(chapterCount: 8));
+      await settle(tester);
+
+      final jump = runtime.jumpToChapter(5);
+      final fading = await expectOldTextUntilCovered(tester);
+      expect(fading, greaterThan(5), reason: '紙是淡入的，不是一幀蓋上');
+
+      for (
+        var frame = 0;
+        frame < 2000 && runtime.stateMachine.currentOperation != null;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await jump;
+      await settle(tester);
+      expect(runtime.state.visibleLocation.chapterIndex, 5);
+      expect(find.byType(LoadingVeil), findsNothing);
+    });
+
+    testWidgets('a font size change keeps the old text until covered', (
+      tester,
+    ) async {
+      await pumpReader(tester);
+      await settle(tester);
+      final larger = ReaderV2LayoutSpec.fromViewport(
+        viewportSize: _viewport,
+        style: ReaderV2LayoutStyle(
+          fontSize: 26,
+          lineHeight: _style.lineHeight,
+          letterSpacing: _style.letterSpacing,
+          paragraphSpacing: _style.paragraphSpacing,
+          paddingTop: _style.paddingTop,
+          paddingBottom: _style.paddingBottom,
+          paddingLeft: _style.paddingLeft,
+          paddingRight: _style.paddingRight,
+          textIndent: _style.textIndent,
+        ),
+      );
+
+      final applied = runtime.applyPresentation(spec: larger);
+      final fading = await expectOldTextUntilCovered(tester);
+      expect(fading, greaterThan(5), reason: '紙是淡入的，不是一幀蓋上');
+
+      for (
+        var frame = 0;
+        frame < 2000 && runtime.stateMachine.currentOperation != null;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await applied;
+      await settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(runtime.state.layoutSpec.style.fontSize, 26);
+      expect(find.byType(LoadingVeil), findsNothing);
+      expect(find.byType(CustomScrollView), findsOneWidget);
+    });
+  });
+
   /// 第 7 章的正文等 [target] 才到，其餘章節立刻到。
   Future<void> pumpReaderWaitingForChapter7(
     WidgetTester tester,

@@ -158,6 +158,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     },
   );
 
+  /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙蓋滿（或途中掀開）後完成；
+  /// 其他時候為 null（見 [_coverText]）。
+  Future<void>? _covering;
+
+  /// 排版或內容換代了，等紙蓋滿才換（[_handleEpochRebuild]）：換代會拿掉
+  /// 舊正文的版面。
+  bool _epochRebuildPending = false;
+
+  /// 正文上一次照哪個版面畫：紙淡入蓋住舊正文時，舊正文照原本的左右
+  /// 邊距畫，不跟著新設定先跳一下。
+  ReaderV2LayoutSpec? _shownTextSpec;
+
   /// 開書的位置與版面都和上次記下的那一頁相同時，開書的紙照它畫骨架。
   ReaderSkeletonPage? _openingPage;
 
@@ -353,6 +365,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
+    // 舊正文還在畫面上（例如朗讀念到還沒載入的一章）：紙先淡入蓋住，蓋滿
+    // 才開始排版（ADR 0018）。
+    _coverText();
+    if (!await _awaitCovered() || !isCurrent()) return false;
     // 開書、跳章與重新定位都是使用者的動作：之前取不到的章節都再試一次。
     _chapterRepo.forgetFailures();
     final pipeline = _pipeline;
@@ -688,7 +704,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (layoutChanged || contentChanged) {
       _lastLayoutGeneration = state.layoutGeneration;
       _lastContentGeneration = state.contentGeneration;
-      _handleEpochRebuild();
+      // 舊正文還在畫面上時，紙先淡入蓋住，蓋滿才換代（ADR 0018）。
+      _coverText();
+      if (_covering != null) {
+        _epochRebuildPending = true;
+      } else {
+        _handleEpochRebuild();
+      }
       if (contentChanged && operation == null && state.hasStableWorld) {
         _restorePublishedContentGeneration(
           state.visibleLocation,
@@ -731,7 +753,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _jumpVeil = jump;
       _clearSelection();
       _holdScrollUnderJumpVeil();
-      _coverUntilFirstPage();
+      _coverText();
     } else if (wasVeiled) {
       _veil.reveal(SkeletonReveal.of(context));
     }
@@ -842,6 +864,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
+    // 換代等紙蓋滿才做；還原要用換代後的排版管線。
+    if (!await _awaitCovered()) return false;
+    if (!identical(widget.runtime, runtime) ||
+        (operation != null && !runtime.isCurrentOperationToken(operation))) {
+      return false;
+    }
     final pipeline = _pipeline;
     _runtimeLocationRevision += 1;
     final revision = ++_restoreRevision;
@@ -1409,6 +1437,41 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _veil.cover(skeleton: false);
   }
 
+  /// 跳章、改排版、重載內容開始時蓋紙：舊正文還在畫面上時紙以
+  /// [AppMotion.fade] 淡入蓋過它，舊正文留著、紙攔下捲動與長按，蓋滿
+  /// （[_covering] 完成）才拿掉舊正文、開始排版；這段淡入不和排版疊在一起
+  /// （ADR 0018、0023）。紙已經蓋滿時直接蓋上；正文本來就不在畫面上
+  /// （開書、排版中）時不動，紙由排版流程管。
+  void _coverText() {
+    if (!_initialRestoreCompleted) return;
+    if (_veil.isCovered && _covering == null) {
+      _coverUntilFirstPage();
+      return;
+    }
+    _openingPage = null;
+    _veil.cover(skeleton: false, fade: true);
+    if (_veil.isCovered || _covering != null) return;
+    _clearSelection();
+    _covering = _veil.covered.whenComplete(() {
+      _covering = null;
+      if (!mounted) return;
+      if (_epochRebuildPending) {
+        _epochRebuildPending = false;
+        _handleEpochRebuild();
+      }
+      _scheduleRebuild();
+    });
+  }
+
+  /// 等紙淡入蓋滿（含蓋滿後的換代）；這一頁已經拆掉時回傳 false。
+  Future<bool> _awaitCovered() async {
+    for (var covering = _covering; covering != null; covering = _covering) {
+      await covering;
+      if (!mounted) return false;
+    }
+    return mounted;
+  }
+
   /// 先只排第一頁、照它淡入骨架，淡入播完才回去排前後其他頁（ADR 0016、
   /// 0023）。前後取不到時，第一頁照捲動實際停得住的位置重排。
   Future<bool> _showFirstPage(
@@ -1651,6 +1714,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           keepScrollOffset: false,
         );
         final highlight = widget.ttsHighlight;
+        final textSpec = _covering == null
+            ? (_shownTextSpec = state.layoutSpec)
+            : _shownTextSpec ?? state.layoutSpec;
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
           child: HybridScrollView(
@@ -1664,8 +1730,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             cacheExtent: _viewportSize.height,
             textColor: widget.textColor,
             horizontalPadding: EdgeInsets.only(
-              left: state.layoutSpec.textPaddingLeft,
-              right: state.layoutSpec.textPaddingRight,
+              left: textSpec.textPaddingLeft,
+              right: textSpec.textPaddingRight,
             ),
             physics: _physics,
             // 跨在上下緣的段落畫到正文區外，閱讀頁框架只露出正文與頁首頁尾
@@ -1702,7 +1768,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             if (_veil.isVisible)
               Positioned.fill(
                 child: IgnorePointer(
-                  ignoring: _jumpVeil == null,
+                  // 等跳章正文、或淡入蓋住舊正文時，紙攔下捲動；淡出中的
+                  // 紙不攔。
+                  ignoring: _jumpVeil == null && _covering == null,
                   child: _buildVeil(state),
                 ),
               ),
@@ -1725,7 +1793,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               suppressTapAtPointerDown: _isUserFlingInProgress,
               child: GestureDetector(
                 onLongPressStart:
-                    widget.textSelectionEnabled && _jumpVeil == null
+                    widget.textSelectionEnabled &&
+                        _jumpVeil == null &&
+                        _covering == null
                     ? (details) => unawaited(_handleLongPressStart(details))
                     : null,
                 child: readerStack,
