@@ -496,9 +496,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // 變成骨架照骨架換場的時長。
       states.value = ReaderV2InfoState.loading;
       await tester.pump();
-      await tester.pump(AppMotion.fade ~/ 2);
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       final breathing = [
         for (final element in find.byType(Skeleton).evaluate())
           (element as StatefulElement).state,
@@ -506,7 +507,7 @@ void main() {
       expect(breathing, hasLength(2));
 
       // 資訊淡完移出畫面：骨架留在原本的元素上，呼吸不從頭開始。
-      await tester.pump(AppMotion.fade);
+      await tester.pump(SkeletonReveal.defaultDuration);
       expect(infoText('第一章'), findsOneWidget);
       expect([
         for (final element in find.byType(Skeleton).evaluate())
