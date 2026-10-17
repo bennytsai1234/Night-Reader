@@ -318,6 +318,7 @@ class _BookshelfPageState extends State<BookshelfPage>
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,
+        titles: provider.lastShelfTitles,
         padding: EdgeInsets.fromLTRB(
           AppGrouped.margin,
           insets.top + AppSpacing.xs,

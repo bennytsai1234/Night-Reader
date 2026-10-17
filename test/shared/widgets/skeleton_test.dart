@@ -7,6 +7,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 double _contrast(Color a, Color b) {
   final la = a.computeLuminance();
@@ -109,11 +110,11 @@ void main() {
     );
 
     double contentOpacity(WidgetTester tester) => tester
-        .widget<FadeTransition>(
+        .widget<SkeletonRevealLayer>(
           find
               .ancestor(
                 of: find.text('內容'),
-                matching: find.byType(FadeTransition),
+                matching: find.byType(SkeletonRevealLayer),
               )
               .first,
         )
@@ -140,7 +141,7 @@ void main() {
       decoded.value = true;
       await tester.pump();
       await tester.pump();
-      await tester.pump(AppMotion.reveal ~/ 2);
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       expect(contentOpacity(tester), inExclusiveRange(0, 1));
       expect(find.byType(SkeletonBox), findsOneWidget);
 
@@ -174,7 +175,7 @@ void main() {
       await tester.pump();
       await tester.pump(AppMotion.revealCoverWait);
       await tester.pump();
-      await tester.pump(AppMotion.reveal ~/ 2);
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       expect(contentOpacity(tester), inExclusiveRange(0, 1));
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);

@@ -1,26 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 書架初次載入的骨架：依目前的網格或列表畫出同樣幾何的封面與書名佔位，
 /// 書到了之後換成真的書卡時版面不跳動。放在 [Skeleton] 底下才會呼吸。
 ///
-/// 畫 [bookCount] 本（超出畫面的不畫）；不知道有幾本時鋪滿畫面。
+/// 畫 [bookCount] 本（超出畫面的不畫）；不知道有幾本時鋪滿畫面。[titles]
+/// 有記下的那幾本，書名與作者的長條照真正的文字換行與寬度畫，骨架換場時
+/// 每一條剛好換成那一行字；沒記下的用輪流的長度。
 class BookshelfSkeleton extends StatelessWidget {
   const BookshelfSkeleton({
     super.key,
     required this.grid,
     required this.padding,
     this.bookCount,
+    this.titles = const [],
   });
 
   final bool grid;
 
   /// 上次書架上的本數；null 表示不知道。
   final int? bookCount;
+
+  /// 上次書架前面幾本的書名與作者，依當時的順序。
+  final List<ShelfSkeletonTitle> titles;
 
   /// 與書架清單相同的內距（讓出玻璃頁首與底部浮動列）。
   final EdgeInsets padding;
@@ -80,10 +87,16 @@ class BookshelfSkeleton extends StatelessWidget {
             ),
             child: Align(
               alignment: Alignment.topLeft,
-              child: SkeletonLine(
-                style: BookshelfGridTile.titleStyle,
-                widthFactor: _titleWidths[index % _titleWidths.length],
-              ),
+              child: index < titles.length
+                  ? _TextBars(
+                      text: context.zh(titles[index].name),
+                      style: BookshelfGridTile.titleStyle,
+                      maxLines: 2,
+                    )
+                  : SkeletonLine(
+                      style: BookshelfGridTile.titleStyle,
+                      widthFactor: _titleWidths[index % _titleWidths.length],
+                    ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -107,6 +120,7 @@ class BookshelfSkeleton extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: _ListCardSkeleton(
           titleWidth: _titleWidths[index % _titleWidths.length],
+          title: index < titles.length ? titles[index] : null,
         ),
       ),
     );
@@ -124,9 +138,12 @@ class BookshelfSkeleton extends StatelessWidget {
 
 /// 列表書卡的骨架：與 [BookshelfListCard] 同樣的紙卡、封面與兩行文字位置。
 class _ListCardSkeleton extends StatelessWidget {
-  const _ListCardSkeleton({required this.titleWidth});
+  const _ListCardSkeleton({required this.titleWidth, this.title});
 
   final double titleWidth;
+
+  /// 這一本記下的書名與作者；null 時照 [titleWidth] 畫。
+  final ShelfSkeletonTitle? title;
 
   @override
   Widget build(BuildContext context) {
@@ -151,15 +168,30 @@ class _ListCardSkeleton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SkeletonLine(
-                    style: AppTextStyles.uiMd.copyWith(height: 1.3),
-                    widthFactor: titleWidth * 0.7,
-                  ),
-                  const SizedBox(height: 2),
-                  SkeletonLine(
-                    style: AppTextStyles.bodySm.copyWith(height: 1.3),
-                    widthFactor: 0.3,
-                  ),
+                  if (title case final title?) ...[
+                    _TextBars(
+                      text: context.zh(title.name),
+                      style: BookshelfListCard.titleStyle,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: 2),
+                    // 沒有作者時和真的書卡一樣只留這一行的高度。
+                    _TextBars(
+                      text: context.zh(title.author).trim(),
+                      style: BookshelfListCard.authorStyle,
+                      maxLines: 1,
+                    ),
+                  ] else ...[
+                    SkeletonLine(
+                      style: BookshelfListCard.titleStyle,
+                      widthFactor: titleWidth * 0.7,
+                    ),
+                    const SizedBox(height: 2),
+                    SkeletonLine(
+                      style: BookshelfListCard.authorStyle,
+                      widthFactor: 0.3,
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.md),
                   const _ProgressLineSkeleton(),
                 ],
@@ -184,4 +216,59 @@ class _ProgressLineSkeleton extends StatelessWidget {
       borderRadius: AppRadius.pillShape,
     ),
   );
+}
+
+/// 照真正文字的換行畫出每一行的長條，每條與那一行字一樣寬；行高與真正的
+/// 文字相同，所以換成文字時位置不動。空字串時只留一行的高度。
+class _TextBars extends StatelessWidget {
+  const _TextBars({
+    required this.text,
+    required this.style,
+    required this.maxLines,
+  });
+
+  final String text;
+  final TextStyle style;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final fontSize = textScaler.scale(style.fontSize ?? 14);
+    final lineExtent = fontSize * (style.height ?? 1.3);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          // 和 Text 一樣疊在預設字型上（字族、字距），量出來才一樣寬。
+          text: TextSpan(
+            text: text,
+            style: DefaultTextStyle.of(context).style.merge(style),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: textScaler,
+          maxLines: maxLines,
+          ellipsis: '…',
+        )..layout(maxWidth: constraints.maxWidth);
+        final widths = [
+          for (final line in painter.computeLineMetrics()) line.width,
+        ];
+        painter.dispose();
+        if (widths.isEmpty || text.isEmpty) return SizedBox(height: lineExtent);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final width in widths)
+              SizedBox(
+                height: lineExtent,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SkeletonBox(width: width, height: fontSize * 0.75),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }

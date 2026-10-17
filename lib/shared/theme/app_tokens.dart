@@ -156,10 +156,6 @@ class AppMotion {
   static const Duration fade = Duration(milliseconds: 250);
   static const Curve fadeCurve = Curves.easeInOut;
 
-  /// 整頁從骨架換成內容（連同封面）一次淡入：一次換掉一整頁，比 [fade]
-  /// 長才看得出是轉場而不是閃一下；與 [spring] 同長。
-  static const Duration reveal = Duration(milliseconds: 400);
-
   /// 一次淡入前最多等封面解碼多久。等待時骨架照常呼吸；再久就寧可讓還
   /// 沒好的封面晚點各自淡入，不讓整頁卡在骨架。
   static const Duration revealCoverWait = Duration(milliseconds: 300);

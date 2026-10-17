@@ -17,6 +17,10 @@ class PreferKey {
 
   /// 換頁動畫（[AppPageTransition.name]）。
   static const String pageTransition = 'page_transition';
+
+  /// 骨架換場的方式（[SkeletonRevealStyle.name]）與時長（毫秒）。
+  static const String skeletonRevealStyle = 'skeleton_reveal_style';
+  static const String skeletonRevealMillis = 'skeleton_reveal_millis';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';

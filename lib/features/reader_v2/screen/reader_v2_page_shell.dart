@@ -23,6 +23,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 閱讀頁面框架的垂直幾何：頁首、正文、頁尾各佔的高度。
 ///
@@ -481,9 +482,10 @@ enum ReaderV2InfoState {
   ready,
 }
 
-/// 資訊列在骨架與真正資訊之間以 [AppMotion.fade] 交叉淡換：骨架照資訊的
-/// 寬度畫在同一個位置，看起來是文字變成長條、長條再變回文字。開書時原本
-/// 沒有資訊，就是骨架淡入。系統關閉動畫時直接到位。
+/// 資訊列在骨架與真正資訊之間交叉淡換：骨架照資訊的寬度畫在同一個位置，
+/// 看起來是文字變成長條、長條再變回文字。骨架換成資訊時和正文一起照骨架
+/// 換場（[SkeletonReveal]）的方式與時長，其他切換用 [AppMotion.fade]。開書
+/// 時原本沒有資訊，就是骨架淡入。系統關閉動畫時直接到位。
 class _InfoLayer extends StatefulWidget {
   const _InfoLayer({required this.state, required this.builder});
 
@@ -517,6 +519,9 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   /// null 表示還沒讀過 MediaQuery，第一次讀到時才開始同步狀態。
   bool? _reduceMotion;
 
+  /// 這一次骨架換成資訊是不是由左而右；其他切換一律整條淡。
+  bool _sweep = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -529,7 +534,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(_InfoLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.state != widget.state) _sync();
+    if (oldWidget.state != widget.state) _sync(from: oldWidget.state);
   }
 
   @override
@@ -539,10 +544,17 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _sync() {
+  void _sync({ReaderV2InfoState? from}) {
     // 骨架與資訊在同一個位置交叉淡換，兩者都從目前的濃淡接著走，切換途中
     // 再切回來不會先閃空。
     final state = widget.state;
+    final reveal =
+        from == ReaderV2InfoState.loading && state == ReaderV2InfoState.ready
+        ? SkeletonReveal.of(context)
+        : null;
+    _sweep = reveal?.sweeps ?? false;
+    _info.duration = reveal?.duration ?? AppMotion.fade;
+    _skeleton.reverseDuration = reveal?.duration;
     _animate(_skeleton, state == ReaderV2InfoState.loading ? 1 : 0);
     _animate(_info, state == ReaderV2InfoState.ready ? 1 : 0);
   }
@@ -572,10 +584,17 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
       alignment: Alignment.center,
       children: [
         if (showInfo)
-          FadeTransition(opacity: _infoOpacity, child: widget.builder(false)),
+          SkeletonRevealLayer(
+            opacity: _infoOpacity,
+            side: SkeletonRevealSide.content,
+            sweep: _sweep,
+            child: widget.builder(false),
+          ),
         if (showSkeleton)
-          FadeTransition(
+          SkeletonRevealLayer(
             opacity: _skeletonOpacity,
+            side: SkeletonRevealSide.skeleton,
+            sweep: _sweep,
             child: Skeleton(child: widget.builder(true)),
           ),
       ],
