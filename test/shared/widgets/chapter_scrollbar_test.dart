@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/widgets/chapter_scrollbar.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 
 import '../../support/glass_motion.dart';
 
@@ -81,6 +82,38 @@ void main() {
     // 章名泡泡是玻璃，拖曳鈕還在淡入也不能包在淡入裡（ADR 0022）。
     expectNoGlassUnderFade(tester);
     await gesture.up();
+  });
+
+  testWidgets('the name bubble grows from the thumb side and shrinks back', (
+    tester,
+  ) async {
+    await pumpList(tester, 1000);
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    final gesture = await tester.startGesture(tester.getCenter(thumb()));
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    Rect bubble() => tester.getRect(find.byType(GlassSurface));
+    // 第一幀從 0 開始，不整塊冒出來。
+    expect(bubble().width, lessThan(1));
+
+    await tester.pump(const Duration(milliseconds: 60));
+    final growing = bubble();
+    expectNoGlassUnderFade(tester);
+    await tester.pump(const Duration(milliseconds: 300));
+    final rest = bubble();
+    expect(growing.width, inExclusiveRange(0, rest.width));
+    // 靠拖曳鈕的右緣不動。
+    expect(growing.right, closeTo(rest.right, 0.5));
+
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(bubble().width, inExclusiveRange(0, rest.width));
+    expect(bubble().right, closeTo(rest.right, 0.5));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(GlassSurface), findsNothing);
   });
 
   testWidgets('a short list never shows the thumb', (tester) async {

@@ -320,6 +320,9 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       ? searchRelevanceRank(book, _lastSearchKey)
       : null;
 
+  /// 結果順序是否已經固定（使用者捲動過）。
+  bool get resultOrderHeld => _heldOrder != null;
+
   /// 固定目前的結果順序；使用者開始捲動結果時由頁面呼叫。
   void holdResultOrder() {
     if (_heldOrder != null) return;

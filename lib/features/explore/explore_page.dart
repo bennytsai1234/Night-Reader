@@ -46,8 +46,35 @@ class _ExplorePageContent extends StatefulWidget {
 
 enum _SourceAction { edit, top, search, refresh, delete }
 
-class _ExplorePageContentState extends State<_ExplorePageContent> {
+class _ExplorePageContentState extends State<_ExplorePageContent>
+    with SingleTickerProviderStateMixin {
   final _scrollController = ScrollController();
+
+  /// 分組篩選列出現的進度，1 是完整出現。第一幀照 provider 手上的分組
+  /// （讀到書源前是上次的紀錄）直接到位；之後有無分組改變（紀錄不準、
+  /// 分組刪光或新增）時，篩選列從頁首下緣長出或收回，清單連續讓位。
+  late final AnimationController _filterBar = AnimationController(
+    vsync: this,
+    duration: AppMotion.menu,
+  );
+  late final Animation<double> _filterBarShown = CurvedAnimation(
+    parent: _filterBar,
+    curve: AppMotion.menuCurve,
+  );
+  bool? _filterBarTarget;
+
+  void _syncFilterBar(BuildContext context, bool shown) {
+    if (_filterBarTarget == shown) return;
+    final first = _filterBarTarget == null;
+    _filterBarTarget = shown;
+    if (first || MediaQuery.disableAnimationsOf(context)) {
+      _filterBar.value = shown ? 1 : 0;
+    } else if (shown) {
+      _filterBar.forward();
+    } else {
+      _filterBar.reverse();
+    }
+  }
 
   /// 沒有發現書源時用到：連一個書源都沒有時改成帶去匯入。
   late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
@@ -64,6 +91,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
 
   @override
   void dispose() {
+    _filterBar.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -71,59 +99,79 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExploreProvider>();
-    final showTabs =
-        !provider.isLoadingSources &&
-        provider.sourceLoadError == null &&
-        provider.groups.isNotEmpty;
+    // 讀到書源前 provider 的分組是上次的紀錄，篩選列從第一幀就留好。
+    _syncFilterBar(
+      context,
+      provider.sourceLoadError == null && provider.groups.isNotEmpty,
+    );
+    // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
+    final body = Builder(
+      builder: (bodyContext) {
+        _bodyPadding = MediaQuery.paddingOf(bodyContext);
+        return SkeletonSwitcher(
+          loading: provider.isLoadingSources,
+          skeleton: ExploreSourceListSkeleton(padding: _listPadding),
+          builder: (_) => _buildSourceList(provider),
+        );
+      },
+    );
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: AppChrome.of(context).groupedBackground,
-      appBar: GlassNavHeader(
-        title: '發現',
+    // 篩選列長出、收回時頁首每一幀變高，Scaffold 要重新量；清單是同一個
+    // [body]，只隨讓位的內距重排。
+    return AnimatedBuilder(
+      animation: _filterBarShown,
+      builder: (context, _) => Scaffold(
+        extendBodyBehindAppBar: true,
         backgroundColor: AppChrome.of(context).groupedBackground,
-        bottom: showTabs
-            ? Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppGrouped.margin,
-                  0,
-                  AppGrouped.margin,
-                  AppSpacing.sm,
-                ),
-                child: GroupFilterBar<String?>(
-                  all: GroupFilterOption<String?>(
-                    null,
-                    '全部',
-                    count: provider.totalSourceCount,
+        appBar: _buildHeader(provider),
+        body: body,
+      ),
+    );
+  }
+
+  GlassNavHeader _buildHeader(ExploreProvider provider) {
+    final shown = _filterBarShown.value;
+    return GlassNavHeader(
+      title: '發現',
+      backgroundColor: AppChrome.of(context).groupedBackground,
+      bottom: shown > 0
+          ? ClipRect(
+              // 完整出現時不裁，膠囊的陰影照常伸出去。
+              clipBehavior: shown < 1 ? Clip.hardEdge : Clip.none,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                heightFactor: shown,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppGrouped.margin,
+                    0,
+                    AppGrouped.margin,
+                    AppSpacing.sm,
                   ),
-                  groups: [
-                    for (final group in provider.groups)
-                      GroupFilterOption<String?>(
-                        group,
-                        group,
-                        count: provider.groupCounts[group],
-                      ),
-                  ],
-                  selected: provider.selectedGroup,
-                  // provider 對同一分組是切換語意；篩選列只在選到不同分組時
-                  // 回報，因此不會誤觸取消。
-                  onChanged: provider.setGroupFilter,
+                  child: GroupFilterBar<String?>(
+                    all: GroupFilterOption<String?>(
+                      null,
+                      '全部',
+                      count: provider.filterAllCount,
+                    ),
+                    groups: [
+                      for (final group in provider.groups)
+                        GroupFilterOption<String?>(
+                          group,
+                          group,
+                          count: provider.groupCounts[group],
+                        ),
+                    ],
+                    selected: provider.selectedGroup,
+                    // provider 對同一分組是切換語意；篩選列只在選到不同分組時
+                    // 回報，因此不會誤觸取消。
+                    onChanged: provider.setGroupFilter,
+                  ),
                 ),
-              )
-            : null,
-        bottomHeight: showTabs ? GroupFilterBar.height + AppSpacing.sm : 0,
-      ),
-      // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
-      body: Builder(
-        builder: (bodyContext) {
-          _bodyPadding = MediaQuery.paddingOf(bodyContext);
-          return SkeletonSwitcher(
-            loading: provider.isLoadingSources,
-            skeleton: ExploreSourceListSkeleton(padding: _listPadding),
-            builder: (_) => _buildSourceList(provider),
-          );
-        },
-      ),
+              ),
+            )
+          : null,
+      bottomHeight: (GroupFilterBar.height + AppSpacing.sm) * shown,
     );
   }
 
@@ -165,23 +213,33 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       return _padState(
         StreamBuilder<bool>(
           stream: _hasSources,
-          builder: (context, snapshot) => snapshot.data ?? true
-              ? _buildNoExploreSources(provider)
-              : AppStateView(
-                  icon: Icons.travel_explore_outlined,
-                  title: '還沒有書源',
-                  description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
-                  primaryAction: AppStateAction(
-                    label: '匯入書源',
-                    icon: Icons.download_rounded,
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SourceManagerPage(),
-                      ),
+          // 還不知道有沒有書源時兩種空頁都不畫，知道了才淡入對的那一種；
+          // 之後匯入或刪光書源也是交叉淡換。
+          builder: (context, snapshot) => _FadeSwitch(
+            child: switch (snapshot.data) {
+              null => const SizedBox.expand(key: ValueKey('unknown')),
+              true => KeyedSubtree(
+                key: const ValueKey('noExplore'),
+                child: _buildNoExploreSources(provider),
+              ),
+              false => AppStateView(
+                key: const ValueKey('noSources'),
+                icon: Icons.travel_explore_outlined,
+                title: '還沒有書源',
+                description: '匯入書源後，這裡會列出可以瀏覽分類的書源。',
+                primaryAction: AppStateAction(
+                  label: '匯入書源',
+                  icon: Icons.download_rounded,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SourceManagerPage(),
                     ),
                   ),
                 ),
+              ),
+            },
+          ),
         ),
       );
     }
@@ -290,12 +348,9 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         ),
         KeyedSubtree(
           key: _kindsKeys.putIfAbsent(source.bookSourceUrl, GlobalKey.new),
-          child: AnimatedSize(
-            // 換 key 讓它以收合後的大小重建，不播收合動畫。
-            key: ValueKey(source.bookSourceUrl == _snapCollapseUrl),
-            duration: AppMotion.menu,
-            curve: AppMotion.menuCurve,
-            alignment: Alignment.topCenter,
+          child: _KindsReveal(
+            open: isExpanded && !provider.isLoadingKinds,
+            snap: source.bookSourceUrl == _snapCollapseUrl,
             child: isExpanded && !provider.isLoadingKinds
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -313,7 +368,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                           )
                         : _buildKindTags(provider, source),
                   )
-                : const SizedBox(width: double.infinity),
+                : null,
           ),
         ),
       ],
@@ -585,6 +640,97 @@ class _SourceRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 空頁之間的交叉淡換（[AppMotion.fade]）；系統關閉動畫時直接換。
+class _FadeSwitch extends StatelessWidget {
+  const _FadeSwitch({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : AppMotion.fade,
+      switchInCurve: AppMotion.fadeCurve,
+      switchOutCurve: AppMotion.fadeCurve,
+      child: child,
+    );
+  }
+}
+
+/// 書源的分類區展開、收合：區塊高度從 0 長到內容高度（或反過來），分類
+/// 膠囊跟著同一段進度淡入淡出，並被區塊邊緣裁住。收合時沿用展開時最後
+/// 畫出的分類，provider 已經換去載入別的書源也一樣，最後一幀才拿掉；原本
+/// 收合的第一幀分類就消失，留一塊空白再縮小。
+class _KindsReveal extends StatefulWidget {
+  const _KindsReveal({
+    required this.open,
+    required this.snap,
+    required this.child,
+  });
+
+  final bool open;
+
+  /// 這一次切換直接到位、不播動畫（見 `_collapseExpandedAbove`）。
+  final bool snap;
+
+  /// 展開時的內容；收合時可以是 null，沿用上一次的。
+  final Widget? child;
+
+  @override
+  State<_KindsReveal> createState() => _KindsRevealState();
+}
+
+class _KindsRevealState extends State<_KindsReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.menu,
+    value: widget.open ? 1 : 0,
+  )..addStatusListener((_) => setState(() {}));
+  // 收合也是先快後慢，和展開同一條曲線。
+  late final Animation<double> _shown = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.menuCurve,
+    reverseCurve: AppMotion.menuCurve.flipped,
+  );
+  late Widget? _last = widget.open ? widget.child : null;
+
+  @override
+  void didUpdateWidget(_KindsReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.open) _last = widget.child;
+    if (widget.open == oldWidget.open) return;
+    if (widget.snap || MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = widget.open ? 1 : 0;
+    } else if (widget.open) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = _last;
+    if (_controller.isDismissed || child == null) {
+      return const SizedBox(width: double.infinity);
+    }
+    return SizeTransition(
+      sizeFactor: _shown,
+      alignment: Alignment.topCenter,
+      child: FadeTransition(opacity: _shown, child: child),
     );
   }
 }

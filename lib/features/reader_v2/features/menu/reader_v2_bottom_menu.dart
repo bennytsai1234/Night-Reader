@@ -62,7 +62,14 @@ class ReaderV2BottomMenu extends StatelessWidget {
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.onHidden,
   });
+
+  /// 膠囊內容離上緣的距離。
+  static const double _panelTopPadding = AppSpacing.md;
+
+  /// 拖動條圓鈕的半徑（直徑 26）。
+  static const double _thumbRadius = 13;
 
   final bool controlsVisible;
   final ReaderV2ChapterNavigationState navigation;
@@ -95,6 +102,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final bool showAutoPage;
   final bool showReplaceRule;
 
+  /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderV2MenuEntrance]）。
+  final VoidCallback? onHidden;
+
   @override
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
@@ -102,6 +112,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     return ReaderV2MenuEntrance(
       visible: controlsVisible,
       edge: AxisDirection.down,
+      onHidden: onHidden,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
       child: Theme(
         data: menuStyle.toSheetTheme(Theme.of(context)),
@@ -121,21 +132,26 @@ class ReaderV2BottomMenu extends StatelessWidget {
                 borderRadius: AppRadius.cardXl,
                 tint: menuStyle.glassTintOf(context),
                 grouped: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.sm,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildChapterSlider(context, menuStyle),
-                      const SizedBox(height: AppSpacing.xs),
-                      _buildMainActions(menuStyle),
-                    ],
-                  ),
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.sm,
+                        _panelTopPadding,
+                        AppSpacing.sm,
+                        AppSpacing.sm,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildChapterSlider(context, menuStyle),
+                          const SizedBox(height: AppSpacing.xs),
+                          _buildMainActions(menuStyle),
+                        ],
+                      ),
+                    ),
+                    _buildScrubLabel(context, menuStyle),
+                  ],
                 ),
               ),
             ],
@@ -198,66 +214,83 @@ class ReaderV2BottomMenu extends StatelessWidget {
     final canScrub = navigation.chapterCount > 0;
     final track = menuStyle.mutedForeground.withValues(alpha: 0.24);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: [
-        if (navigation.isScrubbing)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-            child: Text(
-              '本章 ${(navigation.scrubPercent / 10).round()}/10',
-              style: AppTextStyles.labelXs.copyWith(
-                color: menuStyle.mutedForeground,
+        _chapterJumpButton(
+          '上一章',
+          navigation.canNavigateToPrev ? onPrevChapter : null,
+          menuStyle,
+        ),
+        Expanded(
+          // Telegram 式拖動條：細圓角軌道、帶柔和陰影的大圓鈕，無光暈與刻度。
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              trackShape: const RoundedRectSliderTrackShape(),
+              thumbShape: const RoundSliderThumbShape(
+                enabledThumbRadius: _thumbRadius,
+                disabledThumbRadius: _thumbRadius,
+                elevation: 2,
+                pressedElevation: 4,
+              ),
+              overlayShape: SliderComponentShape.noOverlay,
+              overlayColor: Colors.transparent,
+              tickMarkShape: SliderTickMarkShape.noTickMark,
+              activeTrackColor: menuStyle.accent,
+              inactiveTrackColor: track,
+              thumbColor: AppPalette.paper50,
+              disabledActiveTrackColor: track,
+              disabledInactiveTrackColor: track,
+              disabledThumbColor: Color.alphaBlend(track, AppPalette.paper50),
+            ),
+            child: SizedBox(
+              // 圓鈕本身 26，觸控高度維持 44。
+              height: AppGlass.buttonSize,
+              child: _buildProgressSlider(canScrub),
+            ),
+          ),
+        ),
+        _chapterJumpButton(
+          '下一章',
+          navigation.canNavigateToNext ? onNextChapter : null,
+          menuStyle,
+        ),
+      ],
+    );
+  }
+
+  /// 拖動時的「本章 n/10」：疊在膠囊上緣到圓鈕頂端之間原有的空白裡，
+  /// 不佔版面，膠囊、上方圓鈕與亮度條都不動；按下淡入、放開淡出
+  /// （[AppMotion.fade]），淡出時留著最後的數字。
+  Widget _buildScrubLabel(BuildContext context, ReaderV2MenuStyle menuStyle) {
+    const gapAboveThumb =
+        _panelTopPadding + AppGlass.buttonSize / 2 - _thumbRadius;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Positioned(
+      top: gapAboveThumb / 2,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        // 讀屏由拖動條自己念出同樣的「本章 n/10」。
+        child: ExcludeSemantics(
+          child: AnimatedOpacity(
+            opacity: navigation.isScrubbing ? 1 : 0,
+            duration: reduceMotion ? Duration.zero : AppMotion.fade,
+            curve: AppMotion.fadeCurve,
+            // 以文字中線對齊空白的中線，字級放大時往上下兩側長。
+            child: FractionalTranslation(
+              translation: const Offset(0, -0.5),
+              child: Text(
+                '本章 ${(navigation.scrubPercent / 10).round()}/10',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.labelXs.copyWith(
+                  color: menuStyle.mutedForeground,
+                ),
               ),
             ),
           ),
-        Row(
-          children: [
-            _chapterJumpButton(
-              '上一章',
-              navigation.canNavigateToPrev ? onPrevChapter : null,
-              menuStyle,
-            ),
-            Expanded(
-              // Telegram 式拖動條：細圓角軌道、帶柔和陰影的大圓鈕，無光暈與刻度。
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 4,
-                  trackShape: const RoundedRectSliderTrackShape(),
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 13,
-                    disabledThumbRadius: 13,
-                    elevation: 2,
-                    pressedElevation: 4,
-                  ),
-                  overlayShape: SliderComponentShape.noOverlay,
-                  overlayColor: Colors.transparent,
-                  tickMarkShape: SliderTickMarkShape.noTickMark,
-                  activeTrackColor: menuStyle.accent,
-                  inactiveTrackColor: track,
-                  thumbColor: AppPalette.paper50,
-                  disabledActiveTrackColor: track,
-                  disabledInactiveTrackColor: track,
-                  disabledThumbColor: Color.alphaBlend(
-                    track,
-                    AppPalette.paper50,
-                  ),
-                ),
-                child: SizedBox(
-                  // 圓鈕本身 26，觸控高度維持 44。
-                  height: AppGlass.buttonSize,
-                  child: _buildProgressSlider(canScrub),
-                ),
-              ),
-            ),
-            _chapterJumpButton(
-              '下一章',
-              navigation.canNavigateToNext ? onNextChapter : null,
-              menuStyle,
-            ),
-          ],
         ),
-      ],
+      ),
     );
   }
 

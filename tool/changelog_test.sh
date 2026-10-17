@@ -155,6 +155,28 @@ mixed=$(commit fix "lib/other.dart=x")
 expect_failure 'check: 同一次推送裡還有沒標的 App 提交時擋下' check "$noted" "$mixed"
 g checkout -q -
 
+# ---- added ----
+
+added() { (cd "$repo" && sh "$tool" added "$@"); }
+
+g checkout -q -b added "$noted"
+more=$(commit more "CHANGELOG.md=$(changelog '介紹改寫過了。
+
+- 新功能
+- 第二項
+- 第三項
+')")
+expect_output 'added: 只印出起點沒有的條列，不含介紹' "$(printf -- '- 第二項\n- 第三項')" \
+  added "$noted"
+expect_output 'added: 起點的「未發布」是空的時印出全部條列' "$(printf -- '- 新功能\n- 第二項\n- 第三項')" \
+  added "$base"
+commit reworded "CHANGELOG.md=$(changelog '- 新功能（改寫）
+- 第二項
+- 第三項
+')" >/dev/null
+expect_output 'added: 改寫過的條列也算新的' '- 新功能（改寫）' added "$more"
+g checkout -q -
+
 if [ "$failures" -ne 0 ]; then
   echo "changelog_test: $failures 項失敗" >&2
   exit 1

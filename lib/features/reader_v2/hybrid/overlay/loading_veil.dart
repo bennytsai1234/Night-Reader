@@ -10,11 +10,14 @@ import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///
-/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙。紙上的骨架照
+/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙。跳章、改排版與
+/// 重載內容時舊正文還在畫面上，紙以 [AppMotion.fade] 淡入蓋過它
+/// （[cover] 的 `fade`），蓋滿（[covered]）才拿掉舊正文、開始排版
+/// （ADR 0018）。紙上的骨架照
 /// 一頁真正的每一行畫：開書有上次記下的那一頁時紙一蓋上就淡入，其他時候
 /// 紙先空著，第一頁排好後才照它淡入（[showSkeleton]，ADR 0016、0024）。
-/// 正文排好後紙以骨架換場（[SkeletonReveal]，使用者選的方式與時長）淡出、
-/// 露出正文，骨架跟著一起淡掉。
+/// 骨架出現與正文排好後掀紙都照骨架換場（[SkeletonReveal]，使用者選的方式
+/// 與時長）：骨架照它長出來，掀紙時骨架跟著紙一起淡掉、露出正文。
 ///
 /// 只改紙與骨架顏色的透明度，不對正文做整頁 Opacity：載入期間排版用滿每
 /// 一幀的預算，這一層每幀只多畫幾十個圓角條。
@@ -25,7 +28,11 @@ class LoadingVeilController {
         duration: AppMotion.fade,
         value: 1,
       ),
-      _skeleton = AnimationController(vsync: vsync, duration: AppMotion.fade),
+      _skeleton = AnimationController(
+        vsync: vsync,
+        duration: AppMotion.fade,
+        reverseDuration: AppMotion.fade,
+      ),
       _pulse = AnimationController(
         vsync: vsync,
         duration: AppMotion.skeletonPulse,
@@ -39,6 +46,12 @@ class LoadingVeilController {
 
   /// 這一次掀紙是不是由左而右。
   bool _sweep = false;
+
+  /// 骨架出現的方式與時長，見 [skeletonReveal]。
+  SkeletonReveal _skeletonReveal = const SkeletonReveal();
+
+  /// 這一次骨架出現是不是由左而右；骨架自己淡掉時一律整頁淡。
+  bool _skeletonSweep = false;
 
   final AnimationController _cover;
   final AnimationController _skeleton;
@@ -62,12 +75,15 @@ class LoadingVeilController {
   final MotionHold _hold = MotionHold();
 
   /// 系統要求減少動態（`MediaQuery.disableAnimations`）時，紙與骨架直接到位，
-  /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點。
+  /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點（淡入中的
+  /// 紙蓋滿、掀開中的紙掀掉）。
   set reduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
     if (value) {
-      if (_cover.isAnimating) _cover.value = 0;
+      if (_cover.isAnimating) {
+        _cover.value = _cover.status == AnimationStatus.forward ? 1 : 0;
+      }
       if (_skeleton.isAnimating) {
         _skeleton.value = _skeleton.status == AnimationStatus.reverse ? 0 : 1;
       }
@@ -75,8 +91,50 @@ class LoadingVeilController {
     _syncPulse();
   }
 
-  /// 紙還蓋著或正在淡出。
+  /// 骨架出現照的骨架換場設定，呼叫端從主題取得、設定改變時更新。開書時
+  /// 骨架在拿到主題之前就開始出現，這時改照新的方式與時長走完剩下的部分。
+  set skeletonReveal(SkeletonReveal value) {
+    if (_skeletonReveal == value) return;
+    _skeletonReveal = value;
+    if (_skeleton.status == AnimationStatus.forward) {
+      _skeletonSweep = value.sweeps;
+      _skeleton.duration = value.duration;
+      unawaited(_skeleton.forward());
+    }
+  }
+
+  /// 紙還蓋著或正在淡入、淡出。
   bool get isVisible => !_cover.isDismissed;
+
+  /// 紙整張蓋滿、沒有在淡入淡出。
+  bool get isCovered => _cover.isCompleted;
+
+  /// 紙正在掀開（淡出中）。
+  bool get isRevealing => _cover.status == AnimationStatus.reverse;
+
+  /// 等 [covered] 的呼叫端；紙不再往蓋滿走（蓋滿、改成掀開）或控制器
+  /// 拆掉時，每一個都完成一次。
+  final List<Completer<bool>> _coverWaiters = <Completer<bool>>[];
+
+  /// 淡入停下來時完成：整張蓋滿為 true；途中改成掀開、或控制器拆掉時為
+  /// false，呼叫端當成這次蓋紙取消。沒有在淡入時立即以目前是否蓋滿完成。
+  Future<bool> get covered {
+    if (_cover.status != AnimationStatus.forward) {
+      return Future<bool>.value(_cover.isCompleted);
+    }
+    final waiter = Completer<bool>();
+    _coverWaiters.add(waiter);
+    return waiter.future;
+  }
+
+  void _settleCoverWaiters({required bool covered}) {
+    if (_coverWaiters.isEmpty) return;
+    final waiters = List<Completer<bool>>.of(_coverWaiters);
+    _coverWaiters.clear();
+    for (final waiter in waiters) {
+      waiter.complete(covered);
+    }
+  }
 
   /// 骨架還在淡入或淡出。
   bool get isSkeletonFading => _skeleton.isAnimating;
@@ -87,8 +145,17 @@ class LoadingVeilController {
   /// 蓋上整張紙。[skeleton] 為 true 時骨架從目前的濃淡繼續淡入（淡出途中
   /// 再蓋上不會先閃空）；false 時紙先空著，等 [showSkeleton]，已經畫著的
   /// 骨架淡掉。
-  void cover({bool skeleton = true}) {
-    _cover.value = 1;
+  ///
+  /// [fade] 時紙從目前的濃淡以 [AppMotion.fade] 淡入（底下的舊正文還在，
+  /// 等 [covered] 再拿掉）；否則直接蓋滿。掀紙途中再淡入時沿用那次掀紙的
+  /// 方式倒回來，其他時候整張一起淡。
+  void cover({bool skeleton = true, bool fade = false}) {
+    if (fade && !_reduceMotion) {
+      if (!_cover.isAnimating) _sweep = false;
+      unawaited(_cover.forward());
+    } else {
+      _cover.value = 1;
+    }
     if (skeleton) {
       showSkeleton();
     } else {
@@ -96,11 +163,13 @@ class LoadingVeilController {
     }
   }
 
-  /// 淡入紙上的骨架。
+  /// 照 [skeletonReveal] 讓紙上的骨架出現。
   void showSkeleton() {
     if (_reduceMotion) {
       _skeleton.value = 1;
     } else {
+      _skeletonSweep = _skeletonReveal.sweeps;
+      _skeleton.duration = _skeletonReveal.duration;
       unawaited(_skeleton.forward());
     }
     _syncPulse();
@@ -108,6 +177,7 @@ class LoadingVeilController {
 
   /// 淡掉紙上的骨架，紙留著。
   void hideSkeleton() {
+    _skeletonSweep = false;
     if (_reduceMotion || _skeleton.isDismissed) {
       _skeleton.value = 0;
     } else {
@@ -129,6 +199,8 @@ class LoadingVeilController {
 
   void dispose() {
     _hold.release();
+    _cover.removeStatusListener(_onCoverStatus);
+    _settleCoverWaiters(covered: false);
     _cover.dispose();
     _skeleton.dispose();
     _pulse.dispose();
@@ -136,6 +208,9 @@ class LoadingVeilController {
 
   void _onCoverStatus(AnimationStatus status) {
     _syncHold();
+    if (status != AnimationStatus.forward) {
+      _settleCoverWaiters(covered: status == AnimationStatus.completed);
+    }
     if (status != AnimationStatus.dismissed) return;
     _skeleton.value = 0;
     _syncPulse();
@@ -240,6 +315,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
           skeleton: controller._skeletonCurve,
           pulse: controller._pulseCurve,
           sweep: () => controller._sweep,
+          skeletonSweep: () => controller._skeletonSweep,
           spec: widget.spec,
           lines: widget.lines,
           titleLines: widget.titleLines,
@@ -257,6 +333,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.skeleton,
     required this.pulse,
     required this.sweep,
+    required this.skeletonSweep,
     required this.spec,
     required this.lines,
     required this.titleLines,
@@ -270,6 +347,9 @@ class _LoadingVeilPainter extends CustomPainter {
 
   /// 掀紙是不是由左而右；紙蓋著時不影響畫面。
   final bool Function() sweep;
+
+  /// 骨架出現是不是由左而右；骨架已經完全出現時不影響畫面。
+  final bool Function() skeletonSweep;
   final ReaderV2LayoutSpec spec;
   final List<Rect>? lines;
   final Set<int> titleLines;
@@ -319,7 +399,28 @@ class _LoadingVeilPainter extends CustomPainter {
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final base = Skeleton.tint(textColor, dark: dark);
-    final paint = shade(base, Skeleton.pulseStrength(pulse.value) * strength);
+    final pulseStrength = Skeleton.pulseStrength(pulse.value);
+    // 紙蓋著、骨架由左而右出現時，每個橫向位置照骨架換進來的濃度畫；掀紙
+    // 途中照紙的漸層。
+    final growing = !sweeping && skeletonSweep() && skeleton.value < 1;
+    final Paint paint;
+    if (growing) {
+      final grow = SkeletonReveal.sweepStops(skeleton.value);
+      paint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(size.width, 0),
+          [
+            for (final (_, incoming) in grow)
+              base.withValues(
+                alpha: base.a * pulseStrength * coverStrength * incoming,
+              ),
+          ],
+          [for (final (u, _) in grow) u],
+        );
+    } else {
+      paint = shade(base, pulseStrength * strength);
+    }
     final barHeight = style.fontSize * _barHeightFactor;
     final titleBarHeight = style.fontSize > 0
         ? barHeight * style.titleFontSize / style.fontSize

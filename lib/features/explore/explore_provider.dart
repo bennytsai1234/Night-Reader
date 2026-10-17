@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -7,6 +8,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 typedef ExploreKindsLoader = Future<List<ExploreKind>> Function(
   String? exploreUrl, {
@@ -46,6 +48,21 @@ class ExploreProvider extends ChangeNotifier {
   /// 各分組內的發現書源數。
   Map<String, int> get groupCounts => _groupCounts;
   int get totalSourceCount => _allSources.length;
+
+  /// 分組篩選列「全部」的書源數：還沒讀到書源時用上次記下的數字，篩選列
+  /// 從第一幀就和讀完時一樣。
+  int get filterAllCount => _isLoadingSources && _allSources.isEmpty
+      ? _lastAllCount
+      : totalSourceCount;
+  int _lastAllCount = 0;
+
+  /// 上次讀完時的分組篩選列：「全部」的書源數與各分組的名稱、書源數，JSON
+  /// `{"all": n, "groups": [[分組, 書源數], ...]}`。開 App 建立時同步讀出，
+  /// 第一次讀到書源前照它畫篩選列，清單出現時頁首不會多長出一列。
+  static const String _filterBarKey = 'explore_filter_bar';
+
+  /// 確定寫進偏好設定的內容；寫入失敗時不更新，下次讀到書源再寫一次。
+  String? _savedFilterBar;
   String? get selectedGroup => _selectedGroup;
   int get expandedIndex => _expandedIndex;
   List<ExploreKind> get expandedKinds => _expandedKinds;
@@ -58,7 +75,61 @@ class ExploreProvider extends ChangeNotifier {
   ExploreProvider({BookSourceDao? sourceDao, ExploreKindsLoader? kindsLoader})
     : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
       _kindsLoader = kindsLoader ?? ExploreUrlParser.parseAsync {
+    _readFilterBar();
     _bindSources();
+  }
+
+  void _readFilterBar() {
+    // 型別不對的紀錄（不是字串）和讀不懂的內容一樣，當作沒有紀錄。
+    final stored = getIt<SharedPreferences>().get(_filterBarKey);
+    final saved = stored is String ? stored : null;
+    _savedFilterBar = saved;
+    if (saved == null) {
+      if (stored != null) AppLog.w('發現分組篩選列的紀錄型別不對，這次等書源讀完');
+      return;
+    }
+    try {
+      final json = jsonDecode(saved) as Map<String, dynamic>;
+      final counts = <String, int>{
+        for (final entry in json['groups'] as List<dynamic>)
+          entry[0] as String: entry[1] as int,
+      };
+      final all = json['all'] as int;
+      if (all < 0 || counts.values.any((count) => count < 0)) {
+        throw FormatException('書源數是負的', saved);
+      }
+      _lastAllCount = all;
+      _groupCounts = counts;
+      _groups = counts.keys.toList()..sort();
+    } catch (error) {
+      AppLog.w('發現分組篩選列的紀錄讀不懂，這次等書源讀完: $error');
+      _lastAllCount = 0;
+      _groupCounts = {};
+      _groups = [];
+    }
+  }
+
+  void _rememberFilterBar() {
+    final encoded = jsonEncode({
+      'all': _allSources.length,
+      'groups': [
+        for (final group in _groups) [group, _groupCounts[group]],
+      ],
+    });
+    if (_savedFilterBar == encoded) return;
+    unawaited(_saveFilterBar(encoded));
+  }
+
+  Future<void> _saveFilterBar(String encoded) async {
+    try {
+      if (await getIt<SharedPreferences>().setString(_filterBarKey, encoded)) {
+        _savedFilterBar = encoded;
+      } else {
+        AppLog.w('發現分組篩選列沒有寫進偏好設定');
+      }
+    } catch (error, stackTrace) {
+      AppLog.e('發現分組篩選列寫入失敗: $error', error: error, stackTrace: stackTrace);
+    }
   }
 
   void _bindSources() {
@@ -119,6 +190,7 @@ class ExploreProvider extends ChangeNotifier {
     }
     _groupCounts = counts;
     _groups = counts.keys.toList()..sort();
+    _rememberFilterBar();
     // 選中的分組已不存在（書源被刪除或改分組）時回到「全部」。
     if (_selectedGroup != null && !counts.containsKey(_selectedGroup)) {
       _selectedGroup = null;

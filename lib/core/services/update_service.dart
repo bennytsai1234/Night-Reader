@@ -25,29 +25,105 @@ class AppUpdateService {
   /// 取得比目前版本新、且附 APK 的 release。回 `null` 表示確定沒新版；
   /// 連線失敗或 API 回應異常時丟出例外，呼叫端才分得出「已是最新」與「檢查失敗」。
   ///
-  /// [includeBeta] 為 false 時只看最新正式版（`/releases/latest` 不含預發布版）；
-  /// 為 true 時從最近的 release 清單（含測試版）挑版本最高的一個。
+  /// [includeBeta] 為 false 時只看正式版；為 true 時連測試版一起挑版本最高的一個。
+  /// 回傳的 [UpdateInfo.updateLog] 是從目前版本更新上去會收到的說明，見 [_notesSince]。
   Future<UpdateInfo?> checkLatest({bool includeBeta = false}) async {
-    final releases = includeBeta
-        ? await _fetch<List<dynamic>>('$_releasesUrl?per_page=30')
-        : [await _fetch<Map<String, dynamic>>('$_releasesUrl/latest')];
     final current = ReleaseVersion.tryParse(await _currentVersionLoader());
     if (current == null) return null;
+    final releases = await _fetchSince(current);
 
-    UpdateInfo? best;
-    ReleaseVersion? bestVersion;
+    final published = <(ReleaseVersion, Map<String, dynamic>)>[];
     for (final data in releases) {
       if (data is! Map<String, dynamic> || data['draft'] == true) continue;
-      final info = _parseRelease(data);
-      if (info == null) continue;
-      final version = ReleaseVersion.tryParse(info.tagName);
-      if (version == null || version.compareTo(current) <= 0) continue;
-      if (bestVersion == null || version.compareTo(bestVersion) > 0) {
-        best = info;
-        bestVersion = version;
+      final tagName = data['tag_name'];
+      final version = tagName is String
+          ? ReleaseVersion.tryParse(tagName)
+          : null;
+      if (version != null) published.add((version, data));
+    }
+    published.sort((a, b) => b.$1.compareTo(a.$1));
+
+    for (final (version, data) in published) {
+      if (version.compareTo(current) <= 0) break;
+      if (!includeBeta && _isBeta(version, data)) continue;
+      if (_parseRelease(data) == null) continue;
+      return _parseRelease(
+        data,
+        updateLog: _notesSince(
+          published,
+          current,
+          version,
+          includeBeta: includeBeta,
+        ),
+      );
+    }
+    return null;
+  }
+
+  /// 一次讀一頁（GitHub 一頁最多 100 筆）、新的在前，讀到版本不大於 [current]
+  /// 的正式版（目前版本所在的那一輪從那裡開始）或清單讀完為止：更新說明要用到
+  /// 目前版本之後的每一版，以及這一輪已經收過的說明（[_notesSince]）。
+  Future<List<dynamic>> _fetchSince(ReleaseVersion current) async {
+    final releases = <dynamic>[];
+    for (var page = 1; page <= _maxPages; page++) {
+      final batch = await _fetch<List<dynamic>>(
+        '$_releasesUrl?per_page=$_pageSize&page=$page',
+      );
+      releases.addAll(batch);
+      if (batch.length < _pageSize) break;
+      final reachedCycle = batch.any((data) {
+        if (data is! Map<String, dynamic> || data['draft'] == true) {
+          return false;
+        }
+        final tagName = data['tag_name'];
+        final version = tagName is String
+            ? ReleaseVersion.tryParse(tagName)
+            : null;
+        return version != null &&
+            !_isBeta(version, data) &&
+            version.compareTo(current) <= 0;
+      });
+      if (reachedCycle) break;
+    }
+    return releases;
+  }
+
+  static const int _pageSize = 100;
+
+  /// 最多讀幾頁：防 API 一直回滿頁時無止盡地翻下去。十頁是一千個發布，遠多於
+  /// 兩個正式版之間會有的測試版數。
+  static const int _maxPages = 10;
+
+  static bool _isBeta(ReleaseVersion version, Map<String, dynamic> data) =>
+      version.beta != null || data['prerelease'] == true;
+
+  /// 從 [current] 更新到 [target] 會收到的說明：兩者之間每一版的說明，新的在前。
+  ///
+  /// 測試版的說明只寫那一版新增的條目（ADR 0010），跳過幾版也不會漏；正式版的說明是
+  /// 整個版本的改動，[current] 和更早的版本已經列過的行、前面已經列出的行都不再重複。
+  /// 只收正式版（[includeBeta] 為 false）時中間的測試版不算，它們的條目都在正式版
+  /// 的整段說明裡。[published] 依版本由新到舊排好。
+  static String _notesSince(
+    List<(ReleaseVersion, Map<String, dynamic>)> published,
+    ReleaseVersion current,
+    ReleaseVersion target, {
+    required bool includeBeta,
+  }) {
+    final seen = <String>{};
+    final inRange = <String>[];
+    for (final (version, data) in published) {
+      final lines = ((data['body'] as String?) ?? '').split('\n');
+      if (version.compareTo(current) <= 0) {
+        seen.addAll(lines.map((line) => line.trim()));
+      } else if (version.compareTo(target) <= 0 &&
+          (includeBeta || !_isBeta(version, data))) {
+        inRange.addAll(lines);
       }
     }
-    return best;
+    return [
+      for (final line in inRange)
+        if (line.trim().isEmpty || seen.add(line.trim())) line,
+    ].join('\n');
   }
 
   /// 「更新紀錄」用的發布清單：最近的 release，新的在前，跳過 draft。
@@ -94,7 +170,11 @@ class AppUpdateService {
   }
 
   /// 把一筆 release 轉成 [UpdateInfo]；沒有 tag 或沒有可安裝的 APK 時回 `null`。
-  static UpdateInfo? _parseRelease(Map<String, dynamic> data) {
+  /// [updateLog] 沒給時用這一版自己的說明。
+  static UpdateInfo? _parseRelease(
+    Map<String, dynamic> data, {
+    String? updateLog,
+  }) {
     final tagName = data['tag_name'] as String?;
     final body = (data['body'] as String?) ?? '';
     final assets = (data['assets'] as List?) ?? const [];
@@ -125,7 +205,7 @@ class AppUpdateService {
     return UpdateInfo(
       versionName: tagName.replaceFirst(RegExp('^[vV]'), ''),
       tagName: tagName,
-      updateLog: body,
+      updateLog: updateLog ?? body,
       downloadUrl: apkDownloadUrl!,
       assetSize: (apkAsset['size'] as num?)?.toInt() ?? 0,
       releasePageUrl: htmlUrl,
@@ -253,7 +333,7 @@ class UpdateInfo {
   /// 原始 tag，例如 `v0.2.72`。用於 `UpdatePreferences` 記住忽略的版本。
   final String tagName;
 
-  /// Release body（純文字 / Markdown，UI 直接顯示文字）。
+  /// 從目前版本更新到這一版會收到的說明（Markdown），顯示前經 [releaseNotesForDisplay] 整理。
   final String updateLog;
 
   /// APK 下載 URL。

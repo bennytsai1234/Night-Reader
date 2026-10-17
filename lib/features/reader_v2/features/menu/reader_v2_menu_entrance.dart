@@ -18,6 +18,7 @@ class ReaderV2MenuEntrance extends StatefulWidget {
     required this.edge,
     this.gap = 0,
     this.delay = Duration.zero,
+    this.onHidden,
     required this.child,
   });
 
@@ -29,6 +30,10 @@ class ReaderV2MenuEntrance extends StatefulWidget {
   /// 這一塊離 [edge] 那側螢幕邊緣的距離（見 [GlassSlide.gap]）。
   final double gap;
   final Duration delay;
+
+  /// 收起動畫播完、這一塊完全移出畫面時呼叫（系統關閉動畫時在收起的
+  /// 那一幀）。
+  final VoidCallback? onHidden;
   final Widget child;
 
   @override
@@ -59,6 +64,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   void _onStatus(AnimationStatus status) {
     _hold.moving = status.isAnimating;
+    if (status.isDismissed) widget.onHidden?.call();
   }
 
   @override

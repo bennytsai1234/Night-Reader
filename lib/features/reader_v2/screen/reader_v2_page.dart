@@ -24,6 +24,7 @@ import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2
 import 'package:night_reader/features/reader_v2/session/reader_v2_session_facade.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness.dart';
 import 'package:night_reader/features/reader_v2/features/brightness/reader_v2_brightness_bar.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_departure.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
@@ -91,6 +92,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 從目錄跳章時，等目錄收起的那一下；收到底、目錄從畫面上拿掉時完成。
   Completer<void>? _drawerClosed;
   bool _entranceWatched = false;
+
+  /// 從選單推一整頁時，等選單滑出畫面（見 [_pushOverMenu]）。
+  late final ReaderV2MenuDeparture _menuDeparture = ReaderV2MenuDeparture(
+    _host.menu,
+  );
 
   /// 只拿來計骨架淡入的時長（頁首頁尾骨架與照紀錄畫的正文骨架都是
   /// [AppMotion.fade]）：開書時和這一頁的第一幀同時開始，從目錄跳章時和
@@ -165,6 +171,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_handleVolumeKey);
     unawaited(_settingsSaveFailures?.cancel());
+    _menuDeparture.dispose();
     _coordinator.dispose();
     _progress.dispose();
     _host.dispose();
@@ -347,6 +354,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               showTts: true,
               showAutoPage: true,
               showReplaceRule: true,
+              onMenuHidden: _handleMenuHidden,
             ),
           ),
         ),
@@ -572,14 +580,52 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       case _ReaderMoreAction.bookDetail:
         await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SettingsPage()),
+        final pushed = await _pushOverMenu(
+          _menuDeparture.depart(),
+          MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
         );
+        if (!mounted || pushed == null) return;
         // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
-        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
-        if (mounted) unawaited(_host.settings.loadSettings());
+        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。等返回動畫
+        // 播完才載入：設定變了會重排正文，不和返回動畫疊在一起（ADR 0018）。
+        _restoreMenuWhenUncovered(
+          beforeMenu: () => unawaited(_host.settings.loadSettings()),
+        );
     }
+  }
+
+  void _handleMenuHidden() => _menuDeparture.menusHidden();
+
+  /// 從選單推一整頁（書籍詳情、全域設定）：等選單滑出畫面才推（見
+  /// [ReaderV2MenuDeparture]）。推之前再確認這次請求沒有作廢（選單又打開、
+  /// 改選了別的、離開閱讀器）、閱讀器仍是最上面的一頁、選單完全收著；
+  /// 沒有推頁時回傳 null，推了就回傳那一頁關掉時的結果。
+  Future<(T?,)?> _pushOverMenu<T>(
+    ReaderV2MenuDepartureTicket ticket,
+    Route<T> route,
+  ) async {
+    if (!await ticket.menusGone ||
+        !mounted ||
+        !ticket.canDepart ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return null;
+    }
+    return (await Navigator.of(context).push(route),);
+  }
+
+  /// 推上去的頁關掉後，等返回動畫播完再把選單滑回來，回到打開選單的
+  /// 樣子；滑入不和返回動畫疊在一起，也不在淡入中的閱讀器裡出現。
+  /// [beforeMenu] 在返回動畫播完、選單滑回之前呼叫（閱讀器已經被別頁
+  /// 蓋住時也照樣呼叫）。
+  void _restoreMenuWhenUncovered({VoidCallback? beforeMenu}) {
+    unawaited(
+      TransitionSettled.uncovered(context).then((_) {
+        if (!mounted) return;
+        beforeMenu?.call();
+        if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        _host.menu.showControls();
+      }),
+    );
   }
 
   /// 書源回了擋爬蟲頁或不完整的正文時，向書源重抓這一章、停在原位；
@@ -597,6 +643,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
   /// 按閱讀鈕直接回來。
   Future<void> _showBookDetail() async {
+    final departure = _menuDeparture.depart();
     final flushed = await _host.flushProgress();
     if (!mounted) return;
     final chapterDao = _host.dependencies.chapterDao;
@@ -610,13 +657,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterIndex: storedIndex ?? index,
       durChapterTitle: _rawChapterTitleAt(index),
     );
-    final targetUrl = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
+    // 寫入進度、查章節的期間選單可能又被打開：推之前由 [_pushOverMenu]
+    // 再確認一次。
+    final pushed = await _pushOverMenu(
+      departure,
+      MaterialPageRoute<String>(
         builder: (_) => BookDetailPage(book: book, fromReader: true),
       ),
     );
-    if (!mounted || targetUrl == null) return;
-    _host.menu.dismissControls();
+    if (!mounted || pushed == null) return;
+    final (targetUrl,) = pushed;
+    if (targetUrl == null) {
+      _restoreMenuWhenUncovered();
+      return;
+    }
     final target = await resolveDetailChapter(
       url: targetUrl,
       readerChapters: _host.runtime?.chapters ?? widget.initialChapters,

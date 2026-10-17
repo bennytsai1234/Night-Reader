@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
@@ -332,5 +333,186 @@ void main() {
     expect(provider.isSearchPaused, isFalse);
     Navigator.of(pageContext).pop();
     await tester.pumpAndSettle();
+  });
+
+  Future<SearchProvider> pumpSearch(WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+  }
+
+  double top(WidgetTester tester, String text) =>
+      tester.getTopLeft(find.text(text)).dy;
+
+  /// 之後每一幀（16ms）這些書名所在的高度，直到動畫播完。
+  Future<Map<String, List<double>>> trace(
+    WidgetTester tester,
+    List<String> names,
+  ) async {
+    final frames = {for (final name in names) name: <double>[]};
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      for (final name in names) {
+        frames[name]!.add(top(tester, name));
+      }
+    }
+    return frames;
+  }
+
+  /// 每一幀只移動一小段（不跳），途中經過兩端之間，最後停在 [end]。
+  void expectGlide(
+    List<double> frames, {
+    required double start,
+    required double end,
+  }) {
+    var previous = start;
+    for (final y in frames) {
+      expect((y - previous).abs(), lessThan((end - start).abs() / 4));
+      previous = y;
+    }
+    expect(
+      frames.any((y) => (y - start).abs() > 1 && (y - end).abs() > 1),
+      isTrue,
+    );
+    expect(frames.last, moreOrLessEquals(end, epsilon: 1));
+  }
+
+  testWidgets('reordered rows slide to their new places', (tester) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pumpAndSettle();
+    final first = top(tester, '甲書');
+    final second = top(tester, '乙書');
+    expect(second, greaterThan(first));
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    // 重排的第一幀：兩列都還畫在原本的位置。
+    expect(top(tester, '甲書'), moreOrLessEquals(first, epsilon: 1));
+    expect(top(tester, '乙書'), moreOrLessEquals(second, epsilon: 1));
+
+    final frames = await trace(tester, ['甲書', '乙書']);
+    expectGlide(frames['甲書']!, start: first, end: second);
+    expectGlide(frames['乙書']!, start: second, end: first);
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('sliding rows hold the motion gate until they settle', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pumpAndSettle();
+    expect(MotionGate.instance.isMoving, isFalse);
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    // 滑到一半又重排：接著滑，閘門一直持有到最後一列到位。
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    await tester.pumpAndSettle();
+    expect(MotionGate.instance.isMoving, isFalse);
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('leaving the page mid-slide releases the motion gate', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pumpAndSettle();
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    // 列被拿掉（離開頁面、捲出畫面回收）時一起放開。
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(MotionGate.instance.isMoving, isFalse);
+  });
+
+  testWidgets('a new book above pushes the rows below down gradually', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書')]);
+    await tester.pumpAndSettle();
+    final before = top(tester, '甲書');
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    expect(top(tester, '甲書'), moreOrLessEquals(before, epsilon: 1));
+    final frames = await trace(tester, ['甲書']);
+    await tester.pumpAndSettle();
+    final after = top(tester, '甲書');
+    expect(after, greaterThan(before + 10));
+    expectGlide(frames['甲書']!, start: before, end: after);
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('finishing fades the progress out and the toolbar in', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書')]);
+    await tester.pumpAndSettle();
+    expect(find.text('正在搜尋'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    final resultTop = top(tester, '甲書');
+
+    double opacityOf(Finder finder) => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(of: finder, matching: find.byType(FadeTransition))
+              .first,
+        )
+        .opacity
+        .value;
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    // 途中進度條與進度字樣還在、淡出中，工具列淡入中；結果沒有被推動。
+    final bar = opacityOf(find.byType(LinearProgressIndicator));
+    final progress = opacityOf(find.text('正在搜尋'));
+    final toolbar = opacityOf(find.textContaining('排序'));
+    for (final value in [bar, progress, toolbar]) {
+      expect(value, greaterThan(0));
+      expect(value, lessThan(1));
+    }
+    expect(top(tester, '甲書'), resultTop);
+
+    await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('正在搜尋'), findsNothing);
+    expect(opacityOf(find.textContaining('排序')), 1);
+    expect(top(tester, '甲書'), resultTop);
   });
 }

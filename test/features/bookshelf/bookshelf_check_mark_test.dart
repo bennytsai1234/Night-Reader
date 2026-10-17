@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
   final book = Book(
@@ -51,5 +52,128 @@ void main() {
       last = width;
     }
     expect(slot(), 0);
+  });
+
+  testWidgets('the tick and the card tint change together with the fill', (
+    tester,
+  ) async {
+    Widget card({required bool selected}) => MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 360,
+            child: BookshelfListCard(
+              book: book,
+              selecting: true,
+              selected: selected,
+            ),
+          ),
+        ),
+      ),
+    );
+    double tickShown() => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.check_rounded),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+    Color tint() => tester
+        .widget<Material>(
+          find
+              .ancestor(
+                of: find.byType(InkWell),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .color!;
+
+    await tester.pumpWidget(card(selected: false));
+    await tester.pumpAndSettle();
+    final unselected = tint();
+    expect(tickShown(), 0);
+
+    await tester.pumpWidget(card(selected: true));
+    await tester.pump();
+    await tester.pump(AppMotion.menu ~/ 2);
+    expect(tickShown(), inExclusiveRange(0, 1));
+    final mid = tint();
+    expect(mid, isNot(unselected));
+
+    await tester.pumpAndSettle();
+    expect(tickShown(), 1);
+    final selectedTint = tint();
+    expect(selectedTint, isNot(mid));
+    // 半途的底色在未選與已選之間。
+    expect(
+      mid.b,
+      inExclusiveRange(
+        selectedTint.b < unselected.b ? selectedTint.b : unselected.b,
+        selectedTint.b < unselected.b ? unselected.b : selectedTint.b,
+      ),
+    );
+  });
+
+  group('with animations turned off', () {
+    Widget card({
+      required bool selecting,
+      bool selected = false,
+      bool disable = true,
+    }) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: disable),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 360,
+            child: BookshelfListCard(
+              book: book,
+              selecting: selecting,
+              selected: selected,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('selecting lands the slot, tick and tint at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(selecting: false));
+      await tester.pumpWidget(card(selecting: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+
+      await tester.pumpWidget(card(selecting: true, selected: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+
+      await tester.pumpWidget(card(selecting: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('turning animations off mid-change lands it at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(selecting: true, disable: false));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        card(selecting: true, selected: true, disable: false),
+      );
+      await tester.pump(AppMotion.menu ~/ 4);
+      expect(tester.hasRunningAnimations, isTrue);
+
+      await tester.pumpWidget(card(selecting: true, selected: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
   });
 }

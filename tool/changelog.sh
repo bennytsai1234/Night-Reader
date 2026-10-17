@@ -4,7 +4,12 @@
 #   sh tool/changelog.sh section <標題> [檔案]
 #     印出「## <標題>」段落的內容，去掉前後空行。檔案預設 CHANGELOG.md，「-」代表標準輸入。
 #     找不到這個標題時結束碼為 1；段落存在但沒有內容時印出空字串、結束碼為 0。
-#     android-release.yml 用它取 GitHub Release 說明：測試版取「未發布」，正式版取「X.Y.Z」。
+#     android-release.yml 用它取正式版的 GitHub Release 說明（「X.Y.Z」段落）。
+#
+#   sh tool/changelog.sh added <base> [檔案]
+#     印出「## 未發布」裡 <base> 那個提交還沒有的條列（以「- 」開頭的行，改寫過的也算），
+#     不含開頭的介紹段落。<base> 沒有這個段落時印出全部條列。
+#     android-release.yml 以上一個發布的 tag 為 base，取測試版的 Release 說明。
 #
 #   sh tool/changelog.sh check <base> <head>
 #     base..head 改到 App 內容時，確認 CHANGELOG.md 有跟著寫：「## 未發布」改過且不是空的，
@@ -48,6 +53,14 @@ section() {
 # 印出 <commit> 上 CHANGELOG.md 的「## <標題>」段落；沒有這個檔案或標題時結束碼為 1。
 section_at() {
   git show "$1:CHANGELOG.md" 2>/dev/null | section "$2" -
+}
+
+added() {
+  old=$(section_at "$1" "$UNRELEASED") || old=''
+  section "$UNRELEASED" "${2:-CHANGELOG.md}" | OLD=$old awk '
+    BEGIN { n = split(ENVIRON["OLD"], lines, "\n"); for (i = 1; i <= n; i++) seen[lines[i]] = 1 }
+    /^- / && !($0 in seen)
+  '
 }
 
 check() {
@@ -132,7 +145,7 @@ check() {
 }
 
 usage() {
-  echo "用法：sh tool/changelog.sh section <標題> [檔案] | check <base> <head>" >&2
+  echo "用法：sh tool/changelog.sh section <標題> [檔案] | added <base> [檔案] | check <base> <head>" >&2
   exit 2
 }
 
@@ -143,6 +156,10 @@ case $command in
   section)
     [ $# -ge 1 ] && [ $# -le 2 ] || usage
     section "$@"
+    ;;
+  added)
+    [ $# -ge 1 ] && [ $# -le 2 ] || usage
+    added "$@"
     ;;
   check)
     [ $# -eq 2 ] || usage

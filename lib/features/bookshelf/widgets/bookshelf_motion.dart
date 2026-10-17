@@ -5,35 +5,119 @@ import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 書架清單的版面動畫：換排序、或書因閱讀移到最前面時，書卡從舊位置平滑
-/// 移到新位置；新加入的書淡入；移出的書直接消失，其他書卡移過去補位。
+/// 移到新位置；新加入的書淡入；移出的書先在原位淡出，淡完其他書卡才移過去
+/// 補位。
 ///
 /// 做法是 FLIP：書的順序或成員一改變，就在重建前記下每張書卡（以 bookUrl
 /// 辨識）上一幀在螢幕上的位置；新版面排好後，每張書卡在繪製時算出新舊位置
 /// 的差，先畫在舊位置，再隨動畫把位移收回零。只改繪製位移與透明度，不觸發
 /// 重新排版。
 ///
+/// 移出書時 [update] 先照舊回傳含移出書的順序，清單照舊排、移出的書淡出
+/// （[AppMotion.fade]）；淡完呼叫 [onRemovalsFaded]，清單重建時才真的拿掉，
+/// 這時再播補位。淡出途中書又回到資料裡，就從當下的濃淡淡回來。
+///
+/// 動畫途中又有變化時，每張書卡從此刻畫的位置與濃淡接著動，不先跳到終點。
+///
 /// 網格與列表互換時不播（那是整頁交叉淡化）；拖曳排序放下時清單本身已經
 /// 把書卡移到定位，用 [accept] 採用新順序，不再播一次。
 class BookshelfLayoutMotion {
-  BookshelfLayoutMotion({required TickerProvider vsync})
+  BookshelfLayoutMotion({required TickerProvider vsync, this.onRemovalsFaded})
     : _controller = AnimationController(
         vsync: vsync,
         duration: AppMotion.spring,
-      ) {
+      ),
+      _exit = AnimationController(vsync: vsync, duration: AppMotion.fade) {
     _controller
       ..addListener(_repaintAnimated)
       ..addStatusListener((status) {
-        _hold.moving = status.isAnimating;
+        _syncHold();
         if (status == AnimationStatus.completed) _finish();
+      });
+    _exit
+      ..addListener(_repaintLeaving)
+      ..addStatusListener((status) {
+        _syncHold();
+        if (status != AnimationStatus.completed) return;
+        _returning.clear();
+        if (_leaving.isEmpty) {
+          // 只有淡回的書：已經到位，下一次移出從頭淡。
+          _exit.reset();
+        } else {
+          onRemovalsFaded?.call();
+        }
       });
   }
 
+  /// 移出的書淡完，清單要重建一次，讓 [update] 拿掉它們、開始補位。
+  final VoidCallback? onRemovalsFaded;
+
   final AnimationController _controller;
+  final AnimationController _exit;
   final MotionHold _hold = MotionHold();
   final Set<_RenderBookshelfMotionItem> _items = {};
 
+  /// 正在淡出的書，以及這一段淡出開始時的透明度（淡出途中又移出別本時，
+  /// 先前那幾本從當下的濃淡接著淡，不會跳回不透明）。
+  final Map<String, double> _leaving = {};
+
+  /// 淡出途中又回到資料裡的書，以及這一段淡回開始時的透明度；跟著 [_exit]
+  /// 淡回不透明。
+  final Map<String, double> _returning = {};
+
+  void _syncHold() =>
+      _hold.moving = _controller.isAnimating || _exit.isAnimating;
+
+  /// 淡出或淡回中的書此刻的透明度；兩者都不是時為 null。
+  double? _exitOpacity(String id) {
+    final progress = AppMotion.fadeCurve.transform(_exit.value);
+    final leaving = _leaving[id];
+    if (leaving != null) return leaving * (1 - progress);
+    final returning = _returning[id];
+    if (returning != null) return returning + (1 - returning) * progress;
+    return null;
+  }
+
+  /// 某本書此刻畫出來的透明度；不在畫面上當作不透明。
+  double _opacityOf(String id) {
+    for (final item in _items) {
+      if (item.id == id) return item._opacity;
+    }
+    return 1;
+  }
+
+  /// 淡出、淡回的每一本從當下的濃淡重新起算；之後 [_exit] 要從頭播。
+  void _rebaseExit() {
+    for (final id in _leaving.keys.toList()) {
+      _leaving[id] = _exitOpacity(id)!;
+    }
+    for (final id in _returning.keys.toList()) {
+      _returning[id] = _exitOpacity(id)!;
+    }
+  }
+
+  void _repaintLeaving() {
+    for (final item in _items) {
+      if (_leaving.containsKey(item.id) || _returning.containsKey(item.id)) {
+        item.markNeedsPaint();
+      }
+    }
+  }
+
+  /// 不再淡出：已經淡到一半的書直接拿掉（換檢視、關閉動畫、拖曳排序等）。
+  void _dropLeaving() {
+    if (_leaving.isEmpty && _returning.isEmpty) return;
+    _leaving.clear();
+    _returning.clear();
+    _exit.reset();
+    _syncHold();
+  }
+
   /// 這一輪開始前每張書卡在螢幕上的位置。
   Map<String, Offset> _before = const {};
+
+  /// 這一輪開始前還沒完全不透明的書卡（淡入、淡回途中）與當時的濃淡。
+  Map<String, double> _beforeOpacity = const {};
 
   /// 每開始一輪加一；書卡據此判斷是否已經算過這一輪的起點。
   int _generation = 0;
@@ -57,11 +141,17 @@ class BookshelfLayoutMotion {
   double get _fadeOpacity =>
       _running ? _fadeCurve.transform(_controller.value) : 1;
 
-  /// 建構書架清單時呼叫，傳入目前的書（bookUrl）順序。
+  /// 建構書架清單時呼叫，傳入目前的書（bookUrl）順序，回傳這一幀要排出的
+  /// 順序：移出的書淡出期間仍留在原位，其他時候就是 [urls]。
   ///
   /// 順序或成員和上次不同、檢視模式相同、[animate] 為 true 時開始一輪動畫。
-  /// 第一次載入（上次沒有書）不播，免得一開 App 整片書淡入。
-  void update(List<String> urls, {required bool grid, required bool animate}) {
+  /// 只少了幾本書（其他順序不變）時先淡出那幾本，淡完才補位。第一次載入
+  /// （上次沒有書）不播，免得一開 App 整片書淡入。
+  List<String> update(
+    List<String> urls, {
+    required bool grid,
+    required bool animate,
+  }) {
     final previous = _lastUrls;
     final previousGrid = _lastGrid;
     _lastUrls = urls;
@@ -69,26 +159,82 @@ class BookshelfLayoutMotion {
     if (!animate || previousGrid != grid) {
       // 換檢視或關掉動畫時，進行中這一輪的起點已經不適用：停在終點，
       // 不讓新檢視的書卡從舊檢視的位置飛過來。
+      _dropLeaving();
       _stop();
-      return;
+      return urls;
+    }
+    // 淡出中的書又出現在資料裡（例如很快又加回書架）：不再淡出，從當下的
+    // 濃淡淡回來。要在比對順序之前做：整份恢復時順序和上次一樣，下面會直接
+    // 返回。
+    final current = urls.toSet();
+    final back = [
+      for (final id in _leaving.keys)
+        if (current.contains(id)) id,
+    ];
+    if (back.isNotEmpty) {
+      _rebaseExit();
+      for (final id in back) {
+        _returning[id] = _leaving.remove(id)!;
+      }
+      _exit.forward(from: 0);
+      _repaintLeaving();
     }
     if (previous == null || previous.isEmpty || listEquals(previous, urls)) {
-      return;
+      return urls;
     }
+    final removed = previous.toSet().difference(current);
+    final onlyRemoved =
+        removed.isNotEmpty &&
+        listEquals([
+          for (final url in previous)
+            if (!removed.contains(url)) url,
+        ], urls);
+    if (onlyRemoved && !_exit.isCompleted) {
+      // 這次只少了書：清單照舊排、這幾本先淡出。淡出途中又移出別本時一起
+      // 重新淡，每一本從當下的濃淡接著淡（淡入、淡回途中的也是）。版面
+      // 沒變，正在換位的書卡照常移到定位。
+      final stillThere = <String>{
+        for (final url in removed)
+          if (!_leaving.containsKey(url)) url,
+      };
+      if (stillThere.isNotEmpty) {
+        final from = {for (final id in stillThere) id: _opacityOf(id)};
+        _rebaseExit();
+        _returning.removeWhere((id, _) => from.containsKey(id));
+        _leaving.addAll(from);
+        _exit.forward(from: 0);
+        _repaintLeaving();
+      }
+      _lastUrls = previous;
+      return previous;
+    }
+    // 淡完了（或這次不只是移出）：真的拿掉，下面照一般換位補位。每張書卡
+    // 從此刻畫的位置與濃淡接著動。
     final before = <String, Offset>{};
+    final beforeOpacity = <String, double>{};
     for (final item in _items) {
       final position = item._visualPosition();
-      if (position != null) before[item.id] = position;
+      if (position != null) {
+        before[item.id] = position;
+        final opacity = item._opacity;
+        if (opacity < 1) beforeOpacity[item.id] = opacity;
+      }
       // 書卡可能只是換了位置、內容沒變，不重畫就算不到新位置。
       item.markNeedsPaint();
     }
+    _dropLeaving();
     _before = before;
+    _beforeOpacity = beforeOpacity;
     _generation++;
     _controller.forward(from: 0);
+    return urls;
   }
 
   /// 清單已經自己把書卡移到新順序（拖曳排序放下）：記下新順序，不播動畫。
-  void accept(List<String> urls) => _lastUrls = urls;
+  void accept(List<String> urls) {
+    _dropLeaving();
+    _lastUrls = urls;
+  }
 
   void _repaintAnimated() {
     for (final item in _items) {
@@ -100,6 +246,7 @@ class BookshelfLayoutMotion {
     // 中途停下不會發出狀態變化，在這裡一起放開。
     _hold.release();
     _before = const {};
+    _beforeOpacity = const {};
     for (final item in _items) {
       if (item._animated) item.markNeedsPaint();
     }
@@ -114,6 +261,7 @@ class BookshelfLayoutMotion {
   void dispose() {
     _hold.release();
     _controller.dispose();
+    _exit.dispose();
   }
 }
 
@@ -188,17 +336,23 @@ class _RenderBookshelfMotionItem extends RenderProxyBox {
   /// 這一輪開始時從新位置指回舊位置的位移；null 表示不移動。
   Offset? _from;
 
-  /// 這一輪是否淡入（新加入，或原本不在畫面上）。
-  bool _fadeIn = false;
+  /// 這一輪淡入的起點濃淡：新加入或原本不在畫面上的是 0，淡入、淡回到
+  /// 一半又換位的接著淡；null 表示不淡入。
+  double? _fadeFrom;
 
-  bool get _animated => _from != null || _fadeIn;
+  bool get _animated => _from != null || _fadeFrom != null;
 
   Offset get _shift {
     final from = _from;
     return from == null ? Offset.zero : from * motion._remaining;
   }
 
-  double get _opacity => _fadeIn ? motion._fadeOpacity : 1;
+  double get _opacity {
+    final exit = motion._exitOpacity(id);
+    if (exit != null) return exit;
+    final from = _fadeFrom;
+    return from == null ? 1 : from + (1 - from) * motion._fadeOpacity;
+  }
 
   @override
   void attach(PipelineOwner owner) {
@@ -223,13 +377,14 @@ class _RenderBookshelfMotionItem extends RenderProxyBox {
     if (_resolvedGeneration == motion._generation) return;
     _resolvedGeneration = motion._generation;
     _from = null;
-    _fadeIn = false;
+    _fadeFrom = null;
     if (!motion._running) return;
     final before = motion._before[id];
     if (before == null) {
-      _fadeIn = true;
+      _fadeFrom = 0;
       return;
     }
+    _fadeFrom = motion._beforeOpacity[id];
     final delta = before - localToGlobal(Offset.zero);
     // 不到半個像素的差是捲動或取整造成的，不算移動。
     if (delta.distance >= 0.5) _from = delta;
@@ -242,13 +397,18 @@ class _RenderBookshelfMotionItem extends RenderProxyBox {
     _resolve();
     if (!motion._running) {
       _from = null;
-      _fadeIn = false;
+      _fadeFrom = null;
     }
     final shifted = offset + _shift;
     final alpha = (_opacity * 255).round();
     if (alpha >= 255) {
       layer = null;
       context.paintChild(child, shifted);
+      return;
+    }
+    if (alpha <= 0) {
+      // 淡完、等清單重建拿掉的書：不畫。
+      layer = null;
       return;
     }
     layer = context.pushOpacity(
@@ -261,10 +421,12 @@ class _RenderBookshelfMotionItem extends RenderProxyBox {
 
   /// 換位中的書卡不接點擊：清單依版面位置分派點擊，畫在別格的書卡收不到
   /// 自己的點擊，點它所在的格子反而會點到排在那裡的另一本書。換位只有
-  /// [AppMotion.spring] 這麼久，停住點擊比點錯書好。
+  /// [AppMotion.spring] 這麼久，停住點擊比點錯書好。淡出中的書已經移出
+  /// 書架，也不接點擊。
   @override
   bool hitTest(BoxHitTestResult result, {required Offset position}) {
     if (_from != null && motion._running) return false;
+    if (motion._leaving.containsKey(id)) return false;
     return super.hitTest(result, position: position);
   }
 

@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart'
+    show BoxHitTestResult, PipelineOwner, RenderProxyBox, RenderSliver;
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -20,6 +23,7 @@ import 'models/search_scope.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
@@ -100,12 +104,22 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   /// 結果會隨書源回傳重新排序、更換代表書；以合併卡的身分辨認同一本書。
   static String _resultKey(SearchBook book) => searchResultIdentity(book);
 
+  /// 這一次建出的、之前不在畫面上的列要不要淡入。順序還會重排時（使用者
+  /// 沒捲過），新建的列只會是重排從畫面外換進來的書：它沒有舊位置可以滑過來，
+  /// 改成淡入，不在一幀內冒出來。順序固定後新建的列是捲進來的，不播。
+  bool _fadeUnseenRows = false;
+
+  /// 畫面上的結果列；結果有變時先記下位置，重排後各自從舊位置滑過去。
+  final _ResultMoves _moves = _ResultMoves();
+
   void _trackArrivals(SearchProvider provider) {
     // 新一輪搜尋開始時會先清空結果。不看「是否搜尋中」：最後一批結果可能和
     // 搜尋完成在同一幀到，那一批也要淡入。
     if (provider.results.isEmpty) _knownResultKeys.clear();
     final animate = _arrivalsPrimed;
     _arrivalsPrimed = true;
+    _fadeUnseenRows = animate && !provider.resultOrderHeld;
+    _moves.rememberPositions();
     var arrived = false;
     for (final book in provider.results) {
       final key = _resultKey(book);
@@ -229,18 +243,23 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                   ),
                   // 蓋在結果上面而不是換掉它，打完字取消時結果和捲動位置還在。
                   Positioned.fill(child: _buildSuggestions(provider)),
-                  if (provider.isSearching)
-                    Positioned(
-                      // 進度條貼在玻璃頁首實色區的下緣。
-                      top: padding.top - AppGlass.headerFadeHeight,
-                      left: 0,
-                      right: 0,
-                      child: LinearProgressIndicator(
-                        value: provider.progress,
-                        minHeight: 2,
-                        backgroundColor: Colors.transparent,
-                      ),
+                  Positioned(
+                    // 進度條貼在玻璃頁首實色區的下緣。
+                    top: padding.top - AppGlass.headerFadeHeight,
+                    left: 0,
+                    right: 0,
+                    // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
+                    child: _FadeSwap(
+                      child: provider.isSearching
+                          ? LinearProgressIndicator(
+                              key: const ValueKey('progress'),
+                              value: provider.progress,
+                              minHeight: 2,
+                              backgroundColor: Colors.transparent,
+                            )
+                          : const SizedBox(width: double.infinity, height: 2),
                     ),
+                  ),
                 ],
               );
             },
@@ -468,9 +487,20 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     ),
     child: ConstrainedBox(
       constraints: const BoxConstraints(minHeight: GlassCapsule.height),
-      child: p.isSearching
-          ? _buildSearchProgress(p)
-          : _buildResultToolbar(context, p),
+      // 搜尋結束時進度字樣與工具列在同一格交叉淡換；工具列的膠囊都是
+      // blur: false，可以跟著淡。
+      child: _FadeSwap(
+        alignment: AlignmentDirectional.centerStart,
+        child: p.isSearching
+            ? KeyedSubtree(
+                key: const ValueKey('progress'),
+                child: _buildSearchProgress(p),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('toolbar'),
+                child: _buildResultToolbar(context, p),
+              ),
+      ),
     ),
   );
 
@@ -836,6 +866,11 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     final results = p.results;
     final panels = _buildPanels(p);
     final padding = _bodyPadding;
+    // 重排時同一本書的列（連同它的狀態與畫面上的位置）跟著書走，才能從
+    // 原本的位置滑到新位置。
+    final indexByKey = <String, int>{
+      for (var i = 0; i < results.length; i++) _resultKey(results[i]): i,
+    };
     return NotificationListener<ScrollUpdateNotification>(
       // 使用者一開始捲，結果順序就固定，之後找到的書接在尾端。
       onNotification: (notification) {
@@ -853,6 +888,10 @@ class _SearchPageContentState extends State<_SearchPageContent> {
           bottom: padding.bottom + AppSpacing.xl,
         ),
         itemCount: panels.length + results.length,
+        findChildIndexCallback: (key) {
+          final index = key is ValueKey<String> ? indexByKey[key.value] : null;
+          return index == null ? null : panels.length + index;
+        },
         itemBuilder: (ctx, i) {
           if (i < panels.length) return panels[i];
           final index = i - panels.length;
@@ -868,7 +907,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
             // 以書名＋作者當 key，「展開來源」等列內狀態才會跟著那本書，不會
             // 留在原本的位置。
             key: ValueKey(key),
-            animate: _arrivingResultKeys.contains(key),
+            animate: _arrivingResultKeys.contains(key) || _fadeUnseenRows,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -877,22 +916,256 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                   _RelevanceTierHeader(tier: tier, first: index == 0)
                 else if (index > 0)
                   const InsetSeparator(indent: ExploreBookItem.textIndent),
-                SearchResultItem(
-                  result: AggregatedSearchBook(
-                    book: book,
-                    sources: book.sourceLabels.isNotEmpty
-                        ? book.sourceLabels
-                        : [book.originName ?? '未知來源'],
+                // 只有書卡滑動；段名與分隔線屬於清單的位置，照新版面。
+                _ResultMove(
+                  key: const ValueKey('book'),
+                  moves: _moves,
+                  child: SearchResultItem(
+                    result: AggregatedSearchBook(
+                      book: book,
+                      sources: book.sourceLabels.isNotEmpty
+                          ? book.sourceLabels
+                          : [book.originName ?? '未知來源'],
+                    ),
+                    coverUrl: p.coverOf(book),
+                    onOpen: () => p.rememberOpenedCard(book),
+                    isInBookshelf: p.isInBookshelf(book),
                   ),
-                  coverUrl: p.coverOf(book),
-                  onOpen: () => p.rememberOpenedCard(book),
-                  isInBookshelf: p.isInBookshelf(book),
                 ),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+/// 同一格裡兩種內容交叉淡換（[AppMotion.fade]）；系統關閉動畫時直接換。
+/// 兩者疊在一起、靠 [alignment] 對齊，淡換期間版面取較大的那個。
+class _FadeSwap extends StatelessWidget {
+  const _FadeSwap({
+    this.alignment = AlignmentDirectional.center,
+    required this.child,
+  });
+
+  final AlignmentGeometry alignment;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : AppMotion.fade,
+      switchInCurve: AppMotion.fadeCurve,
+      switchOutCurve: AppMotion.fadeCurve,
+      layoutBuilder: (current, previous) =>
+          Stack(alignment: alignment, children: [...previous, ?current]),
+      child: child,
+    );
+  }
+}
+
+/// 搜尋結果重新排序、上面多出或少掉一列時，這一本的書卡從原本的位置滑到新位置，
+/// 不在一幀內跳過去。時長與曲線同新結果的淡入（[AppMotion.fade]），插進一本
+/// 書時下面的列讓位和它淡入同時完成。
+///
+/// 結果有變、清單重建之前，頁面先叫 [_ResultMoves.rememberPositions] 記下
+/// 每一列在清單裡的位置（這時版面還是上一幀的；清單重建時搬動過的列會
+/// 失去位置紀錄，所以不能等列自己重建才量），畫出來時每一列再量一次；位置
+/// 不同就從舊位置開始，平移回原位。量的是在整條清單裡的位置，和目前捲到
+/// 哪裡無關。只是畫的位置平移，不改版面。
+class _ResultMove extends StatefulWidget {
+  const _ResultMove({super.key, required this.moves, required this.child});
+
+  final _ResultMoves moves;
+  final Widget child;
+
+  @override
+  State<_ResultMove> createState() => _ResultMoveState();
+}
+
+class _ResultMoveState extends State<_ResultMove>
+    with SingleTickerProviderStateMixin {
+  /// 書卡滑動時持有動作閘門，背景工作等它到位（ADR 0018）。
+  final MotionHold _hold = MotionHold();
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+    value: 1,
+  )..addStatusListener((_) => _hold.moving = _controller.isAnimating);
+  late final Animation<double> _progress = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.fadeCurve,
+  );
+
+  void _restart() {
+    if (mounted) _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    // 滑到一半被回收或離開頁面：停下不會發出狀態變化，在這裡放開。
+    _hold.release();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _ResultMoveBox(
+    moves: widget.moves,
+    progress: _progress,
+    enabled: !MediaQuery.disableAnimationsOf(context),
+    onMoved: _restart,
+    child: widget.child,
+  );
+}
+
+/// 畫面上所有搜尋結果列的登記處。
+class _ResultMoves {
+  final Set<_RenderResultMove> _rows = {};
+
+  /// 結果有變、清單重建之前呼叫。
+  void rememberPositions() {
+    for (final row in _rows) {
+      row.rememberPosition();
+    }
+  }
+}
+
+class _ResultMoveBox extends SingleChildRenderObjectWidget {
+  const _ResultMoveBox({
+    required this.moves,
+    required this.progress,
+    required this.enabled,
+    required this.onMoved,
+    required super.child,
+  });
+
+  final _ResultMoves moves;
+  final Animation<double> progress;
+  final bool enabled;
+  final VoidCallback onMoved;
+
+  @override
+  _RenderResultMove createRenderObject(BuildContext context) =>
+      _RenderResultMove(
+        moves: moves,
+        progress: progress,
+        enabled: enabled,
+        onMoved: onMoved,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderResultMove renderObject,
+  ) {
+    renderObject
+      ..enabled = enabled
+      ..onMoved = onMoved;
+  }
+}
+
+class _RenderResultMove extends RenderProxyBox {
+  _RenderResultMove({
+    required this.moves,
+    required this.progress,
+    required this.enabled,
+    required this.onMoved,
+  });
+
+  final _ResultMoves moves;
+
+  /// 平移的進度；同一列一直是同一個（State 擁有）。
+  final Animation<double> progress;
+
+  bool enabled;
+  VoidCallback onMoved;
+
+  /// 平移從這個距離開始，隨進度收到 0。
+  double _from = 0;
+
+  /// 剛換了起點、動畫下一幀才從頭播：這一幀照起點畫。
+  bool _restartPending = false;
+
+  /// 清單重建前記下的位置（上一幀的版面）；畫出來時拿來比。
+  double? _before;
+
+  double get _shift => _restartPending ? _from : _from * (1 - progress.value);
+
+  /// 這一列頂端在清單裡的位置：清單項目的排版位置加上這一列在項目裡的
+  /// 位置。項目剛被搬動、還沒重新排版時量不到，回傳 null。
+  double? _listOffset() {
+    if (!attached || !hasSize) return null;
+    RenderObject item = this;
+    while (item.parent is! RenderSliver) {
+      final parent = item.parent;
+      if (parent == null) return null;
+      item = parent;
+    }
+    if (item is! RenderBox) return null;
+    final itemOffset = (item.parent! as RenderSliver).childScrollOffset(item);
+    if (itemOffset == null) return null;
+    return itemOffset + localToGlobal(Offset.zero, ancestor: item).dy;
+  }
+
+  void rememberPosition() {
+    if (!attached || !enabled) return;
+    _before = _listOffset();
+    markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    progress.addListener(markNeedsPaint);
+    moves._rows.add(this);
+  }
+
+  @override
+  void detach() {
+    moves._rows.remove(this);
+    progress.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final before = _before;
+    _before = null;
+    if (before != null) {
+      final now = _listOffset();
+      if (now != null && (before - now).abs() > 0.5) {
+        // 動畫途中又移動：從目前畫的位置接著滑，不跳回去。
+        _from = _shift + before - now;
+        _restartPending = true;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _restartPending = false;
+          onMoved();
+        });
+      }
+    }
+    super.paint(context, offset.translate(0, _paintShift));
+  }
+
+  double get _paintShift => enabled ? _shift : 0.0;
+
+  // 點擊與讀屏的位置跟著畫的位置走，滑動途中點到的就是看到的那一列。
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    transform.translateByDouble(0, _paintShift, 0, 1);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return result.addWithPaintOffset(
+      offset: Offset(0, _paintShift),
+      position: position,
+      hitTest: (result, position) =>
+          super.hitTestChildren(result, position: position),
     );
   }
 }

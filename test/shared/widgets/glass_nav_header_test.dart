@@ -84,4 +84,36 @@ void main() {
 
     expect(sheenMask, findsNothing);
   });
+
+  testWidgets('a morphing slot without a button grows its glass from a point', (
+    tester,
+  ) async {
+    GlassNavHeader header({required bool withButton}) => GlassNavHeader(
+      title: '書源管理',
+      morph: true,
+      automaticallyImplyLeading: false,
+      leading: withButton
+          ? GlassTextButton(label: '全選', onPressed: () {})
+          : null,
+    );
+    Size leading() => tester.getSize(find.byType(GlassMorph).first);
+
+    await tester.pumpWidget(page(header(withButton: false)));
+    expect(leading(), Size.zero, reason: '沒有按鈕時玻璃縮成一個點');
+
+    await tester.pumpWidget(page(header(withButton: true)));
+    await tester.pump(AppMotion.fade ~/ 2);
+    final midway = leading();
+    expect(midway.width, greaterThan(0));
+    expect(midway.height, greaterThan(0));
+
+    await tester.pumpAndSettle();
+    final full = leading();
+    expect(midway.width, lessThan(full.width), reason: '玻璃從點長大，不是一幀冒出來');
+    expect(full.height, 44, reason: '照按鈕自己的高度，不被工具列拉高');
+
+    await tester.pumpWidget(page(header(withButton: false)));
+    await tester.pumpAndSettle();
+    expect(leading(), Size.zero);
+  });
 }
