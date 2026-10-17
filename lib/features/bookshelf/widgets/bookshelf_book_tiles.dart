@@ -52,9 +52,13 @@ class BookshelfCheckMark extends StatelessWidget {
           width: 1.5,
         ),
       ),
-      child: selected
-          ? Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary)
-          : null,
+      // 勾號和圓圈的填色一起淡入淡出，不在第一幀就整個冒出來。
+      child: AnimatedOpacity(
+        duration: AppMotion.menu,
+        curve: AppMotion.menuCurve,
+        opacity: selected ? 1 : 0,
+        child: Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary),
+      ),
     );
   }
 }
@@ -83,65 +87,85 @@ class BookshelfUpdateBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final result = this.result;
+    // 角標出現與清掉時整塊淡入淡出；換成另一個結果（「+12」→「+3」、
+    // 「+3」→「!」）時同一塊膠囊留著，寬度與底色跟著淡換連續變化。
     return AnimatedSwitcher(
       duration: AppMotion.fade,
       switchInCurve: AppMotion.fadeCurve,
       switchOutCurve: AppMotion.fadeCurve,
       child: result == null
           ? const SizedBox.shrink(key: ValueKey('no-badge'))
-          : result.failed
-          ? _failed()
-          : _newChapters(result.newChapterCount),
+          : _BadgePill(key: const ValueKey('badge'), result: result),
     );
   }
+}
 
-  Widget _newChapters(int count) {
+/// 角標膠囊：失敗的「!」是同高的正圓，也就是最窄的膠囊，所以兩種結果
+/// 共用一塊，換結果時寬度、底色與字都在 [AppMotion.fade] 內連續換過去，
+/// 淡換結束時不會再縮一下、整塊往右跳。
+class _BadgePill extends StatelessWidget {
+  const _BadgePill({super.key, required this.result});
+
+  final BookUpdateCheckResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = result.failed;
+    final count = result.newChapterCount;
+    final style = AppTextStyles.micro.copyWith(
+      height: 1,
+      fontWeight: failed ? FontWeight.w700 : FontWeight.w600,
+      color: BookshelfUpdateBadge._textColor,
+    );
     return Semantics(
-      key: ValueKey('new-$count'),
-      label: '有 $count 個新章節',
+      label: failed ? '檢查更新失敗' : '有 $count 個新章節',
       child: ExcludeSemantics(
-        child: Container(
-          height: height,
+        child: AnimatedContainer(
+          duration: AppMotion.fade,
+          curve: AppMotion.fadeCurve,
+          height: BookshelfUpdateBadge.height,
+          constraints: const BoxConstraints(
+            minWidth: BookshelfUpdateBadge.height,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: newChaptersColor,
+            color: failed
+                ? BookshelfUpdateBadge.failedColor
+                : BookshelfUpdateBadge.newChaptersColor,
             borderRadius: AppRadius.pillShape,
-            border: _edge,
+            border: BookshelfUpdateBadge._edge,
           ),
-          child: Text(
-            '+$count',
-            style: AppTextStyles.micro.copyWith(
-              height: 1,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _failed() {
-    return Semantics(
-      key: const ValueKey('failed'),
-      label: '檢查更新失敗',
-      child: ExcludeSemantics(
-        child: Container(
-          width: height,
-          height: height,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: failedColor,
-            border: _edge,
-          ),
-          child: Text(
-            '!',
-            style: AppTextStyles.micro.copyWith(
-              height: 1,
-              fontWeight: FontWeight.w700,
-              color: _textColor,
+          child: AnimatedSize(
+            duration: AppMotion.fade,
+            curve: AppMotion.fadeCurve,
+            child: AnimatedSwitcher(
+              duration: AppMotion.fade,
+              switchInCurve: AppMotion.fadeCurve,
+              switchOutCurve: AppMotion.fadeCurve,
+              // 大小只照新的字量：舊字縮成 0×0 的錨點、從中央溢出畫，
+              // 外面的 AnimatedSize 一開始淡換就往新寬度走。預設的排法取
+              // 新舊之中較大者，舊字淡完那一刻才縮，角標會跳一下。
+              layoutBuilder: (current, previous) => Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  for (final child in previous)
+                    SizedBox.shrink(
+                      child: OverflowBox(
+                        maxWidth: double.infinity,
+                        maxHeight: double.infinity,
+                        child: child,
+                      ),
+                    ),
+                  ?current,
+                ],
+              ),
+              child: Text(
+                failed ? '!' : '+$count',
+                key: ValueKey(failed ? 'failed' : 'new-$count'),
+                style: style,
+              ),
             ),
           ),
         ),
@@ -323,18 +347,30 @@ class BookshelfListCard extends StatelessWidget {
       selected: selecting ? selected : null,
       child: TransitionSource(
         radius: AppGrouped.radius,
-        child: Material(
-          color: selecting && selected
-              ? Color.alphaBlend(
-                  scheme.primary.withValues(alpha: 0.06),
-                  surface,
-                )
-              : surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppGrouped.cardRadius,
-            side: BorderSide(color: chrome.separator, width: AppGlass.hairline),
+        // 選取的淡主色底與勾選圓圈的填色同時、同速漸變（Material 不會自己
+        // 漸變底色）。漸變的是主色的濃淡、不是兩個顏色之間：換深淺或風格
+        // 時底色直接換成新配色，不另外慢慢過渡。
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: selecting && selected ? 1 : 0),
+          duration: AppMotion.menu,
+          curve: AppMotion.menuCurve,
+          builder: (context, tint, child) => Material(
+            color: tint == 0
+                ? surface
+                : Color.alphaBlend(
+                    scheme.primary.withValues(alpha: 0.06 * tint),
+                    surface,
+                  ),
+            shape: RoundedRectangleBorder(
+              borderRadius: AppGrouped.cardRadius,
+              side: BorderSide(
+                color: chrome.separator,
+                width: AppGlass.hairline,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: child,
           ),
-          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress == null

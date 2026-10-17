@@ -88,4 +88,60 @@ void main() {
     expect(fillOf('!'), AppPalette.rustDark);
     expect(tester.widget<Text>(find.text('!')).style?.color, AppPalette.ink700);
   });
+
+  // 角標貼著封面右上角，寬度變化就是左緣在動；收尾時不能再縮一段。
+  for (final (label, from, to) in [
+    (
+      '+12 to +3',
+      const BookUpdateCheckResult(bookUrl: 'u', newChapterCount: 12),
+      const BookUpdateCheckResult(bookUrl: 'u', newChapterCount: 3),
+    ),
+    (
+      '+3 to !',
+      const BookUpdateCheckResult(bookUrl: 'u', newChapterCount: 3),
+      BookUpdateCheckResult(bookUrl: 'u', newChapterCount: 0, error: 'x'),
+    ),
+  ]) {
+    testWidgets('narrowing the badge $label shrinks it continuously', (
+      tester,
+    ) async {
+      // 和書卡一樣用 Positioned 貼在右上角，寬度照字量。
+      Widget badge(BookUpdateCheckResult result) => host(
+        SizedBox(
+          height: 40,
+          child: Stack(
+            children: [
+              Positioned(
+                top: 0,
+                right: 0,
+                child: BookshelfUpdateBadge(result: result),
+              ),
+            ],
+          ),
+        ),
+      );
+      double width() => tester.getSize(find.byType(AnimatedContainer)).width;
+
+      await tester.pumpWidget(badge(to));
+      final rest = width();
+      await tester.pumpWidget(badge(from));
+      await tester.pumpAndSettle();
+      final start = width();
+      expect(start, greaterThan(rest));
+
+      await tester.pumpWidget(badge(to));
+      var last = start;
+      var moved = false;
+      while (tester.binding.hasScheduledFrame) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final now = width();
+        // 每一幀只移一小段，淡換途中就在縮，不是結束那一刻才跳。
+        expect((now - last).abs(), lessThan((start - rest) / 3));
+        if (now < start && now > rest) moved = true;
+        last = now;
+      }
+      expect(moved, isTrue);
+      expect(width(), rest);
+    });
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
   final book = Book(
@@ -51,5 +52,70 @@ void main() {
       last = width;
     }
     expect(slot(), 0);
+  });
+
+  testWidgets('the tick and the card tint change together with the fill', (
+    tester,
+  ) async {
+    Widget card({required bool selected}) => MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 360,
+            child: BookshelfListCard(
+              book: book,
+              selecting: true,
+              selected: selected,
+            ),
+          ),
+        ),
+      ),
+    );
+    double tickShown() => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.check_rounded),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+    Color tint() => tester
+        .widget<Material>(
+          find
+              .ancestor(
+                of: find.byType(InkWell),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .color!;
+
+    await tester.pumpWidget(card(selected: false));
+    await tester.pumpAndSettle();
+    final unselected = tint();
+    expect(tickShown(), 0);
+
+    await tester.pumpWidget(card(selected: true));
+    await tester.pump();
+    await tester.pump(AppMotion.menu ~/ 2);
+    expect(tickShown(), inExclusiveRange(0, 1));
+    final mid = tint();
+    expect(mid, isNot(unselected));
+
+    await tester.pumpAndSettle();
+    expect(tickShown(), 1);
+    final selectedTint = tint();
+    expect(selectedTint, isNot(mid));
+    // 半途的底色在未選與已選之間。
+    expect(
+      mid.b,
+      inExclusiveRange(
+        selectedTint.b < unselected.b ? selectedTint.b : unselected.b,
+        selectedTint.b < unselected.b ? unselected.b : selectedTint.b,
+      ),
+    );
   });
 }
