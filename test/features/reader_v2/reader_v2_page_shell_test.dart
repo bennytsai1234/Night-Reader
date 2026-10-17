@@ -11,6 +11,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/glass_motion.dart';
@@ -473,11 +474,11 @@ void main() {
 
       expect(find.byType(SkeletonBox), findsNothing);
       expect(infoText('第一章'), findsOneWidget);
-      final opacity = tester.widget<FadeTransition>(
+      final opacity = tester.widget<SkeletonRevealLayer>(
         find
             .ancestor(
               of: infoText('第一章'),
-              matching: find.byType(FadeTransition),
+              matching: find.byType(SkeletonRevealLayer),
             )
             .first,
       );

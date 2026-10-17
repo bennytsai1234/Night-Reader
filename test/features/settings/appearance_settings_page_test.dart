@@ -8,6 +8,7 @@ import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -102,6 +103,31 @@ void main() {
       HSLColor.fromColor(primary).hue,
       closeTo(HSLColor.fromColor(AppAccent.bamboo.dark!).hue, 2),
       reason: '素色深色選竹綠，開關是綠色而不是白色',
+    );
+  });
+
+  testWidgets('骨架換場預設由左而右、0.6 秒，改了會保存', (tester) async {
+    await pumpPage(tester);
+    await tester.scrollUntilVisible(find.text('換場時長'), 200);
+    expect(find.text('由左而右'), findsOneWidget);
+    expect(find.text('0.6 秒'), findsOneWidget);
+
+    // 捲到畫面中間，不被頁首與底部讓出的位置擋住。
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    expect(themeSettings.skeletonReveal.duration.inMilliseconds, 700);
+    expect(prefs.getInt(PreferKey.skeletonRevealMillis), 700);
+
+    await tester.tap(find.text('骨架換場'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('整頁淡入').last);
+    await tester.pumpAndSettle();
+    expect(themeSettings.skeletonReveal.style, SkeletonRevealStyle.fade);
+    expect(
+      prefs.getString(PreferKey.skeletonRevealStyle),
+      SkeletonRevealStyle.fade.name,
     );
   });
 }

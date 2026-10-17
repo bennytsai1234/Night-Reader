@@ -299,6 +299,7 @@ class ReaderApp extends StatelessWidget {
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
+            skeletonReveal: themeSettings.skeletonReveal,
           ),
           darkTheme: buildAppTheme(
             themeSettings.style,
@@ -306,6 +307,7 @@ class ReaderApp extends StatelessWidget {
             glassStrength: themeSettings.glassStrength,
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
+            skeletonReveal: themeSettings.skeletonReveal,
           ),
           themeMode: settings.themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，

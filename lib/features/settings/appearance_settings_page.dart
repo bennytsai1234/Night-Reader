@@ -10,11 +10,13 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、強調色、深淺、玻璃效果與換頁動畫。風格與深淺同時
-/// 決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 外觀與主題：風格、強調色、深淺、玻璃效果、換頁動畫與骨架換場。風格與
+/// 深淺同時決定 App 介面、閱讀正文與閱讀選單的配色。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
@@ -107,6 +109,35 @@ class AppearanceSettingsPage extends StatelessWidget {
               ),
             ],
           ),
+          GroupedSection(
+            children: [
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '骨架換場',
+                  value: themeSettings.skeletonReveal.style.label,
+                  showChevron: false,
+                  onTap: () => _pickSkeletonReveal(rowContext, themeSettings),
+                ),
+              ),
+              GroupedContent(
+                child: NumberStepperRow(
+                  label: '換場時長',
+                  value:
+                      themeSettings.skeletonReveal.duration.inMilliseconds /
+                      1000,
+                  min: SkeletonReveal.minDuration.inMilliseconds / 1000,
+                  max: SkeletonReveal.maxDuration.inMilliseconds / 1000,
+                  step: SkeletonReveal.durationStep.inMilliseconds / 1000,
+                  fractionDigits: 1,
+                  unit: '秒',
+                  onChanged: (seconds) =>
+                      themeSettings.setSkeletonRevealDuration(
+                        Duration(milliseconds: (seconds * 1000).round()),
+                      ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -130,6 +161,25 @@ Future<void> _pickPageTransition(
     ],
   );
   if (transition != null) themeSettings.setPageTransition(transition);
+}
+
+Future<void> _pickSkeletonReveal(
+  BuildContext rowContext,
+  ThemeSettingsProvider themeSettings,
+) async {
+  final style = await showGlassMenu<SkeletonRevealStyle>(
+    context: rowContext,
+    anchor: globalRectOf(rowContext),
+    entries: [
+      for (final style in SkeletonRevealStyle.values)
+        GlassMenuItem(
+          value: style,
+          label: style.label,
+          checked: style == themeSettings.skeletonReveal.style,
+        ),
+    ],
+  );
+  if (style != null) themeSettings.setSkeletonRevealStyle(style);
 }
 
 /// 強調色選單：每個色點是套到目前風格與深淺後實際會用的顏色。

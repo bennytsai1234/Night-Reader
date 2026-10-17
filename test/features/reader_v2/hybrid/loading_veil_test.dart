@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 void main() {
   final spec = ReaderV2LayoutSpec(
@@ -22,6 +23,8 @@ void main() {
     ),
   );
   const frame = Duration(milliseconds: 16);
+  // 掀紙照骨架換場的預設時長。
+  const revealTime = SkeletonReveal.defaultDuration;
   final noSkeleton = paintsExactlyCountTimes(#drawRRect, 0);
 
   late LoadingVeilController veil;
@@ -89,11 +92,11 @@ void main() {
     await advance(tester, AppMotion.fade);
 
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     expect(veil.isVisible, isTrue);
     expect(hiddenCount, 0);
 
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(veil.isVisible, isFalse);
     expect(hiddenCount, 1);
     expect(tester.hasRunningAnimations, isFalse);
@@ -107,7 +110,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade ~/ 2);
     veil.reveal();
-    await advance(tester, AppMotion.fade * 2);
+    await advance(tester, revealTime * 2);
     expect(veil.isVisible, isFalse);
     expect(find.byType(LoadingVeil), noSkeleton);
     expect(tester.hasRunningAnimations, isFalse);
@@ -121,7 +124,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade);
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
 
     veil.cover();
     await tester.pump();
@@ -179,7 +182,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade);
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     expect(veil.isVisible, isTrue);
 
     veil.reduceMotion = true;

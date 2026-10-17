@@ -7,6 +7,7 @@ import '../theme/app_tokens.dart';
 import 'package:night_reader/core/services/motion_gate.dart';
 
 import 'cover_reveal.dart';
+import 'skeleton_reveal.dart';
 
 /// 骨架載入：資料還沒到時，以淡紙色的形狀標出內容將出現的位置（封面方塊、
 /// 文字條），取代置中的轉圈。
@@ -167,7 +168,9 @@ class SkeletonLine extends StatelessWidget {
   }
 }
 
-/// 骨架與真實內容之間的切換：資料到了以 [AppMotion.fade] 淡入取代骨架。
+/// 骨架與真實內容之間的切換：資料到了以骨架換場（[SkeletonReveal]，使用者
+/// 在「外觀與主題」選的方式與時長）換成內容。重新載入時以 [AppMotion.fade]
+/// 整頁淡回骨架。
 ///
 /// 兩者都撐滿父層（呼叫端給的是整頁內容區）。[builder] 只在載入完成後
 /// 才呼叫。
@@ -185,8 +188,8 @@ class SkeletonSwitcher extends StatefulWidget {
   final WidgetBuilder builder;
 
   /// 資料到了先在骨架底下建好內容，等畫面上的封面解碼好（最多
-  /// [AppMotion.revealCoverWait]），再以 [AppMotion.reveal] 連同封面一次
-  /// 淡入；不會先出現空白的書卡、封面再一張張浮出來。
+  /// [AppMotion.revealCoverWait]），再連同封面一次換場；不會先出現空白的
+  /// 書卡、封面再一張張浮出來。
   final bool waitForCovers;
 
   @override
@@ -197,7 +200,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: widget.waitForCovers ? AppMotion.reveal : AppMotion.fade,
+    reverseDuration: AppMotion.fade,
     value: widget.loading ? 0 : 1,
   )..addStatusListener((_) => setState(() {}));
   late final Animation<double> _content = CurvedAnimation(
@@ -205,6 +208,9 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     curve: AppMotion.fadeCurve,
   );
   late final Animation<double> _skeleton = ReverseAnimation(_content);
+
+  /// 這一次換成內容是不是由左而右；淡回骨架一律整頁淡。
+  bool _sweep = false;
 
   /// 淡入前等封面的那一輪；等完或重新載入就換掉。
   CoverReveal? _reveal;
@@ -218,6 +224,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     if (widget.loading == oldWidget.loading) return;
     _reveal = null;
     if (widget.loading) {
+      _sweep = false;
       _controller.reverse();
     } else if (widget.waitForCovers) {
       // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。
@@ -225,12 +232,19 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
       final reveal = _reveal = CoverReveal();
       unawaited(
         reveal.settle(AppMotion.revealCoverWait).whenComplete(() {
-          if (mounted && identical(_reveal, reveal)) _controller.forward();
+          if (mounted && identical(_reveal, reveal)) _revealContent();
         }),
       );
     } else {
-      _controller.forward();
+      _revealContent();
     }
+  }
+
+  void _revealContent() {
+    final reveal = SkeletonReveal.of(context);
+    _sweep = reveal.sweeps;
+    _controller.duration = reveal.duration;
+    _controller.forward();
   }
 
   @override
@@ -257,16 +271,20 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
       fit: StackFit.expand,
       children: [
         if (!_controller.isCompleted)
-          FadeTransition(
+          SkeletonRevealLayer(
             key: const ValueKey('skeleton'),
             opacity: _skeleton,
+            side: SkeletonRevealSide.skeleton,
+            sweep: _sweep,
             child: Skeleton(child: widget.skeleton),
           ),
         // 等封面時內容已經建在骨架底下，只是還全透明。
         if (content != null && (!_controller.isDismissed || reveal != null))
-          FadeTransition(
+          SkeletonRevealLayer(
             key: const ValueKey('content'),
             opacity: _content,
+            side: SkeletonRevealSide.content,
+            sweep: _sweep,
             // 還沒淡入或正在淡出的內容不接點擊、不給讀屏念。
             child: IgnorePointer(
               ignoring: hidden,

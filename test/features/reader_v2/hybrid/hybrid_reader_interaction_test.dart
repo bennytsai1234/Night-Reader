@@ -20,7 +20,7 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import 'package:night_reader/features/reader_v2/session/reader_v2_progress_controller.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_runtime.dart';
 import 'package:night_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -210,8 +210,10 @@ void main() {
     expect(taps, hasLength(1), reason: '停住之後的下一次點擊照常生效');
   });
 
+  /// 推進到骨架換場（預設時長）播完再多幾幀。
   Future<void> settle(WidgetTester tester) async {
-    for (var frame = 0; frame < 30; frame++) {
+    final frames = SkeletonReveal.defaultDuration.inMilliseconds ~/ 16 + 8;
+    for (var frame = 0; frame < frames; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
   }
@@ -394,7 +396,7 @@ void main() {
     }
     await jump;
     await settle(tester);
-    await tester.pump(AppMotion.fade);
+    await tester.pump(SkeletonReveal.defaultDuration);
 
     expect(tester.takeException(), isNull);
     expect(runtime.state.visibleLocation.chapterIndex, 7);
@@ -467,7 +469,7 @@ void main() {
     }
     await jump;
     await settle(tester);
-    await tester.pump(AppMotion.fade);
+    await tester.pump(SkeletonReveal.defaultDuration);
   }
 
   testWidgets('the jump paper stops a fling and still lets taps through', (
@@ -596,7 +598,7 @@ void main() {
     await tester.pump();
     expect(taps, hasLength(1), reason: '淡出中的紙不攔點擊');
 
-    await tester.pump(AppMotion.fade);
+    await tester.pump(SkeletonReveal.defaultDuration);
     expect(find.byType(LoadingVeil), findsNothing);
   });
 

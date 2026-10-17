@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/motion_gate.dart';
 
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -261,7 +262,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (_initialRestoreCompleted == completed) return;
     _initialRestoreCompleted = completed;
     if (completed) {
-      _veil.reveal();
+      _veil.reveal(SkeletonReveal.of(context));
     } else {
       _veil.cover();
     }
@@ -678,7 +679,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _holdScrollUnderJumpVeil();
       _veil.cover();
     } else if (wasVeiled) {
-      _veil.reveal();
+      _veil.reveal(SkeletonReveal.of(context));
     }
   }
 

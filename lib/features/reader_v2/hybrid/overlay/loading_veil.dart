@@ -1,16 +1,18 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///
 /// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙；蓋上時紙上就
-/// 淡入照閱讀版面畫的正文骨架。正文排好後紙以 [AppMotion.fade] 淡出、露出
-/// 正文，骨架跟著一起淡掉。
+/// 淡入照閱讀版面畫的正文骨架。正文排好後紙以骨架換場（[SkeletonReveal]，
+/// 使用者選的方式與時長）淡出、露出正文，骨架跟著一起淡掉。
 ///
 /// 只改紙與骨架顏色的透明度，不對正文做整頁 Opacity：載入期間排版用滿每
 /// 一幀的預算，這一層每幀只多畫幾十個圓角條。
@@ -32,6 +34,9 @@ class LoadingVeilController {
 
   /// 紙完全淡出時呼叫，呼叫端據此把 [LoadingVeil] 移出畫面。
   final VoidCallback? onHidden;
+
+  /// 這一次掀紙是不是由左而右。
+  bool _sweep = false;
 
   final AnimationController _cover;
   final AnimationController _skeleton;
@@ -80,11 +85,13 @@ class LoadingVeilController {
     _syncPulse();
   }
 
-  /// 正文已排好：紙淡出。
-  void reveal() {
+  /// 正文已排好：照 [reveal] 的方式與時長掀開紙。
+  void reveal([SkeletonReveal reveal = const SkeletonReveal()]) {
     if (_reduceMotion) {
       _cover.value = 0;
     } else {
+      _sweep = reveal.sweeps;
+      _cover.reverseDuration = reveal.duration;
       unawaited(_cover.reverse());
     }
   }
@@ -191,6 +198,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
           cover: controller._coverCurve,
           skeleton: controller._skeletonCurve,
           pulse: controller._pulseCurve,
+          sweep: () => controller._sweep,
           spec: widget.spec,
           backgroundColor: widget.backgroundColor,
           textColor: widget.textColor,
@@ -205,6 +213,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.cover,
     required this.skeleton,
     required this.pulse,
+    required this.sweep,
     required this.spec,
     required this.backgroundColor,
     required this.textColor,
@@ -213,6 +222,9 @@ class _LoadingVeilPainter extends CustomPainter {
   final Animation<double> cover;
   final Animation<double> skeleton;
   final Animation<double> pulse;
+
+  /// 掀紙是不是由左而右；紙蓋著時不影響畫面。
+  final bool Function() sweep;
   final ReaderV2LayoutSpec spec;
   final Color backgroundColor;
   final Color textColor;
@@ -237,15 +249,34 @@ class _LoadingVeilPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final coverStrength = cover.value;
     if (coverStrength <= 0) return;
+    // 由左而右掀紙時，紙與骨架在每個橫向位置各自淡出：濃度是 1 減該處
+    // 正文的濃度。
+    final sweeping = sweep() && coverStrength < 1;
+    final stops = sweeping
+        ? SkeletonReveal.sweepStops(1 - coverStrength)
+        : const <(double, double)>[];
+    Paint shade(Color color, double strength) {
+      if (!sweeping) {
+        return Paint()..color = color.withValues(alpha: color.a * strength);
+      }
+      return Paint()
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(size.width, 0),
+          [
+            for (final (_, content) in stops)
+              color.withValues(alpha: color.a * strength * (1 - content)),
+          ],
+          [for (final (u, _) in stops) u],
+        );
+    }
+
     canvas.drawRect(
       Offset.zero & size,
-      Paint()
-        ..color = backgroundColor.withValues(
-          alpha: backgroundColor.a * coverStrength,
-        ),
+      shade(backgroundColor, sweeping ? 1 : coverStrength),
     );
 
-    final strength = skeleton.value * coverStrength;
+    final strength = skeleton.value * (sweeping ? 1 : coverStrength);
     if (strength <= 0) return;
     final style = spec.style;
     final lineExtent = style.fontSize * style.effectiveLineHeight;
@@ -257,10 +288,7 @@ class _LoadingVeilPainter extends CustomPainter {
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final base = Skeleton.tint(textColor, dark: dark);
-    final paint = Paint()
-      ..color = base.withValues(
-        alpha: base.a * Skeleton.pulseStrength(pulse.value) * strength,
-      );
+    final paint = shade(base, Skeleton.pulseStrength(pulse.value) * strength);
     final barHeight = style.fontSize * _barHeightFactor;
     final barInset = (lineExtent - barHeight) / 2;
     final radius = AppRadius.cardXs.topLeft;
