@@ -201,6 +201,15 @@ class BookshelfListCard extends StatelessWidget {
   static const double coverWidth = 52;
   static const double coverHeight = 72;
 
+  /// 書名與作者的字型；載入骨架照它們量出每一行的寬度。
+  static final TextStyle titleStyle = AppTextStyles.uiMd.copyWith(
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+  );
+  static final TextStyle authorStyle = AppTextStyles.bodySm.copyWith(
+    height: 1.3,
+  );
+
   /// 編輯模式時勾選圓圈佔用的寬度（含與封面的間距）。
   static const double _checkSlot = BookshelfCheckMark.size + AppSpacing.md;
 
@@ -289,11 +298,7 @@ class BookshelfListCard extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.uiMd.copyWith(
-                    height: 1.3,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSurface,
-                  ),
+                  style: titleStyle.copyWith(color: scheme.onSurface),
                 ),
                 // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
                 // 載入骨架（不知道哪本沒有作者）才對得上。
@@ -302,10 +307,7 @@ class BookshelfListCard extends StatelessWidget {
                   author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.bodySm.copyWith(
-                    height: 1.3,
-                    color: chrome.sectionText,
-                  ),
+                  style: authorStyle.copyWith(color: chrome.sectionText),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 BookshelfProgressLine(book: book),

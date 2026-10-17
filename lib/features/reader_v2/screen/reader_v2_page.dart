@@ -393,6 +393,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   : _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
+              skeletonPages: _host.dependencies.skeletonPages,
             ),
             if (runtime.state.lifecycle == ReaderV2Lifecycle.unavailable)
               Align(

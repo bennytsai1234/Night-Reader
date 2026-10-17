@@ -41,7 +41,7 @@ class BookshelfProvider extends BookshelfProviderBase
     try {
       books = await bookDao.getInBookshelf();
       _sortBooks();
-      rememberBookCount(books.length);
+      rememberShelf(books);
     } catch (error, stackTrace) {
       AppLog.e('載入書架失敗: $error', error: error, stackTrace: stackTrace);
       loadErrorMessage = '書架載入失敗，請重試';

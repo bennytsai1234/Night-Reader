@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 
@@ -23,31 +25,64 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
         savedSort < BookshelfSortMode.values.length) {
       sortMode = BookshelfSortMode.values[savedSort];
     }
-    lastBookCount = _savedBookCount = prefs.getInt(_bookCountKey);
+    _readShelfSkeleton(prefs.getString(_skeletonKey));
   }
 
-  static const String _bookCountKey = 'bookshelf_book_count';
+  /// 上次書架讀完時的樣子：本數與前面幾本的書名、作者，JSON
+  /// `{"count": n, "books": [[書名, 作者], ...]}`。
+  static const String _skeletonKey = 'bookshelf_skeleton';
 
-  /// 確定寫進偏好設定的本數；寫入失敗時不更新，下次載入書架再寫一次。
-  int? _savedBookCount;
+  /// 記下書名的本數：最高的手機加上最小字級，一個畫面也放不到 30 本書卡
+  /// （網格每列 3 本約 10 列），再多也畫不到。
+  static const int skeletonTitleLimit = 30;
 
-  /// 記下書架上的本數，下次開 App 的骨架畫一樣多本。寫入在背景進行，
-  /// 失敗只記日誌，不算書架載入失敗。
-  void rememberBookCount(int count) {
-    lastBookCount = count;
-    if (_savedBookCount == count) return;
-    unawaited(_saveBookCount(count));
-  }
+  /// 確定寫進偏好設定的內容；寫入失敗時不更新，下次載入書架再寫一次。
+  String? _savedSkeleton;
 
-  Future<void> _saveBookCount(int count) async {
+  void _readShelfSkeleton(String? saved) {
+    _savedSkeleton = saved;
+    if (saved == null) return;
     try {
-      if (await getIt<SharedPreferences>().setInt(_bookCountKey, count)) {
-        _savedBookCount = count;
+      final json = jsonDecode(saved) as Map<String, dynamic>;
+      lastBookCount = json['count'] as int;
+      lastShelfTitles = [
+        for (final entry in json['books'] as List<dynamic>)
+          (name: entry[0] as String, author: entry[1] as String),
+      ];
+    } catch (error) {
+      AppLog.w('書架骨架的紀錄讀不懂，這次鋪滿畫面: $error');
+      lastBookCount = null;
+      lastShelfTitles = const [];
+    }
+  }
+
+  /// 記下書架上的本數與前面幾本的書名、作者，下次開 App 的骨架照著畫。
+  /// 寫入在背景進行，失敗只記日誌，不算書架載入失敗。
+  void rememberShelf(List<Book> books) {
+    lastBookCount = books.length;
+    lastShelfTitles = [
+      for (final book in books.take(skeletonTitleLimit))
+        (name: book.name, author: book.author),
+    ];
+    final encoded = jsonEncode({
+      'count': lastBookCount,
+      'books': [
+        for (final title in lastShelfTitles) [title.name, title.author],
+      ],
+    });
+    if (_savedSkeleton == encoded) return;
+    unawaited(_saveShelfSkeleton(encoded));
+  }
+
+  Future<void> _saveShelfSkeleton(String encoded) async {
+    try {
+      if (await getIt<SharedPreferences>().setString(_skeletonKey, encoded)) {
+        _savedSkeleton = encoded;
       } else {
-        AppLog.w('書架本數沒有寫進偏好設定');
+        AppLog.w('書架骨架沒有寫進偏好設定');
       }
     } catch (error, stackTrace) {
-      AppLog.e('書架本數寫入失敗: $error', error: error, stackTrace: stackTrace);
+      AppLog.e('書架骨架寫入失敗: $error', error: error, stackTrace: stackTrace);
     }
   }
 

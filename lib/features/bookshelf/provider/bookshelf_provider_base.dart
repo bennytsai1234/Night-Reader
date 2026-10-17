@@ -32,6 +32,10 @@ extension BookshelfSortModeLabel on BookshelfSortMode {
   }
 }
 
+/// 書架骨架照著畫的一本書：原始的書名與作者，畫的時候再轉成目前的中文
+/// 顯示方式。
+typedef ShelfSkeletonTitle = ({String name, String author});
+
 Future<void> _keepWithDownloadService(
   String bookUrl, {
   bool hasNewChapters = false,
@@ -55,6 +59,10 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
 
   /// 上次書架讀完時的本數，初次載入的骨架畫一樣多本；從沒讀過時為 null。
   int? lastBookCount;
+
+  /// 上次書架前面幾本的書名與作者（依當時的排序），初次載入的骨架照它們
+  /// 的長度畫。
+  List<ShelfSkeletonTitle> lastShelfTitles = const [];
 
   bool isGridView = true;
   bool showLastUpdate = false;

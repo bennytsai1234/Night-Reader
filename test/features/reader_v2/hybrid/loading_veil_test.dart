@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 void main() {
   final spec = ReaderV2LayoutSpec(
@@ -22,6 +23,8 @@ void main() {
     ),
   );
   const frame = Duration(milliseconds: 16);
+  // 掀紙照骨架換場的預設時長。
+  const revealTime = SkeletonReveal.defaultDuration;
   final noSkeleton = paintsExactlyCountTimes(#drawRRect, 0);
 
   late LoadingVeilController veil;
@@ -34,7 +37,11 @@ void main() {
       ..cover();
   }
 
-  Future<void> pumpVeil(WidgetTester tester, {bool mounted = true}) {
+  Future<void> pumpVeil(
+    WidgetTester tester, {
+    bool mounted = true,
+    List<Rect>? lines,
+  }) {
     return tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
@@ -42,6 +49,7 @@ void main() {
             ? LoadingVeil(
                 controller: veil,
                 spec: spec,
+                lines: lines,
                 backgroundColor: const Color(0xFFF6F1E7),
                 textColor: const Color(0xFF2B2622),
               )
@@ -89,11 +97,11 @@ void main() {
     await advance(tester, AppMotion.fade);
 
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     expect(veil.isVisible, isTrue);
     expect(hiddenCount, 0);
 
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(veil.isVisible, isFalse);
     expect(hiddenCount, 1);
     expect(tester.hasRunningAnimations, isFalse);
@@ -107,7 +115,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade ~/ 2);
     veil.reveal();
-    await advance(tester, AppMotion.fade * 2);
+    await advance(tester, revealTime * 2);
     expect(veil.isVisible, isFalse);
     expect(find.byType(LoadingVeil), noSkeleton);
     expect(tester.hasRunningAnimations, isFalse);
@@ -121,7 +129,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade);
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
 
     veil.cover();
     await tester.pump();
@@ -179,7 +187,7 @@ void main() {
     await pumpVeil(tester);
     await advance(tester, AppMotion.fade);
     veil.reveal();
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     expect(veil.isVisible, isTrue);
 
     veil.reduceMotion = true;
@@ -187,6 +195,34 @@ void main() {
     expect(hiddenCount, 1);
     await tester.pump();
     expect(tester.hasRunningAnimations, isFalse);
+    await finish(tester);
+  });
+
+  testWidgets('remembered lines are drawn where each line of text was', (
+    tester,
+  ) async {
+    makeVeil(tester);
+    // 兩行正文、一行比正文高的章名。
+    await pumpVeil(
+      tester,
+      lines: const [
+        Rect.fromLTRB(20, 10, 300, 40),
+        Rect.fromLTRB(56, 60, 380, 78),
+        Rect.fromLTRB(20, 90, 200, 108),
+      ],
+    );
+    await advance(tester, AppMotion.fade);
+    // 正文的長條是字級的 0.75（18 → 13.5），章名照字框高度等比放大。
+    final radius = AppRadius.cardXs.topLeft;
+    expect(
+      find.byType(LoadingVeil),
+      paints
+        ..rect()
+        ..rrect(rrect: RRect.fromLTRBR(20, 25 - 11.25, 300, 25 + 11.25, radius))
+        ..rrect(rrect: RRect.fromLTRBR(56, 69 - 6.75, 380, 69 + 6.75, radius))
+        ..rrect(rrect: RRect.fromLTRBR(20, 99 - 6.75, 200, 99 + 6.75, radius)),
+    );
+    expect(find.byType(LoadingVeil), paintsExactlyCountTimes(#drawRRect, 3));
     await finish(tester);
   });
 }

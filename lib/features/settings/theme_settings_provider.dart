@@ -4,9 +4,11 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 外觀風格、玻璃強度與換頁動畫；深淺模式由 [SettingsProvider.themeMode] 決定。
+/// 外觀風格、玻璃強度、換頁動畫與骨架換場；深淺模式由
+/// [SettingsProvider.themeMode] 決定。
 class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
     style = AppStyle.fromStorage(_prefs.getString(PreferKey.appStyle));
@@ -16,6 +18,15 @@ class ThemeSettingsProvider extends ChangeNotifier {
     );
     pageTransition = AppPageTransition.fromStorage(
       _prefs.getString(PreferKey.pageTransition),
+    );
+    final revealMillis = _prefs.getInt(PreferKey.skeletonRevealMillis);
+    skeletonReveal = SkeletonReveal(
+      style: SkeletonRevealStyle.fromStorage(
+        _prefs.getString(PreferKey.skeletonRevealStyle),
+      ),
+      duration: revealMillis == null
+          ? SkeletonReveal.defaultDuration
+          : _clampRevealDuration(Duration(milliseconds: revealMillis)),
     );
   }
 
@@ -32,6 +43,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   /// 全 App 換頁共用的轉場。
   late AppPageTransition pageTransition;
+
+  /// 骨架換成內容的方式與時長。
+  late SkeletonReveal skeletonReveal;
 
   void setStyle(AppStyle value) {
     if (style == value) return;
@@ -60,4 +74,26 @@ class ThemeSettingsProvider extends ChangeNotifier {
     _prefs.setString(PreferKey.pageTransition, value.name);
     notifyListeners();
   }
+
+  void setSkeletonRevealStyle(SkeletonRevealStyle value) {
+    if (skeletonReveal.style == value) return;
+    skeletonReveal = skeletonReveal.copyWith(style: value);
+    _prefs.setString(PreferKey.skeletonRevealStyle, value.name);
+    notifyListeners();
+  }
+
+  void setSkeletonRevealDuration(Duration value) {
+    final duration = _clampRevealDuration(value);
+    if (skeletonReveal.duration == duration) return;
+    skeletonReveal = skeletonReveal.copyWith(duration: duration);
+    _prefs.setInt(PreferKey.skeletonRevealMillis, duration.inMilliseconds);
+    notifyListeners();
+  }
+
+  static Duration _clampRevealDuration(Duration value) => Duration(
+    milliseconds: value.inMilliseconds.clamp(
+      SkeletonReveal.minDuration.inMilliseconds,
+      SkeletonReveal.maxDuration.inMilliseconds,
+    ),
+  );
 }
