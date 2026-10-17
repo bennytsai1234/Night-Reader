@@ -29,10 +29,13 @@ void main() {
     charOffset: charOffset,
     visualOffsetPx: 4.5,
     layout: ReaderSkeletonPage.layoutKeyOf(spec()),
+    contentHash: 'hash-3',
     lines: const [
-      Rect.fromLTRB(56, 10.25, 380, 28.75),
-      Rect.fromLTRB(20, 39, 210, 57),
+      Rect.fromLTRB(20, 4, 300, 32),
+      Rect.fromLTRB(56, 40.25, 380, 58.75),
+      Rect.fromLTRB(20, 69, 210, 87),
     ],
+    titleLines: const {0},
     progress: const HybridProgressSnapshot(
       chapterIndex: 3,
       chapterCount: 40,
@@ -68,8 +71,10 @@ void main() {
 
   test('a saved page reads back with one-decimal lines', () {
     final restored = ReaderSkeletonPage.fromJson(page().toJson());
-    expect(restored.lines.first, const Rect.fromLTRB(56, 10.3, 380, 28.8));
-    expect(restored.lines.last, const Rect.fromLTRB(20, 39, 210, 57));
+    expect(restored.lines[1], const Rect.fromLTRB(56, 40.3, 380, 58.8));
+    expect(restored.lines.last, const Rect.fromLTRB(20, 69, 210, 87));
+    expect(restored.titleLines, {0});
+    expect(restored.contentHash, 'hash-3');
     expect(restored.progress?.chapterPercent, 35);
     expect(restored.matches(location, spec()), isTrue);
   });

@@ -92,8 +92,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Completer<void>? _drawerClosed;
   bool _entranceWatched = false;
 
-  /// 只拿來計骨架淡入的時長（正文骨架與頁首頁尾骨架都是 [AppMotion.fade]）：
-  /// 開書時和這一頁的第一幀同時開始，從目錄跳章時和蓋紙同時開始。
+  /// 只拿來計骨架淡入的時長（頁首頁尾骨架與照紀錄畫的正文骨架都是
+  /// [AppMotion.fade]）：開書時和這一頁的第一幀同時開始，從目錄跳章時和
+  /// 蓋紙同時開始。
   late final AnimationController _skeletonFadeIn = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
@@ -458,8 +459,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _handleExitIntent();
   }
 
-  /// 點目錄的一章：目錄與選單馬上收起、紙蓋上淡入骨架，這幾段動畫都播完
-  /// 才開始載入（ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
+  /// 點目錄的一章：目錄與選單馬上收起、紙蓋上、頁首頁尾淡入骨架，這幾段
+  /// 動畫都播完才開始載入（ADR 0018）。取不到正文時紙掀開回到原處，提示原因。
   void _jumpToChapterFromDrawer(int index) {
     final scaffold = _scaffoldKey.currentState;
     final drawerClosed = scaffold != null && scaffold.isDrawerOpen

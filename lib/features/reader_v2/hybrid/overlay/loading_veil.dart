@@ -10,9 +10,11 @@ import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///
-/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙；蓋上時紙上就
-/// 淡入照閱讀版面畫的正文骨架。正文排好後紙以骨架換場（[SkeletonReveal]，
-/// 使用者選的方式與時長）淡出、露出正文，骨架跟著一起淡掉。
+/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙。紙上的骨架照
+/// 一頁真正的每一行畫：開書有上次記下的那一頁時紙一蓋上就淡入，其他時候
+/// 紙先空著，第一頁排好後才照它淡入（[showSkeleton]，ADR 0016、0024）。
+/// 正文排好後紙以骨架換場（[SkeletonReveal]，使用者選的方式與時長）淡出、
+/// 露出正文，骨架跟著一起淡掉。
 ///
 /// 只改紙與骨架顏色的透明度，不對正文做整頁 Opacity：載入期間排版用滿每
 /// 一幀的預算，這一層每幀只多畫幾十個圓角條。
@@ -66,7 +68,9 @@ class LoadingVeilController {
     _reduceMotion = value;
     if (value) {
       if (_cover.isAnimating) _cover.value = 0;
-      if (_skeleton.isAnimating) _skeleton.value = 1;
+      if (_skeleton.isAnimating) {
+        _skeleton.value = _skeleton.status == AnimationStatus.reverse ? 0 : 1;
+      }
     }
     _syncPulse();
   }
@@ -74,13 +78,37 @@ class LoadingVeilController {
   /// 紙還蓋著或正在淡出。
   bool get isVisible => !_cover.isDismissed;
 
-  /// 蓋上整張紙，骨架從目前的濃淡繼續淡入（淡出途中再蓋上不會先閃空）。
-  void cover() {
+  /// 骨架還在淡入或淡出。
+  bool get isSkeletonFading => _skeleton.isAnimating;
+
+  /// 蓋上整張紙。[skeleton] 為 true 時骨架從目前的濃淡繼續淡入（淡出途中
+  /// 再蓋上不會先閃空）；false 時紙先空著，等 [showSkeleton]，已經畫著的
+  /// 骨架淡掉。
+  void cover({bool skeleton = true}) {
     _cover.value = 1;
+    if (skeleton) {
+      showSkeleton();
+    } else {
+      hideSkeleton();
+    }
+  }
+
+  /// 淡入紙上的骨架。
+  void showSkeleton() {
     if (_reduceMotion) {
       _skeleton.value = 1;
     } else {
       unawaited(_skeleton.forward());
+    }
+    _syncPulse();
+  }
+
+  /// 淡掉紙上的骨架，紙留著。
+  void hideSkeleton() {
+    if (_reduceMotion || _skeleton.isDismissed) {
+      _skeleton.value = 0;
+    } else {
+      unawaited(_skeleton.reverse());
     }
     _syncPulse();
   }
@@ -154,18 +182,23 @@ class LoadingVeil extends StatefulWidget {
     required this.backgroundColor,
     required this.textColor,
     this.lines,
+    this.titleLines = const <int>{},
   });
 
   final LoadingVeilController controller;
 
-  /// 正文目前的版面：骨架照它的行高、段距、首行縮排與左右邊距畫。
+  /// 正文目前的版面：骨架長條的高度照它的字級。
   final ReaderV2LayoutSpec spec;
   final Color backgroundColor;
   final Color textColor;
 
-  /// 上次在這個位置看到的每一行字（[ReaderSkeletonPage.lines]）；有的話
-  /// 骨架照它們畫，沒有時照 [spec] 畫固定的段落樣式。
+  /// 這一頁每一行字在正文區的位置：上次離開時記下的
+  /// （[ReaderSkeletonPage.lines]），或這次排好的第一頁。還沒有時紙上只有
+  /// 底色。
   final List<Rect>? lines;
+
+  /// [lines] 裡章名那幾行的索引：長條照章名與正文的字級比放大。
+  final Set<int> titleLines;
 
   @override
   State<LoadingVeil> createState() => _LoadingVeilState();
@@ -206,6 +239,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
           sweep: () => controller._sweep,
           spec: widget.spec,
           lines: widget.lines,
+          titleLines: widget.titleLines,
           backgroundColor: widget.backgroundColor,
           textColor: widget.textColor,
         ),
@@ -222,6 +256,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.sweep,
     required this.spec,
     required this.lines,
+    required this.titleLines,
     required this.backgroundColor,
     required this.textColor,
   }) : super(repaint: Listenable.merge([cover, skeleton, pulse]));
@@ -234,21 +269,9 @@ class _LoadingVeilPainter extends CustomPainter {
   final bool Function() sweep;
   final ReaderV2LayoutSpec spec;
   final List<Rect>? lines;
+  final Set<int> titleLines;
   final Color backgroundColor;
   final Color textColor;
-
-  /// 每段的行數與末行長度（佔整行的比例），依序循環；長短交錯才像文字。
-  static const List<int> _paragraphLines = [3, 5, 2, 4, 1, 3, 6, 2];
-  static const List<double> _lastLineWidths = [
-    0.64,
-    0.38,
-    0.82,
-    0.5,
-    0.72,
-    0.27,
-    0.56,
-    0.9,
-  ];
 
   /// 圓角條佔字號的比例，與 [SkeletonLine] 相同。
   static const double _barHeightFactor = 0.75;
@@ -286,69 +309,22 @@ class _LoadingVeilPainter extends CustomPainter {
 
     final strength = skeleton.value * (sweeping ? 1 : coverStrength);
     if (strength <= 0) return;
+    final lines = this.lines;
+    if (lines == null) return;
     final style = spec.style;
-    final lineExtent = style.fontSize * style.effectiveLineHeight;
-    final left = spec.textPaddingLeft;
-    final width = size.width - left - spec.textPaddingRight;
-    if (lineExtent <= 0 || width <= 0) return;
-
     final dark =
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final base = Skeleton.tint(textColor, dark: dark);
     final paint = shade(base, Skeleton.pulseStrength(pulse.value) * strength);
     final barHeight = style.fontSize * _barHeightFactor;
-    final barInset = (lineExtent - barHeight) / 2;
+    final titleBarHeight = style.fontSize > 0
+        ? barHeight * style.titleFontSize / style.fontSize
+        : barHeight;
     final radius = AppRadius.cardXs.topLeft;
-    if (lines case final lines? when lines.isNotEmpty) {
-      _paintLines(canvas, lines, barHeight, radius, paint);
-      return;
-    }
-    final indent = style.textIndent * (spec.cellWidth ?? style.fontSize);
-    final paragraphGap = lineExtent * style.paragraphSpacing;
-
-    var top = 0.0;
-    for (var paragraph = 0; top < size.height; paragraph++) {
-      final pattern = paragraph % _paragraphLines.length;
-      final lines = _paragraphLines[pattern];
-      for (var line = 0; line < lines && top < size.height; line++) {
-        final start = line == 0 ? indent : 0.0;
-        final end = line == lines - 1
-            ? width * _lastLineWidths[pattern]
-            : width;
-        if (end > start) {
-          canvas.drawRRect(
-            RRect.fromLTRBR(
-              left + start,
-              top + barInset,
-              left + end,
-              top + barInset + barHeight,
-              radius,
-            ),
-            paint,
-          );
-        }
-        top += lineExtent;
-      }
-      top += paragraphGap;
-    }
-  }
-
-  /// 照記下的每一行畫：長條與那一行字同寬、置中在那一行上；正文的長條
-  /// 是 [barHeight]，比正文高的行（章名）照字框高度等比放大。
-  static void _paintLines(
-    Canvas canvas,
-    List<Rect> lines,
-    double barHeight,
-    Radius radius,
-    Paint paint,
-  ) {
-    final heights = [for (final line in lines) line.height]..sort();
-    final bodyHeight = heights[heights.length ~/ 2];
-    for (final line in lines) {
-      final height = bodyHeight <= 0
-          ? barHeight
-          : barHeight * (line.height / bodyHeight).clamp(1.0, 3.0);
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final height = titleLines.contains(i) ? titleBarHeight : barHeight;
       final top = line.center.dy - height / 2;
       canvas.drawRRect(
         RRect.fromLTRBR(line.left, top, line.right, top + height, radius),
@@ -364,6 +340,7 @@ class _LoadingVeilPainter extends CustomPainter {
       oldDelegate.pulse != pulse ||
       oldDelegate.spec != spec ||
       !identical(oldDelegate.lines, lines) ||
+      !identical(oldDelegate.titleLines, titleLines) ||
       oldDelegate.backgroundColor != backgroundColor ||
       oldDelegate.textColor != textColor;
 }

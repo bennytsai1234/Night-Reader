@@ -150,14 +150,22 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
     onHidden: () {
-      // 開書的紙掀完了；之後跳章、重新排版蓋上的紙不在記下的那一頁上。
+      // 紙掀完了；下一次蓋紙另外決定照什麼畫骨架。
       _openingPage = null;
+      _veilPage = null;
+      _veilAwaitsPage = false;
       if (mounted) setState(() {});
     },
   );
 
   /// 開書的位置與版面都和上次記下的那一頁相同時，開書的紙照它畫骨架。
   ReaderSkeletonPage? _openingPage;
+
+  /// 這次排好的第一頁；紙上的骨架照它畫（見 [_coverUntilFirstPage]）。
+  _PageLines? _veilPage;
+
+  /// 紙蓋著、中間還空著，等第一頁排好。
+  bool _veilAwaitsPage = false;
 
   /// App 切到背景時記下目前這一頁（之後可能被系統關掉，不會再走到
   /// [dispose]）。
@@ -194,7 +202,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _registerRuntime();
     _attachController();
     _openingPage = _rememberedPageForOpening();
-    _veil.cover();
+    if (_openingPage == null) {
+      _coverUntilFirstPage();
+    } else {
+      _veil.cover();
+    }
     _lifecycle = AppLifecycleListener(onHide: _rememberPage);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -290,7 +302,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (completed) {
       _veil.reveal(SkeletonReveal.of(context));
     } else {
-      _veil.cover();
+      _coverUntilFirstPage();
     }
   }
 
@@ -370,12 +382,51 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       );
       final anchor = HybridAnchor.fromLocation(normalized, blocks);
       _setRestoreCompleted(false);
+      // 開書照上次記下的那一頁畫著骨架，但正文換過了（替換規則、重新取得）
+      // 或紙還沒掀開版面就變了（例如轉向）：那些行不是這次的，淡掉改等
+      // 第一頁。
+      if (_openingPage case final opening?
+          when opening.contentHash != blocks.contentHash ||
+              opening.layout !=
+                  ReaderSkeletonPage.layoutKeyOf(
+                    widget.runtime.state.layoutSpec,
+                  )) {
+        setState(_coverUntilFirstPage);
+      }
       pipeline.onScrollStateChanged(PumpState.loading);
       _scheduleRebuild();
       pipeline.resetDocument(anchor.blockKey);
+      final pageHeight = math.max(1.0, _viewportSize.height);
       restoreLoop:
       while (isCurrent()) {
         final revision = _documentIndex.revisionNumber;
+        if (_veilAwaitsPage) {
+          // 先只排第一頁：骨架照它畫，淡入播完才排前後其他頁。
+          final pageTop = _clampToBook(_offsetForAnchor(anchor, blocks) ?? 0);
+          pipeline.requestWindow(
+            pageTop,
+            pageTop + pageHeight,
+            anchorKey: anchor.blockKey,
+          );
+          final positioned = _offsetForAnchor(anchor, blocks);
+          final page = positioned == null ? null : _clampToBook(positioned);
+          if (page != null && pipeline.windowReady(page, page + pageHeight)) {
+            if (!await _showFirstPageSkeleton(page, isCurrent)) {
+              return false;
+            }
+            continue;
+          }
+          if (_documentIndex.revisionNumber != revision) continue;
+          final wait = await pipeline.waitForProgress(isCurrent);
+          switch (wait) {
+            case MaterializationWait.progressed:
+              continue;
+            case MaterializationWait.frontierUnavailable:
+              break restoreLoop;
+            case MaterializationWait.cancelled:
+              return false;
+          }
+        }
         final target = _offsetForAnchor(anchor, blocks);
         final readyTop = _readyWorldTop(
           target: target ?? 0,
@@ -419,6 +470,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       if (!isCurrent()) return false;
       final target = _offsetForAnchor(anchor, blocks);
+      // 排不滿一頁就沒有更多可排了（例如書尾）：骨架照排出來的那些行畫。
+      if (target != null &&
+          _veilAwaitsPage &&
+          !await _showFirstPageSkeleton(_clampToBook(target), isCurrent)) {
+        return false;
+      }
       if (target == null) {
         throw StateError(
           'Hybrid restore target has no admitted anchor geometry after '
@@ -703,8 +760,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _jumpVeil = jump;
       _clearSelection();
       _holdScrollUnderJumpVeil();
-      _veil.cover();
+      _coverUntilFirstPage();
     } else if (wasVeiled) {
+      _veilAwaitsPage = false;
       _veil.reveal(SkeletonReveal.of(context));
     }
   }
@@ -1361,20 +1419,117 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return controller.position.isScrollingNotifier.value && _sawUserScroll;
   }
 
+  /// 紙上的骨架照哪些行畫。
+  _PageLines? _veilLines() {
+    if (_veilPage case final page?) return page;
+    final opening = _openingPage;
+    // 紙還沒掀開前版面就變了（例如轉向），記下的行對不上，先不畫；重新
+    // 排版時改等第一頁。
+    if (opening == null ||
+        opening.layout !=
+            ReaderSkeletonPage.layoutKeyOf(widget.runtime.state.layoutSpec)) {
+      return null;
+    }
+    return (lines: opening.lines, titleLines: opening.titleLines);
+  }
+
   Widget _buildVeil(ReaderV2State state) {
-    final page = _openingPage;
+    final page = _veilLines();
     return LoadingVeil(
       controller: _veil,
       spec: state.layoutSpec,
-      // 紙還沒掀開前版面就變了（例如轉向），記下的行對不上，改畫固定樣式。
-      lines:
-          page != null &&
-              page.layout == ReaderSkeletonPage.layoutKeyOf(state.layoutSpec)
-          ? page.lines
-          : null,
+      lines: page?.lines,
+      titleLines: page?.titleLines ?? const <int>{},
       backgroundColor: widget.backgroundColor,
       textColor: widget.textColor,
     );
+  }
+
+  /// 蓋上紙，中間先空著（頁首頁尾照樣畫成骨架），等第一頁排好才照它淡入
+  /// 骨架（ADR 0016）。開書有上次記下的那一頁時不走這裡，直接照紀錄畫。
+  void _coverUntilFirstPage() {
+    // 畫著的骨架照原樣淡掉，第一頁排好才換。
+    _veilPage = _veilLines();
+    _openingPage = null;
+    _veilAwaitsPage = true;
+    _veil.cover(skeleton: false);
+  }
+
+  /// 第一頁排好了：紙上照它的每一行淡入骨架，淡入播完才回來排前後其他頁
+  /// （ADR 0016、0023）。
+  Future<bool> _showFirstPageSkeleton(
+    double offset,
+    bool Function() isCurrent,
+  ) async {
+    _veilAwaitsPage = false;
+    setState(() => _veilPage = _pageLinesAt(offset));
+    _veil.showSkeleton();
+    while (_veil.isSkeletonFading) {
+      await _nextFrame();
+      if (!isCurrent()) return false;
+    }
+    return isCurrent();
+  }
+
+  /// 書頭書尾都排進來時捲動停得住的位置：還原的捲動位置最後也夾在這裡
+  /// （例如從書的最開頭開書，章名上方不留空）。
+  double _clampToBook(double offset) {
+    var result = offset;
+    if (_admission.atForwardBookBoundary) {
+      result = math.min(
+        result,
+        _documentIndex.afterExtent - _viewportSize.height,
+      );
+    }
+    if (_admission.atBackwardBookBoundary) {
+      result = math.max(result, -_documentIndex.beforeExtent);
+    }
+    return result;
+  }
+
+  /// 捲動位置在 [offset] 時畫面上每一行字的位置（viewport 座標），與其中
+  /// 章名那幾行的索引。
+  _PageLines _pageLinesAt(double offset) {
+    final height = _viewportSize.height;
+    final lines = <Rect>[];
+    final titleLines = <int>{};
+    final ranges = <int, (int, int)>{};
+    for (final key in _documentIndex.keysInRange(offset, offset + height)) {
+      final blocks = _pipeline.blocksOf(key.chapterIndex);
+      if (blocks == null) continue;
+      final range = blocks
+          .blockForCharOffset(blocks.blockStartOffset(key))
+          .charRange;
+      final previous = ranges[key.chapterIndex];
+      ranges[key.chapterIndex] = previous == null
+          ? (range.start, range.end)
+          : (
+              math.min(previous.$1, range.start),
+              math.max(previous.$2, range.end),
+            );
+    }
+    void addLines(int chapter, int start, int end, {required bool title}) {
+      if (end <= start) return;
+      for (final box in _pipeline.geometry.lineBoxes(chapter, start, end)) {
+        final top = box.top - offset;
+        final bottom = box.bottom - offset;
+        if (bottom <= 0 || top >= height) continue;
+        if (title) titleLines.add(lines.length);
+        lines.add(Rect.fromLTRB(box.left, top, box.right, bottom));
+      }
+    }
+
+    for (final MapEntry(key: chapter, value: (start, end)) in ranges.entries) {
+      // 章名在一章的最前面，和正文不會在同一行。
+      var titleEnd = 0;
+      for (final block in _pipeline.blocksOf(chapter)!.blocks) {
+        if (!block.isTitle) break;
+        titleEnd = block.charRange.end;
+      }
+      addLines(chapter, start, math.min(end, titleEnd), title: true);
+      addLines(chapter, math.max(start, titleEnd), end, title: false);
+    }
+    return (lines: lines, titleLines: titleLines);
   }
 
   /// 上次離開這本書時的那一頁，開書的位置與版面都相同時才用。當時的進度
@@ -1412,32 +1567,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final location = _captureVisibleLocation();
     final offset = _effectiveScrollOffset();
     if (location == null || offset == null) return;
-    final lines = <Rect>[];
-    final ranges = <int, (int, int)>{};
-    for (final key in _documentIndex.keysInRange(
-      offset,
-      offset + _viewportSize.height,
-    )) {
-      final blocks = _pipeline.blocksOf(key.chapterIndex);
-      if (blocks == null) continue;
-      final range = blocks
-          .blockForCharOffset(blocks.blockStartOffset(key))
-          .charRange;
-      final previous = ranges[key.chapterIndex];
-      ranges[key.chapterIndex] = previous == null
-          ? (range.start, range.end)
-          : (
-              math.min(previous.$1, range.start),
-              math.max(previous.$2, range.end),
-            );
-    }
-    for (final MapEntry(key: chapter, value: (start, end)) in ranges.entries) {
-      for (final box in _lineBoxes(chapter, start, end)) {
-        if (box.bottom <= 0 || box.top >= _viewportSize.height) continue;
-        lines.add(Rect.fromLTRB(box.left, box.top, box.right, box.bottom));
-      }
-    }
-    if (lines.isEmpty) return;
+    final contentHash = _pipeline.blocksOf(location.chapterIndex)?.contentHash;
+    final (:lines, :titleLines) = _pageLinesAt(offset);
+    if (lines.isEmpty || contentHash == null) return;
     unawaited(
       store.write(
         bookUrl,
@@ -1448,7 +1580,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           layout: ReaderSkeletonPage.layoutKeyOf(
             widget.runtime.state.layoutSpec,
           ),
+          contentHash: contentHash,
           lines: lines,
+          titleLines: titleLines,
           progress: widget.progressListenable?.value,
         ),
       ),
@@ -1489,7 +1623,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                     ),
                   ),
                 )
-              // 載入中不放轉圈與文字：紙一蓋上就淡入正文骨架（見
+              // 載入中不放轉圈與文字：紙上照一頁真正的每一行畫骨架（見
               // [LoadingVeilController] 與 ADR 0016）。
               : _buildVeil(state),
         ),
@@ -1663,3 +1797,7 @@ final class _HybridCommandQueue {
     return result;
   }
 }
+
+/// 一頁上每一行字的位置（viewport 座標，由上而下），與其中章名那幾行的
+/// 索引。
+typedef _PageLines = ({List<Rect> lines, Set<int> titleLines});

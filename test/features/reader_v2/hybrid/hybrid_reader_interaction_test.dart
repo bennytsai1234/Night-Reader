@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -292,7 +293,7 @@ void main() {
       expectSameLines(store.read('http://interaction.test')!.lines, page.lines);
     });
 
-    testWidgets('opening somewhere else keeps the plain skeleton', (
+    testWidgets('opening somewhere else does not use the record', (
       tester,
     ) async {
       final page = await leaveMidChapter(tester);
@@ -902,5 +903,171 @@ void main() {
     expect(position.pixels, closeTo(afterSettle + 60, 0.5));
     await gesture.up();
     await settle(tester);
+  });
+
+  group('沒有可用的紀錄時，骨架照排好的第一頁畫', () {
+    const bookUrl = 'http://interaction.test';
+    late ReaderSkeletonPageStore store;
+    setUp(() async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      store = ReaderSkeletonPageStore(await SharedPreferences.getInstance());
+    });
+
+    List<Rect>? veilLines(WidgetTester tester) {
+      final veil = find.byType(LoadingVeil);
+      return veil.evaluate().isEmpty
+          ? null
+          : tester.widget<LoadingVeil>(veil).lines;
+    }
+
+    /// 一幀一幀推進，直到紙上的骨架照 [accept] 認可的行畫；回傳那張紙。
+    Future<LoadingVeil> untilVeilLines(
+      WidgetTester tester, {
+      bool Function(List<Rect> lines)? accept,
+    }) async {
+      for (var frame = 0; frame < 2000; frame++) {
+        final lines = veilLines(tester);
+        if (lines != null && (accept?.call(lines) ?? true)) {
+          return tester.widget<LoadingVeil>(find.byType(LoadingVeil));
+        }
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      fail('紙上一直沒有畫出骨架');
+    }
+
+    Future<void> untilVeilGone(WidgetTester tester) async {
+      for (
+        var frame = 0;
+        frame < 2000 && find.byType(LoadingVeil).evaluate().isNotEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byType(LoadingVeil), findsNothing);
+    }
+
+    /// 離開閱讀器，回傳記下的那一頁每一行字的位置。
+    Future<List<Rect>> linesOnLeaving(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      return store.read(bookUrl)!.lines;
+    }
+
+    /// 紀錄存到小數一位，同一行最多差 0.1。
+    void expectSameLines(List<Rect> actual, List<Rect> expected) {
+      expect(actual.length, expected.length);
+      for (var i = 0; i < expected.length; i++) {
+        for (final (a, e) in [
+          (actual[i].left, expected[i].left),
+          (actual[i].top, expected[i].top),
+          (actual[i].right, expected[i].right),
+          (actual[i].bottom, expected[i].bottom),
+        ]) {
+          expect(a, closeTo(e, 0.11), reason: '第 $i 行');
+        }
+      }
+    }
+
+    testWidgets('a jump leaves the middle empty until its first page is laid '
+        'out, then the bars become the text', (tester) async {
+      final target = Completer<String?>();
+      await pumpReader(
+        tester,
+        customRuntime: _makeRuntime(
+          chapterCount: 8,
+          contentLoader: (index, chapter) =>
+              index == 7 ? target.future : Future.value(chapter.content),
+        ),
+        skeletonPages: store,
+      );
+      await untilVeilGone(tester);
+
+      final jump = runtime.jumpToChapter(7);
+      await paperFalls(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(veilLines(tester), isNull, reason: '正文還沒到，中間空著');
+
+      target.complete(_chapter(7).content);
+      final veil = await untilVeilLines(tester);
+      expect(veil.titleLines, contains(0), reason: '跳到章首，第一行是章名');
+      await finishJump(tester, jump);
+      expect(runtime.state.visibleLocation.chapterIndex, 7);
+      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+    });
+
+    testWidgets('opening without a record waits for the first page too', (
+      tester,
+    ) async {
+      await pumpReader(tester, skeletonPages: store, waitForOpen: false);
+      expect(veilLines(tester), isNull);
+      final veil = await untilVeilLines(tester);
+      await untilVeilGone(tester);
+      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+    });
+
+    testWidgets('a record of different text is dropped for the first page', (
+      tester,
+    ) async {
+      final custom = _makeRuntime();
+      const stale = [Rect.fromLTRB(12, 10, 200, 28)];
+      await store.write(
+        bookUrl,
+        ReaderSkeletonPage(
+          chapterIndex: 0,
+          charOffset: 0,
+          visualOffsetPx: 0,
+          layout: ReaderSkeletonPage.layoutKeyOf(custom.state.layoutSpec),
+          contentHash: '替換規則改過之前的正文',
+          lines: stale,
+        ),
+      );
+      await pumpReader(
+        tester,
+        customRuntime: custom,
+        skeletonPages: store,
+        waitForOpen: false,
+      );
+      expect(veilLines(tester), stale, reason: '開書時還不知道正文換過');
+
+      final veil = await untilVeilLines(
+        tester,
+        accept: (lines) => !listEquals(lines, stale),
+      );
+      await untilVeilGone(tester);
+      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+    });
+
+    testWidgets('jumping while the opening reveal plays drops the record', (
+      tester,
+    ) async {
+      final custom = _makeRuntime();
+      const remembered = [Rect.fromLTRB(12, 10, 200, 28)];
+      await pumpReader(tester, customRuntime: custom);
+      final contentHash = (await custom.repository.loadContent(0)).contentHash;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await store.write(
+        bookUrl,
+        ReaderSkeletonPage(
+          chapterIndex: 0,
+          charOffset: 0,
+          visualOffsetPx: 0,
+          layout: ReaderSkeletonPage.layoutKeyOf(
+            _makeRuntime().state.layoutSpec,
+          ),
+          contentHash: contentHash,
+          lines: remembered,
+        ),
+      );
+
+      await pumpReader(tester, skeletonPages: store);
+      expect(veilLines(tester), remembered, reason: '開書換場還在播，照紀錄畫');
+      final jump = runtime.jumpToChapter(1);
+      final veil = await untilVeilLines(
+        tester,
+        accept: (lines) => !listEquals(lines, remembered),
+      );
+      await finishJump(tester, jump);
+      expect(runtime.state.visibleLocation.chapterIndex, 1);
+      expectSameLines(await linesOnLeaving(tester), veil.lines!);
+    });
   });
 }

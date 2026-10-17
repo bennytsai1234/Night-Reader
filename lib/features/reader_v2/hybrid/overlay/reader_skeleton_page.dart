@@ -18,7 +18,9 @@ final class ReaderSkeletonPage {
     required this.charOffset,
     required this.visualOffsetPx,
     required this.layout,
+    required this.contentHash,
     required this.lines,
+    this.titleLines = const <int>{},
     this.progress,
   });
 
@@ -29,8 +31,15 @@ final class ReaderSkeletonPage {
   /// 記下時的版面（[layoutKeyOf]）；版面不同時行的位置對不上，不用。
   final String layout;
 
+  /// 記下時這一章的正文（`ChapterBlocks.contentHash`）。替換規則或重新取得
+  /// 換了正文時，同一個位置的行不再是記下的那些，開書取到正文後比對。
+  final String contentHash;
+
   /// 每一行字在正文區的範圍（正文區座標，由上而下）。
   final List<Rect> lines;
+
+  /// [lines] 裡章名那幾行的索引。
+  final Set<int> titleLines;
   final HybridProgressSnapshot? progress;
 
   /// 開書的位置與版面都和記下時相同。位置比到半個像素：存進資料庫再讀
@@ -72,12 +81,14 @@ final class ReaderSkeletonPage {
     'offset': charOffset,
     'visual': visualOffsetPx,
     'layout': layout,
+    'content': contentHash,
     // 一位小數就分不出差別，紀錄小一半。
     'lines': [
       for (final line in lines)
         for (final value in [line.left, line.top, line.right, line.bottom])
           (value * 10).round() / 10,
     ],
+    if (titleLines.isNotEmpty) 'titles': titleLines.toList()..sort(),
     if (progress case final progress?)
       'progress': [
         progress.chapterIndex,
@@ -97,6 +108,11 @@ final class ReaderSkeletonPage {
       charOffset: json['offset'] as int,
       visualOffsetPx: (json['visual'] as num).toDouble(),
       layout: json['layout'] as String,
+      contentHash: json['content'] as String,
+      titleLines: {
+        for (final index in json['titles'] as List<dynamic>? ?? const [])
+          index as int,
+      },
       lines: [
         for (var i = 0; i + 3 < values.length; i += 4)
           Rect.fromLTRB(values[i], values[i + 1], values[i + 2], values[i + 3]),
