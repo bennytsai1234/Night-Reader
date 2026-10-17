@@ -247,11 +247,11 @@ class _BookDetailPageState extends State<BookDetailPage> {
               ],
             ),
           ),
-          // 骨架照進頁時手上的書排；資料到了先在骨架底下排好內容，再照
-          // 骨架換場的設定換過去。
+          // 骨架照這一輪載入開始時手上的書排；資料到了先在骨架底下排好
+          // 內容，再照骨架換場的設定換過去，骨架不跟著新資料變形。
           SliverSkeletonSwitcher(
             loading: loading,
-            skeleton: BookDetailSkeleton(book: currentBook),
+            skeleton: BookDetailSkeleton(book: provider.skeletonBook),
             builder: (context) => _buildLoadedSlivers(context, provider),
           ),
           // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。

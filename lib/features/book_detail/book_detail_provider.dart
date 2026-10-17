@@ -148,6 +148,12 @@ class BookDetailProvider extends ChangeNotifier {
   bool _isChangingSource = false;
 
   Book get book => _book;
+
+  /// 這一輪載入的骨架照哪本書排（DESIGN「書籍詳情」：照進頁時手上的書）。
+  /// 每次開始載入（[_init]）時記下一份，載入中與這一輪的換場播完前都照
+  /// 它：資料到了只換掉骨架底下的內容，骨架不先變成新資料的形狀。
+  Book get skeletonBook => _skeletonBook;
+  late Book _skeletonBook;
   List<BookChapter> get filteredChapters => _displayChapters;
   List<BookChapter> get allChapters => List.unmodifiable(_allChapters);
   int get totalChapterCount => _allChapters.length;
@@ -264,6 +270,7 @@ class BookDetailProvider extends ChangeNotifier {
             originName: searchBook.book.originName ?? '發現',
             type: searchBook.book.type,
           );
+    _skeletonBook = _book.copyWith();
     // 進場動畫播完才讀資料庫、向書源抓資料（ADR 0018）；這之前照傳進來
     // 的書畫。
     unawaited(entrance.then((_) => _init()));
@@ -273,6 +280,8 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _init() async {
     if (_disposed) return;
+    // 新的一輪載入：骨架換成照目前手上的書排。
+    _skeletonBook = _book.copyWith();
     _worldState = BookDetailWorldState.initializing;
     _loadErrorMessage = null;
     notifyListeners();

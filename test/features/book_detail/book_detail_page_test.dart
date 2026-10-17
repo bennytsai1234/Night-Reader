@@ -75,11 +75,12 @@ void main() {
     WidgetTester tester,
     Book book, {
     Widget? home,
+    Book? stored,
   }) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    bookDao = _FakeBookDao(book);
+    bookDao = _FakeBookDao(stored ?? book);
     register<BookDao>(bookDao);
     register<ChapterDao>(
       _FakeChapterDao([
@@ -228,6 +229,32 @@ void main() {
         if (text != '測試書源') expect(bar.left, content.left, reason: text);
       }
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('the skeleton keeps the entry book while the loaded one '
+        'is laid out under it', (tester) async {
+      // 從搜尋結果進來：手上的書只有一句簡介；資料庫裡的那本簡介長得多。
+      final entry = bookWith()
+        ..intro = '短簡介。'
+        ..totalChapterNum = 40;
+      await pumpDetail(tester, entry, stored: detailedBook());
+      final before = tester.getRect(textIn(tocHeader, skeleton: true)).top;
+
+      await untilContentLaidOut(tester);
+      expect(skeletonLayer(tester).opacity.value, 1, reason: '換場還沒開始');
+      expect(
+        tester.getRect(textIn(tocHeader, skeleton: true)).top,
+        before,
+        reason: '骨架整個蓋著時不先換成新資料的形狀',
+      );
+
+      // 換場途中骨架也照同一本書，只有透明度在變。
+      await tester.pump();
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
+      expect(skeletonLayer(tester).opacity.value, inExclusiveRange(0, 1));
+      expect(tester.getRect(textIn(tocHeader, skeleton: true)).top, before);
+      await tester.pumpAndSettle();
+      expect(textIn(tocHeader, skeleton: true), findsNothing);
     });
 
     testWidgets('with animations disabled the content replaces it at once', (
