@@ -580,11 +580,14 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     final showInfo = state == ReaderV2InfoState.ready || !_info.isDismissed;
     final showSkeleton =
         state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
+    // 兩層各帶 key：一層淡完移出時另一層的位置往前挪，沒有 key 會被接到
+    // 移走那一層的元素上重建，骨架的呼吸從頭開始、資訊的時鐘電量重訂閱。
     return Stack(
       alignment: Alignment.center,
       children: [
         if (showInfo)
           SkeletonRevealLayer(
+            key: const ValueKey(SkeletonRevealSide.content),
             opacity: _infoOpacity,
             side: SkeletonRevealSide.content,
             sweep: _sweep,
@@ -592,6 +595,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
           ),
         if (showSkeleton)
           SkeletonRevealLayer(
+            key: const ValueKey(SkeletonRevealSide.skeleton),
             opacity: _skeletonOpacity,
             side: SkeletonRevealSide.skeleton,
             sweep: _sweep,

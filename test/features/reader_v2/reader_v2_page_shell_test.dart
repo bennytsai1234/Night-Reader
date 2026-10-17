@@ -452,6 +452,37 @@ void main() {
       expect(tester.getRect(infoText('第一章')), infoTitle);
     });
 
+    testWidgets('the skeleton keeps breathing when the info finishes fading', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.ready);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pumpAndSettle();
+
+      states.value = ReaderV2InfoState.loading;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      final breathing = [
+        for (final element in find.byType(Skeleton).evaluate())
+          (element as StatefulElement).state,
+      ];
+      expect(breathing, hasLength(2));
+
+      // 資訊淡完移出畫面：骨架留在原本的元素上，呼吸不從頭開始。
+      await tester.pump(AppMotion.fade);
+      expect(infoText('第一章'), findsOneWidget);
+      expect([
+        for (final element in find.byType(Skeleton).evaluate())
+          (element as StatefulElement).state,
+      ], breathing);
+    });
+
     testWidgets('switching back before the fade starts moving keeps the info', (
       tester,
     ) async {
