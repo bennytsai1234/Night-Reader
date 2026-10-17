@@ -241,6 +241,35 @@ void main() {
       expect(headerHeight(tester), before);
     });
 
+    for (final (label, record) in [
+      ('a wrong type', 1),
+      ('broken JSON', '{"all": 3, "groups": ['),
+      ('negative counts', '{"all": -1, "groups": [["甲", -2]]}'),
+    ]) {
+      testWidgets('a damaged record ($label) counts as no record', (
+        tester,
+      ) async {
+        final prefs = getIt<SharedPreferences>();
+        if (record is String) {
+          await prefs.setString('explore_filter_bar', record);
+        } else {
+          await prefs.setInt('explore_filter_bar', record as int);
+        }
+        final sources = StreamController<List<BookSource>>();
+        // 建立失敗時沒有人聽，等 close 會卡住。
+        addTearDown(() => unawaited(sources.close()));
+        await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
+        await tester.pump();
+
+        // 和沒有紀錄一樣：先不留篩選列，讀到書源才長出來並重新記下。
+        expect(find.byType(GroupFilterBar<String?>), findsNothing);
+        sources.add(groupedSources());
+        await tester.pumpAndSettle();
+        expect(find.byType(GroupFilterBar<String?>), findsOneWidget);
+        expect(prefs.get('explore_filter_bar'), '{"all":3,"groups":[["甲",3]]}');
+      });
+    }
+
     testWidgets('grows in when the record had no groups', (tester) async {
       final sources = StreamController<List<BookSource>>();
       addTearDown(sources.close);

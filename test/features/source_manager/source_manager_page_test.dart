@@ -381,6 +381,33 @@ void main() {
       expect(find.byType(SearchField), findsNothing);
     });
 
+    for (final (label, record) in [('a string', 'bad'), ('negative', -3)]) {
+      testWidgets('a damaged count record ($label) counts as no record', (
+        tester,
+      ) async {
+        final prefs = GetIt.instance<SharedPreferences>();
+        if (record is String) {
+          await prefs.setString('source_manager_last_count', record);
+        } else {
+          await prefs.setInt('source_manager_last_count', record as int);
+        }
+        gatedDao.gate = Completer<void>();
+        await pumpPage(tester);
+
+        // 和沒有紀錄一樣：當作有書源，先畫骨架、留好搜尋框與工具列。
+        expect(tester.takeException(), isNull);
+        expect(skeletonRows(), findsWidgets);
+        expect(find.byType(SearchField), findsOneWidget);
+        expect(find.byType(SelectActionBar), findsOneWidget);
+
+        gatedDao.gate!.complete();
+        await settleQueries(tester);
+        await tester.pumpAndSettle();
+        expect(find.text('書源0'), findsOneWidget);
+        expect(prefs.get('source_manager_last_count'), 3);
+      });
+    }
+
     testWidgets('search box grows in when the record was wrong', (
       tester,
     ) async {

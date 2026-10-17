@@ -355,6 +355,14 @@ class SourceManagerProvider with ChangeNotifier {
       ? (lastSourceCount ?? 1) > 0
       : _sources.isNotEmpty;
 
+  /// 讀出 [lastSourceCount]；型別不對或是負數的紀錄壞了，當作沒有紀錄。
+  static int? _readLastCount() {
+    final value = getIt<SharedPreferences>().get(_lastCountKey);
+    if (value is int && value >= 0) return value;
+    if (value != null) AppLog.w('書源數的紀錄讀不懂，當作沒有紀錄: $value');
+    return null;
+  }
+
   void _rememberCount(int count) {
     if (lastSourceCount == count) return;
     lastSourceCount = count;
@@ -397,7 +405,7 @@ class SourceManagerProvider with ChangeNotifier {
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
        checkService = sourceCheckService ?? getIt<CheckSourceService>(),
-       lastSourceCount = getIt<SharedPreferences>().getInt(_lastCountKey) {
+       lastSourceCount = _readLastCount() {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
     unawaited(
