@@ -562,10 +562,14 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     final toInfo =
         from == ReaderV2InfoState.loading && state == ReaderV2InfoState.ready;
     final reveal = toSkeleton || toInfo ? SkeletonReveal.of(context) : null;
-    _incoming = toSkeleton
-        ? SkeletonRevealSide.skeleton
-        : SkeletonRevealSide.content;
-    _sweep = reveal?.sweeps ?? false;
+    // 換場途中反過來時沿用這一輪的方向與方式倒著走：換掉 _incoming 會讓
+    // 左右的濃淡在同一幀對調。
+    if (!_skeleton.isAnimating && !_info.isAnimating) {
+      _incoming = toSkeleton
+          ? SkeletonRevealSide.skeleton
+          : SkeletonRevealSide.content;
+      _sweep = reveal?.sweeps ?? false;
+    }
     final duration = reveal?.duration ?? AppMotion.fade;
     _info.duration = duration;
     _skeleton.duration = duration;

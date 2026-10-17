@@ -282,11 +282,14 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     _controller.forward();
   }
 
-  /// 這一次換場照使用者選的方式與時長。
+  /// 這一次換場照使用者選的方式與時長。換場途中反過來時沿用這一輪的方向
+  /// 與方式倒著走：換掉 [_incoming] 會讓左右的濃淡在同一幀對調。
   void _prepare(SkeletonRevealSide incoming) {
     final reveal = SkeletonReveal.of(context);
-    _incoming = incoming;
-    _sweep = reveal.sweeps;
+    if (!_controller.isAnimating) {
+      _incoming = incoming;
+      _sweep = reveal.sweeps;
+    }
     _controller
       ..duration = reveal.duration
       ..reverseDuration = reveal.duration;

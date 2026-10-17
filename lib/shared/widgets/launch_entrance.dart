@@ -87,10 +87,18 @@ class _LaunchEntranceState extends State<LaunchEntrance>
   LaunchEntranceMotion? _motion;
   final MotionHold _hold = MotionHold();
 
+  /// 主頁面在畫面上、進場播得動；被推上來的頁面蓋住時為 false。
+  bool _onScreen = true;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_motion != null) return;
+    // 進場還沒播完就被別頁蓋住時，動畫停著，閘門要先放開，回來再接著持有。
+    _onScreen = TickerMode.valuesOf(context).enabled;
+    if (_motion != null) {
+      _syncHold();
+      return;
+    }
     // 時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final skeleton = SkeletonReveal.of(context).duration;
     _controller.duration = LaunchEntranceMotion.totalFor(skeleton);
@@ -100,13 +108,13 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       return;
     }
     // 第一幀只畫底色、和系統啟動畫面一樣，畫完才開始進場。
-    _hold.moving = true;
+    _syncHold();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _controller.forward();
     });
   }
 
-  void _syncHold() => _hold.moving = !_controller.isCompleted;
+  void _syncHold() => _hold.moving = _onScreen && !_controller.isCompleted;
 
   @override
   void dispose() {
