@@ -144,4 +144,39 @@ void main() {
       expect(width(), rest);
     });
   }
+
+  testWidgets('with animations off the badge lands at once', (tester) async {
+    Widget tile(BookUpdateCheckResult? result) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 120,
+            child: BookshelfGridTile(book: book, updateBadge: result),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(tile(null));
+    await tester.pumpWidget(tile(newChapters));
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.text('+3'), findsOneWidget);
+
+    // 換成另一個結果：大小、底色與字一起直接換好。
+    await tester.pumpWidget(tile(failed));
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.text('+3'), findsNothing);
+    expect(find.text('!'), findsOneWidget);
+
+    await tester.pumpWidget(tile(null));
+    await tester.pump();
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.text('!'), findsNothing);
+  });
 }
