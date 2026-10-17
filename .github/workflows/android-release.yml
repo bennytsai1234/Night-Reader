@@ -41,6 +41,7 @@ jobs:
       prerelease: ${{ steps.plan.outputs.prerelease }}
       tag_name: ${{ steps.plan.outputs.tag_name }}
       notes_heading: ${{ steps.plan.outputs.notes_heading }}
+      notes_base: ${{ steps.plan.outputs.notes_base }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
       build_name: ${{ steps.plan.outputs.build_name }}
       build_number: ${{ steps.plan.outputs.build_number }}
@@ -195,12 +196,15 @@ jobs:
             publish=true
           fi
 
-          # Release 說明取 CHANGELOG.md 的段落（ADR 0010）：測試版取「未發布」，正式版取「X.Y.Z」。
+          # Release 說明取 CHANGELOG.md 的段落（ADR 0010）：正式版取「X.Y.Z」整段；測試版取「未發布」
+          # 裡上一個發布（notes_base）還沒有的條列，App 更新時再把中間每一版接起來。
           # 先在這裡確認段落存在，免得建置完才在發布時失敗。
           notes_heading=""
+          notes_base=""
           if [[ "$publish" == "true" ]]; then
             if [[ "$prerelease" == "true" ]]; then
               notes_heading="未發布"
+              notes_base="$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "${target_sha}^")"
             else
               notes_heading="$app_version"
             fi
@@ -226,6 +230,7 @@ jobs:
             echo "prerelease=$prerelease"
             echo "tag_name=$tag_name"
             echo "notes_heading=$notes_heading"
+            echo "notes_base=$notes_base"
             echo "target_sha=$target_sha"
             echo "build_name=$build_name"
             echo "build_number=$build_number"
@@ -330,12 +335,17 @@ jobs:
           TARGET_SHA: ${{ needs.plan-release.outputs.target_sha }}
           PRERELEASE: ${{ needs.plan-release.outputs.prerelease }}
           NOTES_HEADING: ${{ needs.plan-release.outputs.notes_heading }}
+          NOTES_BASE: ${{ needs.plan-release.outputs.notes_base }}
         run: |
           set -euo pipefail
           apk_path="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           asset_name="night-reader-${TAG_NAME}-arm64-v8a.apk"
           notes_path="$RUNNER_TEMP/release-notes.md"
-          sh tool/changelog.sh section "$NOTES_HEADING" > "$notes_path"
+          if [[ "$PRERELEASE" == "true" ]]; then
+            sh tool/changelog.sh added "$NOTES_BASE" > "$notes_path"
+          else
+            sh tool/changelog.sh section "$NOTES_HEADING" > "$notes_path"
+          fi
 
           # 測試版標成預發布版：不會成為 Latest，網站與只收正式版的 App 都看不到。
           if [[ "$PRERELEASE" == "true" ]]; then

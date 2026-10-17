@@ -128,6 +128,55 @@ void main() {
     });
   });
 
+  group('checkLatest notes', () {
+    Map<String, Object?> release(
+      String tag,
+      String body, {
+      bool prerelease = true,
+      bool apk = true,
+    }) => {..._release(tag, prerelease: prerelease, apk: apk), 'body': body};
+
+    final stable = release(
+      'v0.3.4',
+      '整理過的介紹。\n\n- 甲\n- 乙\n- 丙',
+      prerelease: false,
+    );
+    final betas = [
+      release('v0.3.4-beta.9', '- 丙', apk: false),
+      release('v0.3.4-beta.7', '- 乙'),
+      release('v0.3.4-beta.5', '- 甲'),
+      release('v0.3.3', '- 上一版', prerelease: false),
+    ];
+
+    Future<String?> notes(
+      List<Object> list,
+      String current, {
+      bool includeBeta = true,
+    }) async => (await _service(
+      _ReleaseApi(latest: stable, list: list),
+      current,
+    ).checkLatest(includeBeta: includeBeta))?.updateLog;
+
+    test('joins the betas skipped since the installed one', () async {
+      // beta.9 沒有 APK、裝不了，它的說明要等下一個裝得了的版本再列。
+      expect(await notes(betas, '0.3.3'), '- 乙\n- 甲');
+    });
+
+    test('a release drops the lines earlier betas already delivered', () async {
+      expect(
+        await notes([stable, ...betas], '0.3.4-beta.5'),
+        '整理過的介紹。\n\n- 乙\n- 丙',
+      );
+    });
+
+    test('stable channel shows the whole release notes', () async {
+      expect(
+        await notes([], '0.3.3', includeBeta: false),
+        '整理過的介紹。\n\n- 甲\n- 乙\n- 丙',
+      );
+    });
+  });
+
   group('fetchReleaseNotes', () {
     final api = _ReleaseApi(
       latest: _release('v0.3.3'),
