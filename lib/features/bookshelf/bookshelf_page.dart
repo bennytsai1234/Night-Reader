@@ -58,21 +58,51 @@ class BookshelfPage extends StatefulWidget {
 }
 
 class _BookshelfPageState extends State<BookshelfPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _isMultiSelect = false;
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
   /// 換排序、書移到最前面時書卡平滑換位，新加入的書淡入。
-  late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(vsync: this);
+  /// 移出的書淡完時重建一次，清單才真的拿掉它們、其他書卡補位。
+  late final BookshelfLayoutMotion _motion = BookshelfLayoutMotion(
+    vsync: this,
+    onRemovalsFaded: () {
+      if (mounted) setState(() {});
+    },
+  );
 
-  /// 書架空著時才用到：還沒有書源時主按鈕改成匯入書源。
-  late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
-      ? getIt<BookSourceDao>().watchHasAny()
-      : Stream<bool>.value(true);
+  /// 畫面上的書（含淡出中、已不在書架上的書），供淡出期間照舊畫出來。
+  Map<String, Book> _shownBooks = const {};
+
+  /// 書架空著時才用到：還沒有書源時主按鈕改成匯入書源。第一次書架空著
+  /// 時才開始查；查到之前是 null，骨架留著，不先畫其中一種空書架。
+  bool? _hasSources;
+  StreamSubscription<bool>? _hasSourcesSub;
+
+  void _watchSources() {
+    if (_hasSourcesSub != null) return;
+    final stream = getIt.isRegistered<BookSourceDao>()
+        ? getIt<BookSourceDao>().watchHasAny()
+        : Stream<bool>.value(true);
+    _hasSourcesSub = stream.listen(
+      (value) {
+        if (mounted && value != _hasSources) {
+          setState(() => _hasSources = value);
+        }
+      },
+      // 查不到時照有書源畫（原本的空書架）。
+      onError: (Object _) {
+        if (mounted && _hasSources == null) {
+          setState(() => _hasSources = true);
+        }
+      },
+    );
+  }
 
   @override
   void dispose() {
+    unawaited(_hasSourcesSub?.cancel());
     _motion.dispose();
     super.dispose();
   }
@@ -170,6 +200,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           provider.books.isNotEmpty &&
           _selectedUrls.length == provider.books.length;
       return GlassNavHeader(
+        morph: true,
         title: '已選 ${_selectedUrls.length} 本',
         leading: GlassTextButton(
           label: '完成',
@@ -194,7 +225,9 @@ class _BookshelfPageState extends State<BookshelfPage>
         ],
       );
     }
+    // 進出多選時標題淡換、兩側按鈕的玻璃留著只改大小（GlassMorph）。
     return GlassNavHeader(
+      morph: true,
       title: '書架',
       titleSheen: provider.isCheckingShelf,
       leading: GlassMenuButton<Object>(
@@ -312,8 +345,14 @@ class _BookshelfPageState extends State<BookshelfPage>
   /// 的封面解碼好，書卡連同封面一次淡入。
   Widget _buildContent(BuildContext context, BookshelfProvider provider) {
     final insets = MediaQuery.paddingOf(context);
+    final empty = provider.books.isEmpty;
+    if (empty && !provider.isLoading) _watchSources();
     return SkeletonSwitcher(
-      loading: provider.isLoading && provider.books.isEmpty,
+      // 第一次是空書架時，查到有沒有書源之前骨架留著：不先畫「搜尋書籍」
+      // 再一幀換成「匯入書源」，骨架直接換場成對的那一種。
+      loading:
+          empty &&
+          (provider.isLoading || _hasSources == null && !_contentShown),
       waitForCovers: true,
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
@@ -330,9 +369,27 @@ class _BookshelfPageState extends State<BookshelfPage>
     );
   }
 
+  /// 書架內容已經換場出來過；之後書架變空（移出最後一本）不再退回骨架。
+  bool _contentShown = false;
+
   Widget _buildLoadedContent(BookshelfProvider provider, EdgeInsets insets) {
+    _contentShown = true;
+    final grid = provider.isGridView;
+    final animate = !MediaQuery.disableAnimationsOf(context);
+    // 移出的書淡出期間仍在清單裡（已不在書架上，取上次畫的那一本）。
+    final shownUrls = _motion.update(
+      [for (final book in provider.books) book.bookUrl],
+      grid: grid,
+      animate: animate,
+    );
+    final known = {
+      ..._shownBooks,
+      for (final book in provider.books) book.bookUrl: book,
+    };
+    final books = [for (final url in shownUrls) ?known[url]];
+    _shownBooks = {for (final book in books) book.bookUrl: book};
     // 載入失敗時已有的書照常顯示；只有什麼都沒有時才換成錯誤頁。
-    if (provider.books.isEmpty && provider.loadErrorMessage != null) {
+    if (books.isEmpty && provider.loadErrorMessage != null) {
       return Padding(
         padding: EdgeInsets.only(top: insets.top, bottom: insets.bottom),
         child: AppStateView(
@@ -348,50 +405,50 @@ class _BookshelfPageState extends State<BookshelfPage>
         ),
       );
     }
-    if (provider.books.isEmpty) {
+    if (books.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: insets.top, bottom: insets.bottom),
-        child: StreamBuilder<bool>(
-          stream: _hasSources,
-          // 還沒查到前當作有書源，畫面跟以前一樣；全新安裝時很快就換掉。
-          builder: (context, snapshot) => snapshot.data ?? true
-              ? AppStateView(
-                  icon: Icons.auto_stories_outlined,
-                  title: '書架還是空的',
-                  description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
-                  primaryAction: AppStateAction(
-                    label: '搜尋書籍',
-                    icon: Icons.search,
-                    onPressed: _openSearch,
-                  ),
-                )
-              : AppStateView(
-                  icon: Icons.auto_stories_outlined,
-                  title: '書架還是空的',
-                  description: '匯入書源後就能搜尋網路小說，手機裡的 TXT 也能直接加入。',
-                  primaryAction: AppStateAction(
-                    label: '匯入書源',
-                    icon: Icons.download_rounded,
-                    onPressed: _openSourceManager,
-                  ),
-                  secondaryAction: AppStateAction(
-                    label: '加入本地書籍',
-                    icon: Icons.file_open_outlined,
-                    onPressed: () => unawaited(_pickLocalBook(provider)),
-                  ),
-                ),
+        // 還不知道有沒有書源時先空著（移出最後一本書之後），知道了再淡入
+        // 對的那一種；之後書源有無改變時兩種交叉淡換。
+        child: AnimatedSwitcher(
+          duration: animate ? AppMotion.fade : Duration.zero,
+          switchInCurve: AppMotion.fadeCurve,
+          switchOutCurve: AppMotion.fadeCurve,
+          child: switch (_hasSources) {
+            null => const SizedBox.expand(key: ValueKey('unknown')),
+            true => AppStateView(
+              key: const ValueKey('has-sources'),
+              icon: Icons.auto_stories_outlined,
+              title: '書架還是空的',
+              description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
+              primaryAction: AppStateAction(
+                label: '搜尋書籍',
+                icon: Icons.search,
+                onPressed: _openSearch,
+              ),
+            ),
+            false => AppStateView(
+              key: const ValueKey('no-sources'),
+              icon: Icons.auto_stories_outlined,
+              title: '書架還是空的',
+              description: '匯入書源後就能搜尋網路小說，手機裡的 TXT 也能直接加入。',
+              primaryAction: AppStateAction(
+                label: '匯入書源',
+                icon: Icons.download_rounded,
+                onPressed: _openSourceManager,
+              ),
+              secondaryAction: AppStateAction(
+                label: '加入本地書籍',
+                icon: Icons.file_open_outlined,
+                onPressed: () => unawaited(_pickLocalBook(provider)),
+              ),
+            ),
+          },
         ),
       );
     }
     // 編輯工具列佔用分頁列的位置，清單底部讓出的高度不變。
     final bottom = insets.bottom + AppSpacing.md;
-    final grid = provider.isGridView;
-    final animate = !MediaQuery.disableAnimationsOf(context);
-    _motion.update(
-      [for (final book in provider.books) book.bookUrl],
-      grid: grid,
-      animate: animate,
-    );
     // 下拉在背景檢查更新：不轉圈，檢查期間不會重複觸發；結果只在書卡角標
     // 上顯示 5 秒。
     return RefreshIndicator.noSpinner(
@@ -418,8 +475,8 @@ class _BookshelfPageState extends State<BookshelfPage>
         child: KeyedSubtree(
           key: ValueKey(grid),
           child: grid
-              ? _buildGridView(provider, insets.top, bottom)
-              : _buildListView(provider, insets.top, bottom),
+              ? _buildGridView(provider, books, insets.top, bottom)
+              : _buildListView(provider, books, insets.top, bottom),
         ),
       ),
     );
@@ -622,6 +679,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   Widget _buildListView(
     BookshelfProvider provider,
+    List<Book> books,
     double topInset,
     double bottomInset,
   ) {
@@ -631,19 +689,36 @@ class _BookshelfPageState extends State<BookshelfPage>
       AppGrouped.margin,
       bottomInset,
     );
-    final books = provider.books;
-    // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走「選取」。
-    if (!_isMultiSelect && provider.sortMode == BookshelfSortMode.custom) {
+    // 自訂排序時長按拖曳換位置，不開情境選單；其餘操作走「選取」。多選時
+    // 仍是同一個清單、只關掉拖曳：換成另一種清單會丟掉捲動位置，書卡也會
+    // 重建，勾選圈直接冒出來而不是滑進來。
+    if (provider.sortMode == BookshelfSortMode.custom) {
       return ReorderableListView.builder(
         padding: padding,
         itemCount: books.length,
+        // 拖曳的起點自己包（見下面），多選時關掉；預設的會依開關換外層
+        // 元件，書卡跟著重建。
+        buildDefaultDragHandles: false,
         onReorderStart: (_) => AppHaptics.lift(),
         onReorderEnd: (_) => AppHaptics.snap(),
         onReorderItem: (oldIndex, newIndex) {
+          // 清單裡可能還有淡出中的書（已不在書架上）：照書換算成書架上的
+          // 位置。
+          final shown = [...books];
+          final moved = shown.removeAt(oldIndex);
+          final from = provider.books.indexWhere(
+            (book) => book.bookUrl == moved.bookUrl,
+          );
+          if (from < 0) return;
+          final shelf = {for (final book in provider.books) book.bookUrl};
+          final to = shown
+              .take(newIndex)
+              .where((book) => shelf.contains(book.bookUrl))
+              .length;
           // reorderBooks 在第一個 await 之前就換好清單順序；清單本身已經把
           // 書卡放到定位，採用新順序，不再播換位動畫。
-          unawaited(provider.reorderBooks(oldIndex, newIndex));
-          _motion.accept([for (final book in books) book.bookUrl]);
+          unawaited(provider.reorderBooks(from, to));
+          _motion.accept([for (final book in provider.books) book.bookUrl]);
         },
         // 預設的拖曳外觀會在卡片外距外畫出方形陰影，改成只微微放大。
         proxyDecorator: (child, _, animation) => ScaleTransition(
@@ -652,8 +727,10 @@ class _BookshelfPageState extends State<BookshelfPage>
           ),
           child: Material(type: MaterialType.transparency, child: child),
         ),
-        itemBuilder: (context, index) => KeyedSubtree(
+        itemBuilder: (context, index) => ReorderableDelayedDragStartListener(
           key: ValueKey(books[index].bookUrl),
+          index: index,
+          enabled: !_isMultiSelect,
           child: _buildListCard(provider, books[index], reorderable: true),
         ),
       );
@@ -690,6 +767,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   Widget _buildGridView(
     BookshelfProvider provider,
+    List<Book> books,
     double topInset,
     double bottomInset,
   ) {
@@ -715,9 +793,9 @@ class _BookshelfPageState extends State<BookshelfPage>
         crossAxisSpacing: AppSpacing.lg,
         mainAxisSpacing: AppSpacing.md,
       ),
-      itemCount: provider.books.length,
+      itemCount: books.length,
       itemBuilder: (context, index) {
-        final book = provider.books[index];
+        final book = books[index];
         return BookshelfMotionItem(
           id: book.bookUrl,
           motion: _motion,

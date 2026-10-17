@@ -11,10 +11,14 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/glass_motion.dart';
 
 /// 可以把書源讀取卡住的 DAO，用來觀察「重新載入中」的畫面。
 class _GatedSourceDao extends BookSourceDao {
@@ -105,6 +109,35 @@ void main() {
     for (var i = 0; i < 3; i++) {
       expect(find.text('書源$i'), findsOneWidget);
     }
+  });
+
+  testWidgets('entering selection crossfades the title and morphs the glass', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    double trailingWidth() =>
+        tester.getSize(find.byType(GlassMorph).last).width;
+    final menuWidth = trailingWidth();
+
+    await tester.tap(find.bySemanticsLabel('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('選取書源'));
+    await tester.pump();
+    await tester.pump(AppMotion.fade ~/ 2);
+    // 淡換途中新舊標題都在；玻璃按鈕不在淡入裡，寬度在半路。
+    Finder header(String text) => find.descendant(
+      of: find.byType(GlassNavHeader),
+      matching: find.text(text),
+    );
+    expect(header('書源管理'), findsOneWidget);
+    expect(header('選取書源'), findsOneWidget);
+    expectNoGlassUnderFade(tester);
+    final midway = trailingWidth();
+    expect(midway, greaterThan(menuWidth));
+
+    await tester.pumpAndSettle();
+    expect(find.text('書源管理'), findsNothing);
+    expect(trailingWidth(), greaterThan(midway));
   });
 
   testWidgets('reloading keeps the list instead of a full-page spinner', (

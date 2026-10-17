@@ -285,6 +285,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       final busy = provider.isMutationBusy || _isImporting;
       final count = provider.selectedUrls.length;
       return GlassNavHeader(
+        morph: true,
         title: count == 0 ? '選取書源' : '已選 $count 項',
         leading: GlassTextButton(
           label: allSelected ? '取消全選' : '全選',
@@ -304,7 +305,9 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
       );
     }
 
+    // 進出多選時標題淡換、兩側按鈕的玻璃留著只改大小（GlassMorph）。
     return GlassNavHeader(
+      morph: true,
       title: '書源管理',
       actions: [
         SourceManagerMenus.buildMoreMenu(
