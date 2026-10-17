@@ -145,9 +145,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   /// [_restoreCore]（見 [_syncJumpVeil]）。
   ReaderV2OperationToken? _jumpVeil;
 
-  /// 蓋上等跳章的紙那一刻的捲動位置；紙下的正文停在這裡，取不到正文時
-  /// 掀開紙回到的就是這個位置。
-  double? _jumpVeilOffset;
+  /// 紙開始蓋住正文那一刻的捲動位置；紙下的正文停在這裡，蓋紙的操作
+  /// 取消或失敗、掀開紙回到的就是這個位置（見 [_veilHoldsText]）。
+  double? _veilHoldOffset;
+
+  /// 正在進行的還原（[_restoreCore]）還有效時，紙歸它管：結束時由它自己
+  /// 決定掀紙或交給下一個（見 [_releasePaper]）。
+  bool Function()? _restoreOwner;
+
+  /// 沒有操作負責、正文卻不在畫面上或已經過時時，重新還原最後的穩定位置
+  /// （見 [_syncStableWorld]）；還原進行中為 true。
+  bool _stableRestoreRunning = false;
   late final LoadingVeilController _veil = LoadingVeilController(
     vsync: this,
     onHidden: () {
@@ -158,15 +166,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     },
   );
 
-  /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙蓋滿（或途中掀開）後完成；
-  /// 其他時候為 null（見 [_coverText]）。
+  /// 舊正文還在畫面上、紙正在淡入蓋住它時，紙停下來（蓋滿或途中掀開）
+  /// 後完成；其他時候為 null（見 [_coverText]）。
   Future<void>? _covering;
 
-  /// 排版或內容換代了，等紙蓋滿才換（[_handleEpochRebuild]）：換代會拿掉
-  /// 舊正文的版面。
-  bool _epochRebuildPending = false;
-
-  /// 正文上一次照哪個版面畫：紙淡入蓋住舊正文時，舊正文照原本的左右
+  /// 正文上一次照哪個版面畫：排版換代了、舊正文還在紙下時，照原本的左右
   /// 邊距畫，不跟著新設定先跳一下。
   ReaderV2LayoutSpec? _shownTextSpec;
 
@@ -350,6 +354,15 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     );
   }
 
+  /// Runtime 已經發布新的排版或內容世代，排版管線（與畫面上的正文）還是
+  /// 舊的：等紙蓋滿才換代（[_handleEpochRebuild]），換代會拿掉舊正文。
+  bool get _textOutdated {
+    final state = widget.runtime.state;
+    final epoch = _pipeline.epoch;
+    return epoch.value != state.layoutGeneration ||
+        epoch.contentGeneration != state.contentGeneration;
+  }
+
   void _handleEpochRebuild() {
     _runtimeLocationRevision += 1;
     _restoreRevision += 1;
@@ -360,12 +373,37 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     _pipeline = _createPipeline();
   }
 
+  /// 還原到 [location]，期間紙歸這次還原管。沒有完成（作廢或失敗）時交給
+  /// [_releasePaper]：沒有操作接手就掀紙回到舊正文，舊正文已經拆掉時重新
+  /// 還原最後的穩定位置。
   Future<bool> _restoreCore(
     ReaderV2Location location, {
     required bool Function() isCurrent,
     ReaderV2OperationKind? operationKind,
   }) async {
     if (!isCurrent() || widget.runtime.chapterCount <= 0) return false;
+    _restoreOwner = isCurrent;
+    var restored = false;
+    try {
+      restored = await _runRestore(
+        location,
+        isCurrent: isCurrent,
+        operationKind: operationKind,
+      );
+      return restored;
+    } finally {
+      if (identical(_restoreOwner, isCurrent)) _restoreOwner = null;
+      if (!restored) _releasePaper();
+    }
+  }
+
+  bool get _restoreInFlight => _restoreOwner?.call() ?? false;
+
+  Future<bool> _runRestore(
+    ReaderV2Location location, {
+    required bool Function() isCurrent,
+    ReaderV2OperationKind? operationKind,
+  }) async {
     // 舊正文還在畫面上（例如朗讀念到還沒載入的一章）：紙先淡入蓋住，蓋滿
     // 才開始排版（ADR 0018）。
     _coverText();
@@ -548,11 +586,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (notification.depth != 0) return false;
     if (notification is ScrollStartNotification) _scrollHold.moving = true;
     if (notification is ScrollEndNotification) _scrollHold.moving = false;
-    if (_jumpVeil != null) {
+    if (_veilHoldsText) {
       // 紙蓋上前就按下的手指，在紙下開始拖動：不算使用者接手、不取消
-      // 跳章，拖動作廢並回到蓋紙那一刻的位置。
+      // 蓋紙的跳章或還原，拖動作廢並回到蓋紙那一刻的位置。
       if (_isDragNotification(notification)) {
-        scheduleMicrotask(_holdScrollUnderJumpVeilAgain);
+        scheduleMicrotask(_holdScrollUnderVeilAgain);
       }
       return false;
     }
@@ -707,17 +745,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _lastContentGeneration = state.contentGeneration;
       // 舊正文還在畫面上時，紙先淡入蓋住，蓋滿才換代（ADR 0018）。
       _coverText();
-      if (_covering != null) {
-        _epochRebuildPending = true;
-      } else {
-        _handleEpochRebuild();
-      }
-      if (contentChanged && operation == null && state.hasStableWorld) {
-        _restorePublishedContentGeneration(
-          state.visibleLocation,
-          state.contentGeneration,
-        );
-      }
+      if (_covering == null) _handleEpochRebuild();
     }
     final requested = runtime.pendingLocation;
     if (requested != null && !identical(operation, _demandOwner)) {
@@ -736,54 +764,123 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _reconcileVisibleWindow();
       _publishProgress();
     }
+    // 蓋紙的操作結束了（取不到正文、被取代後接手的操作又失敗），或沒有
+    // 操作時內容換代：沒有人接手時掀紙或重新還原。
+    _releasePaper();
     _scheduleRebuild();
   }
 
   /// 跳章一開始就蓋紙：正文還在取得時，舊正文不留在畫面上，紙也攔下捲動。
-  /// 排版開始後由 [_restoreCore] 接手；跳章在那之前就結束（取不到正文、被
-  /// 別的操作取代）時掀開紙，舊正文原封不動。
+  /// 排版開始後由 [_restoreCore] 接手；跳章在那之前就結束時，紙交給接手的
+  /// 操作，沒有操作接手就由 [_releasePaper] 掀開，舊正文原封不動。
   void _syncJumpVeil(ReaderV2OperationToken? operation) {
     final jump = operation?.kind == ReaderV2OperationKind.jump
         ? operation
         : null;
     if (identical(jump, _jumpVeil)) return;
-    final wasVeiled = _jumpVeil != null;
     _jumpVeil = null;
-    if (!_initialRestoreCompleted) return;
-    if (jump != null) {
-      _jumpVeil = jump;
-      _clearSelection();
-      _holdScrollUnderJumpVeil();
-      _coverText();
-    } else if (wasVeiled) {
-      _veil.reveal(SkeletonReveal.of(context));
-    }
+    if (jump == null || !_initialRestoreCompleted) return;
+    _jumpVeil = jump;
+    _clearSelection();
+    _coverText();
   }
+
+  /// 紙正蓋著畫面上的正文（淡入中或已蓋滿，不是正在掀開）：紙攔下捲動、
+  /// 長按與翻頁，紙下的正文停在蓋紙那一刻的位置。
+  bool get _veilHoldsText =>
+      _initialRestoreCompleted && _veil.isVisible && !_veil.isRevealing;
 
   /// 停住紙下正在跑的捲動（甩動的慣性、已經開始的拖動），固定在蓋紙那一刻
   /// 的位置。`jumpTo` 會結束目前的捲動活動，進行中的拖動也一併作廢。
-  void _holdScrollUnderJumpVeil() {
+  void _holdScrollUnderVeil() {
     final controller = _scrollController;
     if (controller == null || !controller.hasClients) return;
     final position = controller.position;
-    _jumpVeilOffset = position.pixels;
+    _veilHoldOffset = position.pixels;
     position.jumpTo(position.pixels);
     _dragging = false;
     _sawUserScroll = false;
     _pipeline.onScrollStateChanged(PumpState.idle);
   }
 
-  void _holdScrollUnderJumpVeilAgain() {
-    final offset = _jumpVeilOffset;
+  void _holdScrollUnderVeilAgain() {
+    final offset = _veilHoldOffset;
     final controller = _scrollController;
     if (!mounted ||
-        _jumpVeil == null ||
+        !_veilHoldsText ||
         offset == null ||
         controller == null ||
         !controller.hasClients) {
       return;
     }
     controller.position.jumpTo(offset);
+  }
+
+  /// 蓋在正文上的紙沒有人要用了：蓋紙的操作或還原結束、作廢，也沒有別的
+  /// 操作或還原接手（接手的自己會蓋紙、排版、掀紙，這裡不掀別人的紙）。
+  /// 紙下的舊正文仍照目前的排版與內容排著，就掀紙露出它；舊正文已經拆掉
+  /// 或過時（新的排版世代已經發布），就重新還原最後的穩定位置再掀紙。
+  void _releasePaper() {
+    if (!mounted ||
+        widget.runtime.stateMachine.currentOperation != null ||
+        _restoreInFlight ||
+        _stableRestoreRunning) {
+      return;
+    }
+    if (!_initialRestoreCompleted || _textOutdated) {
+      _syncStableWorld();
+      return;
+    }
+    if (!_veilHoldsText) return;
+    _veil.reveal(SkeletonReveal.of(context));
+    _scheduleRebuild();
+  }
+
+  /// 沒有操作負責正文、Runtime 也有穩定的位置，畫面上卻沒有照目前世代
+  /// 排好的正文時（被取代的還原、接手的操作又失敗；沒有操作時內容換代），
+  /// 照目前的排版重新還原那個位置：紙先蓋住舊正文、蓋滿才換代，排好再掀紙。
+  /// 開始新的操作時這次還原作廢，交給那個操作。
+  void _syncStableWorld() {
+    final runtime = widget.runtime;
+    if (!mounted ||
+        _stableRestoreRunning ||
+        _restoreInFlight ||
+        runtime.stateMachine.currentOperation != null ||
+        !runtime.state.hasStableWorld ||
+        (_initialRestoreCompleted && !_textOutdated)) {
+      return;
+    }
+    _stableRestoreRunning = true;
+    final generations = (
+      runtime.state.layoutGeneration,
+      runtime.state.contentGeneration,
+    );
+    unawaited(
+      Future<void>.microtask(() async {
+        var restored = false;
+        try {
+          if (mounted &&
+              identical(widget.runtime, runtime) &&
+              runtime.stateMachine.currentOperation == null) {
+            restored = await _restoreToLocation(runtime.state.visibleLocation);
+          }
+        } finally {
+          _stableRestoreRunning = false;
+        }
+        // 還原途中又換代（沒有操作時內容換代）而作廢：照新的世代再還原一次。
+        // 取不到正文這類失敗不重試，免得一直重抓。
+        if (!restored &&
+            mounted &&
+            identical(widget.runtime, runtime) &&
+            generations !=
+                (
+                  runtime.state.layoutGeneration,
+                  runtime.state.contentGeneration,
+                )) {
+          _syncStableWorld();
+        }
+      }),
+    );
   }
 
   static bool _isDragNotification(ScrollNotification notification) =>
@@ -793,23 +890,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           notification.dragDetails != null) ||
       (notification is OverscrollNotification &&
           notification.dragDetails != null);
-
-  void _restorePublishedContentGeneration(
-    ReaderV2Location location,
-    int contentGeneration,
-  ) {
-    unawaited(
-      Future<void>.microtask(() async {
-        if (!mounted) return;
-        final runtime = widget.runtime;
-        if (runtime.state.contentGeneration != contentGeneration ||
-            runtime.stateMachine.currentOperation != null) {
-          return;
-        }
-        await _restoreToLocation(location);
-      }),
-    );
-  }
 
   void _restoreAttachedRuntime() {
     final runtime = widget.runtime;
@@ -862,15 +942,18 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return previous;
   }
 
+  /// 還原到 [location]。有操作時屬於那個操作；沒有操作時（重新還原穩定
+  /// 位置，見 [_syncStableWorld]）一開始新的操作就作廢。
   Future<bool> _restoreToLocation(ReaderV2Location location) async {
     final runtime = widget.runtime;
     final operation = runtime.stateMachine.currentOperation;
-    // 換代等紙蓋滿才做；還原要用換代後的排版管線。
+    bool owned() => operation == null
+        ? runtime.stateMachine.currentOperation == null
+        : runtime.isCurrentOperationToken(operation);
+    // 紙先蓋住畫面上的舊正文；換代等紙蓋滿才做，還原要用換代後的排版管線。
+    _coverText();
     if (!await _awaitCovered()) return false;
-    if (!identical(widget.runtime, runtime) ||
-        (operation != null && !runtime.isCurrentOperationToken(operation))) {
-      return false;
-    }
+    if (!identical(widget.runtime, runtime) || !owned()) return false;
     final pipeline = _pipeline;
     _runtimeLocationRevision += 1;
     final revision = ++_restoreRevision;
@@ -879,7 +962,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         identical(widget.runtime, runtime) &&
         identical(_pipeline, pipeline) &&
         revision == _restoreRevision &&
-        (operation == null || runtime.isCurrentOperationToken(operation));
+        owned();
     if (!current() || runtime.chapterCount <= 0) return false;
     final controller = _scrollController;
     if (controller != null && controller.hasClients) {
@@ -980,8 +1063,10 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final operation = runtime.stateMachine.currentOperation;
     final pipeline = _pipeline;
     final revision = _runtimeLocationRevision;
+    // 紙蓋著正文時不接新的命令；這個命令自己蓋的紙（朗讀跟隨到還沒載入
+    // 的一章）不影響它繼續。
     final admitted =
-        _initialRestoreCompleted && !_sawUserScroll && _jumpVeil == null;
+        _initialRestoreCompleted && !_sawUserScroll && !_veilHoldsText;
     return () =>
         admitted &&
         mounted &&
@@ -1449,28 +1534,34 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _coverUntilFirstPage();
       return;
     }
+    final wasHolding = _veilHoldsText;
     _openingPage = null;
     _veil.cover(skeleton: false, fade: true);
+    if (!wasHolding) {
+      // 紙從這一幀開始畫在正文上、攔下觸控。
+      _clearSelection();
+      _holdScrollUnderVeil();
+      _scheduleRebuild();
+    }
     if (_veil.isCovered || _covering != null) return;
-    _clearSelection();
-    _covering = _veil.covered.whenComplete(() {
+    _covering = _veil.covered.then((covered) {
       _covering = null;
       if (!mounted) return;
-      if (_epochRebuildPending) {
-        _epochRebuildPending = false;
-        _handleEpochRebuild();
-      }
+      // 蓋滿才換代；途中被掀開時舊正文還在畫面上，不能拆。
+      if (covered && _textOutdated) _handleEpochRebuild();
       _scheduleRebuild();
+      _releasePaper();
     });
   }
 
-  /// 等紙淡入蓋滿（含蓋滿後的換代）；這一頁已經拆掉時回傳 false。
+  /// 等紙淡入蓋滿（含蓋滿後的換代）。紙途中被掀開、正文還露在畫面上，
+  /// 或這一頁已經拆掉時回傳 false：這次蓋紙取消了。
   Future<bool> _awaitCovered() async {
     for (var covering = _covering; covering != null; covering = _covering) {
       await covering;
       if (!mounted) return false;
     }
-    return mounted;
+    return mounted && (!_initialRestoreCompleted || _veil.isCovered);
   }
 
   /// 先只排第一頁、照它淡入骨架，淡入播完才回去排前後其他頁（ADR 0016、
@@ -1715,9 +1806,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           keepScrollOffset: false,
         );
         final highlight = widget.ttsHighlight;
-        final textSpec = _covering == null
-            ? (_shownTextSpec = state.layoutSpec)
-            : _shownTextSpec ?? state.layoutSpec;
+        final textSpec = _textOutdated
+            ? _shownTextSpec ?? state.layoutSpec
+            : (_shownTextSpec = state.layoutSpec);
         final visualContent = NotificationListener<ScrollNotification>(
           onNotification: _handleScrollNotification,
           child: HybridScrollView(
@@ -1769,9 +1860,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             if (_veil.isVisible)
               Positioned.fill(
                 child: IgnorePointer(
-                  // 等跳章正文、或淡入蓋住舊正文時，紙攔下捲動；淡出中的
-                  // 紙不攔。
-                  ignoring: _jumpVeil == null && _covering == null,
+                  // 紙蓋著正文（淡入中或已蓋滿）時攔下捲動；淡出中的紙
+                  // 不攔。
+                  ignoring: !_veilHoldsText,
                   child: _buildVeil(state),
                 ),
               ),
@@ -1793,10 +1884,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                   : _handleContentTapUp,
               suppressTapAtPointerDown: _isUserFlingInProgress,
               child: GestureDetector(
-                onLongPressStart:
-                    widget.textSelectionEnabled &&
-                        _jumpVeil == null &&
-                        _covering == null
+                onLongPressStart: widget.textSelectionEnabled && !_veilHoldsText
                     ? (details) => unawaited(_handleLongPressStart(details))
                     : null,
                 child: readerStack,

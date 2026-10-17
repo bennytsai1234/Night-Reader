@@ -230,7 +230,7 @@ void main() {
       await revealed(tester);
       var covered = false;
       veil.cover(skeleton: false, fade: true);
-      unawaited(veil.covered.then((_) => covered = true));
+      unawaited(veil.covered.then((value) => covered = value));
       await tester.pump();
       await advance(tester, AppMotion.fade ~/ 2);
       expect(veil.isVisible, isTrue);
@@ -256,6 +256,41 @@ void main() {
       veil.cover(skeleton: false, fade: true);
       expect(veil.isCovered, isTrue);
       await veil.covered;
+      await finish(tester);
+    });
+
+    testWidgets('disposing mid-fade ends every wait on the paper', (
+      tester,
+    ) async {
+      await revealed(tester);
+      veil.cover(skeleton: false, fade: true);
+      final results = <bool>[];
+      unawaited(veil.covered.then(results.add));
+      await tester.pump();
+      await advance(tester, AppMotion.fade ~/ 2);
+      unawaited(veil.covered.then(results.add));
+
+      await pumpVeil(tester, mounted: false);
+      veil.dispose();
+      await tester.pump();
+      expect(results, [false, false], reason: '拆掉不算蓋滿，但每個等待都結束');
+    });
+
+    testWidgets('lifting the paper mid-fade ends the wait as not covered', (
+      tester,
+    ) async {
+      await revealed(tester);
+      veil.cover(skeleton: false, fade: true);
+      bool? covered;
+      unawaited(veil.covered.then((value) => covered = value));
+      await tester.pump();
+      await advance(tester, AppMotion.fade ~/ 2);
+
+      veil.reveal();
+      await tester.pump();
+      expect(covered, isFalse, reason: '一改成掀開就結束，不等淡出完');
+      expect(veil.isRevealing, isTrue);
+      await advance(tester, revealTime * 2);
       await finish(tester);
     });
 

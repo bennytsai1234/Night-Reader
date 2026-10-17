@@ -109,19 +109,31 @@ class LoadingVeilController {
   /// 紙整張蓋滿、沒有在淡入淡出。
   bool get isCovered => _cover.isCompleted;
 
-  /// 紙停下來時完成：淡入蓋滿，或途中改成掀開、淡出完。沒有在淡入淡出
-  /// 時立即完成。
-  Future<void> get covered {
-    if (!_cover.isAnimating) return Future<void>.value();
-    final settled = Completer<void>();
-    void listener(AnimationStatus status) {
-      if (status.isAnimating) return;
-      _cover.removeStatusListener(listener);
-      settled.complete();
-    }
+  /// 紙正在掀開（淡出中）。
+  bool get isRevealing => _cover.status == AnimationStatus.reverse;
 
-    _cover.addStatusListener(listener);
-    return settled.future;
+  /// 等 [covered] 的呼叫端；紙不再往蓋滿走（蓋滿、改成掀開）或控制器
+  /// 拆掉時，每一個都完成一次。
+  final List<Completer<bool>> _coverWaiters = <Completer<bool>>[];
+
+  /// 淡入停下來時完成：整張蓋滿為 true；途中改成掀開、或控制器拆掉時為
+  /// false，呼叫端當成這次蓋紙取消。沒有在淡入時立即以目前是否蓋滿完成。
+  Future<bool> get covered {
+    if (_cover.status != AnimationStatus.forward) {
+      return Future<bool>.value(_cover.isCompleted);
+    }
+    final waiter = Completer<bool>();
+    _coverWaiters.add(waiter);
+    return waiter.future;
+  }
+
+  void _settleCoverWaiters({required bool covered}) {
+    if (_coverWaiters.isEmpty) return;
+    final waiters = List<Completer<bool>>.of(_coverWaiters);
+    _coverWaiters.clear();
+    for (final waiter in waiters) {
+      waiter.complete(covered);
+    }
   }
 
   /// 骨架還在淡入或淡出。
@@ -187,6 +199,8 @@ class LoadingVeilController {
 
   void dispose() {
     _hold.release();
+    _cover.removeStatusListener(_onCoverStatus);
+    _settleCoverWaiters(covered: false);
     _cover.dispose();
     _skeleton.dispose();
     _pulse.dispose();
@@ -194,6 +208,9 @@ class LoadingVeilController {
 
   void _onCoverStatus(AnimationStatus status) {
     _syncHold();
+    if (status != AnimationStatus.forward) {
+      _settleCoverWaiters(covered: status == AnimationStatus.completed);
+    }
     if (status != AnimationStatus.dismissed) return;
     _skeleton.value = 0;
     _syncPulse();

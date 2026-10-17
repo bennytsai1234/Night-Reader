@@ -695,6 +695,206 @@ void main() {
     await tester.pump(SkeletonReveal.defaultDuration);
   }
 
+  group('a paper whose owner gives up never leaves the reader blank', () {
+    ReaderV2LayoutSpec specWithFont(double fontSize) =>
+        ReaderV2LayoutSpec.fromViewport(
+          viewportSize: _viewport,
+          style: ReaderV2LayoutStyle(
+            fontSize: fontSize,
+            lineHeight: _style.lineHeight,
+            letterSpacing: _style.letterSpacing,
+            paragraphSpacing: _style.paragraphSpacing,
+            paddingTop: _style.paddingTop,
+            paddingBottom: _style.paddingBottom,
+            paddingLeft: _style.paddingLeft,
+            paddingRight: _style.paddingRight,
+            textIndent: _style.textIndent,
+          ),
+        );
+
+    LoadingVeilController? veilOf(WidgetTester tester) {
+      final veil = find.byType(LoadingVeil);
+      return veil.evaluate().isEmpty
+          ? null
+          : tester.widget<LoadingVeil>(veil).controller;
+    }
+
+    /// 推進到沒有操作、紙掀完、正文在畫面上（最多 2000 幀）。
+    Future<void> untilSettled(WidgetTester tester) async {
+      for (
+        var frame = 0;
+        frame < 2000 &&
+            (runtime.stateMachine.currentOperation != null ||
+                find.byType(LoadingVeil).evaluate().isNotEmpty ||
+                find.byType(CustomScrollView).evaluate().isEmpty);
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    void expectTextBack({required double fontSize, int chapter = 0}) {
+      expect(find.byType(CustomScrollView), findsOneWidget, reason: '正文回來');
+      expect(find.byType(LoadingVeil), findsNothing, reason: '紙掀掉');
+      expect(runtime.stateMachine.currentOperation, isNull);
+      expect(runtime.state.visibleLocation.chapterIndex, chapter);
+      expect(runtime.state.layoutSpec.style.fontSize, fontSize);
+    }
+
+    testWidgets('a jump that fails while a font change fades the paper in', (
+      tester,
+    ) async {
+      final target = Completer<String?>();
+      await pumpReaderWaitingForChapter7(tester, target);
+      await settle(tester);
+
+      final applied = runtime.applyPresentation(spec: specWithFont(26));
+      for (
+        var frame = 0;
+        frame < 200 && runtime.state.layoutGeneration == 0;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(runtime.state.layoutGeneration, 1, reason: '新版面已經生效');
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(veilOf(tester)!.isCovered, isFalse, reason: '紙還在淡入');
+
+      final jump = runtime.jumpToChapter(7);
+      await tester.pump(const Duration(milliseconds: 16));
+      target.completeError(
+        const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+      );
+      await untilSettled(tester);
+      await jump;
+      await applied;
+
+      expect(tester.takeException(), isNull);
+      expect(runtime.takeUserNotice(), '第 7 章暫時取不到');
+      expectTextBack(fontSize: 26);
+    });
+
+    testWidgets('a jump that fails after a font change covered the text', (
+      tester,
+    ) async {
+      final target = Completer<String?>();
+      await pumpReaderWaitingForChapter7(tester, target);
+      await settle(tester);
+
+      final applied = runtime.applyPresentation(spec: specWithFont(26));
+      for (
+        var frame = 0;
+        frame < 200 && runtime.state.layoutGeneration == 0;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final jump = runtime.jumpToChapter(7);
+      for (
+        var frame = 0;
+        frame < 200 && find.byType(CustomScrollView).evaluate().isNotEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byType(CustomScrollView), findsNothing, reason: '舊正文已拆掉');
+
+      target.completeError(
+        const ReaderV2ContentUnavailableException('第 7 章暫時取不到'),
+      );
+      await untilSettled(tester);
+      await jump;
+      await applied;
+
+      expect(tester.takeException(), isNull);
+      expectTextBack(fontSize: 26);
+    });
+
+    testWidgets('a second font change during the fade-in wins', (tester) async {
+      await pumpReader(tester);
+      await settle(tester);
+
+      final first = runtime.applyPresentation(spec: specWithFont(26));
+      for (
+        var frame = 0;
+        frame < 200 && runtime.state.layoutGeneration == 0;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(veilOf(tester)!.isCovered, isFalse);
+      final second = runtime.applyPresentation(spec: specWithFont(30));
+      await untilSettled(tester);
+      await first;
+      await second;
+
+      expect(tester.takeException(), isNull);
+      expectTextBack(fontSize: 30);
+    });
+
+    testWidgets('a finger already down cannot drag the text under a '
+        'speech-follow paper', (tester) async {
+      await pumpReader(tester, customRuntime: _makeRuntime(chapterCount: 8));
+      await settle(tester);
+      final position = scrollPosition(tester);
+      final start = position.pixels;
+      final gesture = await tester.startGesture(const Offset(200, 300));
+
+      final followed = viewport.ensureCharRangeVisible!(
+        chapterIndex: 7,
+        startCharOffset: 0,
+        endCharOffset: 4,
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final veil = veilOf(tester);
+      expect(veil, isNotNull, reason: '紙淡入時就畫在正文上');
+      expect(veil!.isCovered, isFalse);
+      for (var step = 0; step < 5; step++) {
+        await gesture.moveBy(const Offset(0, -20));
+        await tester.pump();
+      }
+      expect(position.pixels, start, reason: '紙下的拖動作廢');
+      await gesture.up();
+      await untilSettled(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(await followed, isTrue, reason: '拖動不取消朗讀跟隨');
+      expect(find.byType(LoadingVeil), findsNothing);
+      expect(runtime.state.visibleLocation.chapterIndex, 7);
+    });
+
+    testWidgets('a speech-follow paper cancelled mid-fade lifts off the old '
+        'text', (tester) async {
+      await pumpReader(tester, customRuntime: _makeRuntime(chapterCount: 8));
+      await settle(tester);
+      final position = scrollPosition(tester);
+      final start = position.pixels;
+
+      final followed = viewport.ensureCharRangeVisible!(
+        chapterIndex: 7,
+        startCharOffset: 0,
+        endCharOffset: 4,
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(veilOf(tester)!.isCovered, isFalse, reason: '紙還在淡入');
+      // 停止自動捲動這類「停在原處」的要求讓這次跟隨作廢，沒有別的操作接手。
+      unawaited(viewport.settleScroll!());
+      await untilSettled(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(await followed, isFalse);
+      expect(find.byType(LoadingVeil), findsNothing, reason: '紙掀回舊正文');
+      expect(identical(scrollPosition(tester), position), isTrue);
+      expect(position.pixels, start);
+      expect(runtime.state.visibleLocation.chapterIndex, 0);
+    });
+  });
+
   testWidgets('the jump paper stops a fling and still lets taps through', (
     tester,
   ) async {
