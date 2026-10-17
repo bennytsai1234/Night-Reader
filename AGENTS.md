@@ -30,14 +30,14 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - `HANDOFF.md` 只寫查不到的事：還沒合併的工作在哪、等使用者決定的事、還沒寫進其他文件的決定、環境上的坑；合併了什麼看 PR，發版看 GitHub Actions。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
-- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
+- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴；寫的是和上一個正式版相比的最後結果，改到已經寫過的事就改原本那一條，不另外加（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
 - `main` 的分支保護只禁止強制推送與刪除，不強制走 PR：versionCode 取 `main` 的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004）。
 - 長期有效的內容依性質放：架構決定寫成 `docs/adr/` 的 ADR，寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`；本檔只放從 repo 查不到的事實。
 
 ## 發布流程
 
 - 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004、0014）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取 `main` 的提交數。
-- 測試版：推上 `main` 不會發版。使用者說「發 beta」時執行 `gh workflow run android-release.yml --ref main -f channel=beta`，把上一個發布之後累積的改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布`。上一個發布之後沒有 App 改動，或改了 App 卻沒寫「未發布」時，這次執行會失敗並寫明原因。日常改進不用升版號。
+- 測試版：推上 `main` 不會發版。使用者說「發 beta」時執行 `gh workflow run android-release.yml --ref main -f channel=beta`，把上一個發布之後累積的改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布` 裡上一個發布之後新增或改寫的條列。上一個發布之後沒有 App 改動，或改了 App 卻沒寫「未發布」時，這次執行會失敗並寫明原因。日常改進不用升版號。
 - 正式版：推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時把 `CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留一個空的 `## 未發布`；CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
 - 觸發測試版或推上版號 commit 後，檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
