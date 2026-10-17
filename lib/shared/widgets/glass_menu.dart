@@ -327,29 +327,35 @@ class _GlassMenuOverlay<T> extends StatelessWidget {
             animation: curved,
             builder: (context, child) {
               final rect = Rect.lerp(anchor, previewRect, curved.value)!;
+              // 陰影跟著浮起的進度長出、收回：濃淡、模糊與位移都從 0 開始，
+              // 第一幀不會整塊冒出陰影，收起的最後一幀也不會突然消失。彈簧
+              // 回彈超過 1 的那一段維持滿陰影。
+              final lift = curved.value.clamp(0.0, 1.0);
               return Positioned.fromRect(
                 rect: rect,
                 child: Transform.scale(
                   scale: 1 + 0.03 * curved.value,
-                  child: child,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: route.previewRadius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: chrome.glassShadow.withValues(
+                            alpha: chrome.glassShadow.a * lift,
+                          ),
+                          blurRadius: 30 * lift,
+                          offset: Offset(0, 10 * lift),
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  ),
                 ),
               );
             },
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: route.previewRadius,
-                boxShadow: [
-                  BoxShadow(
-                    color: chrome.glassShadow,
-                    blurRadius: 30,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: route.previewRadius,
-                child: IgnorePointer(child: route.preview),
-              ),
+            child: ClipRRect(
+              borderRadius: route.previewRadius,
+              child: IgnorePointer(child: route.preview),
             ),
           ),
         Positioned(

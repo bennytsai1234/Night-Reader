@@ -44,6 +44,10 @@ class GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 在 [GlassMorph] 裡：玻璃由外面那塊共用，這裡只畫內容。
+    if (_GlassMorphContent._inside(context)) {
+      return _GlassMorphContent._reset(child: child);
+    }
     final reveal = GlassReveal._of(context);
     // 裡面的玻璃不再跟著淡：內容已經整塊淡入，再淡一次會變成平方。
     if (reveal == null) return _build(context, 1, child);
@@ -128,6 +132,97 @@ class GlassReveal extends InheritedWidget {
   @override
   bool updateShouldNotify(GlassReveal oldWidget) =>
       animation != oldWidget.animation;
+}
+
+/// 同一個位置換按鈕時（例如頁首進出多選：「整理」圓鈕換成「完成」膠囊），
+/// 玻璃留著不動、只改大小，裡面的圖示或文字交叉淡換（ADR 0022：玻璃只動、
+/// 內容只淡）。
+///
+/// [child] 是一顆玻璃按鈕（[GlassIconButton]、[GlassTextButton]、
+/// `GlassMenuButton`）：它自己的那塊玻璃交給這裡共用，只畫內容。換成不同
+/// 的按鈕（種類、圖示或文字不同）時交叉淡換，玻璃的寬度在同一段時間裡
+/// 連續變到新按鈕的寬度；圓鈕就是最窄的膠囊，兩者共用同一塊膠囊形玻璃。
+/// 不要放非玻璃的元件：它背後也會多出一塊玻璃。
+class GlassMorph extends StatelessWidget {
+  const GlassMorph({super.key, required this.child});
+
+  final Widget child;
+
+  /// 判斷是不是換了一顆按鈕：同種類但圖示或文字不同也算。
+  static Object _identityOf(Widget child) => switch (child) {
+    GlassTextButton(:final label, :final emphasized) => (
+      GlassTextButton,
+      label,
+      emphasized,
+    ),
+    GlassIconButton(:final icon, :final label) => (
+      GlassIconButton,
+      icon,
+      label,
+    ),
+    _ => (child.runtimeType, child.key),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppMotion.fade;
+    return GlassSurface(
+      borderRadius: AppRadius.pillShape,
+      shadow: false,
+      child: AnimatedSize(
+        duration: duration,
+        curve: AppMotion.fadeCurve,
+        child: AnimatedSwitcher(
+          duration: duration,
+          switchInCurve: AppMotion.fadeCurve,
+          switchOutCurve: AppMotion.fadeCurve,
+          // 大小只照新按鈕：舊的縮成 0×0 的錨點、從中央溢出畫，外面的
+          // AnimatedSize 一開始淡換就往新寬度走，不會等舊的淡完才縮。淡出
+          // 中的舊按鈕不接點擊、不給讀屏念。
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              for (final child in previous)
+                SizedBox.shrink(
+                  child: OverflowBox(
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: IgnorePointer(child: ExcludeSemantics(child: child)),
+                  ),
+                ),
+              ?current,
+            ],
+          ),
+          child: _GlassMorphContent(
+            key: ValueKey(_identityOf(child)),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 標出 [GlassMorph] 的內容：底下最近的一塊 [GlassSurface] 不畫自己的玻璃。
+class _GlassMorphContent extends InheritedWidget {
+  const _GlassMorphContent({super.key, required super.child}) : inside = true;
+
+  const _GlassMorphContent._reset({required super.child}) : inside = false;
+
+  final bool inside;
+
+  static bool _inside(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_GlassMorphContent>()
+          ?.inside ??
+      false;
+
+  @override
+  bool updateShouldNotify(_GlassMorphContent oldWidget) =>
+      inside != oldWidget.inside;
 }
 
 /// 玻璃從畫面 [edge] 那一側滑進滑出，不淡（ADR 0022）。
@@ -643,7 +738,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.foregroundColor,
     this.systemOverlayStyle,
     this.titleSheen = false,
+    this.morph = false,
   });
+
+  /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
+  /// 左右兩側每個位置的按鈕包在 [GlassMorph] 裡，玻璃留著只改大小、內容
+  /// 淡換。兩種頁首都要設 true，兩側也都只能放玻璃按鈕，按鈕數也要一樣。
+  final bool morph;
 
   final String? title;
   final Widget? titleWidget;
@@ -720,11 +821,28 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     Widget fadeIn(Widget child) => entrance == null
         ? child
         : FadeTransition(opacity: entrance.title, child: child);
-    final middle =
+    Widget slot(Widget button) => morph ? GlassMorph(child: button) : button;
+    Widget? middle =
         titleWidget ??
         (title == null
             ? null
-            : NavHeaderTitle(title!, color: fg, sheen: titleSheen));
+            : NavHeaderTitle(
+                title!,
+                key: morph ? ValueKey(title) : null,
+                color: fg,
+                sheen: titleSheen,
+              ));
+    if (morph && middle != null) {
+      final duration = MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : AppMotion.fade;
+      middle = AnimatedSwitcher(
+        duration: duration,
+        switchInCurve: AppMotion.fadeCurve,
+        switchOutCurve: AppMotion.fadeCurve,
+        child: middle,
+      );
+    }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
@@ -761,7 +879,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                             ),
                             child: IconTheme.merge(
                               data: IconThemeData(color: fg),
-                              child: effectiveLeading,
+                              child: slot(effectiveLeading),
                             ),
                           ),
                         ),
@@ -781,7 +899,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                                   for (var i = 0; i < actions.length; i++) ...[
                                     if (i > 0)
                                       const SizedBox(width: AppSpacing.sm),
-                                    actions[i],
+                                    slot(actions[i]),
                                   ],
                                 ],
                               ),

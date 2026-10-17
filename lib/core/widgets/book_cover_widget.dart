@@ -9,7 +9,11 @@ import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
-class BookCoverWidget extends StatelessWidget {
+/// 書的封面：只畫圖片本身加底下的陰影（ADR 0021）。
+///
+/// 換成另一張封面時（換封面、打勾或取消「統一封面」），舊封面留著，新封面
+/// 解碼好才以 [AppMotion.fade] 淡入蓋過去；不會先空一下或一幀換掉。
+class BookCoverWidget extends StatefulWidget {
   final String? coverUrl;
   final String bookName;
   final String? author;
@@ -27,23 +31,97 @@ class BookCoverWidget extends StatelessWidget {
     this.borderRadius,
   });
 
+  /// 載入失敗的封面：清單每次重建都會重新建立圖片，不記下來會一直重抓。
+  static final Set<String> _failedCoverSources = <String>{};
+
+  /// 忘掉失敗過的封面，下次顯示時再試。搜尋時上百個書源同時連線，封面常
+  /// 只是一時逾時；每次新搜尋都重來一次，不會整個 App 開著都不再試。
+  static void forgetFailedCovers() => _failedCoverSources.clear();
+
+  @override
+  State<BookCoverWidget> createState() => _BookCoverWidgetState();
+}
+
+/// 封面來源；null 是預設封面。
+String? _sourceOf(String? coverUrl) {
+  final source = coverUrl?.trim();
+  return source == null || source.isEmpty ? null : source;
+}
+
+class _BookCoverWidgetState extends State<BookCoverWidget>
+    with SingleTickerProviderStateMixin {
+  /// 換封面的交叉淡化；第一次換封面時才建立，書架上大多數封面用不到。
+  AnimationController? _swapController;
+  Animation<double>? _swapCurve;
+
+  AnimationController get _swap => _swapController ??=
+      AnimationController(vsync: this, duration: AppMotion.fade)
+        ..addStatusListener((status) {
+          if (status == AnimationStatus.completed &&
+              mounted &&
+              _outgoing != null) {
+            setState(() => _outgoing = null);
+          }
+        });
+
+  Animation<double> get _swapIn =>
+      _swapCurve ??= CurvedAnimation(parent: _swap, curve: AppMotion.fadeCurve);
+
+  /// 換封面時還畫著的舊封面（`source` 為 null 是預設封面）；不在換時為 null。
+  ({String? source})? _outgoing;
+
+  @override
+  void didUpdateWidget(BookCoverWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final before = _sourceOf(oldWidget.coverUrl);
+    final next = _sourceOf(widget.coverUrl);
+    if (before == next) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _outgoing = null;
+      return;
+    }
+    // 換到一半又換：新的那張還很淡時，畫面上主要還是更早那張，留著它；
+    // 換回更早那張時留著現在這張，從它淡回去。
+    final outgoing = _outgoing;
+    var keep = outgoing != null && _swap.value < 0.5 ? outgoing.source : before;
+    if (keep == next) keep = before;
+    _outgoing = (source: keep);
+    _swap.value = 0;
+  }
+
+  @override
+  void dispose() {
+    _swapController?.dispose();
+    super.dispose();
+  }
+
+  /// 新封面畫得出來了：開始淡入蓋過舊封面。
+  void _ready(String? source) {
+    if (_outgoing == null || source != _sourceOf(widget.coverUrl)) return;
+    if (_swap.isAnimating || _swap.isCompleted) return;
+    // 只牽動 [FadeTransition] 的繪製，建構途中也可以開始。
+    _swap.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final effectiveBorderRadius = borderRadius ?? AppRadius.cardXs;
-    final trimmedAuthor = author?.trim();
+    final effectiveBorderRadius = widget.borderRadius ?? AppRadius.cardXs;
+    final trimmedAuthor = widget.author?.trim();
     final semanticLabel = trimmedAuthor == null || trimmedAuthor.isEmpty
-        ? '《$bookName》封面'
-        : '《$bookName》封面，作者 $trimmedAuthor';
+        ? '《${widget.bookName}》封面'
+        : '《${widget.bookName}》封面，作者 $trimmedAuthor';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final source = _sourceOf(widget.coverUrl);
+    final outgoing = _outgoing;
 
     return Semantics(
       image: true,
       label: semanticLabel,
       child: ExcludeSemantics(
         child: Container(
-          width: width,
-          height: height,
+          width: widget.width,
+          height: widget.height,
           decoration: BoxDecoration(
             borderRadius: effectiveBorderRadius,
             boxShadow: [
@@ -68,22 +146,77 @@ class BookCoverWidget extends StatelessWidget {
             borderRadius: effectiveBorderRadius,
             // 網格以 double.infinity 撐滿格子，解碼尺寸要用實際版面大小。
             child: LayoutBuilder(
-              builder: (context, constraints) =>
-                  _buildCover(context, constraints),
+              builder: (context, constraints) {
+                // 每張封面以來源當 key：開始換時，原本那張連同已解碼的圖
+                // 原封不動變成底下的舊封面，不重新載入。
+                Widget layer(String? layerSource, Animation<double> opacity) =>
+                    KeyedSubtree(
+                      key: ValueKey(('cover', layerSource)),
+                      child: FadeTransition(
+                        opacity: opacity,
+                        child: _CoverImage(
+                          source: layerSource,
+                          bookName: widget.bookName,
+                          width: widget.width,
+                          height: widget.height,
+                          constraints: constraints,
+                          // 換封面時由外面這層淡入，圖本身不再淡一次。
+                          instant: outgoing != null,
+                          onReady: _ready,
+                        ),
+                      ),
+                    );
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (outgoing != null)
+                      layer(outgoing.source, kAlwaysCompleteAnimation),
+                    layer(
+                      source,
+                      outgoing == null ? kAlwaysCompleteAnimation : _swapIn,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildCover(BuildContext context, BoxConstraints constraints) {
-    final source = coverUrl?.trim();
-    if (source == null || source.isEmpty) {
-      return _buildDefaultCover();
-    }
+/// 一張封面圖：網路、檔案、記憶體或預設封面。
+class _CoverImage extends StatelessWidget {
+  const _CoverImage({
+    required this.source,
+    required this.bookName,
+    required this.width,
+    required this.height,
+    required this.constraints,
+    required this.instant,
+    required this.onReady,
+  });
 
-    if (_failedCoverSources.contains(source)) {
+  final String? source;
+  final String bookName;
+  final double width;
+  final double height;
+  final BoxConstraints constraints;
+
+  /// 圖到了直接出現、不淡入（換封面時由外層淡入）。
+  final bool instant;
+
+  /// 這張封面畫得出來了（圖解碼好，或改畫預設封面）。
+  final ValueChanged<String?> onReady;
+
+  Set<String> get _failed => BookCoverWidget._failedCoverSources;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = this.source;
+    if (source == null || _failed.contains(source)) {
+      onReady(source);
       return _buildDefaultCover();
     }
 
@@ -108,9 +241,7 @@ class BookCoverWidget extends StatelessWidget {
               reveal?.add(source);
               return _buildPlaceholder(context);
             }
-            reveal?.remove(source);
-            _failedCoverSources.add(source);
-            return _buildDefaultCover();
+            return _buildFailedCover(context, source);
           }
           return Image.memory(
             bytes,
@@ -166,9 +297,14 @@ class BookCoverWidget extends StatelessWidget {
 
   /// 載入中鋪一層與載入骨架同色的底（[Skeleton.colorOf]），不在每張縮圖上
   /// 轉圈；骨架換成書卡時封面位置的顏色不跳。
-  Widget _buildPlaceholder(BuildContext context) {
+  static Widget _buildPlaceholder(BuildContext context) {
     return ColoredBox(color: Skeleton.colorOf(context));
   }
+
+  /// 這次要不要直接出現：換封面中、在等一次淡入（[CoverRevealScope]，
+  /// 跟著整頁一起出現），或系統關閉動畫。
+  bool _instantIn(BuildContext context, CoverReveal? reveal) =>
+      instant || reveal != null || MediaQuery.disableAnimationsOf(context);
 
   /// 封面要非同步解碼，解碼好之前什麼都不畫，圖一到就突然跳出來；改成
   /// 先鋪 [_buildPlaceholder]，圖以 [AppMotion.fade] 淡入。已經在快取、同一
@@ -186,6 +322,7 @@ class BookCoverWidget extends StatelessWidget {
       reveal?.add(source);
     } else {
       reveal?.remove(source);
+      onReady(source);
     }
     if (wasSynchronouslyLoaded) return child;
     return Stack(
@@ -194,7 +331,7 @@ class BookCoverWidget extends StatelessWidget {
         _buildPlaceholder(context),
         AnimatedOpacity(
           opacity: frame == null ? 0 : 1,
-          duration: reveal != null || MediaQuery.disableAnimationsOf(context)
+          duration: _instantIn(context, reveal)
               ? Duration.zero
               : AppMotion.fade,
           curve: AppMotion.fadeCurve,
@@ -204,20 +341,67 @@ class BookCoverWidget extends StatelessWidget {
     );
   }
 
-  /// 載不到的封面記下來、不再讓一次淡入等它，畫預設封面。
+  /// 載不到的封面記下來、不再讓一次淡入等它，改畫預設封面：鋪在載入底上
+  /// 以 [AppMotion.fade] 淡入，不在載入底上一幀冒出來。
   Widget _buildFailedCover(BuildContext context, String source) {
-    CoverRevealScope.waitingOf(context)?.remove(source);
-    _failedCoverSources.add(source);
-    return _buildDefaultCover();
+    final reveal = CoverRevealScope.waitingOf(context);
+    reveal?.remove(source);
+    _failed.add(source);
+    onReady(source);
+    return _FadeInOnce(
+      instant: _instantIn(context, reveal),
+      background: _buildPlaceholder(context),
+      child: _buildDefaultCover(),
+    );
   }
 
   /// 沒有封面或載不到時畫預設封面（[DefaultBookCover]）。
   Widget _buildDefaultCover() => DefaultBookCover(bookName: bookName);
+}
 
-  /// 載入失敗的封面：清單每次重建都會重新建立圖片，不記下來會一直重抓。
-  static final Set<String> _failedCoverSources = <String>{};
+/// 第一次出現時在 [background] 上以 [AppMotion.fade] 淡入 [child]；之後重建
+/// 不再播。
+class _FadeInOnce extends StatefulWidget {
+  const _FadeInOnce({
+    required this.instant,
+    required this.background,
+    required this.child,
+  });
 
-  /// 忘掉失敗過的封面，下次顯示時再試。搜尋時上百個書源同時連線，封面常
-  /// 只是一時逾時；每次新搜尋都重來一次，不會整個 App 開著都不再試。
-  static void forgetFailedCovers() => _failedCoverSources.clear();
+  final bool instant;
+  final Widget background;
+  final Widget child;
+
+  @override
+  State<_FadeInOnce> createState() => _FadeInOnceState();
+}
+
+class _FadeInOnceState extends State<_FadeInOnce>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.fade,
+    value: widget.instant ? 1 : 0,
+  )..forward();
+  late final Animation<double> _opacity = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.fadeCurve,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.background,
+        FadeTransition(opacity: _opacity, child: widget.child),
+      ],
+    );
+  }
 }

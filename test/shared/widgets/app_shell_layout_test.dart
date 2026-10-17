@@ -124,4 +124,72 @@ void main() {
     expect(taps, [2]);
     handle.dispose();
   });
+
+  testWidgets('a pill dragged and dropped back on its tab slides home', (
+    tester,
+  ) async {
+    final controller = PageController();
+    addTearDown(controller.dispose);
+    final taps = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Scaffold(
+          body: PageView(
+            controller: controller,
+            children: const [SizedBox(), SizedBox(), SizedBox()],
+          ),
+          bottomNavigationBar: FloatingTabBar(
+            controller: controller,
+            currentIndex: 0,
+            onTap: taps.add,
+            items: const [
+              FloatingTabItem(
+                icon: Icons.book_outlined,
+                selectedIcon: Icons.book,
+                label: '書架',
+              ),
+              FloatingTabItem(
+                icon: Icons.explore_outlined,
+                selectedIcon: Icons.explore,
+                label: '發現',
+              ),
+              FloatingTabItem(
+                icon: Icons.person_outline,
+                selectedIcon: Icons.person,
+                label: '我的',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final pill = find.descendant(
+      of: find.byType(FloatingTabBar),
+      matching: find.byType(AnimatedScale),
+    );
+    final home = tester.getCenter(pill).dx;
+    final step = tester.getCenter(find.text('發現')).dx - home;
+
+    // 拖到第二個分頁附近，再拉回離原分頁四成格寬的地方放開（仍選原分頁）。
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('書架')),
+    );
+    await gesture.moveBy(const Offset(20, 0));
+    await gesture.moveBy(Offset(step - 20, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(-step * 0.6, 0));
+    await tester.pump();
+    final dropped = tester.getCenter(pill).dx;
+    expect(dropped - home, closeTo(step * 0.4, 1));
+    await gesture.up();
+    expect(taps, [0]);
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    // 膠囊在路上，不是一幀跳回原位。
+    expect(tester.getCenter(pill).dx, inExclusiveRange(home, dropped));
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(pill).dx, home);
+  });
 }

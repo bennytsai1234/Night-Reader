@@ -40,7 +40,8 @@ class ChapterScrollbar extends StatefulWidget {
   State<ChapterScrollbar> createState() => _ChapterScrollbarState();
 }
 
-class _ChapterScrollbarState extends State<ChapterScrollbar> {
+class _ChapterScrollbarState extends State<ChapterScrollbar>
+    with SingleTickerProviderStateMixin {
   /// 清單至少這麼多個畫面長才出現；更短的目錄直接滑就到了。
   static const double _minScreens = 4;
 
@@ -59,10 +60,38 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
   int _dragIndex = 0;
   Timer? _hideTimer;
 
+  /// 章名泡泡是玻璃，不淡：按下時從靠拖曳鈕的那一側由 0 長大，放開時縮
+  /// 回去（ADR 0022），時長與曲線同跳出的玻璃選單（`showGlassMenu`）。
+  late final AnimationController _bubble =
+      AnimationController(
+        vsync: this,
+        duration: AppMotion.menu,
+        reverseDuration: const Duration(milliseconds: 160),
+      )..addStatusListener((status) {
+        // 縮完才拿掉泡泡。
+        if (status == AnimationStatus.dismissed && mounted) setState(() {});
+      });
+  late final Animation<double> _bubbleScale = CurvedAnimation(
+    parent: _bubble,
+    curve: AppMotion.springCurve,
+    reverseCurve: Curves.easeInCubic.flipped,
+  );
+
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _bubble.dispose();
     super.dispose();
+  }
+
+  void _showBubble(bool shown) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _bubble.value = shown ? 1 : 0;
+    } else if (shown) {
+      _bubble.forward();
+    } else {
+      _bubble.reverse();
+    }
   }
 
   int get _span {
@@ -136,7 +165,7 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
             ),
           // 章名泡泡是玻璃，放在淡入的拖曳鈕外面（ADR 0022）：拖曳鈕還在淡入
           // 時就開始拖，泡泡也不會到淡入結束才突然糊上。
-          if (_long && _dragging)
+          if (_long && (_dragging || !_bubble.isDismissed))
             Positioned(
               key: const ValueKey('bubble'),
               top: widget.padding.top,
@@ -163,23 +192,27 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
             constraints: BoxConstraints(
               maxWidth: math.min(260, constraints.maxWidth * 0.7),
             ),
-            child: SizedBox(
-              height: AppGlass.buttonSize,
-              child: GlassSurface(
-                borderRadius: AppRadius.pillShape,
-                grouped: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                  ),
-                  child: Center(
-                    widthFactor: 1,
-                    child: Text(
-                      widget.labelFor(_dragIndex),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.uiMd.copyWith(
-                        color: scheme.onSurface,
+            child: ScaleTransition(
+              scale: _bubbleScale,
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                height: AppGlass.buttonSize,
+                child: GlassSurface(
+                  borderRadius: AppRadius.pillShape,
+                  grouped: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                    ),
+                    child: Center(
+                      widthFactor: 1,
+                      child: Text(
+                        widget.labelFor(_dragIndex),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.uiMd.copyWith(
+                          color: scheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
@@ -213,6 +246,7 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
                   _dragging = true;
                   _dragIndex = (_fraction * _lastTopIndex).round();
                 });
+                _showBubble(true);
               },
               onVerticalDragUpdate: (details) {
                 if (travel <= 0) return;
@@ -244,6 +278,7 @@ class _ChapterScrollbarState extends State<ChapterScrollbar> {
   void _endDrag() {
     if (!_dragging) return;
     setState(() => _dragging = false);
+    _showBubble(false);
     _scheduleHide();
   }
 }

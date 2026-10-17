@@ -139,6 +139,10 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
   /// 拖曳中的膠囊位置（以分頁索引為單位）；null 表示跟隨頁面。
   double? _dragPosition;
 
+  /// 放開拖曳後膠囊正用彈簧滑回分頁：放回原本的分頁時頁面沒有動，跟頁
+  /// 的膠囊不會自己過去，沒有這段會從手指的位置一幀跳回去。
+  bool _settling = false;
+
   double _pagePosition() {
     final controller = widget.controller;
     if (controller != null &&
@@ -228,14 +232,20 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
         0.0,
         (count - 1).toDouble(),
       );
-      setState(() => _dragPosition = position);
+      setState(() {
+        _dragPosition = position;
+        _settling = false;
+      });
     }
 
     void endDrag() {
       final position = _dragPosition;
       if (position == null) return;
       final index = position.round();
-      setState(() => _dragPosition = null);
+      setState(() {
+        _dragPosition = null;
+        _settling = true;
+      });
       if (index != widget.currentIndex) AppHaptics.select();
       widget.onTap(index);
     }
@@ -257,11 +267,18 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
             final target = _dragPosition ?? _pagePosition();
             return TweenAnimationBuilder<double>(
               tween: Tween(end: target),
-              // 拖曳與跟頁時直接跟手；只有跳轉（例如無 controller）時用彈簧。
-              duration: _dragPosition != null || widget.controller != null
-                  ? Duration.zero
-                  : AppMotion.spring,
+              // 拖曳與跟頁時直接跟手；跳轉（例如無 controller）與放開拖曳
+              // 後滑到分頁時用彈簧，放回原分頁也一樣滑回去。
+              duration:
+                  _dragPosition == null &&
+                      (widget.controller == null || _settling) &&
+                      !MediaQuery.disableAnimationsOf(context)
+                  ? AppMotion.spring
+                  : Duration.zero,
               curve: AppMotion.springCurve,
+              onEnd: () {
+                if (_settling) setState(() => _settling = false);
+              },
               builder: (context, position, _) {
                 return Stack(
                   children: [

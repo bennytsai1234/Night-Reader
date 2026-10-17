@@ -49,4 +49,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(picked, '移出書架');
   });
+
+  testWidgets('the lifted preview shadow grows and shrinks with the lift', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showContextPreviewMenu<String>(
+                context: context,
+                sourceRect: const Rect.fromLTWH(40, 200, 100, 140),
+                preview: const ColoredBox(color: Colors.brown),
+                entries: const [GlassMenuItem(value: '刪除', label: '刪除')],
+              ),
+              child: const Text('長按'),
+            ),
+          ),
+        ),
+      ),
+    );
+    BoxShadow shadow() {
+      final box = tester.widget<DecoratedBox>(
+        find
+            .ancestor(
+              of: find.byWidgetPredicate(
+                (w) => w is ColoredBox && w.color == Colors.brown,
+              ),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      return (box.decoration as BoxDecoration).boxShadow!.single;
+    }
+
+    await tester.tap(find.text('長按'));
+    await tester.pump();
+    // 第一幀還沒浮起：沒有陰影。
+    expect(shadow().color.a, 0);
+    expect(shadow().blurRadius, 0);
+
+    await tester.pump(const Duration(milliseconds: 60));
+    final mid = shadow();
+    expect(mid.blurRadius, inExclusiveRange(0, 30));
+    expect(mid.offset.dy, inExclusiveRange(0, 10));
+
+    await tester.pumpAndSettle();
+    final rest = shadow();
+    expect(rest.blurRadius, 30);
+    expect(rest.offset, const Offset(0, 10));
+    final full = rest.color.a;
+    expect(full, greaterThan(0));
+
+    // 收起時陰影跟著退，最後一幀之前已經很淡，不會在結束那一刻才消失。
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(shadow().color.a, inExclusiveRange(0, full));
+    await tester.pump(const Duration(milliseconds: 75));
+    expect(shadow().color.a, lessThan(full * 0.1));
+    await tester.pumpAndSettle();
+    expect(find.text('刪除'), findsNothing);
+  });
 }

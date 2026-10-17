@@ -11,9 +11,13 @@ import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/glass_motion.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   _FakeBookDao(this.shelf);
@@ -24,7 +28,12 @@ class _FakeBookDao extends Fake implements BookDao {
   Future<List<Book>> getInBookshelf() async => List.of(shelf);
 }
 
-class _FakeBookSourceDao extends Fake implements BookSourceDao {}
+class _FakeBookSourceDao extends Fake implements BookSourceDao {
+  final StreamController<bool> hasAny = StreamController<bool>.broadcast();
+
+  @override
+  Stream<bool> watchHasAny() => hasAny.stream;
+}
 
 class _FakeChapterDao extends Fake implements ChapterDao {}
 
@@ -37,6 +46,8 @@ void main() {
   ]..forEach((book) => book.isInBookshelf = true);
 
   late BookshelfProvider provider;
+  late _FakeBookDao bookDao;
+  late _FakeBookSourceDao sourceDao;
 
   setUp(() async {
     await GetIt.instance.reset();
@@ -45,8 +56,8 @@ void main() {
       ..registerSingleton<SharedPreferences>(
         await SharedPreferences.getInstance(),
       )
-      ..registerSingleton<BookDao>(_FakeBookDao(books))
-      ..registerSingleton<BookSourceDao>(_FakeBookSourceDao())
+      ..registerSingleton<BookDao>(bookDao = _FakeBookDao(List.of(books)))
+      ..registerSingleton<BookSourceDao>(sourceDao = _FakeBookSourceDao())
       ..registerSingleton<ChapterDao>(_FakeChapterDao());
     provider = BookshelfProvider(
       keepBookDownloaded: (url, {hasNewChapters = false}) async {},
@@ -58,7 +69,7 @@ void main() {
     await GetIt.instance.reset();
   });
 
-  Future<void> pumpShelf(WidgetTester tester) async {
+  Future<void> pumpShelf(WidgetTester tester, {bool settle = true}) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(AppStyle.paper, Brightness.light),
@@ -68,7 +79,25 @@ void main() {
         ),
       ),
     );
+    if (settle) await tester.pumpAndSettle();
+  }
+
+  /// 照書架重新建立 provider（例如換成空書架或很多本書）。
+  void reshelve(List<Book> shelf) {
+    provider.dispose();
+    bookDao.shelf
+      ..clear()
+      ..addAll(shelf);
+    provider = BookshelfProvider(
+      keepBookDownloaded: (url, {hasNewChapters = false}) async {},
+    );
+  }
+
+  Future<void> enterSelect(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('整理書架'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('選取'));
+    await tester.pump();
   }
 
   Offset slotOf(WidgetTester tester, String name) =>
@@ -112,5 +141,144 @@ void main() {
     expect(find.byType(GridView), findsNothing);
     expect(find.byType(ListView), findsOneWidget);
     expect(find.widgetWithText(BookshelfListCard, '甲'), findsWidgets);
+  });
+
+  testWidgets('移出的書先淡出，淡完其他書卡才移過去補位', (tester) async {
+    await pumpShelf(tester);
+    final slots = [
+      for (final name in ['甲', '乙', '丙']) slotOf(tester, name),
+    ];
+
+    bookDao.shelf.removeWhere((book) => book.name == '乙');
+    unawaited(provider.loadBooks());
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(AppMotion.fade ~/ 2);
+    // 乙還在原位淡出，丙還沒動。
+    expect(slotOf(tester, '乙'), slots[1]);
+    expect(slotOf(tester, '丙'), slots[2]);
+
+    await tester.pump(AppMotion.fade);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.widgetWithText(BookshelfGridTile, '乙'), findsNothing);
+    final midway = slotOf(tester, '丙').dx;
+    expect(midway, lessThan(slots[2].dx));
+    expect(midway, greaterThan(slots[1].dx));
+
+    await tester.pumpAndSettle();
+    expect(slotOf(tester, '丙'), slots[1]);
+  });
+
+  testWidgets('進出多選時標題淡換、頁首按鈕的玻璃留著只改寬度', (tester) async {
+    await pumpShelf(tester);
+    double leadingWidth() =>
+        tester.getSize(find.byType(GlassMorph).first).width;
+    final iconWidth = leadingWidth();
+
+    await enterSelect(tester);
+    await tester.pump(AppMotion.fade ~/ 2);
+    // 淡換途中新舊標題都在，玻璃不在淡入裡，寬度在半路。
+    expect(find.text('書架'), findsOneWidget);
+    expect(find.text('已選 0 本'), findsOneWidget);
+    expectNoGlassUnderFade(tester);
+    final midway = leadingWidth();
+    expect(midway, greaterThan(iconWidth));
+
+    await tester.pumpAndSettle();
+    expect(find.text('書架'), findsNothing);
+    final textWidth = leadingWidth();
+    expect(midway, lessThan(textWidth));
+    // 頁首兩側各只有一塊玻璃（按鈕自己的玻璃交給 GlassMorph）。
+    expect(
+      find.descendant(
+        of: find.byType(GlassNavHeader),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsNWidgets(2),
+    );
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+    expect(find.text('書架'), findsOneWidget);
+    expect(leadingWidth(), iconWidth);
+  });
+
+  testWidgets('自訂排序的列表進出多選時保留捲動位置，勾選圈滑進來', (tester) async {
+    reshelve([
+      for (var i = 0; i < 30; i++)
+        Book(bookUrl: 'm$i', origin: 'o', name: '書$i', order: i)
+          ..isInBookshelf = true,
+    ]);
+    await provider.setSortMode(BookshelfSortMode.custom);
+    provider.setGridView(false);
+    await pumpShelf(tester);
+    expect(find.byType(ReorderableListView), findsOneWidget);
+
+    await tester.drag(find.byType(ReorderableListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(ReorderableListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    final offset = scrollable.position.pixels;
+    expect(offset, greaterThan(0));
+
+    await enterSelect(tester);
+    await tester.pump(AppMotion.menu ~/ 2);
+    // 同一個清單、同一個捲動位置；勾選圈的位子正在讓出來。
+    expect(find.byType(ReorderableListView), findsOneWidget);
+    expect(
+      tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(ReorderableListView),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position
+          .pixels,
+      offset,
+    );
+    final slot = tester
+        .getSize(
+          find
+              .ancestor(
+                of: find.byType(BookshelfCheckMark).first,
+                matching: find.byType(ClipRect),
+              )
+              .first,
+        )
+        .width;
+    expect(slot, inExclusiveRange(0, BookshelfCheckMark.size + 10));
+
+    await tester.pumpAndSettle();
+    expect(scrollable.position.pixels, offset);
+  });
+
+  testWidgets('全新安裝的空書架等查到書源才換場，不先畫搜尋書籍', (tester) async {
+    reshelve([]);
+    await pumpShelf(tester, settle: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('書架還是空的'), findsNothing);
+    expect(find.text('搜尋書籍'), findsNothing);
+
+    sourceDao.hasAny.add(false);
+    await tester.pump();
+    expect(find.text('搜尋書籍'), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.text('匯入書源'), findsOneWidget);
+
+    // 之後加了書源：兩種空書架交叉淡換。
+    sourceDao.hasAny.add(true);
+    await tester.pump();
+    await tester.pump(AppMotion.fade ~/ 2);
+    expect(find.text('匯入書源'), findsOneWidget);
+    expect(find.text('搜尋書籍'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('匯入書源'), findsNothing);
+    expect(find.text('搜尋書籍'), findsOneWidget);
   });
 }
