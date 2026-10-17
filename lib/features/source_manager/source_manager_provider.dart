@@ -11,6 +11,8 @@ import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/core/storage/app_storage_paths.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/import_preview_dialog.dart';
@@ -341,6 +343,31 @@ class SourceManagerProvider with ChangeNotifier {
       _pendingSourceMutations.isNotEmpty;
   bool get isMutationBusy => _isLoading || _hasActiveMutation;
 
+  /// 上次讀完時的書源數，存在偏好設定、開頁時同步讀出；第一次讀取完成前
+  /// 照它畫骨架的列數，並決定要不要先留出搜尋框與底部工具列。沒有紀錄
+  /// （第一次開新版）時當作有書源。
+  int? lastSourceCount;
+  static const String _lastCountKey = 'source_manager_last_count';
+
+  /// 頁面要不要畫「有書源」的版面（頁首搜尋框、底部工具列）。還沒有資料的
+  /// 載入中照上次的紀錄，版面從第一幀就和讀完時一樣，清單出現時不被推動。
+  bool get expectsSources => _isLoading && _sources.isEmpty
+      ? (lastSourceCount ?? 1) > 0
+      : _sources.isNotEmpty;
+
+  void _rememberCount(int count) {
+    if (lastSourceCount == count) return;
+    lastSourceCount = count;
+    unawaited(
+      getIt<SharedPreferences>().setInt(_lastCountKey, count).catchError((
+        Object error,
+      ) {
+        AppLog.w('書源數的紀錄寫入失敗: $error');
+        return false;
+      }),
+    );
+  }
+
   /// 清單是否照手動順序完整列出；決定清單用可拖曳排序的版面。與一時的忙碌
   /// 狀態無關，切開關時版面才不會整個換掉重建。
   bool get showsManualOrder =>
@@ -369,7 +396,8 @@ class SourceManagerProvider with ChangeNotifier {
     SourceImportService? importService,
     CheckSourceService? sourceCheckService,
   }) : _importService = importService ?? SourceImportService(),
-       checkService = sourceCheckService ?? getIt<CheckSourceService>() {
+       checkService = sourceCheckService ?? getIt<CheckSourceService>(),
+       lastSourceCount = getIt<SharedPreferences>().getInt(_lastCountKey) {
     _seenCheckRunCount = checkService.finishedRunCount;
     checkService.addListener(_handleCheckServiceChanged);
     unawaited(
@@ -429,6 +457,7 @@ class SourceManagerProvider with ChangeNotifier {
       final loadedSources = await _dao.getAllPart();
       if (_disposed || generation != _loadGeneration) return;
       _sources = loadedSources;
+      _rememberCount(loadedSources.length);
       _selectedUrls.retainAll(
         loadedSources.map((source) => source.bookSourceUrl).toSet(),
       );

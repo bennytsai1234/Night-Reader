@@ -25,10 +25,12 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
+import 'widgets/source_list_skeleton.dart';
 import 'widgets/source_batch_toolbar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
@@ -68,9 +70,38 @@ class _SourceManagerPageContent extends StatefulWidget {
       _SourceManagerPageContentState();
 }
 
-class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
+class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
+    with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   bool _isImporting = false;
+
+  /// 「有書源」的版面（頁首搜尋框、底部工具列）出現的進度，1 是完整出現。
+  /// 第一幀照上次的紀錄直接到位（`SourceManagerProvider.expectsSources`）；
+  /// 之後有無書源改變（讀完發現和紀錄不同、刪光、第一次匯入）時，搜尋框
+  /// 從頁首下緣長出來、工具列從底部滑進來，清單跟著連續讓位，不在一幀內
+  /// 被推開。
+  late final AnimationController _chrome = AnimationController(
+    vsync: this,
+    duration: AppMotion.menu,
+  );
+  late final Animation<double> _chromeShown = CurvedAnimation(
+    parent: _chrome,
+    curve: AppMotion.menuCurve,
+  );
+  bool? _chromeTarget;
+
+  void _syncChrome(BuildContext context, bool shown) {
+    if (_chromeTarget == shown) return;
+    final first = _chromeTarget == null;
+    _chromeTarget = shown;
+    if (first || MediaQuery.disableAnimationsOf(context)) {
+      _chrome.value = shown ? 1 : 0;
+    } else if (shown) {
+      _chrome.forward();
+    } else {
+      _chrome.reverse();
+    }
+  }
 
   /// Telegram 式編輯模式：左側勾選圈、底部批次工具列。有選取時也視為
   /// 編輯模式，避免選取狀態沒有出口。
@@ -78,6 +109,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   @override
   void dispose() {
+    _chrome.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -108,101 +140,102 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
           _editMode = false;
         }
         final editing = _isEditing(provider) && provider.totalSourceCount > 0;
+        _syncChrome(context, provider.expectsSources);
+        final body = Builder(
+          builder: (bodyContext) => _buildMainContent(bodyContext, provider),
+        );
         return PopScope<void>(
           canPop: !editing,
           onPopInvokedWithResult: (didPop, _) {
             if (!didPop) _exitEditMode(provider);
           },
-          child: Scaffold(
-            extendBodyBehindAppBar: true,
-            extendBody: true,
-            appBar: _buildHeader(
-              context,
-              nav,
-              provider,
-              editing: editing,
-              mutationEnabled: mutationEnabled,
+          // 頁首與底部工具列的高度跟著 [_chrome] 變，Scaffold 要每一幀
+          // 重新量；清單是同一個 [body]，只隨讓位的內距重排。
+          child: AnimatedBuilder(
+            animation: _chromeShown,
+            builder: (context, _) => Scaffold(
+              extendBodyBehindAppBar: true,
+              extendBody: true,
+              appBar: _buildHeader(
+                context,
+                nav,
+                provider,
+                editing: editing,
+                mutationEnabled: mutationEnabled,
+              ),
+              body: body,
+              bottomNavigationBar: _buildBottomBar(context, provider),
             ),
-            body: Builder(
-              builder: (bodyContext) =>
-                  _buildMainContent(bodyContext, provider),
-            ),
-            // 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。
-            bottomNavigationBar: provider.totalSourceCount > 0
-                ? SelectActionBar(
-                    provider: provider,
-                    externallyBusy: _isImporting,
-                    onEnable: () => _runAction(
-                      () => provider.batchSetEnabled(true),
-                      errorPrefix: '啟用書源失敗',
-                    ),
-                    onDisable: () => _runAction(
-                      () => provider.batchSetEnabled(false),
-                      errorPrefix: '停用書源失敗',
-                    ),
-                    onAddGroup: () => _showSelectionGroupDialog(
-                      context,
-                      provider,
-                      remove: false,
-                    ),
-                    onRemoveGroup: () => _showSelectionGroupDialog(
-                      context,
-                      provider,
-                      remove: true,
-                    ),
-                    onEnableExplore: () => _runAction(
-                      () => provider.batchSetEnabledExplore(true),
-                      errorPrefix: '啟用發現失敗',
-                    ),
-                    onDisableExplore: () => _runAction(
-                      () => provider.batchSetEnabledExplore(false),
-                      errorPrefix: '停用發現失敗',
-                    ),
-                    onSelectInterval: provider.checkSelectedInterval,
-                    onMoveToTop: () => _runAction(
-                      provider.moveSelectedToTop,
-                      errorPrefix: '移動書源失敗',
-                    ),
-                    onMoveToBottom: () => _runAction(
-                      provider.moveSelectedToBottom,
-                      errorPrefix: '移動書源失敗',
-                    ),
-                    onExport: () => _runAction(() async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      final copiedToClipboard = await provider.exportSelected();
-                      if (!mounted) return;
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出',
-                          ),
-                        ),
-                      );
-                    }, errorPrefix: '匯出書源失敗'),
-                    onShare: () => _runAction(
-                      provider.shareSelectedSources,
-                      errorPrefix: '分享書源失敗',
-                    ),
-                    onCheckSource: () {
-                      SourceManagerDialogs.showCheckConfigDialog(
-                        context,
-                        provider,
-                      );
-                    },
-                    onClearCheckMarks: () =>
-                        SourceManagerDialogs.clearCheckMarks(
-                          context,
-                          provider,
-                          urls: provider.selectedUrls,
-                        ),
-                    onDelete: () {
-                      _confirmDeleteSelected(context, provider);
-                    },
-                  )
-                : null,
           ),
         );
       },
+    );
+  }
+
+  /// 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。出現與收起時
+  /// 從底部滑進滑出：佔的高度跟著 [_chrome] 縮放，清單底部的讓位也連續
+  /// 變化。
+  Widget? _buildBottomBar(
+    BuildContext context,
+    SourceManagerProvider provider,
+  ) {
+    final shown = _chromeShown.value;
+    if (shown == 0) return null;
+    return Align(
+      alignment: Alignment.topCenter,
+      heightFactor: shown,
+      child: SelectActionBar(
+        provider: provider,
+        externallyBusy: _isImporting,
+        onEnable: () => _runAction(
+          () => provider.batchSetEnabled(true),
+          errorPrefix: '啟用書源失敗',
+        ),
+        onDisable: () => _runAction(
+          () => provider.batchSetEnabled(false),
+          errorPrefix: '停用書源失敗',
+        ),
+        onAddGroup: () =>
+            _showSelectionGroupDialog(context, provider, remove: false),
+        onRemoveGroup: () =>
+            _showSelectionGroupDialog(context, provider, remove: true),
+        onEnableExplore: () => _runAction(
+          () => provider.batchSetEnabledExplore(true),
+          errorPrefix: '啟用發現失敗',
+        ),
+        onDisableExplore: () => _runAction(
+          () => provider.batchSetEnabledExplore(false),
+          errorPrefix: '停用發現失敗',
+        ),
+        onSelectInterval: provider.checkSelectedInterval,
+        onMoveToTop: () =>
+            _runAction(provider.moveSelectedToTop, errorPrefix: '移動書源失敗'),
+        onMoveToBottom: () =>
+            _runAction(provider.moveSelectedToBottom, errorPrefix: '移動書源失敗'),
+        onExport: () => _runAction(() async {
+          final messenger = ScaffoldMessenger.of(context);
+          final copiedToClipboard = await provider.exportSelected();
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出'),
+            ),
+          );
+        }, errorPrefix: '匯出書源失敗'),
+        onShare: () =>
+            _runAction(provider.shareSelectedSources, errorPrefix: '分享書源失敗'),
+        onCheckSource: () {
+          SourceManagerDialogs.showCheckConfigDialog(context, provider);
+        },
+        onClearCheckMarks: () => SourceManagerDialogs.clearCheckMarks(
+          context,
+          provider,
+          urls: provider.selectedUrls,
+        ),
+        onDelete: () {
+          _confirmDeleteSelected(context, provider);
+        },
+      ),
     );
   }
 
@@ -213,23 +246,34 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
     required bool editing,
     required bool mutationEnabled,
   }) {
-    final showSearch = provider.totalSourceCount > 0;
+    // 搜尋框跟著「有書源」的版面從頁首下緣長出、收回（見 [_chrome]）；
+    // 讀取完成前照上次的紀錄先留好。
+    final search = _chromeShown.value;
+    final showSearch = search > 0;
     final showStatus =
         provider.checkService.isChecking || provider.hasLastCheckReport;
     final bottomChildren = <Widget>[
       if (showSearch)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppGrouped.margin,
-            AppSpacing.xs,
-            AppGrouped.margin,
-            AppSpacing.xs,
-          ),
-          child: SearchField(
-            controller: _searchController,
-            hintText: '搜尋書源名稱、網址',
-            glass: true,
-            onChanged: provider.setSearchQuery,
+        ClipRect(
+          // 完整出現時不裁，玻璃的陰影照常伸出去。
+          clipBehavior: search < 1 ? Clip.hardEdge : Clip.none,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            heightFactor: search,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppGrouped.margin,
+                AppSpacing.xs,
+                AppGrouped.margin,
+                AppSpacing.xs,
+              ),
+              child: SearchField(
+                controller: _searchController,
+                hintText: '搜尋書源名稱、網址',
+                glass: true,
+                onChanged: provider.setSearchQuery,
+              ),
+            ),
           ),
         ),
       if (showStatus)
@@ -267,7 +311,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         ),
     ];
     final double bottomHeight =
-        (showSearch ? SearchField.height + AppSpacing.xs * 2 : 0.0) +
+        (SearchField.height + AppSpacing.xs * 2) * search +
         (showStatus ? SourceCheckStatusBar.height + AppSpacing.xs * 2 : 0.0) +
         (_isImporting ? 2.0 : 0.0);
     final bottom = bottomChildren.isEmpty
@@ -352,16 +396,33 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
 
   Widget _buildMainContent(BuildContext context, SourceManagerProvider p) {
     final padding = MediaQuery.paddingOf(context);
+    // 只有還沒有任何資料時才畫骨架；之後的重新載入保留清單與捲動位置。
+    // 列數照上次讀完時的書源數；上次沒有書源時不畫列，空著等空頁淡入。
+    return SkeletonSwitcher(
+      loading: p.isLoading && p.totalSourceCount == 0,
+      // 底色就是頁面底色（分組清單的底色與頁面相同），骨架不另鋪底，
+      // 換場時兩層一起淡也不會透出別的顏色。
+      skeleton: p.expectsSources
+          ? SourceListSkeleton(
+              padding: EdgeInsets.only(
+                top: padding.top + AppSpacing.sm,
+                bottom: padding.bottom + AppSpacing.xxl,
+              ),
+              count: p.lastSourceCount,
+            )
+          : const SizedBox.shrink(),
+      builder: (context) => _buildLoadedContent(context, p),
+    );
+  }
+
+  Widget _buildLoadedContent(BuildContext context, SourceManagerProvider p) {
+    final padding = MediaQuery.paddingOf(context);
     final chrome = AppChrome.of(context);
     Widget stateView(Widget child) => Padding(
       padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
       child: child,
     );
 
-    // 只有還沒有任何資料時才整頁轉圈；之後的重新載入保留清單與捲動位置。
-    if (p.isLoading && p.totalSourceCount == 0) {
-      return stateView(const Center(child: CircularProgressIndicator()));
-    }
     if (p.loadErrorMessage != null && p.totalSourceCount == 0) {
       return stateView(
         AppStateView(
