@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
@@ -405,6 +406,52 @@ void main() {
 
     provider.onSearchFinish(isEmpty: false);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('sliding rows hold the motion gate until they settle', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pumpAndSettle();
+    expect(MotionGate.instance.isMoving, isFalse);
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    // 滑到一半又重排：接著滑，閘門一直持有到最後一列到位。
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    await tester.pumpAndSettle();
+    expect(MotionGate.instance.isMoving, isFalse);
+
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('leaving the page mid-slide releases the motion gate', (
+    tester,
+  ) async {
+    final provider = await pumpSearch(tester);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('甲書'), book('乙書')]);
+    await tester.pumpAndSettle();
+
+    provider.onSearchSuccess([book('乙書'), book('甲書')]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(MotionGate.instance.isMoving, isTrue);
+
+    // 列被拿掉（離開頁面、捲出畫面回收）時一起放開。
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(MotionGate.instance.isMoving, isFalse);
   });
 
   testWidgets('a new book above pushes the rows below down gradually', (
