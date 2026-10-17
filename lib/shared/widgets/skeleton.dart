@@ -169,8 +169,8 @@ class SkeletonLine extends StatelessWidget {
 }
 
 /// 骨架與真實內容之間的切換：資料到了以骨架換場（[SkeletonReveal]，使用者
-/// 在「外觀與主題」選的方式與時長）換成內容。重新載入時以 [AppMotion.fade]
-/// 整頁淡回骨架。
+/// 在「外觀與主題」選的方式與時長）換成內容；重新載入時骨架也照同樣的方式
+/// 與時長長回來。
 ///
 /// 兩者都撐滿父層（呼叫端給的是整頁內容區）。[builder] 只在載入完成後
 /// 才呼叫。
@@ -181,6 +181,7 @@ class SkeletonSwitcher extends StatefulWidget {
     required this.skeleton,
     required this.builder,
     this.waitForCovers = false,
+    this.entrance,
   });
 
   final bool loading;
@@ -192,6 +193,11 @@ class SkeletonSwitcher extends StatefulWidget {
   /// 書卡、封面再一張張浮出來。
   final bool waitForCovers;
 
+  /// 骨架自己的進場（開 App 時書架的骨架，見 `LaunchEntrance`）：播放中骨架
+  /// 照它的進度、以骨架換場的方式出現；這段期間資料到了也先不建內容、不換場，
+  /// 播完才接著做（ADR 0018）。null 時骨架一開始就在。
+  final Animation<double>? entrance;
+
   @override
   State<SkeletonSwitcher> createState() => _SkeletonSwitcherState();
 }
@@ -200,8 +206,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    reverseDuration: AppMotion.fade,
-    value: widget.loading ? 0 : 1,
+    value: widget.loading || _entering ? 0 : 1,
   )..addStatusListener((_) => setState(() {}));
   late final Animation<double> _content = CurvedAnimation(
     parent: _controller,
@@ -209,7 +214,10 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   );
   late final Animation<double> _skeleton = ReverseAnimation(_content);
 
-  /// 這一次換成內容是不是由左而右；淡回骨架一律整頁淡。
+  /// 這一次換進來的是哪一層：換成內容，或重新載入時長回骨架。
+  SkeletonRevealSide _incoming = SkeletonRevealSide.content;
+
+  /// 這一次換場是不是由左而右。
   bool _sweep = false;
 
   /// 淡入前等封面的那一輪；等完或重新載入就換掉。
@@ -218,15 +226,43 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   /// 重新載入、淡回骨架時，淡出中的內容沿用上一次建好的樣子。
   Widget? _lastContent;
 
+  /// 骨架還在進場：這段期間當作還在載入。
+  bool get _entering {
+    final entrance = widget.entrance;
+    return entrance != null && !entrance.isCompleted;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.entrance?.addStatusListener(_onEntranceStatus);
+  }
+
   @override
   void didUpdateWidget(SkeletonSwitcher oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(widget.entrance, oldWidget.entrance)) {
+      oldWidget.entrance?.removeStatusListener(_onEntranceStatus);
+      widget.entrance?.addStatusListener(_onEntranceStatus);
+    }
     if (widget.loading == oldWidget.loading) return;
     _reveal = null;
     if (widget.loading) {
-      _sweep = false;
+      _prepare(SkeletonRevealSide.skeleton);
       _controller.reverse();
-    } else if (widget.waitForCovers) {
+    } else if (!_entering) {
+      _onLoaded();
+    }
+  }
+
+  void _onEntranceStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted) return;
+    setState(() {});
+    if (!widget.loading) _onLoaded();
+  }
+
+  void _onLoaded() {
+    if (widget.waitForCovers) {
       // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。
       _controller.value = 0;
       final reveal = _reveal = CoverReveal();
@@ -241,14 +277,23 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   }
 
   void _revealContent() {
-    final reveal = SkeletonReveal.of(context);
-    _sweep = reveal.sweeps;
-    _controller.duration = reveal.duration;
+    _prepare(SkeletonRevealSide.content);
     _controller.forward();
+  }
+
+  /// 這一次換場照使用者選的方式與時長。
+  void _prepare(SkeletonRevealSide incoming) {
+    final reveal = SkeletonReveal.of(context);
+    _incoming = incoming;
+    _sweep = reveal.sweeps;
+    _controller
+      ..duration = reveal.duration
+      ..reverseDuration = reveal.duration;
   }
 
   @override
   void dispose() {
+    widget.entrance?.removeStatusListener(_onEntranceStatus);
     _controller.dispose();
     super.dispose();
   }
@@ -256,9 +301,11 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   @override
   Widget build(BuildContext context) {
     final reveal = _reveal;
-    final hidden = widget.loading || reveal != null && reveal.waiting;
+    final entrance = _entering ? widget.entrance : null;
+    final loading = widget.loading || entrance != null;
+    final hidden = loading || reveal != null && reveal.waiting;
     Widget? content = _lastContent;
-    if (!widget.loading) {
+    if (!loading) {
       content = _lastContent = reveal == null
           ? Builder(builder: widget.builder)
           : CoverRevealScope(
@@ -273,9 +320,14 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
         if (!_controller.isCompleted)
           SkeletonRevealLayer(
             key: const ValueKey('skeleton'),
-            opacity: _skeleton,
+            opacity: entrance ?? _skeleton,
             side: SkeletonRevealSide.skeleton,
-            sweep: _sweep,
+            incoming: entrance == null
+                ? _incoming
+                : SkeletonRevealSide.skeleton,
+            sweep: entrance == null
+                ? _sweep
+                : SkeletonReveal.of(context).sweeps,
             child: Skeleton(child: widget.skeleton),
           ),
         // 等封面時內容已經建在骨架底下，只是還全透明。
@@ -284,6 +336,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
             key: const ValueKey('content'),
             opacity: _content,
             side: SkeletonRevealSide.content,
+            incoming: _incoming,
             sweep: _sweep,
             // 還沒淡入或正在淡出的內容不接點擊、不給讀屏念。
             child: IgnorePointer(

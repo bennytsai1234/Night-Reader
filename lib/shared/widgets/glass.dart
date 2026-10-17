@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'launch_entrance.dart';
 
 /// 霧面紙材質：紙／墨色調、輕度背景模糊、髮絲亮邊與漫射陰影。
 ///
@@ -702,6 +703,28 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
+    // 開 App 的進場：按鈕從上緣滑進來，標題淡入。
+    final entrance = LaunchEntrance.maybeOf(context);
+    Widget slideIn(Widget child) => entrance == null
+        ? child
+        : AnimatedBuilder(
+            animation: entrance.header,
+            child: child,
+            builder: (context, child) => GlassSlide(
+              shown: entrance.header.value,
+              edge: AxisDirection.up,
+              gap: topPadding,
+              child: child!,
+            ),
+          );
+    Widget fadeIn(Widget child) => entrance == null
+        ? child
+        : FadeTransition(opacity: entrance.title, child: child);
+    final middle =
+        titleWidget ??
+        (title == null
+            ? null
+            : NavHeaderTitle(title!, color: fg, sheen: titleSheen));
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
@@ -731,41 +754,37 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   middleSpacing: AppSpacing.md,
                   leading: effectiveLeading == null
                       ? null
-                      : Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppGrouped.margin,
-                          ),
-                          child: IconTheme.merge(
-                            data: IconThemeData(color: fg),
-                            child: effectiveLeading,
+                      : slideIn(
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: AppGrouped.margin,
+                            ),
+                            child: IconTheme.merge(
+                              data: IconThemeData(color: fg),
+                              child: effectiveLeading,
+                            ),
                           ),
                         ),
-                  middle:
-                      titleWidget ??
-                      (title == null
-                          ? null
-                          : NavHeaderTitle(
-                              title!,
-                              color: fg,
-                              sheen: titleSheen,
-                            )),
+                  middle: middle == null ? null : fadeIn(middle),
                   trailing: actions.isEmpty
                       ? null
-                      : Padding(
-                          padding: const EdgeInsets.only(
-                            right: AppGrouped.margin,
-                          ),
-                          child: IconTheme.merge(
-                            data: IconThemeData(color: fg),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (var i = 0; i < actions.length; i++) ...[
-                                  if (i > 0)
-                                    const SizedBox(width: AppSpacing.sm),
-                                  actions[i],
+                      : slideIn(
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              right: AppGrouped.margin,
+                            ),
+                            child: IconTheme.merge(
+                              data: IconThemeData(color: fg),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (var i = 0; i < actions.length; i++) ...[
+                                    if (i > 0)
+                                      const SizedBox(width: AppSpacing.sm),
+                                    actions[i],
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),

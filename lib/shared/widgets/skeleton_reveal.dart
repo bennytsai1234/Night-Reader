@@ -20,7 +20,8 @@ enum SkeletonRevealStyle {
       values.where((value) => value.name == name).firstOrNull ?? sweep;
 }
 
-/// 骨架換場的設定，掛在主題上；書架、發現、書籍詳情與閱讀器共用。
+/// 骨架換場的設定，掛在主題上；書架、發現、書籍詳情與閱讀器共用。骨架出現
+/// （開 App、重新載入、閱讀器蓋上紙）也照同一個方式與時長。
 @immutable
 class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
   const SkeletonReveal({
@@ -45,16 +46,17 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
 
   bool get sweeps => style == SkeletonRevealStyle.sweep;
 
-  /// 內容在橫向位置 [u]（0 左緣、1 右緣）的濃度：[progress] 是整段換場
-  /// 套過曲線的進度，0 是骨架、1 是內容。
-  static double contentOpacityAt(
+  /// 換進來的那一層（換成內容時是內容，骨架出現時是骨架）在橫向位置
+  /// [u]（0 左緣、1 右緣）的濃度：[progress] 是整段換場套過曲線的進度，
+  /// 0 還沒開始、1 完全換好。
+  static double incomingOpacityAt(
     double progress,
     double u, {
     bool sweep = true,
   }) => sweep ? (2 * progress - u).clamp(0.0, 1.0) : progress;
 
-  /// 由左而右時，內容濃度沿橫向的轉折點（位置、濃度），依位置排好。濃度
-  /// 在轉折點之間是直線，畫成漸層只要這幾個停點。
+  /// 由左而右時，換進來那一層的濃度沿橫向的轉折點（位置、濃度），依位置
+  /// 排好。濃度在轉折點之間是直線，畫成漸層只要這幾個停點。
   static List<(double, double)> sweepStops(double progress) {
     final points = <double>{0, 1};
     for (final u in [2 * progress - 1, 2 * progress]) {
@@ -62,7 +64,7 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
     }
     return [
       for (final u in points.toList()..sort())
-        (u, contentOpacityAt(progress, u)),
+        (u, incomingOpacityAt(progress, u)),
     ];
   }
 
@@ -87,13 +89,16 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
   int get hashCode => Object.hash(style, duration);
 }
 
-/// 換場時的哪一層：內容隨進度出現，骨架隨進度消失。
+/// 換場時的哪一層：骨架或內容。
 enum SkeletonRevealSide { content, skeleton }
 
-/// 骨架換場的一層：照 [opacity] 淡入淡出；[sweep] 時改成左邊先、右邊後
-/// （[SkeletonReveal.contentOpacityAt]）。
+/// 骨架換場的一層：照 [opacity] 淡入淡出；[sweep] 時改成換進來的那一層
+/// 左邊先、右邊後出現（[SkeletonReveal.incomingOpacityAt]），換出去的那一層
+/// 在每個位置補滿剩下的濃度。
 ///
-/// [opacity] 是這一層自己的濃度：內容那層是換場進度，骨架那層是 1 減進度。
+/// [opacity] 是這一層自己的濃度；[incoming] 是這一次換進來的是哪一層：換成
+/// 內容時是 [SkeletonRevealSide.content]，骨架出現時是
+/// [SkeletonRevealSide.skeleton]。同一次換場的兩層要給同一個 [incoming]。
 /// 完全不透明時直接畫、不另開圖層，換場結束後沒有額外負擔；子樹一直在
 /// 同一個位置，不會因為換場開始或結束而重建。
 class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
@@ -101,17 +106,24 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
     super.key,
     required this.opacity,
     required this.side,
+    this.incoming = SkeletonRevealSide.content,
     this.sweep = false,
     super.child,
   });
 
   final Animation<double> opacity;
   final SkeletonRevealSide side;
+  final SkeletonRevealSide incoming;
   final bool sweep;
 
   @override
   RenderSkeletonRevealLayer createRenderObject(BuildContext context) =>
-      RenderSkeletonRevealLayer(opacity: opacity, side: side, sweep: sweep);
+      RenderSkeletonRevealLayer(
+        opacity: opacity,
+        side: side,
+        incoming: incoming,
+        sweep: sweep,
+      );
 
   @override
   void updateRenderObject(
@@ -121,6 +133,7 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
     renderObject
       ..opacity = opacity
       ..side = side
+      ..incoming = incoming
       ..sweep = sweep;
   }
 }
@@ -129,6 +142,7 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
   RenderSkeletonRevealLayer({
     required this._opacity,
     required this._side,
+    required this._incoming,
     required this._sweep,
   });
 
@@ -148,6 +162,13 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
     _onTick();
   }
 
+  SkeletonRevealSide _incoming;
+  set incoming(SkeletonRevealSide value) {
+    if (_incoming == value) return;
+    _incoming = value;
+    _onTick();
+  }
+
   bool _sweep;
   set sweep(bool value) {
     if (_sweep == value) return;
@@ -160,19 +181,20 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
       LayerHandle<ShaderMaskLayer>();
   bool _partial = false;
 
-  /// 換場進度（0 骨架、1 內容），由這一層自己的濃度換算。
-  double get _progress =>
-      _side == SkeletonRevealSide.content ? _opacity.value : 1 - _opacity.value;
+  bool get _isIncoming => _side == _incoming;
 
-  /// 這一層在橫向位置 [u] 的濃度。
-  double _alphaAt(double u) {
-    final content = SkeletonReveal.contentOpacityAt(
-      _progress,
-      u,
-      sweep: _sweep,
-    );
-    return _side == SkeletonRevealSide.content ? content : 1 - content;
-  }
+  /// 換場進度（0 還沒開始、1 換好），由這一層自己的濃度換算。
+  double get _progress => _isIncoming ? _opacity.value : 1 - _opacity.value;
+
+  /// 這一層在橫向位置 [u]（0 左緣、1 右緣）的濃度。
+  @visibleForTesting
+  double alphaAt(double u) => _alphaAt(u);
+
+  double _alphaAt(double u) =>
+      _alphaFor(SkeletonReveal.incomingOpacityAt(_progress, u, sweep: _sweep));
+
+  /// 換進來那一層的濃度 [incoming] 換算成這一層的濃度。
+  double _alphaFor(double incoming) => _isIncoming ? incoming : 1 - incoming;
 
   bool get _fullyOpaque => _alphaAt(0) >= 1 && _alphaAt(1) >= 1;
   bool get _fullyClear => _alphaAt(0) <= 0 && _alphaAt(1) <= 0;
@@ -241,13 +263,8 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
       local.centerLeft,
       local.centerRight,
       [
-        for (final (_, content) in stops)
-          Color.fromRGBO(
-            0,
-            0,
-            0,
-            _side == SkeletonRevealSide.content ? content : 1 - content,
-          ),
+        for (final (_, incoming) in stops)
+          Color.fromRGBO(0, 0, 0, _alphaFor(incoming)),
       ],
       [for (final (u, _) in stops) u],
     );

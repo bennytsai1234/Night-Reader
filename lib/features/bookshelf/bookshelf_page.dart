@@ -29,6 +29,7 @@ import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 
 enum _BookshelfBatchAction { checkUpdate, delete }
@@ -308,13 +309,15 @@ class _BookshelfPageState extends State<BookshelfPage>
     }
   }
 
-  /// 初次載入時顯示與目前檢視同形、本數與上次相同的骨架；書到了等畫面上
-  /// 的封面解碼好，書卡連同封面一次淡入。
+  /// 初次載入時顯示與目前檢視同形、本數與上次相同的骨架（開 App 時隨進場
+  /// 出現，見 [LaunchEntrance]）；書到了等畫面上的封面解碼好，書卡連同封面
+  /// 一次換場。
   Widget _buildContent(BuildContext context, BookshelfProvider provider) {
     final insets = MediaQuery.paddingOf(context);
     return SkeletonSwitcher(
       loading: provider.isLoading && provider.books.isEmpty,
       waitForCovers: true,
+      entrance: LaunchEntrance.maybeOf(context)?.skeleton,
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,

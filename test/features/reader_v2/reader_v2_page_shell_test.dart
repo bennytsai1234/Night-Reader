@@ -437,12 +437,13 @@ void main() {
 
       states.value = ReaderV2InfoState.loading;
       await tester.pump();
-      await tester.pump(AppMotion.fade ~/ 2);
-      // 淡出中的資訊與淡入中的骨架同時在畫面上，骨架就在資訊的位置。
+      // 變成骨架照骨架換場的時長。
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
+      // 讓開中的資訊與換進來的骨架同時在畫面上，骨架就在資訊的位置。
       expect(infoText('第一章'), findsNWidgets(2));
       expect(find.byType(SkeletonBox), findsNWidgets(3));
 
-      await tester.pump(AppMotion.fade);
+      await tester.pump(SkeletonReveal.defaultDuration);
       // 資訊淡出完就移出畫面，只剩骨架裡不畫出的那一份。
       expect(infoText('第一章'), findsOneWidget);
       expect(

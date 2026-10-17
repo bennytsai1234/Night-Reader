@@ -23,7 +23,7 @@ void main() {
     ),
   );
   const frame = Duration(milliseconds: 16);
-  // 掀紙照骨架換場的預設時長。
+  // 骨架出現與掀紙都照骨架換場的預設時長。
   const revealTime = SkeletonReveal.defaultDuration;
   final noSkeleton = paintsExactlyCountTimes(#drawRRect, 0);
 
@@ -89,7 +89,7 @@ void main() {
     await pumpVeil(tester);
     expect(find.byType(LoadingVeil), paints..rect());
 
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(
       find.byType(LoadingVeil),
       paints
@@ -106,7 +106,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
 
     veil.reveal();
     await advance(tester, revealTime ~/ 2);
@@ -125,7 +125,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     veil.reveal();
     await advance(tester, revealTime * 2);
     expect(veil.isVisible, isFalse);
@@ -139,7 +139,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     veil.reveal();
     await advance(tester, revealTime ~/ 2);
 
@@ -155,7 +155,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester, mounted: false);
-    await advance(tester, AppMotion.fade * 2);
+    await advance(tester, revealTime * 2);
     expect(tester.hasRunningAnimations, isFalse);
 
     await pumpVeil(tester);
@@ -182,7 +182,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade ~/ 2);
+    await advance(tester, revealTime ~/ 2);
     expect(tester.hasRunningAnimations, isTrue);
 
     veil.reduceMotion = true;
@@ -197,7 +197,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     veil.reveal();
     await advance(tester, revealTime ~/ 2);
     expect(veil.isVisible, isTrue);
@@ -224,7 +224,7 @@ void main() {
       ],
       titleLines: const {0},
     );
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     // 正文的長條是字級的 0.75（18 → 13.5），章名照章名與正文的字級比放大。
     final title = 13.5 * spec.style.titleFontSize / spec.style.fontSize / 2;
     final radius = AppRadius.cardXs.topLeft;
@@ -252,7 +252,7 @@ void main() {
       ],
       titleLines: const {0},
     );
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     final title = 13.5 * spec.style.titleFontSize / spec.style.fontSize / 2;
     final radius = AppRadius.cardXs.topLeft;
     expect(
@@ -268,7 +268,7 @@ void main() {
   testWidgets('without lines the paper stays plain', (tester) async {
     makeVeil(tester);
     await pumpVeil(tester, lines: null);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(find.byType(LoadingVeil), paints..rect());
     expect(find.byType(LoadingVeil), noSkeleton);
     await finish(tester);
@@ -279,7 +279,7 @@ void main() {
   ) async {
     makeVeil(tester, skeleton: false);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(find.byType(LoadingVeil), paints..rect());
     expect(find.byType(LoadingVeil), noSkeleton, reason: '第一頁排好前中間空著');
     expect(veil.isSkeletonFading, isFalse);
@@ -287,7 +287,7 @@ void main() {
     veil.showSkeleton();
     await tester.pump(frame);
     expect(veil.isSkeletonFading, isTrue);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(veil.isSkeletonFading, isFalse);
     expect(
       find.byType(LoadingVeil),
@@ -304,7 +304,7 @@ void main() {
   ) async {
     makeVeil(tester);
     await pumpVeil(tester);
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
 
     veil.cover(skeleton: false);
     await tester.pump(frame);
@@ -316,7 +316,7 @@ void main() {
         ..rrect(),
       reason: '不突然消失',
     );
-    await advance(tester, AppMotion.fade);
+    await advance(tester, revealTime);
     expect(find.byType(LoadingVeil), noSkeleton);
     expect(veil.isVisible, isTrue, reason: '紙留著');
     await finish(tester);

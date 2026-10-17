@@ -235,6 +235,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _veil.reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _veil.skeletonReveal = SkeletonReveal.of(context);
   }
 
   @override

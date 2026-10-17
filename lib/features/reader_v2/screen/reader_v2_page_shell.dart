@@ -483,9 +483,10 @@ enum ReaderV2InfoState {
 }
 
 /// 資訊列在骨架與真正資訊之間交叉淡換：骨架照資訊的寬度畫在同一個位置，
-/// 看起來是文字變成長條、長條再變回文字。骨架換成資訊時和正文一起照骨架
-/// 換場（[SkeletonReveal]）的方式與時長，其他切換用 [AppMotion.fade]。開書
-/// 時原本沒有資訊，就是骨架淡入。系統關閉動畫時直接到位。
+/// 看起來是文字變成長條、長條再變回文字。變成骨架、以及骨架換成資訊（和
+/// 正文一起）都照骨架換場（[SkeletonReveal]）的方式與時長，收起（取不到
+/// 正文）用 [AppMotion.fade]。開書時原本沒有資訊，就是骨架出現。系統關閉
+/// 動畫時直接到位。
 class _InfoLayer extends StatefulWidget {
   const _InfoLayer({required this.state, required this.builder});
 
@@ -519,7 +520,10 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
   /// null 表示還沒讀過 MediaQuery，第一次讀到時才開始同步狀態。
   bool? _reduceMotion;
 
-  /// 這一次骨架換成資訊是不是由左而右；其他切換一律整條淡。
+  /// 這一次換進來的是骨架還是資訊。
+  SkeletonRevealSide _incoming = SkeletonRevealSide.content;
+
+  /// 這一次換場是不是由左而右；收起一律整條淡。
   bool _sweep = false;
 
   @override
@@ -548,14 +552,18 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     // 骨架與資訊在同一個位置交叉淡換，兩者都從目前的濃淡接著走，切換途中
     // 再切回來不會先閃空。
     final state = widget.state;
-    final reveal =
-        from == ReaderV2InfoState.loading && state == ReaderV2InfoState.ready
-        ? SkeletonReveal.of(context)
-        : null;
+    final toSkeleton = state == ReaderV2InfoState.loading;
+    final toInfo =
+        from == ReaderV2InfoState.loading && state == ReaderV2InfoState.ready;
+    final reveal = toSkeleton || toInfo ? SkeletonReveal.of(context) : null;
+    _incoming = toSkeleton
+        ? SkeletonRevealSide.skeleton
+        : SkeletonRevealSide.content;
     _sweep = reveal?.sweeps ?? false;
-    _info.duration = reveal?.duration ?? AppMotion.fade;
-    _skeleton.reverseDuration = reveal?.duration;
-    _animate(_skeleton, state == ReaderV2InfoState.loading ? 1 : 0);
+    final duration = reveal?.duration ?? AppMotion.fade;
+    _info.duration = duration;
+    _skeleton.duration = duration;
+    _animate(_skeleton, toSkeleton ? 1 : 0);
     _animate(_info, state == ReaderV2InfoState.ready ? 1 : 0);
   }
 
@@ -587,6 +595,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
           SkeletonRevealLayer(
             opacity: _infoOpacity,
             side: SkeletonRevealSide.content,
+            incoming: _incoming,
             sweep: _sweep,
             child: widget.builder(false),
           ),
@@ -594,6 +603,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
           SkeletonRevealLayer(
             opacity: _skeletonOpacity,
             side: SkeletonRevealSide.skeleton,
+            incoming: _incoming,
             sweep: _sweep,
             child: Skeleton(child: widget.builder(true)),
           ),
