@@ -17,6 +17,9 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await GetIt.instance.reset();
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
     db = AppDatabase.forTesting(NativeDatabase.memory());
     dao = BookSourceDao(db);
     GetIt.instance.registerSingleton<BookSourceDao>(dao);

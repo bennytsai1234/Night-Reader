@@ -10,11 +10,15 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'package:night_reader/features/source_manager/source_manager_provider.dart';
+import 'package:night_reader/features/source_manager/widgets/source_batch_toolbar.dart';
+import 'package:night_reader/features/source_manager/widgets/source_item_tile.dart';
+import 'package:night_reader/features/source_manager/widgets/source_list_skeleton.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -43,9 +47,22 @@ void main() {
   late AppDatabase db;
   late _GatedSourceDao gatedDao;
 
+  /// 讓 DAO 查詢在真實事件迴圈上完成，再把結果畫出來。
+  Future<void> settleQueries(WidgetTester tester) async {
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await GetIt.instance.reset();
+    GetIt.instance.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
     db = AppDatabase.forTesting(NativeDatabase.memory());
     gatedDao = _GatedSourceDao(db);
     GetIt.instance.registerSingleton<BookSourceDao>(gatedDao);
@@ -59,10 +76,10 @@ void main() {
     await GetIt.instance.reset();
   });
 
-  Future<void> pumpPage(WidgetTester tester) async {
+  Future<void> pumpPage(WidgetTester tester, {int sources = 3}) async {
     final dao = GetIt.instance<BookSourceDao>();
     await tester.runAsync(() async {
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < sources; i++) {
         await dao.upsert(
           BookSource(
             bookSourceUrl: 'https://s$i.example',
@@ -79,13 +96,7 @@ void main() {
         home: const SourceManagerPage(),
       ),
     );
-    // 讓 DAO 查詢在真實事件迴圈上完成，再把結果畫出來。
-    for (var i = 0; i < 5; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 20)),
-      );
-      await tester.pump();
-    }
+    await settleQueries(tester);
   }
 
   testWidgets('lists every source row', (tester) async {
@@ -261,5 +272,138 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump();
+  });
+
+  testWidgets('the text area widens continuously when the switch fades out', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    // 篩選中沒有排序把手：進入選取時列尾從開關換成空的，文字區要多出
+    // 整個開關的寬度。
+    await tester.enterText(find.byType(TextField), 'example');
+    await tester.pumpAndSettle();
+    final textArea = find
+        .ancestor(
+          of: find.text('https://s0.example'),
+          matching: find.byType(Column),
+        )
+        .first;
+    final restWidth = tester.getSize(textArea).width;
+
+    await tester.tap(find.text('全選'));
+    await tester.pump();
+    final widths = <double>[];
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      widths.add(tester.getSize(textArea).width);
+    }
+    await tester.pumpAndSettle();
+    final settled = tester.getSize(textArea).width;
+
+    expect(find.byType(GroupedSwitch), findsNothing);
+    // 勾選圈佔掉的比開關讓出的少，文字區最後比原本寬。
+    expect(settled, greaterThan(restWidth + 10));
+    var previous = restWidth;
+    for (final width in widths) {
+      expect(
+        (width - previous).abs(),
+        lessThan(12),
+        reason: '文字區每一幀只變一點，不在淡換結束時一口氣跳寬',
+      );
+      previous = width;
+    }
+    expect(widths.last, moreOrLessEquals(settled, epsilon: 0.01));
+  });
+
+  group('first open', () {
+    Finder skeletonRows() => find.descendant(
+      of: find.byType(SourceListSkeleton),
+      matching: find.byType(GroupedSliceItem),
+    );
+
+    testWidgets('draws row skeletons with the search box and toolbar placed', (
+      tester,
+    ) async {
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(skeletonRows(), findsWidgets);
+      expect(find.byType(SearchField), findsOneWidget);
+      expect(find.byType(SelectActionBar), findsOneWidget);
+      final skeletonTop = tester.getTopLeft(skeletonRows().first).dy;
+      final headerHeight = tester.getSize(find.byType(GlassNavHeader)).height;
+
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SourceListSkeleton), findsNothing);
+      // 清單從骨架的位置出現，頁首沒有長高把它推開。
+      expect(
+        tester.getTopLeft(find.byType(SourceItemTile).first).dy,
+        skeletonTop,
+      );
+      expect(tester.getSize(find.byType(GlassNavHeader)).height, headerHeight);
+    });
+
+    testWidgets('remembers how many sources there were', (tester) async {
+      await pumpPage(tester);
+      await tester.pumpWidget(const SizedBox());
+
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester, sources: 0);
+      // 上次讀到 3 個書源，骨架就畫 3 列。
+      expect(skeletonRows(), findsNWidgets(3));
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+    });
+
+    testWidgets('no sources last time: no search box, then the empty page', (
+      tester,
+    ) async {
+      await GetIt.instance<SharedPreferences>().setInt(
+        'source_manager_last_count',
+        0,
+      );
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester, sources: 0);
+
+      expect(skeletonRows(), findsNothing);
+      expect(find.byType(SearchField), findsNothing);
+      expect(find.byType(SelectActionBar), findsNothing);
+      expect(find.text('尚未加入書源'), findsNothing);
+
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('尚未加入書源'), findsOneWidget);
+      expect(find.byType(SearchField), findsNothing);
+    });
+
+    testWidgets('search box grows in when the record was wrong', (
+      tester,
+    ) async {
+      await GetIt.instance<SharedPreferences>().setInt(
+        'source_manager_last_count',
+        0,
+      );
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester);
+      final before = tester.getSize(find.byType(GlassNavHeader)).height;
+
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      await tester.pump(const Duration(milliseconds: 60));
+      final mid = tester.getSize(find.byType(GlassNavHeader)).height;
+      await tester.pumpAndSettle();
+      final after = tester.getSize(find.byType(GlassNavHeader)).height;
+
+      expect(after, greaterThan(before));
+      expect(mid, greaterThan(before));
+      expect(mid, lessThan(after));
+      expect(find.byType(SearchField), findsOneWidget);
+      expect(find.byType(SelectActionBar), findsOneWidget);
+    });
   });
 }

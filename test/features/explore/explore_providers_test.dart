@@ -9,6 +9,7 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/features/explore/explore_show_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late AppDatabase db;
@@ -17,6 +18,10 @@ void main() {
   setUp(() async {
     final getIt = GetIt.instance;
     await getIt.reset();
+    SharedPreferences.setMockInitialValues({});
+    getIt.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
     db = AppDatabase.forTesting(NativeDatabase.memory());
     dao = BookSourceDao(db);
     getIt

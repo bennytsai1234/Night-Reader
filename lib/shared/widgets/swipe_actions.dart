@@ -363,13 +363,18 @@ class _SwipeActionsState extends State<SwipeActions>
           },
           child: row,
         );
-        if (!active) return row;
-        // 無障礙：不靠滑動也能從列的自訂動作選單執行。
+        // 無障礙：不靠滑動也能從列的自訂動作選單執行。停用時也包同一層
+        // Semantics，只是不給動作：開關 [enabled] 時樹的形狀不變，列裡的
+        // 元件（例如書源列進出選取時的勾選圈與列尾）才不會被整個重建、
+        // 動畫直接跳到終點。
         return Semantics(
-          customSemanticsActions: {
-            for (final action in [...widget.leading, ...widget.trailing])
-              CustomSemanticsAction(label: action.label): action.onPressed,
-          },
+          customSemanticsActions: active
+              ? {
+                  for (final action in [...widget.leading, ...widget.trailing])
+                    CustomSemanticsAction(label: action.label):
+                        action.onPressed,
+                }
+              : null,
           child: row,
         );
       },
