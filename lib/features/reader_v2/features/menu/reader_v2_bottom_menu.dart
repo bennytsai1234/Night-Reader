@@ -62,6 +62,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.onHidden,
   });
 
   /// 膠囊內容離上緣的距離。
@@ -101,6 +102,9 @@ class ReaderV2BottomMenu extends StatelessWidget {
   final bool showAutoPage;
   final bool showReplaceRule;
 
+  /// 收起動畫播完、選單完全移出畫面時呼叫（見 [ReaderV2MenuEntrance]）。
+  final VoidCallback? onHidden;
+
   @override
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.of(context);
@@ -108,6 +112,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
     return ReaderV2MenuEntrance(
       visible: controlsVisible,
       edge: AxisDirection.down,
+      onHidden: onHidden,
       // 玻璃元件的亮邊與陰影取自選單配色推導的主題，而非 App 主題。
       child: Theme(
         data: menuStyle.toSheetTheme(Theme.of(context)),

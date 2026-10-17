@@ -157,6 +157,7 @@ class ReaderV2PageShell extends StatelessWidget {
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.onMenuHidden,
   });
 
   final Book book;
@@ -223,6 +224,10 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
+
+  /// 上下選單與亮度條收完、完全移出畫面時呼叫。三塊同時出發、收起時長
+  /// 相同，跟著下方選單的收起動畫。
+  final VoidCallback? onMenuHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +412,7 @@ class ReaderV2PageShell extends StatelessWidget {
                         showTts: showTts,
                         showAutoPage: showAutoPage,
                         showReplaceRule: showReplaceRule,
+                        onHidden: onMenuHidden,
                       ),
                     ),
                     if (brightnessControl case final control?)

@@ -39,6 +39,7 @@ void main() {
     ReaderV2TtsSleepTimer? sleepTimer,
     double paddingHorizontal = 12,
     VoidCallback? onDrawerClosed,
+    VoidCallback? onMenuHidden,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -126,6 +127,7 @@ void main() {
             onScrubEnd: noopPercent,
             brightnessControl: brightnessControl,
             sleepTimer: sleepTimer,
+            onMenuHidden: onMenuHidden,
           ),
         ),
       ),
@@ -216,6 +218,34 @@ void main() {
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
     expect(awayOf(ReaderV2BottomMenu), 1);
+  });
+
+  testWidgets('the page hears when the menus are fully off screen', (
+    tester,
+  ) async {
+    final controls = ValueNotifier(true);
+    addTearDown(controls.dispose);
+    var hidden = 0;
+    await pumpShell(
+      tester,
+      controls: controls,
+      brightnessControl: const SizedBox.expand(),
+      onMenuHidden: () => hidden += 1,
+    );
+    await tester.pumpAndSettle();
+    expect(hidden, 0);
+
+    // 收起一開始不算：要等選單滑出畫面，頁面才推下一頁或開始重工作。
+    controls.value = false;
+    await tester.pump();
+    await tester.pump(AppMotion.readerMenuOut ~/ 2);
+    expect(hidden, 0);
+    await tester.pump(AppMotion.readerMenuOut);
+    expect(hidden, 1);
+
+    controls.value = true;
+    await tester.pumpAndSettle();
+    expect(hidden, 1);
   });
 
   testWidgets('header and footer open the menu only on a finished tap', (

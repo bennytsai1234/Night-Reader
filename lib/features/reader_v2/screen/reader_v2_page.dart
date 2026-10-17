@@ -92,6 +92,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Completer<void>? _drawerClosed;
   bool _entranceWatched = false;
 
+  /// 收起選單時，等它滑出畫面的那一下；收完時完成（見 [_hideMenu]）。
+  Completer<void>? _menuHidden;
+
   /// 只拿來計骨架淡入的時長（頁首頁尾骨架與照紀錄畫的正文骨架都是
   /// [AppMotion.fade]）：開書時和這一頁的第一幀同時開始，從目錄跳章時和
   /// 蓋紙同時開始。
@@ -347,6 +350,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               showTts: true,
               showAutoPage: true,
               showReplaceRule: true,
+              onMenuHidden: _handleMenuHidden,
             ),
           ),
         ),
@@ -572,14 +576,52 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       case _ReaderMoreAction.bookDetail:
         await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SettingsPage()),
+        await _pushOverMenu(
+          _hideMenu(),
+          MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
         );
+        if (!mounted) return;
         // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
         // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
-        if (mounted) unawaited(_host.settings.loadSettings());
+        unawaited(_host.settings.loadSettings());
+        _restoreMenuWhenUncovered();
     }
+  }
+
+  /// 收起上下選單與亮度條，回傳它們滑出畫面時完成的 Future；本來就收著
+  /// （也沒有在滑出）時立即完成。
+  Future<void> _hideMenu() {
+    final menu = _host.menu;
+    if (menu.controlsVisible) {
+      _menuHidden ??= Completer<void>();
+      menu.dismissControls();
+    }
+    return _menuHidden?.future ?? Future<void>.value();
+  }
+
+  void _handleMenuHidden() {
+    _menuHidden?.complete();
+    _menuHidden = null;
+  }
+
+  /// 從選單推一整頁（書籍詳情、全域設定）：等選單滑出畫面才推。推進、
+  /// 覆蓋、縮放這幾種換頁會淡掉底下的閱讀器，選單還在的話玻璃包在淡出
+  /// 裡，模糊要到最後一幀才糊上（ADR 0022）。
+  Future<T?> _pushOverMenu<T>(Future<void> menuHidden, Route<T> route) async {
+    await menuHidden;
+    if (!mounted) return null;
+    return Navigator.of(context).push(route);
+  }
+
+  /// 推上去的頁關掉後，等返回動畫播完再把選單滑回來，回到打開選單的
+  /// 樣子；滑入不和返回動畫疊在一起，也不在淡入中的閱讀器裡出現。
+  void _restoreMenuWhenUncovered() {
+    unawaited(
+      TransitionSettled.uncovered(context).then((_) {
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        _host.menu.showControls();
+      }),
+    );
   }
 
   /// 書源回了擋爬蟲頁或不完整的正文時，向書源重抓這一章、停在原位；
@@ -597,6 +639,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
   /// 按閱讀鈕直接回來。
   Future<void> _showBookDetail() async {
+    final menuHidden = _hideMenu();
     final flushed = await _host.flushProgress();
     if (!mounted) return;
     final chapterDao = _host.dependencies.chapterDao;
@@ -610,13 +653,17 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       chapterIndex: storedIndex ?? index,
       durChapterTitle: _rawChapterTitleAt(index),
     );
-    final targetUrl = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
+    final targetUrl = await _pushOverMenu(
+      menuHidden,
+      MaterialPageRoute<String>(
         builder: (_) => BookDetailPage(book: book, fromReader: true),
       ),
     );
-    if (!mounted || targetUrl == null) return;
-    _host.menu.dismissControls();
+    if (!mounted) return;
+    if (targetUrl == null) {
+      _restoreMenuWhenUncovered();
+      return;
+    }
     final target = await resolveDetailChapter(
       url: targetUrl,
       readerChapters: _host.runtime?.chapters ?? widget.initialChapters,
