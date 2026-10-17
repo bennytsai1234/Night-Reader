@@ -12,6 +12,18 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 
+/// 書卡上選取（勾號、圓圈、讓位、卡片底色）與角標的動畫時長：系統關閉動畫
+/// 時一律為 0，這組同步的動畫一起直接到位。
+Duration _motion(BuildContext context, Duration duration) =>
+    MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
+
+/// 系統關閉動畫的設定一改，整張書卡重新建立：正在播的選取與角標動畫直接
+/// 停在終點，不播完剩下那段。
+Widget _landOnMotionChange(BuildContext context, Widget child) => KeyedSubtree(
+  key: ValueKey(('motion', MediaQuery.disableAnimationsOf(context))),
+  child: child,
+);
+
 /// 編輯模式的圓形勾選記號（Telegram 編輯清單左側的圓圈）。
 class BookshelfCheckMark extends StatelessWidget {
   const BookshelfCheckMark({
@@ -31,8 +43,9 @@ class BookshelfCheckMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chrome = AppChrome.of(context);
+    final duration = _motion(context, AppMotion.menu);
     return AnimatedContainer(
-      duration: AppMotion.menu,
+      duration: duration,
       curve: AppMotion.menuCurve,
       width: size,
       height: size,
@@ -54,7 +67,7 @@ class BookshelfCheckMark extends StatelessWidget {
       ),
       // 勾號和圓圈的填色一起淡入淡出，不在第一幀就整個冒出來。
       child: AnimatedOpacity(
-        duration: AppMotion.menu,
+        duration: duration,
         curve: AppMotion.menuCurve,
         opacity: selected ? 1 : 0,
         child: Icon(Icons.check_rounded, size: 16, color: scheme.onPrimary),
@@ -90,7 +103,7 @@ class BookshelfUpdateBadge extends StatelessWidget {
     // 角標出現與清掉時整塊淡入淡出；換成另一個結果（「+12」→「+3」、
     // 「+3」→「!」）時同一塊膠囊留著，寬度與底色跟著淡換連續變化。
     return AnimatedSwitcher(
-      duration: AppMotion.fade,
+      duration: _motion(context, AppMotion.fade),
       switchInCurve: AppMotion.fadeCurve,
       switchOutCurve: AppMotion.fadeCurve,
       child: result == null
@@ -117,11 +130,19 @@ class _BadgePill extends StatelessWidget {
       fontWeight: failed ? FontWeight.w700 : FontWeight.w600,
       color: BookshelfUpdateBadge._textColor,
     );
+    final label = Text(
+      failed ? '!' : '+$count',
+      key: ValueKey(failed ? 'failed' : 'new-$count'),
+      style: style,
+    );
+    // 系統關閉動畫時字、大小與底色一起直接換好。AnimatedSize 時長為 0 時
+    // 會在排版中途重設自己，不能只把時長設成 0，直接拿掉。
+    final animate = !MediaQuery.disableAnimationsOf(context);
     return Semantics(
       label: failed ? '檢查更新失敗' : '有 $count 個新章節',
       child: ExcludeSemantics(
         child: AnimatedContainer(
-          duration: AppMotion.fade,
+          duration: animate ? AppMotion.fade : Duration.zero,
           curve: AppMotion.fadeCurve,
           height: BookshelfUpdateBadge.height,
           constraints: const BoxConstraints(
@@ -136,38 +157,36 @@ class _BadgePill extends StatelessWidget {
             borderRadius: AppRadius.pillShape,
             border: BookshelfUpdateBadge._edge,
           ),
-          child: AnimatedSize(
-            duration: AppMotion.fade,
-            curve: AppMotion.fadeCurve,
-            child: AnimatedSwitcher(
-              duration: AppMotion.fade,
-              switchInCurve: AppMotion.fadeCurve,
-              switchOutCurve: AppMotion.fadeCurve,
-              // 大小只照新的字量：舊字縮成 0×0 的錨點、從中央溢出畫，
-              // 外面的 AnimatedSize 一開始淡換就往新寬度走。預設的排法取
-              // 新舊之中較大者，舊字淡完那一刻才縮，角標會跳一下。
-              layoutBuilder: (current, previous) => Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  for (final child in previous)
-                    SizedBox.shrink(
-                      child: OverflowBox(
-                        maxWidth: double.infinity,
-                        maxHeight: double.infinity,
-                        child: child,
-                      ),
+          child: !animate
+              ? label
+              : AnimatedSize(
+                  duration: AppMotion.fade,
+                  curve: AppMotion.fadeCurve,
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.fade,
+                    switchInCurve: AppMotion.fadeCurve,
+                    switchOutCurve: AppMotion.fadeCurve,
+                    // 大小只照新的字量：舊字縮成 0×0 的錨點、從中央溢出畫，
+                    // 外面的 AnimatedSize 一開始淡換就往新寬度走。預設的排法取
+                    // 新舊之中較大者，舊字淡完那一刻才縮，角標會跳一下。
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        for (final child in previous)
+                          SizedBox.shrink(
+                            child: OverflowBox(
+                              maxWidth: double.infinity,
+                              maxHeight: double.infinity,
+                              child: child,
+                            ),
+                          ),
+                        ?current,
+                      ],
                     ),
-                  ?current,
-                ],
-              ),
-              child: Text(
-                failed ? '!' : '+$count',
-                key: ValueKey(failed ? 'failed' : 'new-$count'),
-                style: style,
-              ),
-            ),
-          ),
+                    child: label,
+                  ),
+                ),
         ),
       ),
     );
@@ -287,7 +306,7 @@ class BookshelfListCard extends StatelessWidget {
           // 透明，讓滿（34）時不透明，不會被邊緣削一半像在滑動。進場途中
           // 退出也從當下的寬度接著收，不另跑一條淡入淡出。
           AnimatedContainer(
-            duration: AppMotion.menu,
+            duration: _motion(context, AppMotion.menu),
             curve: AppMotion.menuCurve,
             width: slot,
             height: BookshelfCheckMark.size,
@@ -343,7 +362,7 @@ class BookshelfListCard extends StatelessWidget {
     );
 
     final surface = chrome.groupedSurface;
-    return Semantics(
+    final card = Semantics(
       selected: selecting ? selected : null,
       child: TransitionSource(
         radius: AppGrouped.radius,
@@ -352,7 +371,7 @@ class BookshelfListCard extends StatelessWidget {
         // 時底色直接換成新配色，不另外慢慢過渡。
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: selecting && selected ? 1 : 0),
-          duration: AppMotion.menu,
+          duration: _motion(context, AppMotion.menu),
           curve: AppMotion.menuCurve,
           builder: (context, tint, child) => Material(
             color: tint == 0
@@ -381,6 +400,7 @@ class BookshelfListCard extends StatelessWidget {
         ),
       ),
     );
+    return _landOnMotionChange(context, card);
   }
 }
 
@@ -446,7 +466,7 @@ class BookshelfGridTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final name = context.zh(book.name);
 
-    return Semantics(
+    final tile = Semantics(
       selected: selecting ? selected : null,
       child: PressScale(
         scale: 0.96,
@@ -468,7 +488,7 @@ class BookshelfGridTile extends StatelessWidget {
                   children: [
                     AnimatedScale(
                       scale: selected ? 0.92 : 1,
-                      duration: AppMotion.spring,
+                      duration: _motion(context, AppMotion.spring),
                       curve: AppMotion.springCurve,
                       child: ValueListenableBuilder<bool>(
                         valueListenable: UnifiedCovers.enabled,
@@ -493,7 +513,7 @@ class BookshelfGridTile extends StatelessWidget {
                       top: AppSpacing.sm,
                       right: AppSpacing.sm,
                       child: AnimatedOpacity(
-                        duration: AppMotion.menu,
+                        duration: _motion(context, AppMotion.menu),
                         opacity: selecting ? 1 : 0,
                         child: BookshelfCheckMark(
                           selected: selected,
@@ -521,6 +541,7 @@ class BookshelfGridTile extends StatelessWidget {
         ),
       ),
     );
+    return _landOnMotionChange(context, tile);
   }
 }
 
@@ -627,7 +648,7 @@ class BookshelfEditToolbar extends StatelessWidget {
     return FloatingGlassToolbar(
       height: height,
       child: AnimatedSwitcher(
-        duration: AppMotion.fade,
+        duration: _motion(context, AppMotion.fade),
         switchInCurve: AppMotion.fadeCurve,
         switchOutCurve: AppMotion.fadeCurve,
         child: busy ? progress : buttons,

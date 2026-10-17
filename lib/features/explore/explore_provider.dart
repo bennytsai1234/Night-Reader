@@ -80,16 +80,25 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   void _readFilterBar() {
-    final saved = getIt<SharedPreferences>().getString(_filterBarKey);
+    // 型別不對的紀錄（不是字串）和讀不懂的內容一樣，當作沒有紀錄。
+    final stored = getIt<SharedPreferences>().get(_filterBarKey);
+    final saved = stored is String ? stored : null;
     _savedFilterBar = saved;
-    if (saved == null) return;
+    if (saved == null) {
+      if (stored != null) AppLog.w('發現分組篩選列的紀錄型別不對，這次等書源讀完');
+      return;
+    }
     try {
       final json = jsonDecode(saved) as Map<String, dynamic>;
       final counts = <String, int>{
         for (final entry in json['groups'] as List<dynamic>)
           entry[0] as String: entry[1] as int,
       };
-      _lastAllCount = json['all'] as int;
+      final all = json['all'] as int;
+      if (all < 0 || counts.values.any((count) => count < 0)) {
+        throw FormatException('書源數是負的', saved);
+      }
+      _lastAllCount = all;
       _groupCounts = counts;
       _groups = counts.keys.toList()..sort();
     } catch (error) {

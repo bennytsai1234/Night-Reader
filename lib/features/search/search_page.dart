@@ -23,6 +23,7 @@ import 'models/search_scope.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/explore/widgets/explore_book_item.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/features/source_manager/source_manager_page.dart';
@@ -987,11 +988,14 @@ class _ResultMove extends StatefulWidget {
 
 class _ResultMoveState extends State<_ResultMove>
     with SingleTickerProviderStateMixin {
+  /// 書卡滑動時持有動作閘門，背景工作等它到位（ADR 0018）。
+  final MotionHold _hold = MotionHold();
+
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: AppMotion.fade,
     value: 1,
-  );
+  )..addStatusListener((_) => _hold.moving = _controller.isAnimating);
   late final Animation<double> _progress = CurvedAnimation(
     parent: _controller,
     curve: AppMotion.fadeCurve,
@@ -1003,6 +1007,8 @@ class _ResultMoveState extends State<_ResultMove>
 
   @override
   void dispose() {
+    // 滑到一半被回收或離開頁面：停下不會發出狀態變化，在這裡放開。
+    _hold.release();
     _controller.dispose();
     super.dispose();
   }

@@ -381,6 +381,66 @@ void main() {
       expect(find.byType(SearchField), findsNothing);
     });
 
+    for (final (label, record) in [('a string', 'bad'), ('negative', -3)]) {
+      testWidgets('a damaged count record ($label) counts as no record', (
+        tester,
+      ) async {
+        final prefs = GetIt.instance<SharedPreferences>();
+        if (record is String) {
+          await prefs.setString('source_manager_last_count', record);
+        } else {
+          await prefs.setInt('source_manager_last_count', record as int);
+        }
+        gatedDao.gate = Completer<void>();
+        await pumpPage(tester);
+
+        // 和沒有紀錄一樣：當作有書源，先畫骨架、留好搜尋框與工具列。
+        expect(tester.takeException(), isNull);
+        expect(skeletonRows(), findsWidgets);
+        expect(find.byType(SearchField), findsOneWidget);
+        expect(find.byType(SelectActionBar), findsOneWidget);
+
+        gatedDao.gate!.complete();
+        await settleQueries(tester);
+        await tester.pumpAndSettle();
+        expect(find.text('書源0'), findsOneWidget);
+        expect(prefs.get('source_manager_last_count'), 3);
+      });
+    }
+
+    testWidgets('the toolbar takes its shadow off screen before it goes', (
+      tester,
+    ) async {
+      // 沒有紀錄時當作有書源，工具列先在；讀完發現沒有書源才收起。
+      gatedDao.gate = Completer<void>();
+      await pumpPage(tester, sources: 0);
+      expect(find.byType(SelectActionBar), findsOneWidget);
+      final screen = tester.getSize(find.byType(Scaffold)).height;
+      final glass = find.descendant(
+        of: find.byType(SelectActionBar),
+        matching: find.byType(GlassSurface),
+      );
+
+      gatedDao.gate!.complete();
+      await settleQueries(tester);
+      // 每一幀陰影伸進畫面的距離（玻璃上緣再往上 [AppGlass.shadowReach]）。
+      final intrusions = <double>[];
+      while (glass.evaluate().isNotEmpty) {
+        intrusions.add(
+          screen - (tester.getTopLeft(glass).dy - AppGlass.shadowReach),
+        );
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+
+      expect(intrusions.length, greaterThan(100));
+      // 拿掉前最後一幀（還差 1ms），陰影只剩一點點在畫面內，跟著動畫收到
+      // 底，不會留著整段陰影到拿掉時才一下消失。
+      expect(intrusions.last, lessThan(4));
+      for (var i = 1; i < intrusions.length; i++) {
+        expect(intrusions[i], lessThanOrEqualTo(intrusions[i - 1]));
+      }
+    });
+
     testWidgets('search box grows in when the record was wrong', (
       tester,
     ) async {

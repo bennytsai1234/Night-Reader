@@ -174,7 +174,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
 
   /// 有書源就常駐底部；反選可以直接選起目前篩出的全部書源。出現與收起時
   /// 從底部滑進滑出：佔的高度跟著 [_chrome] 縮放，清單底部的讓位也連續
-  /// 變化。
+  /// 變化。畫的位置再多移開陰影伸出的 [AppGlass.shadowReach]，收到底時
+  /// 陰影也完全在畫面外才拿掉（同 [GlassSlide]，ADR 0022）。
   Widget? _buildBottomBar(
     BuildContext context,
     SourceManagerProvider provider,
@@ -184,58 +185,69 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     return Align(
       alignment: Alignment.topCenter,
       heightFactor: shown,
-      child: SelectActionBar(
-        provider: provider,
-        externallyBusy: _isImporting,
-        onEnable: () => _runAction(
-          () => provider.batchSetEnabled(true),
-          errorPrefix: '啟用書源失敗',
-        ),
-        onDisable: () => _runAction(
-          () => provider.batchSetEnabled(false),
-          errorPrefix: '停用書源失敗',
-        ),
-        onAddGroup: () =>
-            _showSelectionGroupDialog(context, provider, remove: false),
-        onRemoveGroup: () =>
-            _showSelectionGroupDialog(context, provider, remove: true),
-        onEnableExplore: () => _runAction(
-          () => provider.batchSetEnabledExplore(true),
-          errorPrefix: '啟用發現失敗',
-        ),
-        onDisableExplore: () => _runAction(
-          () => provider.batchSetEnabledExplore(false),
-          errorPrefix: '停用發現失敗',
-        ),
-        onSelectInterval: provider.checkSelectedInterval,
-        onMoveToTop: () =>
-            _runAction(provider.moveSelectedToTop, errorPrefix: '移動書源失敗'),
-        onMoveToBottom: () =>
-            _runAction(provider.moveSelectedToBottom, errorPrefix: '移動書源失敗'),
-        onExport: () => _runAction(() async {
-          final messenger = ScaffoldMessenger.of(context);
-          final copiedToClipboard = await provider.exportSelected();
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出'),
-            ),
-          );
-        }, errorPrefix: '匯出書源失敗'),
-        onShare: () =>
-            _runAction(provider.shareSelectedSources, errorPrefix: '分享書源失敗'),
-        onCheckSource: () {
-          SourceManagerDialogs.showCheckConfigDialog(context, provider);
-        },
-        onClearCheckMarks: () => SourceManagerDialogs.clearCheckMarks(
-          context,
-          provider,
-          urls: provider.selectedUrls,
-        ),
-        onDelete: () {
-          _confirmDeleteSelected(context, provider);
-        },
+      // 佔的高度已含安全區與離底的距離，收到 0 時工具列整個在畫面下緣外。
+      child: Transform.translate(
+        offset: Offset(0, AppGlass.shadowReach * (1 - shown)),
+        child: _buildSelectActionBar(context, provider),
       ),
+    );
+  }
+
+  Widget _buildSelectActionBar(
+    BuildContext context,
+    SourceManagerProvider provider,
+  ) {
+    return SelectActionBar(
+      provider: provider,
+      externallyBusy: _isImporting,
+      onEnable: () => _runAction(
+        () => provider.batchSetEnabled(true),
+        errorPrefix: '啟用書源失敗',
+      ),
+      onDisable: () => _runAction(
+        () => provider.batchSetEnabled(false),
+        errorPrefix: '停用書源失敗',
+      ),
+      onAddGroup: () =>
+          _showSelectionGroupDialog(context, provider, remove: false),
+      onRemoveGroup: () =>
+          _showSelectionGroupDialog(context, provider, remove: true),
+      onEnableExplore: () => _runAction(
+        () => provider.batchSetEnabledExplore(true),
+        errorPrefix: '啟用發現失敗',
+      ),
+      onDisableExplore: () => _runAction(
+        () => provider.batchSetEnabledExplore(false),
+        errorPrefix: '停用發現失敗',
+      ),
+      onSelectInterval: provider.checkSelectedInterval,
+      onMoveToTop: () =>
+          _runAction(provider.moveSelectedToTop, errorPrefix: '移動書源失敗'),
+      onMoveToBottom: () =>
+          _runAction(provider.moveSelectedToBottom, errorPrefix: '移動書源失敗'),
+      onExport: () => _runAction(() async {
+        final messenger = ScaffoldMessenger.of(context);
+        final copiedToClipboard = await provider.exportSelected();
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(copiedToClipboard ? '已複製至剪貼簿' : '書源過多，已改用分享方式匯出'),
+          ),
+        );
+      }, errorPrefix: '匯出書源失敗'),
+      onShare: () =>
+          _runAction(provider.shareSelectedSources, errorPrefix: '分享書源失敗'),
+      onCheckSource: () {
+        SourceManagerDialogs.showCheckConfigDialog(context, provider);
+      },
+      onClearCheckMarks: () => SourceManagerDialogs.clearCheckMarks(
+        context,
+        provider,
+        urls: provider.selectedUrls,
+      ),
+      onDelete: () {
+        _confirmDeleteSelected(context, provider);
+      },
     );
   }
 

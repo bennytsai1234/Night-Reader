@@ -118,4 +118,62 @@ void main() {
       ),
     );
   });
+
+  group('with animations turned off', () {
+    Widget card({
+      required bool selecting,
+      bool selected = false,
+      bool disable = true,
+    }) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: disable),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 360,
+            child: BookshelfListCard(
+              book: book,
+              selecting: selecting,
+              selected: selected,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('selecting lands the slot, tick and tint at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(selecting: false));
+      await tester.pumpWidget(card(selecting: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+
+      await tester.pumpWidget(card(selecting: true, selected: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+
+      await tester.pumpWidget(card(selecting: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('turning animations off mid-change lands it at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(selecting: true, disable: false));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        card(selecting: true, selected: true, disable: false),
+      );
+      await tester.pump(AppMotion.menu ~/ 4);
+      expect(tester.hasRunningAnimations, isTrue);
+
+      await tester.pumpWidget(card(selecting: true, selected: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
 }
