@@ -157,6 +157,7 @@ class ReaderV2PageShell extends StatelessWidget {
     this.showTts = true,
     this.showAutoPage = true,
     this.showReplaceRule = true,
+    this.onMenuHidden,
   });
 
   final Book book;
@@ -223,6 +224,10 @@ class ReaderV2PageShell extends StatelessWidget {
   final bool showTts;
   final bool showAutoPage;
   final bool showReplaceRule;
+
+  /// 上下選單與亮度條收完、完全移出畫面時呼叫。三塊同時出發、收起時長
+  /// 相同，跟著下方選單的收起動畫。
+  final VoidCallback? onMenuHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +412,7 @@ class ReaderV2PageShell extends StatelessWidget {
                         showTts: showTts,
                         showAutoPage: showAutoPage,
                         showReplaceRule: showReplaceRule,
+                        onHidden: onMenuHidden,
                       ),
                     ),
                     if (brightnessControl case final control?)
@@ -588,11 +594,14 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     final showInfo = state == ReaderV2InfoState.ready || !_info.isDismissed;
     final showSkeleton =
         state == ReaderV2InfoState.loading || !_skeleton.isDismissed;
+    // 兩層各帶 key：一層淡完移出時另一層的位置往前挪，沒有 key 會被接到
+    // 移走那一層的元素上重建，骨架的呼吸從頭開始、資訊的時鐘電量重訂閱。
     return Stack(
       alignment: Alignment.center,
       children: [
         if (showInfo)
           SkeletonRevealLayer(
+            key: const ValueKey(SkeletonRevealSide.content),
             opacity: _infoOpacity,
             side: SkeletonRevealSide.content,
             incoming: _incoming,
@@ -601,6 +610,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
           ),
         if (showSkeleton)
           SkeletonRevealLayer(
+            key: const ValueKey(SkeletonRevealSide.skeleton),
             opacity: _skeletonOpacity,
             side: SkeletonRevealSide.skeleton,
             incoming: _incoming,

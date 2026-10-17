@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
@@ -208,6 +210,66 @@ void main() {
     await tester.pump();
     expect(tester.hasRunningAnimations, isFalse);
     await finish(tester);
+  });
+
+  group('fading the paper in over the old text', () {
+    const paper = Color(0xFFF6F1E7);
+
+    /// 紙掀掉之後，正文在畫面上。
+    Future<void> revealed(WidgetTester tester) async {
+      makeVeil(tester);
+      await pumpVeil(tester);
+      veil.reveal();
+      await advance(tester, revealTime * 2);
+      expect(veil.isVisible, isFalse);
+    }
+
+    testWidgets('the paper fades in evenly and then covers fully', (
+      tester,
+    ) async {
+      await revealed(tester);
+      var covered = false;
+      veil.cover(skeleton: false, fade: true);
+      unawaited(veil.covered.then((_) => covered = true));
+      await tester.pump();
+      await advance(tester, AppMotion.fade ~/ 2);
+      expect(veil.isVisible, isTrue);
+      expect(veil.isCovered, isFalse);
+      expect(covered, isFalse);
+      // 半途的紙是半透明的整片，不是由左而右的漸層。
+      expect(find.byType(LoadingVeil), isNot(paints..rect(color: paper)));
+      expect(find.byType(LoadingVeil), paints..rect());
+      expect(find.byType(LoadingVeil), noSkeleton);
+
+      await advance(tester, AppMotion.fade);
+      expect(veil.isCovered, isTrue);
+      expect(covered, isTrue);
+      expect(find.byType(LoadingVeil), paints..rect(color: paper));
+      await finish(tester);
+    });
+
+    testWidgets('with animations disabled the paper covers at once', (
+      tester,
+    ) async {
+      await revealed(tester);
+      veil.reduceMotion = true;
+      veil.cover(skeleton: false, fade: true);
+      expect(veil.isCovered, isTrue);
+      await veil.covered;
+      await finish(tester);
+    });
+
+    testWidgets('turning animations off mid-fade covers at once', (
+      tester,
+    ) async {
+      await revealed(tester);
+      veil.cover(skeleton: false, fade: true);
+      await tester.pump();
+      await advance(tester, AppMotion.fade ~/ 2);
+      veil.reduceMotion = true;
+      expect(veil.isCovered, isTrue);
+      await finish(tester);
+    });
   });
 
   testWidgets('each line is drawn where its text is, titles scaled up', (

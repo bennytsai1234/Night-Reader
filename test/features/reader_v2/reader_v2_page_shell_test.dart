@@ -39,6 +39,7 @@ void main() {
     ReaderV2TtsSleepTimer? sleepTimer,
     double paddingHorizontal = 12,
     VoidCallback? onDrawerClosed,
+    VoidCallback? onMenuHidden,
   }) async {
     showControls = 0;
     timedTtsTaps = 0;
@@ -126,6 +127,7 @@ void main() {
             onScrubEnd: noopPercent,
             brightnessControl: brightnessControl,
             sleepTimer: sleepTimer,
+            onMenuHidden: onMenuHidden,
           ),
         ),
       ),
@@ -216,6 +218,34 @@ void main() {
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
     expect(awayOf(ReaderV2BottomMenu), 1);
+  });
+
+  testWidgets('the page hears when the menus are fully off screen', (
+    tester,
+  ) async {
+    final controls = ValueNotifier(true);
+    addTearDown(controls.dispose);
+    var hidden = 0;
+    await pumpShell(
+      tester,
+      controls: controls,
+      brightnessControl: const SizedBox.expand(),
+      onMenuHidden: () => hidden += 1,
+    );
+    await tester.pumpAndSettle();
+    expect(hidden, 0);
+
+    // 收起一開始不算：要等選單滑出畫面，頁面才推下一頁或開始重工作。
+    controls.value = false;
+    await tester.pump();
+    await tester.pump(AppMotion.readerMenuOut ~/ 2);
+    expect(hidden, 0);
+    await tester.pump(AppMotion.readerMenuOut);
+    expect(hidden, 1);
+
+    controls.value = true;
+    await tester.pumpAndSettle();
+    expect(hidden, 1);
   });
 
   testWidgets('header and footer open the menu only on a finished tap', (
@@ -451,6 +481,37 @@ void main() {
         findsOneWidget,
       );
       expect(tester.getRect(infoText('第一章')), infoTitle);
+    });
+
+    testWidgets('the skeleton keeps breathing when the info finishes fading', (
+      tester,
+    ) async {
+      final states = ValueNotifier(ReaderV2InfoState.ready);
+      addTearDown(states.dispose);
+      await pumpShell(
+        tester,
+        controlsVisible: false,
+        infoStates: states,
+        headerInfo: headerInfo,
+      );
+      await tester.pumpAndSettle();
+
+      states.value = ReaderV2InfoState.loading;
+      await tester.pump();
+      await tester.pump(AppMotion.fade ~/ 2);
+      final breathing = [
+        for (final element in find.byType(Skeleton).evaluate())
+          (element as StatefulElement).state,
+      ];
+      expect(breathing, hasLength(2));
+
+      // 資訊淡完移出畫面：骨架留在原本的元素上，呼吸不從頭開始。
+      await tester.pump(AppMotion.fade);
+      expect(infoText('第一章'), findsOneWidget);
+      expect([
+        for (final element in find.byType(Skeleton).evaluate())
+          (element as StatefulElement).state,
+      ], breathing);
     });
 
     testWidgets('switching back before the fade starts moving keeps the info', (

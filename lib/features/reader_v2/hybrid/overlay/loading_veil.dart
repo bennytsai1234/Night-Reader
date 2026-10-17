@@ -10,7 +10,10 @@ import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 開書、跳章與重新排版時蓋在正文上的一張紙。
 ///
-/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙。紙上的骨架照
+/// 排版期間整張紙蓋住，接在開書轉場後面看起來是同一張紙。跳章、改排版與
+/// 重載內容時舊正文還在畫面上，紙以 [AppMotion.fade] 淡入蓋過它
+/// （[cover] 的 `fade`），蓋滿（[covered]）才拿掉舊正文、開始排版
+/// （ADR 0018）。紙上的骨架照
 /// 一頁真正的每一行畫：開書有上次記下的那一頁時紙一蓋上就淡入，其他時候
 /// 紙先空著，第一頁排好後才照它淡入（[showSkeleton]，ADR 0016、0024）。
 /// 骨架出現與正文排好後掀紙都照骨架換場（[SkeletonReveal]，使用者選的方式
@@ -72,12 +75,15 @@ class LoadingVeilController {
   final MotionHold _hold = MotionHold();
 
   /// 系統要求減少動態（`MediaQuery.disableAnimations`）時，紙與骨架直接到位，
-  /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點。
+  /// 骨架不呼吸；中途切換時，進行中的淡出與淡入也直接跳到終點（淡入中的
+  /// 紙蓋滿、掀開中的紙掀掉）。
   set reduceMotion(bool value) {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
     if (value) {
-      if (_cover.isAnimating) _cover.value = 0;
+      if (_cover.isAnimating) {
+        _cover.value = _cover.status == AnimationStatus.forward ? 1 : 0;
+      }
       if (_skeleton.isAnimating) {
         _skeleton.value = _skeleton.status == AnimationStatus.reverse ? 0 : 1;
       }
@@ -97,8 +103,26 @@ class LoadingVeilController {
     }
   }
 
-  /// 紙還蓋著或正在淡出。
+  /// 紙還蓋著或正在淡入、淡出。
   bool get isVisible => !_cover.isDismissed;
+
+  /// 紙整張蓋滿、沒有在淡入淡出。
+  bool get isCovered => _cover.isCompleted;
+
+  /// 紙停下來時完成：淡入蓋滿，或途中改成掀開、淡出完。沒有在淡入淡出
+  /// 時立即完成。
+  Future<void> get covered {
+    if (!_cover.isAnimating) return Future<void>.value();
+    final settled = Completer<void>();
+    void listener(AnimationStatus status) {
+      if (status.isAnimating) return;
+      _cover.removeStatusListener(listener);
+      settled.complete();
+    }
+
+    _cover.addStatusListener(listener);
+    return settled.future;
+  }
 
   /// 骨架還在淡入或淡出。
   bool get isSkeletonFading => _skeleton.isAnimating;
@@ -109,8 +133,17 @@ class LoadingVeilController {
   /// 蓋上整張紙。[skeleton] 為 true 時骨架從目前的濃淡繼續淡入（淡出途中
   /// 再蓋上不會先閃空）；false 時紙先空著，等 [showSkeleton]，已經畫著的
   /// 骨架淡掉。
-  void cover({bool skeleton = true}) {
-    _cover.value = 1;
+  ///
+  /// [fade] 時紙從目前的濃淡以 [AppMotion.fade] 淡入（底下的舊正文還在，
+  /// 等 [covered] 再拿掉）；否則直接蓋滿。掀紙途中再淡入時沿用那次掀紙的
+  /// 方式倒回來，其他時候整張一起淡。
+  void cover({bool skeleton = true, bool fade = false}) {
+    if (fade && !_reduceMotion) {
+      if (!_cover.isAnimating) _sweep = false;
+      unawaited(_cover.forward());
+    } else {
+      _cover.value = 1;
+    }
     if (skeleton) {
       showSkeleton();
     } else {
