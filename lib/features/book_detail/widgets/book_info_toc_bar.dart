@@ -18,7 +18,8 @@ class BookInfoTocBar extends StatelessWidget {
     required this.onLocateCurrent,
   });
 
-  static const double _buttonSize = 34;
+  /// 組標題右側小圓鈕的直徑；載入骨架照它畫佔位。
+  static const double buttonSize = 34;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +38,7 @@ class BookInfoTocBar extends StatelessWidget {
       child: GlassIconButton(
         icon: icon,
         tooltip: tooltip,
-        size: _buttonSize,
+        size: buttonSize,
         iconSize: 18,
         color: color,
         onPressed: onPressed,

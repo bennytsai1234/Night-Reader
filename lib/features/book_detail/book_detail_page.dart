@@ -191,8 +191,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
   bool _hasAmbience(BookDetailProvider provider) =>
       BookCoverAmbience.supports(UnifiedCovers.coverOf(provider.book));
 
-  /// 書名、作者與封面一進頁就畫出，載入中只有
-  /// 動作按鈕與頁首以下顯示骨架；資料到了以淡入取代。
+  /// 書名、作者與封面一進頁就畫出，載入中只有動作按鈕與頁首以下顯示
+  /// 骨架；資料到了照骨架換場（[SliverSkeletonSwitcher]）換成內容。
   Widget _buildContent(BuildContext context, BookDetailProvider provider) {
     final currentBook = provider.book;
     final padding = MediaQuery.paddingOf(context);
@@ -247,12 +247,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
               ],
             ),
           ),
-          if (loading)
-            const SliverToBoxAdapter(
-              child: Skeleton(child: BookDetailSkeleton()),
-            )
-          else
-            ..._buildLoadedSlivers(context, provider),
+          // 骨架照進頁時手上的書排；資料到了先在骨架底下排好內容，再照
+          // 骨架換場的設定換過去。
+          SliverSkeletonSwitcher(
+            loading: loading,
+            skeleton: BookDetailSkeleton(book: currentBook),
+            builder: (context) => _buildLoadedSlivers(context, provider),
+          ),
           // 底部讓出浮動閱讀鈕（已含在 padding.bottom 裡）。
           SliverPadding(
             padding: EdgeInsets.only(bottom: padding.bottom + AppSpacing.md),
@@ -277,7 +278,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
   }
 
-  /// 載入完成後頁首以下的內容；各區塊第一次出現時淡入。
+  /// 載入完成後頁首以下的內容。跟著骨架換場出現的區塊不另外淡；之後才
+  /// 出現的（例如目錄搜尋沒有結果的提示）第一次出現時淡入。
   List<Widget> _buildLoadedSlivers(
     BuildContext context,
     BookDetailProvider provider,

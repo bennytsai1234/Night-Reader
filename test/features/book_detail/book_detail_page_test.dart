@@ -19,6 +19,7 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 書籍資料要等 [gate] 打開才回來，用來停在載入中。
 class _FakeBookDao extends Fake implements BookDao {
@@ -134,6 +135,118 @@ void main() {
       expect(capsule(tester).visible, isTrue);
     },
   );
+
+  group('the skeleton below the header turns into the content', () {
+    const tocHeader = '目錄（共 40 章）';
+
+    Book detailedBook() => bookWith()
+      ..originName = '測試書源'
+      ..latestChapterTitle = '第40章 夜深'
+      ..intro = '夜讀測試書的簡介，' * 12
+      ..totalChapterNum = 40;
+
+    bool inSkeleton(Element element) {
+      var found = false;
+      element.visitAncestorElements((ancestor) {
+        final widget = ancestor.widget;
+        found =
+            widget is SkeletonRevealLayer &&
+            widget.side == SkeletonRevealSide.skeleton;
+        return !found;
+      });
+      return found;
+    }
+
+    Finder textIn(String text, {required bool skeleton}) =>
+        find.byElementPredicate(
+          (element) =>
+              element.widget is Text &&
+              (element.widget as Text).data == text &&
+              inSkeleton(element) == skeleton,
+        );
+
+    /// 頁首以下那一段的骨架層（頁首的動作列另有自己的骨架）。
+    SkeletonRevealLayer skeletonLayer(WidgetTester tester) =>
+        tester.widget<SkeletonRevealLayer>(
+          find
+              .ancestor(
+                of: textIn(tocHeader, skeleton: true),
+                matching: find.byType(SkeletonRevealLayer),
+              )
+              .first,
+        );
+
+    /// 資料到了、內容在骨架底下排好的那一幀。
+    Future<void> untilContentLaidOut(WidgetTester tester) async {
+      bookDao.gate.complete();
+      for (
+        var frame = 0;
+        frame < 100 && textIn(tocHeader, skeleton: false).evaluate().isEmpty;
+        frame++
+      ) {
+        await tester.pump();
+      }
+      expect(textIn(tocHeader, skeleton: false), findsOneWidget);
+    }
+
+    testWidgets('the content is laid out under the skeleton before it shows', (
+      tester,
+    ) async {
+      await pumpDetail(tester, detailedBook());
+      final breathing = tester.state(find.byType(Skeleton).last);
+
+      await untilContentLaidOut(tester);
+      // 內容已經排好，骨架還整個蓋著；骨架沒有被重建，呼吸接著走。
+      expect(textIn(tocHeader, skeleton: true), findsOneWidget);
+      expect(skeletonLayer(tester).opacity.value, 1);
+      expect(tester.state(find.byType(Skeleton).last), same(breathing));
+
+      // 下一幀才開始換場，照設定由左而右（預設）。
+      await tester.pump();
+      await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
+      expect(skeletonLayer(tester).sweep, isTrue);
+      expect(skeletonLayer(tester).opacity.value, inExclusiveRange(0, 1));
+
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(textIn(tocHeader, skeleton: false), findsOneWidget);
+    });
+
+    testWidgets('each skeleton bar sits where its text lands', (tester) async {
+      await pumpDetail(tester, detailedBook());
+      await untilContentLaidOut(tester);
+
+      // 骨架照進頁時手上的書排：來源、最新章節，以及排在簡介之後的目錄
+      // 組標題，骨架與內容在同一個位置，換場時版面不跳。
+      for (final text in ['測試書源', '第40章 夜深', tocHeader]) {
+        final bar = tester.getRect(textIn(text, skeleton: true));
+        final content = tester.getRect(textIn(text, skeleton: false));
+        expect(bar.top, content.top, reason: text);
+        expect(bar.height, content.height, reason: text);
+        // 來源右側的書源狀態膠囊要載入後才知道寫什麼，橫向位置只對得上
+        // 其他列。
+        if (text != '測試書源') expect(bar.left, content.left, reason: text);
+      }
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('with animations disabled the content replaces it at once', (
+      tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await pumpDetail(tester, detailedBook());
+      await untilContentLaidOut(tester);
+      await tester.pump();
+      await tester.pump();
+      expect(textIn(tocHeader, skeleton: true), findsNothing);
+      expect(textIn(tocHeader, skeleton: false), findsOneWidget);
+      await tester.pumpAndSettle();
+    });
+  });
 
   testWidgets('reading is a floating capsule the chapter list ends above', (
     tester,
