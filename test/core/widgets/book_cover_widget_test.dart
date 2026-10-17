@@ -20,6 +20,7 @@ final _png = Uint8List.fromList([
 void main() {
   late Directory dir;
   late String coverUrl;
+  late String otherUrl;
 
   setUp(() async {
     BookCoverWidget.forgetFailedCovers();
@@ -29,6 +30,8 @@ void main() {
     dir = Directory.systemTemp.createTempSync('night_reader_cover_');
     final file = File('${dir.path}/cover.png')..writeAsBytesSync(_png);
     coverUrl = Uri.file(file.path).toString();
+    final other = File('${dir.path}/other.png')..writeAsBytesSync(_png);
+    otherUrl = Uri.file(other.path).toString();
   });
 
   tearDown(() => dir.deleteSync(recursive: true));
@@ -76,6 +79,16 @@ void main() {
         .opacity
         .value;
   }
+
+  /// 某個來源那一層的封面圖。
+  Finder imageOf(String url) => find.descendant(
+    of: find.byWidgetPredicate(
+      (w) =>
+          w is KeyedSubtree &&
+          w.key == ValueKey<(String, String?)>(('cover', url)),
+    ),
+    matching: find.byType(RawImage),
+  );
 
   testWidgets('a cover that fails to load fades the default cover in', (
     tester,
@@ -139,5 +152,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DefaultBookCover), findsNothing);
     expect(layerOpacity(tester, find.byType(RawImage)), 1);
+  });
+
+  testWidgets('a rebuild while the fallback fades in keeps fading', (
+    tester,
+  ) async {
+    final missing = Uri.file('${dir.path}/missing.png').toString();
+    await tester.pumpWidget(cover(missing));
+    await settleIo(tester);
+    await tester.pump(AppMotion.fade ~/ 4);
+    final before = opacityAbove(tester, find.byType(DefaultBookCover));
+    expect(before, inExclusiveRange(0, 1));
+
+    // 父層因為別的原因重建（搜尋結果陸續進來）：淡入接著播，不會一下到位。
+    await tester.pumpWidget(cover(missing));
+    expect(opacityAbove(tester, find.byType(DefaultBookCover)), before);
+    await tester.pump(AppMotion.fade ~/ 4);
+    expect(
+      opacityAbove(tester, find.byType(DefaultBookCover)),
+      inExclusiveRange(before, 1),
+    );
+    await tester.pumpAndSettle();
+    expect(opacityAbove(tester, find.byType(DefaultBookCover)), 1);
+  });
+
+  testWidgets('a known failed cover shows the default cover right away', (
+    tester,
+  ) async {
+    final missing = Uri.file('${dir.path}/missing.png').toString();
+    await tester.pumpWidget(cover(missing));
+    await settleIo(tester);
+    await tester.pumpAndSettle();
+
+    // 換一個新的封面元件（例如清單重新建立）：記得載不到，不再重抓、不再淡。
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(cover(missing));
+    expect(find.byType(DefaultBookCover), findsOneWidget);
+    expect(opacityAbove(tester, find.byType(DefaultBookCover)), 1);
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('switching back before the new cover decodes keeps the old one', (
+    tester,
+  ) async {
+    await tester.pumpWidget(cover(null));
+    await tester.pumpWidget(cover(coverUrl));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+
+    // 新圖還沒解碼就切回來：畫面上本來就是預設封面，照常畫著、不重新淡入。
+    await tester.pumpWidget(cover(null));
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+    expect(find.byType(Image), findsNothing);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+    expect(tester.hasRunningAnimations, isFalse);
+  });
+
+  testWidgets('switching back mid-crossfade fades the new cover back out', (
+    tester,
+  ) async {
+    await tester.pumpWidget(cover(null));
+    await tester.pumpWidget(cover(coverUrl));
+    await settleIo(tester);
+    await tester.pump(AppMotion.fade ~/ 2);
+    final half = layerOpacity(tester, imageOf(coverUrl));
+    expect(half, inExclusiveRange(0, 1));
+
+    await tester.pumpWidget(cover(null));
+    // 從畫面上的樣子接著換：預設封面一直在底下，新圖從一半淡回去。
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+    expect(layerOpacity(tester, imageOf(coverUrl)), half);
+    await tester.pump(AppMotion.fade ~/ 2);
+    expect(layerOpacity(tester, imageOf(coverUrl)), inExclusiveRange(0, half));
+
+    await tester.pumpAndSettle();
+    expect(find.byType(RawImage), findsNothing);
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+  });
+
+  testWidgets('a third cover mid-crossfade continues from what is drawn', (
+    tester,
+  ) async {
+    await tester.pumpWidget(cover(null));
+    await tester.pumpWidget(cover(coverUrl));
+    await settleIo(tester);
+    await tester.pump(AppMotion.fade ~/ 2);
+    final half = layerOpacity(tester, imageOf(coverUrl));
+    expect(half, inExclusiveRange(0, 1));
+
+    // 換到第三張：底下的預設封面與淡到一半的那張都照畫，新的解碼好才淡入。
+    await tester.pumpWidget(cover(otherUrl));
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+    expect(layerOpacity(tester, imageOf(coverUrl)), half);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(layerOpacity(tester, find.byType(DefaultBookCover)), 1);
+    expect(layerOpacity(tester, imageOf(coverUrl)), half);
+
+    await settleIo(tester);
+    await tester.pump(AppMotion.fade ~/ 2);
+    expect(layerOpacity(tester, imageOf(coverUrl)), half);
+    expect(layerOpacity(tester, imageOf(otherUrl)), inExclusiveRange(0, 1));
+
+    await tester.pumpAndSettle();
+    expect(find.byType(DefaultBookCover), findsNothing);
+    expect(imageOf(coverUrl), findsNothing);
+    expect(layerOpacity(tester, imageOf(otherUrl)), 1);
   });
 }
