@@ -582,9 +582,11 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         );
         if (!mounted) return;
         // 「閱讀偏好」頁以自己的 controller 寫入同一組偏好設定；
-        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。
-        unawaited(_host.settings.loadSettings());
-        _restoreMenuWhenUncovered();
+        // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。等返回動畫
+        // 播完才載入：設定變了會重排正文，不和返回動畫疊在一起（ADR 0018）。
+        _restoreMenuWhenUncovered(
+          beforeMenu: () => unawaited(_host.settings.loadSettings()),
+        );
     }
   }
 
@@ -615,10 +617,14 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 推上去的頁關掉後，等返回動畫播完再把選單滑回來，回到打開選單的
   /// 樣子；滑入不和返回動畫疊在一起，也不在淡入中的閱讀器裡出現。
-  void _restoreMenuWhenUncovered() {
+  /// [beforeMenu] 在返回動畫播完、選單滑回之前呼叫（閱讀器已經被別頁
+  /// 蓋住時也照樣呼叫）。
+  void _restoreMenuWhenUncovered({VoidCallback? beforeMenu}) {
     unawaited(
       TransitionSettled.uncovered(context).then((_) {
-        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        if (!mounted) return;
+        beforeMenu?.call();
+        if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
         _host.menu.showControls();
       }),
     );

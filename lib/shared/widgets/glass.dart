@@ -143,10 +143,13 @@ class GlassReveal extends InheritedWidget {
 /// 的按鈕（種類、圖示或文字不同）時交叉淡換，玻璃的寬度在同一段時間裡
 /// 連續變到新按鈕的寬度；圓鈕就是最窄的膠囊，兩者共用同一塊膠囊形玻璃。
 /// 不要放非玻璃的元件：它背後也會多出一塊玻璃。
+///
+/// [child] 為 null 時這個位置沒有按鈕：玻璃縮成一個點。換成有按鈕時玻璃從
+/// 那個點長大，拿掉時縮回去，不淡（ADR 0022）。
 class GlassMorph extends StatelessWidget {
   const GlassMorph({super.key, required this.child});
 
-  final Widget child;
+  final Widget? child;
 
   /// 判斷是不是換了一顆按鈕：同種類但圖示或文字不同也算。
   static Object _identityOf(Widget child) => switch (child) {
@@ -196,10 +199,13 @@ class GlassMorph extends StatelessWidget {
               ?current,
             ],
           ),
-          child: _GlassMorphContent(
-            key: ValueKey(_identityOf(child)),
-            child: child,
-          ),
+          child: switch (child) {
+            final child? => _GlassMorphContent(
+              key: ValueKey(_identityOf(child)),
+              child: child,
+            ),
+            null => const SizedBox.shrink(key: ValueKey(GlassMorph)),
+          },
         ),
       ),
     );
@@ -743,7 +749,9 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
 
   /// 同一頁在兩種頁首之間切換（例如進出多選）時連續過渡：標題交叉淡換，
   /// 左右兩側每個位置的按鈕包在 [GlassMorph] 裡，玻璃留著只改大小、內容
-  /// 淡換。兩種頁首都要設 true，兩側也都只能放玻璃按鈕，按鈕數也要一樣。
+  /// 淡換。兩種頁首都要設 true，兩側也都只能放玻璃按鈕。一側在其中一種頁首
+  /// 沒有按鈕時，那個位置的玻璃從一個點長大或縮回去；右側兩種頁首都有按鈕
+  /// 時，按鈕數要一樣。
   final bool morph;
 
   final String? title;
@@ -821,7 +829,13 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     Widget fadeIn(Widget child) => entrance == null
         ? child
         : FadeTransition(opacity: entrance.title, child: child);
-    Widget slot(Widget button) => morph ? GlassMorph(child: button) : button;
+    // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高。
+    Widget slot(Widget? button) => morph
+        ? Center(widthFactor: 1, child: GlassMorph(child: button))
+        : button!;
+    // 連續過渡時沒有按鈕的一側也留著位置，按鈕才能從一個點長出來。
+    final hasLeading = effectiveLeading != null || morph;
+    final trailing = morph && actions.isEmpty ? const <Widget?>[null] : actions;
     Widget? middle =
         titleWidget ??
         (title == null
@@ -870,7 +884,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                 height: AppGlass.headerToolbarHeight,
                 child: NavigationToolbar(
                   middleSpacing: AppSpacing.md,
-                  leading: effectiveLeading == null
+                  leading: !hasLeading
                       ? null
                       : slideIn(
                           Padding(
@@ -884,7 +898,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                           ),
                         ),
                   middle: middle == null ? null : fadeIn(middle),
-                  trailing: actions.isEmpty
+                  trailing: trailing.isEmpty
                       ? null
                       : slideIn(
                           Padding(
@@ -896,10 +910,10 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  for (var i = 0; i < actions.length; i++) ...[
+                                  for (var i = 0; i < trailing.length; i++) ...[
                                     if (i > 0)
                                       const SizedBox(width: AppSpacing.sm),
-                                    slot(actions[i]),
+                                    slot(trailing[i]),
                                   ],
                                 ],
                               ),
