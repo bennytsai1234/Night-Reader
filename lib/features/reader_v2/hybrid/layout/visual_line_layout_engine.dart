@@ -361,9 +361,9 @@ final class VisualLineLayoutEngine {
     }
 
     // 在 b 之前斷行，並把這一行空出來的寬度平均攤進字距。只攤在旁邊有
-    // 整格字的字距上，英文單字裡面不拉開。空出來的寬度取整數個半格：
-    // 拉下去的都是整格字或補到半格的英數字段，剩下不到半格的是文字框
-    // 防浮點誤差的 slack，攤進去會讓原生排版把這一行再折一次。
+    // 整格字的字距上，英文單字裡面不拉開。行寬補到文字框裡最後一條半格
+    // 線，和排滿的行同一個右緣：文字框是整數個字格再加一點防浮點誤差的
+    // slack，slack 攤進去會讓原生排版把這一行再折一次。
     void endLineJustified(int b) {
       final breakOffset = shaped[b].start;
       final widths = <int, double>{};
@@ -376,12 +376,13 @@ final class VisualLineLayoutEngine {
       for (final width in widths.values) {
         used += width;
       }
-      final spread = ((available - used + _fitEpsilon) / half).floor() * half;
+      final lineWidth = ((available + _fitEpsilon) / half).floor() * half;
+      final spread = lineWidth - used;
       final gaps = <int>[
         for (var k = lineStartIndex + 1; k < b; k += 1)
           if (isCell(k) || isCell(k - 1)) k,
       ];
-      if (spread > 0 && gaps.isNotEmpty) {
+      if (spread > _fitEpsilon && gaps.isNotEmpty) {
         final each = spread / gaps.length;
         for (final k in gaps) {
           final offset = shaped[k].start;

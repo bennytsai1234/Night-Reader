@@ -11,9 +11,11 @@ import 'package:night_reader/features/reader_v2/layout/reader_v2_typography.dart
 /// 換行做避頭尾，被拉字的行把空隙攤進字距（ADR 0026）。
 ///
 /// 測試字型（`test/fixtures/fonts/mixed_width_test.ttf`）：漢字與全形標點
-/// 1000、英文字母 500，字級 20，所以一格 20px。文字框寬 100 是五格。
+/// 1000、英文字母 500，字級 20，所以一格 20px。文字框寬 100 是五格，
+/// 和閱讀器一樣再加 0.05 的 slack 防浮點誤差。
 const double _cell = 20;
-const double _width = 100;
+const double _frame = 100;
+const double _width = _frame + 0.05;
 const _style = HybridBlockTextStyle(
   fontSize: _cell,
   lineHeight: 1.5,
@@ -89,7 +91,7 @@ void main() {
         LineSpacer(3, gap),
       ]),
     );
-    expect(_box(text, plan, 3).right, closeTo(_width, 0.01), reason: '右緣切齊');
+    expect(_box(text, plan, 3).right, closeTo(_frame, 0.01), reason: '右緣切齊');
     expect(_box(text, plan, 4).left, closeTo(0, 0.01));
   });
 
@@ -108,7 +110,7 @@ void main() {
       plan.spacers,
       _spacers(const [LineSpacer(1, _cell), LineSpacer(2, _cell)]),
     );
-    expect(_box(text, plan, 2).right, closeTo(_width, 0.01));
+    expect(_box(text, plan, 2).right, closeTo(_frame, 0.01));
   });
 
   test('刪節號與破折號成對不拆', () {
@@ -122,7 +124,7 @@ void main() {
     final plan = _plan(text);
     expect(plan.visualLineBreakOffsets, const [3]);
     expect(_box(text, plan, 3).left, closeTo(0, 0.01), reason: 'ab 移到下一行行首');
-    expect(_box(text, plan, 2).right, closeTo(_width, 0.01));
+    expect(_box(text, plan, 2).right, closeTo(_frame, 0.01));
   });
 
   test('英文單字裡面不拉開字距', () {
@@ -137,7 +139,15 @@ void main() {
     final a = _box(text, plan, 1);
     final b = _box(text, plan, 2);
     expect(b.left, closeTo(a.right, 0.01), reason: 'a、b 之間沒有補白');
-    expect(_box(text, plan, 3).right, closeTo(_width, 0.01));
+    expect(_box(text, plan, 3).right, closeTo(_frame, 0.01));
+  });
+
+  test('留在行尾的英數字段沒有右側補白，那一行仍補到和滿行同一個右緣', () {
+    // 「「」被拉到下一行，一 abcd 留在本行；abcd 在行尾不補右側。
+    const text = '一abcd「二三四';
+    final plan = _plan(text);
+    expect(plan.visualLineBreakOffsets.first, 5);
+    expect(_box(text, plan, 4).right, closeTo(_frame, 0.01));
   });
 
   test('要把整行拉空或拉太多字時照原本的位置斷', () {
