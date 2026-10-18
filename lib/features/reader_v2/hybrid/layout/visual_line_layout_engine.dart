@@ -120,9 +120,12 @@ final class VisualLineBreakPolicy {
 /// - 行首的一段不補左側、補白全放右側，貼齊左邊界（段首縮排之後也算
 ///   行首）；行尾的一段不補右側。
 ///
-/// A glyph stays on the current line whenever it fits the physical content
-/// width. Punctuation has no special veto (ADR 0005). This class never reads
-/// SkParagraph soft-wrap line boundaries.
+/// 字放得下就留在這一行，只有避頭尾例外（ADR 0026）：在某處斷行會讓
+/// 「，。」』」這類標點落在行首、「「『」留在行尾，或拆開成對的刪節號、
+/// 破折號時，往回找可以斷的位置，把前面幾個字一起拉到下一行；這一行空出
+/// 的寬度平均攤進字距，右緣仍然切齊。
+///
+/// This class never reads SkParagraph soft-wrap line boundaries.
 final class VisualLineLayoutEngine {
   const VisualLineLayoutEngine({
     this.paragraphLayout = const ReaderParagraphLayout(),
@@ -324,6 +327,87 @@ final class VisualLineLayoutEngine {
       available = contentWidth;
     }
 
+    String charAt(int i) => text.substring(shaped[i].start, shaped[i].end);
+
+    // 第 i 個字之前斷行是否違反避頭尾。
+    bool forbidsBreakBefore(int i) {
+      final previous = charAt(i - 1);
+      final current = charAt(i);
+      if (_noLineStart.contains(current) || _noLineEnd.contains(previous)) {
+        return true;
+      }
+      return previous == current && _unsplittablePairs.contains(current);
+    }
+
+    // 本來要在 brk 之前斷行；違反避頭尾時往回找可以斷的位置，回傳下一行
+    // 的第一個字。整段英數字當成一個字一起拉。找不到（本行會被拉空、或
+    // 要拉超過 [_maxKinsokuPull] 個字）就回傳 null，照原本的位置斷。
+    int? kinsokuBreak(int brk) {
+      var b = brk;
+      var pulled = 0;
+      while (forbidsBreakBefore(b)) {
+        if (pulled == _maxKinsokuPull) return null;
+        var previous = b - 1;
+        if (!isCell(previous)) {
+          while (previous > lineStartIndex && !isCell(previous - 1)) {
+            previous -= 1;
+          }
+        }
+        if (previous <= lineStartIndex) return null;
+        b = previous;
+        pulled += 1;
+      }
+      return b == brk ? null : b;
+    }
+
+    // 在 b 之前斷行，並把這一行空出來的寬度平均攤進字距。只攤在旁邊有
+    // 整格字的字距上，英文單字裡面不拉開。行寬補到文字框裡最後一條半格
+    // 線，和排滿的行同一個右緣：文字框是整數個字格再加一點防浮點誤差的
+    // slack，slack 攤進去會讓原生排版把這一行再折一次。
+    void endLineJustified(int b) {
+      final breakOffset = shaped[b].start;
+      final widths = <int, double>{};
+      for (final spacer in spacers) {
+        if (spacer.offset < breakOffset) {
+          widths[spacer.offset] = (widths[spacer.offset] ?? 0) + spacer.width;
+        }
+      }
+      var used = shaped[b - 1].right - shaped[lineStartIndex].left;
+      for (final width in widths.values) {
+        used += width;
+      }
+      final lineWidth = ((available + _fitEpsilon) / half).floor() * half;
+      final spread = lineWidth - used;
+      final gaps = <int>[
+        for (var k = lineStartIndex + 1; k < b; k += 1)
+          if (isCell(k) || isCell(k - 1)) k,
+      ];
+      if (spread > _fitEpsilon && gaps.isNotEmpty) {
+        final each = spread / gaps.length;
+        for (final k in gaps) {
+          final offset = shaped[k].start;
+          widths[offset] = (widths[offset] ?? 0) + each;
+        }
+      }
+      spacers = <LineSpacer>[
+        for (final offset in widths.keys.toList()..sort())
+          LineSpacer(offset, widths[offset]!),
+      ];
+      trailingSpacer = null;
+      endLine(breakOffset, b);
+    }
+
+    // 在 brk 之前斷行，違反避頭尾時改斷在前面；回傳下一行的第一個字。
+    int breakBefore(int brk) {
+      final pulled = kinsokuBreak(brk);
+      if (pulled == null) {
+        endLine(shaped[brk].start, brk);
+        return brk;
+      }
+      endLineJustified(pulled);
+      return pulled;
+    }
+
     while (index < shaped.length) {
       final grapheme = shaped[index];
       if (isCell(index)) {
@@ -336,7 +420,7 @@ final class VisualLineLayoutEngine {
             index += 1;
             continue;
           }
-          endLine(grapheme.start, index);
+          index = breakBefore(index);
           continue;
         }
         x += advance;
@@ -408,7 +492,7 @@ final class VisualLineLayoutEngine {
         if (breakOffset <= runStart) {
           if (!atLineStart) {
             // 第一個字就放不下，而本行已有內容：整段移到下一行。
-            endLine(runStart, index);
+            index = breakBefore(index);
             continue;
           }
           // 行首的一個英文字比整行還寬：只能從字中間斷，至少放一個字。
@@ -436,8 +520,13 @@ final class VisualLineLayoutEngine {
         index = runEnd;
         continue;
       }
-      endLine(breakOffset, segmentEnd);
-      index = segmentEnd;
+      if (segmentEnd == runEnd) {
+        // 整段留在行尾，下一行從整格字開始：照避頭尾檢查。
+        index = breakBefore(segmentEnd);
+      } else {
+        endLine(breakOffset, segmentEnd);
+        index = segmentEnd;
+      }
       continue;
     }
 
@@ -481,6 +570,26 @@ final class VisualLineLayoutEngine {
     return splitsSurrogate ? safe - 1 : safe;
   }
 }
+
+/// 不放行首的標點。
+const Set<String> _noLineStart = {
+  '，', '。', '、', '；', '：', '！', '？', '」', '』', '）', '】', '》', '〉', //
+  '〕', '｝', '．', '・', '‧', '·', '”', '’', ',', '.', ';', ':', '!', '?', //
+  ')', ']', '}',
+};
+
+/// 不放行尾的標點。
+const Set<String> _noLineEnd = {
+  '「', '『', '（', '【', '《', '〈', '〔', '｛', '“', '‘', '(', '[', '{', //
+};
+
+/// 成對使用、不拆到兩行的符號：刪節號「……」與破折號「——」。
+const Set<String> _unsplittablePairs = {'…', '—'};
+
+/// 避頭尾最多往回拉幾個字（整段英數字算一個）。最常見的是拉一個字陪標點
+/// 下去；句號接下引號這樣兩個收尾標點連在一起時要拉兩個，再留一個餘裕。
+/// 超過就照原本的位置斷，免得一行被拉得太短、字距攤得太開。
+const int _maxKinsokuPull = 3;
 
 /// 全形標點：字形本身已帶空白，旁邊的英數字不另外留間隙。
 bool _isCjkPunctuation(String text, ShapedGrapheme grapheme) {

@@ -48,8 +48,9 @@ const List<String> kReaderV2FontFamilyFallback = <String>['sans-serif'];
 // 舊 metrics 不可沿用。
 // twpunct-v2：刪節號與破折號也改由 NightReaderPunct 繪製，各佔一格。
 // halfcell-v1：英數字段補到半格、emoji 縮到一格、行高由 strut 固定。
+// kinsoku-v1：換行做避頭尾，被拉字的行把空隙攤進字距。
 const String kReaderV2CjkTypographyFeatureSignature =
-    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v2+halfcell-v1';
+    'fwid+lastline-v1+physicalwidth-v1+centered-text-frame-v1+readerbreak-v1+systemfont-v1+locale-zh-hant-tw-v1+chapter-gap-v2+twpunct-v2+halfcell-v1+kinsoku-v1';
 
 /// 未設定標題字號時，章節標題比正文大的字號（舊版固定規則）。
 const double kReaderV2DefaultTitleSizeDelta = 4.0;

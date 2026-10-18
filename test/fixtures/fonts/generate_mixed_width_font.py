@@ -3,7 +3,7 @@
 測試環境的預設字型每個字都一樣寬，量不出英數字補半格的效果。這個字型
 的字寬刻意不同（字框 1000）：
 
-- 漢字「一二三四五六七八九十」與全形標點「「」，。」：1000（一格）
+- 漢字「一二三四五六七八九十」與全形標點「「」『』，。、？！…—」：1000（一格）
 - 英文字母：500；i、l：250；數字：600；空格：250
 - U+1F600（😀）：1200，用來驗證 emoji 會縮到一格
 
@@ -19,7 +19,7 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 FAMILY = "ReaderMixedWidthTest"
-CELL = "一二三四五六七八九十「」，。"
+CELL = "一二三四五六七八九十「」『』，。、？！…—"
 
 
 def _advances():
