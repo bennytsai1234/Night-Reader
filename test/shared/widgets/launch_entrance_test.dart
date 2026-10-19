@@ -5,16 +5,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
+import '../../support/glass_motion.dart';
+
 void main() {
   var leftTaps = 0;
 
   /// 像主頁：頁首左右各一顆玻璃按鈕，內容是書架的骨架換場。
-  Widget host({required bool loading, Widget? later}) => MaterialApp(
+  Widget host({
+    required bool loading,
+    Widget? later,
+    bool waitForCovers = false,
+  }) => MaterialApp(
     theme: buildAppTheme(AppStyle.paper, Brightness.light),
     home: LaunchEntrance(
       child: Scaffold(
@@ -27,11 +34,29 @@ void main() {
           ),
           actions: [GlassIconButton(icon: Icons.add, onPressed: () {})],
         ),
+        bottomNavigationBar: FloatingTabBar(
+          items: const [
+            FloatingTabItem(
+              icon: Icons.book_outlined,
+              selectedIcon: Icons.book,
+              label: '書',
+            ),
+            FloatingTabItem(
+              icon: Icons.explore_outlined,
+              selectedIcon: Icons.explore,
+              label: '發現',
+            ),
+          ],
+          currentIndex: 0,
+          onTap: (_) {},
+          onSearch: () {},
+        ),
         body: Stack(
           children: [
             Builder(
               builder: (context) => SkeletonSwitcher(
                 loading: loading,
+                waitForCovers: waitForCovers,
                 entrance: LaunchEntrance.maybeOf(context),
                 skeleton: const SkeletonBox(width: 40, height: 40),
                 builder: (_) => const Text('內容'),
@@ -145,6 +170,12 @@ void main() {
       final right = glass(tester, Icons.add);
       expect(left, inExclusiveRange(0, 1));
       expect(left, greaterThan(right), reason: '和書架一樣由左而右');
+      expectNoGlassUnderFade(tester);
+      expect(
+        glass(tester, Icons.search_rounded),
+        inExclusiveRange(0, 1),
+        reason: '分頁列與搜尋鈕跟著同一段換成玻璃',
+      );
       expect(
         buttonSkeleton(tester, Icons.menu),
         lessThan(buttonSkeleton(tester, Icons.add)),
@@ -164,6 +195,30 @@ void main() {
       expect(leftTaps, 1);
     },
   );
+
+  testWidgets('reloading mid-reveal sends the buttons back with the shelf '
+      'without rebuilding them during build', (tester) async {
+    Widget at({required bool loading}) =>
+        host(loading: loading, waitForCovers: true);
+    await tester.pumpWidget(at(loading: false));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 650));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(glass(tester, Icons.menu), inExclusiveRange(0, 1), reason: '換場中');
+
+    // 第一次換場途中重新載入、又馬上載完（例如空書架再讀一次）。
+    await tester.pumpWidget(at(loading: true));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpWidget(at(loading: false));
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(glass(tester, Icons.menu), 0, reason: '和書架的內容一起從頭等');
+
+    await tester.pumpAndSettle();
+    expect(glass(tester, Icons.menu), 1);
+    expect(find.byType(SkeletonBox), findsNothing);
+  });
 
   testWidgets('glass built after the entrance is drawn directly', (
     tester,

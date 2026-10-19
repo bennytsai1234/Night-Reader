@@ -258,7 +258,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
       _prepare(SkeletonRevealSide.skeleton);
       _controller.reverse();
     } else if (!_entering) {
-      _onLoaded();
+      _onLoaded(duringBuild: true);
     }
   }
 
@@ -268,11 +268,21 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     if (!widget.loading) _onLoaded();
   }
 
-  void _onLoaded() {
+  void _onLoaded({bool duringBuild = false}) {
     if (widget.waitForCovers) {
-      // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。
-      _controller.value = 0;
       final reveal = _reveal = CoverReveal();
+      // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。換場進度可能
+      // 接著開 App 的頁首按鈕與分頁列（[LaunchEntranceMotion.revealWith]），
+      // 建畫面途中歸零會讓它們在別人建構時重建；先停住，這一幀畫完再歸零
+      // （封面最快也要下一輪才等完）。
+      if (duringBuild) {
+        _controller.stop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && identical(_reveal, reveal)) _controller.value = 0;
+        });
+      } else {
+        _controller.value = 0;
+      }
       unawaited(
         reveal.settle(AppMotion.revealCoverWait).whenComplete(() {
           if (mounted && identical(_reveal, reveal)) _revealContent();
