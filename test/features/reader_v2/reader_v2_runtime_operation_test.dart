@@ -522,6 +522,86 @@ void main() {
     },
   );
 
+  test(
+    'a failed jump that replaced the first open reopens the book instead',
+    () async {
+      final openRestore = Completer<bool>();
+      final runtime = makeRuntime(
+        [chapter(0), chapter(1)],
+        contentLoader: (index, chapter) async {
+          if (index == 1) {
+            throw ReaderV2ContentUnavailableException('目標章節暫時無法取得');
+          }
+          return chapter.content;
+        },
+      );
+      addTearDown(runtime.dispose);
+      final restores = <ReaderV2Location>[];
+      runtime.registerViewportRestore(Object(), (location) {
+        restores.add(location);
+        return restores.length == 1 ? openRestore.future : Future.value(true);
+      });
+
+      final open = runtime.openBook();
+      await pumpEventQueue();
+      expect(restores, hasLength(1));
+      expect(runtime.state.hasStableWorld, isFalse);
+
+      await runtime.jumpToChapter(1);
+      openRestore.complete(true);
+      await open;
+
+      expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+      expect(runtime.state.unavailableMessage, isNull);
+      expect(runtime.state.visibleLocation.chapterIndex, 0);
+      expect(restores.last.chapterIndex, 0);
+      expect(runtime.pendingLocation, isNull);
+      expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+    },
+  );
+
+  test('a relayout carrying a failed jump during the first open reopens the '
+      'book with the new layout', () async {
+    final openRestore = Completer<bool>();
+    final targetContent = Completer<String?>();
+    final runtime = makeRuntime(
+      [chapter(0), chapter(1)],
+      contentLoader: (index, chapter) =>
+          index == 1 ? targetContent.future : Future.value(chapter.content),
+    );
+    addTearDown(runtime.dispose);
+    final restores = <ReaderV2Location>[];
+    runtime.registerViewportRestore(Object(), (location) {
+      restores.add(location);
+      return restores.length == 1 ? openRestore.future : Future.value(true);
+    });
+
+    final open = runtime.openBook();
+    await pumpEventQueue();
+    final jump = runtime.jumpToChapter(1);
+    await pumpEventQueue();
+    final relayout = runtime.applyPresentation(spec: specWithFontSize(22));
+    expect(runtime.pendingLocation?.chapterIndex, 1);
+
+    targetContent.completeError(
+      const ReaderV2ContentUnavailableException('目標章節暫時無法取得'),
+    );
+    await Future.wait([jump, relayout]);
+    openRestore.complete(true);
+    await open;
+
+    expect(runtime.state.lifecycle, ReaderV2Lifecycle.ready);
+    expect(runtime.state.unavailableMessage, isNull);
+    expect(runtime.state.visibleLocation.chapterIndex, 0);
+    expect(
+      runtime.state.layoutSpec.layoutSignature,
+      specWithFontSize(22).layoutSignature,
+    );
+    expect(restores.last.chapterIndex, 0);
+    expect(runtime.pendingLocation, isNull);
+    expect(runtime.takeUserNotice(), '目標章節暫時無法取得');
+  });
+
   test('internal viewport ownership violation is exposed as a bug', () async {
     final runtime = makeRuntime([chapter(0), chapter(1)]);
     addTearDown(runtime.dispose);

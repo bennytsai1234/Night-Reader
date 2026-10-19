@@ -170,7 +170,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     try {
       return await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
-      _finishContentUnavailable(token, error);
+      await _finishContentUnavailable(token, error);
       return false;
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
@@ -197,7 +197,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     try {
       await _positionViewport(location: _initialLocation, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
-      _finishContentUnavailable(token, error);
+      await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
@@ -228,7 +228,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     try {
       await _positionViewport(location: location, token: token);
     } on ReaderV2ContentUnavailableException catch (error) {
-      _finishContentUnavailable(token, error);
+      await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
@@ -256,7 +256,7 @@ class ReaderV2Runtime extends ChangeNotifier {
       await _positionViewport(location: remappedLocation, token: token);
       return true;
     } on ReaderV2ContentUnavailableException catch (error) {
-      _finishContentUnavailable(token, error);
+      await _finishContentUnavailable(token, error);
       return false;
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
@@ -327,11 +327,20 @@ class ReaderV2Runtime extends ChangeNotifier {
     if (stateMachine.abandonOperation(operation)) notifyListeners();
   }
 
-  void _finishContentUnavailable(
+  Future<void> _finishContentUnavailable(
     ReaderV2OperationToken token,
     ReaderV2ContentUnavailableException error,
-  ) {
+  ) async {
     if (!isCurrentOperationToken(token)) return;
+    if (state.lifecycle == ReaderV2Lifecycle.cold &&
+        _targetsAnotherChapterThanOpen(token)) {
+      // 開書還沒排好就跳到別章（之後可能又改了排版、沿用同一個目標），
+      // 那一章取不到：取不到的是跳到的章，不是這本書。回到開書的位置重新開，
+      // 新的開書接手這次操作，連同已經改好的排版；並告訴使用者原因。
+      _pendingUserNotice = error.message;
+      await openBook();
+      return;
+    }
     if (state.hasStableWorld) {
       if (!stateMachine.abandonOperation(token)) return;
       _pendingUserNotice = error.message;
@@ -339,6 +348,12 @@ class ReaderV2Runtime extends ChangeNotifier {
       if (!stateMachine.markUnavailable(token, error)) return;
     }
     notifyListeners();
+  }
+
+  bool _targetsAnotherChapterThanOpen(ReaderV2OperationToken token) {
+    final count = repository.chapterCount;
+    return token.targetLocation.normalized(chapterCount: count).chapterIndex !=
+        _initialLocation.normalized(chapterCount: count).chapterIndex;
   }
 
   Never _rethrowOperationFailure(
@@ -485,7 +500,7 @@ class ReaderV2Runtime extends ChangeNotifier {
         await viewportBridge.saveProgressLocation(state.visibleLocation);
       }
     } on ReaderV2ContentUnavailableException catch (error) {
-      _finishContentUnavailable(token, error);
+      await _finishContentUnavailable(token, error);
     } catch (error, stackTrace) {
       _rethrowOperationFailure(token, error, stackTrace);
     }
