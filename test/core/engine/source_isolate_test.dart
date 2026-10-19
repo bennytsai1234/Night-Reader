@@ -132,6 +132,13 @@ void main() {
   late HttpServer server;
   late String baseUrl;
 
+  // `/held/<名稱>` 的正文：請求到了就記下（[arrived]），等測試放行
+  // （[released]）才回。
+  final arrived = <String, Completer<void>>{};
+  final released = <String, Completer<void>>{};
+  Completer<void> gate(Map<String, Completer<void>> gates, String name) =>
+      gates.putIfAbsent(name, Completer<void>.new);
+
   setUpAll(() async {
     quickJsUnavailableReason();
     SharedPreferences.setMockInitialValues({});
@@ -162,6 +169,11 @@ void main() {
           );
         case '/c/1':
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
+        case final path when path.startsWith('/held/'):
+          final name = path.substring('/held/'.length);
+          gate(arrived, name).complete();
+          await gate(released, name).future;
+          request.response.write('<p>$name 的正文，夜裡讀起來剛好。</p>');
         default:
           request.response.statusCode = HttpStatus.notFound;
       }
@@ -514,6 +526,59 @@ void main() {
         expect(book.getVariable('seen'), '正文');
         expect(chapter.getVariable('page'), '1');
         expect(book.name, '夜讀（改）');
+      },
+      skip: quickJsUnavailableReason(),
+    );
+
+    test('a caller edit made after the work was sent is not undone', () async {
+      final book = Book(
+        bookUrl: '$baseUrl/book/1',
+        origin: baseUrl,
+        name: '夜讀',
+      );
+      final chapter = BookChapter(
+        title: '改名',
+        url: '$baseUrl/held/rename',
+        bookUrl: book.bookUrl,
+      );
+
+      final content = BookSourceService().getContent(source, book, chapter);
+      book.name = '夜讀（改）';
+      // 工作已經送出、正在抓：書源 isolate 的複本是「夜讀（改）」。
+      await gate(arrived, 'rename').future;
+      book.name = '夜讀（再改）';
+      gate(released, 'rename').complete();
+
+      expect(await content, contains('rename 的正文'));
+      expect(book.name, '夜讀（再改）');
+    });
+
+    test(
+      'chapters fetched at the same time keep the variables of both',
+      () async {
+        source.ruleContent!.content =
+            'tag.p@text@js:book.putVariable(chapter.title, "done");result';
+        final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+        BookChapter chapterOf(String name) => BookChapter(
+          title: name,
+          url: '$baseUrl/held/$name',
+          bookUrl: book.bookUrl,
+        );
+
+        final service = BookSourceService();
+        final one = service.getContent(source, book, chapterOf('one'));
+        final two = service.getContent(source, book, chapterOf('two'));
+        // 兩章都送出後才回：兩份複本都還沒有對方的變數。
+        await Future.wait([
+          gate(arrived, 'one').future,
+          gate(arrived, 'two').future,
+        ]);
+        gate(released, 'one').complete();
+        await one;
+        gate(released, 'two').complete();
+        await two;
+
+        expect(book.variableMap, {'one': 'done', 'two': 'done'});
       },
       skip: quickJsUnavailableReason(),
     );

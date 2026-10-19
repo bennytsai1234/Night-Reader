@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
@@ -8,12 +10,16 @@ import 'package:night_reader/core/models/search_book.dart';
 /// isolate 的複本上跑完後也照它把改過的欄位抄回呼叫端
 /// （`BookSourceService`，ADR 0028）。讓規則能改新的欄位，只要加在這裡。
 final class RuleDataField<T> {
-  const RuleDataField(this.read, this.write);
+  const RuleDataField(this.read, this.write, {this.merge});
 
   final Object? Function(T target) read;
 
   /// 寫入規則給的值，型別不對時照 JS 的習慣轉換。
   final void Function(T target, Object? value) write;
+
+  /// 把一個工作在複本上從 `before` 改成 `after` 的結果，合併進呼叫端目前
+  /// 的值；沒有時直接寫入 `after`。
+  final Object? Function(Object? current, Object? before, Object? after)? merge;
 }
 
 final Map<String, RuleDataField<Book>> bookRuleFields = {
@@ -55,6 +61,7 @@ final Map<String, RuleDataField<Book>> bookRuleFields = {
   'variable': RuleDataField(
     (b) => b.variable,
     (b, v) => b.variable = _nullableString(v),
+    merge: _mergeVariables,
   ),
   'isInBookshelf': RuleDataField(
     (b) => b.isInBookshelf,
@@ -116,6 +123,7 @@ final Map<String, RuleDataField<SearchBook>> searchBookRuleFields = {
   'variable': RuleDataField(
     (b) => b.variable,
     (b, v) => b.variable = _nullableString(v),
+    merge: _mergeVariables,
   ),
   'tocUrl': RuleDataField(
     (b) => b.tocUrl,
@@ -171,12 +179,40 @@ final Map<String, RuleDataField<BookChapter>> chapterRuleFields = {
   'variable': RuleDataField(
     (c) => c.variable,
     (c, v) => c.variable = _nullableString(v),
+    merge: _mergeVariables,
   ),
   'content': RuleDataField(
     (c) => c.content,
     (c, v) => c.content = _nullableString(v),
   ),
 };
+
+/// `putVariable` 一次改一個鍵，同一本書常同時有好幾章在抓：只把這個工作增刪
+/// 的鍵合併進目前的值，不拿複本的整串蓋掉別的工作剛寫進的鍵。任一邊不是
+/// JSON 物件時（規則直接設成別的字串），照整串寫入。
+Object? _mergeVariables(Object? current, Object? before, Object? after) {
+  final was = _variableMap(before);
+  final now = _variableMap(after);
+  final merged = _variableMap(current);
+  if (was == null || now == null || merged == null) return after;
+  for (final key in was.keys) {
+    if (!now.containsKey(key)) merged.remove(key);
+  }
+  for (final MapEntry(:key, :value) in now.entries) {
+    if (was[key] != value) merged[key] = value;
+  }
+  return merged.isEmpty ? after : jsonEncode(merged);
+}
+
+Map<String, Object?>? _variableMap(Object? value) {
+  if (value == null || value == '') return {};
+  try {
+    final decoded = jsonDecode(value.toString());
+    return decoded is Map ? Map<String, Object?>.from(decoded) : null;
+  } on FormatException {
+    return null;
+  }
+}
 
 String _string(Object? value) => value?.toString() ?? '';
 

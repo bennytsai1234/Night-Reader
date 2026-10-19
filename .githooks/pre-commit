@@ -6,30 +6,56 @@
 # 其餘檔案暫存版本與磁碟相同，直接批次檢查磁碟上的檔案，省下每個檔案各啟動一次 dart。
 #
 # 檢查不會改檔，但 dart format 的摘要「Formatted N files (1 changed)」看起來像已經排好，
-# 所以不顯示它的輸出，只收集排版不符的檔名，最後印出要執行的指令。
+# 所以不顯示它的摘要，只收集排版不符的檔名，最後印出要執行的指令。檔案解析不了（語法
+# 錯誤）時 dart format 不會列出檔名，改顯示它的錯誤訊息，一樣擋下。
 staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR -- '*.dart' ':!:*.g.dart')
 [ -z "$staged" ] && exit 0
 
 bad=""
+errors=""
 same=""
 newline='
 '
+
+# dart format 的輸出裡，排版不符的檔名以外、不是摘要也不是 analysis_options 解析警告的
+# 那些行，就是解析錯誤。
+error_lines() {
+  printf '%s\n' "$1" | grep -v -e '^Changed ' -e '^Formatted ' \
+    -e '^Warning: Package resolution error' -e '^Failed to resolve package URI'
+}
+
 while IFS= read -r f; do
   if git diff --quiet -- "$f"; then
     same="$same$f$newline"
-  elif ! git show ":$f" | dart format --output=none --set-exit-if-changed --stdin-name "$f" >/dev/null 2>&1; then
-    bad="$bad$f$newline"
+  elif ! result=$(git show ":$f" | dart format --output=none --set-exit-if-changed --stdin-name "$f" 2>&1); then
+    if printf '%s\n' "$result" | grep -q '^Changed '; then
+      bad="$bad$f$newline"
+    else
+      failures=$(error_lines "$result")
+      errors="$errors${failures:-$result}$newline"
+    fi
   fi
 done <<EOF
 $staged
 EOF
 
 # 分批呼叫，避開 Windows 的命令列長度上限。
-if [ -n "$same" ]; then
-  changed=$(printf '%s' "$same" | tr '\n' '\0' |
-    xargs -0 -n 50 dart format --output=none --set-exit-if-changed 2>/dev/null |
-    sed -n 's/^Changed //p')
+if [ -n "$same" ] &&
+  ! result=$(printf '%s' "$same" | tr '\n' '\0' |
+    xargs -0 -n 50 dart format --output=none --set-exit-if-changed 2>&1); then
+  changed=$(printf '%s\n' "$result" | sed -n 's/^Changed //p')
   [ -n "$changed" ] && bad="$bad$changed$newline"
+  failures=$(error_lines "$result")
+  # 失敗了卻認不出原因時，整段照原樣顯示，照樣擋下。
+  [ -z "$changed$failures" ] && failures=$result
+  [ -n "$failures" ] && errors="$errors$failures$newline"
+fi
+
+if [ -n "$errors" ]; then
+  {
+    echo "pre-commit: dart format 解析不了下面的內容，這次 commit 沒有建立："
+    printf '%s' "$errors" | sed 's/^/  /'
+  } >&2
 fi
 
 if [ -n "$bad" ]; then
@@ -41,5 +67,6 @@ if [ -n "$bad" ]; then
     printf '%s' "$bad" | while IFS= read -r f; do printf ' %s' "$f"; done
     echo
   } >&2
-  exit 1
 fi
+
+[ -z "$errors$bad" ] || exit 1

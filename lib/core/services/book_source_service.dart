@@ -161,134 +161,134 @@ bool Function(String name, String author) _exactBook(
 // ── 送進書源 isolate 的工作 ─────────────────────────────────────────
 //
 // 每個工作在只捕捉書源、書、章節與參數的頂層函式裡建立，連同捕捉的變數複製
-// 到書源 isolate。工作把它手上的書與章節（書源 isolate 裡是複本）一起傳回，
-// 讓 [_runOnSource] 把規則改過的欄位抄回來。
+// 到書源 isolate。
 
-typedef _SourceTask<R> = Future<_Ran<R>> Function(CancelToken cancelToken);
+typedef _Work<R> = Future<R> Function(CancelToken cancelToken);
 
-final class _Ran<R> {
-  const _Ran(this.result, {this.book, this.chapter});
+_Work<Book> _bookInfoTask(BookSource source, Book book) =>
+    (cancelToken) =>
+        WebBook.getBookInfoAwait(source, book, cancelToken: cancelToken);
 
-  final R result;
-  final Book? book;
-  final BookChapter? chapter;
-}
-
-_SourceTask<Book> _bookInfoTask(BookSource source, Book book) =>
-    (cancelToken) async => _Ran(
-      await WebBook.getBookInfoAwait(source, book, cancelToken: cancelToken),
-      book: book,
-    );
-
-_SourceTask<List<BookChapter>> _chapterListTask(
+_Work<List<BookChapter>> _chapterListTask(
   BookSource source,
   Book book, {
   required int? chapterLimit,
   required int? pageConcurrency,
   required bool requireComplete,
 }) =>
-    (cancelToken) async => _Ran(
-      await WebBook.getChapterListAwait(
-        source,
-        book,
-        chapterLimit: chapterLimit,
-        pageConcurrency: pageConcurrency,
-        cancelToken: cancelToken,
-        requireComplete: requireComplete,
-      ),
-      book: book,
+    (cancelToken) => WebBook.getChapterListAwait(
+      source,
+      book,
+      chapterLimit: chapterLimit,
+      pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
+      requireComplete: requireComplete,
     );
 
-_SourceTask<String> _contentTask(
+_Work<String> _contentTask(
   BookSource source,
   Book book,
   BookChapter chapter, {
   required String? nextChapterUrl,
   required int? pageConcurrency,
 }) =>
-    (cancelToken) async => _Ran(
-      await CompleteContentFetcher.fetch(
-        source,
-        book,
-        chapter,
-        nextChapterUrl: nextChapterUrl,
-        pageConcurrency: pageConcurrency,
-        cancelToken: cancelToken,
-      ),
-      book: book,
-      chapter: chapter,
+    (cancelToken) => CompleteContentFetcher.fetch(
+      source,
+      book,
+      chapter,
+      nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
     );
 
-_SourceTask<List<SearchBook>> _searchTask(
+_Work<List<SearchBook>> _searchTask(
   BookSource source,
   String key, {
   required int page,
   required bool Function(String name, String author)? filter,
   required bool Function(int size)? shouldBreak,
 }) =>
-    (cancelToken) async => _Ran(
-      await WebBook.searchBookAwait(
-        source,
-        key,
-        page: page,
-        filter: filter,
-        shouldBreak: shouldBreak,
-        cancelToken: cancelToken,
-      ),
+    (cancelToken) => WebBook.searchBookAwait(
+      source,
+      key,
+      page: page,
+      filter: filter,
+      shouldBreak: shouldBreak,
+      cancelToken: cancelToken,
     );
 
-_SourceTask<List<SearchBook>> _exploreTask(
+_Work<List<SearchBook>> _exploreTask(
   BookSource source,
   String url, {
   required int? page,
 }) =>
-    (cancelToken) async => _Ran(
-      await WebBook.exploreBookAwait(
-        source,
-        url,
-        page: page,
-        cancelToken: cancelToken,
-      ),
+    (cancelToken) => WebBook.exploreBookAwait(
+      source,
+      url,
+      page: page,
+      cancelToken: cancelToken,
     );
 
-_SourceTask<List<ExploreKind>> _exploreKindsTask(
+_Work<List<ExploreKind>> _exploreKindsTask(
   String? exploreUrl,
   BookSource? source,
 ) =>
-    (cancelToken) async =>
-        _Ran(await ExploreUrlParser.parseAsync(exploreUrl, source: source));
+    (cancelToken) => ExploreUrlParser.parseAsync(exploreUrl, source: source);
 
-/// 在書源 isolate 執行 [task]，把規則在 [book]、[chapter] 複本上改的欄位
-/// （[bookRuleFields]、[chapterRuleFields]）抄回來。只抄這次跑的期間有變的欄位：同一段時間裡畫面執行緒改了這本書
-/// （例如閱讀進度），規則沒動的欄位不會被舊值蓋掉。
+// ── 規則改過的欄位抄回呼叫端 ───────────────────────────────────────
+
+/// 一個欄位在工作開始與結束時的值。
+typedef _Change = (Object? before, Object? after);
+
+final class _Ran<R> {
+  const _Ran(this.result, this.bookChanges, this.chapterChanges);
+
+  final R result;
+  final Map<String, _Change> bookChanges;
+  final Map<String, _Change> chapterChanges;
+}
+
+/// 在書源 isolate 執行 [work]，把規則在 [book]、[chapter] 上改的欄位
+/// （[bookRuleFields]、[chapterRuleFields]）抄回傳入的物件。
+///
+/// 改了什麼由工作本身在開始與結束時比對（[_tracked]），所以送出前排隊的
+/// 這段時間、以及執行期間畫面執行緒改了這本書（例如閱讀進度），都不會被當
+/// 成規則的改動、被複本的舊值蓋掉。
 Future<R> _runOnSource<R>(
-  _SourceTask<R> task, {
+  _Work<R> work, {
   Book? book,
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
-  final bookBefore = book == null ? null : _readFields(bookRuleFields, book);
-  final chapterBefore = chapter == null
-      ? null
-      : _readFields(chapterRuleFields, chapter);
-  final ran = await SourceIsolate.run(task, cancelToken: cancelToken);
-  final ranBook = ran.book;
-  if (book != null && ranBook != null && !identical(ranBook, book)) {
-    _copyChangedFields(bookRuleFields, bookBefore!, from: ranBook, to: book);
-  }
-  final ranChapter = ran.chapter;
-  if (chapter != null &&
-      ranChapter != null &&
-      !identical(ranChapter, chapter)) {
-    _copyChangedFields(
-      chapterRuleFields,
-      chapterBefore!,
-      from: ranChapter,
-      to: chapter,
-    );
-  }
+  final ran = await SourceIsolate.run(
+    _tracked(work, book, chapter),
+    cancelToken: cancelToken,
+  );
+  if (book != null) _apply(bookRuleFields, ran.bookChanges, book);
+  if (chapter != null) _apply(chapterRuleFields, ran.chapterChanges, chapter);
   return ran.result;
 }
+
+/// 包住 [work]：在執行它的 isolate 裡，開始前與結束後各讀一次 [book]、
+/// [chapter] 的規則欄位，只傳回有變的。[book]、[chapter] 和 [work] 捕捉的是
+/// 同一份（同一則訊息複製過去的物件仍是同一個）。
+_Work<_Ran<R>> _tracked<R>(_Work<R> work, Book? book, BookChapter? chapter) =>
+    (cancelToken) async {
+      final bookBefore = book == null
+          ? null
+          : _readFields(bookRuleFields, book);
+      final chapterBefore = chapter == null
+          ? null
+          : _readFields(chapterRuleFields, chapter);
+      final result = await work(cancelToken);
+      return _Ran(
+        result,
+        book == null ? const {} : _changes(bookRuleFields, bookBefore!, book),
+        chapter == null
+            ? const {}
+            : _changes(chapterRuleFields, chapterBefore!, chapter),
+      );
+    };
 
 Map<String, Object?> _readFields<T>(
   Map<String, RuleDataField<T>> fields,
@@ -297,14 +297,28 @@ Map<String, Object?> _readFields<T>(
   for (final MapEntry(:key, :value) in fields.entries) key: value.read(target),
 };
 
-void _copyChangedFields<T>(
+Map<String, _Change> _changes<T>(
   Map<String, RuleDataField<T>> fields,
-  Map<String, Object?> before, {
-  required T from,
-  required T to,
-}) {
-  for (final MapEntry(:key, :value) in fields.entries) {
-    final now = value.read(from);
-    if (now != before[key]) value.write(to, now);
+  Map<String, Object?> before,
+  T target,
+) => {
+  for (final MapEntry(:key, :value) in fields.entries)
+    if (value.read(target) case final now when now != before[key])
+      key: (before[key], now),
+};
+
+/// 原地執行時規則已經改在 [target] 上，再寫一次值相同，不影響結果。
+void _apply<T>(
+  Map<String, RuleDataField<T>> fields,
+  Map<String, _Change> changes,
+  T target,
+) {
+  for (final MapEntry(key: name, value: (before, after)) in changes.entries) {
+    final field = fields[name]!;
+    final merge = field.merge;
+    field.write(
+      target,
+      merge == null ? after : merge(field.read(target), before, after),
+    );
   }
 }
