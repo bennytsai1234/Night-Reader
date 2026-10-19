@@ -8,9 +8,9 @@ import 'skeleton_reveal.dart';
 
 /// 開 App 的進場（ADR 0025）：系統啟動畫面只有底色，Flutter 第一幀也只畫
 /// 底色；接著整個畫面照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：
-/// 書架、頁首兩側的按鈕與底部分頁列（按鈕與分頁列用 [LaunchSkeleton]），
-/// 標題淡入。骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架
-/// 換場時按鈕與分頁列跟著同一段換成玻璃（[LaunchEntranceMotion.reveal]）。
+/// 書架、頁首的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。
+/// 骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架換場時標題、
+/// 按鈕與分頁列跟著同一段換成真的（[LaunchEntranceMotion.reveal]）。
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架用
 /// [maybeOf] 取得各自的進度。從主頁面推出去的頁面不在底下，不受影響。
@@ -32,16 +32,7 @@ class LaunchEntrance extends StatefulWidget {
 /// 進場各部分的進度，0 還沒出現、1 到位。
 class LaunchEntranceMotion {
   LaunchEntranceMotion._(this._controller, {required this.sweep}) {
-    final total = _controller.duration!.inMicroseconds;
     skeleton = CurvedAnimation(parent: _controller, curve: AppMotion.fadeCurve);
-    title = CurvedAnimation(
-      parent: _controller,
-      curve: Interval(
-        0,
-        AppMotion.fade.inMicroseconds / total,
-        curve: AppMotion.fadeCurve,
-      ),
-    );
   }
 
   final AnimationController _controller;
@@ -51,9 +42,6 @@ class LaunchEntranceMotion {
 
   /// 骨架出現是不是由左而右。
   final bool sweep;
-
-  /// 頁首標題。
-  late final Animation<double> title;
 
   /// 書架換成內容的進度（套過曲線）：書架開始換場前是 0，換完之後一直是 1。
   /// 由書架的 `SkeletonSwitcher` 用 [revealWith] 接上。
@@ -108,9 +96,7 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     }
     // 方式與時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final reveal = SkeletonReveal.of(context);
-    _controller.duration = reveal.duration > AppMotion.fade
-        ? reveal.duration
-        : AppMotion.fade;
+    _controller.duration = reveal.duration;
     _motion = LaunchEntranceMotion._(_controller, sweep: reveal.sweeps);
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
@@ -147,22 +133,34 @@ class _LaunchEntranceScope extends InheritedWidget {
       !identical(motion, oldWidget.motion);
 }
 
-/// 開 App 進場時，一塊玻璃（頁首按鈕、分頁列、搜尋鈕）先畫成同形的骨架，
-/// 和書架的骨架一起出現、一起呼吸；書架換場時骨架淡掉，玻璃連同模糊
-/// 一起淡入（[GlassReveal]，ADR 0022）。由左而右時照這塊玻璃中心的橫向
-/// 位置決定先後，和書架的掃動對齊。
+/// 開 App 進場時，頁首與分頁列的一個元件先畫成骨架，和書架的骨架一起
+/// 出現、一起呼吸；書架換場時骨架淡掉、元件出現。由左而右時照元件中心的
+/// 橫向位置決定先後，和書架的掃動對齊。
 ///
-/// [child] 是一塊玻璃；骨架照它的大小與 [borderRadius] 畫（圓鈕就是最窄
-/// 的膠囊）。玻璃出現前不接點擊、不給讀屏念。不在進場底下，或進場結束後
-/// 才建的（例如之後才打開的分頁），直接畫 [child]。
+/// - 玻璃（頁首按鈕、分頁列、搜尋鈕）：骨架照它的大小與 [borderRadius] 畫
+///   （圓鈕就是最窄的膠囊），玻璃連同模糊一起淡入（[GlassReveal]，ADR 0022）。
+/// - 一行字（[LaunchSkeleton.text]，頁首標題）：骨架是和字同寬、約字身高
+///   的長條（同 [SkeletonLine]），字只淡入。
+///
+/// 出現前不接點擊、不給讀屏念。不在進場底下，或進場結束後才建的（例如
+/// 之後才打開的分頁），直接畫 [child]。
 class LaunchSkeleton extends StatefulWidget {
   const LaunchSkeleton({
     super.key,
     this.borderRadius = AppRadius.pillShape,
     required this.child,
-  });
+  }) : textStyle = null;
+
+  const LaunchSkeleton.text({
+    super.key,
+    required TextStyle this.textStyle,
+    required this.child,
+  }) : borderRadius = AppRadius.cardXs;
 
   final BorderRadius borderRadius;
+
+  /// [child] 是一行這個樣式的字；null 時 [child] 是一塊玻璃。
+  final TextStyle? textStyle;
   final Widget child;
 
   @override
@@ -170,11 +168,11 @@ class LaunchSkeleton extends StatefulWidget {
 }
 
 class _LaunchSkeletonState extends State<LaunchSkeleton> {
-  /// 這塊玻璃中心在螢幕上的橫向位置（0 左緣、1 右緣）；量到之前骨架還沒
+  /// 這個元件中心在螢幕上的橫向位置（0 左緣、1 右緣）；量到之前骨架還沒
   /// 開始出現，先取中央。
   double _u = 0.5;
 
-  /// 照 [_u] 換算的玻璃濃度；跟著書架換場走。
+  /// 照 [_u] 換算的濃度；跟著書架換場走。
   late final Animation<double> _glass = _SweptAnimation(
     parent: _motion!.reveal,
     opacityAt: (progress) => SkeletonReveal.incomingOpacityAt(
@@ -216,7 +214,14 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   Widget build(BuildContext context) {
     final motion = _motion;
     if (_passThrough || motion == null) return widget.child;
-    final child = GlassReveal(animation: _glass, child: widget.child);
+    final style = widget.textStyle;
+    final child = style == null
+        ? GlassReveal(animation: _glass, child: widget.child)
+        : FadeTransition(opacity: _glass, child: widget.child);
+    // 字的骨架是一條約字身高的長條，置中在那一行上。
+    final barHeight = style == null
+        ? null
+        : MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14) * 0.75;
     return AnimatedBuilder(
       animation: Listenable.merge([motion.skeleton, motion.reveal]),
       child: child,
@@ -241,10 +246,14 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
             if (!done)
               Positioned.fill(
                 child: IgnorePointer(
-                  child: Skeleton(
-                    child: SkeletonBox(
-                      borderRadius: widget.borderRadius,
-                      color: base.withValues(alpha: base.a * skeleton),
+                  child: Center(
+                    child: Skeleton(
+                      child: SkeletonBox(
+                        width: double.infinity,
+                        height: barHeight ?? double.infinity,
+                        borderRadius: widget.borderRadius,
+                        color: base.withValues(alpha: base.a * skeleton),
+                      ),
                     ),
                   ),
                 ),

@@ -116,6 +116,20 @@ void main() {
         reason: '左邊的按鈕骨架先長出來',
       );
       expect(glass(tester, Icons.menu), 0, reason: '玻璃還沒出現');
+      expect(titleOpacity(tester), 0, reason: '標題也先是骨架');
+      final titleBar = tester.getRect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('書架'),
+            matching: find.byType(LaunchSkeleton),
+          ),
+          matching: find.byType(SkeletonBox),
+        ),
+      );
+      final titleText = tester.getRect(find.text('書架'));
+      expect(titleBar.width, titleText.width, reason: '長條和字同寬');
+      expect(titleBar.height, lessThan(titleText.height), reason: '約字身高');
+      expect(titleBar.center.dy, closeTo(titleText.center.dy, 0.5));
 
       // 骨架還在出現時書就到了：先不建內容。
       await tester.pumpWidget(host(loading: false));

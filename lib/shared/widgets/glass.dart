@@ -812,11 +812,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
-    // 開 App 的進場：按鈕先是骨架、跟書架一起換成玻璃，標題淡入。
-    final entrance = LaunchEntrance.maybeOf(context);
-    Widget fadeIn(Widget child) => entrance == null
-        ? child
-        : FadeTransition(opacity: entrance.title, child: child);
+    // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
     // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高。
     Widget slot(Widget? button) => morph
         ? Center(
@@ -886,7 +882,12 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                             child: slot(effectiveLeading),
                           ),
                         ),
-                  middle: middle == null ? null : fadeIn(middle),
+                  middle: middle == null
+                      ? null
+                      : LaunchSkeleton.text(
+                          textStyle: AppTextStyles.titleSm,
+                          child: middle,
+                        ),
                   trailing: trailing.isEmpty
                       ? null
                       : Padding(
