@@ -2,7 +2,7 @@ name: CI
 
 on:
   # 每條分支都跑，結果也顯示在該分支的 PR 上，通過才合併（AGENTS.md「Git 流程」）。
-  # 本機 pre-push 在 Windows 上跑，只有 Linux 會出的錯要靠這裡在進 main 之前擋下。
+  # 本機 pre-push 在 Windows 上跑，只有 Linux 會出的錯要靠這裡在進 beta 之前擋下。
   push:
     branches: ["**"]
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test changelog tool
-        # 有沒有寫更新說明，在手動發測試版時才檢查（android-release.yml，ADR 0014）。
+        # 有沒有寫更新說明，在推上 beta 發測試版時才檢查（android-release.yml，ADR 0027）。
         run: sh tool/changelog_test.sh
 
   verify:

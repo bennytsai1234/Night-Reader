@@ -1,5 +1,7 @@
 # 測試版手動發布；功能與維護走 PR、文件直接改 main，合併前 Codex 審查並把摘要貼在 PR 上，squash 合併
 
+> 分支與發測試版的時機已由 ADR 0027 取代：PR 與只改文件的提交都進 `beta`，推上 `beta` 就自動發測試版，`main` 只快轉到 `beta` 上的提交發正式版。PR 的審查、squash 合併、交接與原型分支照本文，本文的 `main` 讀作 `beta`。
+
 測試版不再隨推上 `main` 自動發布：`main` 收到改動只跑 CI，維護者說要發時，以 `channel=beta` 手動執行 `android-release.yml`，把上一個發布之後累積的改動發成一個測試版（tag 與 versionCode 的算法照 ADR 0004）。正式版不變，仍由升版號的 commit 推上 `main` 觸發（ADR 0002）。更新說明也改在手動發測試版的那一刻檢查：上一個發布的 tag 之後改到 App 內容，`CHANGELOG.md` 的「未發布」就要跟著寫（ADR 0010 的檢查規則不變，只是時機從每次推送改成發版）。
 
 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時直接在 `main` 上改，不開分支、不審。新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在分支上做、走 PR；跟著功能一起改的文件放在同一個 PR。`HANDOFF.md` 只寫從 repo 與 GitHub 查不到的事（還沒合併的工作、等維護者決定的事、還沒寫進其他文件的決定、環境上的坑），不寫合併了什麼、發了哪一版。維護者說合併時：

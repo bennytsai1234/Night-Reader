@@ -9,8 +9,12 @@ Android 小說閱讀器：從使用者自行匯入的書源搜尋、閱讀、下
 _Avoid_: InkPage、inkpage reader
 
 **測試版**：
-維護者手動觸發時，把 `main` 上一個發布之後累積的改動發成的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004、0014）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
-_Avoid_: beta 分支、預覽版、nightly
+推上 `beta` 分支時，把上一個發布之後累積的 App 改動自動發成的 GitHub 預發布版，tag 形如 `v0.3.4-beta.2`（ADR 0004、0027）。和正式版是同一個 App，使用者在「關於」打開「接收測試版更新」才會收到。
+_Avoid_: 預覽版、nightly
+
+**`beta` 分支**：
+日常改動都進的長期分支，也是 GitHub 的預設分支；推上去就發測試版。`main` 只快轉到 `beta` 上維護者用過沒問題的提交，用來發正式版，自己不收提交（ADR 0027）。
+_Avoid_: dev、開發分支
 
 **換頁動畫**：
 App 裡所有換頁共用的轉場，使用者在「外觀與主題」的選單從八種選一種（`AppPageTransition`）：上浮、平移（預設，Telegram iOS）、俐落平移（Telegram iOS 26）、滑入（Telegram Android）、推進（Android 系統）、覆蓋（Legado）、縮放（Material 共享 Z 軸）、展開（iOS 18 縮放）。返回不是開啟倒著播，一律先快後慢；往右拖返回與點主頁分頁也照選的那一種（ADR 0020）。
