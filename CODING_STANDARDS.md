@@ -15,6 +15,7 @@
 ## 動畫
 
 - 玻璃（`GlassSurface`、`BackdropFilter`）不包在 `Opacity`、`FadeTransition` 或 `AnimatedOpacity` 裡：從畫面邊緣進出用 `GlassSlide`，原地出現要淡入時用 `GlassReveal`（ADR 0022）。玻璃進出場的測試在動畫途中呼叫 `expectNoGlassUnderFade`（`test/support/glass_motion.dart`），只量透明度數值看不出模糊在哪一幀生效。
+- 宣稱某段工作已離開主執行緒、拿掉一段等待，或改了骨架換場、開 App 進場、跳章的流程時，跑 `test/frame_budget/`（用法在 `test/support/frame_budget.dart` 檔頭）比對改動前後每一幀的成本，結果寫進 commit message（ADR 0018）。
 
 ## Reader V2
 
@@ -29,3 +30,4 @@
 - `lib/main.dart` 與 Workmanager 的 `callbackDispatcher()` 都會呼叫 `configureDependencies()`；背景 isolate 不共用主 isolate 的 GetIt 單例。
 - 交給 `SourceIsolate.run` 的工作，以及傳給 `BookSourceService.searchBooks` 的 `filter`、`shouldBreak`，連同捕捉的變數會複製到另一個 isolate：在只捕捉書源、書籍、字串這類資料的頂層函式裡建立。方法或測試本體裡的 lambda 會把同一層其他閉包捕捉的變數（例如 `this`、頁面、資料庫連線）一起帶過去，送不出去或複製出用不到的東西。
 - 在書源 isolate 執行的程式只用 `getIt` 裡的資料庫與 DAO（`registerDatabase`）；WebView、`rootBundle`、`SharedPreferences`、頁面這些只有主 isolate 有的東西，要先在 `SourceIsolate` 加上交給主 isolate 的代理（ADR 0028）。
+- 說明或註解宣稱某段工作「在背景」「不佔主執行緒」時，沿呼叫路徑看到底：只有送進 `SourceIsolate.run`、worker 或 `Isolate.run` 的那一段在背景，呼叫端在主 isolate 讀整本目錄、逐章或逐筆的迴圈、每筆都 `notifyListeners`，都還在主執行緒（ADR 0018、0028）。

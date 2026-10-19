@@ -3,3 +3,7 @@ tags:
   # flutter test --run-skipped -t screens test/screens
   screens:
     skip: "截圖用，平常不跑"
+  # 動畫期間每一幀的成本（test/frame_budget/），要量時才跑：
+  # flutter test --run-skipped -t frame_budget test/frame_budget
+  frame_budget:
+    skip: "量測用，平常不跑"

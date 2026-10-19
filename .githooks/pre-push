@@ -34,3 +34,5 @@ fi
 
 flutter analyze --no-pub
 flutter test --no-pub --reporter compact
+# 推送的人只看最後一行（AGENTS.md）；set -e 下走到這裡就是兩項都過了。
+echo "pre-push: analyze 與全套測試通過"
