@@ -19,7 +19,6 @@ import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 
 import 'reader_v2_content.dart';
 import 'reader_v2_content_transformer.dart';
-import 'reader_v2_processed_chapter.dart';
 
 typedef ReaderV2TestContentLoader = Future<String?> Function(
   int chapterIndex,
@@ -292,15 +291,10 @@ class ReaderV2ChapterRepository {
       cacheGeneration,
     );
     if (loaded != null) {
-      final content = ReaderV2Content.fromRaw(
-        chapterIndex: chapterIndex,
-        title: loaded.displayTitle,
-        rawText: loaded.content,
-      );
       if (cacheGeneration == _contentCacheGeneration) {
-        _writeToContentCache(chapterIndex, content);
+        _writeToContentCache(chapterIndex, loaded);
       }
-      return content;
+      return loaded;
     }
 
     final content = ReaderV2Content.fromRaw(
@@ -412,7 +406,7 @@ class ReaderV2ChapterRepository {
     );
   }
 
-  Future<ReaderV2ProcessedChapter?> _loadViaV2ContentPipeline(
+  Future<ReaderV2Content?> _loadViaV2ContentPipeline(
     int chapterIndex,
     BookChapter chapter,
     int cacheGeneration,
@@ -439,6 +433,7 @@ class ReaderV2ChapterRepository {
     final enabledRules = await _ensureEnabledReplaceRules();
     try {
       return await _contentTransformer.process(
+        chapterIndex: chapterIndex,
         book: book,
         chapter: chapter,
         rawContent: prepared.content,

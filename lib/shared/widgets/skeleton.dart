@@ -220,6 +220,10 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   /// 重新載入、淡回骨架時，淡出中的內容沿用上一次建好的樣子。
   Widget? _lastContent;
 
+  /// [_lastContent] 是照哪一個 widget 與哪一輪等封面建的。
+  SkeletonSwitcher? _contentFor;
+  CoverReveal? _contentReveal;
+
   /// 骨架還在進場：這段期間當作還在載入。
   bool get _entering {
     final entrance = widget.entrance;
@@ -317,15 +321,23 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     final appearing = entrance?.skeleton;
     final loading = widget.loading || entrance != null;
     final hidden = loading || reveal != null && reveal.waiting;
-    Widget? content = _lastContent;
-    if (!loading) {
-      content = _lastContent = reveal == null
+    // 換場開始與結束時只是自己的動畫狀態變了，沿用同一個內容元件，整頁內容
+    // 不重建；上層給了新的 [SkeletonSwitcher] 或換了一輪等封面才重新建。原本
+    // 每次都包新的 Builder，換場的第一幀與最後一幀都把整個書架重建一次
+    // （ADR 0018）。
+    if (!loading &&
+        (!identical(_contentFor, widget) ||
+            !identical(_contentReveal, reveal))) {
+      _contentFor = widget;
+      _contentReveal = reveal;
+      _lastContent = reveal == null
           ? Builder(builder: widget.builder)
           : CoverRevealScope(
               notifier: reveal,
               child: Builder(builder: widget.builder),
             );
     }
+    final content = _lastContent;
     // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。
     return Stack(
       fit: StackFit.expand,
@@ -444,6 +456,22 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
     child: ExcludeSemantics(child: Skeleton(child: widget.skeleton)),
   );
 
+  Widget? _builtContent;
+  SliverSkeletonSwitcher? _builtFor;
+
+  /// 換場開始與結束時只是自己的動畫狀態變了，沿用同一份內容，整頁不重建；
+  /// 上層給了新的 [SliverSkeletonSwitcher] 才重新建（ADR 0018）。
+  Widget _contentFor(SliverSkeletonSwitcher widget) {
+    if (!identical(_builtFor, widget)) {
+      _builtFor = widget;
+      _builtContent = Builder(
+        builder: (context) =>
+            SliverMainAxisGroup(slivers: widget.builder(context)),
+      );
+    }
+    return _builtContent!;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.loading) return SliverToBoxAdapter(child: _buildSkeleton());
@@ -463,7 +491,7 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
           sweep: _sweep,
           sliver: _SliverRevealScope(
             revealing: revealing,
-            child: SliverMainAxisGroup(slivers: widget.builder(context)),
+            child: _contentFor(widget),
           ),
         ),
       ],

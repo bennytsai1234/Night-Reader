@@ -10,7 +10,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
 
-import 'reader_v2_processed_chapter.dart';
+import 'reader_v2_content.dart';
 
 /// 在內容轉換階段執行文字排版正規化。
 ///
@@ -658,7 +658,11 @@ class ReaderV2ContentTransformer {
     );
   }
 
-  Future<ReaderV2ProcessedChapter> process({
+  /// 處理一章正文，連同切段落與 contentHash 都在 worker 算好
+  /// （[ReaderV2Content.fromRaw]），主 isolate 直接拿到成品：整章跑正規表示式、
+  /// 編碼與雜湊在手機上要幾毫秒，開書與跳章時正好疊在骨架呼吸上（ADR 0018）。
+  Future<ReaderV2Content> process({
+    required int chapterIndex,
     required Book book,
     required BookChapter chapter,
     required String rawContent,
@@ -666,6 +670,7 @@ class ReaderV2ContentTransformer {
     required int chineseConvertType,
   }) async {
     final args = <String, Object?>{
+      'chapterIndex': chapterIndex,
       'bookName': book.name,
       'bookOrigin': book.origin,
       'chapterTitle': chapter.title,
@@ -677,24 +682,7 @@ class ReaderV2ContentTransformer {
     };
 
     final result = await ReaderV2ContentTransformWorker.instance.process(args);
-    return _decodeProcessed(result);
-  }
-
-  static ReaderV2ProcessedChapter _decodeProcessed(
-    Map<String, Object?> result,
-  ) {
-    final effectiveRules = (result['effectiveRules'] as List<dynamic>)
-        .map(
-          (rule) =>
-              ReplaceRule.fromJson(Map<String, dynamic>.from(rule as Map)),
-        )
-        .toList(growable: false);
-    return ReaderV2ProcessedChapter(
-      displayTitle: result['displayTitle'] as String? ?? '',
-      content: result['content'] as String? ?? '',
-      effectiveReplaceRules: List<ReplaceRule>.unmodifiable(effectiveRules),
-      sameTitleRemoved: result['sameTitleRemoved'] as bool? ?? false,
-    );
+    return result['document']! as ReaderV2Content;
   }
 
   static Map<String, Object?> _processInBackground(Map<String, Object?> args) {
@@ -719,7 +707,7 @@ class ReaderV2ContentTransformer {
               rule.appliesToTitle(bookName: bookName, bookOrigin: bookOrigin),
         )
         .toList(growable: false);
-    final contentResult = _processContent(
+    final content = _processContent(
       bookName: bookName,
       bookOrigin: bookOrigin,
       chapterTitle: chapterTitle,
@@ -735,17 +723,10 @@ class ReaderV2ContentTransformer {
       useReplaceRules: useReplaceRules,
     );
 
-    return <String, Object?>{
-      'displayTitle': displayTitle,
-      'content': contentResult.content,
-      'effectiveRules': contentResult.effectiveReplaceRules
-          .map((rule) => rule.toJson())
-          .toList(growable: false),
-      'sameTitleRemoved': contentResult.sameTitleRemoved,
-    };
+    return <String, Object?>{'displayTitle': displayTitle, 'content': content};
   }
 
-  static ReaderV2ProcessedChapter _processContent({
+  static String _processContent({
     required String bookName,
     required String bookOrigin,
     required String chapterTitle,
@@ -756,12 +737,10 @@ class ReaderV2ContentTransformer {
     required bool reSegmentEnabled,
   }) {
     if (rawContent.isEmpty) {
-      return const ReaderV2ProcessedChapter(displayTitle: '', content: '');
+      return '';
     }
 
     var content = rawContent;
-    var sameTitleRemoved = false;
-    final effectiveRules = <ReplaceRule>[];
 
     final nameRegex = RegExp.escape(bookName);
     final titleRegex = RegExp.escape(chapterTitle)
@@ -774,7 +753,6 @@ class ReaderV2ContentTransformer {
     final duplicateTitleMatch = duplicateTitlePattern.firstMatch(content);
     if (duplicateTitleMatch != null) {
       content = content.substring(duplicateTitleMatch.end);
-      sameTitleRemoved = true;
     } else if (useReplaceRules && titleRules.isNotEmpty) {
       final displayTitle = _processTitle(
         chapterTitle: chapterTitle,
@@ -793,7 +771,6 @@ class ReaderV2ContentTransformer {
             .firstMatch(content);
         if (displayDuplicateTitleMatch != null) {
           content = content.substring(displayDuplicateTitleMatch.end);
-          sameTitleRemoved = true;
         }
       }
     }
@@ -818,11 +795,7 @@ class ReaderV2ContentTransformer {
           continue;
         }
 
-        final previous = content;
         content = rule.apply(content);
-        if (content != previous) {
-          effectiveRules.add(rule);
-        }
       }
     }
 
@@ -837,12 +810,7 @@ class ReaderV2ContentTransformer {
       }
     }
 
-    return ReaderV2ProcessedChapter(
-      displayTitle: '',
-      content: paragraphs.join('\n'),
-      effectiveReplaceRules: List<ReplaceRule>.unmodifiable(effectiveRules),
-      sameTitleRemoved: sameTitleRemoved,
-    );
+    return paragraphs.join('\n');
   }
 
   static String _reSegment(String content) {
@@ -912,8 +880,8 @@ final class ReaderV2ContentTransformException implements Exception {
   String toString() => message;
 }
 
-/// 常駐內容轉換 worker isolate；替換規則、重分段與簡繁轉換只在這裡做，
-/// 不在主 isolate 做。
+/// 常駐內容轉換 worker isolate；替換規則、重分段、簡繁轉換，以及切段落與
+/// contentHash（[ReaderV2Content.fromRaw]）只在這裡做，不在主 isolate 做。
 ///
 /// 為什麼不用 compute：fling 放開瞬間會連續預載最多 3 章，compute 每章現場
 /// spawn/銷毀一個 isolate；且簡繁字典只存在主 isolate 靜態區，轉換被迫留在
@@ -1081,6 +1049,12 @@ class ReaderV2ContentTransformWorker {
                 convertType: convertType,
               );
             }
+            // worker 和主 isolate 同一個 isolate group，成品直接傳回去。
+            result['document'] = ReaderV2Content.fromRaw(
+              chapterIndex: args['chapterIndex'] as int? ?? 0,
+              title: result['displayTitle'] as String? ?? '',
+              rawText: result['content'] as String? ?? '',
+            );
             replyPort.send(<String, Object?>{
               'id': id,
               'ok': true,

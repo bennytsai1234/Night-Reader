@@ -1,6 +1,6 @@
 # 書源工作在常駐的書源 isolate 執行；Cookie 與限流留在主 isolate
 
-書源的抓取與解析（含規則 JS）改在一個常駐的背景 isolate 執行，叫「書源 isolate」（`SourceIsolate`），主 isolate 只收結果。所有書源工作都經過 `BookSourceService`（詳情、目錄、正文、搜尋、發現與發現分類），由它把工作送進書源 isolate，所以閱讀器抓正文、背景下載、搜尋、換源、換封面、發現、匯出與書源除錯都不在主 isolate 跑。檢查更新（書架與書籍詳情共用 `BookUpdateService`）整段在書源 isolate 跑，連目錄比對與寫回也在那邊。
+書源的抓取與解析（含規則 JS）改在一個常駐的背景 isolate 執行，叫「書源 isolate」（`SourceIsolate`），主 isolate 只收結果。所有書源工作都經過 `BookSourceService`（詳情、目錄、正文、搜尋、發現與發現分類），由它把工作送進書源 isolate，所以閱讀器抓正文、背景下載、搜尋、換源、換封面、發現、匯出與書源除錯裡「呼叫 `BookSourceService`」的那一段不在主 isolate 跑。呼叫端自己的流程（讀整本目錄、逐章比對、寫入與進度）不會因此跟著搬過去，要像檢查更新與背景下載那樣整段寫成書源 isolate 的工作才算（2026-10-19 下載就是漏在這裡，見 ADR 0018）。檢查更新（書架與書籍詳情共用 `BookUpdateService`）整段在書源 isolate 跑，連目錄比對與寫回也在那邊。
 
 起因是 ADR 0018：帶 JS 的書源在主執行緒一口氣解析，是剩下唯一會把動畫卡掉、又切不開的工作。`ParseWorker` 已經把只做計算的解析搬走，剩下用到 `java.ajax`、Cookie、快取的規則 JS 與 TLS 握手還在主執行緒，使用者手機上最長一幀 27ms（`docs/research/source-engine-off-main-isolate.md`）。
 
@@ -39,4 +39,4 @@ Cookie 檔與限流放在主 isolate，和研究筆記原本的建議（由書�
 - 兩個 isolate 各有一份 JS 引擎與 jsLib 快取、解析器與記憶體快取。
 - 書源 isolate 開不起來時，書源工作整段改回主 isolate 執行，解析也在主執行緒。測試與 Workmanager 不開書源 isolate（`SourceIsolate.enabled`），書源工作原地執行；測試裡照樣試送一次，工作捕捉了送不出去的東西時直接失敗。
 - 新的書源工作加在 `BookSourceService`，工作在只捕捉資料的頂層函式裡建立；搜尋的 `filter`、`shouldBreak` 也一樣。規則能改的書與章節欄位只列在 `lib/core/engine/rule_data_fields.dart`，JS 寫入與跑完抄回都照它，新增欄位只改這裡。
-- 結果很大又不必回到畫面的（例如檢查更新的目錄），在書源 isolate 寫進資料庫，只傳回摘要。
+- 結果很大又不必回到畫面的（例如檢查更新的目錄），在書源 isolate 寫進資料庫，只傳回摘要。背景下載也一樣（2026-10-19）：比對缺哪些章、逐章抓取與寫入都在書源 isolate，主 isolate 只收章節序號與網址、每章成敗。

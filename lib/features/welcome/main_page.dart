@@ -48,10 +48,18 @@ const List<MainDestination> _defaultDestinations = [
 ];
 
 class MainPage extends StatefulWidget {
-  const MainPage({super.key, this.destinations, this.onDestinationDoubleTap});
+  const MainPage({
+    super.key,
+    this.destinations,
+    this.onDestinationDoubleTap,
+    this.onLaunchSettled,
+  });
 
   final List<MainDestination>? destinations;
   final MainDestinationDoubleTapCallback? onDestinationDoubleTap;
+
+  /// 開 App 的進場播完後呼叫一次，App 層的啟動維護從這裡開始（ADR 0018）。
+  final VoidCallback? onLaunchSettled;
 
   @override
   State<MainPage> createState() => _MainPageState();
@@ -137,14 +145,22 @@ class _MainPageState extends State<MainPage>
     if (_scrollToTopControllers.isNotEmpty) {
       _pageController.addListener(_scrollLeftTabsToTop);
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      unawaited(_initDeferredStartupData());
-      if (widget.destinations == null) {
-        _refreshShelfOnceLoaded();
-        unawaited(_runAutomaticUpdateCheck());
-      }
-    });
+    // 真正的主頁面等開 App 的進場播完才開始背景工作（[_onLaunchSettled]）。
+    if (widget.destinations != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_initDeferredStartupData());
+      });
+    }
+  }
+
+  /// 開 App 的進場播完：啟動維護、書架補下載與檢查更新、App 更新檢查這時
+  /// 才開始。原本第一幀後就開始，書架讀完的那一刻正好是書架換場開始，
+  /// 這些工作留在主執行緒的部分全疊在換場上（ADR 0018）。
+  void _onLaunchSettled() {
+    unawaited(_initDeferredStartupData());
+    _refreshShelfOnceLoaded();
+    unawaited(_runAutomaticUpdateCheck());
+    widget.onLaunchSettled?.call();
   }
 
   @override
@@ -253,7 +269,9 @@ class _MainPageState extends State<MainPage>
       ),
     );
     // 開 App 的進場只在真正的主頁面播（ADR 0025）。
-    return widget.destinations == null ? LaunchEntrance(child: page) : page;
+    return widget.destinations == null
+        ? LaunchEntrance(onFinished: _onLaunchSettled, child: page)
+        : page;
   }
 
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
@@ -440,8 +458,7 @@ class _MainPageState extends State<MainPage>
     }
   }
 
-  /// 書架第一次讀完書才在背景補排下載、檢查書架更新，不和首幀與書架載入
-  /// 搶時間。
+  /// 書架讀完書才在背景補排下載、檢查書架更新。
   void _refreshShelfOnceLoaded() {
     final shelf = context.read<BookshelfProvider?>();
     if (shelf == null) return;

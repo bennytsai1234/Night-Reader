@@ -3,14 +3,22 @@ import 'dart:async';
 import 'download_base.dart';
 import 'download_scheduler.dart';
 
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
+import 'package:night_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
-import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -47,6 +55,151 @@ class DownloadChapterResult {
       failureMessage: message.isEmpty ? '下載失敗' : message,
     );
   }
+}
+
+/// 一個任務這次要抓的章節：照目前的目錄換算範圍，扣掉已經有正文的。
+class DownloadPlan {
+  const DownloadPlan({
+    required this.run,
+    required this.total,
+    required this.ready,
+    required this.missing,
+  });
+
+  /// 這一輪下載在書源 isolate 的編號：逐章抓取共用同一份書與章節，跑完
+  /// 交給 [finishDownloadRunInSourceIsolate] 放掉。
+  final int run;
+
+  /// 範圍裡要下載的章數（已下載的也算）。
+  final int total;
+
+  /// 其中已經有正文的章數。
+  final int ready;
+
+  /// 還沒有正文、這次要抓的章節，照目錄順序。
+  final List<({int index, String url, String title})> missing;
+}
+
+/// 下載的目錄比對與抓取寫入在書源 isolate 做（ADR 0028）：上千章的目錄、
+/// 每章的正文都不複製回主 isolate，主 isolate 只收章節的序號與網址、每章
+/// 成功或失敗。原本在主 isolate 逐章查「下載過沒有」、更新進度，幾千章的
+/// 書一開跑就連續佔住主執行緒，疊到換場與骨架上（ADR 0018）。工作會送進
+/// 書源 isolate，所以在頂層函式裡建立，只捕捉任務與字串。
+Future<DownloadPlan> planDownloadInSourceIsolate(DownloadTask task) =>
+    SourceIsolate.run((_) => _planDownload(task));
+
+/// 抓第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。
+Future<DownloadChapterResult> downloadChapterInSourceIsolate({
+  required int run,
+  required String chapterUrl,
+  required int maxAttempts,
+}) => SourceIsolate.run((_) => _downloadChapter(run, chapterUrl, maxAttempts));
+
+/// 第 [run] 輪下載結束（跑完、失敗、暫停或退役），放掉它的書與章節。
+Future<void> finishDownloadRunInSourceIsolate(int run) =>
+    SourceIsolate.run((_) async => _downloadRuns.remove(run));
+
+/// 書源 isolate 裡進行中的每一輪下載：整輪共用同一份書、書源與章節，和
+/// 原本在主 isolate 時一樣。規則在抓目錄或某一章時寫進書與章節的變數
+/// （`book.putVariable`），後面的章節要讀得到；每章重新從資料庫讀會丟掉
+/// 它們。頂層變數每個 isolate 各一份，這份在書源 isolate。
+final Map<
+  int,
+  ({Book book, BookSource? source, Map<String, BookChapter> chapters})
+>
+_downloadRuns = {};
+int _nextDownloadRun = 0;
+
+Future<DownloadPlan> _planDownload(DownloadTask task) async {
+  final book = await getIt<BookDao>().getByUrl(task.bookUrl);
+  if (book == null) {
+    throw Exception('書籍不存在');
+  }
+  final source = book.origin == 'local'
+      ? null
+      : await getIt<BookSourceDao>().getByUrl(book.origin);
+  if (book.origin != 'local' && source == null) {
+    throw Exception('書源不存在');
+  }
+  final chapterDao = getIt<ChapterDao>();
+  var chapters = await chapterDao.getByBook(task.bookUrl);
+  if (chapters.isEmpty) {
+    if (source == null) {
+      throw Exception('章節目錄不存在');
+    }
+    chapters = await BookSourceService().getChapterList(source, book);
+    // 抓不到目錄就記為失敗，書架自動下載照重試規則隔一天再試，不會
+    // 每次開 App 都打一次書源（ADR 0008）。
+    if (chapters.isEmpty) {
+      throw Exception('章節目錄為空');
+    }
+    await chapterDao.insertChapters(chapters);
+  }
+  // 範圍用章節網址記，這時才對照目前的目錄換算（ADR 0008），排隊或
+  // 暫停期間書源插章、刪章都不會選到別章。
+  final scope = chaptersInDownloadScope(chapters, task);
+  if (scope == null) {
+    throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
+  }
+  final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
+    origin: book.origin,
+    bookUrl: book.bookUrl,
+  );
+  final missing = [
+    for (final chapter in scope)
+      if (!stored.contains(chapter.url))
+        (index: chapter.index, url: chapter.url, title: chapter.title),
+  ];
+  final run = _nextDownloadRun++;
+  _downloadRuns[run] = (
+    book: book,
+    source: source,
+    chapters: {for (final chapter in scope) chapter.url: chapter},
+  );
+  return DownloadPlan(
+    run: run,
+    total: scope.length,
+    ready: scope.length - missing.length,
+    missing: missing,
+  );
+}
+
+Future<DownloadChapterResult> _downloadChapter(
+  int run,
+  String chapterUrl,
+  int maxAttempts,
+) async {
+  final state = _downloadRuns[run];
+  if (state == null) return DownloadChapterResult.failed('下載已結束');
+  final book = state.book;
+  final source = state.source;
+  final chapter = state.chapters[chapterUrl];
+  if (chapter == null) return DownloadChapterResult.failed('章節不存在');
+  final chapterDao = getIt<ChapterDao>();
+  final store = ReaderChapterContentStore(
+    chapterDao: chapterDao,
+    contentDao: getIt<ReaderChapterContentDao>(),
+  );
+  // 排進來之後閱讀器可能已經抓好這一章。
+  if (await store.hasReadyContent(book: book, chapter: chapter)) {
+    return DownloadChapterResult.ready();
+  }
+  final result =
+      await ChapterContentPreparationPipeline(
+        book: book,
+        contentStore: store,
+        sourceDao: getIt<BookSourceDao>(),
+        service: BookSourceService(),
+        getSource: () => source,
+      ).prepare(
+        chapterIndex: chapter.index,
+        chapter: chapter,
+        sourceOverride: source,
+        forceRefresh: true,
+        maxAttempts: maxAttempts,
+      );
+  if (result.isReady) return DownloadChapterResult.ready();
+  return DownloadChapterResult.failed(result.failureMessage ?? result.content);
 }
 
 String classifyDownloadFailureReason(String message) {
@@ -108,77 +261,35 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
     update();
 
     var stoppedEarly = false;
+    int? run;
     try {
-      final book = await bookDao.getByUrl(task.bookUrl);
-      if (book == null) {
-        throw Exception('書籍不存在');
-      }
-      final source = book.origin == 'local'
-          ? null
-          : await sourceDao.getByUrl(book.origin);
-      if (book.origin != 'local' && source == null) {
-        throw Exception('書源不存在');
-      }
-
-      var chapters = await chapterDao.getByBook(task.bookUrl);
-      if (chapters.isEmpty) {
-        if (source == null) {
-          throw Exception('章節目錄不存在');
-        }
-        chapters = await sourceService.getChapterList(source, book);
-        // 抓不到目錄就記為失敗，書架自動下載照重試規則隔一天再試，不會
-        // 每次開 App 都打一次書源（ADR 0008）。
-        if (chapters.isEmpty) {
-          throw Exception('章節目錄為空');
-        }
-        await chapterDao.insertChapters(chapters);
-      }
-      // 範圍用章節網址記，這時才對照目前的目錄換算（ADR 0008），排隊或
-      // 暫停期間書源插章、刪章都不會選到別章。
-      final toDownload = chaptersInDownloadScope(chapters, task);
-      if (toDownload == null) {
-        throw Exception('選的章節已不在目錄裡，請重新選擇範圍');
-      }
+      final plan = await planDownloadInSourceIsolate(task);
+      run = plan.run;
       // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
       // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
-      if (toDownload.length != task.totalCount) {
-        task.totalCount = toDownload.length;
+      if (plan.total != task.totalCount) {
+        task.totalCount = plan.total;
         await downloadDao.upsert(task);
       }
-      final contentStore = ReaderChapterContentStore(
-        chapterDao: chapterDao,
-        contentDao: chapterContentDao,
-      );
-      final contentStorage = ReaderChapterContentStorage.withMaterializer(
-        book: book,
-        contentStore: contentStore,
-        sourceDao: sourceDao,
-        service: sourceService,
-        getSource: () => source,
-      );
+      if (plan.ready > 0) {
+        task.successCount = plan.ready;
+        task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+        await downloadDao.updateProgress(
+          task.bookUrl,
+          successCount: task.successCount,
+          errorCount: task.errorCount,
+        );
+        update();
+      }
       var poolCount = 0;
       var consecutiveFailures = 0;
-      for (var chapter in toDownload) {
+      for (final chapter in plan.missing) {
         // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
         // 章節一章章打完（書架自動下載何時再試見 ADR 0008）。
         if (consecutiveFailures >= _maxConsecutiveFailures) break;
         if (!await _mayContinue(task)) {
           stoppedEarly = true;
           break;
-        }
-
-        if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
-          task.successCount++;
-          task.currentChapterIndex = chapter.index;
-          task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-          await downloadDao.updateProgress(
-            task.bookUrl,
-            currentChapterIndex: chapter.index,
-            successCount: task.successCount,
-            errorCount: task.errorCount,
-          );
-          update();
-          continue;
         }
 
         while (poolCount >= maxChapterConcurrent &&
@@ -193,10 +304,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
 
         poolCount++;
         unawaited(
-          _downloadChapter(
-                contentStorage: contentStorage,
-                source: source,
-                chapter: chapter,
+          downloadChapterInSourceIsolate(
+                run: plan.run,
+                chapterUrl: chapter.url,
+                maxAttempts: _maxRetries,
               )
               .then((result) {
                 if (result.success) {
@@ -278,6 +389,14 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         );
       }
     } finally {
+      // 已經開抓的章節在開始時就拿到了書與章節，放掉不影響它們跑完。
+      if (run != null) {
+        unawaited(
+          finishDownloadRunInSourceIsolate(run).catchError((Object error) {
+            AppLog.w('下載結束時放掉書源 isolate 的狀態失敗: $error');
+          }),
+        );
+      }
       activeTaskUrls.remove(task.bookUrl);
       completeTaskActivity(task.bookUrl);
     }
@@ -299,25 +418,5 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       return false;
     }
     return waitUntilTaskRunnable(task.bookUrl);
-  }
-
-  Future<DownloadChapterResult> _downloadChapter({
-    required ReaderChapterContentStorage contentStorage,
-    required BookSource? source,
-    required BookChapter chapter,
-  }) async {
-    final result = await contentStorage.read(
-      chapterIndex: chapter.index,
-      chapter: chapter,
-      sourceOverride: source,
-      forceRefresh: true,
-      maxAttempts: _maxRetries,
-    );
-    if (result.isReady) {
-      return DownloadChapterResult.ready();
-    }
-    return DownloadChapterResult.failed(
-      result.failureMessage ?? result.content,
-    );
   }
 }

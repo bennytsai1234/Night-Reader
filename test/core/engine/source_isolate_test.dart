@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/js/js_engine.dart';
 import 'package:night_reader/core/engine/source_isolate/isolate_channel.dart';
@@ -19,6 +20,7 @@ import 'package:night_reader/core/engine/web_book/headless_webview_service.dart'
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
+import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
@@ -26,6 +28,7 @@ import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/rate_limiter.dart';
 import 'package:night_reader/features/search/search_model.dart';
@@ -169,6 +172,8 @@ void main() {
           );
         case '/c/1':
           request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
+        case '/c/2':
+          request.response.write('<p>第二章的正文，夜裡讀起來剛好。</p>');
         case final path when path.startsWith('/held/'):
           final name = path.substring('/held/'.length);
           gate(arrived, name).complete();
@@ -552,6 +557,55 @@ void main() {
       expect(await content, contains('rename 的正文'));
       expect(book.name, '夜讀（再改）');
     });
+
+    test('a download keeps what rules write on the book from one chapter to '
+        'the next', () async {
+      source.ruleContent!.content =
+          'tag.p@text@js:if (chapter.title == "第一章") '
+          'book.putVariable("token", "yes");'
+          'result + " token=" + book.getVariable("token")';
+      await getIt<BookSourceDao>().upsert(source);
+      final book = Book(
+        bookUrl: '$baseUrl/book/download',
+        origin: baseUrl,
+        name: '下載',
+        isInBookshelf: true,
+      );
+      await getIt<BookDao>().upsert(book);
+      final chapters = [
+        for (final (i, title) in ['第一章', '第二章'].indexed)
+          BookChapter(
+            title: title,
+            url: '$baseUrl/c/${i + 1}',
+            bookUrl: book.bookUrl,
+            index: i,
+          ),
+      ];
+      await getIt<ChapterDao>().insertChapters(chapters);
+
+      final plan = await planDownloadInSourceIsolate(
+        DownloadTask(bookUrl: book.bookUrl, bookName: book.name),
+      );
+      // 依序抓：第二章開始時第一章的規則已經寫進書了。
+      for (final chapter in plan.missing) {
+        final result = await downloadChapterInSourceIsolate(
+          run: plan.run,
+          chapterUrl: chapter.url,
+          maxAttempts: 1,
+        );
+        expect(result.success, isTrue, reason: chapter.title);
+      }
+      await finishDownloadRunInSourceIsolate(plan.run);
+
+      final second = await getIt<ReaderChapterContentDao>().getEntry(
+        contentKey: ReaderChapterContentDao.contentKey(
+          origin: book.origin,
+          bookUrl: book.bookUrl,
+          chapterUrl: chapters[1].url,
+        ),
+      );
+      expect(second?.content, contains('token=yes'));
+    }, skip: quickJsUnavailableReason());
 
     test(
       'chapters fetched at the same time keep the variables of both',

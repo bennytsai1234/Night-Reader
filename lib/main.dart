@@ -228,7 +228,10 @@ Future<void> _runPostFirstFrameStartupTasks() async {
     await prefs.setBool('recordLog', true);
     AppLog.i('Debug Mode: recordLog forced to TRUE');
   }
+}
 
+/// 開 App 的進場播完才做的清理，不和進場搶主執行緒（ADR 0018）。
+void _runPostLaunchTasks() {
   unawaited(_cleanupLegacyCustomFontArtifacts());
   unawaited(_pruneReaderLayoutCaches());
 }
@@ -325,7 +328,9 @@ class ReaderApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const _AssociationLifecycleHost(child: MainPage()),
+          home: const _AssociationLifecycleHost(
+            child: MainPage(onLaunchSettled: _runPostLaunchTasks),
+          ),
         );
       },
     );

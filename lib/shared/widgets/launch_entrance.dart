@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../theme/app_tokens.dart';
 import 'glass.dart';
@@ -15,9 +18,13 @@ import 'skeleton_reveal.dart';
 /// [maybeOf] 取得各自的進度。從主頁面推出去的頁面不在底下，不受影響。
 /// 系統要求減少動態時骨架直接到位。
 class LaunchEntrance extends StatefulWidget {
-  const LaunchEntrance({super.key, required this.child});
+  const LaunchEntrance({super.key, required this.child, this.onFinished});
 
   final Widget child;
+
+  /// 整段進場結束時呼叫一次：開 App 的背景工作從這裡才開始，不和進場搶
+  /// 主執行緒（ADR 0018）。
+  final VoidCallback? onFinished;
 
   static LaunchEntranceMotion? maybeOf(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<_LaunchEntranceScope>()
@@ -53,20 +60,29 @@ class LaunchEntranceMotion {
   /// 整段進場（骨架出現到換成內容）已經結束。
   bool get done => _reveal.parent == kAlwaysCompleteAnimation;
 
+  /// 整段進場結束時完成。
+  Future<void> get finished => _finished.future;
+  final Completer<void> _finished = Completer<void>();
+
+  void _finish() {
+    _reveal.parent = kAlwaysCompleteAnimation;
+    _finished.complete();
+  }
+
   /// 書架第一次換成內容時呼叫：按鈕與分頁列跟著 [progress] 換成玻璃。之後
   /// 書架重新載入不再影響它們。
   void revealWith(Animation<double> progress, {required bool sweep}) {
     if (_reveal.parent != kAlwaysDismissedAnimation) return;
     _revealSweep = sweep;
     if (progress.isCompleted) {
-      _reveal.parent = kAlwaysCompleteAnimation;
+      _finish();
       return;
     }
     _reveal.parent = progress;
     void onStatus(AnimationStatus status) {
       if (!status.isCompleted) return;
       progress.removeStatusListener(onStatus);
-      _reveal.parent = kAlwaysCompleteAnimation;
+      _finish();
     }
 
     progress.addStatusListener(onStatus);
@@ -85,7 +101,19 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     // 方式與時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final reveal = SkeletonReveal.of(context);
     _controller.duration = reveal.duration;
-    _motion = LaunchEntranceMotion._(_controller, sweep: reveal.sweeps);
+    final motion = _motion = LaunchEntranceMotion._(
+      _controller,
+      sweep: reveal.sweeps,
+    );
+    // 換場最後一幀還在畫時就會完成；等這一幀畫完才開始背景工作，最後一幀
+    // 不必跟著等它同步的那一段。
+    unawaited(
+      motion.finished.then((_) => SchedulerBinding.instance.endOfFrame).then((
+        _,
+      ) {
+        if (mounted) widget.onFinished?.call();
+      }),
+    );
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
       return;

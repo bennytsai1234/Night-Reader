@@ -46,47 +46,52 @@ mixin DownloadScheduler on DownloadBase {
     BookChapter? from,
     BookChapter? to,
   }) async {
+    if (chapters.isEmpty) return;
     await _admitDownloadTask(
-      book,
-      chapters,
-      from: from,
-      to: to,
+      bookUrl: book.bookUrl,
+      bookName: book.name,
+      totalCount: chapters.where(chapterIsDownloadable).length,
+      fromUrl: from?.url,
+      toUrl: to?.url,
       intent: _DownloadTaskAdmissionIntent.userRequested,
     );
   }
 
   /// 書架自動下載（ADR 0008）加入的整本任務：不會把使用者暫停的任務排
-  /// 回去；失敗的任務要不要再試由呼叫端依重試規則決定。[chapters] 是目前
-  /// 的目錄，空的表示這本書還沒有目錄（例如匯入時沒附），任務開跑時先抓
-  /// 目錄。
+  /// 回去；失敗的任務要不要再試由呼叫端依重試規則決定。[totalCount] 是目前
+  /// 目錄裡要下載的章數，0 表示這本書還沒有目錄（例如匯入時沒附），任務
+  /// 開跑時先抓目錄。
   ///
   /// Returns true only when a new waiting task was actually admitted.
-  Future<bool> queueShelfDownload(Book book, List<BookChapter> chapters) {
+  Future<bool> queueShelfDownload({
+    required String bookUrl,
+    required String bookName,
+    required int totalCount,
+  }) {
     return _admitDownloadTask(
-      book,
-      chapters,
+      bookUrl: bookUrl,
+      bookName: bookName,
+      totalCount: totalCount,
       intent: _DownloadTaskAdmissionIntent.shelfAuto,
     );
   }
 
-  Future<bool> _admitDownloadTask(
-    Book book,
-    List<BookChapter> chapters, {
-    BookChapter? from,
-    BookChapter? to,
+  Future<bool> _admitDownloadTask({
+    required String bookUrl,
+    required String bookName,
+    required int totalCount,
+    String? fromUrl,
+    String? toUrl,
     required _DownloadTaskAdmissionIntent intent,
   }) async {
-    if (chapters.isEmpty &&
-            intent == _DownloadTaskAdmissionIntent.userRequested ||
-        isTaskRetiring(book.bookUrl) ||
-        !_addingTaskUrls.add(book.bookUrl)) {
+    if (isTaskRetiring(bookUrl) || !_addingTaskUrls.add(bookUrl)) {
       return false;
     }
-    beginTaskActivity(book.bookUrl);
+    beginTaskActivity(bookUrl);
     try {
-      if (activeTaskUrls.contains(book.bookUrl)) return false;
+      if (activeTaskUrls.contains(bookUrl)) return false;
 
-      var existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
+      var existingIndex = tasks.indexWhere((t) => t.bookUrl == bookUrl);
       if (existingIndex != -1) {
         final existing = tasks[existingIndex];
         if (existing.isWaiting || existing.isDownloading) {
@@ -104,31 +109,31 @@ mixin DownloadScheduler on DownloadBase {
           : tasks.fold<int>(-1, (m, t) => t.sortOrder > m ? t.sortOrder : m) +
                 1;
       final task = DownloadTask(
-        bookUrl: book.bookUrl,
-        bookName: book.name,
-        startChapterUrl: from?.url,
-        endChapterUrl: to?.url,
-        totalCount: chapters.where(chapterIsDownloadable).length,
+        bookUrl: bookUrl,
+        bookName: bookName,
+        startChapterUrl: fromUrl,
+        endChapterUrl: toUrl,
+        totalCount: totalCount,
         status: DownloadTask.statusWaiting,
         lastUpdateTime: DateTime.now().millisecondsSinceEpoch,
         sortOrder: sortOrder,
       );
       await downloadDao.upsert(task);
 
-      existingIndex = tasks.indexWhere((t) => t.bookUrl == book.bookUrl);
+      existingIndex = tasks.indexWhere((t) => t.bookUrl == bookUrl);
       if (existingIndex != -1) {
         tasks[existingIndex] = task;
       } else {
         tasks.add(task);
       }
       update();
-      if (!isTaskRetiring(book.bookUrl) && !isDownloading) {
+      if (!isTaskRetiring(bookUrl) && !isDownloading) {
         unawaited(startDownloads());
       }
       return true;
     } finally {
-      _addingTaskUrls.remove(book.bookUrl);
-      completeTaskActivity(book.bookUrl);
+      _addingTaskUrls.remove(bookUrl);
+      completeTaskActivity(bookUrl);
     }
   }
 

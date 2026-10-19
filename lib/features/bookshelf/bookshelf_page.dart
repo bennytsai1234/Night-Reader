@@ -20,6 +20,7 @@ import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
@@ -757,15 +758,20 @@ class _BookshelfPageState extends State<BookshelfPage>
     // 書卡不設左滑動作：書架在可左右滑動換分頁的主畫面裡，兩者會搶同一個手勢。
     final card = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: BookshelfListCard(
-        book: book,
-        updateBadge: selecting ? null : provider.updateBadgeOf(book.bookUrl),
-        selecting: selecting,
-        selected: _selectedUrls.contains(book.bookUrl),
-        onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
-        onLongPress: selecting || reorderable
-            ? null
-            : (rect) => _showBookMenu(provider, book, rect, grid: false),
+      child: CoverRevealSlot(
+        placeholder: const SizedBox(
+          height: BookshelfListCard.coverHeight + AppSpacing.md * 2,
+        ),
+        child: BookshelfListCard(
+          book: book,
+          updateBadge: selecting ? null : provider.updateBadgeOf(book.bookUrl),
+          selecting: selecting,
+          selected: _selectedUrls.contains(book.bookUrl),
+          onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+          onLongPress: selecting || reorderable
+              ? null
+              : (rect) => _showBookMenu(provider, book, rect, grid: false),
+        ),
       ),
     );
     return BookshelfMotionItem(id: book.bookUrl, motion: _motion, child: card);
@@ -805,16 +811,18 @@ class _BookshelfPageState extends State<BookshelfPage>
         return BookshelfMotionItem(
           id: book.bookUrl,
           motion: _motion,
-          child: BookshelfGridTile(
-            book: book,
-            updateBadge: provider.updateBadgeOf(book.bookUrl),
-            selecting: _isMultiSelect,
-            selected: _selectedUrls.contains(book.bookUrl),
-            onTap: () =>
-                _isMultiSelect ? _toggleSelected(book) : _openBook(book),
-            onLongPress: _isMultiSelect
-                ? null
-                : (rect) => _showBookMenu(provider, book, rect, grid: true),
+          child: CoverRevealSlot(
+            child: BookshelfGridTile(
+              book: book,
+              updateBadge: provider.updateBadgeOf(book.bookUrl),
+              selecting: _isMultiSelect,
+              selected: _selectedUrls.contains(book.bookUrl),
+              onTap: () =>
+                  _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+              onLongPress: _isMultiSelect
+                  ? null
+                  : (rect) => _showBookMenu(provider, book, rect, grid: true),
+            ),
           ),
         );
       },
