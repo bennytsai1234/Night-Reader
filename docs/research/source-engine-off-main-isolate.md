@@ -129,4 +129,4 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 - **阻礙四（全域狀態）**：限流紀錄同 Cookie 放在主 isolate；`AppLog` 送回主 isolate；繁簡字典與規則的 fetch polyfill 由主 isolate 讀好傳過去。
 - **阻礙五（呼叫端）**：只改了搜尋（`search_model.dart`）與檢查更新（`book_update_service.dart`，書架與書籍詳情共用）。檢查更新在書源 isolate 寫回目錄，只傳回新章節數。
 
-還沒量手機上的效果；停損點由使用者實際使用判斷。
+停損點由使用者實際使用判斷。
