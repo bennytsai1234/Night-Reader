@@ -351,10 +351,8 @@ class ReaderV2Runtime extends ChangeNotifier {
   }
 
   bool _targetsAnotherChapterThanOpen(ReaderV2OperationToken token) {
-    final target = token.targetLocation;
-    if (target == null) return false;
     final count = repository.chapterCount;
-    return target.normalized(chapterCount: count).chapterIndex !=
+    return token.targetLocation.normalized(chapterCount: count).chapterIndex !=
         _initialLocation.normalized(chapterCount: count).chapterIndex;
   }
 
