@@ -40,6 +40,10 @@ _Avoid_: 隱藏封面、預設封面模式
 一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得書籍詳情、目錄與正文（`BookSource`）。格式相容 Legado 3.0，App 不內建任何書源。
 _Avoid_: 來源、站點、source（不指明時）
 
+**書源 isolate**：
+常駐的背景 isolate，搜尋與檢查更新的書源抓取與解析（含規則 JS）在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
+_Avoid_: 背景執行緒、worker（不指明是哪一個時；`ParseWorker` 是另一個只做純計算解析的背景 isolate）
+
 **書架自動下載**：
 書架上的網路書自動整本下載，新章節也跟著下載；不限網路、沒有開關（ADR 0008，`DownloadService.keepShelfBookDownloaded`）。和使用者在書籍詳情或多選工具列手動加入的下載不同：自動下載不會排回使用者暫停的任務，失敗後依重試規則再試。
 _Avoid_: 預下載（那是手動選範圍的下載）、自動快取

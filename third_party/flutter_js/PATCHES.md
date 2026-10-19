@@ -68,3 +68,13 @@ Night Reader maintains this package in-tree and no longer tracks upstream.
   callback that every new runtime overwrote, so with several runtimes in an
   isolate a message went to the last one created, even after it was disposed.
   `dispose()` now unregisters the runtime and its channels.
+
+## Patch `nightreader.4`: fetch polyfill without `rootBundle`
+
+- `extensions/fetch.dart` adds the top-level `fetchPolyfillSource`, exported
+  from `flutter_js.dart`. When it is set, `enableFetch()` evaluates that text
+  synchronously instead of loading `packages/flutter_js/assets/js/fetch.js`
+  through `rootBundle`.
+- Reason: Night Reader runs book-source rules in a background isolate, which
+  has no `ServicesBinding` and therefore no `rootBundle`. The root isolate
+  reads the asset once and hands the text over.

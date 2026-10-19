@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
@@ -39,30 +40,11 @@ class BookUpdateCheckResult {
 /// 不重複發請求，後到的也不會因為先到的那次已寫入新目錄，就把新章節數算
 /// 成 0。各入口只決定怎麼呈現結果。
 class BookUpdateService {
-  BookUpdateService({
-    required this._keepDownloaded,
-    BookDao? bookDao,
-    ChapterDao? chapterDao,
-    BookSourceDao? sourceDao,
-    BookSourceService? sourceService,
-    ReaderChapterContentDao? contentDao,
-  }) : _bookDao = bookDao ?? getIt<BookDao>(),
-       _tocReplacer = BookTocReplacer(
-         chapterDao: chapterDao ?? getIt<ChapterDao>(),
-         contentDao:
-             contentDao ??
-             (getIt.isRegistered<ReaderChapterContentDao>()
-                 ? getIt<ReaderChapterContentDao>()
-                 : null),
-       ),
-       _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-       _sourceService = sourceService ?? BookSourceService();
+  BookUpdateService({required this._keepDownloaded, BookDao? bookDao})
+    : _bookDao = bookDao ?? getIt<BookDao>();
 
   final ShelfBookDownloader _keepDownloaded;
   final BookDao _bookDao;
-  final BookTocReplacer _tocReplacer;
-  final BookSourceDao _sourceDao;
-  final BookSourceService _sourceService;
 
   /// 進行中的檢查。書架與書籍詳情各自建立實例，所以放在 static 上共用。
   static final Map<(String, String), Future<BookUpdateCheckResult>> _checking =
@@ -82,69 +64,10 @@ class BookUpdateService {
     });
   }
 
-  /// 網路請求期間使用者可能在讀這本書、改了設定或把它移出書架，所以寫回時
-  /// 以資料庫裡最新的一筆為準，只換掉書源給的欄位。
   Future<BookUpdateCheckResult> _check(Book book) async {
     final checkedAt = DateTime.now().millisecondsSinceEpoch;
     try {
-      final source = await _sourceDao.getByUrl(book.origin);
-      if (source == null || !source.isReadingEnabledByRuntime) {
-        throw StateError('找不到可閱讀書源');
-      }
-      final info = await _sourceService.getBookInfo(source, book);
-      // 下面會用它換掉已存的目錄，所以目錄分頁要全部抓到；漏一頁或抓到空
-      // 目錄就當這次檢查失敗，舊目錄不動。
-      final chapters = await _sourceService.getChapterList(
-        source,
-        info,
-        requireComplete: true,
-      );
-      info.bookUrl = book.bookUrl;
-      info.origin = book.origin;
-      info.originName = book.originName;
-      if (info.tocUrl.isEmpty) {
-        info.tocUrl = book.tocUrl;
-      }
-      final newCount = await _bookDao.transaction<int?>(() async {
-        final stored = await _bookDao.getByUrl(book.bookUrl);
-        // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。不在
-        // 書架上的書（從搜尋或發現打開的詳情）照樣寫回。
-        if (book.isInBookshelf && (stored == null || !stored.isInBookshelf) ||
-            stored != null && stored.origin != book.origin) {
-          return null;
-        }
-        final current = stored ?? book;
-        info.isInBookshelf = current.isInBookshelf;
-        info.group = current.group;
-        info.order = current.order;
-        info.syncTime = current.syncTime;
-        info.chapterIndex = current.chapterIndex;
-        info.charOffset = current.charOffset;
-        info.visualOffsetPx = current.visualOffsetPx;
-        info.durChapterTitle = current.durChapterTitle;
-        info.durChapterTime = current.durChapterTime;
-        info.readerAnchorJson = current.readerAnchorJson;
-        info.canUpdate = current.canUpdate;
-        info.customCoverUrl = current.customCoverUrl;
-        info.customCoverLocalPath = current.customCoverLocalPath;
-        info.customIntro = current.customIntro;
-        info.customTag = current.customTag;
-        info.readConfig = current.readConfig;
-        final toc = (await _tocReplacer.replace(info, chapters)).chapters;
-        final oldTotal = current.totalChapterNum > 0
-            ? current.totalChapterNum
-            : toc.length;
-        final newCount = toc.length > oldTotal ? toc.length - oldTotal : 0;
-        info.lastCheckTime = checkedAt;
-        info.lastCheckCount = newCount;
-        info.totalChapterNum = toc.length;
-        info.latestChapterTitle = toc.last.title;
-        if (newCount > 0) {
-          info.latestChapterTime = checkedAt;
-        }
-        await _bookDao.upsert(info);
-        return newCount;
-      });
+      final newCount = await _refreshInSourceIsolate(book, checkedAt);
       if (newCount == null) {
         return BookUpdateCheckResult(bookUrl: book.bookUrl, newChapterCount: 0);
       }
@@ -169,4 +92,84 @@ class BookUpdateService {
       );
     }
   }
+}
+
+/// 在書源 isolate 抓詳情與目錄並寫回資料庫，只把新章節數傳回來：上千章的
+/// 目錄不必複製回畫面執行緒，比對與寫入也不在畫面執行緒上做。工作會送進
+/// 書源 isolate，所以在頂層函式裡建立，只捕捉書與時間。
+Future<int?> _refreshInSourceIsolate(Book book, int checkedAt) =>
+    SourceIsolate.run((cancelToken) => _refreshFromSource(book, checkedAt));
+
+/// 寫回資料庫並回傳新章節數；檢查期間書被移出書架或換了書源時不寫，回傳
+/// null。
+///
+/// 網路請求期間使用者可能在讀這本書、改了設定或把它移出書架，所以寫回時
+/// 以資料庫裡最新的一筆為準，只換掉書源給的欄位。
+Future<int?> _refreshFromSource(Book book, int checkedAt) async {
+  final bookDao = getIt<BookDao>();
+  final tocReplacer = BookTocReplacer(
+    chapterDao: getIt<ChapterDao>(),
+    contentDao: getIt.isRegistered<ReaderChapterContentDao>()
+        ? getIt<ReaderChapterContentDao>()
+        : null,
+  );
+  final sourceService = BookSourceService();
+  final source = await getIt<BookSourceDao>().getByUrl(book.origin);
+  if (source == null || !source.isReadingEnabledByRuntime) {
+    throw StateError('找不到可閱讀書源');
+  }
+  final info = await sourceService.getBookInfo(source, book);
+  // 下面會用它換掉已存的目錄，所以目錄分頁要全部抓到；漏一頁或抓到空
+  // 目錄就當這次檢查失敗，舊目錄不動。
+  final chapters = await sourceService.getChapterList(
+    source,
+    info,
+    requireComplete: true,
+  );
+  info.bookUrl = book.bookUrl;
+  info.origin = book.origin;
+  info.originName = book.originName;
+  if (info.tocUrl.isEmpty) {
+    info.tocUrl = book.tocUrl;
+  }
+  return bookDao.transaction<int?>(() async {
+    final stored = await bookDao.getByUrl(book.bookUrl);
+    // 檢查期間移出書架或換了書源：不寫回，免得書又回到書架上。不在
+    // 書架上的書（從搜尋或發現打開的詳情）照樣寫回。
+    if (book.isInBookshelf && (stored == null || !stored.isInBookshelf) ||
+        stored != null && stored.origin != book.origin) {
+      return null;
+    }
+    final current = stored ?? book;
+    info.isInBookshelf = current.isInBookshelf;
+    info.group = current.group;
+    info.order = current.order;
+    info.syncTime = current.syncTime;
+    info.chapterIndex = current.chapterIndex;
+    info.charOffset = current.charOffset;
+    info.visualOffsetPx = current.visualOffsetPx;
+    info.durChapterTitle = current.durChapterTitle;
+    info.durChapterTime = current.durChapterTime;
+    info.readerAnchorJson = current.readerAnchorJson;
+    info.canUpdate = current.canUpdate;
+    info.customCoverUrl = current.customCoverUrl;
+    info.customCoverLocalPath = current.customCoverLocalPath;
+    info.customIntro = current.customIntro;
+    info.customTag = current.customTag;
+    info.readConfig = current.readConfig;
+    final toc = (await tocReplacer.replace(info, chapters)).chapters;
+    final oldTotal = current.totalChapterNum > 0
+        ? current.totalChapterNum
+        : toc.length;
+    final newCount = toc.length > oldTotal ? toc.length - oldTotal : 0;
+    info.lastCheckTime = checkedAt;
+    info.lastCheckCount = newCount;
+    info.totalChapterNum = toc.length;
+    info.latestChapterTitle = toc.last.title;
+    if (newCount > 0) {
+      info.latestChapterTime = checkedAt;
+    }
+    await bookDao.upsert(info);
+    return newCount;
+  });
 }

@@ -5,7 +5,6 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:synchronized/synchronized.dart';
 import 'package:night_reader/core/network/interceptors/app_interceptor.dart';
 import 'package:night_reader/core/network/interceptors/lenient_cookie_manager.dart';
 
@@ -18,23 +17,20 @@ class NetworkService {
 
   late Dio _dio;
   late CookieJar _cookieJar;
-  final Map<String, Lock> _sourceLocks = {}; // 書源併發鎖
 
   Dio get dio => _dio;
   CookieJar get cookieJar => _cookieJar;
 
   bool _isInitialized = false;
 
-  /// 獲取書源專屬的鎖 (用於併發控制)
-  Lock getSourceLock(String? sourceUrl) {
-    if (sourceUrl == null || sourceUrl.isEmpty) return Lock();
-    return _sourceLocks.putIfAbsent(sourceUrl, () => Lock());
-  }
-
-  Future<void> init({bool ephemeral = false}) async {
+  /// [cookieJar] 給了就用它：書源 isolate 用一個轉給主 isolate 的 jar，
+  /// Cookie 檔只有主 isolate 寫（ADR 0028）。
+  Future<void> init({bool ephemeral = false, CookieJar? cookieJar}) async {
     if (_isInitialized) return;
 
-    if (ephemeral) {
+    if (cookieJar != null) {
+      _cookieJar = cookieJar;
+    } else if (ephemeral) {
       // 背景 isolate：用記憶體 cookie jar，避開 path_provider (platform channel)，
       // 並避免多個校驗 isolate 同時寫入同一個 .cookies 檔造成競爭。
       _cookieJar = CookieJar();

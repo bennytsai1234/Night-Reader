@@ -15,6 +15,16 @@ class AppLog {
 
   static final _toastController = StreamController<String>.broadcast();
 
+  /// 設定後紀錄改交給它，不在這個 isolate 記：書源 isolate 把紀錄與提示
+  /// 送回主 isolate，畫面才收得到提示。
+  static void Function(
+    String message,
+    Object? error,
+    StackTrace? stackTrace,
+    bool toast,
+  )?
+  delegate;
+
   /// 記錄日誌 (原 Android AppLog.kt)
   static void put(
     String message, {
@@ -22,6 +32,11 @@ class AppLog {
     StackTrace? stackTrace,
     bool toast = false,
   }) {
+    final delegate = AppLog.delegate;
+    if (delegate != null) {
+      delegate(message, error, stackTrace, toast);
+      return;
+    }
     if (_logs.length >= _maxLogs) {
       _logs.removeLast();
     }

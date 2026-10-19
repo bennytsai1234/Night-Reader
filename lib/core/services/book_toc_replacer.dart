@@ -43,7 +43,7 @@ class BookTocReplacer {
     }
     final progressMoved = book.realignProgress(chapters, oldToc: oldToc);
     // 目錄沒變就不重寫：書架檢查每本書都會走這裡，大多數時候目錄一樣，
-    // 整份刪掉再寫回要在畫面執行緒上組上千筆寫入。
+    // 整份刪掉再寫回要組上千筆寫入。
     if (!_sameAsStored(oldToc, chapters)) {
       await chapterDao.replaceByBook(book.bookUrl, chapters);
     }

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
@@ -64,6 +65,17 @@ int searchRelevanceRank(SearchBook book, String key) {
 }
 
 String _normalizeBookUrl(String value) => value.trim().toLowerCase();
+
+/// 在書源 isolate 搜一個書源：抓取與解析都不在畫面執行緒上。工作會送進
+/// 書源 isolate，所以在頂層函式裡建立，只捕捉書源與關鍵字。
+Future<List<SearchBook>> _searchInSourceIsolate(
+  BookSource source,
+  String key,
+  CancelToken cancelToken,
+) => SourceIsolate.run(
+  (token) => WebBook.searchBookAwait(source, key, cancelToken: token),
+  cancelToken: cancelToken,
+);
 
 /// 同源去重的索引：同一書源裡網址相同（兩邊都有網址時），或任一邊沒有網址
 /// 而書名與作者相同，就算同一本。每個書源回來都要比對，用雜湊查找，不逐本
@@ -420,7 +432,7 @@ class SearchModel {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        WebBook.searchBookAwait(source, variant, cancelToken: cancelToken)
+        _searchInSourceIsolate(source, variant, cancelToken)
             .timeout(const Duration(seconds: 30))
             .then<List<SearchBook>?>(
               (books) => books,
@@ -585,8 +597,8 @@ class SearchModel {
   }
 
   /// 暫停送出還沒開始的書源；已經送出的照常跑完，結果照常併入。搜尋頁被
-  /// 書籍詳情、閱讀器這類整頁蓋住時用：書源回應都在主 isolate 解析，會跟
-  /// 上面那一頁的載入與排版搶時間。
+  /// 書籍詳情、閱讀器這類整頁蓋住時用：搜尋的請求會跟上面那一頁搶網路，
+  /// 合併結果也要用畫面執行緒。
   void pause() => _resumed ??= Completer<void>();
 
   bool get isPaused => _resumed != null;

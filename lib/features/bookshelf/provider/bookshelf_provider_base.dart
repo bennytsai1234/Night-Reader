@@ -76,9 +76,6 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   late final BookUpdateService updates = BookUpdateService(
     keepDownloaded: keepBookDownloaded,
     bookDao: bookDao,
-    chapterDao: chapterDao,
-    sourceDao: sourceDao,
-    sourceService: service,
   );
 
   /// 排定書卡角標消失的計時，預設 [Timer.new]。

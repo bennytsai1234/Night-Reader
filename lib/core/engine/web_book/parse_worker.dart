@@ -29,8 +29,8 @@ enum ParseWorkerFit {
 /// 其他帶 JS 的規則會經由 `java.*` 用到主 isolate 的網路、資料庫與 Cookie，
 /// 維持原地解析（docs/research/source-engine-off-main-isolate.md）。
 ///
-/// 只在 App 的主 isolate 開啟（`main.dart`）；測試、書源校驗這類已經在背景
-/// 的 isolate 維持原地解析，不再多開一層。
+/// 只在 App 的主 isolate 開啟（`main.dart`）；測試、書源校驗與書源 isolate
+/// 這類已經在背景的 isolate 維持原地解析，不再多開一層。
 abstract final class ParseWorker {
   static bool enabled = false;
 
