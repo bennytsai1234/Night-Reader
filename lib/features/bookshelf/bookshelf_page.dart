@@ -343,8 +343,8 @@ class _BookshelfPageState extends State<BookshelfPage>
   }
 
   /// 初次載入時顯示與目前檢視同形、本數與上次相同的骨架（開 App 時隨進場
-  /// 出現，見 [LaunchEntrance]）；書到了等畫面上的封面解碼好，書卡連同封面
-  /// 一次換場。
+  /// 出現，見 [LaunchEntrance]）；書到了、書名的繁簡轉換字典也好了，再等
+  /// 畫面上的封面解碼好，書卡連同封面一次換場。
   Widget _buildContent(BuildContext context, BookshelfProvider provider) {
     final insets = MediaQuery.paddingOf(context);
     final empty = provider.books.isEmpty;
@@ -352,11 +352,14 @@ class _BookshelfPageState extends State<BookshelfPage>
     return SkeletonSwitcher(
       // 第一次是空書架時，查到有沒有書源之前骨架留著：不先畫「搜尋書籍」
       // 再一幀換成「匯入書源」，骨架直接換場成對的那一種。
+      // 第一次換場前字典還沒好時骨架也留著：書名不會換場後才從原文變成
+      // 轉換後的字。
       loading:
           empty &&
-          (provider.isLoading || _hasSources == null && !_contentShown),
+              (provider.isLoading || _hasSources == null && !_contentShown) ||
+          !_contentShown && !ChineseDisplay.readyOf(context),
       waitForCovers: true,
-      entrance: LaunchEntrance.maybeOf(context)?.skeleton,
+      entrance: LaunchEntrance.maybeOf(context),
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,

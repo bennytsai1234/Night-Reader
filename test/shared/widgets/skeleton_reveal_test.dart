@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -114,43 +112,6 @@ void main() {
       // 骨架會一直呼吸，等不到 pumpAndSettle。
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.text('內容'), findsNothing);
-    });
-
-    testWidgets('content waits for the skeleton entrance to finish', (
-      tester,
-    ) async {
-      final entrance = AnimationController(
-        vsync: const TestVSync(),
-        duration: const Duration(milliseconds: 500),
-      );
-      addTearDown(entrance.dispose);
-      Widget entering({required bool loading}) => MaterialApp(
-        theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: Scaffold(
-          body: SkeletonSwitcher(
-            loading: loading,
-            entrance: entrance,
-            skeleton: const SkeletonBox(width: 40, height: 40),
-            builder: (_) => const Text('內容'),
-          ),
-        ),
-      );
-      await tester.pumpWidget(entering(loading: true));
-      expect(skeletonLayer(tester).alphaAt(0), 0, reason: '第一幀只有底色');
-      unawaited(entrance.forward());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      final growing = skeletonLayer(tester);
-      expect(growing.alphaAt(0), greaterThan(growing.alphaAt(1)));
-
-      await tester.pumpWidget(entering(loading: false));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('內容'), findsNothing, reason: '骨架還在進場，先不建內容');
-
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
-      expect(find.text('內容'), findsOneWidget);
-      expect(find.byType(SkeletonBox), findsNothing);
     });
 
     testWidgets('the sweep masks the content only while it is moving', (

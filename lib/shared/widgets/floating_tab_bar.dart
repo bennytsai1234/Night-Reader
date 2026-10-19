@@ -7,6 +7,7 @@ import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'glass.dart';
+import 'launch_entrance.dart';
 
 class FloatingTabItem {
   const FloatingTabItem({
@@ -175,26 +176,31 @@ class _FloatingTabBarState extends State<FloatingTabBar> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: barWidth,
-            height: AppGlass.tabBarHeight,
-            child: _buildBar(context, barWidth),
+          // 開 App 時先是骨架，跟書架一起換成玻璃（LaunchEntrance）。
+          LaunchSkeleton(
+            child: SizedBox(
+              width: barWidth,
+              height: AppGlass.tabBarHeight,
+              child: _buildBar(context, barWidth),
+            ),
           ),
           if (widget.onSearch != null) ...[
             const SizedBox(width: AppGlass.tabBarGap),
-            Semantics(
-              button: true,
-              label: widget.searchTooltip,
-              child: PressScale(
-                onTap: widget.onSearch,
-                child: SizedBox.square(
-                  dimension: AppGlass.tabBarHeight,
-                  child: GlassSurface(
-                    shape: BoxShape.circle,
-                    child: Icon(
-                      Icons.search_rounded,
-                      size: 26,
-                      color: Theme.of(context).colorScheme.onSurface,
+            LaunchSkeleton(
+              child: Semantics(
+                button: true,
+                label: widget.searchTooltip,
+                child: PressScale(
+                  onTap: widget.onSearch,
+                  child: SizedBox.square(
+                    dimension: AppGlass.tabBarHeight,
+                    child: GlassSurface(
+                      shape: BoxShape.circle,
+                      child: Icon(
+                        Icons.search_rounded,
+                        size: 26,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                   ),
                 ),

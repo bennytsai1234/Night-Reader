@@ -128,6 +128,9 @@ Future<void> _startApp() async {
 
     AppLog.i('$kAppDisplayName Ready to Run');
 
+    // 第一幀前定下書名的繁簡轉換模式；字典在背景載入，書架等它好了才換場。
+    unawaited(ChineseDisplay.start(getIt<SharedPreferences>()));
+
     runApp(
       MultiProvider(
         providers: AppProviders.providers,
