@@ -7,7 +7,6 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 
-import 'js_bridge_guard.dart';
 import 'query_ttf.dart';
 
 /// JsExtensions 的基礎狀態與共用緩存
@@ -62,18 +61,6 @@ abstract class JsExtensionsBase {
 
   JsExtensionsBase(this.runtime, {this.source, this.ruleContext});
 
-  /// 註冊 JS 經 `sendMessage` 呼叫的 Dart 頻道。一律走這裡，背景解析才擋得
-  /// 到會用到主 isolate 狀態的頻道（[JsBridgeGuard]）。擋下時丟出例外而非
-  /// 回 null：非同步呼叫的 Promise 會被拒絕，不會一直等到規則逾時。
-  void onBridge(String channel, dynamic Function(dynamic args) handler) {
-    runtime.onMessage(channel, (dynamic args) {
-      if (JsBridgeGuard.blocks(channel)) {
-        throw StateError('$channel is not available in ParseWorker');
-      }
-      return handler(args);
-    });
-  }
-
   /// 安裝 Dart↔JS Promise bridge 的 JS 端基礎設施與對應 onMessage handler
   ///
   /// 必須在任何一個會用到 `__asyncCall` 的 extension 之前呼叫。
@@ -116,7 +103,7 @@ abstract class JsExtensionsBase {
     ''');
 
     // rule-level 完成通知：args = [ruleCallId, resultJson, errorMsg]
-    onBridge('__ruleDone', (dynamic args) {
+    runtime.onMessage('__ruleDone', (dynamic args) {
       try {
         final list = args is List ? args : jsonDecode(args.toString()) as List;
         final id = (list[0] as num).toInt();

@@ -32,7 +32,6 @@ import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
 import 'core/engine/source_isolate/source_isolate.dart';
-import 'core/engine/web_book/parse_worker.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
@@ -99,11 +98,9 @@ Future<void> _startApp() async {
     LicenseRegistry.addLicense(_punctFontLicense);
     _punctLicenseRegistered = true;
   }
-  // 書源工作都在書源 isolate 執行；書源 isolate 開不起來、改回主 isolate
-  // 執行時，不帶 JS 的解析交給 ParseWorker。背景下載的 Workmanager 入口
-  // 都不開，維持原地執行。
+  // 書源工作都在書源 isolate 執行。背景下載的 Workmanager 入口不開，維持
+  // 原地執行。
   SourceIsolate.enabled = true;
-  ParseWorker.enabled = true;
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(

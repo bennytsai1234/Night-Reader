@@ -5,7 +5,6 @@ import 'package:night_reader/core/engine/analyze_rule.dart';
 import 'package:night_reader/core/engine/js/async_js_rewriter.dart';
 import 'package:night_reader/core/engine/book/book_help.dart';
 import 'package:night_reader/core/engine/web_book/book_info_parser.dart';
-import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
 
@@ -17,78 +16,14 @@ class BookListParser {
     required bool isSearch,
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
-  }) async {
-    // 回呼不能帶進背景 isolate；帶回呼的只有精確搜尋，結果最多一筆。
-    final fit = filter == null && shouldBreak == null
-        ? _fit(source, isSearch)
-        : ParseWorkerFit.none;
-    if (fit != ParseWorkerFit.none) {
-      final books = await ParseWorker.run(
-        _offMain(
-          source: source,
-          body: body,
-          baseUrl: baseUrl,
-          isSearch: isSearch,
-        ),
-        usesJs: fit == ParseWorkerFit.js,
-      );
-      if (books != null) return books;
-    }
-    return _parse(
-      source: source,
-      body: body,
-      baseUrl: baseUrl,
-      isSearch: isSearch,
-      filter: filter,
-      shouldBreak: shouldBreak,
-    );
-  }
-
-  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
-  static Future<List<SearchBook>> Function() _offMain({
-    required BookSource source,
-    required String body,
-    required String baseUrl,
-    required bool isSearch,
-  }) =>
-      () => _parse(
-        source: source,
-        body: body,
-        baseUrl: baseUrl,
-        isSearch: isSearch,
-      );
-
-  /// 這次解析可能用到的規則能不能交給背景 isolate（[ParseWorker.fit]）。
-  /// 列表為空或網址符合 `bookUrlPattern` 時會改用詳情頁規則，發現頁找不到
-  /// 書時會改用搜尋規則，所以一併檢查。`@put`／`@get` 寫讀的是每一筆結果
-  /// 或規則自己的暫存，都跟著結果傳回，可以交出去。
-  static ParseWorkerFit _fit(BookSource source, bool isSearch) {
-    final search = source.ruleSearch;
-    final explore = isSearch ? null : source.ruleExplore;
-    final info = source.ruleBookInfo;
-    return ParseWorker.fit(source, variablesInResult: true, [
-      for (final dynamic rule in [search, explore]) ...[
-        rule?.bookList,
-        rule?.name,
-        rule?.author,
-        rule?.kind,
-        rule?.coverUrl,
-        rule?.intro,
-        rule?.lastChapter,
-        rule?.wordCount,
-        rule?.bookUrl,
-      ],
-      info?.init,
-      info?.name,
-      info?.author,
-      info?.tocUrl,
-      info?.kind,
-      info?.coverUrl,
-      info?.intro,
-      info?.lastChapter,
-      info?.canReName,
-    ]);
-  }
+  }) => _parse(
+    source: source,
+    body: body,
+    baseUrl: baseUrl,
+    isSearch: isSearch,
+    filter: filter,
+    shouldBreak: shouldBreak,
+  );
 
   static Future<List<SearchBook>> _parse({
     required BookSource source,

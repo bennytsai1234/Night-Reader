@@ -127,4 +127,5 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 - **阻礙二（資料庫）**：改成 `DriftIsolate.spawn` 加 `DatabaseConnection.delayed`，書源 isolate 連到同一個 drift isolate。測試確認書源 isolate 的寫入會更新主 isolate 的 `watch()`。
 - **阻礙三（Cookie）**：擁有者與上面的建議相反，放在主 isolate，書源 isolate 經代理讀寫。書源 isolate 會被同步的規則 JS 佔住好幾秒，主 isolate 的事件迴圈每幀都會回來，主 isolate 的 WebView 也要讀寫 Cookie。`CookieStore` 與 `CacheManager` 的記憶體層兩邊各一份，寫入互相轉送。
 - **阻礙四（全域狀態）**：限流紀錄同 Cookie 放在主 isolate；`AppLog` 送回主 isolate；繁簡字典與規則的 fetch polyfill 由主 isolate 讀好傳過去。
+- **`ParseWorker`**：書源工作都搬進來後只剩備援用途，使用者決定拿掉。
 - **阻礙五（呼叫端）**：不逐個改，改在所有呼叫端都經過的 `BookSourceService`，由它送進書源 isolate；規則在書與章節複本上改的欄位跑完抄回來。檢查更新（`book_update_service.dart`）整段在書源 isolate 跑，寫回目錄後只傳回新章節數。

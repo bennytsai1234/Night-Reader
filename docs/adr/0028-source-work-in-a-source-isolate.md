@@ -27,7 +27,7 @@ Cookie 檔與限流放在主 isolate，和研究筆記原本的建議（由書�
 - **跑完把整本書抄回呼叫端**：會蓋掉這段時間裡畫面改的閱讀進度與設定。
 - **兩個 isolate 各開一個資料庫連線**：一邊的寫入不會更新另一邊的 `watch()`（drift 文件 Isolates），書架看不到書源 isolate 寫回的更新。
 - **每個書源工作開一個新的 isolate**（像書源校驗）：每次都要付開 isolate、連資料庫、建 JS 環境的成本，限流與快取也接不起來；搜尋一次上百個書源不可行。
-- **只靠 `ParseWorker`**：已經做了，搬不走用到網路、Cookie、快取的規則 JS 與 TLS 握手。
+- **只靠 `ParseWorker`**（2026-10-14 起把只做計算的解析交給另一個背景 isolate）：搬不走用到網路、Cookie、快取的規則 JS 與 TLS 握手。書源工作都搬進書源 isolate 後，它只剩書源 isolate 開不起來時才用得到，使用者 2026-10-19 決定拿掉，連同它的 `JsBridgeGuard`。
 - **記憶體快取只放在一邊、另一邊用代理**：規則同步讀變數（`source.getVariable()`、`@get`），同步呼叫等不了另一個 isolate 回覆。
 
 ## Consequences
@@ -37,6 +37,6 @@ Cookie 檔與限流放在主 isolate，和研究筆記原本的建議（由書�
 - 送進書源 isolate 的工作連同捕捉的變數一起複製過去，要在只捕捉資料的頂層函式裡建立（`CODING_STANDARDS.md`）。
 - 記憶體快取的轉送是非同步的：一邊寫入後，另一邊要等轉送到了才讀得到；兩邊幾乎同時寫同一個鍵時，最後各自留著對方的值。
 - 兩個 isolate 各有一份 JS 引擎與 jsLib 快取、解析器與記憶體快取。
-- 書源 isolate 開不起來時，書源工作整段改回主 isolate 執行，這時不帶 JS 的解析照舊交給 `ParseWorker`；書源 isolate 裡不開 `ParseWorker`，原地解析。測試與 Workmanager 不開書源 isolate（`SourceIsolate.enabled`），書源工作原地執行。
-- 新的書源工作加在 `BookSourceService`，工作在只捕捉資料的頂層函式裡建立；搜尋的 `filter`、`shouldBreak` 也一樣。規則能改的書與章節欄位多了新的，要加進 `BookSourceService` 抄回的欄位清單。
+- 書源 isolate 開不起來時，書源工作整段改回主 isolate 執行，解析也在主執行緒。測試與 Workmanager 不開書源 isolate（`SourceIsolate.enabled`），書源工作原地執行；測試裡照樣試送一次，工作捕捉了送不出去的東西時直接失敗。
+- 新的書源工作加在 `BookSourceService`，工作在只捕捉資料的頂層函式裡建立；搜尋的 `filter`、`shouldBreak` 也一樣。規則能改的書與章節欄位只列在 `lib/core/engine/rule_data_fields.dart`，JS 寫入與跑完抄回都照它，新增欄位只改這裡。
 - 結果很大又不必回到畫面的（例如檢查更新的目錄），在書源 isolate 寫進資料庫，只傳回摘要。

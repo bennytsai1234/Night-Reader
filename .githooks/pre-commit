@@ -4,30 +4,42 @@
 #
 # commit 記錄的是暫存區的內容。暫存後又改過的檔案（部分暫存）逐一取出暫存版本檢查；
 # 其餘檔案暫存版本與磁碟相同，直接批次檢查磁碟上的檔案，省下每個檔案各啟動一次 dart。
+#
+# 檢查不會改檔，但 dart format 的摘要「Formatted N files (1 changed)」看起來像已經排好，
+# 所以不顯示它的輸出，只收集排版不符的檔名，最後印出要執行的指令。
 staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR -- '*.dart' ':!:*.g.dart')
 [ -z "$staged" ] && exit 0
 
-failed=0
+bad=""
 same=""
 newline='
 '
 while IFS= read -r f; do
   if git diff --quiet -- "$f"; then
     same="$same$f$newline"
-  elif ! git show ":$f" | dart format --output=none --set-exit-if-changed --stdin-name "$f"; then
-    failed=1
+  elif ! git show ":$f" | dart format --output=none --set-exit-if-changed --stdin-name "$f" >/dev/null 2>&1; then
+    bad="$bad$f$newline"
   fi
 done <<EOF
 $staged
 EOF
 
 # 分批呼叫，避開 Windows 的命令列長度上限。
-if [ -n "$same" ] &&
-  ! printf '%s' "$same" | tr '\n' '\0' | xargs -0 -n 50 dart format --output=none --set-exit-if-changed; then
-  failed=1
+if [ -n "$same" ]; then
+  changed=$(printf '%s' "$same" | tr '\n' '\0' |
+    xargs -0 -n 50 dart format --output=none --set-exit-if-changed 2>/dev/null |
+    sed -n 's/^Changed //p')
+  [ -n "$changed" ] && bad="$bad$changed$newline"
 fi
 
-if [ "$failed" -ne 0 ]; then
-  echo "pre-commit: 上面列出的檔案格式不符，執行 dart format 後重新 git add。" >&2
+if [ -n "$bad" ]; then
+  {
+    echo "pre-commit: 下面的檔案沒有照 dart format 排版，這次 commit 沒有建立："
+    printf '%s' "$bad" | sed 's/^/  /'
+    echo "排好後重新 git add 再 commit："
+    printf '  dart format'
+    printf '%s' "$bad" | while IFS= read -r f; do printf ' %s' "$f"; done
+    echo
+  } >&2
   exit 1
 fi

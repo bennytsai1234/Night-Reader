@@ -12,26 +12,7 @@ import 'package:night_reader/core/services/encoding_detect.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
-import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/network/str_response.dart';
-
-/// 背景 isolate 組好的網址與請求選項（見 [AnalyzeUrl.create]）。
-typedef _BuiltUrl = ({
-  String ruleUrl,
-  String url,
-  String method,
-  Map<String, String> headers,
-  dynamic body,
-  String? charset,
-  bool useWebView,
-  String? webJs,
-  int webViewDelayTime,
-  // 書籍變數裡前一個規則留下的回應，網址對得上時直接拿來用、不再請求。
-  String? prefetchedBody,
-  String? prefetchedUrl,
-  String? prefetchedRequestUrl,
-  String? prefetchedRedirectUrl,
-});
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
 class AnalyzeUrl {
@@ -116,85 +97,8 @@ class AnalyzeUrl {
       source: source,
       ruleData: ruleData,
     );
-    // 網址或書源 header 帶的 JS 只做計算時，在背景 isolate 組好網址：搜尋時
-    // 每個書源都要組一次，每次都要建 JS 引擎，原地組會讓畫面一直掉幀。
-    if (source != null &&
-        ParseWorker.fit(source, [rawUrl, source.header]) == ParseWorkerFit.js) {
-      final built = await ParseWorker.run(
-        _buildOffMain(
-          rawUrl,
-          key: key,
-          page: page,
-          speakText: speakText,
-          speakSpeed: speakSpeed,
-          baseUrl: baseUrl,
-          source: source,
-          ruleData: ruleData,
-        ),
-        usesJs: true,
-      );
-      if (built != null) {
-        instance._apply(built);
-        return instance;
-      }
-    }
     await instance._initAsync();
     return instance;
-  }
-
-  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
-  static Future<_BuiltUrl> Function() _buildOffMain(
-    String rawUrl, {
-    String? key,
-    int? page,
-    String? speakText,
-    int? speakSpeed,
-    String baseUrl = '',
-    BaseSource? source,
-    dynamic ruleData,
-  }) => () async {
-    final built = AnalyzeUrl._bare(
-      rawUrl,
-      key: key,
-      page: page,
-      speakText: speakText,
-      speakSpeed: speakSpeed,
-      baseUrl: baseUrl,
-      source: source,
-      ruleData: ruleData,
-    );
-    await built._initAsync();
-    return (
-      ruleUrl: built.ruleUrl,
-      url: built.url,
-      method: built.method,
-      headers: Map<String, String>.of(built.headerMap),
-      body: built.body,
-      charset: built.charset,
-      useWebView: built.useWebView,
-      webJs: built.webJs,
-      webViewDelayTime: built.webViewDelayTime,
-      prefetchedBody: built._prefetchedResponseBody,
-      prefetchedUrl: built._prefetchedResponseUrl,
-      prefetchedRequestUrl: built._prefetchedResponseRequestUrl,
-      prefetchedRedirectUrl: built._prefetchedResponseRedirectUrl,
-    );
-  };
-
-  void _apply(_BuiltUrl built) {
-    ruleUrl = built.ruleUrl;
-    url = built.url;
-    method = built.method;
-    headerMap.addAll(built.headers);
-    body = built.body;
-    charset = built.charset;
-    useWebView = built.useWebView;
-    webJs = built.webJs;
-    webViewDelayTime = built.webViewDelayTime;
-    _prefetchedResponseBody = built.prefetchedBody;
-    _prefetchedResponseUrl = built.prefetchedUrl;
-    _prefetchedResponseRequestUrl = built.prefetchedRequestUrl;
-    _prefetchedResponseRedirectUrl = built.prefetchedRedirectUrl;
   }
 
   void _init() {

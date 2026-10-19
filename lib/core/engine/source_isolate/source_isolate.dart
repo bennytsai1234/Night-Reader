@@ -82,12 +82,18 @@ abstract final class SourceIsolate {
     CancelToken? cancelToken,
   }) async {
     final channel = await _channel;
-    if (channel == null) return task(cancelToken ?? CancelToken());
+    if (channel == null) {
+      // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
+      // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
+      assert(_sendable(task));
+      return task(cancelToken ?? CancelToken());
+    }
     final id = _nextTaskId++;
     final Future<Object?> result;
     try {
       result = channel.request(_RunTask(id, task));
     } on ArgumentError catch (e) {
+      assert(_sendable(task));
       AppLog.e('書源工作送不進書源 isolate，改在主 isolate 執行: $e', error: e);
       return task(cancelToken ?? CancelToken());
     }
@@ -95,6 +101,23 @@ abstract final class SourceIsolate {
       cancelToken?.whenCancel.then((_) => channel.notify(_CancelTask(id))),
     );
     return await result as R;
+  }
+
+  /// 送一次 [task] 給自己，看它連同捕捉的變數能不能跨 isolate；不能時丟出
+  /// 錯誤，指出要改在只捕捉資料的頂層函式裡建立（`CODING_STANDARDS.md`）。
+  static bool _sendable(Object task) {
+    final port = RawReceivePort();
+    try {
+      port.sendPort.send(task);
+      return true;
+    } on ArgumentError catch (e) {
+      throw ArgumentError(
+        '送進書源 isolate 的工作捕捉了不能跨 isolate 的東西，要在只捕捉資料的'
+        '頂層函式裡建立（CODING_STANDARDS.md 背景執行）：$e',
+      );
+    } finally {
+      port.close();
+    }
   }
 
   /// 測試用：結束書源 isolate，回到原地執行。

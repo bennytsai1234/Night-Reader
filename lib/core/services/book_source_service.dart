@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
@@ -258,7 +259,7 @@ _SourceTask<List<ExploreKind>> _exploreKindsTask(
         _Ran(await ExploreUrlParser.parseAsync(exploreUrl, source: source));
 
 /// 在書源 isolate 執行 [task]，把規則在 [book]、[chapter] 複本上改的欄位
-/// 抄回來。只抄這次跑的期間有變的欄位：同一段時間裡畫面執行緒改了這本書
+/// （[bookRuleFields]、[chapterRuleFields]）抄回來。只抄這次跑的期間有變的欄位：同一段時間裡畫面執行緒改了這本書
 /// （例如閱讀進度），規則沒動的欄位不會被舊值蓋掉。
 Future<R> _runOnSource<R>(
   _SourceTask<R> task, {
@@ -266,21 +267,21 @@ Future<R> _runOnSource<R>(
   BookChapter? chapter,
   CancelToken? cancelToken,
 }) async {
-  final bookBefore = book == null ? null : _readFields(_bookFields, book);
+  final bookBefore = book == null ? null : _readFields(bookRuleFields, book);
   final chapterBefore = chapter == null
       ? null
-      : _readFields(_chapterFields, chapter);
+      : _readFields(chapterRuleFields, chapter);
   final ran = await SourceIsolate.run(task, cancelToken: cancelToken);
   final ranBook = ran.book;
   if (book != null && ranBook != null && !identical(ranBook, book)) {
-    _copyChangedFields(_bookFields, bookBefore!, from: ranBook, to: book);
+    _copyChangedFields(bookRuleFields, bookBefore!, from: ranBook, to: book);
   }
   final ranChapter = ran.chapter;
   if (chapter != null &&
       ranChapter != null &&
       !identical(ranChapter, chapter)) {
     _copyChangedFields(
-      _chapterFields,
+      chapterRuleFields,
       chapterBefore!,
       from: ranChapter,
       to: chapter,
@@ -289,72 +290,21 @@ Future<R> _runOnSource<R>(
   return ran.result;
 }
 
-typedef _Field<T> = (Object? Function(T), void Function(T, Object?));
-
-List<Object?> _readFields<T>(List<_Field<T>> fields, T target) => [
-  for (final (read, _) in fields) read(target),
-];
+Map<String, Object?> _readFields<T>(
+  Map<String, RuleDataField<T>> fields,
+  T target,
+) => {
+  for (final MapEntry(:key, :value) in fields.entries) key: value.read(target),
+};
 
 void _copyChangedFields<T>(
-  List<_Field<T>> fields,
-  List<Object?> before, {
+  Map<String, RuleDataField<T>> fields,
+  Map<String, Object?> before, {
   required T from,
   required T to,
 }) {
-  for (var i = 0; i < fields.length; i++) {
-    final (read, write) = fields[i];
-    final value = read(from);
-    if (value != before[i]) write(to, value);
+  for (final MapEntry(:key, :value) in fields.entries) {
+    final now = value.read(from);
+    if (now != before[key]) value.write(to, now);
   }
 }
-
-/// 規則能改的書籍欄位：規則 JS 的 `book.xxx = …`、`book.putVariable`
-/// （`JsExtensions._setBookField`），以及帶 JS 的詳情解析原地填入的欄位。
-final List<_Field<Book>> _bookFields = [
-  ((b) => b.bookUrl, (b, v) => b.bookUrl = v as String),
-  ((b) => b.tocUrl, (b, v) => b.tocUrl = v as String),
-  ((b) => b.origin, (b, v) => b.origin = v as String),
-  ((b) => b.originName, (b, v) => b.originName = v as String),
-  ((b) => b.name, (b, v) => b.name = v as String),
-  ((b) => b.author, (b, v) => b.author = v as String),
-  ((b) => b.kind, (b, v) => b.kind = v as String?),
-  ((b) => b.coverUrl, (b, v) => b.coverUrl = v as String?),
-  ((b) => b.intro, (b, v) => b.intro = v as String?),
-  ((b) => b.latestChapterTitle, (b, v) => b.latestChapterTitle = v as String?),
-  ((b) => b.wordCount, (b, v) => b.wordCount = v as String?),
-  ((b) => b.type, (b, v) => b.type = v as int),
-  ((b) => b.chapterIndex, (b, v) => b.chapterIndex = v as int),
-  ((b) => b.variable, (b, v) => b.variable = v as String?),
-  ((b) => b.isInBookshelf, (b, v) => b.isInBookshelf = v as bool),
-  (
-    (b) => b.readConfig?.reverseToc,
-    (b, v) => (b.readConfig ??= ReadConfig()).reverseToc = v as bool? ?? false,
-  ),
-  (
-    (b) => b.readConfig?.useReplaceRule,
-    (b, v) => (b.readConfig ??= ReadConfig()).useReplaceRule = v as bool?,
-  ),
-  ((b) => b.infoHtml, (b, v) => b.infoHtml = v as String?),
-  ((b) => b.tocHtml, (b, v) => b.tocHtml = v as String?),
-];
-
-/// 規則能改的章節欄位（`JsExtensions._setChapterField`、`chapter.putVariable`）。
-final List<_Field<BookChapter>> _chapterFields = [
-  ((c) => c.url, (c, v) => c.url = v as String),
-  ((c) => c.title, (c, v) => c.title = v as String),
-  ((c) => c.baseUrl, (c, v) => c.baseUrl = v as String),
-  ((c) => c.bookUrl, (c, v) => c.bookUrl = v as String),
-  ((c) => c.index, (c, v) => c.index = v as int),
-  ((c) => c.isVolume, (c, v) => c.isVolume = v as bool),
-  ((c) => c.isVip, (c, v) => c.isVip = v as bool),
-  ((c) => c.isPay, (c, v) => c.isPay = v as bool),
-  ((c) => c.resourceUrl, (c, v) => c.resourceUrl = v as String?),
-  ((c) => c.tag, (c, v) => c.tag = v as String?),
-  ((c) => c.wordCount, (c, v) => c.wordCount = v as String?),
-  ((c) => c.start, (c, v) => c.start = v as int?),
-  ((c) => c.end, (c, v) => c.end = v as int?),
-  ((c) => c.startFragmentId, (c, v) => c.startFragmentId = v as String?),
-  ((c) => c.endFragmentId, (c, v) => c.endFragmentId = v as String?),
-  ((c) => c.variable, (c, v) => c.variable = v as String?),
-  ((c) => c.content, (c, v) => c.content = v as String?),
-];
