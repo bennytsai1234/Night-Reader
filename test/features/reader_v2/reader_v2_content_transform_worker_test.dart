@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 
 Map<String, Object?> _args({Object? rules = const <Object?>[]}) =>
     <String, Object?>{
@@ -21,6 +22,21 @@ void main() {
     final result = await worker.process(_args());
 
     expect(result['content'], '　　第一段。\n　　第二段。');
+  });
+
+  test('the worker also splits paragraphs and hashes the chapter', () async {
+    final result = await worker.process({..._args(), 'chapterIndex': 7});
+
+    final document = result['document']! as ReaderV2Content;
+    final onMain = ReaderV2Content.fromRaw(
+      chapterIndex: 7,
+      title: '第一章',
+      rawText: '　　第一段。\n　　第二段。',
+    );
+    expect(document.chapterIndex, 7);
+    expect(document.paragraphs, onMain.paragraphs);
+    expect(document.displayText, onMain.displayText);
+    expect(document.contentHash, onMain.contentHash);
   });
 
   test(
