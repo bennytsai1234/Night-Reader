@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../theme/app_tokens.dart';
 import 'glass.dart';
@@ -104,8 +105,12 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       _controller,
       sweep: reveal.sweeps,
     );
+    // 換場最後一幀還在畫時就會完成；等這一幀畫完才開始背景工作，最後一幀
+    // 不必跟著等它同步的那一段。
     unawaited(
-      motion.finished.then((_) {
+      motion.finished.then((_) => SchedulerBinding.instance.endOfFrame).then((
+        _,
+      ) {
         if (mounted) widget.onFinished?.call();
       }),
     );
