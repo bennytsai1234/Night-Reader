@@ -18,7 +18,6 @@ import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 
 Color _groupedBackground(BuildContext context) =>
@@ -227,37 +226,35 @@ class _MainPageState extends State<MainPage>
           ],
         ),
         extendBody: true,
-        bottomNavigationBar: _EntranceSlideUp(
-          child: FloatingTabBar(
-            // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
-            controller: outgoing == null ? _pageController : null,
-            // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
-            currentIndex:
-                _follow == _Follow.dragging || _follow == _Follow.cancelling
-                ? _outgoingIndex
-                : _currentIndex,
-            hidden: _tabBarHidden.value,
-            items: [
-              for (final destination in _destinations)
-                FloatingTabItem(
-                  icon: destination.icon,
-                  selectedIcon: destination.selectedIcon,
-                  label: destination.label,
-                ),
-            ],
-            onSearch: widget.destinations == null ? _openSearch : null,
-            onTap: (index) {
-              if (_currentIndex == index) {
-                if (DateTime.now().difference(_lastTapTime).inMilliseconds <
-                    300) {
-                  _handleDoubleTap(index);
-                }
-                _lastTapTime = DateTime.now();
-                return;
+        bottomNavigationBar: FloatingTabBar(
+          // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
+          controller: outgoing == null ? _pageController : null,
+          // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
+          currentIndex:
+              _follow == _Follow.dragging || _follow == _Follow.cancelling
+              ? _outgoingIndex
+              : _currentIndex,
+          hidden: _tabBarHidden.value,
+          items: [
+            for (final destination in _destinations)
+              FloatingTabItem(
+                icon: destination.icon,
+                selectedIcon: destination.selectedIcon,
+                label: destination.label,
+              ),
+          ],
+          onSearch: widget.destinations == null ? _openSearch : null,
+          onTap: (index) {
+            if (_currentIndex == index) {
+              if (DateTime.now().difference(_lastTapTime).inMilliseconds <
+                  300) {
+                _handleDoubleTap(index);
               }
-              _switchTo(index);
-            },
-          ),
+              _lastTapTime = DateTime.now();
+              return;
+            }
+            _switchTo(index);
+          },
         ),
       ),
     );
@@ -572,28 +569,6 @@ class MainDestination {
 
   Color backgroundOf(BuildContext context) =>
       background?.call(context) ?? Theme.of(context).scaffoldBackgroundColor;
-}
-
-/// 開 App 進場時分頁列從下緣滑進來（[LaunchEntrance]）；沒有進場時原樣畫。
-class _EntranceSlideUp extends StatelessWidget {
-  const _EntranceSlideUp({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final entrance = LaunchEntrance.maybeOf(context);
-    if (entrance == null) return child;
-    return AnimatedBuilder(
-      animation: entrance.tabBar,
-      child: child,
-      builder: (context, child) => GlassSlide(
-        shown: entrance.tabBar.value,
-        edge: AxisDirection.down,
-        child: child!,
-      ),
-    );
-  }
 }
 
 class _KeepAliveWrapper extends StatefulWidget {
