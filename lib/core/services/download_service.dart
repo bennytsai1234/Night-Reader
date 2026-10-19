@@ -1,7 +1,13 @@
 import 'dart:async';
 
 import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/database/dao/book_dao.dart';
+import 'package:night_reader/core/database/dao/book_source_dao.dart';
+import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
+import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -48,6 +54,37 @@ ShelfDownloadDecision decideShelfDownload({
   return hasNewChapters || waited >= shelfDownloadRetryInterval.inMilliseconds
       ? ShelfDownloadDecision.queue
       : ShelfDownloadDecision.leave;
+}
+
+/// 書架上一本書要整本下載時排隊顯示的書名與總章數。
+typedef ShelfDownloadNeed = ({String bookName, int totalCount});
+
+/// 書架上這本書還有章節沒下載時回傳 [ShelfDownloadNeed]；不在書架、本地
+/// 書、書源不能讀，或都下載好了時回傳 null。讀整本目錄比對已存的正文，所以
+/// 在書源 isolate 做，只傳回摘要（ADR 0028）；開 App 時書架上每本書都會
+/// 比對一次。
+Future<ShelfDownloadNeed?> _shelfDownloadNeedInSourceIsolate(String bookUrl) =>
+    SourceIsolate.run((_) => _shelfDownloadNeed(bookUrl));
+
+Future<ShelfDownloadNeed?> _shelfDownloadNeed(String bookUrl) async {
+  final book = await getIt<BookDao>().getByUrl(bookUrl);
+  if (book == null || book.isLocal || !book.isInBookshelf) return null;
+  final source = await getIt<BookSourceDao>().getByUrl(book.origin);
+  if (source == null || !source.isReadingEnabledByRuntime) return null;
+  final chapters = await getIt<ChapterDao>().getByBook(bookUrl);
+  // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
+  // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
+  if (chapters.isNotEmpty) {
+    final stored = await getIt<ReaderChapterContentDao>().getStoredChapterUrls(
+      origin: book.origin,
+      bookUrl: bookUrl,
+    );
+    if (chaptersMissingContent(chapters, stored).isEmpty) return null;
+  }
+  return (
+    bookName: book.name,
+    totalCount: chapters.where(chapterIsDownloadable).length,
+  );
 }
 
 /// DownloadService - 書籍章節背景下載服務
@@ -212,20 +249,8 @@ class DownloadService extends DownloadBase
   }) async {
     try {
       await _initialization;
-      final book = await bookDao.getByUrl(bookUrl);
-      if (book == null || book.isLocal || !book.isInBookshelf) return;
-      final source = await sourceDao.getByUrl(book.origin);
-      if (source == null || !source.isReadingEnabledByRuntime) return;
-      final chapters = await chapterDao.getByBook(bookUrl);
-      // 還沒有目錄（例如匯入時沒附）也要排：任務開跑時先抓目錄，抓不到就
-      // 記為失敗，照重試規則再試。有目錄而且都下載好了就不排。
-      if (chapters.isNotEmpty) {
-        final stored = await chapterContentDao.getStoredChapterUrls(
-          origin: book.origin,
-          bookUrl: bookUrl,
-        );
-        if (chaptersMissingContent(chapters, stored).isEmpty) return;
-      }
+      final need = await _shelfDownloadNeedInSourceIsolate(bookUrl);
+      if (need == null) return;
 
       final task = tasks.cast<DownloadTask?>().firstWhere(
         (candidate) => candidate?.bookUrl == bookUrl,
@@ -239,7 +264,11 @@ class DownloadService extends DownloadBase
       );
       switch (decision) {
         case ShelfDownloadDecision.queue:
-          await queueShelfDownload(book, chapters);
+          await queueShelfDownload(
+            bookUrl: bookUrl,
+            bookName: need.bookName,
+            totalCount: need.totalCount,
+          );
         case ShelfDownloadDecision.afterCurrentRun:
           _keepAfterRun[bookUrl] =
               (_keepAfterRun[bookUrl] ?? false) || hasNewChapters;

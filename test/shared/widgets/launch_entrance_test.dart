@@ -12,6 +12,7 @@ import '../../support/glass_motion.dart';
 
 void main() {
   var leftTaps = 0;
+  var finished = 0;
 
   /// 像主頁：頁首左右各一顆玻璃按鈕，內容是書架的骨架換場。
   Widget host({
@@ -21,6 +22,7 @@ void main() {
   }) => MaterialApp(
     theme: buildAppTheme(AppStyle.paper, Brightness.light),
     home: LaunchEntrance(
+      onFinished: () => finished++,
       child: Scaffold(
         appBar: GlassNavHeader(
           morph: true,
@@ -66,7 +68,10 @@ void main() {
     ),
   );
 
-  setUp(() => leftTaps = 0);
+  setUp(() {
+    leftTaps = 0;
+    finished = 0;
+  });
 
   /// 按鈕那塊玻璃的濃度（連同模糊一起淡入）。
   double glass(WidgetTester tester, IconData icon) => tester
@@ -190,6 +195,29 @@ void main() {
       expect(leftTaps, 1);
     },
   );
+
+  testWidgets('says it finished only after the shelf has turned into content, '
+      'once', (tester) async {
+    await tester.pumpWidget(host(loading: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(finished, 0, reason: '骨架出現播完、書還沒到');
+
+    await tester.pumpWidget(host(loading: false));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(finished, 0, reason: '書架換場播到一半，背景工作還不能開始');
+
+    await tester.pumpAndSettle();
+    expect(finished, 1);
+
+    // 重新載入時骨架一直呼吸，用固定時間走完換回骨架。
+    await tester.pumpWidget(host(loading: true));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpWidget(host(loading: false));
+    await tester.pumpAndSettle();
+    expect(finished, 1, reason: '之後重新載入書架不算');
+  });
 
   testWidgets('reloading mid-reveal sends the buttons back with the shelf '
       'without rebuilding them during build', (tester) async {
