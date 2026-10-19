@@ -45,6 +45,43 @@ void main() {
     expect(reveal.waiting, isFalse);
   });
 
+  testWidgets('a single slot is still under the wait when it is built, so its '
+      'cover holds the reveal', (tester) async {
+    final reveal = CoverReveal();
+    addTearDown(reveal.dispose);
+    bool? waitingWhenBuilt;
+    await tester.pumpWidget(
+      CoverRevealScope(
+        notifier: reveal,
+        child: CoverRevealSlot(
+          child: Builder(
+            builder: (context) {
+              // 像封面：建的時候還在等待中就登記，解碼好才拿掉。
+              final waiting = CoverRevealScope.waitingOf(context);
+              waitingWhenBuilt ??= waiting != null;
+              waiting?.add('cover');
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    var settled = false;
+    unawaited(
+      reveal.settle(const Duration(seconds: 5)).then((_) {
+        settled = true;
+      }),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(waitingWhenBuilt, isTrue);
+    expect(settled, isFalse, reason: '封面還沒好，也還沒逾時');
+    reveal.remove('cover');
+    await tester.pump();
+    expect(settled, isTrue);
+  });
+
   testWidgets('a slot built after the wait ends is built right away', (
     tester,
   ) async {

@@ -17,7 +17,10 @@ class CoverReveal extends ChangeNotifier {
   bool _waiting = true;
 
   final Queue<VoidCallback> _builds = Queue();
-  Completer<void>? _built;
+
+  /// 排進來、還沒真的建好的塊數，包括已經放行、下一幀才建的。
+  int _unbuilt = 0;
+  Completer<void>? _allBuilt;
 
   /// 還在等封面；結束後新解碼的封面照常各自淡入。
   bool get waiting => _waiting;
@@ -32,10 +35,20 @@ class CoverReveal extends ChangeNotifier {
     _drained = null;
   }
 
-  /// 排一塊內容等著建，輪到時呼叫 [build]（之後那一幀才真的建）。
-  void queueBuild(VoidCallback build) {
+  /// 排一塊內容等著建，輪到時呼叫 [build]（之後那一幀才真的建）；建好或
+  /// 不再需要時由那一塊呼叫 [_slotDone]。
+  void _queueBuild(VoidCallback build) {
+    _unbuilt++;
     _builds.add(build);
     if (_builds.length == 1) _grantNext();
+  }
+
+  void _slotDone() {
+    if (_unbuilt == 0) return;
+    _unbuilt--;
+    if (_unbuilt > 0) return;
+    _allBuilt?.complete();
+    _allBuilt = null;
   }
 
   /// 每一幀畫完放行一塊：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
@@ -44,12 +57,7 @@ class CoverReveal extends ChangeNotifier {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (_builds.isEmpty) return;
       _builds.removeFirst()();
-      if (_builds.isNotEmpty) {
-        _grantNext();
-        return;
-      }
-      _built?.complete();
-      _built = null;
+      if (_builds.isNotEmpty) _grantNext();
     });
     SchedulerBinding.instance.ensureVisualUpdate();
   }
@@ -58,11 +66,10 @@ class CoverReveal extends ChangeNotifier {
   /// 或 [timeout]。排隊的不算在逾時裡：沒建完就換場會露出空格。
   Future<void> settle(Duration timeout) async {
     await SchedulerBinding.instance.endOfFrame;
-    while (_builds.isNotEmpty) {
-      await (_built ??= Completer<void>()).future;
-      // 最後一塊在下一幀建，它的封面那時才登記。
-      await SchedulerBinding.instance.endOfFrame;
-    }
+    // 看的是「還沒建好」而不是「還在排隊」：最後一塊放行後下一幀才建，它的
+    // 封面那時才登記。這一塊建好的那一幀，封面在同一個 build 裡登記，接下
+    // 來的封面等待照樣等它。
+    if (_unbuilt > 0) await (_allBuilt ??= Completer<void>()).future;
     if (_pending.isNotEmpty) {
       final drained = _drained = Completer<void>();
       await drained.future.timeout(timeout, onTimeout: () {});
@@ -118,17 +125,36 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
     if (_granted) return;
     final reveal = CoverRevealScope.waitingOf(context);
     if (reveal == null) {
+      _release();
       _granted = true;
       return;
     }
     if (identical(_queuedOn, reveal)) return;
+    // 換了一輪等待（重新載入）：舊的那一輪不再等這一塊。
+    _release();
     _queuedOn = reveal;
-    reveal.queueBuild(() {
+    reveal._queueBuild(() {
       if (mounted && !_granted) setState(() => _granted = true);
     });
   }
 
+  /// 告訴排隊的那一輪這一塊建好了，或不再需要。
+  void _release() {
+    final reveal = _queuedOn;
+    _queuedOn = null;
+    reveal?._slotDone();
+  }
+
   @override
-  Widget build(BuildContext context) =>
-      _granted ? widget.child : widget.placeholder;
+  void dispose() {
+    _release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_granted) return widget.placeholder;
+    _release();
+    return widget.child;
+  }
 }

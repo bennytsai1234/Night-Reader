@@ -10,6 +10,8 @@ import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -58,10 +60,15 @@ class DownloadChapterResult {
 /// 一個任務這次要抓的章節：照目前的目錄換算範圍，扣掉已經有正文的。
 class DownloadPlan {
   const DownloadPlan({
+    required this.run,
     required this.total,
     required this.ready,
     required this.missing,
   });
+
+  /// 這一輪下載在書源 isolate 的編號：逐章抓取共用同一份書與章節，跑完
+  /// 交給 [finishDownloadRunInSourceIsolate] 放掉。
+  final int run;
 
   /// 範圍裡要下載的章數（已下載的也算）。
   final int total;
@@ -81,14 +88,27 @@ class DownloadPlan {
 Future<DownloadPlan> planDownloadInSourceIsolate(DownloadTask task) =>
     SourceIsolate.run((_) => _planDownload(task));
 
-/// 抓一章正文寫進資料庫；已經有正文就不抓。
+/// 抓第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。
 Future<DownloadChapterResult> downloadChapterInSourceIsolate({
-  required String bookUrl,
+  required int run,
   required String chapterUrl,
   required int maxAttempts,
-}) => SourceIsolate.run(
-  (_) => _downloadChapter(bookUrl, chapterUrl, maxAttempts),
-);
+}) => SourceIsolate.run((_) => _downloadChapter(run, chapterUrl, maxAttempts));
+
+/// 第 [run] 輪下載結束（跑完、失敗、暫停或退役），放掉它的書與章節。
+Future<void> finishDownloadRunInSourceIsolate(int run) =>
+    SourceIsolate.run((_) async => _downloadRuns.remove(run));
+
+/// 書源 isolate 裡進行中的每一輪下載：整輪共用同一份書、書源與章節，和
+/// 原本在主 isolate 時一樣。規則在抓目錄或某一章時寫進書與章節的變數
+/// （`book.putVariable`），後面的章節要讀得到；每章重新從資料庫讀會丟掉
+/// 它們。頂層變數每個 isolate 各一份，這份在書源 isolate。
+final Map<
+  int,
+  ({Book book, BookSource? source, Map<String, BookChapter> chapters})
+>
+_downloadRuns = {};
+int _nextDownloadRun = 0;
 
 Future<DownloadPlan> _planDownload(DownloadTask task) async {
   final book = await getIt<BookDao>().getByUrl(task.bookUrl);
@@ -130,7 +150,14 @@ Future<DownloadPlan> _planDownload(DownloadTask task) async {
       if (!stored.contains(chapter.url))
         (index: chapter.index, url: chapter.url, title: chapter.title),
   ];
+  final run = _nextDownloadRun++;
+  _downloadRuns[run] = (
+    book: book,
+    source: source,
+    chapters: {for (final chapter in scope) chapter.url: chapter},
+  );
   return DownloadPlan(
+    run: run,
     total: scope.length,
     ready: scope.length - missing.length,
     missing: missing,
@@ -138,15 +165,17 @@ Future<DownloadPlan> _planDownload(DownloadTask task) async {
 }
 
 Future<DownloadChapterResult> _downloadChapter(
-  String bookUrl,
+  int run,
   String chapterUrl,
   int maxAttempts,
 ) async {
-  final book = await getIt<BookDao>().getByUrl(bookUrl);
-  if (book == null) return DownloadChapterResult.failed('書籍不存在');
-  final chapterDao = getIt<ChapterDao>();
-  final chapter = await chapterDao.getByUrl(chapterUrl);
+  final state = _downloadRuns[run];
+  if (state == null) return DownloadChapterResult.failed('下載已結束');
+  final book = state.book;
+  final source = state.source;
+  final chapter = state.chapters[chapterUrl];
   if (chapter == null) return DownloadChapterResult.failed('章節不存在');
+  final chapterDao = getIt<ChapterDao>();
   final store = ReaderChapterContentStore(
     chapterDao: chapterDao,
     contentDao: getIt<ReaderChapterContentDao>(),
@@ -155,15 +184,11 @@ Future<DownloadChapterResult> _downloadChapter(
   if (await store.hasReadyContent(book: book, chapter: chapter)) {
     return DownloadChapterResult.ready();
   }
-  final sourceDao = getIt<BookSourceDao>();
-  final source = book.origin == 'local'
-      ? null
-      : await sourceDao.getByUrl(book.origin);
   final result =
       await ChapterContentPreparationPipeline(
         book: book,
         contentStore: store,
-        sourceDao: sourceDao,
+        sourceDao: getIt<BookSourceDao>(),
         service: BookSourceService(),
         getSource: () => source,
       ).prepare(
@@ -236,8 +261,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
     update();
 
     var stoppedEarly = false;
+    int? run;
     try {
       final plan = await planDownloadInSourceIsolate(task);
+      run = plan.run;
       // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
       // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
       if (plan.total != task.totalCount) {
@@ -278,7 +305,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         poolCount++;
         unawaited(
           downloadChapterInSourceIsolate(
-                bookUrl: task.bookUrl,
+                run: plan.run,
                 chapterUrl: chapter.url,
                 maxAttempts: _maxRetries,
               )
@@ -362,6 +389,14 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         );
       }
     } finally {
+      // 已經開抓的章節在開始時就拿到了書與章節，放掉不影響它們跑完。
+      if (run != null) {
+        unawaited(
+          finishDownloadRunInSourceIsolate(run).catchError((Object error) {
+            AppLog.w('下載結束時放掉書源 isolate 的狀態失敗: $error');
+          }),
+        );
+      }
       activeTaskUrls.remove(task.bookUrl);
       completeTaskActivity(task.bookUrl);
     }
