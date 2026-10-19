@@ -11,37 +11,75 @@ class ConcurrentRecord {
   ConcurrentRecord(this.isConcurrent, this.time, this.frequency);
 }
 
+/// 另一個 isolate 擁有的限流紀錄：[acquire] 等到可以發請求時回傳一張票，
+/// 請求結束時 [release] 交回。
+abstract interface class ConcurrentRateDelegate {
+  Future<int> acquire(String key, String concurrentRate);
+  void release(int ticket);
+}
+
 /// ConcurrentRateLimiter - 並發速率限制器
 /// (原 Android help/ConcurrentRateLimiter.kt)
 class ConcurrentRateLimiter {
-  final BaseSource? source;
+  ConcurrentRateLimiter(BaseSource? source)
+    : _key = source?.getKey(),
+      _concurrentRate = source?.concurrentRate;
+
+  final String? _key;
+  final String? _concurrentRate;
 
   static final Map<String, ConcurrentRecord> _concurrentRecordMap = {};
 
-  ConcurrentRateLimiter(this.source);
+  /// 設定後限流紀錄改由它管：書源 isolate 的請求和主 isolate 的請求打的是
+  /// 同一批網站，限流紀錄只能有一份，放在主 isolate（ADR 0028）。
+  static ConcurrentRateDelegate? delegate;
 
-  /// 獲取並發記錄，若處於限制狀態則等待
-  Future<ConcurrentRecord?> getConcurrentRecord() async {
+  /// 執行帶限制的區塊
+  Future<T> withLimit<T>(Future<T> Function() block) async {
+    final key = _key;
+    final rate = _concurrentRate;
+    if (key == null || !_limits(rate)) return await block();
+
+    final delegate = ConcurrentRateLimiter.delegate;
+    if (delegate != null) {
+      final ticket = await delegate.acquire(key, rate!);
+      try {
+        return await block();
+      } finally {
+        delegate.release(ticket);
+      }
+    }
+
+    final record = await acquire(key, rate!);
+    try {
+      return await block();
+    } finally {
+      release(record);
+    }
+  }
+
+  static bool _limits(String? concurrentRate) =>
+      concurrentRate != null &&
+      concurrentRate.isNotEmpty &&
+      concurrentRate != '0';
+
+  /// 等到 [key] 這個書源可以再發一個請求，回傳要交給 [release] 的紀錄。
+  static Future<ConcurrentRecord?> acquire(
+    String key,
+    String concurrentRate,
+  ) async {
     while (true) {
-      final waitTime = _checkFetchStart();
+      final waitTime = _checkFetchStart(key, concurrentRate);
       if (waitTime <= 0) {
-        return _concurrentRecordMap[source!.getKey()];
+        return _concurrentRecordMap[key];
       }
       await Future.delayed(Duration(milliseconds: waitTime));
     }
   }
 
-  int _checkFetchStart() {
-    if (source == null) return 0;
+  static int _checkFetchStart(String key, String concurrentRate) {
+    if (!_limits(concurrentRate)) return 0;
 
-    final concurrentRate = source!.concurrentRate;
-    if (concurrentRate == null ||
-        concurrentRate.isEmpty ||
-        concurrentRate == '0') {
-      return 0;
-    }
-
-    final key = source!.getKey();
     final rateIndex = concurrentRate.indexOf('/');
     final now = DateTime.now().millisecondsSinceEpoch;
     final isConcurrent = rateIndex > 0;
@@ -94,21 +132,9 @@ class ConcurrentRateLimiter {
     }
   }
 
-  void fetchEnd(ConcurrentRecord? record) {
+  static void release(ConcurrentRecord? record) {
     if (record != null && !record.isConcurrent) {
       record.frequency = (record.frequency - 1).clamp(0, 999);
-    }
-  }
-
-  /// 執行帶限制的區塊
-  Future<T> withLimit<T>(Future<T> Function() block) async {
-    if (source == null) return await block();
-
-    final record = await getConcurrentRecord();
-    try {
-      return await block();
-    } finally {
-      fetchEnd(record);
     }
   }
 }

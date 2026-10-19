@@ -25,6 +25,7 @@ import '../services/tts_service.dart';
 import '../services/check_source_service.dart';
 import '../services/crash_handler.dart';
 import '../services/app_log_service.dart';
+import '../engine/source_isolate/source_isolate.dart';
 
 final getIt = GetIt.instance;
 
@@ -46,11 +47,33 @@ Future<void> configureDependencies() async {
     ),
   );
 
-  // 2. 核心資料庫服務 (切換為 SQLite)
-  final appDatabase = AppDatabase();
-  getIt.registerSingleton<AppDatabase>(appDatabase);
+  // 2. 核心資料庫與 DAO
+  registerDatabase(AppDatabase());
 
-  // 3. DAO 註冊 (統一使用 SQLite 實作)
+  // 3. 其它核心服務註冊
+  getIt.registerSingleton<NetworkService>(NetworkService());
+  getIt.registerSingleton<TTSService>(TTSService());
+  getIt.registerLazySingleton<CheckSourceService>(CheckSourceService.new);
+
+  // 預先載入 SharedPreferences，讓 SettingsProvider / BookshelfProvider 建構時同步讀取，消除第一幀閃爍
+  final prefs = await SharedPreferences.getInstance();
+  getIt.registerSingleton<SharedPreferences>(prefs);
+
+  // 4. 初始化啟動所需服務。
+  // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
+  // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
+  await Future.wait([CrashHandler.init(), getIt<NetworkService>().init()]);
+
+  // 書源的抓取與解析改在書源 isolate（只有 App 的主 isolate 會開，見
+  // [SourceIsolate.enabled]）；不等它開好，第一個書源工作才會等。
+  SourceIsolate.start();
+
+  unawaited(_initializeTtsInBackground(getIt<TTSService>()));
+}
+
+/// 註冊資料庫與所有 DAO。主 isolate 與書源 isolate（連到同一個資料庫）共用。
+void registerDatabase(AppDatabase database) {
+  getIt.registerSingleton<AppDatabase>(database);
   getIt.registerLazySingleton<BookDao>(() => BookDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<BookSourceDao>(
     () => BookSourceDao(getIt<AppDatabase>()),
@@ -88,22 +111,6 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<ReaderChapterContentDao>(
     () => ReaderChapterContentDao(getIt<AppDatabase>()),
   );
-
-  // 4. 其它核心服務註冊
-  getIt.registerSingleton<NetworkService>(NetworkService());
-  getIt.registerSingleton<TTSService>(TTSService());
-  getIt.registerLazySingleton<CheckSourceService>(CheckSourceService.new);
-
-  // 預先載入 SharedPreferences，讓 SettingsProvider / BookshelfProvider 建構時同步讀取，消除第一幀閃爍
-  final prefs = await SharedPreferences.getInstance();
-  getIt.registerSingleton<SharedPreferences>(prefs);
-
-  // 5. 初始化啟動所需服務。
-  // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
-  // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
-  await Future.wait([CrashHandler.init(), getIt<NetworkService>().init()]);
-
-  unawaited(_initializeTtsInBackground(getIt<TTSService>()));
 }
 
 Future<void> _initializeTtsInBackground(TTSService service) async {

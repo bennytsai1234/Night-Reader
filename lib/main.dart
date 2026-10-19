@@ -23,7 +23,6 @@ import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
-import 'shared/navigation/transition_settled.dart';
 import 'shared/widgets/theme_reveal_scope.dart';
 import 'features/association/association_handler_service.dart';
 import 'features/settings/launch_screen_theme_sync.dart';
@@ -31,7 +30,7 @@ import 'features/settings/settings_provider.dart';
 import 'features/settings/theme_settings_provider.dart';
 import 'features/welcome/main_page.dart';
 import 'features/welcome/startup_failure_panel.dart';
-import 'core/engine/web_book/parse_worker.dart';
+import 'core/engine/source_isolate/source_isolate.dart';
 import 'core/services/app_log_service.dart';
 import 'core/services/crash_handler.dart';
 import 'core/startup/startup_retry_gate.dart';
@@ -98,9 +97,9 @@ Future<void> _startApp() async {
     LicenseRegistry.addLicense(_punctFontLicense);
     _punctLicenseRegistered = true;
   }
-  // 不帶 JS 的搜尋結果與目錄改在背景 isolate 解析；背景下載的 Workmanager
-  // 入口不開，維持原地解析。
-  ParseWorker.enabled = true;
+  // 書源工作都在書源 isolate 執行。背景下載的 Workmanager 入口不開，維持
+  // 原地執行。
+  SourceIsolate.enabled = true;
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     AppLog.e(
@@ -128,6 +127,9 @@ Future<void> _startApp() async {
     };
 
     AppLog.i('$kAppDisplayName Ready to Run');
+
+    // 第一幀前定下書名的繁簡轉換模式；字典在背景載入，書架等它好了才換場。
+    unawaited(ChineseDisplay.start(getIt<SharedPreferences>()));
 
     runApp(
       MultiProvider(
@@ -287,11 +289,7 @@ class ReaderApp extends StatelessWidget {
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
-          navigatorObservers: [
-            appRouteObserver,
-            statusBarPolicy,
-            motionGateObserver,
-          ],
+          navigatorObservers: [appRouteObserver, statusBarPolicy],
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
             themeSettings.style,

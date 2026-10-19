@@ -13,7 +13,7 @@ import 'package:night_reader/core/services/http_client.dart';
 /// JsExtensions 的字體處理擴展
 extension JsFontExtensions on JsExtensionsBase {
   void injectFontExtensions() {
-    onBridge('queryTTF', (dynamic args) async {
+    runtime.onMessage('queryTTF', (dynamic args) async {
       try {
         final dataStr = args[0].toString();
         final useCache = args.length > 1 ? args[1] as bool : true;
@@ -49,7 +49,7 @@ extension JsFontExtensions on JsExtensionsBase {
       return null;
     });
 
-    onBridge('replaceFont', (dynamic args) {
+    runtime.onMessage('replaceFont', (dynamic args) {
       try {
         final text = args[0]?.toString() ?? '';
         final errorKey = args[1]?.toString();

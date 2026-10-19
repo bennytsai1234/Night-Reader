@@ -15,6 +15,22 @@ class CookieStore {
       getIt.isRegistered<CookieDao>() ? getIt<CookieDao>() : null;
   final Map<String, String> _memoryCache = {};
 
+  /// 設定後，記憶體層的每次寫入也交給它：[cookie] 為 null 是刪除，[domain]
+  /// 也為 null 是全部清除。主 isolate 與書源 isolate 各有一份記憶體快取，
+  /// 讀取時先看記憶體，所以兩邊互相轉送寫入（ADR 0028）。
+  static void Function(String? domain, String? cookie)? onMemoryWrite;
+
+  /// 套用另一個 isolate 轉送來的寫入，不再轉送回去。
+  void applyMirroredWrite(String? domain, String? cookie) {
+    if (domain == null) {
+      _memoryCache.clear();
+    } else if (cookie == null) {
+      _memoryCache.remove(domain);
+    } else {
+      _memoryCache[domain] = cookie;
+    }
+  }
+
   /// 獲取二級域名
   String getSubDomain(String url) {
     try {
@@ -47,6 +63,7 @@ class CookieStore {
     if (cookie == null || cookie.isEmpty) return;
     final domain = getSubDomain(url);
     _memoryCache[domain] = cookie;
+    onMemoryWrite?.call(domain, cookie);
     await _cookieDao?.upsert(Cookie(url: domain, cookie: cookie));
   }
 
@@ -84,12 +101,14 @@ class CookieStore {
   Future<void> removeCookie(String url) async {
     final domain = getSubDomain(url);
     _memoryCache.remove(domain);
+    onMemoryWrite?.call(domain, null);
     await _cookieDao?.deleteByUrl(domain);
   }
 
   /// 清除所有由 App 自行保存的 Cookie
   Future<void> clearAll() async {
     _memoryCache.clear();
+    onMemoryWrite?.call(null, null);
     await _cookieDao?.clearAll();
   }
 

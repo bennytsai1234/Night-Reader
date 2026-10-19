@@ -118,3 +118,14 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 - 背景失敗、JS 引擎沒起來（引擎沒起來時 `JsEngine` 會回模擬值，所以背景先確認一次）或 30 秒沒回覆，都回到原地解析。
 
 結果：主 isolate 上的 JS 532 → 67 ms，書源解析 354 → 73 ms，最長一幀 88 → 27 ms。仍在主 isolate 的有：用到上面「留在原地」那些 API 的書源、TLS 握手（`dart:io` 在主 isolate），要再往下仍得照阻礙一到五整套搬。
+
+## 後續：書源 isolate（2026-10-19）
+
+做了阻礙一到五（ADR 0028）。第一批搬搜尋與檢查更新，同一天使用者決定其他呼叫端全部搬：
+
+- **阻礙一（WebView）**：書源 isolate 把渲染請求送回主 isolate，照上面的做法。
+- **阻礙二（資料庫）**：改成 `DriftIsolate.spawn` 加 `DatabaseConnection.delayed`，書源 isolate 連到同一個 drift isolate。測試確認書源 isolate 的寫入會更新主 isolate 的 `watch()`。
+- **阻礙三（Cookie）**：擁有者與上面的建議相反，放在主 isolate，書源 isolate 經代理讀寫。書源 isolate 會被同步的規則 JS 佔住好幾秒，主 isolate 的事件迴圈每幀都會回來，主 isolate 的 WebView 也要讀寫 Cookie。`CookieStore` 與 `CacheManager` 的記憶體層兩邊各一份，寫入互相轉送。
+- **阻礙四（全域狀態）**：限流紀錄同 Cookie 放在主 isolate；`AppLog` 送回主 isolate；繁簡字典與規則的 fetch polyfill 由主 isolate 讀好傳過去。
+- **`ParseWorker`**：書源工作都搬進來後只剩備援用途，使用者決定拿掉。
+- **阻礙五（呼叫端）**：不逐個改，改在所有呼叫端都經過的 `BookSourceService`，由它送進書源 isolate；規則在書與章節複本上改的欄位跑完抄回來。檢查更新（`book_update_service.dart`）整段在書源 isolate 跑，寫回目錄後只傳回新章節數。

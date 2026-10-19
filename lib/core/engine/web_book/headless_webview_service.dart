@@ -11,6 +11,18 @@ class HeadlessWebViewService {
 
   WebViewController? _controller;
 
+  /// 設定後改由它渲染：WebView 的事件是平台呼叫 Dart，只有主 isolate 收得到，
+  /// 書源 isolate 用它請主 isolate 渲染（ADR 0028）。參數與
+  /// [getRenderedHtml] 相同。
+  static Future<String> Function({
+    required String url,
+    Map<String, String>? headers,
+    String? userAgent,
+    String? js,
+    int delayTime,
+  })?
+  delegate;
+
   /// 串列化鎖：指向目前正在處理 (或等待中的最後一個) 的 Future。
   /// 每次 acquire 會把自己接在鏈尾，確保任何時刻只有一個 getRenderedHtml 在實際執行。
   /// 相較於原本的 `while (_mutex != null)` 輪詢，這個實作不會在 release 瞬間
@@ -25,6 +37,16 @@ class HeadlessWebViewService {
     String? js,
     int delayTime = 0,
   }) async {
+    final delegate = HeadlessWebViewService.delegate;
+    if (delegate != null) {
+      return delegate(
+        url: url,
+        headers: headers,
+        userAgent: userAgent,
+        js: js,
+        delayTime: delayTime,
+      );
+    }
     // 串列化：把自己接在鏈尾，等前一個任務完成再執行。
     final previous = _tail;
     final gate = Completer<void>();

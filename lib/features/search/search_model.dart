@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/engine/web_book/web_book_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -196,6 +196,7 @@ class SearchModel {
   /// 分組裡保留逐源回傳的原始書本，合併卡另外複製。
   final _ResultGroups _groups = _ResultGroups();
   final _SameSourceIndex _rawIndex = _SameSourceIndex();
+  final BookSourceService _sources = BookSourceService();
   List<SearchBook> _searchBooks = [];
   CancelToken? _cancelToken;
 
@@ -420,7 +421,8 @@ class SearchModel {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        WebBook.searchBookAwait(source, variant, cancelToken: cancelToken)
+        _sources
+            .searchBooks(source, variant, cancelToken: cancelToken)
             .timeout(const Duration(seconds: 30))
             .then<List<SearchBook>?>(
               (books) => books,
@@ -585,8 +587,8 @@ class SearchModel {
   }
 
   /// 暫停送出還沒開始的書源；已經送出的照常跑完，結果照常併入。搜尋頁被
-  /// 書籍詳情、閱讀器這類整頁蓋住時用：書源回應都在主 isolate 解析，會跟
-  /// 上面那一頁的載入與排版搶時間。
+  /// 書籍詳情、閱讀器這類整頁蓋住時用：搜尋的請求會跟上面那一頁搶網路，
+  /// 合併結果也要用畫面執行緒。
   void pause() => _resumed ??= Completer<void>();
 
   bool get isPaused => _resumed != null;

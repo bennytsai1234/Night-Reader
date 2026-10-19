@@ -85,6 +85,21 @@ class CacheManager {
 
   CacheManager._internal();
 
+  /// 設定後，記憶體層的每次寫入與刪除（[value] 為 null）也交給它。主 isolate
+  /// 與書源 isolate 各有一份記憶體快取，書源規則同步讀的變數
+  /// （`source.getVariable()`、`@get`）只看記憶體，所以兩邊互相轉送寫入
+  /// （ADR 0028）。從資料庫或檔案讀進記憶體的不轉送。
+  static void Function(String key, Object? value, int deadline)? onMemoryWrite;
+
+  /// 套用另一個 isolate 轉送來的寫入，不再轉送回去。
+  void applyMirroredWrite(String key, Object? value, int deadline) {
+    if (value == null) {
+      _deleteMemory(key);
+    } else {
+      _putMemory(key, value, deadline: deadline);
+    }
+  }
+
   /// 獲取快取檔案路徑 (對標 js_cache 目錄)
   Future<String> getCachePath(String key) async {
     final cacheDir = await AppStoragePaths.jsCacheDir();
@@ -152,7 +167,7 @@ class CacheManager {
     final file = File(path);
     if (await file.exists()) {
       final content = await file.readAsString();
-      putMemory(key, content);
+      _putMemory(key, content);
       return content;
     }
     return null;
@@ -168,6 +183,7 @@ class CacheManager {
         ? 0
         : DateTime.now().millisecondsSinceEpoch + saveTimeSeconds * 1000;
     _putMemory(key, content, deadline: deadline);
+    onMemoryWrite?.call(key, content, deadline);
 
     // 儲存至資料庫
 
@@ -185,9 +201,18 @@ class CacheManager {
   }
 
   /// 記憶體快取專用介面
-  void putMemory(String key, dynamic value) => _putMemory(key, value);
+  void putMemory(String key, dynamic value) {
+    _putMemory(key, value);
+    onMemoryWrite?.call(key, value, 0);
+  }
+
   dynamic getFromMemory(String key) => _memoryCache.get(key);
   void deleteMemory(String key) {
+    _deleteMemory(key);
+    onMemoryWrite?.call(key, null, 0);
+  }
+
+  void _deleteMemory(String key) {
     _memoryDeadlines.remove(key);
     _memoryCache.remove(key);
   }

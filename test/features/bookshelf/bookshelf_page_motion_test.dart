@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,8 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
@@ -280,5 +283,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('匯入書源'), findsNothing);
     expect(find.text('搜尋書籍'), findsOneWidget);
+  });
+
+  testWidgets('書名要轉換時等字典好了才換場，書名一出現就是轉換後的字', (tester) async {
+    reshelve([
+      Book(bookUrl: 's1', origin: 'o', name: '斗罗大陆')..isInBookshelf = true,
+    ]);
+    ChineseDisplay.mode.value = 1;
+    addTearDown(() => ChineseDisplay.mode.value = 0);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        builder: (context, child) => ChineseDisplayScope(child: child!),
+        home: ChangeNotifierProvider<BookshelfProvider>.value(
+          value: provider,
+          child: const BookshelfPage(),
+        ),
+      ),
+    );
+    // 骨架一直呼吸，等不到靜止。
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('斗罗大陆'), findsNothing, reason: '書到了，字典還沒好');
+    expect(find.text('斗羅大陸'), findsNothing);
+
+    ChineseUtils.initializeFromDictionaryData([
+      for (final path in ChineseUtils.dictionaryAssetPaths)
+        File(path).readAsStringSync(),
+    ]);
+    ChineseDisplay.mode.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('斗羅大陸'), findsOneWidget);
+    expect(find.text('斗罗大陆'), findsNothing);
   });
 }

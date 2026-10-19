@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/welcome/main_page.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -205,32 +204,6 @@ void main() {
       await tester.drag(find.text('丙3'), const Offset(0, -600));
       await tester.pumpAndSettle();
     }
-
-    testWidgets('switching tabs holds the motion gate until it ends', (
-      tester,
-    ) async {
-      await tester.pumpWidget(threeTabs());
-      await tester.pumpAndSettle();
-      expect(MotionGate.instance.isMoving, isFalse);
-
-      // 點分頁：換頁中背景工作要等。
-      await tester.tap(find.text('三'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byType(AppTransitionSwitch), findsOneWidget);
-      expect(MotionGate.instance.isMoving, isTrue);
-      await tester.pumpAndSettle();
-      expect(MotionGate.instance.isMoving, isFalse);
-
-      // 跟著返回手勢：拖曳中與彈回都持有，取消後放開。
-      await send(tester, 'startBackGesture', event(0, 0));
-      await send(tester, 'updateBackGestureProgress', event(200, 0.4));
-      await tester.pump(const Duration(milliseconds: 40));
-      expect(MotionGate.instance.isMoving, isTrue);
-      await send(tester, 'cancelBackGesture');
-      await tester.pumpAndSettle();
-      expect(MotionGate.instance.isMoving, isFalse);
-    });
 
     testWidgets('the shelf comes back as far as the gesture goes', (
       tester,

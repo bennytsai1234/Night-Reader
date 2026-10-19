@@ -20,10 +20,6 @@ _Avoid_: dev、開發分支
 App 裡所有換頁共用的轉場，使用者在「外觀與主題」的選單從八種選一種（`AppPageTransition`）：上浮、平移（預設，Telegram iOS）、俐落平移（Telegram iOS 26）、滑入（Telegram Android）、推進（Android 系統）、覆蓋（Legado）、縮放（Material 共享 Z 軸）、展開（iOS 18 縮放）。返回不是開啟倒著播，一律先快後慢；往右拖返回與點主頁分頁也照選的那一種（ADR 0020）。
 _Avoid_: 轉場效果、頁面動畫、Hero（封面共享元素轉場已移除）
 
-**動作閘門**：
-畫面上有動畫在播時關上的閘門（`MotionGate`）；背景下載與書架檢查更新每做一段之前等它打開，不和動畫搶主執行緒（ADR 0018）。換頁、載入骨架、閱讀器捲動、主題暈開與書卡移位播放時關上。
-_Avoid_: 動畫鎖、暫停下載
-
 **更新紀錄**：
 「關於夜讀」裡列出各版更新說明的頁面（`ReleaseNotesPage`），資料來自 GitHub Releases；有開「接收測試版更新」才含測試版。更新後不會主動跳出。
 _Avoid_: 更新日誌、changelog（指這個頁面時）、這次更新了什麼
@@ -39,6 +35,10 @@ _Avoid_: 隱藏封面、預設封面模式
 **書源**：
 一份 JSON 規則，描述某個網站怎麼搜尋、怎麼取得書籍詳情、目錄與正文（`BookSource`）。格式相容 Legado 3.0，App 不內建任何書源。
 _Avoid_: 來源、站點、source（不指明時）
+
+**書源 isolate**：
+常駐的背景 isolate，書源的抓取與解析（含規則 JS）都在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）；閱讀器抓正文、下載、搜尋、檢查更新、換源、發現與書源除錯都經過它。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
+_Avoid_: 背景執行緒、worker
 
 **書架自動下載**：
 書架上的網路書自動整本下載，新章節也跟著下載；不限網路、沒有開關（ADR 0008，`DownloadService.keepShelfBookDownloaded`）。和使用者在書籍詳情或多選工具列手動加入的下載不同：自動下載不會排回使用者暫停的任務，失敗後依重試規則再試。

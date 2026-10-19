@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io' hide Cookie;
 
 import 'package:drift/drift.dart';
+import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -91,7 +93,19 @@ class AppDatabase extends _$AppDatabase {
   static final AppDatabase _instance = AppDatabase._internal();
   factory AppDatabase() => _instance;
   AppDatabase._internal() : super(_openConnection());
+
+  /// 連上另一個 isolate 開好的資料庫（[sharedIsolate]）：書源 isolate 用它，
+  /// 和主 isolate 共用同一個連線，寫入會更新兩邊的 `watch()`。
+  AppDatabase.connected(DatabaseConnection super.connection);
   AppDatabase.forTesting(super.executor);
+
+  /// 執行查詢的 drift isolate。主 isolate 與書源 isolate 都連到它；兩邊各自
+  /// 開連線的話，一邊的寫入不會更新另一邊的 `watch()`（drift 文件 Isolates）。
+  static Future<DriftIsolate> get sharedIsolate => _sharedIsolate.future;
+  static final Completer<DriftIsolate> _sharedIsolate =
+      Completer<DriftIsolate>()
+        // 開不起來時錯誤由查詢那一端回報；沒有人等這個 isolate 時不另外報錯。
+        ..future.ignore();
 
   @override
   int get schemaVersion => 7;
@@ -258,21 +272,42 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final appSupportDir = await getApplicationSupportDirectory();
-    final dbDir = Directory(p.join(appSupportDir.path, 'databases'));
-    if (!dbDir.existsSync()) {
-      dbDir.createSync(recursive: true);
-    }
-    final file = File(p.join(dbDir.path, 'night_reader.db'));
-    // 從 inkpage_reader 品牌改名後的一次性遷移：舊裝置上 DB 仍叫 inkpage_reader.db
-    if (!file.existsSync()) {
-      final legacy = File(p.join(dbDir.path, 'inkpage_reader.db'));
-      if (legacy.existsSync()) {
-        legacy.renameSync(file.path);
+/// 在背景的 drift isolate 執行查詢，並讓其他 isolate 能連上同一個
+/// （[AppDatabase.sharedIsolate]）。多個 isolate 共用時 drift 建議用
+/// `DatabaseConnection.delayed`，不用只共用執行器、不同步串流的
+/// `LazyDatabase`。
+DatabaseConnection _openConnection() {
+  return DatabaseConnection.delayed(
+    Future(() async {
+      try {
+        final isolate = await _spawnDatabaseIsolate(await _databasePath());
+        AppDatabase._sharedIsolate.complete(isolate);
+        return await isolate.connect();
+      } catch (error, stackTrace) {
+        AppDatabase._sharedIsolate.completeError(error, stackTrace);
+        rethrow;
       }
-    }
-    return NativeDatabase.createInBackground(file);
-  });
+    }),
+  );
 }
+
+Future<String> _databasePath() async {
+  final appSupportDir = await getApplicationSupportDirectory();
+  final dbDir = Directory(p.join(appSupportDir.path, 'databases'));
+  if (!dbDir.existsSync()) {
+    dbDir.createSync(recursive: true);
+  }
+  final file = File(p.join(dbDir.path, 'night_reader.db'));
+  // 從 inkpage_reader 品牌改名後的一次性遷移：舊裝置上 DB 仍叫 inkpage_reader.db
+  if (!file.existsSync()) {
+    final legacy = File(p.join(dbDir.path, 'inkpage_reader.db'));
+    if (legacy.existsSync()) {
+      legacy.renameSync(file.path);
+    }
+  }
+  return file.path;
+}
+
+/// 開資料庫的函式會送進新的 isolate，所以在這裡建立，只捕捉檔案路徑。
+Future<DriftIsolate> _spawnDatabaseIsolate(String path) =>
+    DriftIsolate.spawn(() => NativeDatabase(File(path)));

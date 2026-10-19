@@ -7,6 +7,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
 import 'package:night_reader/core/engine/parsers/css/analyze_by_css_support.dart';
+import 'package:night_reader/core/engine/rule_data_fields.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
@@ -53,7 +54,7 @@ class JsExtensions extends JsExtensionsBase {
 
   void _injectCoreHandlers() {
     // ─── 純同步 (sharedScope / log / toast) ─────────────────────
-    onBridge('scopePut', (args) {
+    runtime.onMessage('scopePut', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         final key = payload[0].toString();
@@ -76,7 +77,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('scopeGet', (args) {
+    runtime.onMessage('scopeGet', (args) {
       final key = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -96,7 +97,7 @@ class JsExtensions extends JsExtensionsBase {
       final value = JsExtensionsBase.sharedScope[key];
       return value == null ? '' : value.toString();
     });
-    onBridge('ruleGetString', (args) {
+    runtime.onMessage('ruleGetString', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -105,7 +106,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    onBridge('ruleGetStringList', (args) {
+    runtime.onMessage('ruleGetStringList', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -114,7 +115,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    onBridge('ruleGetElement', (args) {
+    runtime.onMessage('ruleGetElement', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -123,7 +124,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    onBridge('ruleGetElements', (args) {
+    runtime.onMessage('ruleGetElements', (args) {
       final rule = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
@@ -133,7 +134,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <dynamic>[];
     });
-    onBridge('ruleSetContent', (args) {
+    runtime.onMessage('ruleSetContent', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.isNotEmpty && ruleContext != null) {
         try {
@@ -145,29 +146,29 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('log', (args) {
+    runtime.onMessage('log', (args) {
       debugPrint('JS_LOG: ${_compactJsBridgeLog(args)}');
       return _decodeSyncArgs(args);
     });
-    onBridge('toast', (args) {
+    runtime.onMessage('toast', (args) {
       debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
       return null;
     });
-    onBridge('htmlSelectText', (args) {
+    runtime.onMessage('htmlSelectText', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlText(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    onBridge('htmlSelectHtml', (args) {
+    runtime.onMessage('htmlSelectHtml', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    onBridge('htmlSelectAttr', (args) {
+    runtime.onMessage('htmlSelectAttr', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 3) {
         return _selectHtmlAttr(
@@ -178,14 +179,14 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    onBridge('htmlSelectData', (args) {
+    runtime.onMessage('htmlSelectData', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlData(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    onBridge('htmlSelectAttributes', (args) {
+    runtime.onMessage('htmlSelectAttributes', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlAttributes(
@@ -195,7 +196,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    onBridge('htmlSelectCount', (args) {
+    runtime.onMessage('htmlSelectCount', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
@@ -205,7 +206,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return 0;
     });
-    onBridge('htmlSelectTextList', (args) {
+    runtime.onMessage('htmlSelectTextList', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _selectHtmlElements(
@@ -215,14 +216,14 @@ class JsExtensions extends JsExtensionsBase {
       }
       return const <String>[];
     });
-    onBridge('htmlRemove', (args) {
+    runtime.onMessage('htmlRemove', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _removeHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
     });
-    onBridge('scopedObjectGetVariable', (args) {
+    runtime.onMessage('scopedObjectGetVariable', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectVariable(
@@ -232,7 +233,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
-    onBridge('scopedObjectPutVariable', (args) {
+    runtime.onMessage('scopedObjectPutVariable', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         _putScopedObjectVariable(
@@ -243,7 +244,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('scopedObjectGetField', (args) {
+    runtime.onMessage('scopedObjectGetField', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
         return _getScopedObjectField(
@@ -253,7 +254,7 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('scopedObjectSetField', (args) {
+    runtime.onMessage('scopedObjectSetField', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 3) {
         _setScopedObjectField(
@@ -267,17 +268,17 @@ class JsExtensions extends JsExtensionsBase {
 
     // ─── Fire-and-forget async (JS 不讀回傳值) ──────────────────
     // 直接啟動 Future，不 block handler；失敗寫 log 但不 reject JS
-    onBridge('setCookie', (args) {
+    runtime.onMessage('setCookie', (args) {
       if (args is List && args.length >= 2) {
         CookieStore().setCookie(args[0].toString(), args[1].toString());
       }
       return null;
     });
-    onBridge('removeCookie', (args) {
+    runtime.onMessage('removeCookie', (args) {
       CookieStore().removeCookie(args.toString());
       return null;
     });
-    onBridge('putCache', (args) {
+    runtime.onMessage('putCache', (args) {
       if (args is List && args.length >= 2) {
         final saveTime = args.length > 2
             ? int.tryParse(args[2].toString()) ?? 0
@@ -290,11 +291,11 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('deleteCache', (args) {
+    runtime.onMessage('deleteCache', (args) {
       cacheManager.delete(args.toString());
       return null;
     });
-    onBridge('sourcePut', (args) {
+    runtime.onMessage('sourcePut', (args) {
       if (args is List && args.length >= 2 && source != null) {
         final key = args[0].toString();
         final value = args[1].toString();
@@ -302,20 +303,20 @@ class JsExtensions extends JsExtensionsBase {
       }
       return null;
     });
-    onBridge('sourcePutLoginInfo', (args) {
+    runtime.onMessage('sourcePutLoginInfo', (args) {
       if (source != null) {
         source!.putLoginInfo(args.toString());
       }
       return null;
     });
-    onBridge('sourceSetVariable', (args) {
+    runtime.onMessage('sourceSetVariable', (args) {
       if (source != null) {
         final decoded = _decodeSyncArgs(args);
         source!.setVariableSync(decoded?.toString());
       }
       return null;
     });
-    onBridge('sourceGetHeaderMap', (args) {
+    runtime.onMessage('sourceGetHeaderMap', (args) {
       if (source == null) return <String, String>{};
       final includeLoginHeader = _decodeSyncArgs(args) is bool
           ? _decodeSyncArgs(args) as bool
@@ -324,7 +325,7 @@ class JsExtensions extends JsExtensionsBase {
     });
 
     // ─── Promise bridge: async with return value ────────────────
-    onBridge('getCache', (args) {
+    runtime.onMessage('getCache', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final key = parsed.payload.toString();
       cacheManager
@@ -338,7 +339,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('cacheTextFile', (args) {
+    runtime.onMessage('cacheTextFile', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       final url = payload is List && payload.isNotEmpty
@@ -357,7 +358,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('importScript', (args) {
+    runtime.onMessage('importScript', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final path = parsed.payload.toString();
       () async {
@@ -386,7 +387,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('sourceGet', (args) {
+    runtime.onMessage('sourceGet', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -404,7 +405,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('sourceGetLoginInfo', (args) {
+    runtime.onMessage('sourceGetLoginInfo', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -421,7 +422,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('sourceGetVariable', (args) {
+    runtime.onMessage('sourceGetVariable', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       if (source == null) {
         resolveJsPending(parsed.callId, '');
@@ -438,7 +439,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('cookieGet', (args) {
+    runtime.onMessage('cookieGet', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = parsed.payload.toString();
       CookieStore()
@@ -452,7 +453,7 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
 
-    onBridge('allCookies', (args) {
+    runtime.onMessage('allCookies', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       // CookieStore 目前沒有 allCookies API，回傳空字串維持既有行為
       resolveJsPending(parsed.callId, '');
@@ -460,7 +461,7 @@ class JsExtensions extends JsExtensionsBase {
     });
 
     // cacheFile 供 Dart 端內部使用 (例如 font cache)
-    onBridge('cacheFile', (args) {
+    runtime.onMessage('cacheFile', (args) {
       // 歷史上是同步呼叫，但底層是 async HTTP。維持原行為：fire-and-forget
       // 並回傳空字串。若 rule JS 實際需要讀結果，應改用 java.get(...).body()。
       if (args is List && args.isNotEmpty) {
@@ -537,214 +538,14 @@ class JsExtensions extends JsExtensionsBase {
     dynamic value,
   ) {
     final target = _resolveScopedObject(scopeName);
-    if (target is Book) {
-      _setBookField(target, fieldName, value);
-      return;
+    switch (target) {
+      case final Book book:
+        bookRuleFields[fieldName]?.write(book, value);
+      case final SearchBook book:
+        searchBookRuleFields[fieldName]?.write(book, value);
+      case final BookChapter chapter:
+        chapterRuleFields[fieldName]?.write(chapter, value);
     }
-    if (target is SearchBook) {
-      _setSearchBookField(target, fieldName, value);
-      return;
-    }
-    if (target is BookChapter) {
-      _setChapterField(target, fieldName, value);
-    }
-  }
-
-  void _setBookField(Book book, String fieldName, dynamic value) {
-    switch (fieldName) {
-      case 'bookUrl':
-        book.bookUrl = _asString(value);
-        return;
-      case 'tocUrl':
-        book.tocUrl = _asString(value);
-        return;
-      case 'origin':
-        book.origin = _asString(value);
-        return;
-      case 'originName':
-        book.originName = _asString(value);
-        return;
-      case 'name':
-        book.name = _asString(value);
-        return;
-      case 'author':
-        book.author = _asString(value);
-        return;
-      case 'kind':
-        book.kind = _asNullableString(value);
-        return;
-      case 'coverUrl':
-        book.coverUrl = _asNullableString(value);
-        return;
-      case 'intro':
-        book.intro = _asNullableString(value);
-        return;
-      case 'latestChapterTitle':
-        book.latestChapterTitle = _asNullableString(value);
-        return;
-      case 'wordCount':
-        book.wordCount = _asNullableString(value);
-        return;
-      case 'type':
-        book.type = _asInt(value, fallback: book.type);
-        return;
-      case 'chapterIndex':
-        book.chapterIndex = _asInt(value, fallback: book.chapterIndex);
-        return;
-      case 'variable':
-        book.variable = _asNullableString(value);
-        return;
-      case 'isInBookshelf':
-        book.isInBookshelf = _asBool(value, fallback: book.isInBookshelf);
-        return;
-      case 'reverseToc':
-        (book.readConfig ??= ReadConfig()).reverseToc = _asBool(
-          value,
-          fallback: book.readConfig?.reverseToc ?? false,
-        );
-        return;
-      case 'useReplaceRule':
-        (book.readConfig ??= ReadConfig()).useReplaceRule = _asBool(
-          value,
-          fallback: book.readConfig?.useReplaceRule ?? false,
-        );
-        return;
-      default:
-        return;
-    }
-  }
-
-  void _setSearchBookField(SearchBook book, String fieldName, dynamic value) {
-    switch (fieldName) {
-      case 'bookUrl':
-        book.bookUrl = _asString(value);
-        return;
-      case 'name':
-        book.name = _asString(value);
-        return;
-      case 'author':
-        book.author = _asNullableString(value);
-        return;
-      case 'kind':
-        book.kind = _asNullableString(value);
-        return;
-      case 'coverUrl':
-        book.coverUrl = _asNullableString(value);
-        return;
-      case 'intro':
-        book.intro = _asNullableString(value);
-        return;
-      case 'wordCount':
-        book.wordCount = _asNullableString(value);
-        return;
-      case 'latestChapterTitle':
-        book.latestChapterTitle = _asNullableString(value);
-        return;
-      case 'origin':
-        book.origin = _asString(value);
-        return;
-      case 'originName':
-        book.originName = _asNullableString(value);
-        return;
-      case 'originOrder':
-        book.originOrder = _asInt(value, fallback: book.originOrder);
-        return;
-      case 'type':
-        book.type = _asInt(value, fallback: book.type);
-        return;
-      case 'variable':
-        book.variable = _asNullableString(value);
-        return;
-      case 'tocUrl':
-        book.tocUrl = _asNullableString(value);
-        return;
-      case 'respondTime':
-        book.respondTime = _asInt(value, fallback: book.respondTime);
-        return;
-      default:
-        return;
-    }
-  }
-
-  void _setChapterField(BookChapter chapter, String fieldName, dynamic value) {
-    switch (fieldName) {
-      case 'url':
-        chapter.url = _asString(value);
-        return;
-      case 'title':
-        chapter.title = _asString(value);
-        return;
-      case 'baseUrl':
-        chapter.baseUrl = _asString(value);
-        return;
-      case 'bookUrl':
-        chapter.bookUrl = _asString(value);
-        return;
-      case 'index':
-        chapter.index = _asInt(value, fallback: chapter.index);
-        return;
-      case 'isVolume':
-        chapter.isVolume = _asBool(value, fallback: chapter.isVolume);
-        return;
-      case 'isVip':
-        chapter.isVip = _asBool(value, fallback: chapter.isVip);
-        return;
-      case 'isPay':
-        chapter.isPay = _asBool(value, fallback: chapter.isPay);
-        return;
-      case 'resourceUrl':
-        chapter.resourceUrl = _asNullableString(value);
-        return;
-      case 'tag':
-        chapter.tag = _asNullableString(value);
-        return;
-      case 'wordCount':
-        chapter.wordCount = _asNullableString(value);
-        return;
-      case 'start':
-        chapter.start = _asNullableInt(value);
-        return;
-      case 'end':
-        chapter.end = _asNullableInt(value);
-        return;
-      case 'startFragmentId':
-        chapter.startFragmentId = _asNullableString(value);
-        return;
-      case 'endFragmentId':
-        chapter.endFragmentId = _asNullableString(value);
-        return;
-      case 'variable':
-        chapter.variable = _asNullableString(value);
-        return;
-      case 'content':
-        chapter.content = _asNullableString(value);
-        return;
-      default:
-        return;
-    }
-  }
-
-  String _asString(dynamic value) => value?.toString() ?? '';
-
-  String? _asNullableString(dynamic value) => value?.toString();
-
-  int _asInt(dynamic value, {int fallback = 0}) {
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? fallback;
-  }
-
-  int? _asNullableInt(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toInt();
-    return int.tryParse(value.toString());
-  }
-
-  bool _asBool(dynamic value, {bool fallback = false}) {
-    if (value is bool) return value;
-    final normalized = value?.toString().trim().toLowerCase();
-    if (normalized == 'true' || normalized == '1') return true;
-    if (normalized == 'false' || normalized == '0') return false;
-    return fallback;
   }
 
   List<dom.Element> _selectHtmlElements(String html, String selector) {

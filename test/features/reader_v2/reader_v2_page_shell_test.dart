@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
@@ -152,7 +151,7 @@ void main() {
     }
   });
 
-  testWidgets('the contents hold the motion gate until fully closed', (
+  testWidgets('the contents count as closed only once fully closed', (
     tester,
   ) async {
     var closed = 0;
@@ -161,11 +160,9 @@ void main() {
       controlsVisible: false,
       onDrawerClosed: () => closed += 1,
     );
-    expect(MotionGate.instance.isMoving, isFalse);
 
     scaffoldKey.currentState!.openDrawer();
     await tester.pump();
-    expect(MotionGate.instance.isMoving, isTrue);
     await tester.pumpAndSettle();
 
     // 收起動畫一開始就算「收起」的通知不算數：要收到底才完成。
@@ -173,11 +170,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(closed, 0);
-    expect(MotionGate.instance.isMoving, isTrue);
 
     await tester.pumpAndSettle();
     expect(closed, 1);
-    expect(MotionGate.instance.isMoving, isFalse);
   });
 
   testWidgets('the menus slide in and out instead of popping', (tester) async {

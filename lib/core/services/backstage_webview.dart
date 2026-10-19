@@ -22,6 +22,12 @@ class BackstageWebView {
 
   static Widget? _hiddenWebViewWidget;
 
+  /// 設定後改由它載入：WebView 只能在主 isolate 用，書源 isolate 把這個
+  /// 請求（只有網址、HTML 與規則這些資料）交給主 isolate 執行
+  /// （ADR 0028）。
+  static Future<Map<String, dynamic>> Function(BackstageWebView request)?
+  delegate;
+
   BackstageWebView({
     this.url,
     this.html,
@@ -47,6 +53,8 @@ class BackstageWebView {
   }
 
   Future<Map<String, dynamic>> getStrResponse() async {
+    final delegate = BackstageWebView.delegate;
+    if (delegate != null) return delegate(this);
     final completer = Completer<Map<String, dynamic>>();
 
     // Setup WebViewController

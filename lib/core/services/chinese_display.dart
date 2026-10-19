@@ -1,6 +1,9 @@
 import 'package:flutter/widgets.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 書籍資訊的顯示時繁簡轉換：書名、作者、簡介、分類與章節標題。
 ///
@@ -11,16 +14,41 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 ///
 /// 轉換模式與閱讀設定的「繁簡轉換」為同一個值
 /// （0：不轉換、1：簡轉繁、2：繁轉簡），由 ReaderV2SettingsController
-/// 在載入與變更時同步；App 啟動時由 [dictionaryReady] 載入。
+/// 在載入與變更時同步；App 啟動時由 [start] 讀出。
 abstract final class ChineseDisplay {
   static final ChineseDisplayMode mode = ChineseDisplayMode();
   static const ChineseTextConverter _converter = ChineseTextConverter();
 
-  /// 字典在背景載入；載入完成前轉換會原樣返回，完成後要讓已顯示的
-  /// 文字重建一次。
-  static void dictionaryReady(int? storedMode) {
-    mode.value = storedMode ?? mode.value;
-    mode.refresh();
+  /// 字典這一輪載入失敗：顯示原文，不再等它。
+  static bool _dictionaryFailed = false;
+
+  /// App 啟動、建第一幀之前呼叫一次：照閱讀設定定下轉換模式，並在背景
+  /// 載入字典。載入完成前轉換會原樣返回，所以要轉換時，書架這類第一次
+  /// 顯示書名的畫面先看 [readyOf] 再換成內容，書名不會在畫面上從原文
+  /// 一下子變成轉換後的字。
+  static Future<void> start(SharedPreferences prefs) async {
+    mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
+    try {
+      await ChineseUtils.initialize();
+    } catch (e, stack) {
+      AppLog.e('ChineseUtils load error: $e', error: e, stackTrace: stack);
+      _dictionaryFailed = true;
+    }
+    // 不轉換時已顯示的文字不受影響，不必整個 App 重建。
+    if (mode.value != 0) mode.refresh();
+  }
+
+  /// 目前的模式下，書籍資訊能不能照轉換後的樣子顯示：不轉換、字典已載入，
+  /// 或字典載入失敗（顯示原文）。登記字典載入完成時重建。
+  static bool readyOf(BuildContext context) {
+    final notifier =
+        context
+            .dependOnInheritedWidgetOfExactType<ChineseDisplayScope>()
+            ?.notifier ??
+        mode;
+    return notifier.value == 0 ||
+        ChineseUtils.isInitialized ||
+        _dictionaryFailed;
   }
 
   static String convert(String text, {int? convertType}) {

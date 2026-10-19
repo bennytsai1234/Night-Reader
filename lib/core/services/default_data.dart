@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:night_reader/core/services/chinese_display.dart';
-import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
@@ -12,8 +10,6 @@ import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/database/dao/search_history_dao.dart';
 import 'package:night_reader/core/database/dao/cache_dao.dart';
 import 'package:night_reader/core/models/book_source.dart';
-
-import 'chinese_utils.dart';
 
 import 'package:night_reader/core/di/injection.dart';
 
@@ -44,8 +40,6 @@ class DefaultData {
     // 2. 啟動時維護與清理 (原 Android App.onCreate 中的各式 Clear 與 adjustSortNumber)
     await _maintenance();
 
-    // 3. 預熱與同步 (原 Android ChineseUtils.preLoad 與 AppWebDav 同步)
-    _startBackgroundTasks();
     _deferredInitialized = true;
   }
 
@@ -69,24 +63,6 @@ class DefaultData {
       await getIt<CacheDao>().clearDeadline(now);
     } catch (e) {
       AppLog.e('Maintenance error: $e', error: e);
-    }
-  }
-
-  static void _startBackgroundTasks() {
-    // A. 預熱簡繁轉換 (原 Android ChineseUtils.preLoad)
-    unawaited(_warmChineseUtils());
-  }
-
-  static Future<void> _warmChineseUtils() async {
-    try {
-      await ChineseUtils.initialize();
-      ChineseUtils.s2t('');
-      final prefs = await SharedPreferences.getInstance();
-      ChineseDisplay.dictionaryReady(
-        prefs.getInt(PreferKey.readerChineseConvert),
-      );
-    } catch (e) {
-      AppLog.e('ChineseUtils warmup error: $e', error: e);
     }
   }
 

@@ -1,0 +1,532 @@
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio/dio.dart';
+import 'package:drift/isolate.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_js/flutter_js.dart' show fetchPolyfillSource;
+import 'package:night_reader/core/database/app_database.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/backstage_webview.dart';
+import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/core/services/cookie_store.dart';
+import 'package:night_reader/core/services/crash_handler.dart';
+import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/core/services/rate_limiter.dart';
+
+import 'isolate_channel.dart';
+
+/// 書源 isolate：常駐的背景 isolate，書源的抓取與解析（含規則 JS）在這裡
+/// 跑，主 isolate 只收結果，畫面不會被解析卡住（ADR 0028）。
+///
+/// 和主 isolate 共用的東西各只有一個擁有者：
+/// - 資料庫：兩邊連到同一個 drift isolate（[AppDatabase.sharedIsolate]）。
+/// - Cookie 檔與書源限流：在主 isolate；這裡的請求經由 [_MainCookieJar]、
+///   [_MainRateLimits] 交給主 isolate。這裡可能被一段同步的規則 JS 佔住
+///   好幾秒，擁有者放在這裡的話，主 isolate 上的請求都得等它。
+/// - WebView：平台訊息只送到主 isolate，渲染交給主 isolate。
+/// - 紀錄與提示：送回主 isolate（[AppLog.delegate]），未接住的錯誤寫進
+///   主 isolate 的錯誤紀錄。
+/// - 快取與 Cookie 的記憶體層：兩邊各一份，寫入互相轉送。
+abstract final class SourceIsolate {
+  /// 只在 App 的主 isolate 開（`main.dart`）。測試與 Workmanager 不開，
+  /// [run] 原地執行。
+  static bool enabled = false;
+
+  static Future<IsolateChannel?>? _channel;
+  static Isolate? _isolate;
+  static ReceivePort? _inbox;
+  static ReceivePort? _errors;
+  static int _nextTaskId = 0;
+
+  /// 書源 isolate 借走、還沒交回的限流紀錄。
+  static final Map<int, ConcurrentRecord?> _rateTickets = {};
+  static int _nextRateTicket = 0;
+
+  /// 開始開書源 isolate（[enabled] 時），不等它開好，[run] 會等。開不起來
+  /// 時記下原因，書源工作改回主 isolate 執行。[database] 預設為主 isolate
+  /// 的資料庫。
+  static void start({Future<DriftIsolate>? database}) {
+    if (!enabled || _channel != null) return;
+    _installMainMirrors();
+    _channel = _spawn(database ?? AppDatabase.sharedIsolate)
+        .then<IsolateChannel?>(
+          (channel) => channel,
+          onError: (Object error, StackTrace stackTrace) {
+            AppLog.e(
+              '書源 isolate 開不起來，書源工作改在主 isolate 執行: $error',
+              error: error,
+              stackTrace: stackTrace,
+            );
+            _uninstallMainMirrors();
+            _shutdown();
+            return null;
+          },
+        );
+  }
+
+  /// 在書源 isolate 執行 [task] 並傳回結果；沒開時原地執行。[task] 拿到的
+  /// [CancelToken] 屬於執行它的 isolate，[cancelToken] 取消時跟著取消。
+  /// 錯誤照原樣丟出（送不回來時見 [IsolateTaskError]）。
+  ///
+  /// [task] 連同它捕捉的變數會複製到書源 isolate，要在只捕捉書源、書籍與
+  /// 字串這類資料的地方建立（例如頂層函式），不能捕捉頁面、回呼或資料庫
+  /// 連線。
+  static Future<R> run<R>(
+    Future<R> Function(CancelToken cancelToken) task, {
+    CancelToken? cancelToken,
+  }) async {
+    final channel = await _channel;
+    if (channel == null) {
+      // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
+      // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
+      assert(_sendable(task));
+      return task(cancelToken ?? CancelToken());
+    }
+    final id = _nextTaskId++;
+    final Future<Object?> result;
+    try {
+      result = channel.request(_RunTask(id, task));
+    } on ArgumentError catch (e) {
+      assert(_sendable(task));
+      AppLog.e('書源工作送不進書源 isolate，改在主 isolate 執行: $e', error: e);
+      return task(cancelToken ?? CancelToken());
+    }
+    unawaited(
+      cancelToken?.whenCancel.then((_) => channel.notify(_CancelTask(id))),
+    );
+    return await result as R;
+  }
+
+  /// 送一次 [task] 給自己，看它連同捕捉的變數能不能跨 isolate；不能時丟出
+  /// 錯誤，指出要改在只捕捉資料的頂層函式裡建立（`CODING_STANDARDS.md`）。
+  static bool _sendable(Object task) {
+    final port = RawReceivePort();
+    try {
+      port.sendPort.send(task);
+      return true;
+    } on ArgumentError catch (e) {
+      throw ArgumentError(
+        '送進書源 isolate 的工作捕捉了不能跨 isolate 的東西，要在只捕捉資料的'
+        '頂層函式裡建立（CODING_STANDARDS.md 背景執行）：$e',
+      );
+    } finally {
+      port.close();
+    }
+  }
+
+  /// 測試用：結束書源 isolate，回到原地執行。
+  @visibleForTesting
+  static Future<void> stop() async {
+    final channel = await _channel;
+    channel?.close(StateError('書源 isolate 已結束'));
+    _uninstallMainMirrors();
+    _shutdown();
+    _channel = null;
+    _rateTickets.clear();
+  }
+
+  static void _shutdown() {
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+    _inbox?.close();
+    _inbox = null;
+    _errors?.close();
+    _errors = null;
+  }
+
+  static Future<IsolateChannel> _spawn(Future<DriftIsolate> database) async {
+    final inbox = _inbox = ReceivePort('SourceIsolate main');
+    final errors = _errors = ReceivePort('SourceIsolate errors');
+    errors.listen(_recordUncaughtError);
+    final remote = Completer<SendPort>();
+    late final IsolateChannel channel;
+    inbox.listen((message) {
+      if (!remote.isCompleted) {
+        remote.complete(message as SendPort);
+        return;
+      }
+      channel.receive(message);
+    });
+    _isolate = await Isolate.spawn(
+      _main,
+      inbox.sendPort,
+      debugName: 'SourceIsolate',
+      // 規則 JS 留下的非同步錯誤不能讓書源 isolate 結束，否則之後的書源
+      // 工作都等不到回覆。
+      errorsAreFatal: false,
+      onError: errors.sendPort,
+    );
+    channel = IsolateChannel(
+      await remote.future,
+      onRequest: _answerSourceIsolate,
+      onNotice: _onSourceIsolateNotice,
+    );
+    await channel.request(
+      _Initialize(
+        databasePort: (await database).connectPort,
+        rootToken: RootIsolateToken.instance,
+        dictionaries: await _loadOrNull(
+          () => Future.wait(
+            ChineseUtils.dictionaryAssetPaths.map(rootBundle.loadString),
+          ),
+        ),
+        fetchPolyfill: await _loadOrNull(
+          () => rootBundle.loadString('packages/flutter_js/assets/js/fetch.js'),
+        ),
+      ),
+    );
+    return channel;
+  }
+
+  /// 讀不到（例如測試沒有這個資源）時給 null：繁簡轉換原樣返回、規則的
+  /// fetch 不能用，其他照常。
+  static Future<T?> _loadOrNull<T>(Future<T> Function() load) async {
+    try {
+      return await load();
+    } catch (e) {
+      AppLog.w('書源 isolate 的資源讀不到: $e');
+      return null;
+    }
+  }
+
+  static void _recordUncaughtError(Object? message) {
+    if (message is! List || message.isEmpty) return;
+    final error = '${message[0]}';
+    final stack = message.length > 1 ? message[1]?.toString() : null;
+    final stackTrace = stack == null || stack.isEmpty
+        ? null
+        : StackTrace.fromString(stack);
+    AppLog.e('書源 isolate 未處理的錯誤: $error', stackTrace: stackTrace);
+    CrashHandler.recordError('書源 isolate: $error', stackTrace);
+  }
+
+  // ── 主 isolate 替書源 isolate 做的事 ─────────────────────────────
+
+  static Future<Object?> _answerSourceIsolate(Object request) async {
+    switch (request) {
+      case final _RenderHtml render:
+        return HeadlessWebViewService().getRenderedHtml(
+          url: render.url,
+          headers: render.headers,
+          userAgent: render.userAgent,
+          js: render.js,
+          delayTime: render.delayTime,
+        );
+      case final BackstageWebView webView:
+        return webView.getStrResponse();
+      case _CookieJarLoad(:final uri):
+        return NetworkService().cookieJar.loadForRequest(uri);
+      case _CookieJarSave(:final uri, :final cookies):
+        await NetworkService().cookieJar.saveFromResponse(uri, cookies);
+        return null;
+      case _CookieJarDelete(:final uri, :final withDomainSharedCookie):
+        final jar = NetworkService().cookieJar;
+        if (uri == null) {
+          await jar.deleteAll();
+        } else {
+          await jar.delete(uri, withDomainSharedCookie);
+        }
+        return null;
+      case _RateAcquire(:final key, :final concurrentRate):
+        final record = await ConcurrentRateLimiter.acquire(key, concurrentRate);
+        final ticket = _nextRateTicket++;
+        _rateTickets[ticket] = record;
+        return ticket;
+    }
+    throw UnsupportedError('Unknown source isolate request: $request');
+  }
+
+  static void _onSourceIsolateNotice(Object notice) {
+    switch (notice) {
+      case _Log(:final message, :final error, :final stackTrace, :final toast):
+        AppLog.put(
+          message,
+          error: error,
+          stackTrace: stackTrace == null
+              ? null
+              : StackTrace.fromString(stackTrace),
+          toast: toast,
+        );
+      case _RateRelease(:final ticket):
+        ConcurrentRateLimiter.release(_rateTickets.remove(ticket));
+      case _CacheWrite(:final key, :final value, :final deadline):
+        CacheManager().applyMirroredWrite(key, value, deadline);
+      case _CookieWrite(:final domain, :final cookie):
+        CookieStore().applyMirroredWrite(domain, cookie);
+    }
+  }
+
+  static void _installMainMirrors() {
+    CacheManager.onMemoryWrite = (key, value, deadline) =>
+        _notifySourceIsolate(_CacheWrite(key, value, deadline));
+    CookieStore.onMemoryWrite = (domain, cookie) =>
+        _notifySourceIsolate(_CookieWrite(domain, cookie));
+  }
+
+  static void _uninstallMainMirrors() {
+    CacheManager.onMemoryWrite = null;
+    CookieStore.onMemoryWrite = null;
+  }
+
+  /// 書源 isolate 還在開時先排著，開好後照順序送出。
+  static void _notifySourceIsolate(Object notice) {
+    unawaited(_channel?.then((channel) => _tryNotify(channel, notice)));
+  }
+}
+
+/// 快取裡存的值理論上都是字串；送不過去的不同步，只記下來。
+void _tryNotify(IsolateChannel? channel, Object notice) {
+  if (channel == null) return;
+  try {
+    channel.notify(notice);
+  } on ArgumentError catch (e) {
+    AppLog.w('記憶體快取的寫入無法同步到另一個 isolate: $e');
+  }
+}
+
+// ── 書源 isolate 這一端 ─────────────────────────────────────────────
+
+void _main(SendPort mainPort) {
+  final inbox = ReceivePort('SourceIsolate');
+  final tasks = <int, CancelToken>{};
+  late final IsolateChannel channel;
+  channel = IsolateChannel(
+    mainPort,
+    onRequest: (request) async {
+      switch (request) {
+        case _RunTask(:final id, :final task):
+          final cancelToken = CancelToken();
+          tasks[id] = cancelToken;
+          try {
+            return await task(cancelToken);
+          } finally {
+            tasks.remove(id);
+          }
+        case final _Initialize init:
+          await _initialize(init, channel);
+          return null;
+      }
+      throw UnsupportedError(
+        'Unknown request for the source isolate: $request',
+      );
+    },
+    onNotice: (notice) {
+      switch (notice) {
+        case _CancelTask(:final id):
+          tasks[id]?.cancel('已取消');
+        case _CacheWrite(:final key, :final value, :final deadline):
+          CacheManager().applyMirroredWrite(key, value, deadline);
+        case _CookieWrite(:final domain, :final cookie):
+          CookieStore().applyMirroredWrite(domain, cookie);
+      }
+    },
+  );
+  inbox.listen(channel.receive);
+  mainPort.send(inbox.sendPort);
+}
+
+Future<void> _initialize(_Initialize init, IsolateChannel channel) async {
+  final rootToken = init.rootToken;
+  // 讓外掛（例如規則檔案 API 用的 path_provider）能用；平台送來的訊息仍
+  // 只到主 isolate，所以 WebView 交給主 isolate。
+  if (rootToken != null) {
+    BackgroundIsolateBinaryMessenger.ensureInitialized(rootToken);
+  }
+  AppLog.delegate = (message, error, stackTrace, toast) => channel.notify(
+    _Log(
+      message,
+      error: error?.toString(),
+      stackTrace: stackTrace?.toString(),
+      toast: toast,
+    ),
+  );
+  HeadlessWebViewService.delegate =
+      ({
+        required String url,
+        Map<String, String>? headers,
+        String? userAgent,
+        String? js,
+        int delayTime = 0,
+      }) async => await channel.request(
+        _RenderHtml(
+          url: url,
+          headers: headers,
+          userAgent: userAgent,
+          js: js,
+          delayTime: delayTime,
+        ),
+      ) as String;
+  BackstageWebView.delegate = (request) async =>
+      (await channel.request(request) as Map).cast<String, dynamic>();
+  ConcurrentRateLimiter.delegate = _MainRateLimits(channel);
+  CacheManager.onMemoryWrite = (key, value, deadline) =>
+      _tryNotify(channel, _CacheWrite(key, value, deadline));
+  CookieStore.onMemoryWrite = (domain, cookie) =>
+      _tryNotify(channel, _CookieWrite(domain, cookie));
+
+  // 規則的 fetch／XHR：沒有 rootBundle，用主 isolate 讀好的 polyfill；讀不到
+  // 時給空字串，fetch 不能用，但不會去碰 rootBundle。
+  fetchPolyfillSource = init.fetchPolyfill ?? '';
+  final dictionaries = init.dictionaries;
+  if (dictionaries != null) {
+    ChineseUtils.initializeFromDictionaryData(dictionaries);
+  }
+
+  final connection = await DriftIsolate.fromConnectPort(init.databasePort)
+      .connect();
+  registerDatabase(AppDatabase.connected(connection));
+  await NetworkService().init(cookieJar: _MainCookieJar(channel));
+}
+
+/// Cookie 檔在主 isolate：載入與寫入都交給它。
+final class _MainCookieJar implements CookieJar {
+  _MainCookieJar(this._channel);
+
+  final IsolateChannel _channel;
+
+  @override
+  bool get ignoreExpires => false;
+
+  @override
+  Future<List<Cookie>> loadForRequest(Uri uri) async =>
+      (await _channel.request(_CookieJarLoad(uri)) as List).cast<Cookie>();
+
+  @override
+  Future<void> saveFromResponse(Uri uri, List<Cookie> cookies) =>
+      _channel.request(_CookieJarSave(uri, cookies));
+
+  @override
+  Future<void> delete(Uri uri, [bool withDomainSharedCookie = false]) =>
+      _channel.request(_CookieJarDelete(uri, withDomainSharedCookie));
+
+  @override
+  Future<void> deleteAll() => _channel.request(const _CookieJarDelete(null));
+}
+
+/// 書源限流紀錄在主 isolate：發請求前向它借，結束時交回。
+final class _MainRateLimits implements ConcurrentRateDelegate {
+  _MainRateLimits(this._channel);
+
+  final IsolateChannel _channel;
+
+  @override
+  Future<int> acquire(String key, String concurrentRate) async =>
+      await _channel.request(_RateAcquire(key, concurrentRate)) as int;
+
+  @override
+  void release(int ticket) => _channel.notify(_RateRelease(ticket));
+}
+
+// ── 訊息 ────────────────────────────────────────────────────────────
+
+final class _Initialize {
+  const _Initialize({
+    required this.databasePort,
+    required this.rootToken,
+    required this.dictionaries,
+    required this.fetchPolyfill,
+  });
+
+  final SendPort databasePort;
+  final RootIsolateToken? rootToken;
+  final List<String>? dictionaries;
+  final String? fetchPolyfill;
+}
+
+final class _RunTask {
+  const _RunTask(this.id, this.task);
+
+  final int id;
+  final Future<Object?> Function(CancelToken cancelToken) task;
+}
+
+final class _CancelTask {
+  const _CancelTask(this.id);
+
+  final int id;
+}
+
+final class _Log {
+  const _Log(
+    this.message, {
+    required this.error,
+    required this.stackTrace,
+    required this.toast,
+  });
+
+  final String message;
+  final String? error;
+  final String? stackTrace;
+  final bool toast;
+}
+
+final class _RenderHtml {
+  const _RenderHtml({
+    required this.url,
+    required this.headers,
+    required this.userAgent,
+    required this.js,
+    required this.delayTime,
+  });
+
+  final String url;
+  final Map<String, String>? headers;
+  final String? userAgent;
+  final String? js;
+  final int delayTime;
+}
+
+final class _CookieJarLoad {
+  const _CookieJarLoad(this.uri);
+
+  final Uri uri;
+}
+
+final class _CookieJarSave {
+  const _CookieJarSave(this.uri, this.cookies);
+
+  final Uri uri;
+  final List<Cookie> cookies;
+}
+
+/// [uri] 為 null 是全部刪除。
+final class _CookieJarDelete {
+  const _CookieJarDelete(this.uri, [this.withDomainSharedCookie = false]);
+
+  final Uri? uri;
+  final bool withDomainSharedCookie;
+}
+
+final class _RateAcquire {
+  const _RateAcquire(this.key, this.concurrentRate);
+
+  final String key;
+  final String concurrentRate;
+}
+
+final class _RateRelease {
+  const _RateRelease(this.ticket);
+
+  final int ticket;
+}
+
+final class _CacheWrite {
+  const _CacheWrite(this.key, this.value, this.deadline);
+
+  final String key;
+  final Object? value;
+  final int deadline;
+}
+
+final class _CookieWrite {
+  const _CookieWrite(this.domain, this.cookie);
+
+  final String? domain;
+  final String? cookie;
+}

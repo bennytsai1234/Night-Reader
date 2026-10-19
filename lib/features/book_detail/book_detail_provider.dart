@@ -242,9 +242,6 @@ class BookDetailProvider extends ChangeNotifier {
                 hasNewChapters: hasNewChapters,
               ),
           bookDao: _bookDao,
-          chapterDao: _chapterDao,
-          sourceDao: _sourceDao,
-          sourceService: _service,
         );
     _bookStorageService =
         bookStorageService ??

@@ -8,6 +8,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/core/engine/explore_url_parser.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef ExploreKindsLoader = Future<List<ExploreKind>> Function(
@@ -74,7 +75,7 @@ class ExploreProvider extends ChangeNotifier {
 
   ExploreProvider({BookSourceDao? sourceDao, ExploreKindsLoader? kindsLoader})
     : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
-      _kindsLoader = kindsLoader ?? ExploreUrlParser.parseAsync {
+      _kindsLoader = kindsLoader ?? BookSourceService().exploreKinds {
     _readFilterBar();
     _bindSources();
   }

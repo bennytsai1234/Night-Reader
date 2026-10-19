@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 
 /// 等換頁動畫播完（ADR 0018）：頁面的載入與重排從這之後才開始，不和換頁
 /// 搶同一幀。
@@ -44,50 +43,5 @@ abstract final class TransitionSettled {
 
     animation.addStatusListener(listener);
     return settled.future;
-  }
-}
-
-final MotionGateNavigatorObserver motionGateObserver =
-    MotionGateNavigatorObserver();
-
-/// 換頁、底部面板與對話框的進出場、返回手勢進行中都持有 [MotionGate]
-/// （ADR 0018），背景工作等它們播完再做。
-class MotionGateNavigatorObserver extends NavigatorObserver {
-  final MotionHold _gesture = MotionHold();
-
-  /// 每個路由一個，跟著它的動畫狀態持有或放開，直到路由移除。
-  final Expando<MotionHold> _routes = Expando<MotionHold>();
-
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _follow(route);
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    _follow(newRoute);
-    if (oldRoute != null) _routes[oldRoute]?.release();
-  }
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      _routes[route]?.release();
-
-  @override
-  void didStartUserGesture(
-    Route<dynamic> route,
-    Route<dynamic>? previousRoute,
-  ) => _gesture.moving = true;
-
-  @override
-  void didStopUserGesture() => _gesture.moving = false;
-
-  // 進場、返回都看同一個動畫：播放中持有，停下放開。推入後第一幀 Hero
-  // 會暫時把動畫換成「已播完」，接著換回來，持有也跟著接上。
-  void _follow(Route<dynamic>? route) {
-    if (route is! TransitionRoute || _routes[route] != null) return;
-    final animation = route.animation;
-    if (animation == null) return;
-    final hold = _routes[route] = MotionHold()..moving = animation.isAnimating;
-    animation.addStatusListener((status) => hold.moving = status.isAnimating);
   }
 }

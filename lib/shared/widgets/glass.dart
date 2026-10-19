@@ -812,27 +812,14 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final solidHeight = topPadding + _toolbarHeight + bottomHeight;
     final totalHeight = solidHeight + AppGlass.headerFadeHeight;
     final brightness = ThemeData.estimateBrightnessForColor(bg);
-    // 開 App 的進場：按鈕從上緣滑進來，標題淡入。
-    final entrance = LaunchEntrance.maybeOf(context);
-    Widget slideIn(Widget child) => entrance == null
-        ? child
-        : AnimatedBuilder(
-            animation: entrance.header,
-            child: child,
-            builder: (context, child) => GlassSlide(
-              shown: entrance.header.value,
-              edge: AxisDirection.up,
-              gap: topPadding,
-              child: child!,
-            ),
-          );
-    Widget fadeIn(Widget child) => entrance == null
-        ? child
-        : FadeTransition(opacity: entrance.title, child: child);
+    // 開 App 的進場：標題與按鈕先是骨架，跟書架一起換成真的。
     // 左側位置的高度是撐滿工具列的；置中讓玻璃照按鈕自己的大小，不被拉高。
     Widget slot(Widget? button) => morph
-        ? Center(widthFactor: 1, child: GlassMorph(child: button))
-        : button!;
+        ? Center(
+            widthFactor: 1,
+            child: LaunchSkeleton(child: GlassMorph(child: button)),
+          )
+        : LaunchSkeleton(child: button!);
     // 連續過渡時沒有按鈕的一側也留著位置，按鈕才能從一個點長出來。
     final hasLeading = effectiveLeading != null || morph;
     final trailing = morph && actions.isEmpty ? const <Widget?>[null] : actions;
@@ -886,37 +873,38 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
                   middleSpacing: AppSpacing.md,
                   leading: !hasLeading
                       ? null
-                      : slideIn(
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              left: AppGrouped.margin,
-                            ),
-                            child: IconTheme.merge(
-                              data: IconThemeData(color: fg),
-                              child: slot(effectiveLeading),
-                            ),
+                      : Padding(
+                          padding: const EdgeInsets.only(
+                            left: AppGrouped.margin,
+                          ),
+                          child: IconTheme.merge(
+                            data: IconThemeData(color: fg),
+                            child: slot(effectiveLeading),
                           ),
                         ),
-                  middle: middle == null ? null : fadeIn(middle),
+                  middle: middle == null
+                      ? null
+                      : LaunchSkeleton.text(
+                          textStyle: AppTextStyles.titleSm,
+                          child: middle,
+                        ),
                   trailing: trailing.isEmpty
                       ? null
-                      : slideIn(
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              right: AppGrouped.margin,
-                            ),
-                            child: IconTheme.merge(
-                              data: IconThemeData(color: fg),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  for (var i = 0; i < trailing.length; i++) ...[
-                                    if (i > 0)
-                                      const SizedBox(width: AppSpacing.sm),
-                                    slot(trailing[i]),
-                                  ],
+                      : Padding(
+                          padding: const EdgeInsets.only(
+                            right: AppGrouped.margin,
+                          ),
+                          child: IconTheme.merge(
+                            data: IconThemeData(color: fg),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < trailing.length; i++) ...[
+                                  if (i > 0)
+                                    const SizedBox(width: AppSpacing.sm),
+                                  slot(trailing[i]),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
                         ),

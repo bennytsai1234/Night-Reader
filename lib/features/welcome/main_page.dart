@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/default_data.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
@@ -18,7 +17,6 @@ import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
-import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
 
 Color _groupedBackground(BuildContext context) =>
@@ -97,10 +95,6 @@ class _MainPageState extends State<MainPage>
   _Follow _follow = _Follow.none;
   final PredictiveBackTracker _back = PredictiveBackTracker();
 
-  /// 換分頁（含跟著返回手勢、送完或彈回）從開始到結束都持有動作閘門：它
-  /// 不是路由，路由的觀察者管不到（ADR 0018）。
-  final MotionHold _switchMotion = MotionHold();
-
   /// 跟著返回手勢時，每一格把換頁放到重新取樣後的進度。
   late final Ticker _backTicker = createTicker((_) {
     if (_follow != _Follow.dragging) return;
@@ -128,7 +122,6 @@ class _MainPageState extends State<MainPage>
       controller.dispose();
     }
     _backTicker.dispose();
-    _switchMotion.release();
     _switch.dispose();
     _outgoing?.dispose();
     _pageController.dispose();
@@ -227,37 +220,35 @@ class _MainPageState extends State<MainPage>
           ],
         ),
         extendBody: true,
-        bottomNavigationBar: _EntranceSlideUp(
-          child: FloatingTabBar(
-            // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
-            controller: outgoing == null ? _pageController : null,
-            // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
-            currentIndex:
-                _follow == _Follow.dragging || _follow == _Follow.cancelling
-                ? _outgoingIndex
-                : _currentIndex,
-            hidden: _tabBarHidden.value,
-            items: [
-              for (final destination in _destinations)
-                FloatingTabItem(
-                  icon: destination.icon,
-                  selectedIcon: destination.selectedIcon,
-                  label: destination.label,
-                ),
-            ],
-            onSearch: widget.destinations == null ? _openSearch : null,
-            onTap: (index) {
-              if (_currentIndex == index) {
-                if (DateTime.now().difference(_lastTapTime).inMilliseconds <
-                    300) {
-                  _handleDoubleTap(index);
-                }
-                _lastTapTime = DateTime.now();
-                return;
+        bottomNavigationBar: FloatingTabBar(
+          // 換頁中頁面直接到位，膠囊改照選取的分頁用彈簧滑過去。
+          controller: outgoing == null ? _pageController : null,
+          // 返回手勢還沒確定返回前，膠囊留在原本的分頁。
+          currentIndex:
+              _follow == _Follow.dragging || _follow == _Follow.cancelling
+              ? _outgoingIndex
+              : _currentIndex,
+          hidden: _tabBarHidden.value,
+          items: [
+            for (final destination in _destinations)
+              FloatingTabItem(
+                icon: destination.icon,
+                selectedIcon: destination.selectedIcon,
+                label: destination.label,
+              ),
+          ],
+          onSearch: widget.destinations == null ? _openSearch : null,
+          onTap: (index) {
+            if (_currentIndex == index) {
+              if (DateTime.now().difference(_lastTapTime).inMilliseconds <
+                  300) {
+                _handleDoubleTap(index);
               }
-              _switchTo(index);
-            },
-          ),
+              _lastTapTime = DateTime.now();
+              return;
+            }
+            _switchTo(index);
+          },
         ),
       ),
     );
@@ -306,13 +297,11 @@ class _MainPageState extends State<MainPage>
       _follow = follow ? _Follow.dragging : _Follow.none;
     });
     _pageController.jumpToPage(index);
-    _switchMotion.moving = true;
     return true;
   }
 
   void _endSwitch() {
     _stopFollowingBack();
-    _switchMotion.release();
     final outgoing = _outgoing;
     if (outgoing == null) return;
     _switch.stop();
@@ -572,28 +561,6 @@ class MainDestination {
 
   Color backgroundOf(BuildContext context) =>
       background?.call(context) ?? Theme.of(context).scaffoldBackgroundColor;
-}
-
-/// 開 App 進場時分頁列從下緣滑進來（[LaunchEntrance]）；沒有進場時原樣畫。
-class _EntranceSlideUp extends StatelessWidget {
-  const _EntranceSlideUp({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final entrance = LaunchEntrance.maybeOf(context);
-    if (entrance == null) return child;
-    return AnimatedBuilder(
-      animation: entrance.tabBar,
-      child: child,
-      builder: (context, child) => GlassSlide(
-        shown: entrance.tabBar.value,
-        edge: AxisDirection.down,
-        child: child!,
-      ),
-    );
-  }
 }
 
 class _KeepAliveWrapper extends StatefulWidget {

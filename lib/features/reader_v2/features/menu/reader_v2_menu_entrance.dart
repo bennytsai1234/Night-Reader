@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
@@ -9,7 +8,6 @@ import 'package:night_reader/shared/widgets/glass.dart';
 /// 玻璃，淡入時模糊到最後一幀才突然糊上去。[delay] 只用在進場，讓幾塊錯開
 /// 出發。
 ///
-/// 播放中持有 [MotionGate]（ADR 0018），背景下載不會在這幾幀解析章節。
 /// 收起時不接點擊；系統關閉動畫時直接到位。
 class ReaderV2MenuEntrance extends StatefulWidget {
   const ReaderV2MenuEntrance({
@@ -55,15 +53,12 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
     reverseCurve: Curves.easeInCubic.flipped,
   );
 
-  final MotionHold _hold = MotionHold();
-
   double get _delayFraction {
     final total = AppMotion.readerMenuIn + widget.delay;
     return widget.delay.inMicroseconds / total.inMicroseconds;
   }
 
   void _onStatus(AnimationStatus status) {
-    _hold.moving = status.isAnimating;
     if (status.isDismissed) widget.onHidden?.call();
   }
 
@@ -82,7 +77,6 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   @override
   void dispose() {
-    _hold.release();
     _progress.dispose();
     _controller.dispose();
     super.dispose();

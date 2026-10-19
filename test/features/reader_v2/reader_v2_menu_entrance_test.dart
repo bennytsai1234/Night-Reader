@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_entrance.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
@@ -38,9 +37,7 @@ void main() {
       )
       .visible;
 
-  testWidgets('slides in over readerMenuIn without fading, holding the gate', (
-    tester,
-  ) async {
+  testWidgets('slides in over readerMenuIn without fading', (tester) async {
     await pumpEntrance(tester, visible: false);
     expect(topOf(tester), hiddenTop);
     expect(painted(tester), isFalse);
@@ -49,7 +46,6 @@ void main() {
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
     expect(topOf(tester), inExclusiveRange(hiddenTop, 0));
     expect(painted(tester), isTrue);
-    expect(MotionGate.instance.isMoving, isTrue);
     for (final fade in [Opacity, FadeTransition]) {
       expect(
         find.descendant(
@@ -62,7 +58,6 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(topOf(tester), 0);
-    expect(MotionGate.instance.isMoving, isFalse);
   });
 
   testWidgets('a delayed piece waits before it starts moving', (tester) async {

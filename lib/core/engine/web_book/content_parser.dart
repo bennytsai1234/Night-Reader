@@ -2,7 +2,6 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/engine/analyze_rule.dart';
-import 'package:night_reader/core/engine/web_book/parse_worker.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/utils/html_formatter.dart';
@@ -24,67 +23,7 @@ class ContentResult {
 class ContentParser {
   /// 解析正文頁，返回正文內容與下一頁 URL
   /// (對標 Android BookContent.analyzeContent)
-  ///
-  /// 規則不帶 JS 與變數存取時交給背景 isolate 解析（書架上的書在背景整本
-  /// 下載，同時有好幾章在解析），失敗時原地再解析一次。
   static Future<ContentResult> parse({
-    required BookSource source,
-    Book? book,
-    BookChapter? chapter,
-    required String body,
-    required String baseUrl,
-    String? nextChapterUrl,
-  }) async {
-    final contentRule = source.ruleContent;
-    final fit = contentRule == null
-        ? ParseWorkerFit.none
-        : ParseWorker.fit(source, [
-            contentRule.content,
-            contentRule.nextContentUrl,
-          ]);
-    if (fit != ParseWorkerFit.none) {
-      final result = await ParseWorker.run(
-        usesJs: fit == ParseWorkerFit.js,
-        _offMain(
-          source: source,
-          book: book,
-          chapter: chapter,
-          body: body,
-          baseUrl: baseUrl,
-          nextChapterUrl: nextChapterUrl,
-        ),
-      );
-      if (result != null) return result;
-    }
-    return _parse(
-      source: source,
-      book: book,
-      chapter: chapter,
-      body: body,
-      baseUrl: baseUrl,
-      nextChapterUrl: nextChapterUrl,
-    );
-  }
-
-  /// 在只捕捉這幾個參數的地方建立，背景 isolate 才收得到。
-  static Future<ContentResult> Function() _offMain({
-    required BookSource source,
-    Book? book,
-    BookChapter? chapter,
-    required String body,
-    required String baseUrl,
-    String? nextChapterUrl,
-  }) =>
-      () => _parse(
-        source: source,
-        book: book,
-        chapter: chapter,
-        body: body,
-        baseUrl: baseUrl,
-        nextChapterUrl: nextChapterUrl,
-      );
-
-  static Future<ContentResult> _parse({
     required BookSource source,
     Book? book,
     BookChapter? chapter,
