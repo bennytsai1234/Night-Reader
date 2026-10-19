@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test changelog tool
-        # 有沒有寫更新說明，在手動發測試版時才檢查（android-release.yml，ADR 0014）。
+        # 有沒有寫更新說明，在推上 beta 發測試版時才檢查（android-release.yml，ADR 0027）。
         run: sh tool/changelog_test.sh
 
   verify:
