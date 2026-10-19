@@ -37,6 +37,10 @@ jobs:
     timeout-minutes: 20
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}
+      # 推分支直接觸發的，有新的一次就取消舊的：舊提交的結果已經沒有用，留著
+      # 只會讓新的一次排在它後面。發版呼叫的（帶 ref）不取消：每次合併各發
+      # 一版，發版前的驗證要跑完（ADR 0027）。
+      cancel-in-progress: ${{ !inputs.ref }}
     steps:
       - uses: actions/checkout@v6
         with:
