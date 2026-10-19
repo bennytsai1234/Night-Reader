@@ -11,7 +11,6 @@ import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/reader_chapter_content_storage.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 
 /// [task] 的範圍在目前的目錄 [chapters]（依序號排好）裡要下載的章節；分卷
 /// 標題沒有正文、付費還沒買的只會抓到付費提示，都不算。起點或終點那一章
@@ -186,8 +185,8 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
             !isTaskRetiring(task.bookUrl)) {
           await Future.delayed(const Duration(milliseconds: 500));
         }
-        // 等名額時可能有新的動畫開始，所以開抓前才等動畫（ADR 0018）。
-        if (!await _clearToStartChapter(task)) {
+        // 等名額期間可能被暫停或退役，開抓前再看一次。
+        if (!await _mayContinue(task)) {
           stoppedEarly = true;
           break;
         }
@@ -300,21 +299,6 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       return false;
     }
     return waitUntilTaskRunnable(task.bookUrl);
-  }
-
-  /// 開抓下一章之前等畫面上的動畫播完（ADR 0018）：解析在書源 isolate
-  /// （ADR 0028），每一章回到主 isolate 仍要收正文與寫入；已經在抓的章節
-  /// 照常做完。等的時候退役（換源）馬上放行去收尾，等完再看一次期間有沒有
-  /// 被暫停。
-  Future<bool> _clearToStartChapter(DownloadTask task) async {
-    while (true) {
-      if (!await _mayContinue(task)) return false;
-      if (!MotionGate.instance.isMoving) return true;
-      await Future.any<void>([
-        MotionGate.instance.idle,
-        retirementSignal(task.bookUrl),
-      ]);
-    }
   }
 
   Future<DownloadChapterResult> _downloadChapter({

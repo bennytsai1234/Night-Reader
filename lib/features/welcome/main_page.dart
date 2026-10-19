@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/default_data.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
@@ -97,10 +96,6 @@ class _MainPageState extends State<MainPage>
   _Follow _follow = _Follow.none;
   final PredictiveBackTracker _back = PredictiveBackTracker();
 
-  /// 換分頁（含跟著返回手勢、送完或彈回）從開始到結束都持有動作閘門：它
-  /// 不是路由，路由的觀察者管不到（ADR 0018）。
-  final MotionHold _switchMotion = MotionHold();
-
   /// 跟著返回手勢時，每一格把換頁放到重新取樣後的進度。
   late final Ticker _backTicker = createTicker((_) {
     if (_follow != _Follow.dragging) return;
@@ -128,7 +123,6 @@ class _MainPageState extends State<MainPage>
       controller.dispose();
     }
     _backTicker.dispose();
-    _switchMotion.release();
     _switch.dispose();
     _outgoing?.dispose();
     _pageController.dispose();
@@ -306,13 +300,11 @@ class _MainPageState extends State<MainPage>
       _follow = follow ? _Follow.dragging : _Follow.none;
     });
     _pageController.jumpToPage(index);
-    _switchMotion.moving = true;
     return true;
   }
 
   void _endSwitch() {
     _stopFollowingBack();
-    _switchMotion.release();
     final outgoing = _outgoing;
     if (outgoing == null) return;
     _switch.stop();

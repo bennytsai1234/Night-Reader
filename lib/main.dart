@@ -23,7 +23,6 @@ import 'shared/theme/custom_app_theme.dart';
 import 'shared/navigation/app_page_transition.dart';
 import 'shared/navigation/app_route_observer.dart';
 import 'shared/navigation/status_bar.dart';
-import 'shared/navigation/transition_settled.dart';
 import 'shared/widgets/theme_reveal_scope.dart';
 import 'features/association/association_handler_service.dart';
 import 'features/settings/launch_screen_theme_sync.dart';
@@ -287,11 +286,7 @@ class ReaderApp extends StatelessWidget {
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
           scaffoldMessengerKey: scaffoldMessengerKey,
-          navigatorObservers: [
-            appRouteObserver,
-            statusBarPolicy,
-            motionGateObserver,
-          ],
+          navigatorObservers: [appRouteObserver, statusBarPolicy],
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(
             themeSettings.style,

@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -47,14 +46,9 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
 
-  /// 目錄從滑出、捲動到收完都持有動作閘門：抽屜不是路由，路由的觀察者
-  /// 管不到它（ADR 0018）。
-  final MotionHold _motion = MotionHold();
-
   @override
   void initState() {
     super.initState();
-    _motion.moving = true;
     widget.listenable?.addListener(_handleChanged);
   }
 
@@ -79,7 +73,6 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   void dispose() {
     widget.listenable?.removeListener(_handleChanged);
     _scrollController.dispose();
-    _motion.release();
     widget.onClosed?.call();
     super.dispose();
   }

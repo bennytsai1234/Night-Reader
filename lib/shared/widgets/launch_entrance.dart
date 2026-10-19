@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 
 import '../theme/app_tokens.dart';
 import 'skeleton_reveal.dart';
@@ -11,7 +10,7 @@ import 'skeleton_reveal.dart';
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架骨架用
 /// [maybeOf] 取得各自的進度。從主頁面推出去的頁面不在底下，不受影響。
-/// 系統要求減少動態時直接到位。播放中持有 [MotionGate]（ADR 0018）。
+/// 系統要求減少動態時直接到位。
 class LaunchEntrance extends StatefulWidget {
   const LaunchEntrance({super.key, required this.child});
 
@@ -82,23 +81,13 @@ class LaunchEntranceMotion {
 
 class _LaunchEntranceState extends State<LaunchEntrance>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(vsync: this)
-    ..addStatusListener((_) => _syncHold());
+  late final AnimationController _controller = AnimationController(vsync: this);
   LaunchEntranceMotion? _motion;
-  final MotionHold _hold = MotionHold();
-
-  /// 主頁面在畫面上、進場播得動；被推上來的頁面蓋住時為 false。
-  bool _onScreen = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 進場還沒播完就被別頁蓋住時，動畫停著，閘門要先放開，回來再接著持有。
-    _onScreen = TickerMode.valuesOf(context).enabled;
-    if (_motion != null) {
-      _syncHold();
-      return;
-    }
+    if (_motion != null) return;
     // 時長在第一次建畫面時定下來，播放中改設定不影響這一次。
     final skeleton = SkeletonReveal.of(context).duration;
     _controller.duration = LaunchEntranceMotion.totalFor(skeleton);
@@ -108,17 +97,13 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       return;
     }
     // 第一幀只畫底色、和系統啟動畫面一樣，畫完才開始進場。
-    _syncHold();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _controller.forward();
     });
   }
 
-  void _syncHold() => _hold.moving = _onScreen && !_controller.isCompleted;
-
   @override
   void dispose() {
-    _hold.release();
     _controller.dispose();
     super.dispose();
   }

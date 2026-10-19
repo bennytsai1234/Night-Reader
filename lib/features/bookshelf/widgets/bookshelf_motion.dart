@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:night_reader/core/services/motion_gate.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 /// 書架清單的版面動畫：換排序、或書因閱讀移到最前面時，書卡從舊位置平滑
@@ -31,13 +30,11 @@ class BookshelfLayoutMotion {
     _controller
       ..addListener(_repaintAnimated)
       ..addStatusListener((status) {
-        _syncHold();
         if (status == AnimationStatus.completed) _finish();
       });
     _exit
       ..addListener(_repaintLeaving)
       ..addStatusListener((status) {
-        _syncHold();
         if (status != AnimationStatus.completed) return;
         _returning.clear();
         if (_leaving.isEmpty) {
@@ -54,7 +51,6 @@ class BookshelfLayoutMotion {
 
   final AnimationController _controller;
   final AnimationController _exit;
-  final MotionHold _hold = MotionHold();
   final Set<_RenderBookshelfMotionItem> _items = {};
 
   /// 正在淡出的書，以及這一段淡出開始時的透明度（淡出途中又移出別本時，
@@ -64,9 +60,6 @@ class BookshelfLayoutMotion {
   /// 淡出途中又回到資料裡的書，以及這一段淡回開始時的透明度；跟著 [_exit]
   /// 淡回不透明。
   final Map<String, double> _returning = {};
-
-  void _syncHold() =>
-      _hold.moving = _controller.isAnimating || _exit.isAnimating;
 
   /// 淡出或淡回中的書此刻的透明度；兩者都不是時為 null。
   double? _exitOpacity(String id) {
@@ -110,7 +103,6 @@ class BookshelfLayoutMotion {
     _leaving.clear();
     _returning.clear();
     _exit.reset();
-    _syncHold();
   }
 
   /// 這一輪開始前每張書卡在螢幕上的位置。
@@ -243,8 +235,6 @@ class BookshelfLayoutMotion {
   }
 
   void _finish() {
-    // 中途停下不會發出狀態變化，在這裡一起放開。
-    _hold.release();
     _before = const {};
     _beforeOpacity = const {};
     for (final item in _items) {
@@ -259,7 +249,6 @@ class BookshelfLayoutMotion {
   }
 
   void dispose() {
-    _hold.release();
     _controller.dispose();
     _exit.dispose();
   }

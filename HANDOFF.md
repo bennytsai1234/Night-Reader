@@ -12,7 +12,6 @@
 
 ## 等使用者決定或動手
 
-- **下載與檢查更新還要不要等動畫播完**（2026-10-19）：ADR 0018 讓背景下載與書架檢查更新在動畫或捲動時停著（`MotionGate`），理由是書源解析在主執行緒。解析搬走後，主 isolate 每一章只剩收正文與寫入。放寬的話一直捲時下載也會繼續；還沒問使用者，也還沒量過剩下的工作多重。`bookshelf_update_mixin.dart` 與 `reader_v2_menu_entrance.dart` 的註解還寫著舊理由，決定後一起改。
 
 - **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。

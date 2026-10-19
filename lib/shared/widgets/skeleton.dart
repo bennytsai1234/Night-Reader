@@ -5,8 +5,6 @@ import 'package:flutter/rendering.dart';
 
 import '../theme/app_tokens.dart';
 
-import 'package:night_reader/core/services/motion_gate.dart';
-
 import 'cover_reveal.dart';
 import 'skeleton_reveal.dart';
 
@@ -58,10 +56,6 @@ class _SkeletonState extends State<Skeleton>
     curve: AppMotion.fadeCurve,
   );
 
-  /// 畫面上看得到的骨架在呼吸時持有 [MotionGate]（ADR 0018）；被別的頁面
-  /// 蓋住（TickerMode 關掉）時放開。
-  final MotionHold _hold = MotionHold();
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -70,13 +64,10 @@ class _SkeletonState extends State<Skeleton>
     } else if (!_controller.isAnimating) {
       _controller.repeat(reverse: true);
     }
-    _hold.moving =
-        _controller.isAnimating && TickerMode.valuesOf(context).enabled;
   }
 
   @override
   void dispose() {
-    _hold.release();
     _controller.dispose();
     super.dispose();
   }
