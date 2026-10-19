@@ -121,12 +121,10 @@ Dart isolate 之間只能傳訊息，不共用記憶體（[Dart: Isolates](https
 
 ## 後續：書源 isolate（2026-10-19）
 
-照使用者定的範圍做了阻礙一到四，第一批搬搜尋與檢查更新（ADR 0028）：
+做了阻礙一到五（ADR 0028）。第一批搬搜尋與檢查更新，同一天使用者決定其他呼叫端全部搬：
 
 - **阻礙一（WebView）**：書源 isolate 把渲染請求送回主 isolate，照上面的做法。
 - **阻礙二（資料庫）**：改成 `DriftIsolate.spawn` 加 `DatabaseConnection.delayed`，書源 isolate 連到同一個 drift isolate。測試確認書源 isolate 的寫入會更新主 isolate 的 `watch()`。
-- **阻礙三（Cookie）**：擁有者與上面的建議相反，放在主 isolate，書源 isolate 經代理讀寫。書源 isolate 會被同步的規則 JS 佔住好幾秒，主 isolate 的事件迴圈每幀都會回來；使用者定了停損點，一半在主 isolate、一半在書源 isolate 的狀態可能長期存在。`CookieStore` 與 `CacheManager` 的記憶體層兩邊各一份，寫入互相轉送。
+- **阻礙三（Cookie）**：擁有者與上面的建議相反，放在主 isolate，書源 isolate 經代理讀寫。書源 isolate 會被同步的規則 JS 佔住好幾秒，主 isolate 的事件迴圈每幀都會回來，主 isolate 的 WebView 也要讀寫 Cookie。`CookieStore` 與 `CacheManager` 的記憶體層兩邊各一份，寫入互相轉送。
 - **阻礙四（全域狀態）**：限流紀錄同 Cookie 放在主 isolate；`AppLog` 送回主 isolate；繁簡字典與規則的 fetch polyfill 由主 isolate 讀好傳過去。
-- **阻礙五（呼叫端）**：只改了搜尋（`search_model.dart`）與檢查更新（`book_update_service.dart`，書架與書籍詳情共用）。檢查更新在書源 isolate 寫回目錄，只傳回新章節數。
-
-停損點由使用者實際使用判斷。
+- **阻礙五（呼叫端）**：不逐個改，改在所有呼叫端都經過的 `BookSourceService`，由它送進書源 isolate；規則在書與章節複本上改的欄位跑完抄回來。檢查更新（`book_update_service.dart`）整段在書源 isolate 跑，寫回目錄後只傳回新章節數。

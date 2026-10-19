@@ -4,19 +4,16 @@
 
 ## 還沒合併的工作
 
-兩條分支都已推上、全套測試通過，等使用者說合併。照 AGENTS.md 併成一個以 `beta` 為目標的 PR；兩條都改了 `HANDOFF.md` 與 `CHANGELOG.md` 的「未發布」，併的時候要整理成一份。
+三條分支都已推上、全套測試通過，等使用者說合併。照 AGENTS.md 併成一個以 `beta` 為目標的 PR；三條都改了 `CHANGELOG.md` 的「未發布」，前兩條也改了 `HANDOFF.md`，併的時候要整理成一份。
 
 - **`fix/reader-jump-fails-during-open`**：開書第一次還沒排好就跳到取不到的章節（包括跳章途中又改排版、沿用同一個目標），不再整頁顯示「閱讀內容暫時無法顯示」，改回開書的位置重新開並提示原因，已改好的排版保留（`ReaderV2Runtime._finishContentUnavailable`）。要去的就是開書那一章時照舊標成無法顯示。
-- **`t3/reader-background-isolation`**：書源 isolate 第一批（ADR 0028）。搜尋與檢查更新（書架、書籍詳情共用）的抓取與解析改在常駐的書源 isolate；資料庫兩邊連同一個 drift isolate，Cookie 檔、限流與 WebView 由主 isolate 擁有、書源 isolate 經代理使用，記憶體快取兩邊互相轉送寫入。`flutter_js` fork 升到 `nightreader.4`（`fetchPolyfillSource`）。
+- **`t3/reader-background-isolation`**：書源 isolate（ADR 0028）。所有書源工作都由 `BookSourceService` 送進常駐的書源 isolate（閱讀器抓正文、下載、搜尋、檢查更新、換源、換封面、發現與發現分類、匯出、書源除錯），規則在書與章節複本上改的欄位跑完抄回呼叫端；資料庫兩邊連同一個 drift isolate，Cookie 檔、限流與 WebView 由主 isolate 擁有、書源 isolate 經代理使用，記憶體快取兩邊互相轉送寫入。`flutter_js` fork 升到 `nightreader.4`（`fetchPolyfillSource`）。已併入 `beta` 最新的提交。
+- **`t3/fix-shelf-transition-jumps`（PR #79）**：開 App 時整個畫面先是骨架，簡繁字典在背景解析，書架一次換場（ADR 0025）。Codex 已審、發現已修。PR 是在 ADR 0027 之前開的，目標還是 `main`，合併時要改成 `beta`（或併進上面那一個 PR）。
 
 ## 等使用者決定或動手
 
-- **書源 isolate 要不要再搬其他呼叫端**（2026-10-19）。使用者定的停損點：搜尋與書架搬完後，實際使用已感覺不到剩下的卡頓，就不再搬。使用者問過剩下的能不能切，回答過的評估：
-  - 抓正文：最值得，閱讀器開沒下載過的章節與背景下載都經過 `ChapterContentPreparationPipeline` 的 `service.getContent`，改一處兩邊受益；ADR 0018 記的卡頓就是這兩個情境。建議若使用者覺得閱讀或下載還會頓，下一步只搬這個。
-  - 下載重抓目錄（`download_executor.dart`）、書籍詳情的詳情與目錄、換源（`source_switch_service.dart`，精確搜尋的過濾回呼只捕捉書名與作者，可以送）、換封面、發現、匯出：都是一兩個呼叫，照搜尋的改法。
-  - 書源除錯與書源編輯器：要把除錯紀錄一步步即時傳回畫面，得另加串流通道，效益最小，不建議搬。
-  - 每個呼叫端都有測試注入假的書源服務，假物件送不進書源 isolate；照 `BookUpdateService` 的改法，工作在哪個 isolate 跑就用那邊 `getIt` 的。
-  - 取捨：書源 isolate 只有一條執行緒，正文搬過去後，搜尋時某個書源的 JS 算一兩秒，點開的章節要排在它後面（畫面不頓，正文晚一點，合 ADR 0023）。要避免互相排隊可以讓閱讀與下載另開一個書源 isolate，多一份 JS 引擎與記憶體。
+- **`ParseWorker` 要不要拿掉**（2026-10-19）：書源工作都搬進書源 isolate 後，`ParseWorker` 只剩書源 isolate 開不起來、改回主 isolate 執行時才用到。拿掉可以少一整套背景解析與它的測試，代價是那種少見的情況下解析回到主執行緒；還沒問使用者。
+- **下載與檢查更新還要不要等動畫播完**（2026-10-19）：ADR 0018 讓背景下載與書架檢查更新在動畫或捲動時停著（`MotionGate`），理由是書源解析在主執行緒。解析搬走後，主 isolate 每一章只剩收正文與寫入。放寬的話一直捲時下載也會繼續；還沒問使用者，也還沒量過剩下的工作多重。`bookshelf_update_mixin.dart` 與 `reader_v2_menu_entrance.dart` 的註解還寫著舊理由，決定後一起改。
 
 - **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。

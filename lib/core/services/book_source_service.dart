@@ -3,6 +3,9 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/core/models/source/explore_kind.dart';
+import 'package:night_reader/core/engine/explore_url_parser.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/complete_content_fetcher.dart';
 import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -12,19 +15,22 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
+///
+/// 書源的抓取與解析都在書源 isolate 執行（ADR 0028），畫面執行緒只收結果；
+/// 已經在書源 isolate 裡（例如規則 JS 呼叫回來）或沒開書源 isolate 時原地
+/// 執行。送過去的書與章節是複本，規則在複本上改的欄位（例如
+/// `book.putVariable`）跑完後抄回傳入的物件，和原地執行時一樣。
 class BookSourceService {
   /// 獲取書籍詳情 (對標 getBookInfoAwait)
   Future<Book> getBookInfo(
     BookSource source,
     Book book, {
     CancelToken? cancelToken,
-  }) async {
-    return await WebBook.getBookInfoAwait(
-      source,
-      book,
-      cancelToken: cancelToken,
-    );
-  }
+  }) => _runOnSource(
+    _bookInfoTask(source, book),
+    book: book,
+    cancelToken: cancelToken,
+  );
 
   /// 獲取目錄列表 (對標 getChapterListAwait)
   Future<List<BookChapter>> getChapterList(
@@ -34,16 +40,17 @@ class BookSourceService {
     int? pageConcurrency,
     CancelToken? cancelToken,
     bool requireComplete = false,
-  }) async {
-    return await WebBook.getChapterListAwait(
+  }) => _runOnSource(
+    _chapterListTask(
       source,
       book,
       chapterLimit: chapterLimit,
       pageConcurrency: pageConcurrency,
-      cancelToken: cancelToken,
       requireComplete: requireComplete,
-    );
-  }
+    ),
+    book: book,
+    cancelToken: cancelToken,
+  );
 
   /// 獲取正文內容。
   ///
@@ -56,18 +63,23 @@ class BookSourceService {
     String? nextChapterUrl,
     int? pageConcurrency,
     CancelToken? cancelToken,
-  }) async {
-    return await CompleteContentFetcher.fetch(
+  }) => _runOnSource(
+    _contentTask(
       source,
       book,
       chapter,
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
-      cancelToken: cancelToken,
-    );
-  }
+    ),
+    book: book,
+    chapter: chapter,
+    cancelToken: cancelToken,
+  );
 
   /// 搜尋書籍 (對標 searchBookAwait)
+  ///
+  /// [filter]、[shouldBreak] 會跟著送進書源 isolate，要在只捕捉書名、作者
+  /// 這類資料的頂層函式裡建立（`CODING_STANDARDS.md`）。
   Future<List<SearchBook>> searchBooks(
     BookSource source,
     String key, {
@@ -75,45 +87,46 @@ class BookSourceService {
     bool Function(String name, String author)? filter,
     bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
-  }) async {
-    return await WebBook.searchBookAwait(
+  }) => _runOnSource(
+    _searchTask(
       source,
       key,
       page: page,
       filter: filter,
       shouldBreak: shouldBreak,
-      cancelToken: cancelToken,
-    );
-  }
+    ),
+    cancelToken: cancelToken,
+  );
 
   /// 發現/探索書籍 (對標 exploreBookAwait)
   Future<List<SearchBook>> exploreBooks(
     BookSource source,
     String url, {
-    int page = 1,
+    int? page = 1,
     CancelToken? cancelToken,
-  }) async {
-    return await WebBook.exploreBookAwait(
-      source,
-      url,
-      page: page,
-      cancelToken: cancelToken,
-    );
-  }
+  }) => _runOnSource(
+    _exploreTask(source, url, page: page),
+    cancelToken: cancelToken,
+  );
 
-  /// 精確搜尋
+  /// 發現頁的分類（對標 BookSource.getExploreKinds）；`<js>`、`@js:` 規則
+  /// 也在書源 isolate 執行。
+  Future<List<ExploreKind>> exploreKinds(
+    String? exploreUrl, {
+    BookSource? source,
+  }) => _runOnSource(_exploreKindsTask(exploreUrl, source));
+
+  /// 精確搜尋：書名與作者都相同的第一本。
   Future<List<SearchBook>> preciseSearch(
     BookSource source,
     String name,
     String author,
-  ) async {
-    return await WebBook.searchBookAwait(
-      source,
-      name,
-      filter: (n, a) => n == name && a == author,
-      shouldBreak: (size) => size >= 1,
-    );
-  }
+  ) => searchBooks(
+    source,
+    name,
+    filter: _exactBook(name, author),
+    shouldBreak: stopAtFirstSearchResult,
+  );
 
   Future<List<Book>> importBookshelf(String url) async {
     final result = await BookshelfExchangeService().importFromUrl(url);
@@ -133,3 +146,215 @@ class BookSourceService {
   Future<List<BookChapter>> getBookChapters(String bookUrl) =>
       getIt<ChapterDao>().getByBook(bookUrl);
 }
+
+/// 搜尋找到第一本就停，給 [BookSourceService.searchBooks] 的 `shouldBreak`。
+/// 頂層函式送得進書源 isolate。
+bool stopAtFirstSearchResult(int size) => size >= 1;
+
+bool Function(String name, String author) _exactBook(
+  String name,
+  String author,
+) =>
+    (n, a) => n == name && a == author;
+
+// ── 送進書源 isolate 的工作 ─────────────────────────────────────────
+//
+// 每個工作在只捕捉書源、書、章節與參數的頂層函式裡建立，連同捕捉的變數複製
+// 到書源 isolate。工作把它手上的書與章節（書源 isolate 裡是複本）一起傳回，
+// 讓 [_runOnSource] 把規則改過的欄位抄回來。
+
+typedef _SourceTask<R> = Future<_Ran<R>> Function(CancelToken cancelToken);
+
+final class _Ran<R> {
+  const _Ran(this.result, {this.book, this.chapter});
+
+  final R result;
+  final Book? book;
+  final BookChapter? chapter;
+}
+
+_SourceTask<Book> _bookInfoTask(BookSource source, Book book) =>
+    (cancelToken) async => _Ran(
+      await WebBook.getBookInfoAwait(source, book, cancelToken: cancelToken),
+      book: book,
+    );
+
+_SourceTask<List<BookChapter>> _chapterListTask(
+  BookSource source,
+  Book book, {
+  required int? chapterLimit,
+  required int? pageConcurrency,
+  required bool requireComplete,
+}) =>
+    (cancelToken) async => _Ran(
+      await WebBook.getChapterListAwait(
+        source,
+        book,
+        chapterLimit: chapterLimit,
+        pageConcurrency: pageConcurrency,
+        cancelToken: cancelToken,
+        requireComplete: requireComplete,
+      ),
+      book: book,
+    );
+
+_SourceTask<String> _contentTask(
+  BookSource source,
+  Book book,
+  BookChapter chapter, {
+  required String? nextChapterUrl,
+  required int? pageConcurrency,
+}) =>
+    (cancelToken) async => _Ran(
+      await CompleteContentFetcher.fetch(
+        source,
+        book,
+        chapter,
+        nextChapterUrl: nextChapterUrl,
+        pageConcurrency: pageConcurrency,
+        cancelToken: cancelToken,
+      ),
+      book: book,
+      chapter: chapter,
+    );
+
+_SourceTask<List<SearchBook>> _searchTask(
+  BookSource source,
+  String key, {
+  required int page,
+  required bool Function(String name, String author)? filter,
+  required bool Function(int size)? shouldBreak,
+}) =>
+    (cancelToken) async => _Ran(
+      await WebBook.searchBookAwait(
+        source,
+        key,
+        page: page,
+        filter: filter,
+        shouldBreak: shouldBreak,
+        cancelToken: cancelToken,
+      ),
+    );
+
+_SourceTask<List<SearchBook>> _exploreTask(
+  BookSource source,
+  String url, {
+  required int? page,
+}) =>
+    (cancelToken) async => _Ran(
+      await WebBook.exploreBookAwait(
+        source,
+        url,
+        page: page,
+        cancelToken: cancelToken,
+      ),
+    );
+
+_SourceTask<List<ExploreKind>> _exploreKindsTask(
+  String? exploreUrl,
+  BookSource? source,
+) =>
+    (cancelToken) async =>
+        _Ran(await ExploreUrlParser.parseAsync(exploreUrl, source: source));
+
+/// 在書源 isolate 執行 [task]，把規則在 [book]、[chapter] 複本上改的欄位
+/// 抄回來。只抄這次跑的期間有變的欄位：同一段時間裡畫面執行緒改了這本書
+/// （例如閱讀進度），規則沒動的欄位不會被舊值蓋掉。
+Future<R> _runOnSource<R>(
+  _SourceTask<R> task, {
+  Book? book,
+  BookChapter? chapter,
+  CancelToken? cancelToken,
+}) async {
+  final bookBefore = book == null ? null : _readFields(_bookFields, book);
+  final chapterBefore = chapter == null
+      ? null
+      : _readFields(_chapterFields, chapter);
+  final ran = await SourceIsolate.run(task, cancelToken: cancelToken);
+  final ranBook = ran.book;
+  if (book != null && ranBook != null && !identical(ranBook, book)) {
+    _copyChangedFields(_bookFields, bookBefore!, from: ranBook, to: book);
+  }
+  final ranChapter = ran.chapter;
+  if (chapter != null &&
+      ranChapter != null &&
+      !identical(ranChapter, chapter)) {
+    _copyChangedFields(
+      _chapterFields,
+      chapterBefore!,
+      from: ranChapter,
+      to: chapter,
+    );
+  }
+  return ran.result;
+}
+
+typedef _Field<T> = (Object? Function(T), void Function(T, Object?));
+
+List<Object?> _readFields<T>(List<_Field<T>> fields, T target) => [
+  for (final (read, _) in fields) read(target),
+];
+
+void _copyChangedFields<T>(
+  List<_Field<T>> fields,
+  List<Object?> before, {
+  required T from,
+  required T to,
+}) {
+  for (var i = 0; i < fields.length; i++) {
+    final (read, write) = fields[i];
+    final value = read(from);
+    if (value != before[i]) write(to, value);
+  }
+}
+
+/// 規則能改的書籍欄位：規則 JS 的 `book.xxx = …`、`book.putVariable`
+/// （`JsExtensions._setBookField`），以及帶 JS 的詳情解析原地填入的欄位。
+final List<_Field<Book>> _bookFields = [
+  ((b) => b.bookUrl, (b, v) => b.bookUrl = v as String),
+  ((b) => b.tocUrl, (b, v) => b.tocUrl = v as String),
+  ((b) => b.origin, (b, v) => b.origin = v as String),
+  ((b) => b.originName, (b, v) => b.originName = v as String),
+  ((b) => b.name, (b, v) => b.name = v as String),
+  ((b) => b.author, (b, v) => b.author = v as String),
+  ((b) => b.kind, (b, v) => b.kind = v as String?),
+  ((b) => b.coverUrl, (b, v) => b.coverUrl = v as String?),
+  ((b) => b.intro, (b, v) => b.intro = v as String?),
+  ((b) => b.latestChapterTitle, (b, v) => b.latestChapterTitle = v as String?),
+  ((b) => b.wordCount, (b, v) => b.wordCount = v as String?),
+  ((b) => b.type, (b, v) => b.type = v as int),
+  ((b) => b.chapterIndex, (b, v) => b.chapterIndex = v as int),
+  ((b) => b.variable, (b, v) => b.variable = v as String?),
+  ((b) => b.isInBookshelf, (b, v) => b.isInBookshelf = v as bool),
+  (
+    (b) => b.readConfig?.reverseToc,
+    (b, v) => (b.readConfig ??= ReadConfig()).reverseToc = v as bool? ?? false,
+  ),
+  (
+    (b) => b.readConfig?.useReplaceRule,
+    (b, v) => (b.readConfig ??= ReadConfig()).useReplaceRule = v as bool?,
+  ),
+  ((b) => b.infoHtml, (b, v) => b.infoHtml = v as String?),
+  ((b) => b.tocHtml, (b, v) => b.tocHtml = v as String?),
+];
+
+/// 規則能改的章節欄位（`JsExtensions._setChapterField`、`chapter.putVariable`）。
+final List<_Field<BookChapter>> _chapterFields = [
+  ((c) => c.url, (c, v) => c.url = v as String),
+  ((c) => c.title, (c, v) => c.title = v as String),
+  ((c) => c.baseUrl, (c, v) => c.baseUrl = v as String),
+  ((c) => c.bookUrl, (c, v) => c.bookUrl = v as String),
+  ((c) => c.index, (c, v) => c.index = v as int),
+  ((c) => c.isVolume, (c, v) => c.isVolume = v as bool),
+  ((c) => c.isVip, (c, v) => c.isVip = v as bool),
+  ((c) => c.isPay, (c, v) => c.isPay = v as bool),
+  ((c) => c.resourceUrl, (c, v) => c.resourceUrl = v as String?),
+  ((c) => c.tag, (c, v) => c.tag = v as String?),
+  ((c) => c.wordCount, (c, v) => c.wordCount = v as String?),
+  ((c) => c.start, (c, v) => c.start = v as int?),
+  ((c) => c.end, (c, v) => c.end = v as int?),
+  ((c) => c.startFragmentId, (c, v) => c.startFragmentId = v as String?),
+  ((c) => c.endFragmentId, (c, v) => c.endFragmentId = v as String?),
+  ((c) => c.variable, (c, v) => c.variable = v as String?),
+  ((c) => c.content, (c, v) => c.content = v as String?),
+];

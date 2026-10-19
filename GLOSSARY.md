@@ -41,7 +41,7 @@ _Avoid_: 隱藏封面、預設封面模式
 _Avoid_: 來源、站點、source（不指明時）
 
 **書源 isolate**：
-常駐的背景 isolate，搜尋與檢查更新的書源抓取與解析（含規則 JS）在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
+常駐的背景 isolate，書源的抓取與解析（含規則 JS）都在這裡跑，主 isolate 只收結果（`SourceIsolate`，ADR 0028）；閱讀器抓正文、下載、搜尋、檢查更新、換源、發現與書源除錯都經過它。資料庫和主 isolate 連同一個；Cookie 檔、限流與 WebView 由主 isolate 擁有，經代理使用。
 _Avoid_: 背景執行緒、worker（不指明是哪一個時；`ParseWorker` 是另一個只做純計算解析的背景 isolate）
 
 **書架自動下載**：

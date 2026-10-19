@@ -18,9 +18,11 @@ import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/book_update_service.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
 import 'package:night_reader/core/services/cookie_store.dart';
@@ -158,6 +160,8 @@ void main() {
             '<div class="list"><a href="/c/1">第一章</a>'
             '<a href="/c/2">第二章</a><a href="/c/3">第三章</a></div>',
           );
+        case '/c/1':
+          request.response.write('<p>第一章的正文，夜裡讀起來剛好。</p>');
         default:
           request.response.statusCode = HttpStatus.notFound;
       }
@@ -416,6 +420,103 @@ void main() {
     final chapters = await ChapterDao(db).getByBook(book.bookUrl);
     expect(chapters.map((c) => c.title), ['第一章', '第二章', '第三章']);
     expect((await BookDao(db).getByUrl(book.bookUrl))!.totalChapterNum, 3);
+  });
+
+  group('BookSourceService work goes through the source isolate', () {
+    late List<String> logs;
+    late BookSource source;
+
+    setUp(() {
+      logs = [];
+      AppLog.delegate = (message, error, stackTrace, toast) =>
+          logs.add(message);
+      source = BookSource.fromJson({
+        'bookSourceUrl': baseUrl,
+        'bookSourceName': '本機',
+        'searchUrl': '$baseUrl/search',
+        'exploreUrl': '玄幻::$baseUrl/search',
+        'ruleSearch': {
+          'bookList': 'class.item',
+          'name': 'a@text',
+          'author': 'class.author@text',
+          'bookUrl': 'a@href',
+        },
+        'ruleBookInfo': {'name': 'tag.h1@text', 'author': 'class.author@text'},
+        'ruleToc': {
+          'chapterList': 'class.list@a',
+          'chapterName': 'a@text',
+          'chapterUrl': 'a@href',
+        },
+        'ruleContent': {'content': 'tag.p@text'},
+      });
+    });
+
+    tearDown(() {
+      AppLog.delegate = null;
+      // 送不進書源 isolate 時會改在主 isolate 執行並記下來，結果照樣對。
+      expect(logs.where((m) => m.contains('送不進書源 isolate')), isEmpty);
+    });
+
+    test('book info, chapter list and content', () async {
+      final service = BookSourceService();
+      final book = Book(bookUrl: '$baseUrl/book/1', origin: baseUrl);
+
+      final info = await service.getBookInfo(source, book);
+      final chapters = await service.getChapterList(source, info);
+      final content = await service.getContent(source, info, chapters.first);
+
+      expect((info.name, info.author), ('夜讀', '作者'));
+      expect(chapters.map((c) => c.title), ['第一章', '第二章', '第三章']);
+      expect(content, contains('第一章的正文'));
+    });
+
+    test('searches that stop at the first exact match', () async {
+      final found = await BookSourceService().preciseSearch(source, '夜讀', '作者');
+
+      expect(found.map((b) => (b.name, b.author)), [('夜讀', '作者')]);
+    });
+
+    test('explore kinds and explore pages', () async {
+      final service = BookSourceService();
+
+      final kinds = await service.exploreKinds(
+        source.exploreUrl,
+        source: source,
+      );
+      final books = await service.exploreBooks(source, kinds.single.url!);
+
+      expect(kinds.single.title, '玄幻');
+      expect(books.map((b) => b.name), ['夜讀']);
+    });
+
+    test(
+      'what rules write on the book and chapter comes back to the caller',
+      () async {
+        source.ruleContent!.content =
+            'tag.p@text@js:book.putVariable("seen", "正文");'
+            'chapter.putVariable("page", "1");result';
+        final book = Book(
+          bookUrl: '$baseUrl/book/1',
+          origin: baseUrl,
+          name: '夜讀',
+        );
+        final chapter = BookChapter(
+          title: '第一章',
+          url: '$baseUrl/c/1',
+          bookUrl: book.bookUrl,
+        );
+
+        final content = BookSourceService().getContent(source, book, chapter);
+        // 抓的期間畫面執行緒改了規則沒動的欄位，不會被複本的舊值蓋回去。
+        book.name = '夜讀（改）';
+        expect(await content, contains('第一章的正文'));
+
+        expect(book.getVariable('seen'), '正文');
+        expect(chapter.getVariable('page'), '1');
+        expect(book.name, '夜讀（改）');
+      },
+      skip: quickJsUnavailableReason(),
+    );
   });
 }
 

@@ -302,9 +302,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
     return waitUntilTaskRunnable(task.bookUrl);
   }
 
-  /// 開抓下一章之前等畫面上的動畫播完：帶 JS 的書源在主執行緒解析正文，
-  /// 會把動畫卡掉（ADR 0018）；已經在抓的章節照常做完。等的時候退役（換
-  /// 源）馬上放行去收尾，等完再看一次期間有沒有被暫停。
+  /// 開抓下一章之前等畫面上的動畫播完（ADR 0018）：解析在書源 isolate
+  /// （ADR 0028），每一章回到主 isolate 仍要收正文與寫入；已經在抓的章節
+  /// 照常做完。等的時候退役（換源）馬上放行去收尾，等完再看一次期間有沒有
+  /// 被暫停。
   Future<bool> _clearToStartChapter(DownloadTask task) async {
     while (true) {
       if (!await _mayContinue(task)) return false;

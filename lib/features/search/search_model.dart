@@ -5,8 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
-import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
-import 'package:night_reader/core/engine/web_book/web_book_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/search_book_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
@@ -65,17 +64,6 @@ int searchRelevanceRank(SearchBook book, String key) {
 }
 
 String _normalizeBookUrl(String value) => value.trim().toLowerCase();
-
-/// 在書源 isolate 搜一個書源：抓取與解析都不在畫面執行緒上。工作會送進
-/// 書源 isolate，所以在頂層函式裡建立，只捕捉書源與關鍵字。
-Future<List<SearchBook>> _searchInSourceIsolate(
-  BookSource source,
-  String key,
-  CancelToken cancelToken,
-) => SourceIsolate.run(
-  (token) => WebBook.searchBookAwait(source, key, cancelToken: token),
-  cancelToken: cancelToken,
-);
 
 /// 同源去重的索引：同一書源裡網址相同（兩邊都有網址時），或任一邊沒有網址
 /// 而書名與作者相同，就算同一本。每個書源回來都要比對，用雜湊查找，不逐本
@@ -208,6 +196,7 @@ class SearchModel {
   /// 分組裡保留逐源回傳的原始書本，合併卡另外複製。
   final _ResultGroups _groups = _ResultGroups();
   final _SameSourceIndex _rawIndex = _SameSourceIndex();
+  final BookSourceService _sources = BookSourceService();
   List<SearchBook> _searchBooks = [];
   CancelToken? _cancelToken;
 
@@ -432,7 +421,8 @@ class SearchModel {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        _searchInSourceIsolate(source, variant, cancelToken)
+        _sources
+            .searchBooks(source, variant, cancelToken: cancelToken)
             .timeout(const Duration(seconds: 30))
             .then<List<SearchBook>?>(
               (books) => books,

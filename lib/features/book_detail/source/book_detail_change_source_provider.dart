@@ -15,6 +15,31 @@ import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/features/search/search_model.dart';
 import 'package:pool/pool.dart';
 
+/// 搜尋結果是不是要換源的這本書：書名（與作者）正規化後相同。
+bool _isSameBookAs(
+  String name,
+  String? author,
+  String bookName,
+  String bookAuthor,
+  bool checkAuthor,
+) {
+  if (normalizeSearchText(name) != normalizeSearchText(bookName)) {
+    return false;
+  }
+  return !checkAuthor ||
+      normalizeSearchText(author) == normalizeSearchText(bookAuthor);
+}
+
+/// 換源搜尋的過濾條件，跟著搜尋送進書源 isolate，所以在只捕捉書名與作者的
+/// 頂層函式裡建立。
+bool Function(String name, String author) _sameBookFilter(
+  String bookName,
+  String bookAuthor, {
+  required bool checkAuthor,
+}) =>
+    (name, author) =>
+        _isSameBookAs(name, author, bookName, bookAuthor, checkAuthor);
+
 class BookDetailChangeSourceProvider extends ChangeNotifier {
   BookDetailChangeSourceProvider(
     this.book, {
@@ -155,8 +180,11 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               final results = await _searchNames(
                 source,
                 names,
-                (name, author) =>
-                    _isSameBook(name, author, checkAuthor: shouldCheckAuthor),
+                _sameBookFilter(
+                  book.name,
+                  book.author,
+                  checkAuthor: shouldCheckAuthor,
+                ),
               );
               if (!_isSearchActive(searchId)) return;
               _replaceSourceResults(source.bookSourceUrl, results);
@@ -219,7 +247,7 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
               source,
               name,
               filter: filter,
-              shouldBreak: (size) => size >= 1,
+              shouldBreak: stopAtFirstSearchResult,
               cancelToken: cancelToken,
             )
             .timeout(
@@ -248,13 +276,8 @@ class BookDetailChangeSourceProvider extends ChangeNotifier {
     return [for (final books in succeeded) ...books];
   }
 
-  bool _isSameBook(String name, String? author, {required bool checkAuthor}) {
-    if (normalizeSearchText(name) != normalizeSearchText(book.name)) {
-      return false;
-    }
-    return !checkAuthor ||
-        normalizeSearchText(author) == normalizeSearchText(book.author);
-  }
+  bool _isSameBook(String name, String? author, {required bool checkAuthor}) =>
+      _isSameBookAs(name, author, book.name, book.author, checkAuthor);
 
   Future<BookSource?> findSourceByUrl(String url) => _sourceDao.getByUrl(url);
 

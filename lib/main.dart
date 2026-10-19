@@ -99,9 +99,9 @@ Future<void> _startApp() async {
     LicenseRegistry.addLicense(_punctFontLicense);
     _punctLicenseRegistered = true;
   }
-  // 書源工作（目前是搜尋與書架檢查更新）在書源 isolate 執行；其他還在
-  // 主 isolate 抓的書源，不帶 JS 的搜尋結果與目錄改在背景 isolate 解析。
-  // 背景下載的 Workmanager 入口都不開，維持原地執行。
+  // 書源工作都在書源 isolate 執行；書源 isolate 開不起來、改回主 isolate
+  // 執行時，不帶 JS 的解析交給 ParseWorker。背景下載的 Workmanager 入口
+  // 都不開，維持原地執行。
   SourceIsolate.enabled = true;
   ParseWorker.enabled = true;
 

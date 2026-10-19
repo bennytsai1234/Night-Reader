@@ -20,11 +20,12 @@ import 'package:night_reader/core/network/str_response.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
 ///
-/// 抓取與帶 JS 的解析在呼叫它的 isolate 執行：搜尋與檢查更新在書源 isolate
-/// （`SourceIsolate`，ADR 0028），其他呼叫端在主 isolate。規則的 JS 會經由
-/// `java.*` 用到網路、資料庫與 Cookie。在主 isolate 時，不帶 JS 的搜尋結果、
-/// 詳情、目錄與正文由 [BookListParser]、[BookInfoParser]、
-/// [ChapterListParser]、[ContentParser] 自行交給背景 isolate（`ParseWorker`）。
+/// 抓取與帶 JS 的解析在呼叫它的 isolate 執行，平常是書源 isolate
+/// （`SourceIsolate`，ADR 0028；呼叫端經過 `BookSourceService`）。規則的 JS
+/// 會經由 `java.*` 用到網路、資料庫與 Cookie。在主 isolate 時（書源 isolate
+/// 開不起來），不帶 JS 的搜尋結果、詳情、目錄與正文由 [BookListParser]、
+/// [BookInfoParser]、[ChapterListParser]、[ContentParser] 自行交給背景
+/// isolate（`ParseWorker`）。
 class WebBook {
   WebBook._();
 

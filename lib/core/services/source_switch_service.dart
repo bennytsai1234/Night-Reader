@@ -22,6 +22,11 @@ bool isSourceSwitchUnavailable(Object error) {
   return error is AppException || error is TimeoutException;
 }
 
+/// 換源搜尋只要書名相同的那本；跟著搜尋送進書源 isolate，所以在只捕捉書名
+/// 的頂層函式裡建立。
+bool Function(String name, String author) _nameEquals(String bookName) =>
+    (name, _) => name == bookName;
+
 bool _looksReadableSourceSwitchContent(String content) {
   final trimmed = content.trim();
   if (trimmed.isEmpty) return false;
@@ -105,8 +110,8 @@ class SourceSwitchService {
             return await _service.searchBooks(
               source,
               book.name,
-              filter: (name, _) => name == book.name,
-              shouldBreak: (size) => size >= 1,
+              filter: _nameEquals(book.name),
+              shouldBreak: stopAtFirstSearchResult,
             );
           } catch (error) {
             if (!isSourceSwitchUnavailable(error)) rethrow;

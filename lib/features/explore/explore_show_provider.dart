@@ -8,8 +8,8 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
-import 'package:night_reader/core/engine/web_book/web_book_service.dart';
 
 typedef ExploreBookLoader = Future<List<SearchBook>> Function(
   BookSource source,
@@ -55,7 +55,7 @@ class ExploreShowProvider extends ChangeNotifier {
     BookshelfStateTracker? bookshelfTracker,
     ExploreBookLoader? exploreLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
-       _exploreLoader = exploreLoader ?? WebBook.exploreBookAwait {
+       _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks {
     _init();
   }
 
