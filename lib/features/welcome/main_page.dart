@@ -283,9 +283,17 @@ class _MainPageState extends State<MainPage>
       _pageController.jumpToPage(index);
       return;
     }
+    // 換頁的第一幀要拍快照、排新分頁（第一次來還要整頁建起來），常常很重；
+    // 這一幀停在起點，畫完才開始計時。原本一開始就計時，第一幀花掉的時間
+    // 直接被跳過，點下去就掉幀（ADR 0018）。
+    final trip = _switchCount;
     _switch
       ..duration = AppPageTransition.of(context).duration
-      ..forward(from: 0);
+      ..value = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _switchCount != trip || _outgoing == null) return;
+      _switch.forward(from: 0);
+    });
   }
 
   /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；

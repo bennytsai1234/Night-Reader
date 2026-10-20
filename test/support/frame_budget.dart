@@ -5,13 +5,15 @@
 //   FRAME_ATTRIBUTE=1 flutter test --run-skipped -t frame_budget test/frame_budget
 //
 // 量到的是電腦上 debug 模式的時間，手機上會慢好幾倍，看的是相對大小與尖峰
-// 出現在哪一段。FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡耗時最多的 widget 與
-// render object，以及重建從哪些 widget 開始（誰呼叫了 setState）；打開這些
-// 紀錄本身會讓數字變大（幀前多了印堆疊的時間），只拿來找是誰。測試環境
+// 出現在哪一段。FRAME_ATTRIBUTE=1 時另外列出尖峰幀裡自己耗時最多（扣掉包在
+// 裡面的）的 widget 與 render object，以及重建從哪些 widget 開始（誰呼叫了
+// setState）；打開這些紀錄本身會讓數字變大（每排一次重建就印一段堆疊，整棵
+// 子樹被搬動、一次排上百個重建時會大上幾十倍），只拿來找是誰。測試環境
 // 沒有開書源 isolate（`SourceIsolate.enabled`），書源工作在原地執行，會算進
 // 主執行緒。
 
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -126,10 +128,7 @@ Future<List<FrameCost>> recordFrames(
       await tester.pump(frameDuration);
       final stop = clock.elapsedMicroseconds;
       final top = frameAttribution
-          ? ([...FlutterTimeline.debugCollect().aggregatedBlocks]
-                  ..sort((a, b) => b.duration.compareTo(a.duration)))
-                .take(12)
-                .toList()
+          ? _exclusive(FlutterTimeline.debugCollect().timedBlocks)
           : const <AggregatedTimedBlock>[];
       // 沒有排到幀（畫面靜止）時整段都算在幀前。
       if (begin < 0 || end < 0) begin = end = stop;
@@ -158,6 +157,42 @@ Future<List<FrameCost>> recordFrames(
     debugPrint = previous.$6;
   }
   return costs;
+}
+
+/// 每一種區塊自己花的時間（扣掉包在裡面的區塊），由多到少取前 15 個。
+/// 直接加總的時間會把外層（Stack、Semantics 這類一路包到底的 widget）算得
+/// 最多，看不出是誰在做事。
+List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
+  final sorted = [...blocks]..sort((a, b) => a.start.compareTo(b.start));
+  final self = <String, double>{};
+  final counts = <String, int>{};
+  // 還沒結束的區塊，與它裡面的區塊已經花掉的時間。
+  final open = <(TimedBlock, double)>[];
+  void close() {
+    final (block, inner) = open.removeLast();
+    self[block.name] = (self[block.name] ?? 0) + block.duration - inner;
+    counts[block.name] = (counts[block.name] ?? 0) + 1;
+    if (open.isNotEmpty) {
+      final (outer, spent) = open.removeLast();
+      open.add((outer, spent + block.duration));
+    }
+  }
+
+  for (final block in sorted) {
+    while (open.isNotEmpty && open.last.$1.end <= block.start) {
+      close();
+    }
+    open.add((block, 0));
+  }
+  while (open.isNotEmpty) {
+    close();
+  }
+  return [
+      for (final MapEntry(:key, :value) in self.entries)
+        AggregatedTimedBlock(name: key, duration: value, count: counts[key]!),
+    ]
+    ..sort((a, b) => b.duration.compareTo(a.duration))
+    ..length = math.min(15, self.length);
 }
 
 /// 摘要：幀數、中位數、最大值，以及超過 [over] 的每一幀各段成本。

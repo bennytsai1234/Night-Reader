@@ -88,6 +88,17 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
   );
 }
 
+/// [context] 所在頁面的路由，不讓呼叫端依賴路由的狀態。
+///
+/// `ModalRoute.of` 會讓呼叫端在路由狀態改變時重建：上面推入或移走一頁
+/// （isCurrent 改變）時，用頁面的 State 拿過路由的整頁跟著重建，每次推入與
+/// 返回的第一幀都白白重建一次底下那頁（ADR 0018）。只是拿路由等換頁播完、
+/// 判斷自己是不是最上層時用這個。換頁走 [AppPageTransitionsBuilder] 的頁面
+/// 從轉場元件取得；其他路由（對話框、面板）照舊用 `ModalRoute.of`。
+ModalRoute<Object?>? pageRouteOf(BuildContext context) =>
+    context.findAncestorWidgetOfExactType<_AppTransition>()?.route ??
+    ModalRoute.of(context);
+
 /// 轉場用到的曲線，參數都取自來源 App 的原始碼。
 abstract final class _Curves {
   /// Telegram iOS 對 0.5 秒系統彈簧（mass 3、stiffness 1000、damping 500）的
@@ -385,6 +396,9 @@ class _AppTransitionState extends State<_AppTransition>
   final _Trip _top = _Trip();
   final _Trip _under = _Trip();
 
+  /// 這一頁最近一次在 offstage 的那一幀（推入的第一幀，見 [_Trip]）。
+  Duration? _offstageFrame;
+
   late final HorizontalDragGestureRecognizer _drag;
 
   /// 手指放開後把頁面送完（或彈回）的那一段；進度直接寫回路由。
@@ -632,6 +646,9 @@ class _AppTransitionState extends State<_AppTransition>
             background,
           );
         }
+        if (_route.offstage) {
+          _offstageFrame = SchedulerBinding.instance.currentFrameTimeStamp;
+        }
         final origin = TransitionOrigin.of(_route);
         final top = gesturing
             ? _TopPose.follow(
@@ -642,7 +659,7 @@ class _AppTransitionState extends State<_AppTransition>
               )
             : _TopPose.of(
                 widget.transition,
-                trip: _top.of(widget.animation),
+                trip: _top.of(widget.animation, offstageFrame: _offstageFrame),
                 size: size,
                 origin: origin,
               );
@@ -827,23 +844,74 @@ class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
 
 /// 一趟轉場（開啟或返回）走到哪：[time] 為這一趟的時間比例 0→1。中途反向
 /// 時沿用原本那一趟（跟 [CurvedAnimation] 一樣），畫面不跳。
+///
+/// 從頭開始的一趟，第一幀花掉的時間不算進動畫：第一幀常常很重（推入時新頁
+/// 第一次建立、返回時底下那頁重新排版），路由的時鐘照樣走，第二幀就直接跳到
+/// 那段時間之後的位置，看起來是點下去就掉幀。這裡讓第一、二幀都停在起點，
+/// 之後把剩下的時間照比例走完整段，最後一幀和路由同時到位（ADR 0018）。
 class _Trip {
   AnimationStatus? _direction;
 
+  /// 這一趟第一幀的時間戳；null 是還沒畫到。
+  Duration? _firstFrame;
+
+  /// 第二幀時這一趟已經走掉的時間比例，之後照它把剩下的時間拉回整段。
+  double? _resume;
+
+  /// 這一趟從頭開始，照上面的方式起步；中途接手的（拖曳返回放開後、半途
+  /// 反向）照路由的時間走。
+  bool _paced = false;
+
   void update(AnimationStatus status) {
     if (status.isAnimating) {
-      _direction ??= status;
+      if (_direction == null) {
+        _direction = status;
+        _firstFrame = null;
+        _resume = null;
+        _paced = true;
+      }
     } else {
       _direction = null;
+      _paced = false;
     }
   }
 
-  ({bool closing, double time}) of(Animation<double> animation) {
+  /// [offstageFrame] 是這一頁最近一次在 offstage 的那一幀（只有剛推入的
+  /// 新頁有）。
+  ({bool closing, double time}) of(
+    Animation<double> animation, {
+    Duration? offstageFrame,
+  }) {
     final closing = (_direction ?? animation.status) == AnimationStatus.reverse;
-    return (
-      closing: closing,
-      time: closing ? 1 - animation.value : animation.value,
-    );
+    final time = closing ? 1 - animation.value : animation.value;
+    return (closing: closing, time: _pace(time, offstageFrame));
+  }
+
+  double _pace(double time, Duration? offstageFrame) {
+    if (!_paced) return time;
+    final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
+    final first = _firstFrame;
+    if (first == null) {
+      if (time > 0) {
+        // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
+        // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
+        // 起算，兩頁才會同步。
+        if (offstageFrame != null && offstageFrame != stamp) {
+          _firstFrame = offstageFrame;
+          _resume = time;
+          return 0;
+        }
+        // 不是從起點開始的一趟不調整。
+        _paced = false;
+        return time;
+      }
+      _firstFrame = stamp;
+      return 0;
+    }
+    if (stamp == first) return 0;
+    final resume = _resume ??= time;
+    if (resume >= 1) return time;
+    return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
   }
 }
 
@@ -1025,7 +1093,7 @@ class _TopPose {
       fit = Matrix4.identity();
       clip = null;
     }
-    return Opacity(
+    return _PageOpacity(
       opacity: opacity.clamp(0.0, 1.0),
       child: Transform.translate(
         offset: offset,
@@ -1172,7 +1240,7 @@ class _UnderPose {
     final faded = opacity < 1;
     return _Backdrop(
       color: faded ? background : null,
-      child: Opacity(
+      child: _PageOpacity(
         opacity: opacity.clamp(0.0, 1.0),
         child: FractionalTranslation(
           translation: fractionalOffset,
@@ -1197,6 +1265,26 @@ class _UnderPose {
         ),
       ),
     );
+  }
+}
+
+/// 換頁中整頁的透明度：和 [Opacity] 一樣，但完全不透明時直接畫、不另開
+/// 圖層。換頁靜止時一直包著它，[Opacity] 在 1 時也會留一層 OpacityLayer。
+class _PageOpacity extends Opacity {
+  const _PageOpacity({required super.opacity, super.child});
+
+  @override
+  RenderOpacity createRenderObject(BuildContext context) =>
+      _RenderPageOpacity(opacity: opacity);
+}
+
+class _RenderPageOpacity extends RenderOpacity {
+  _RenderPageOpacity({super.opacity});
+
+  @override
+  bool get alwaysNeedsCompositing {
+    final alpha = Color.getAlphaFromOpacity(opacity);
+    return child != null && alpha > 0 && alpha < 255;
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../navigation/app_page_transition.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
@@ -794,7 +795,10 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     final topPadding = MediaQuery.paddingOf(context).top;
     final bg = backgroundColor ?? theme.scaffoldBackgroundColor;
     final fg = foregroundColor ?? theme.colorScheme.onSurface;
-    final route = ModalRoute.of(context);
+    // 只在能不能返回改變時重建：`ModalRoute.of` 會讓頁首在每次從這一頁推入、
+    // 返回時跟著重建。
+    ModalRoute.canPopOf(context);
+    final route = pageRouteOf(context);
     final canPop = route?.impliesAppBarDismissal ?? false;
     final effectiveLeading =
         leading ??

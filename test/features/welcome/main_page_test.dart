@@ -219,6 +219,26 @@ void main() {
       expect(builds, before);
     });
 
+    testWidgets('a slow first frame does not make the switch jump', (
+      tester,
+    ) async {
+      await tester.pumpWidget(threeTabs());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('三'));
+      await tester.pump();
+      // 第一幀很重（拍快照、排新分頁）：下一幀晚了 100ms 才到。
+      await tester.pump(const Duration(milliseconds: 100));
+      double left() => tester.getRect(find.byType(RawImage)).left;
+      // 換頁前的畫面還停在原處，那 100ms 不算進動畫。
+      expect(left(), 0);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(left(), lessThan(0));
+      expect(left(), greaterThan(-120));
+      await tester.pumpAndSettle();
+      expect(switching(tester), isFalse);
+    });
+
     testWidgets('switches at once when animations are off', (tester) async {
       await tester.pumpWidget(threeTabs(disableAnimations: true));
       await tester.pumpAndSettle();

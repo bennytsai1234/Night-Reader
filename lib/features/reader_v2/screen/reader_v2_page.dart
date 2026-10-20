@@ -13,6 +13,7 @@ import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/services/source_switch_service.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/book_detail/widgets/change_source_sheet.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/navigation/status_bar.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
@@ -198,7 +199,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         !_host.settings.volumeKeyPage ||
         _host.menu.controlsVisible ||
         (_host.tts?.isPlaying ?? false) ||
-        !(ModalRoute.of(context)?.isCurrent ?? false) ||
+        !(pageRouteOf(context)?.isCurrent ?? false) ||
         (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
       return false;
     }
@@ -529,7 +530,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         // consumed, then removes only the reader route itself.
         popNavigator: () {
           final navigator = Navigator.of(context, rootNavigator: true);
-          final readerRoute = ModalRoute.of(context);
+          final readerRoute = pageRouteOf(context);
           if (readerRoute == null) {
             navigator.pop();
             return;
@@ -607,7 +608,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (!await ticket.menusGone ||
         !mounted ||
         !ticket.canDepart ||
-        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+        !(pageRouteOf(context)?.isCurrent ?? false)) {
       return null;
     }
     return (await Navigator.of(context).push(route),);
@@ -622,7 +623,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       TransitionSettled.uncovered(context).then((_) {
         if (!mounted) return;
         beforeMenu?.call();
-        if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        if (!(pageRouteOf(context)?.isCurrent ?? false)) return;
         _host.menu.showControls();
       }),
     );
@@ -702,7 +703,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _host.menu.dismissControls();
     unawaited(
       open().whenComplete(() {
-        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        if (!mounted || !(pageRouteOf(context)?.isCurrent ?? false)) return;
         _host.menu.showControls();
       }),
     );

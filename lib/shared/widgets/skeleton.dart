@@ -657,9 +657,6 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
   );
   late final Animation<double> _skeleton = ReverseAnimation(_content);
 
-  /// 骨架從載入中的 sliver 移到換場時疊在內容上的那一層，呼吸不從頭開始。
-  final GlobalKey _skeletonKey = GlobalKey();
-
   /// 這一次換場是不是由左而右。
   bool _sweep = false;
 
@@ -696,7 +693,6 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
   }
 
   Widget _buildSkeleton() => SkeletonRevealLayer(
-    key: _skeletonKey,
     opacity: _skeleton,
     side: SkeletonRevealSide.skeleton,
     sweep: _sweep,
@@ -721,26 +717,31 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
 
   @override
   Widget build(BuildContext context) {
-    if (widget.loading) return SliverToBoxAdapter(child: _buildSkeleton());
-    final revealing = !_controller.isCompleted;
-    // 兩層各有 key：骨架移出時內容不會被錯配、重建。
+    final loading = widget.loading;
+    final revealing = !loading && !_controller.isCompleted;
+    // 兩層各有 key：骨架移出時內容不會被錯配、重建。骨架從載入中到換場一直
+    // 是同一個 sliver，只從佔位改成疊在內容上：原本載入中與換場時包在不同
+    // 的 sliver 裡，內容到的那一幀整個骨架被搬過去、全部重建，和建內容擠
+    // 在同一幀（ADR 0018）。
     return SliverMainAxisGroup(
       slivers: [
         // 先列的 sliver 畫在上面：骨架疊在內容上。
-        if (revealing)
+        if (loading || revealing)
           _SliverOverlay(
             key: const ValueKey('skeleton'),
+            takesSpace: loading,
             child: _buildSkeleton(),
           ),
-        _SliverRevealLayer(
-          key: const ValueKey('content'),
-          opacity: _content,
-          sweep: _sweep,
-          sliver: _SliverRevealScope(
-            revealing: revealing,
-            child: _contentFor(widget),
+        if (!loading)
+          _SliverRevealLayer(
+            key: const ValueKey('content'),
+            opacity: _content,
+            sweep: _sweep,
+            sliver: _SliverRevealScope(
+              revealing: revealing,
+              child: _contentFor(widget),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -761,18 +762,42 @@ class _SliverRevealScope extends InheritedWidget {
   bool updateShouldNotify(_SliverRevealScope oldWidget) => false;
 }
 
-/// 不佔捲動範圍、疊在後面 sliver 上的一個 box：畫在這個位置原本該在的地方
-/// （捲過去的部分移出上緣），不接點擊。只支援往下捲的清單。
+/// 清單裡的一個 box，畫在這個位置原本該在的地方（捲過去的部分移出上緣），
+/// 不接點擊。[takesSpace] 時和 [SliverToBoxAdapter] 一樣佔捲動範圍；否則
+/// 不佔、疊在後面的 sliver 上。只支援往下捲的清單。
 class _SliverOverlay extends SingleChildRenderObjectWidget {
-  const _SliverOverlay({super.key, required Widget super.child});
+  const _SliverOverlay({
+    super.key,
+    required this.takesSpace,
+    required Widget super.child,
+  });
+
+  final bool takesSpace;
 
   @override
   _RenderSliverOverlay createRenderObject(BuildContext context) =>
-      _RenderSliverOverlay();
+      _RenderSliverOverlay(takesSpace);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSliverOverlay renderObject,
+  ) {
+    renderObject.takesSpace = takesSpace;
+  }
 }
 
 class _RenderSliverOverlay extends RenderSliver
     with RenderObjectWithChildMixin<RenderBox> {
+  _RenderSliverOverlay(this._takesSpace);
+
+  bool _takesSpace;
+  set takesSpace(bool value) {
+    if (_takesSpace == value) return;
+    _takesSpace = value;
+    markNeedsLayout();
+  }
+
   @override
   void setupParentData(RenderObject child) {
     if (child.parentData is! SliverPhysicalParentData) {
@@ -784,14 +809,31 @@ class _RenderSliverOverlay extends RenderSliver
   void performLayout() {
     assert(constraints.axisDirection == AxisDirection.down);
     final child = this.child;
-    if (child != null) {
-      child.layout(constraints.asBoxConstraints(), parentUsesSize: true);
-      (child.parentData! as SliverPhysicalParentData).paintOffset = Offset(
-        0,
-        -constraints.scrollOffset,
-      );
+    if (child == null) {
+      geometry = SliverGeometry.zero;
+      return;
     }
-    geometry = SliverGeometry(visible: child != null);
+    child.layout(constraints.asBoxConstraints(), parentUsesSize: true);
+    (child.parentData! as SliverPhysicalParentData).paintOffset = Offset(
+      0,
+      -constraints.scrollOffset,
+    );
+    if (!_takesSpace) {
+      geometry = const SliverGeometry(visible: true);
+      return;
+    }
+    final extent = child.size.height;
+    final painted = calculatePaintOffset(constraints, from: 0, to: extent);
+    geometry = SliverGeometry(
+      scrollExtent: extent,
+      paintExtent: painted,
+      cacheExtent: calculateCacheOffset(constraints, from: 0, to: extent),
+      maxPaintExtent: extent,
+      hitTestExtent: painted,
+      hasVisualOverflow:
+          extent > constraints.remainingPaintExtent ||
+          constraints.scrollOffset > 0,
+    );
   }
 
   @override

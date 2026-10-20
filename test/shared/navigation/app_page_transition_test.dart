@@ -63,7 +63,7 @@ void main() {
     final page = find.text('新頁');
     final opacity = tester
         .widgetList<Opacity>(
-          find.ancestor(of: page, matching: find.byType(Opacity)),
+          find.ancestor(of: page, matching: find.bySubtype<Opacity>()),
         )
         .fold(1.0, (product, w) => product * w.opacity);
     final clip =
@@ -87,6 +87,13 @@ void main() {
     ];
   }
 
+  /// 換頁的第一、二幀停在起點（第一幀花掉的時間不算進動畫），之後才照時間
+  /// 走；量某個時間點的樣子前先推過這兩幀，第二幀只隔 1ms。
+  Future<void> startTrip(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
   double distance(List<double> a, List<double> b) =>
       [for (var i = 0; i < a.length; i++) (a[i] - b[i]).abs()]
           .fold(0.0, (sum, d) => sum + d);
@@ -108,7 +115,7 @@ void main() {
           builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
         ),
       );
-      await tester.pump();
+      await startTrip(tester);
       final total = transition.duration;
       await tester.pump(total * 0.3);
       final opening = pose(tester);
@@ -119,7 +126,7 @@ void main() {
       final settled = pose(tester);
 
       Navigator.pop(tester.element(find.text('新頁')));
-      await tester.pump();
+      await startTrip(tester);
       await tester.pump(total * 0.7);
       final closing = pose(tester);
 
@@ -140,7 +147,7 @@ void main() {
       await push(tester);
 
       Navigator.pop(tester.element(find.text('新頁')));
-      await tester.pump();
+      await startTrip(tester);
       final start = pose(tester);
       // 先快後慢：第一段時間變得比下一段多。俐落平移的彈簧從靜止起步、
       // 約 8.5% 時最快，所以比 20% 一段；其他比 10%。
@@ -207,12 +214,46 @@ void main() {
     });
   }
 
+  testWidgets('a slow first frame does not make the page jump', (tester) async {
+    await pumpApp(tester, AppPageTransition.slide);
+    Navigator.push(
+      home,
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('新頁'))),
+      ),
+    );
+    await tester.pump();
+    // 第一幀很重（新頁第一次建立）：下一幀晚了 100ms 才到。
+    await tester.pump(const Duration(milliseconds: 100));
+    double left() => tester.getRect(find.byType(Scaffold).last).left;
+    // 還停在起點，那 100ms 不算進動畫；原本直接跳到 100ms 的位置（過半）。
+    expect(left(), closeTo(800, 1));
+    await tester.pump(const Duration(milliseconds: 16));
+    final step = 800 - left();
+    expect(step, greaterThan(0));
+    expect(step, lessThan(200));
+    // 和路由同時到位。
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(left(), closeTo(0, 0.5));
+    expect(ModalRoute.of(tester.element(find.text('新頁')))!.isCurrent, isTrue);
+    await tester.pumpAndSettle();
+    expect(left(), 0);
+
+    // 返回也一樣：第一幀晚到的時間不算。
+    Navigator.pop(tester.element(find.text('新頁')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(left(), closeTo(0, 1));
+    await tester.pumpAndSettle();
+    expect(find.text('新頁'), findsNothing);
+  });
+
   testWidgets('slide closes fast first, then eases into place', (tester) async {
     await pumpApp(tester, AppPageTransition.slide);
     await push(tester);
 
     Navigator.pop(tester.element(find.text('新頁')));
-    await tester.pump();
+    await startTrip(tester);
     await tester.pump(AppPageTransition.slide.duration * 0.2);
     // 時間才走 20%，頁面已經移出一半以上；倒著播的話還不到一成。
     expect(tester.getCenter(find.text('新頁')).dx, greaterThan(400 + 400 * 0.5));

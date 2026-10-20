@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -31,6 +32,13 @@ class SettingsPage extends StatelessWidget {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
+  /// 這一頁能不能返回。只在能不能返回改變時重建：`ModalRoute.of` 會讓整頁
+  /// 在每次從這裡推入、返回時跟著重建。
+  bool _impliesBack(BuildContext context) {
+    ModalRoute.canPopOf(context);
+    return pageRouteOf(context)?.impliesAppBarDismissal ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,8 +46,7 @@ class SettingsPage extends StatelessWidget {
       // 從閱讀器推入時才有返回鈕。
       appBar: GlassNavHeader(
         title: '我的',
-        automaticallyImplyLeading:
-            ModalRoute.of(context)?.impliesAppBarDismissal ?? false,
+        automaticallyImplyLeading: _impliesBack(context),
       ),
       body: GroupedListView(
         children: [
