@@ -188,6 +188,8 @@ void main() {
         await tester.pump();
       }
       expect(textIn(tocHeader, skeleton: false), findsOneWidget);
+      // 內容在骨架底下一幀建一段，目錄組標題之後還有目錄清單那一段。
+      await tester.pump();
     }
 
     testWidgets('the content is laid out under the skeleton before it shows', (

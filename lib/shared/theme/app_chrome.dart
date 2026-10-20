@@ -174,6 +174,47 @@ class AppChrome extends ThemeExtension<AppChrome> {
     );
   }
 
+  // 照值比較：每次建主題都推導一份新的（閱讀選單的 `toSheetTheme`、App 的
+  // `buildAppTheme`），沒有照值比較時 ThemeData 永遠不相等，上層一重建，
+  // 底下每個用到主題的元件都跟著重建，按鈕的主題漸變也重播一次（ADR 0018）。
+  @override
+  bool operator ==(Object other) =>
+      other is AppChrome &&
+      other.groupedBackground == groupedBackground &&
+      other.groupedSurface == groupedSurface &&
+      other.cardEdge == cardEdge &&
+      other.separator == separator &&
+      other.sectionText == sectionText &&
+      other.pressedHighlight == pressedHighlight &&
+      other.glassTint == glassTint &&
+      other.glassBorder == glassBorder &&
+      other.glassShadow == glassShadow &&
+      other.selectionLens == selectionLens &&
+      other.barrier == barrier &&
+      other.toastBackground == toastBackground &&
+      other.toastForeground == toastForeground &&
+      other.toastAction == toastAction &&
+      other.glassStrength == glassStrength;
+
+  @override
+  int get hashCode => Object.hash(
+    groupedBackground,
+    groupedSurface,
+    cardEdge,
+    separator,
+    sectionText,
+    pressedHighlight,
+    glassTint,
+    glassBorder,
+    glassShadow,
+    selectionLens,
+    barrier,
+    toastBackground,
+    toastForeground,
+    toastAction,
+    glassStrength,
+  );
+
   @override
   AppChrome lerp(ThemeExtension<AppChrome>? other, double t) {
     if (other is! AppChrome) return this;

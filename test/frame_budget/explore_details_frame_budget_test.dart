@@ -113,6 +113,8 @@ void main() {
                           sourceUrl: _origin,
                           exploreUrl: '$_origin/category/1',
                           exploreName: '玄幻',
+                          // 書單本來就晚 0.3 秒才到，進場不另外等。
+                          entrance: Future<void>.value(),
                           bookshelfTracker: BookshelfStateTracker(
                             bookDao: _FakeBookDao(),
                           ),

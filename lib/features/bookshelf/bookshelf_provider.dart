@@ -25,13 +25,34 @@ class BookshelfProvider extends BookshelfProviderBase
   }) : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
     loadBooks();
-    _bookshelfSub = AppEventBus()
-        .onName(AppEventBus.upBookshelf)
-        .listen((_) => unawaited(loadBooks()));
+    _bookshelfSub = AppEventBus().onName(AppEventBus.upBookshelf).listen((_) {
+      if (_covered) {
+        _reloadWhenUncovered = true;
+        return;
+      }
+      unawaited(loadBooks());
+    });
   }
 
   final BookStorageService _bookStorageService;
   StreamSubscription<AppEvent>? _bookshelfSub;
+
+  /// 書架被別的頁面蓋著（[setCovered]）：背景下載完成要重讀時先記著，露出
+  /// 來才讀。蓋著的書架仍在元件樹裡，重讀會整頁重建、書卡移位，正好疊在
+  /// 上面那頁的換頁動畫上。
+  bool _covered = false;
+  bool _reloadWhenUncovered = false;
+
+  void setCovered(bool covered) {
+    _covered = covered;
+    if (covered || !_reloadWhenUncovered) return;
+    _reloadWhenUncovered = false;
+    unawaited(loadBooks());
+  }
+
+  /// 接下來要蓋上書架的頁面會改到書（例如閱讀器改進度）：露出來時重讀一次，
+  /// 和蓋著時收到的下載完成合併，不各讀一次。
+  void reloadWhenUncovered() => _reloadWhenUncovered = true;
 
   @override
   Future<void> loadBooks() async {

@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -86,6 +87,17 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
     child: child,
   );
 }
+
+/// [context] 所在頁面的路由，不讓呼叫端依賴路由的狀態。
+///
+/// `ModalRoute.of` 會讓呼叫端在路由狀態改變時重建：上面推入或移走一頁
+/// （isCurrent 改變）時，用頁面的 State 拿過路由的整頁跟著重建，每次推入與
+/// 返回的第一幀都白白重建一次底下那頁（ADR 0018）。只是拿路由等換頁播完、
+/// 判斷自己是不是最上層時用這個。換頁走 [AppPageTransitionsBuilder] 的頁面
+/// 從轉場元件取得；其他路由（對話框、面板）照舊用 `ModalRoute.of`。
+ModalRoute<Object?>? pageRouteOf(BuildContext context) =>
+    context.findAncestorWidgetOfExactType<_AppTransition>()?.route ??
+    ModalRoute.of(context);
 
 /// 轉場用到的曲線，參數都取自來源 App 的原始碼。
 abstract final class _Curves {
@@ -384,6 +396,9 @@ class _AppTransitionState extends State<_AppTransition>
   final _Trip _top = _Trip();
   final _Trip _under = _Trip();
 
+  /// 這一頁最近一次在 offstage 的那一幀（推入的第一幀，見 [_Trip]）。
+  Duration? _offstageFrame;
+
   late final HorizontalDragGestureRecognizer _drag;
 
   /// 手指放開後把頁面送完（或彈回）的那一段；進度直接寫回路由。
@@ -622,9 +637,18 @@ class _AppTransitionState extends State<_AppTransition>
       builder: (context, child) {
         // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
         final gesturing = _route.popGestureInProgress;
-        if (still && !gesturing) return child!;
         final size = MediaQuery.sizeOf(context);
         final background = Theme.of(context).scaffoldBackgroundColor;
+        // 關閉動畫時照樣包同一串元件、停在整頁，手勢開始時頁面不會被搬動。
+        if (still && !gesturing) {
+          return const _UnderPose().wrap(
+            const _TopPose().wrap(child!, size),
+            background,
+          );
+        }
+        if (_route.offstage) {
+          _offstageFrame = SchedulerBinding.instance.currentFrameTimeStamp;
+        }
         final origin = TransitionOrigin.of(_route);
         final top = gesturing
             ? _TopPose.follow(
@@ -635,7 +659,7 @@ class _AppTransitionState extends State<_AppTransition>
               )
             : _TopPose.of(
                 widget.transition,
-                trip: _top.of(widget.animation),
+                trip: _top.of(widget.animation, offstageFrame: _offstageFrame),
                 size: size,
                 origin: origin,
               );
@@ -675,14 +699,19 @@ class _AppTransitionState extends State<_AppTransition>
 /// [outgoing] 像返回一樣離開、露出 [incoming]。
 ///
 /// [animation] 是這一趟的時間比例 0→1，曲線由各動畫自己套；[follow] 時
-/// 是拖曳返回的進度，照拖曳返回的樣子和進度成正比。「展開」從這個元件
-/// 建立時最後按下的地方長出來（返回時縮回去），每一趟要給新的 key。
-/// [incoming] 在換頁前後要保留狀態時，給它 [GlobalKey]。
+/// 是拖曳返回的進度，照拖曳返回的樣子和進度成正比。「展開」從這一趟開始
+/// 時（[trip] 換了值）最後按下的地方長出來（返回時縮回去）。
+///
+/// 沒在換頁時 [outgoing] 是 null，[incoming] 原樣畫在整頁。元件一直掛著、
+/// [incoming] 不論換頁與否、往哪個方向，都包在同一串元件的同一個位置，換頁
+/// 開始與結束時不會被搬動：原本換頁時才把它搬進來，帶著 GlobalKey 的整個
+/// 分頁每次換頁開始與結束都整棵重建（ADR 0018）。
 class AppTransitionSwitch extends StatefulWidget {
   const AppTransitionSwitch({
     super.key,
     required this.transition,
     required this.animation,
+    required this.trip,
     required this.forward,
     required this.outgoing,
     required this.incoming,
@@ -693,9 +722,14 @@ class AppTransitionSwitch extends StatefulWidget {
 
   final AppPageTransition transition;
   final Animation<double> animation;
+
+  /// 每一趟換頁給不同的值。
+  final Object? trip;
   final bool forward;
   final bool follow;
-  final Widget outgoing;
+
+  /// 換頁中離開的畫面；null 是沒在換頁。
+  final Widget? outgoing;
   final Widget incoming;
 
   /// 墊在淡掉的底下那一頁後面的顏色（見 [_UnderPose.wrap]）。
@@ -707,17 +741,47 @@ class AppTransitionSwitch extends StatefulWidget {
 }
 
 class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
+  static const _incomingKey = ValueKey('incoming');
+  static const _outgoingKey = ValueKey('outgoing');
+
+  TransitionSourceRect? _origin;
+
+  @override
+  void initState() {
+    super.initState();
+    _takeOrigin();
+  }
+
+  @override
+  void didUpdateWidget(AppTransitionSwitch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.trip != oldWidget.trip) _takeOrigin();
+  }
+
   // 系統的返回手勢不經過 App 的按下，上一次按下的地方跟這一趟無關，
   // 「展開」改縮回畫面中央。
-  late final TransitionSourceRect? _origin = widget.follow
-      ? null
-      : TransitionOrigin._last;
+  void _takeOrigin() => _origin = widget.follow ? null : TransitionOrigin._last;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.animation,
     builder: (context, _) {
       final size = MediaQuery.sizeOf(context);
+      final outgoing = widget.outgoing;
+      if (outgoing == null) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _posed(
+              widget.incoming,
+              top: const _TopPose(),
+              under: const _UnderPose(),
+              size: size,
+              background: widget.incomingBackground,
+            ),
+          ],
+        );
+      }
       final t = widget.animation.value;
       final _TopPose top;
       final _UnderPose under;
@@ -741,36 +805,113 @@ class _AppTransitionSwitchState extends State<AppTransitionSwitch> {
         );
         under = _UnderPose.of(widget.transition, trip: trip);
       }
-      final (upper, lower, lowerBackground) = widget.forward
-          ? (widget.incoming, widget.outgoing, widget.outgoingBackground)
-          : (widget.outgoing, widget.incoming, widget.incomingBackground);
+      // 上下兩層都包同一串元件，上層的「底下」與下層的「上面」停在原樣；
+      // 兩層各有 key，往左往右換頁時上下對調只是搬動順序。
+      final incoming = _posed(
+        widget.incoming,
+        top: widget.forward ? top : const _TopPose(),
+        under: widget.forward ? const _UnderPose() : under,
+        size: size,
+        background: widget.incomingBackground,
+      );
+      final leaving = _posed(
+        outgoing,
+        top: widget.forward ? const _TopPose() : top,
+        under: widget.forward ? under : const _UnderPose(),
+        size: size,
+        background: widget.outgoingBackground,
+        key: _outgoingKey,
+      );
       return Stack(
         fit: StackFit.expand,
-        children: [under.wrap(lower, lowerBackground), top.wrap(upper, size)],
+        children: widget.forward ? [leaving, incoming] : [incoming, leaving],
       );
     },
+  );
+
+  Widget _posed(
+    Widget child, {
+    required _TopPose top,
+    required _UnderPose under,
+    required Size size,
+    required Color background,
+    Key key = _incomingKey,
+  }) => KeyedSubtree(
+    key: key,
+    child: under.wrap(top.wrap(child, size), background),
   );
 }
 
 /// 一趟轉場（開啟或返回）走到哪：[time] 為這一趟的時間比例 0→1。中途反向
 /// 時沿用原本那一趟（跟 [CurvedAnimation] 一樣），畫面不跳。
+///
+/// 從頭開始的一趟，第一幀花掉的時間不算進動畫：第一幀常常很重（推入時新頁
+/// 第一次建立、返回時底下那頁重新排版），路由的時鐘照樣走，第二幀就直接跳到
+/// 那段時間之後的位置，看起來是點下去就掉幀。這裡讓第一、二幀都停在起點，
+/// 之後把剩下的時間照比例走完整段，最後一幀和路由同時到位（ADR 0018）。
 class _Trip {
   AnimationStatus? _direction;
 
+  /// 這一趟第一幀的時間戳；null 是還沒畫到。
+  Duration? _firstFrame;
+
+  /// 第二幀時這一趟已經走掉的時間比例，之後照它把剩下的時間拉回整段。
+  double? _resume;
+
+  /// 這一趟從頭開始，照上面的方式起步；中途接手的（拖曳返回放開後、半途
+  /// 反向）照路由的時間走。
+  bool _paced = false;
+
   void update(AnimationStatus status) {
     if (status.isAnimating) {
-      _direction ??= status;
+      if (_direction == null) {
+        _direction = status;
+        _firstFrame = null;
+        _resume = null;
+        _paced = true;
+      }
     } else {
       _direction = null;
+      _paced = false;
     }
   }
 
-  ({bool closing, double time}) of(Animation<double> animation) {
+  /// [offstageFrame] 是這一頁最近一次在 offstage 的那一幀（只有剛推入的
+  /// 新頁有）。
+  ({bool closing, double time}) of(
+    Animation<double> animation, {
+    Duration? offstageFrame,
+  }) {
     final closing = (_direction ?? animation.status) == AnimationStatus.reverse;
-    return (
-      closing: closing,
-      time: closing ? 1 - animation.value : animation.value,
-    );
+    final time = closing ? 1 - animation.value : animation.value;
+    return (closing: closing, time: _pace(time, offstageFrame));
+  }
+
+  double _pace(double time, Duration? offstageFrame) {
+    if (!_paced) return time;
+    final stamp = SchedulerBinding.instance.currentFrameTimeStamp;
+    final first = _firstFrame;
+    if (first == null) {
+      if (time > 0) {
+        // 推入的第一幀新頁在 offstage（Hero 量位置），路由的動畫暫時是
+        // 「已播完」，這一趟從第二幀才看得到；照底下那頁同樣的方式從這一幀
+        // 起算，兩頁才會同步。
+        if (offstageFrame != null && offstageFrame != stamp) {
+          _firstFrame = offstageFrame;
+          _resume = time;
+          return 0;
+        }
+        // 不是從起點開始的一趟不調整。
+        _paced = false;
+        return time;
+      }
+      _firstFrame = stamp;
+      return 0;
+    }
+    if (stamp == first) return 0;
+    final resume = _resume ??= time;
+    if (resume >= 1) return time;
+    return ((time - resume) / (1 - resume)).clamp(0.0, 1.0);
   }
 }
 
@@ -934,56 +1075,58 @@ class _TopPose {
   /// 整頁等比縮進這個範圍，超出的部分裁掉（「展開」）。
   final TransitionSourceRect? frame;
 
+  /// 每一種、每一個進度都包同樣的一串元件，只改數值。原本用不到的那一層
+  /// 就不包（例如圓角到 0 拿掉 ClipRRect、陰影出現才包 Stack），層數一變，
+  /// 底下整頁（路由的頁面帶著 GlobalKey）就被搬到新的位置，搬過去的每個
+  /// 元件都要重建：換頁的第一、二幀與最後一幀，整頁各重建一次（ADR 0018）。
   Widget wrap(Widget child, Size size) {
-    var page = child;
     final frame = this.frame;
+    final Matrix4 fit;
+    final RRect? clip;
     if (frame != null) {
       final rect = frame.rect;
       final s = rect.width / size.width;
-      return ClipRRect(
-        clipper: _RRectClipper(
-          RRect.fromRectAndRadius(rect, Radius.circular(frame.radius)),
-        ),
-        child: Transform(
-          transform: Matrix4.translationValues(rect.left, rect.top, 0)
-            ..scaleByDouble(s, s, 1, 1),
-          child: page,
-        ),
-      );
+      fit = Matrix4.translationValues(rect.left, rect.top, 0)
+        ..scaleByDouble(s, s, 1, 1);
+      clip = RRect.fromRectAndRadius(rect, Radius.circular(frame.radius));
+    } else {
+      fit = Matrix4.identity();
+      clip = null;
     }
-    if (radius > 0) {
-      page = ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: page,
-      );
-    }
-    if (shadow > 0) {
-      page = Stack(
-        fit: StackFit.passthrough,
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: -_EdgeShadow.width,
-            width: _EdgeShadow.width,
-            top: 0,
-            bottom: 0,
-            child: _EdgeShadow(strength: shadow),
+    return _PageOpacity(
+      opacity: opacity.clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: offset,
+        child: FractionalTranslation(
+          translation: fractionalOffset,
+          child: Transform.scale(
+            scale: scale,
+            child: Stack(
+              fit: StackFit.passthrough,
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: -_EdgeShadow.width,
+                  width: _EdgeShadow.width,
+                  top: 0,
+                  bottom: 0,
+                  child: shadow > 0
+                      ? _EdgeShadow(strength: shadow)
+                      : const SizedBox.shrink(),
+                ),
+                ClipRRect(
+                  clipper: _PageClipper(rrect: clip, radius: radius),
+                  clipBehavior: clip != null || radius > 0
+                      ? Clip.antiAlias
+                      : Clip.none,
+                  child: Transform(transform: fit, child: child),
+                ),
+              ],
+            ),
           ),
-          page,
-        ],
-      );
-    }
-    if (scale != 1) page = Transform.scale(scale: scale, child: page);
-    if (fractionalOffset != Offset.zero) {
-      page = FractionalTranslation(translation: fractionalOffset, child: page);
-    }
-    if (offset != Offset.zero) {
-      page = Transform.translate(offset: offset, child: page);
-    }
-    if (opacity < 1) {
-      page = Opacity(opacity: opacity.clamp(0.0, 1.0), child: page);
-    }
-    return page;
+        ),
+      ),
+    );
   }
 }
 
@@ -1091,34 +1234,94 @@ class _UnderPose {
   final double dim;
 
   /// [background] 墊在淡掉的頁面後面，透出來的是頁面底色而不是視窗底色。
+  /// 和 [_TopPose.wrap] 一樣每個進度都包同樣的一串元件，底下的頁面不會在
+  /// 換頁開始或結束時被搬動、整頁重建。
   Widget wrap(Widget child, Color background) {
-    var page = child;
-    if (dim > 0) {
-      page = Stack(
-        fit: StackFit.passthrough,
-        children: [
-          page,
-          Positioned.fill(
-            child: IgnorePointer(
-              child: ColoredBox(
-                color: Colors.black.withValues(alpha: dim.clamp(0.0, 1.0)),
-              ),
+    final faded = opacity < 1;
+    return _Backdrop(
+      color: faded ? background : null,
+      child: _PageOpacity(
+        opacity: opacity.clamp(0.0, 1.0),
+        child: FractionalTranslation(
+          translation: fractionalOffset,
+          child: Transform.scale(
+            scale: scale,
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                child,
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _Backdrop(
+                      color: dim > 0
+                          ? Colors.black.withValues(alpha: dim.clamp(0.0, 1.0))
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      );
+        ),
+      ),
+    );
+  }
+}
+
+/// 換頁中整頁的透明度：和 [Opacity] 一樣，但完全不透明時直接畫、不另開
+/// 圖層。換頁靜止時一直包著它，[Opacity] 在 1 時也會留一層 OpacityLayer。
+class _PageOpacity extends Opacity {
+  const _PageOpacity({required super.opacity, super.child});
+
+  @override
+  RenderOpacity createRenderObject(BuildContext context) =>
+      _RenderPageOpacity(opacity: opacity);
+}
+
+class _RenderPageOpacity extends RenderOpacity {
+  _RenderPageOpacity({super.opacity});
+
+  @override
+  bool get alwaysNeedsCompositing {
+    final alpha = Color.getAlphaFromOpacity(opacity);
+    return child != null && alpha > 0 && alpha < 255;
+  }
+}
+
+/// 有顏色時鋪滿一層底色，null 時什麼都不畫；換頁中顏色出現、消失時元件
+/// 結構不變。
+class _Backdrop extends SingleChildRenderObjectWidget {
+  const _Backdrop({required this.color, super.child});
+
+  final Color? color;
+
+  @override
+  _RenderBackdrop createRenderObject(BuildContext context) =>
+      _RenderBackdrop(color);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderBackdrop renderObject) {
+    renderObject.color = color;
+  }
+}
+
+class _RenderBackdrop extends RenderProxyBox {
+  _RenderBackdrop(this._color);
+
+  Color? _color;
+  set color(Color? value) {
+    if (value == _color) return;
+    _color = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final color = _color;
+    if (color != null && size > Size.zero) {
+      context.canvas.drawRect(offset & size, Paint()..color = color);
     }
-    if (scale != 1) page = Transform.scale(scale: scale, child: page);
-    if (fractionalOffset != Offset.zero) {
-      page = FractionalTranslation(translation: fractionalOffset, child: page);
-    }
-    if (opacity < 1) {
-      page = ColoredBox(
-        color: background,
-        child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: page),
-      );
-    }
-    return page;
+    super.paint(context, offset);
   }
 }
 
@@ -1147,14 +1350,20 @@ class _EdgeShadow extends StatelessWidget {
   );
 }
 
-class _RRectClipper extends CustomClipper<RRect> {
-  const _RRectClipper(this.rrect);
+/// 換頁中整頁的裁切：「展開」時是長到一半的範圍 [rrect]，其他是整頁加上
+/// [radius] 的圓角。
+class _PageClipper extends CustomClipper<RRect> {
+  const _PageClipper({required this.rrect, required this.radius});
 
-  final RRect rrect;
+  final RRect? rrect;
+  final double radius;
 
   @override
-  RRect getClip(Size size) => rrect;
+  RRect getClip(Size size) =>
+      rrect ??
+      RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
 
   @override
-  bool shouldReclip(_RRectClipper oldClipper) => oldClipper.rrect != rrect;
+  bool shouldReclip(_PageClipper oldClipper) =>
+      oldClipper.rrect != rrect || oldClipper.radius != radius;
 }

@@ -17,6 +17,8 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
+import 'package:night_reader/shared/navigation/app_route_observer.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -61,8 +63,40 @@ class BookshelfPage extends StatefulWidget {
 }
 
 class _BookshelfPageState extends State<BookshelfPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware {
   bool _isMultiSelect = false;
+
+  ModalRoute<Object?>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 用 pageRouteOf 不用 ModalRoute.of：後者會讓書架依賴路由狀態，每次有
+    // 頁面推入或移走都整頁重建（ADR 0018）。
+    final route = pageRouteOf(context);
+    if (route != _route) {
+      if (_route != null) appRouteObserver.unsubscribe(this);
+      _route = route;
+      if (route != null) appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// 別的頁面蓋上書架（書籍詳情、搜尋、閱讀器……）：背景下載完成的重讀
+  /// 先記著，不在別人的換頁動畫裡重排被蓋住的書架（ADR 0018、0029）。
+  @override
+  void didPushNext() => context.read<BookshelfProvider>().setCovered(true);
+
+  /// 書架露出來、返回動畫播完，才補做被蓋住時記下的重讀。
+  @override
+  void didPopNext() {
+    final provider = context.read<BookshelfProvider>();
+    unawaited(
+      TransitionSettled.uncovered(context).then((_) {
+        if (mounted) provider.setCovered(false);
+      }),
+    );
+  }
+
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
@@ -105,6 +139,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     unawaited(_hasSourcesSub?.cancel());
     _motion.dispose();
     super.dispose();
@@ -1024,16 +1059,14 @@ class _BookshelfPageState extends State<BookshelfPage>
           .showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
       return;
     }
-    final provider = context.read<BookshelfProvider>();
+    // 閱讀器只改了這本書的進度，不會通知書架；回來時要重排（最近閱讀）並更新
+    // 進度線。記成「露出來要重讀」，和閱讀期間下載完成的重讀併成一次，返回
+    // 動畫播完才做（didPopNext，ADR 0018）。
+    context.read<BookshelfProvider>().reloadWhenUncovered();
     await Navigator.push(
       context,
       BookOpenRoute(book: book, openTarget: ReaderV2OpenTarget.resume(book)),
     );
-    // 閱讀器只改了這本書的進度，不會通知書架；回來時重排（最近閱讀）並更新
-    // 進度線。返回動畫播完才重排，書卡移位不和返回疊在一起（ADR 0018）。
-    if (!mounted) return;
-    await TransitionSettled.uncovered(context);
-    if (mounted) await provider.loadBooks();
   }
 
   Future<void> _showDeleteConfirm(

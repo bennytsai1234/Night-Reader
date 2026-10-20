@@ -83,8 +83,7 @@ class _MainPageState extends State<MainPage>
 
   static const _exitBackInterval = Duration(seconds: 2);
 
-  /// 分頁的 [PageView]；點分頁換頁時搬進 [AppTransitionSwitch]，靠這個 key
-  /// 保住各分頁的狀態，也從這裡拍下換頁前的畫面。
+  /// 分頁的 [PageView]；從這裡拍下換頁前的畫面。
   final GlobalKey _pagesKey = GlobalKey();
 
   /// 換頁的進度；換頁中 [_outgoing] 是換頁前畫面的快照。跟著返回手勢時
@@ -95,7 +94,7 @@ class _MainPageState extends State<MainPage>
       if (status.isCompleted && _follow == _Follow.none) _endSwitch();
     });
   ui.Image? _outgoing;
-  late Color _outgoingBackground;
+  Color _outgoingBackground = const Color(0x00000000);
   late Color _outgoingFade;
   int _outgoingIndex = 0;
   bool _switchForward = true;
@@ -215,26 +214,27 @@ class _MainPageState extends State<MainPage>
         body: Stack(
           fit: StackFit.expand,
           children: [
-            if (outgoing == null)
-              pages
-            else
-              IgnorePointer(
-                child: AppTransitionSwitch(
-                  key: ValueKey(_switchCount),
-                  transition: AppPageTransition.of(context),
-                  animation: _switch,
-                  forward: _switchForward,
-                  outgoing: ExcludeSemantics(
-                    child: RawImage(image: outgoing, fit: BoxFit.fill),
-                  ),
-                  incoming: pages,
-                  follow: _follow != _Follow.none,
-                  outgoingBackground: _outgoingBackground,
-                  incomingBackground: _destinations[_currentIndex].backgroundOf(
-                    context,
-                  ),
+            // 換頁與否分頁都包在同一個位置，換頁開始與結束時不搬動、不重建。
+            IgnorePointer(
+              ignoring: outgoing != null,
+              child: AppTransitionSwitch(
+                trip: _switchCount,
+                transition: AppPageTransition.of(context),
+                animation: _switch,
+                forward: _switchForward,
+                outgoing: outgoing == null
+                    ? null
+                    : ExcludeSemantics(
+                        child: RawImage(image: outgoing, fit: BoxFit.fill),
+                      ),
+                incoming: pages,
+                follow: _follow != _Follow.none,
+                outgoingBackground: _outgoingBackground,
+                incomingBackground: _destinations[_currentIndex].backgroundOf(
+                  context,
                 ),
               ),
+            ),
             // 分頁列後方的漸隱帶，顏色跟著頁面位置在相鄰分頁的背景色間過渡。
             // 整頁編輯時收掉，由分頁墊在自己的編輯工具列後面。
             Positioned(
@@ -299,9 +299,17 @@ class _MainPageState extends State<MainPage>
       _pageController.jumpToPage(index);
       return;
     }
+    // 換頁的第一幀要拍快照、排新分頁（第一次來還要整頁建起來），常常很重；
+    // 這一幀停在起點，畫完才開始計時。原本一開始就計時，第一幀花掉的時間
+    // 直接被跳過，點下去就掉幀（ADR 0018）。
+    final trip = _switchCount;
     _switch
       ..duration = AppPageTransition.of(context).duration
-      ..forward(from: 0);
+      ..value = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _switchCount != trip || _outgoing == null) return;
+      _switch.forward(from: 0);
+    });
   }
 
   /// 拍下換頁前的畫面、把分頁換到 [index]，交給 [AppTransitionSwitch]；

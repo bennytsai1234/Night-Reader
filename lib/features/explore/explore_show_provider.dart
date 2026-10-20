@@ -59,16 +59,20 @@ class ExploreShowProvider extends ChangeNotifier {
     required this.sourceUrl,
     required this.exploreUrl,
     required this.exploreName,
+    required Future<void> entrance,
     BookshelfStateTracker? bookshelfTracker,
     ExploreBookLoader? exploreLoader,
     ExploreExtrasLoader? extrasLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
        _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks,
        details = ExploreBookDetails(loader: extrasLoader) {
-    _init();
+    // 進場動畫播完才讀書源、向書源抓書單（ADR 0018）：原本一進頁就開始，
+    // 書單在換頁途中到，建清單與骨架換場都疊在換頁上。這之前照常是骨架。
+    unawaited(entrance.then((_) => _init()));
   }
 
   Future<void> _init() async {
+    if (_isDisposed) return;
     try {
       _bookSource = await _sourceDao.getByUrl(sourceUrl);
       if (_isDisposed) return;

@@ -72,6 +72,7 @@ void main() {
       sourceUrl: 'https://s.example',
       exploreUrl: 'https://s.example/explore',
       exploreName: '玄幻',
+      entrance: Future<void>.value(),
       exploreLoader: (source, url, {page = 1, cancelToken}) async {
         requests++;
         return [

@@ -63,6 +63,7 @@ void main() {
             sourceUrl: _origin,
             exploreUrl: '$_origin/category/1',
             exploreName: '玄幻',
+            entrance: Future<void>.value(),
             bookshelfTracker: BookshelfStateTracker(bookDao: _FakeBookDao()),
             exploreLoader: (source, url, {page, cancelToken}) async =>
                 page == 1 ? [for (var i = 0; i < 30; i++) listed(i)] : [],
