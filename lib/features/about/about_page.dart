@@ -120,19 +120,33 @@ class _AboutPageState extends State<AboutPage> {
     if (!confirmed || !mounted) return;
     setState(() => _clearingWebData = true);
     final messenger = ScaffoldMessenger.of(context);
-    try {
-      final service = WebViewDataService();
-      await service.clearAllCookies();
-      await service.clearWebViewLocalStorage();
-      await service.clearWebViewCache();
-      messenger.showSnackBar(const SnackBar(content: Text('已清除網頁資料')));
-    } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(failureMessage('清除網頁資料', error))),
-      );
-    } finally {
-      if (mounted) setState(() => _clearingWebData = false);
+    final service = WebViewDataService();
+    // 三種互不依賴：一種失敗照樣清其他的，最後說哪幾種沒清掉。
+    final failures = <String>[];
+    Object? firstError;
+    for (final (label, clear) in <(String, Future<void> Function())>[
+      ('Cookie', service.clearAllCookies),
+      ('localStorage', service.clearWebViewLocalStorage),
+      ('快取', service.clearWebViewCache),
+    ]) {
+      try {
+        await clear();
+      } catch (error, stackTrace) {
+        AppLog.e('清除$label失敗', error: error, stackTrace: stackTrace);
+        failures.add(label);
+        firstError ??= error;
+      }
     }
+    if (mounted) setState(() => _clearingWebData = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failures.isEmpty
+              ? '已清除網頁資料'
+              : failureMessage('清除${failures.join('、')}', firstError!),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPackageInfo() async {
