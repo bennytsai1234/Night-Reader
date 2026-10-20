@@ -151,18 +151,34 @@ void main() {
       await first;
     });
 
-    test('tells listeners while a shelf check is running', () async {
+    test(
+      'signals a running shelf check without notifying the whole shelf',
+      () async {
+        await bookDao.upsert(shelfBook('https://a.example/1'));
+        final states = <bool>[];
+        provider.checkingShelf.addListener(
+          () => states.add(provider.checkingShelf.value),
+        );
+
+        final refresh = provider.refreshBookshelf();
+        expect(provider.checkingShelf.value, isTrue);
+        await refresh;
+
+        expect(provider.checkingShelf.value, isFalse);
+        expect(states, [true, false]);
+      },
+    );
+
+    test('a shelf reload with books on it notifies once, at the end', () async {
       await bookDao.upsert(shelfBook('https://a.example/1'));
-      final states = <bool>[];
-      provider.addListener(() => states.add(provider.isCheckingShelf));
+      await provider.loadBooks();
+      var notified = 0;
+      provider.addListener(() => notified++);
 
-      final refresh = provider.refreshBookshelf();
-      expect(provider.isCheckingShelf, isTrue);
-      await refresh;
+      await provider.loadBooks();
 
-      expect(provider.isCheckingShelf, isFalse);
-      expect(states.first, isTrue);
-      expect(states.last, isFalse);
+      // 書架有書時不換回骨架，開始時不必讓整頁重建。
+      expect(notified, 1);
     });
 
     test('a check that ends after the provider is disposed stays '
@@ -175,6 +191,25 @@ void main() {
       shelf.dispose();
 
       await expectLater(refresh, completes);
+    });
+
+    test('a launch whose downloads finish after the shelf closes does not '
+        'start a check', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      final downloading = Completer<void>();
+      final shelf = BookshelfProvider(
+        keepBookDownloaded: (url, {hasNewChapters = false}) =>
+            downloading.future,
+      );
+
+      final launch = shelf.onAppLaunch();
+      await Future<void>.delayed(Duration.zero);
+      shelf.dispose();
+      downloading.complete();
+
+      // 不寫已釋放的訊號，也不開始檢查。
+      await expectLater(launch, completes);
+      expect(await lastCheckTimeOf('https://a.example/1'), 0);
     });
   });
 
@@ -303,11 +338,15 @@ void main() {
       expect(shelf.updateBadgeOf('https://a.example/same'), isNull);
       expect(timers.single.$1, const Duration(seconds: 5));
 
-      var notified = false;
-      shelf.addListener(() => notified = true);
+      // 角標消失只通知角標，不讓整個書架重建。
+      var shelfNotified = false;
+      var badgesNotified = false;
+      shelf.addListener(() => shelfNotified = true);
+      shelf.updateBadges.addListener(() => badgesNotified = true);
       timers.single.$2();
 
-      expect(notified, isTrue);
+      expect(badgesNotified, isTrue);
+      expect(shelfNotified, isFalse);
       expect(shelf.updateBadgeOf('https://a.example/new'), isNull);
       expect(shelf.updateBadgeOf('https://a.example/broken'), isNull);
     });

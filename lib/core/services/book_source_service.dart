@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -30,6 +31,18 @@ class BookSourceService {
   }) => _runOnSource(
     _bookInfoTask(source, book),
     book: book,
+    cancelToken: cancelToken,
+  );
+
+  /// 從書籍詳情頁取封面與字數（和 [getBookInfo] 同一條解析），給清單補上
+  /// 清單規則沒給的；只把這兩個欄位傳回畫面執行緒，不帶整頁 HTML。沒抓到
+  /// 的是空字串。
+  Future<({String coverUrl, String wordCount})> getCoverAndWordCount(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) => _runOnSource(
+    _coverAndWordCountTask(source, book),
     cancelToken: cancelToken,
   );
 
@@ -168,6 +181,22 @@ typedef _Work<R> = Future<R> Function(CancelToken cancelToken);
 _Work<Book> _bookInfoTask(BookSource source, Book book) =>
     (cancelToken) =>
         WebBook.getBookInfoAwait(source, book, cancelToken: cancelToken);
+
+_Work<({String coverUrl, String wordCount})> _coverAndWordCountTask(
+  BookSource source,
+  Book book,
+) => (cancelToken) async {
+  final info = await WebBook.getBookInfoAwait(
+    source,
+    book,
+    cancelToken: cancelToken,
+  );
+  // 字數照書籍詳情的寫法：字數欄沒有時從分類（例如「玄幻,25萬字」）取。
+  return (
+    coverUrl: info.coverUrl ?? '',
+    wordCount: StringUtils.displayWordCount(info.wordCount, info.kind),
+  );
+};
 
 _Work<List<BookChapter>> _chapterListTask(
   BookSource source,

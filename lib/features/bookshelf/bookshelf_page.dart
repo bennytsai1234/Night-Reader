@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
@@ -231,7 +232,7 @@ class _BookshelfPageState extends State<BookshelfPage>
     return GlassNavHeader(
       morph: true,
       title: '書架',
-      titleSheen: provider.isCheckingShelf,
+      titleSheen: provider.checkingShelf,
       leading: GlassMenuButton<Object>(
         icon: Icons.swap_vert_rounded,
         tooltip: '整理書架',
@@ -361,6 +362,8 @@ class _BookshelfPageState extends State<BookshelfPage>
           !_contentShown && !ChineseDisplay.readyOf(context),
       waitForCovers: true,
       entrance: LaunchEntrance.maybeOf(context),
+      // 書架直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
+      backdrop: Theme.of(context).scaffoldBackgroundColor,
       skeleton: BookshelfSkeleton(
         grid: provider.isGridView,
         bookCount: provider.lastBookCount,
@@ -762,15 +765,19 @@ class _BookshelfPageState extends State<BookshelfPage>
         placeholder: const SizedBox(
           height: BookshelfListCard.coverHeight + AppSpacing.md * 2,
         ),
-        child: BookshelfListCard(
-          book: book,
-          updateBadge: selecting ? null : provider.updateBadgeOf(book.bookUrl),
-          selecting: selecting,
-          selected: _selectedUrls.contains(book.bookUrl),
-          onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
-          onLongPress: selecting || reorderable
-              ? null
-              : (rect) => _showBookMenu(provider, book, rect, grid: false),
+        child: _UpdateBadgeOf(
+          badges: provider.updateBadges,
+          bookUrl: book.bookUrl,
+          builder: (badge) => BookshelfListCard(
+            book: book,
+            updateBadge: selecting ? null : badge,
+            selecting: selecting,
+            selected: _selectedUrls.contains(book.bookUrl),
+            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+            onLongPress: selecting || reorderable
+                ? null
+                : (rect) => _showBookMenu(provider, book, rect, grid: false),
+          ),
         ),
       ),
     );
@@ -812,16 +819,20 @@ class _BookshelfPageState extends State<BookshelfPage>
           id: book.bookUrl,
           motion: _motion,
           child: CoverRevealSlot(
-            child: BookshelfGridTile(
-              book: book,
-              updateBadge: provider.updateBadgeOf(book.bookUrl),
-              selecting: _isMultiSelect,
-              selected: _selectedUrls.contains(book.bookUrl),
-              onTap: () =>
-                  _isMultiSelect ? _toggleSelected(book) : _openBook(book),
-              onLongPress: _isMultiSelect
-                  ? null
-                  : (rect) => _showBookMenu(provider, book, rect, grid: true),
+            child: _UpdateBadgeOf(
+              badges: provider.updateBadges,
+              bookUrl: book.bookUrl,
+              builder: (badge) => BookshelfGridTile(
+                book: book,
+                updateBadge: badge,
+                selecting: _isMultiSelect,
+                selected: _selectedUrls.contains(book.bookUrl),
+                onTap: () =>
+                    _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+                onLongPress: _isMultiSelect
+                    ? null
+                    : (rect) => _showBookMenu(provider, book, rect, grid: true),
+              ),
             ),
           ),
         );
@@ -1056,4 +1067,57 @@ class _BookshelfPageState extends State<BookshelfPage>
       messenger.showSnackBar(SnackBar(content: Text(failureMessage('刪除', e))));
     }
   }
+}
+
+/// 只在這本書的角標變了才重建書卡：書架檢查結束、角標出現與消失時，其他
+/// 書卡與整個書架都不動（ADR 0018）。
+class _UpdateBadgeOf extends StatefulWidget {
+  const _UpdateBadgeOf({
+    required this.badges,
+    required this.bookUrl,
+    required this.builder,
+  });
+
+  final ValueListenable<Map<String, BookUpdateCheckResult>> badges;
+  final String bookUrl;
+  final Widget Function(BookUpdateCheckResult? badge) builder;
+
+  @override
+  State<_UpdateBadgeOf> createState() => _UpdateBadgeOfState();
+}
+
+class _UpdateBadgeOfState extends State<_UpdateBadgeOf> {
+  BookUpdateCheckResult? _badge;
+
+  @override
+  void initState() {
+    super.initState();
+    _badge = widget.badges.value[widget.bookUrl];
+    widget.badges.addListener(_onBadges);
+  }
+
+  @override
+  void didUpdateWidget(_UpdateBadgeOf oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.badges, widget.badges)) {
+      oldWidget.badges.removeListener(_onBadges);
+      widget.badges.addListener(_onBadges);
+    }
+    _badge = widget.badges.value[widget.bookUrl];
+  }
+
+  @override
+  void dispose() {
+    widget.badges.removeListener(_onBadges);
+    super.dispose();
+  }
+
+  void _onBadges() {
+    final badge = widget.badges.value[widget.bookUrl];
+    if (identical(badge, _badge)) return;
+    setState(() => _badge = badge);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_badge);
 }

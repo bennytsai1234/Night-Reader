@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
 
+import 'explore_book_details.dart';
+
 typedef ExploreBookLoader = Future<List<SearchBook>> Function(
   BookSource source,
   String exploreUrl, {
@@ -41,7 +43,12 @@ class ExploreShowProvider extends ChangeNotifier {
   int _requestSerial = 0;
   bool _isDisposed = false;
 
+  /// 清單上畫出來的書缺的封面與字數，在背景向書源補。
+  final ExploreBookDetails details;
+
   // --- Getters ---
+  /// 這個分類的書源；找到之前是 null。
+  BookSource? get source => _bookSource;
   List<SearchBook> get books => _books;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
@@ -55,8 +62,10 @@ class ExploreShowProvider extends ChangeNotifier {
     required Future<void> entrance,
     BookshelfStateTracker? bookshelfTracker,
     ExploreBookLoader? exploreLoader,
+    ExploreExtrasLoader? extrasLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
-       _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks {
+       _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks,
+       details = ExploreBookDetails(loader: extrasLoader) {
     // 進場動畫播完才讀書源、向書源抓書單（ADR 0018）：原本一進頁就開始，
     // 書單在換頁途中到，建清單與骨架換場都疊在換頁上。這之前照常是骨架。
     unawaited(entrance.then((_) => _init()));
@@ -173,6 +182,7 @@ class ExploreShowProvider extends ChangeNotifier {
     _requestSerial++;
     _cancelToken?.cancel('ExploreShowProvider disposed');
     _bookshelfTracker.dispose();
+    details.dispose();
     super.dispose();
   }
 }
