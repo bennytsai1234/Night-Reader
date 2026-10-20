@@ -67,6 +67,20 @@ void main() {
             closeTo(gap, tolerance),
             reason: '閱讀選單和紙分開',
           );
+          // 次要文字和閱讀選單的距離不比和卡片的近：選單底色移動時跟著移。
+          final menuMuted = AppLayers.keepGap(
+            palette.textMuted,
+            palette.text,
+            from: palette.surface,
+            to: palette.readerMenu,
+          );
+          expect(
+            (l(menuMuted) - l(palette.readerMenu)).abs(),
+            greaterThanOrEqualTo(
+              (l(palette.textMuted) - l(palette.surface)).abs() - tolerance,
+            ),
+            reason: '閱讀選單上的次要文字',
+          );
           final chrome = buildAppTheme(
             style,
             brightness,

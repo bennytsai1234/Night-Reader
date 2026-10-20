@@ -49,6 +49,19 @@ class AppLayers {
     return Color.alphaBlend(toward.withValues(alpha: hi), from);
   }
 
+  /// 底色從 [from] 換成 [to] 而離 [color] 更近時，把 [color] 往 [toward] 移，
+  /// 保持原本和底色的明度差；離得更遠就不動。用在次要文字換到另一層底上。
+  static Color keepGap(
+    Color color,
+    Color toward, {
+    required Color from,
+    required Color to,
+  }) {
+    final l = lightness(color);
+    final lost = (l - lightness(from)).abs() - (l - lightness(to)).abs();
+    return lost > 0 ? step(color, toward, lost) : color;
+  }
+
   /// 畫在 [surface] 上的框線色。
   static Color edgeOn(Color surface, Color text) =>
       step(surface, text, edgeGap);
