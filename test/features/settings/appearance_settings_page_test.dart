@@ -107,58 +107,20 @@ void main() {
     );
   });
 
-  testWidgets('骨架換場預設由左而右、0.6 秒，改了會保存', (tester) async {
+  testWidgets('不再有骨架的選項，骨架照固定的樣子與換場', (tester) async {
     await pumpPage(tester);
-    await tester.scrollUntilVisible(find.text('換場時長'), 200);
-    expect(find.text('由左而右'), findsOneWidget);
-    expect(find.text('0.6 秒'), findsOneWidget);
-
-    // 捲到畫面中間，不被頁首與底部讓出的位置擋住。
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.add_rounded));
-    await tester.pumpAndSettle();
-    expect(themeSettings.skeletonReveal.duration.inMilliseconds, 700);
-    expect(prefs.getInt(PreferKey.skeletonRevealMillis), 700);
-
-    await tester.tap(find.text('骨架換場'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('整頁淡入').last);
-    await tester.pumpAndSettle();
-    expect(themeSettings.skeletonReveal.style, SkeletonRevealStyle.fade);
+    for (final title in ['骨架深淺', '骨架呼吸', '骨架換場', '換場時長']) {
+      expect(find.text(title), findsNothing, reason: title);
+    }
+    final context = tester.element(find.byType(AppearanceSettingsPage));
+    expect(SkeletonLook.of(context), const SkeletonLook());
+    expect(SkeletonLook.of(context).strength, SkeletonStrength.standard);
+    expect(SkeletonLook.of(context).breath, SkeletonBreath.gentleSweep);
+    expect(SkeletonReveal.of(context), const SkeletonReveal());
+    expect(SkeletonReveal.of(context).sweeps, isTrue);
     expect(
-      prefs.getString(PreferKey.skeletonRevealStyle),
-      SkeletonRevealStyle.fade.name,
-    );
-  });
-
-  testWidgets('骨架深淺預設標準、呼吸預設由左而右・緩，改了會保存', (tester) async {
-    await pumpPage(tester);
-    await tester.scrollUntilVisible(find.text('換場時長'), 200);
-    expect(find.text('標準'), findsOneWidget);
-    expect(find.text('由左而右・緩'), findsOneWidget);
-
-    // 捲到畫面中間，不被頁首與底部讓出的位置擋住。
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('骨架深淺'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('很深').last);
-    await tester.pumpAndSettle();
-    expect(themeSettings.skeletonLook.strength, SkeletonStrength.strongest);
-    expect(
-      prefs.getString(PreferKey.skeletonStrength),
-      SkeletonStrength.strongest.name,
-    );
-
-    await tester.tap(find.text('骨架呼吸'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('整塊一起').last);
-    await tester.pumpAndSettle();
-    expect(themeSettings.skeletonLook.breath, SkeletonBreath.whole);
-    expect(
-      prefs.getString(PreferKey.skeletonBreath),
-      SkeletonBreath.whole.name,
+      SkeletonReveal.of(context).duration,
+      const Duration(milliseconds: 600),
     );
   });
 }

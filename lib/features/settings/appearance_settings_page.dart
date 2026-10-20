@@ -10,14 +10,12 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
-import 'package:night_reader/shared/widgets/number_stepper_row.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
-/// 外觀與主題：風格、強調色、深淺、玻璃效果、換頁動畫與骨架換場。風格與
-/// 深淺同時決定 App 介面、閱讀正文與閱讀選單的配色。
+/// 外觀與主題：風格、強調色、深淺、玻璃效果與換頁動畫。風格與深淺同時
+/// 決定 App 介面、閱讀正文與閱讀選單的配色。載入骨架的深淺、呼吸與換場
+/// 不給選，固定用 `SkeletonLook`、`SkeletonReveal` 的預設。
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
@@ -112,69 +110,6 @@ class AppearanceSettingsPage extends StatelessWidget {
                     selected: themeSettings.pageTransition,
                     onPicked: themeSettings.setPageTransition,
                   ),
-                ),
-              ),
-            ],
-          ),
-          GroupedSection(
-            children: [
-              Builder(
-                builder: (rowContext) => GroupedRow(
-                  title: '骨架深淺',
-                  value: themeSettings.skeletonLook.strength.label,
-                  showChevron: false,
-                  onTap: () => _pickOption(
-                    rowContext,
-                    SkeletonStrength.values,
-                    label: (strength) => strength.label,
-                    selected: themeSettings.skeletonLook.strength,
-                    onPicked: themeSettings.setSkeletonStrength,
-                  ),
-                ),
-              ),
-              Builder(
-                builder: (rowContext) => GroupedRow(
-                  title: '骨架呼吸',
-                  value: themeSettings.skeletonLook.breath.label,
-                  showChevron: false,
-                  onTap: () => _pickOption(
-                    rowContext,
-                    SkeletonBreath.values,
-                    label: (breath) => breath.label,
-                    selected: themeSettings.skeletonLook.breath,
-                    onPicked: themeSettings.setSkeletonBreath,
-                  ),
-                ),
-              ),
-              Builder(
-                builder: (rowContext) => GroupedRow(
-                  title: '骨架換場',
-                  value: themeSettings.skeletonReveal.style.label,
-                  showChevron: false,
-                  onTap: () => _pickOption(
-                    rowContext,
-                    SkeletonRevealStyle.values,
-                    label: (style) => style.label,
-                    selected: themeSettings.skeletonReveal.style,
-                    onPicked: themeSettings.setSkeletonRevealStyle,
-                  ),
-                ),
-              ),
-              GroupedContent(
-                child: NumberStepperRow(
-                  label: '換場時長',
-                  value:
-                      themeSettings.skeletonReveal.duration.inMilliseconds /
-                      1000,
-                  min: SkeletonReveal.minDuration.inMilliseconds / 1000,
-                  max: SkeletonReveal.maxDuration.inMilliseconds / 1000,
-                  step: SkeletonReveal.durationStep.inMilliseconds / 1000,
-                  fractionDigits: 1,
-                  unit: '秒',
-                  onChanged: (seconds) =>
-                      themeSettings.setSkeletonRevealDuration(
-                        Duration(milliseconds: (seconds * 1000).round()),
-                      ),
                 ),
               ),
             ],
