@@ -11,7 +11,6 @@ import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/reading_stats_page.dart';
 
 import 'tts_settings_page.dart';
-import 'data_privacy_settings_page.dart';
 import 'backup_settings_page.dart';
 
 import 'package:night_reader/features/about/about_page.dart';
@@ -105,14 +104,6 @@ class SettingsPage extends StatelessWidget {
                 ),
                 title: '備份與還原',
                 onTap: () => _push(context, const BackupSettingsPage()),
-              ),
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.shield_outlined,
-                  tint: AppTint.azurite,
-                ),
-                title: '資料與隱私',
-                onTap: () => _push(context, const DataPrivacySettingsPage()),
               ),
               GroupedRow(
                 leading: const GroupedIconTile(

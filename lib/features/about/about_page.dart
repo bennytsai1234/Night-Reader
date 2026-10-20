@@ -1,20 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
+import 'package:night_reader/core/services/webview_data_service.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
+import 'privacy_pages.dart';
 import 'release_notes_page.dart';
 import 'update_check_runner.dart';
+
+/// 「自動更新」的三種：不自動檢查、自動檢查（有新版時問要不要下載）、自動
+/// 檢查並在 Wi-Fi 下直接下載。
+enum _AppUpdateMode {
+  manual('不自動'),
+  check('自動檢查'),
+  download('Wi-Fi 下自動下載');
+
+  const _AppUpdateMode(this.label);
+  final String label;
+}
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -57,14 +72,81 @@ class _AboutPageState extends State<AboutPage> {
     await _updatePreferences.setBetaChannel(enabled);
   }
 
-  Future<void> _setAutoCheck(bool enabled) async {
-    setState(() => _autoCheck = enabled);
-    await _updatePreferences.setAutoCheck(enabled);
+  _AppUpdateMode get _updateMode => !_autoCheck
+      ? _AppUpdateMode.manual
+      : _autoDownload
+      ? _AppUpdateMode.download
+      : _AppUpdateMode.check;
+
+  /// 「自動檢查」與「在 Wi-Fi 下自動下載」原本是兩個開關，後者只在前者開著
+  /// 時有作用；合成一列三選一。
+  Future<void> _setUpdateMode(_AppUpdateMode mode) async {
+    setState(() {
+      _autoCheck = mode != _AppUpdateMode.manual;
+      if (_autoCheck) _autoDownload = mode == _AppUpdateMode.download;
+    });
+    await _updatePreferences.setAutoCheck(_autoCheck);
+    if (_autoCheck) await _updatePreferences.setAutoDownload(_autoDownload);
   }
 
-  Future<void> _setAutoDownload(bool enabled) async {
-    setState(() => _autoDownload = enabled);
-    await _updatePreferences.setAutoDownload(enabled);
+  Future<void> _pickUpdateMode(BuildContext rowContext) async {
+    final picked = await showGlassMenu<_AppUpdateMode>(
+      context: rowContext,
+      anchor: globalRectOf(rowContext),
+      entries: [
+        for (final mode in _AppUpdateMode.values)
+          GlassMenuItem(
+            value: mode,
+            label: mode.label,
+            checked: mode == _updateMode,
+          ),
+      ],
+    );
+    if (picked != null) await _setUpdateMode(picked);
+  }
+
+  bool _clearingWebData = false;
+
+  /// 書源登入用的 Cookie、WebView 的 localStorage 與快取一起清掉。原本是三個
+  /// 分開的按鈕，結果都是「需要網頁驗證的書源可能要重新驗證」。
+  Future<void> _clearWebData() async {
+    final confirmed = await showAppConfirm(
+      context: context,
+      title: '清除網頁資料',
+      message: '會清除書源的 Cookie、WebView 的 localStorage 與快取，需要登入或網頁驗證的書源要重新驗證；書籍與正文不受影響。',
+      confirmLabel: '清除',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _clearingWebData = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final service = WebViewDataService();
+    // 三種互不依賴：一種失敗照樣清其他的，最後說哪幾種沒清掉。
+    final failures = <String>[];
+    Object? firstError;
+    for (final (label, clear) in <(String, Future<void> Function())>[
+      ('Cookie', service.clearAllCookies),
+      ('localStorage', service.clearWebViewLocalStorage),
+      ('快取', service.clearWebViewCache),
+    ]) {
+      try {
+        await clear();
+      } catch (error, stackTrace) {
+        AppLog.e('清除$label失敗', error: error, stackTrace: stackTrace);
+        failures.add(label);
+        firstError ??= error;
+      }
+    }
+    if (mounted) setState(() => _clearingWebData = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failures.isEmpty
+              ? '已清除網頁資料'
+              : failureMessage('清除${failures.join('、')}', firstError!),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPackageInfo() async {
@@ -133,6 +215,28 @@ class _AboutPageState extends State<AboutPage> {
                 title: '免責聲明',
                 onTap: () => _showDisclaimer(context),
               ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.privacy_tip_outlined,
+                  tint: AppTint.ink,
+                ),
+                title: '隱私說明',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PrivacyNoticePage()),
+                ),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.admin_panel_settings_outlined,
+                  tint: AppTint.ink,
+                ),
+                title: '權限',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PermissionsPage()),
+                ),
+              ),
             ],
           ),
           GroupedSection(
@@ -166,26 +270,18 @@ class _AboutPageState extends State<AboutPage> {
                   MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
                 ),
               ),
-              GroupedSwitchRow(
-                leading: const GroupedIconTile(
-                  Icons.update_rounded,
-                  tint: AppTint.azurite,
-                ),
-                title: '自動檢查更新',
-                value: _autoCheck,
-                onChanged: _setAutoCheck,
-              ),
-              // 只在自動檢查開著時才有作用，關閉時整列收起。
-              if (_autoCheck)
-                GroupedSwitchRow(
+              Builder(
+                builder: (rowContext) => GroupedRow(
                   leading: const GroupedIconTile(
-                    Icons.wifi_rounded,
-                    tint: AppTint.tea,
+                    Icons.update_rounded,
+                    tint: AppTint.azurite,
                   ),
-                  title: '在 Wi-Fi 下自動下載更新',
-                  value: _autoDownload,
-                  onChanged: _setAutoDownload,
+                  title: '自動更新',
+                  value: _updateMode.label,
+                  showChevron: false,
+                  onTap: () => _pickUpdateMode(rowContext),
                 ),
+              ),
               GroupedSwitchRow(
                 leading: const GroupedIconTile(
                   Icons.science_outlined,
@@ -205,6 +301,16 @@ class _AboutPageState extends State<AboutPage> {
                   (settings) => settings.autoRefresh,
                 ),
                 onChanged: context.read<SettingsProvider>().setAutoRefresh,
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.cleaning_services_outlined,
+                  tint: AppTint.tea,
+                ),
+                title: '清除網頁資料',
+                showChevron: false,
+                enabled: !_clearingWebData,
+                onTap: _clearWebData,
               ),
               GroupedRow(
                 leading: const GroupedIconTile(
