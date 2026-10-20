@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
+import 'package:night_reader/features/explore/explore_book_details.dart';
 import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
@@ -14,18 +16,26 @@ import 'package:night_reader/core/services/chinese_display.dart';
 /// ExploreBookItem - 探索結果書籍項目
 /// (對標 Android ExploreShowAdapter + item_search 佈局)
 ///
-/// Telegram 清單列樣式：左側封面，右側書名、作者與分類、最新章節、簡介；
-/// 按下整列高亮，列間分隔線從文字起點開始（[textIndent]）。
+/// Telegram 清單列樣式：左側封面，右側書名、作者 · 字數 · 分類、最新章節，
+/// 不放簡介；按下整列高亮，列間分隔線從文字起點開始（[textIndent]）。
+///
+/// 封面與字數可能晚一點才從書籍詳情補到（[extras]）：補到時只重建封面與
+/// 作者 · 字數 · 分類那一行。封面大小固定，那一行沒有內容時也佔著一行高，
+/// 換字只重排那一行，這一列與清單的版面不動。
 class ExploreBookItem extends StatelessWidget {
   final SearchBook book;
   final bool isInBookshelf;
   final String? sourceName;
+
+  /// 從書籍詳情補到的封面與字數（見 [ExploreBookDetails]）。
+  final ValueListenable<ExploreBookExtras?>? extras;
 
   const ExploreBookItem({
     super.key,
     required this.book,
     this.isInBookshelf = false,
     this.sourceName,
+    this.extras,
   });
 
   static const double coverWidth = 52;
@@ -39,17 +49,15 @@ class ExploreBookItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final secondary = AppChrome.of(context).sectionText;
-    final kinds = _kinds(context);
-    final wordCount = StringUtils.displayWordCount(
-      book.wordCount,
-      context.zh(book.kind ?? ''),
+    final metaStyle = AppTextStyles.bodySm.copyWith(
+      height: 1.35,
+      color: secondary,
     );
-    final meta = [
-      if (book.author != null && book.author!.isNotEmpty)
-        context.zh(book.author!),
-      if (wordCount.isNotEmpty) wordCount,
-      ...kinds,
-    ].join(' · ');
+    // 固定一行高（行高照字級與系統字級算）：外框的大小給死，字數補到時
+    // 換字只重排這一行。
+    final metaLineHeight =
+        MediaQuery.textScalerOf(context).scale(metaStyle.fontSize!) *
+        metaStyle.height!;
 
     return TransitionSource(
       child: InkWell(
@@ -64,13 +72,15 @@ class ExploreBookItem extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BookCoverWidget(
-                coverUrl: book.coverUrl,
-                bookName: context.zh(book.name),
-                author: context.zh(book.author ?? ''),
-                width: coverWidth,
-                height: coverHeight,
-                borderRadius: AppRadius.cardXs,
+              _withExtras(
+                (book) => BookCoverWidget(
+                  coverUrl: book.coverUrl,
+                  bookName: context.zh(book.name),
+                  author: context.zh(book.author ?? ''),
+                  width: coverWidth,
+                  height: coverHeight,
+                  borderRadius: AppRadius.cardXs,
+                ),
               ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
@@ -98,42 +108,26 @@ class ExploreBookItem extends StatelessWidget {
                         ],
                       ],
                     ),
-                    if (meta.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        meta,
-                        style: AppTextStyles.bodySm.copyWith(
-                          height: 1.35,
-                          color: secondary,
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      width: double.infinity,
+                      height: metaLineHeight,
+                      child: _withExtras(
+                        (book) => Text(
+                          _meta(context, book),
+                          style: metaStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
+                    ),
                     if (book.latestChapterTitle != null &&
                         book.latestChapterTitle!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
                         '最新：${context.zh(book.latestChapterTitle!)}',
-                        style: AppTextStyles.bodySm.copyWith(
-                          height: 1.35,
-                          color: secondary,
-                        ),
+                        style: metaStyle,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    if (book.intro != null && book.intro!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        context.zh(
-                          book.intro!.replaceAll(RegExp(r'\s+'), ' ').trim(),
-                        ),
-                        style: AppTextStyles.bodySm.copyWith(
-                          height: 1.4,
-                          color: secondary.withValues(alpha: 0.85),
-                        ),
-                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -147,19 +141,39 @@ class ExploreBookItem extends StatelessWidget {
     );
   }
 
-  List<String> _kinds(BuildContext context) {
-    if (book.kind == null || book.kind!.isEmpty) return const [];
-    return StringUtils.kindLabels(context.zh(book.kind!)).take(3).toList();
+  /// 補上 [extras] 的書；[builder] 只在補到時跟著重建。
+  Widget _withExtras(Widget Function(SearchBook book) builder) {
+    final extras = this.extras;
+    if (extras == null) return builder(book);
+    return ValueListenableBuilder<ExploreBookExtras?>(
+      valueListenable: extras,
+      builder: (context, value, _) =>
+          builder(ExploreBookDetails.withExtras(book, value)),
+    );
+  }
+
+  /// 作者 · 字數 · 分類（分類最多三個）。
+  static String _meta(BuildContext context, SearchBook book) {
+    final kind = context.zh(book.kind ?? '');
+    final wordCount = StringUtils.displayWordCount(book.wordCount, kind);
+    return [
+      if (book.author != null && book.author!.isNotEmpty)
+        context.zh(book.author!),
+      if (wordCount.isNotEmpty) wordCount,
+      if (kind.isNotEmpty) ...StringUtils.kindLabels(kind).take(3),
+    ].join(' · ');
   }
 
   void _navigateToDetail(BuildContext context) {
+    // 補到的封面與字數一起帶進書籍詳情，詳情一進頁就畫得出封面。
+    final shown = ExploreBookDetails.withExtras(book, extras?.value);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => BookDetailPage(
           searchBook: AggregatedSearchBook(
-            book: book,
-            sources: [book.originName ?? sourceName ?? '發現'],
+            book: shown,
+            sources: [shown.originName ?? sourceName ?? '發現'],
           ),
         ),
       ),
