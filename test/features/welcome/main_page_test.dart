@@ -56,6 +56,13 @@ void main() {
 
   bool tabBarHidden(WidgetTester tester) =>
       tester.widget<FloatingTabBar>(find.byType(FloatingTabBar)).hidden;
+
+  /// 正在播換頁：換頁前的畫面是一張快照。
+  bool switching(WidgetTester tester) =>
+      tester
+          .widget<AppTransitionSwitch>(find.byType(AppTransitionSwitch))
+          .outgoing !=
+      null;
   FloatingTabBarFade fade(WidgetTester tester) =>
       tester.widget<FloatingTabBarFade>(find.byType(FloatingTabBarFade));
 
@@ -136,7 +143,7 @@ void main() {
       await tester.tap(find.text('三'));
       await tester.pump();
       // 換頁前的畫面是快照，新分頁已經到位；中間的分頁沒有出現。
-      expect(find.byType(AppTransitionSwitch), findsOneWidget);
+      expect(switching(tester), isTrue);
       expect(find.byType(RawImage), findsOneWidget);
       expect(find.text('丙0'), findsOneWidget);
       expect(find.text('乙0'), findsNothing);
@@ -145,7 +152,7 @@ void main() {
       expect(find.text('乙0'), findsNothing);
 
       await tester.pumpAndSettle();
-      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(switching(tester), isFalse);
       expect(find.byType(RawImage), findsNothing);
       expect(find.text('丙0'), findsOneWidget);
     });
@@ -163,13 +170,62 @@ void main() {
       expect(find.text('甲0'), findsNothing);
     });
 
+    testWidgets('tabs are not rebuilt when a switch starts or ends', (
+      tester,
+    ) async {
+      var builds = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: MainPage(
+            destinations: [
+              MainDestination(
+                icon: Icons.book_outlined,
+                selectedIcon: Icons.book,
+                label: '一',
+                page: Builder(
+                  builder: (context) {
+                    builds++;
+                    // 和真的分頁一樣依賴主題：被搬動時會跟著重建。
+                    return ColoredBox(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      child: const Center(child: Text('甲')),
+                    );
+                  },
+                ),
+              ),
+              const MainDestination(
+                icon: Icons.explore_outlined,
+                selectedIcon: Icons.explore,
+                label: '二',
+                page: _ListPage('乙', _secondBackground),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = builds;
+
+      await tester.tap(find.text('二'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('一'));
+      await tester.pump();
+      expect(switching(tester), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(switching(tester), isFalse);
+      expect(find.text('甲'), findsOneWidget);
+      expect(builds, before);
+    });
+
     testWidgets('switches at once when animations are off', (tester) async {
       await tester.pumpWidget(threeTabs(disableAnimations: true));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('三'));
       await tester.pump();
-      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(switching(tester), isFalse);
       expect(find.text('丙0'), findsOneWidget);
     });
   });
@@ -216,7 +272,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 40));
 
       // 預設的平移：這一頁的快照跟著進度往右移一半，底下露出書架。
-      expect(find.byType(AppTransitionSwitch), findsOneWidget);
+      expect(switching(tester), isTrue);
       expect(tester.getRect(find.byType(RawImage)).left, closeTo(400, 1));
       expect(find.text('甲0'), findsOneWidget);
       expect(find.text('乙0'), findsNothing);
@@ -225,7 +281,7 @@ void main() {
 
       await send(tester, 'commitBackGesture');
       await tester.pumpAndSettle();
-      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(switching(tester), isFalse);
       expect(selectedTab(tester), 0);
       expect(find.text('甲0'), findsOneWidget);
       expect(find.text('丙0'), findsNothing);
@@ -241,7 +297,7 @@ void main() {
       await send(tester, 'cancelBackGesture');
       await tester.pumpAndSettle();
 
-      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(switching(tester), isFalse);
       expect(selectedTab(tester), 2);
       // 捲動位置還在，沒有因為途中露出書架而捲回頂端。
       expect(find.text('丙0'), findsNothing);
@@ -256,7 +312,7 @@ void main() {
       await send(tester, 'startBackGesture', event(0, 0));
       await send(tester, 'updateBackGestureProgress', event(100, 0.3));
       await tester.pump();
-      expect(find.byType(AppTransitionSwitch), findsNothing);
+      expect(switching(tester), isFalse);
       await send(tester, 'cancelBackGesture');
       await tester.pumpAndSettle();
     });

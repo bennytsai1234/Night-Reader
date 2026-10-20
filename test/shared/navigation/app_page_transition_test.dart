@@ -157,6 +157,56 @@ void main() {
     });
   }
 
+  for (final transition in AppPageTransition.values) {
+    testWidgets('${transition.name}: neither page is rebuilt while moving', (
+      tester,
+    ) async {
+      var homeBuilds = 0;
+      var pageBuilds = 0;
+      // 兩頁都依賴主題，和真的頁面一樣：被搬到別的位置時會跟著重建。
+      Widget counted(String text, void Function() count) => Builder(
+        builder: (context) {
+          count();
+          return ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Center(child: Text(text)),
+          );
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(
+            AppStyle.paper,
+            Brightness.light,
+            pageTransition: transition,
+          ),
+          home: Builder(
+            builder: (context) {
+              home = context;
+              return counted('主頁', () => homeBuilds++);
+            },
+          ),
+        ),
+      );
+      final homeBefore = homeBuilds;
+
+      Navigator.push(
+        home,
+        MaterialPageRoute<void>(
+          builder: (_) => counted('新頁', () => pageBuilds++),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // 新頁只在推入時建一次；換頁的第一幀、途中與最後一幀都不重建。
+      expect(pageBuilds, 1);
+
+      Navigator.pop(tester.element(find.text('新頁')));
+      await tester.pumpAndSettle();
+      expect(pageBuilds, 1);
+      expect(homeBuilds, homeBefore);
+    });
+  }
+
   testWidgets('slide closes fast first, then eases into place', (tester) async {
     await pumpApp(tester, AppPageTransition.slide);
     await push(tester);

@@ -29,6 +29,7 @@ class FrameCost {
     required this.async,
     required this.top,
     required this.dirty,
+    this.note,
   });
 
   final int index;
@@ -52,6 +53,10 @@ class FrameCost {
   /// 開始，誰呼叫了 setState 或 markNeedsBuild）與次數。
   final Map<String, int> dirty;
 
+  /// 這一幀畫完時畫面在哪一段（[recordFrames] 的 `note`），例如換頁中、
+  /// 骨架、換場。
+  final String? note;
+
   int get total => beforeFrame + frame + afterFrame + async;
 }
 
@@ -60,10 +65,12 @@ final bool frameAttribution = Platform.environment['FRAME_ATTRIBUTE'] == '1';
 
 /// 一幀一幀推進（每幀 [frameDuration]），直到 [until] 成立後再多 [tailFrames]
 /// 幀，記下每一幀的成本。[realAsync] 時每幀之間讓出真實時間，給跑在真的
-/// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。
+/// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
+/// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。
 Future<List<FrameCost>> recordFrames(
   WidgetTester tester, {
   required bool Function() until,
+  String? Function()? note,
   int tailFrames = 0,
   int maxFrames = 1200,
   Duration frameDuration = const Duration(milliseconds: 16),
@@ -135,6 +142,7 @@ Future<List<FrameCost>> recordFrames(
           async: asyncCost,
           top: top,
           dirty: dirty,
+          note: note?.call(),
         ),
       );
       dirty = <String, int>{};
@@ -165,7 +173,8 @@ String describeFrames(
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
         '最大 ${ms(totals.last)}ms，超過 ${over.inMilliseconds}ms 的 ${spikes.length} 幀',
     for (final cost in spikes) ...[
-      '  第 ${cost.index} 幀 ${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
+      '  第 ${cost.index} 幀${cost.note == null ? '' : '（${cost.note}）'} '
+          '${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
           '幀 ${ms(cost.frame)}、幀後 ${ms(cost.afterFrame)}、'
           '非同步 ${ms(cost.async)}',
       if (cost.top.isNotEmpty)
