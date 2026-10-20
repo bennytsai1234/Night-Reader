@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
-import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
+
+import '../../support/theme_with.dart';
 
 void main() {
   group('由左而右', () {
@@ -43,11 +44,7 @@ void main() {
 
   group('SkeletonSwitcher', () {
     Widget host(SkeletonReveal reveal, {required bool loading}) => MaterialApp(
-      theme: buildAppTheme(
-        AppStyle.paper,
-        Brightness.light,
-        skeletonReveal: reveal,
-      ),
+      theme: themeWith(AppStyle.paper, Brightness.light, [reveal]),
       home: Scaffold(
         body: SkeletonSwitcher(
           loading: loading,
@@ -176,11 +173,7 @@ void main() {
 
   group('SliverSkeletonSwitcher', () {
     Widget host(SkeletonReveal reveal, {required bool loading}) => MaterialApp(
-      theme: buildAppTheme(
-        AppStyle.paper,
-        Brightness.light,
-        skeletonReveal: reveal,
-      ),
+      theme: themeWith(AppStyle.paper, Brightness.light, [reveal]),
       home: Scaffold(
         body: CustomScrollView(
           slivers: [
