@@ -244,11 +244,6 @@ private val launchThemes = mapOf(
     "azurite" to LaunchThemes(R.style.LaunchTheme_Azurite, R.style.LaunchTheme_Azurite_Light, R.style.LaunchTheme_Azurite_Dark),
     "tea" to LaunchThemes(R.style.LaunchTheme_Tea, R.style.LaunchTheme_Tea_Light, R.style.LaunchTheme_Tea_Dark),
     "plain" to LaunchThemes(R.style.LaunchTheme_Plain, R.style.LaunchTheme_Plain_Light, R.style.LaunchTheme_Plain_Dark),
-    "rouge" to LaunchThemes(R.style.LaunchTheme_Rouge, R.style.LaunchTheme_Rouge_Light, R.style.LaunchTheme_Rouge_Dark),
-    "lotus" to LaunchThemes(R.style.LaunchTheme_Lotus, R.style.LaunchTheme_Lotus_Light, R.style.LaunchTheme_Lotus_Dark),
-    "scroll" to LaunchThemes(R.style.LaunchTheme_Scroll, R.style.LaunchTheme_Scroll_Light, R.style.LaunchTheme_Scroll_Dark),
-    "amber" to LaunchThemes(R.style.LaunchTheme_Amber, R.style.LaunchTheme_Amber_Light, R.style.LaunchTheme_Amber_Dark),
-    "frost" to LaunchThemes(R.style.LaunchTheme_Frost, R.style.LaunchTheme_Frost_Light, R.style.LaunchTheme_Frost_Dark),
 )
 
 // 電量與充電狀態；只在 Dart 端有訂閱時才註冊系統廣播。
