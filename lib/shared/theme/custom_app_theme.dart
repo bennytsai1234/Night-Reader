@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
-import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 import 'app_chrome.dart';
 import 'app_layers.dart';
@@ -15,8 +13,6 @@ ThemeData buildAppTheme(
   GlassStrength glassStrength = GlassStrength.frosted,
   AppAccent accent = AppAccent.theme,
   AppPageTransition pageTransition = AppPageTransition.slide,
-  SkeletonReveal skeletonReveal = const SkeletonReveal(),
-  SkeletonLook skeletonLook = const SkeletonLook(),
 }) {
   final colors = style.paletteFor(brightness, accent);
   // 淺色模式的提示訊息是深底，動作字取深色配色的主色才看得清楚。
@@ -98,7 +94,9 @@ ThemeData buildAppTheme(
     brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: colors.background,
-    extensions: [chrome, colors, skeletonReveal, skeletonLook],
+    // 骨架的樣子與換場不給選，`SkeletonLook.of`、`SkeletonReveal.of` 沒有
+    // 擴充時用預設。
+    extensions: [chrome, colors],
     // 點擊回饋採 Telegram 式整列高亮，不畫水波紋。
     splashFactory: NoSplash.splashFactory,
     highlightColor: chrome.pressedHighlight,

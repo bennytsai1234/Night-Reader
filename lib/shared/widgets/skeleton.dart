@@ -11,9 +11,9 @@ import 'cover_reveal.dart';
 import 'launch_entrance.dart';
 import 'skeleton_reveal.dart';
 
-/// 骨架的深淺，在「外觀與主題 → 骨架深淺」選：佔位底色是文字色疊上這個
-/// 透明度。幾組數值是原型上比過的（2026-10-20）；使用者在素色深色的閱讀器
-/// 上看不到原本的骨架，選了 [standard]。[faintest] 是原本的值。
+/// 骨架的深淺：佔位底色是文字色疊上這個透明度。幾組數值是原型上比過的
+/// （2026-10-20）；使用者在素色深色的閱讀器上看不到原本的骨架，選了
+/// [standard]，App 固定用它（不給選，ADR 0024）。[faintest] 是原本的值。
 enum SkeletonStrength {
   faintest('很淡', light: 0.07, dark: 0.09),
   faint('淡', light: 0.12, dark: 0.15),
@@ -29,12 +29,9 @@ enum SkeletonStrength {
   /// 深色的底與文字色的對比比淺色小，同樣的透明度看起來比較淡，所以深色
   /// 多疊一些。
   final double dark;
-
-  static SkeletonStrength fromStorage(String? name) =>
-      values.where((value) => value.name == name).firstOrNull ?? standard;
 }
 
-/// 骨架怎麼呼吸，在「外觀與主題 → 骨架呼吸」選。每個位置照同一個節奏由深
+/// 骨架怎麼呼吸；App 固定用 [gentleSweep]（不給選，ADR 0024）。每個位置照同一個節奏由深
 /// 變淺再變深（一輪是 [AppMotion.skeletonPulse] 的兩倍）；由左而右時，越往右
 /// 越晚開始，畫面最右邊比最左邊晚 [lag] 輪，看起來是一道明暗由左往右走過去。
 enum SkeletonBreath {
@@ -51,9 +48,6 @@ enum SkeletonBreath {
 
   final String label;
   final double lag;
-
-  static SkeletonBreath fromStorage(String? name) =>
-      values.where((value) => value.name == name).firstOrNull ?? gentleSweep;
 }
 
 /// 骨架的深淺與呼吸，掛在主題上；書架、發現、書籍詳情與閱讀器共用。
@@ -408,8 +402,8 @@ class SkeletonLine extends StatelessWidget {
   }
 }
 
-/// 骨架與真實內容之間的切換：資料到了以骨架換場（[SkeletonReveal]，使用者
-/// 在「外觀與主題」選的方式與時長）換成內容；重新載入時骨架也照同樣的方式
+/// 骨架與真實內容之間的切換：資料到了以骨架換場（[SkeletonReveal] 的方式
+/// 與時長）換成內容；重新載入時骨架也照同樣的方式
 /// 與時長長回來。
 ///
 /// 兩者都撐滿父層（呼叫端給的是整頁內容區）。[builder] 只在載入完成後
@@ -541,7 +535,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     _controller.forward();
   }
 
-  /// 這一次換場照使用者選的方式與時長。換場途中反過來時沿用這一輪的方向
+  /// 這一次換場照 [SkeletonReveal] 的方式與時長。換場途中反過來時沿用這一輪的方向
   /// 與方式倒著走：換掉 [_incoming] 會讓左右的濃淡在同一幀對調。
   void _prepare(SkeletonRevealSide incoming) {
     final reveal = SkeletonReveal.of(context);
@@ -621,7 +615,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
 
 /// 清單（sliver）版的 [SkeletonSwitcher]：載入中是一段 [skeleton]（一般
 /// box）；資料到了先把 [builder] 給的 slivers 在骨架底下排好（全透明），
-/// 下一幀才照骨架換場（[SkeletonReveal]，使用者選的方式與時長）讓內容淡入、
+/// 下一幀才照骨架換場（[SkeletonReveal] 的方式與時長）讓內容淡入、
 /// 骨架淡出，兩者疊在同一個位置、跟著捲動。換場只改透明度，結束後骨架
 /// 移出畫面、內容不留圖層。系統關閉動畫時直接換成內容。
 ///
