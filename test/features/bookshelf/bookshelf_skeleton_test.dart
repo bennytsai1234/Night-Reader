@@ -157,9 +157,10 @@ void main() {
             in find
                 .byWidgetPredicate(
                   (widget) =>
+                      // 文字條和字一樣高；封面方塊高得多。
                       widget is SkeletonBox &&
                       widget.height != null &&
-                      widget.height! < 14 &&
+                      widget.height! < 30 &&
                       widget.height != BookshelfProgressLine.height,
                 )
                 .evaluate())

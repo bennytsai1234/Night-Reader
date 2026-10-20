@@ -8,6 +8,7 @@ import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -128,6 +129,36 @@ void main() {
     expect(
       prefs.getString(PreferKey.skeletonRevealStyle),
       SkeletonRevealStyle.fade.name,
+    );
+  });
+
+  testWidgets('骨架深淺預設標準、呼吸預設由左而右・緩，改了會保存', (tester) async {
+    await pumpPage(tester);
+    await tester.scrollUntilVisible(find.text('換場時長'), 200);
+    expect(find.text('標準'), findsOneWidget);
+    expect(find.text('由左而右・緩'), findsOneWidget);
+
+    // 捲到畫面中間，不被頁首與底部讓出的位置擋住。
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('骨架深淺'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('很深').last);
+    await tester.pumpAndSettle();
+    expect(themeSettings.skeletonLook.strength, SkeletonStrength.strongest);
+    expect(
+      prefs.getString(PreferKey.skeletonStrength),
+      SkeletonStrength.strongest.name,
+    );
+
+    await tester.tap(find.text('骨架呼吸'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('整塊一起').last);
+    await tester.pumpAndSettle();
+    expect(themeSettings.skeletonLook.breath, SkeletonBreath.whole);
+    expect(
+      prefs.getString(PreferKey.skeletonBreath),
+      SkeletonBreath.whole.name,
     );
   });
 }

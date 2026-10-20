@@ -703,6 +703,7 @@ class _InfoRow extends StatelessWidget {
             dark:
                 ThemeData.estimateBrightnessForColor(shell.backgroundColor) ==
                 Brightness.dark,
+            strength: SkeletonLook.of(context).strength,
           )
         : null;
     Widget? masked(Widget? child) => skeletonColor == null || child == null
@@ -847,7 +848,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 /// 載入中的一個資訊欄位：照真正內容排版但不畫出，在它佔的寬度上畫一條
-/// 約字身高的圓角條（同 [SkeletonLine]），資訊淡入時位置不動。
+/// 和字一樣高的圓角條（同 [SkeletonLine]），資訊淡入時位置不動。
 class _InfoItemSkeleton extends StatelessWidget {
   const _InfoItemSkeleton({required this.color, required this.child});
 
@@ -866,7 +867,7 @@ class _InfoItemSkeleton extends StatelessWidget {
           child: Center(
             child: SkeletonBox(
               width: double.infinity,
-              height: fontSize * 0.75,
+              height: fontSize * Skeleton.barHeightFactor,
               color: color,
             ),
           ),

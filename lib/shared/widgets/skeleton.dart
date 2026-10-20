@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -9,38 +11,133 @@ import 'cover_reveal.dart';
 import 'launch_entrance.dart';
 import 'skeleton_reveal.dart';
 
+/// 骨架的深淺，在「外觀與主題 → 骨架深淺」選：佔位底色是文字色疊上這個
+/// 透明度。幾組數值是原型上比過的（2026-10-20）；使用者在素色深色的閱讀器
+/// 上看不到原本的骨架，選了 [standard]。[faintest] 是原本的值。
+enum SkeletonStrength {
+  faintest('很淡', light: 0.07, dark: 0.09),
+  faint('淡', light: 0.12, dark: 0.15),
+  standard('標準', light: 0.16, dark: 0.20),
+  strong('深', light: 0.20, dark: 0.25),
+  strongest('很深', light: 0.24, dark: 0.30);
+
+  const SkeletonStrength(this.label, {required this.light, required this.dark});
+
+  final String label;
+  final double light;
+
+  /// 深色的底與文字色的對比比淺色小，同樣的透明度看起來比較淡，所以深色
+  /// 多疊一些。
+  final double dark;
+
+  static SkeletonStrength fromStorage(String? name) =>
+      values.where((value) => value.name == name).firstOrNull ?? standard;
+}
+
+/// 骨架怎麼呼吸，在「外觀與主題 → 骨架呼吸」選。每個位置照同一個節奏由深
+/// 變淺再變深（一輪是 [AppMotion.skeletonPulse] 的兩倍）；由左而右時，越往右
+/// 越晚開始，畫面最右邊比最左邊晚 [lag] 輪，看起來是一道明暗由左往右走過去。
+enum SkeletonBreath {
+  /// 整塊同時變深變淺（原本的樣子）。
+  whole('整塊一起', lag: 0),
+
+  /// 傳過整個寬度要半輪：同一時間左右兩端剛好一深一淺。
+  gentleSweep('由左而右・緩', lag: 0.5),
+
+  /// 傳過整個寬度要一整輪：畫面上看得到完整的一道明暗。
+  waveSweep('由左而右・明顯', lag: 1);
+
+  const SkeletonBreath(this.label, {required this.lag});
+
+  final String label;
+  final double lag;
+
+  static SkeletonBreath fromStorage(String? name) =>
+      values.where((value) => value.name == name).firstOrNull ?? gentleSweep;
+}
+
+/// 骨架的深淺與呼吸，掛在主題上；書架、發現、書籍詳情與閱讀器共用。
+@immutable
+class SkeletonLook extends ThemeExtension<SkeletonLook> {
+  const SkeletonLook({
+    this.strength = SkeletonStrength.standard,
+    this.breath = SkeletonBreath.gentleSweep,
+  });
+
+  final SkeletonStrength strength;
+  final SkeletonBreath breath;
+
+  static SkeletonLook of(BuildContext context) =>
+      Theme.of(context).extension<SkeletonLook>() ?? const SkeletonLook();
+
+  @override
+  SkeletonLook copyWith({SkeletonStrength? strength, SkeletonBreath? breath}) =>
+      SkeletonLook(
+        strength: strength ?? this.strength,
+        breath: breath ?? this.breath,
+      );
+
+  @override
+  SkeletonLook lerp(SkeletonLook? other, double t) =>
+      other == null || t < 0.5 ? this : other;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SkeletonLook &&
+      other.strength == strength &&
+      other.breath == breath;
+
+  @override
+  int get hashCode => Object.hash(strength, breath);
+}
+
 /// 骨架載入：資料還沒到時，以淡紙色的形狀標出內容將出現的位置（封面方塊、
 /// 文字條），取代置中的轉圈。
 ///
-/// [Skeleton] 提供一個共用的呼吸脈動，底下的 [SkeletonBox]／[SkeletonLine]
-/// 只改自己的底色，不對整塊做透明度，不需離屏合成。系統要求減少動態
-/// （`MediaQuery.disableAnimations`）時保持靜態。
+/// [Skeleton] 提供一個共用的呼吸節奏，底下的 [SkeletonBox]／[SkeletonLine]
+/// 只改自己的底色（由左而右呼吸時是沿橫向的漸層），不對整塊做透明度，不需
+/// 離屏合成。系統要求減少動態（`MediaQuery.disableAnimations`）時保持靜態。
 class Skeleton extends StatefulWidget {
   const Skeleton({super.key, required this.child});
 
   final Widget child;
 
-  /// 佔位形狀的底色：主要文字色疊一層很淡的透明度，淺色是略深一階的紙，
-  /// 深色是略亮一階的墨；各風格都從自己的配色推導。
+  /// 佔位形狀的底色：主要文字色疊上 [SkeletonLook.strength] 的透明度，淺色
+  /// 是深一階的紙，深色是亮一階的墨；各風格都從自己的配色推導。
   static Color colorOf(BuildContext context) {
     final theme = Theme.of(context);
     return tint(
       theme.colorScheme.onSurface,
       dark: theme.brightness == Brightness.dark,
+      strength: SkeletonLook.of(context).strength,
     );
   }
 
   /// [colorOf] 的配色公式，給不從 App 主題取色的畫面（例如閱讀器用自己的
   /// 正文色）共用。
-  static Color tint(Color ink, {required bool dark}) =>
-      ink.withValues(alpha: dark ? 0.09 : 0.07);
+  static Color tint(
+    Color ink, {
+    required bool dark,
+    required SkeletonStrength strength,
+  }) => ink.withValues(alpha: dark ? strength.dark : strength.light);
 
-  /// 脈動進度 [pulse]（0 最深、1 最淺）對應的深淺比例，乘在佔位底色的
-  /// 透明度上。
-  static double pulseStrength(double pulse) => 1 - (1 - _pulseFloor) * pulse;
+  /// 文字骨架的圓角條佔字號的比例。中文字幾乎撐滿整個字號，條和字一樣高，
+  /// 換成文字時才不會大一圈（2026-10-20，原本 0.75）。
+  static const double barHeightFactor = 1;
 
-  /// 脈動最淺時保留的深淺比例：再淺就會在紙上消失，看不出形狀。
+  /// 呼吸一輪的進度 [phase]（0 到 1，0 最深、0.5 最淺）在橫向位置 [u]（0
+  /// 畫面左緣、1 右緣）的深淺比例，乘在佔位底色的透明度上。
+  static double breathAt(double phase, double u, SkeletonBreath breath) {
+    final p = (phase - breath.lag * u) % 1;
+    final toFaintest = p < 0.5 ? 2 * p : 2 - 2 * p;
+    return 1 - (1 - _pulseFloor) * AppMotion.fadeCurve.transform(toFaintest);
+  }
+
+  /// 呼吸最淺時保留的深淺比例：再淺就會在紙上消失，看不出形狀。
   static const double _pulseFloor = 0.55;
+
+  /// 呼吸一輪的時長：由深到淺、再由淺到深各一段 [AppMotion.skeletonPulse]。
+  static Duration get breathCycle => AppMotion.skeletonPulse * 2;
 
   @override
   State<Skeleton> createState() => _SkeletonState();
@@ -50,20 +147,18 @@ class _SkeletonState extends State<Skeleton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: AppMotion.skeletonPulse,
+    duration: Skeleton.breathCycle,
   );
-  late final Animation<double> _pulse = CurvedAnimation(
-    parent: _controller,
-    curve: AppMotion.fadeCurve,
-  );
+  bool _breathing = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
+    _breathing = !MediaQuery.disableAnimationsOf(context);
+    if (!_breathing) {
       _controller.value = 0;
     } else if (!_controller.isAnimating) {
-      _controller.repeat(reverse: true);
+      _controller.repeat();
     }
   }
 
@@ -74,21 +169,26 @@ class _SkeletonState extends State<Skeleton>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      _SkeletonScope(pulse: _pulse, child: widget.child);
+  Widget build(BuildContext context) => _SkeletonScope(
+    phase: _breathing ? _controller : null,
+    child: widget.child,
+  );
 }
 
 class _SkeletonScope extends InheritedWidget {
-  const _SkeletonScope({required this.pulse, required super.child});
+  const _SkeletonScope({required this.phase, required super.child});
 
-  final Animation<double> pulse;
+  /// 呼吸一輪的進度；null 是不呼吸（減少動態）。
+  final Animation<double>? phase;
 
-  static Animation<double>? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_SkeletonScope>()?.pulse;
+  /// 在 [Skeleton] 底下時回傳 scope 本身（不呼吸時 [phase] 為 null），不在
+  /// 底下時回傳 null。
+  static _SkeletonScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_SkeletonScope>();
 
   @override
   bool updateShouldNotify(_SkeletonScope oldWidget) =>
-      !identical(pulse, oldWidget.pulse);
+      !identical(phase, oldWidget.phase);
 }
 
 /// 方塊佔位（封面、按鈕）。放在 [Skeleton] 底下時跟著呼吸。
@@ -110,29 +210,166 @@ class SkeletonBox extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) {
-    final base = color ?? Skeleton.colorOf(context);
-    final pulse = _SkeletonScope.maybeOf(context);
-    Widget box(Color color) => SizedBox(
-      width: width,
-      height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: color, borderRadius: borderRadius),
-      ),
-    );
-    if (pulse == null) return box(base);
-    return AnimatedBuilder(
-      animation: pulse,
-      builder: (context, _) {
-        final factor = Skeleton.pulseStrength(pulse.value);
-        return box(base.withValues(alpha: base.a * factor));
-      },
-    );
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    height: height,
+    child: _SkeletonBoxPaint(
+      color: color ?? Skeleton.colorOf(context),
+      borderRadius: borderRadius,
+      phase: _SkeletonScope.maybeOf(context)?.phase,
+      breath: SkeletonLook.of(context).breath,
+      viewWidth: MediaQuery.sizeOf(context).width,
+    ),
+  );
+}
+
+/// [SkeletonBox] 的圓角方塊：呼吸時每一幀只重畫自己，不重建。由左而右呼吸
+/// 時照方塊在畫面上的橫向位置畫成漸層，同一直行的方塊深淺一致。
+class _SkeletonBoxPaint extends LeafRenderObjectWidget {
+  const _SkeletonBoxPaint({
+    required this.color,
+    required this.borderRadius,
+    required this.phase,
+    required this.breath,
+    required this.viewWidth,
+  });
+
+  final Color color;
+  final BorderRadius borderRadius;
+  final Animation<double>? phase;
+  final SkeletonBreath breath;
+  final double viewWidth;
+
+  @override
+  _RenderSkeletonBox createRenderObject(BuildContext context) =>
+      _RenderSkeletonBox(
+        color: color,
+        borderRadius: borderRadius,
+        phase: phase,
+        breath: breath,
+        viewWidth: viewWidth,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSkeletonBox renderObject,
+  ) {
+    renderObject
+      ..color = color
+      ..borderRadius = borderRadius
+      ..phase = phase
+      ..breath = breath
+      ..viewWidth = viewWidth;
+  }
+}
+
+class _RenderSkeletonBox extends RenderBox {
+  _RenderSkeletonBox({
+    required this._color,
+    required this._borderRadius,
+    required this._phase,
+    required this._breath,
+    required this._viewWidth,
+  });
+
+  Color _color;
+  set color(Color value) {
+    if (_color == value) return;
+    _color = value;
+    markNeedsPaint();
+  }
+
+  BorderRadius _borderRadius;
+  set borderRadius(BorderRadius value) {
+    if (_borderRadius == value) return;
+    _borderRadius = value;
+    markNeedsPaint();
+  }
+
+  Animation<double>? _phase;
+  set phase(Animation<double>? value) {
+    if (identical(_phase, value)) return;
+    if (attached) _phase?.removeListener(markNeedsPaint);
+    _phase = value;
+    if (attached) _phase?.addListener(markNeedsPaint);
+    markNeedsPaint();
+  }
+
+  SkeletonBreath _breath;
+  set breath(SkeletonBreath value) {
+    if (_breath == value) return;
+    _breath = value;
+    markNeedsPaint();
+  }
+
+  double _viewWidth;
+  set viewWidth(double value) {
+    if (_viewWidth == value) return;
+    _viewWidth = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _phase?.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    _phase?.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  // 和原本的 DecoratedBox 一樣取最小的尺寸，由外層的 SizedBox 決定大小。
+  @override
+  bool get sizedByParent => true;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.smallest;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (size.isEmpty) return;
+    final rect = offset & size;
+    final paint = Paint();
+    final phase = _phase;
+    if (phase == null) {
+      paint.color = _color;
+    } else if (_breath.lag == 0 || _viewWidth <= 0) {
+      paint.color = _color.withValues(
+        alpha: _color.a * Skeleton.breathAt(phase.value, 0, _breath),
+      );
+    } else {
+      final left = localToGlobal(Offset.zero).dx / _viewWidth;
+      final span = size.width / _viewWidth;
+      // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
+      final count = math.max(2, (span * 32).ceil() + 1);
+      paint.shader = ui.Gradient.linear(
+        rect.centerLeft,
+        rect.centerRight,
+        [
+          for (var i = 0; i < count; i++)
+            _color.withValues(
+              alpha:
+                  _color.a *
+                  Skeleton.breathAt(
+                    phase.value,
+                    left + span * i / (count - 1),
+                    _breath,
+                  ),
+            ),
+        ],
+        [for (var i = 0; i < count; i++) i / (count - 1)],
+      );
+    }
+    context.canvas.drawRRect(_borderRadius.toRRect(rect), paint);
   }
 }
 
 /// 一行文字的佔位：佔用與 [style] 一行文字相同的高度（跟著系統字級
-/// 放大），中間畫一條約字身高的圓角條，版面不會在內容出現時跳動。
+/// 放大），中間畫一條和字一樣高的圓角條，版面不會在內容出現時跳動。
 class SkeletonLine extends StatelessWidget {
   const SkeletonLine({super.key, required this.style, this.widthFactor = 1});
 
@@ -152,7 +389,7 @@ class SkeletonLine extends StatelessWidget {
         child: FractionallySizedBox(
           widthFactor: widthFactor,
           child: SkeletonBox(
-            height: fontSize * 0.75,
+            height: fontSize * Skeleton.barHeightFactor,
             borderRadius: AppRadius.cardXs,
           ),
         ),

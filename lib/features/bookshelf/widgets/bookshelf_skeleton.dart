@@ -263,7 +263,10 @@ class _TextBars extends StatelessWidget {
                 height: lineExtent,
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: SkeletonBox(width: width, height: fontSize * 0.75),
+                  child: SkeletonBox(
+                    width: width,
+                    height: fontSize * Skeleton.barHeightFactor,
+                  ),
                 ),
               ),
           ],
