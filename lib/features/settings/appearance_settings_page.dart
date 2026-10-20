@@ -11,6 +11,7 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
@@ -104,7 +105,13 @@ class AppearanceSettingsPage extends StatelessWidget {
                   title: '換頁動畫',
                   value: themeSettings.pageTransition.label,
                   showChevron: false,
-                  onTap: () => _pickPageTransition(rowContext, themeSettings),
+                  onTap: () => _pickOption(
+                    rowContext,
+                    AppPageTransition.values,
+                    label: (transition) => transition.label,
+                    selected: themeSettings.pageTransition,
+                    onPicked: themeSettings.setPageTransition,
+                  ),
                 ),
               ),
             ],
@@ -113,10 +120,44 @@ class AppearanceSettingsPage extends StatelessWidget {
             children: [
               Builder(
                 builder: (rowContext) => GroupedRow(
+                  title: '骨架深淺',
+                  value: themeSettings.skeletonLook.strength.label,
+                  showChevron: false,
+                  onTap: () => _pickOption(
+                    rowContext,
+                    SkeletonStrength.values,
+                    label: (strength) => strength.label,
+                    selected: themeSettings.skeletonLook.strength,
+                    onPicked: themeSettings.setSkeletonStrength,
+                  ),
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
+                  title: '骨架呼吸',
+                  value: themeSettings.skeletonLook.breath.label,
+                  showChevron: false,
+                  onTap: () => _pickOption(
+                    rowContext,
+                    SkeletonBreath.values,
+                    label: (breath) => breath.label,
+                    selected: themeSettings.skeletonLook.breath,
+                    onPicked: themeSettings.setSkeletonBreath,
+                  ),
+                ),
+              ),
+              Builder(
+                builder: (rowContext) => GroupedRow(
                   title: '骨架換場',
                   value: themeSettings.skeletonReveal.style.label,
                   showChevron: false,
-                  onTap: () => _pickSkeletonReveal(rowContext, themeSettings),
+                  onTap: () => _pickOption(
+                    rowContext,
+                    SkeletonRevealStyle.values,
+                    label: (style) => style.label,
+                    selected: themeSettings.skeletonReveal.style,
+                    onPicked: themeSettings.setSkeletonRevealStyle,
+                  ),
                 ),
               ),
               GroupedContent(
@@ -144,42 +185,27 @@ class AppearanceSettingsPage extends StatelessWidget {
   }
 }
 
-Future<void> _pickPageTransition(
+/// 從一組選項挑一個：在那一列旁邊開出選單，目前的打勾。
+Future<void> _pickOption<T>(
   BuildContext rowContext,
-  ThemeSettingsProvider themeSettings,
-) async {
-  final transition = await showGlassMenu<AppPageTransition>(
+  List<T> options, {
+  required String Function(T option) label,
+  required T selected,
+  required void Function(T option) onPicked,
+}) async {
+  final picked = await showGlassMenu<T>(
     context: rowContext,
     anchor: globalRectOf(rowContext),
     entries: [
-      for (final transition in AppPageTransition.values)
+      for (final option in options)
         GlassMenuItem(
-          value: transition,
-          label: transition.label,
-          checked: transition == themeSettings.pageTransition,
+          value: option,
+          label: label(option),
+          checked: option == selected,
         ),
     ],
   );
-  if (transition != null) themeSettings.setPageTransition(transition);
-}
-
-Future<void> _pickSkeletonReveal(
-  BuildContext rowContext,
-  ThemeSettingsProvider themeSettings,
-) async {
-  final style = await showGlassMenu<SkeletonRevealStyle>(
-    context: rowContext,
-    anchor: globalRectOf(rowContext),
-    entries: [
-      for (final style in SkeletonRevealStyle.values)
-        GlassMenuItem(
-          value: style,
-          label: style.label,
-          checked: style == themeSettings.skeletonReveal.style,
-        ),
-    ],
-  );
-  if (style != null) themeSettings.setSkeletonRevealStyle(style);
+  if (picked != null) onPicked(picked);
 }
 
 /// 強調色選單：每個色點是套到目前風格與深淺後實際會用的顏色。

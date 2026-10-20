@@ -34,7 +34,7 @@ class LoadingVeilController {
       ),
       _pulse = AnimationController(
         vsync: vsync,
-        duration: AppMotion.skeletonPulse,
+        duration: Skeleton.breathCycle,
       ) {
     _cover.addStatusListener(_onCoverStatus);
   }
@@ -60,10 +60,6 @@ class LoadingVeilController {
   );
   late final Animation<double> _skeletonCurve = CurvedAnimation(
     parent: _skeleton,
-    curve: AppMotion.fadeCurve,
-  );
-  late final Animation<double> _pulseCurve = CurvedAnimation(
-    parent: _pulse,
     curve: AppMotion.fadeCurve,
   );
   int _attachedVeils = 0;
@@ -229,7 +225,7 @@ class LoadingVeilController {
         !_cover.isDismissed &&
         (_skeleton.value > 0 || _skeleton.isAnimating);
     if (run) {
-      if (!_pulse.isAnimating) unawaited(_pulse.repeat(reverse: true));
+      if (!_pulse.isAnimating) unawaited(_pulse.repeat());
     } else if (_pulse.isAnimating || _pulse.value != 0) {
       _pulse
         ..stop()
@@ -294,13 +290,22 @@ class _LoadingVeilState extends State<LoadingVeil> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final viewWidth = MediaQuery.maybeSizeOf(context)?.width ?? 0;
     return RepaintBoundary(
       child: CustomPaint(
         size: Size.infinite,
         painter: _LoadingVeilPainter(
           cover: controller._coverCurve,
           skeleton: controller._skeletonCurve,
-          pulse: controller._pulseCurve,
+          pulse: controller._pulse,
+          look: SkeletonLook.of(context),
+          breathSpan: () {
+            final box = context.findRenderObject();
+            if (box is! RenderBox || !box.hasSize || viewWidth <= 0) {
+              return (0, 1);
+            }
+            return Skeleton.screenSpan(box, viewWidth);
+          },
           sweep: () => controller._sweep,
           skeletonSweep: () => controller._skeletonSweep,
           spec: widget.spec,
@@ -319,6 +324,8 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.cover,
     required this.skeleton,
     required this.pulse,
+    required this.look,
+    required this.breathSpan,
     required this.sweep,
     required this.skeletonSweep,
     required this.spec,
@@ -330,7 +337,14 @@ class _LoadingVeilPainter extends CustomPainter {
 
   final Animation<double> cover;
   final Animation<double> skeleton;
+
+  /// 呼吸一輪的進度（[Skeleton.breathAt]）；停著時骨架不呼吸。
   final Animation<double> pulse;
+  final SkeletonLook look;
+
+  /// 紙的左右兩緣在螢幕上的位置（[Skeleton.screenSpan]）：呼吸照螢幕位置，
+  /// 換頁平移、縮放時和頁首頁尾的骨架接得上；長出與掀紙照紙上的位置。
+  final (double, double) Function() breathSpan;
 
   /// 掀紙是不是由左而右；紙蓋著時不影響畫面。
   final bool Function() sweep;
@@ -342,9 +356,6 @@ class _LoadingVeilPainter extends CustomPainter {
   final Set<int> titleLines;
   final Color backgroundColor;
   final Color textColor;
-
-  /// 圓角條佔字號的比例，與 [SkeletonLine] 相同。
-  static const double _barHeightFactor = 0.75;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -385,30 +396,58 @@ class _LoadingVeilPainter extends CustomPainter {
     final dark =
         ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
-    final base = Skeleton.tint(textColor, dark: dark);
-    final pulseStrength = Skeleton.pulseStrength(pulse.value);
+    final base = Skeleton.tint(textColor, dark: dark, strength: look.strength);
+    final breathing = pulse.isAnimating;
     // 紙蓋著、骨架由左而右出現時，每個橫向位置照骨架換進來的濃度畫；掀紙
     // 途中照紙的漸層。
     final growing = !sweeping && skeletonSweep() && skeleton.value < 1;
-    final Paint paint;
-    if (growing) {
-      final grow = SkeletonReveal.sweepStops(skeleton.value);
-      paint = Paint()
-        ..shader = ui.Gradient.linear(
-          Offset.zero,
-          Offset(size.width, 0),
-          [
-            for (final (_, incoming) in grow)
-              base.withValues(
-                alpha: base.a * pulseStrength * coverStrength * incoming,
-              ),
-          ],
-          [for (final (u, _) in grow) u],
-        );
-    } else {
-      paint = shade(base, pulseStrength * strength);
+    double layerAt(double u) {
+      if (growing) {
+        return coverStrength *
+            SkeletonReveal.incomingOpacityAt(skeleton.value, u);
+      }
+      if (sweeping) {
+        return strength *
+            (1 - SkeletonReveal.incomingOpacityAt(1 - coverStrength, u));
+      }
+      return strength;
     }
-    final barHeight = style.fontSize * _barHeightFactor;
+
+    final (screenLeft, screenRight) = breathing ? breathSpan() : (0.0, 1.0);
+    double alphaAt(double u) =>
+        base.a *
+        layerAt(u) *
+        (breathing
+            ? Skeleton.breathAt(
+                pulse.value,
+                screenLeft + (screenRight - screenLeft) * u,
+                look.breath,
+              )
+            : 1);
+    // 沿橫向會變的有：骨架長出來、掀紙與由左而右的呼吸。換場的濃度在
+    // 轉折點之間是直線，取轉折點就好；呼吸是曲線，每 1/32 個寬度取一點。
+    final breathSweeps = breathing && look.breath.lag > 0;
+    final points = <double>{0, 1};
+    if (growing) {
+      points.addAll(SkeletonReveal.sweepStops(skeleton.value).map((s) => s.$1));
+    }
+    if (sweeping) points.addAll(stops.map((s) => s.$1));
+    if (breathSweeps) {
+      for (var i = 1; i < 32; i++) {
+        points.add(i / 32);
+      }
+    }
+    final Paint paint;
+    if (!growing && !sweeping && !breathSweeps) {
+      paint = Paint()..color = base.withValues(alpha: alphaAt(0));
+    } else {
+      final us = points.toList()..sort();
+      paint = Paint()
+        ..shader = ui.Gradient.linear(Offset.zero, Offset(size.width, 0), [
+          for (final u in us) base.withValues(alpha: alphaAt(u)),
+        ], us);
+    }
+    final barHeight = style.fontSize * Skeleton.barHeightFactor;
     final titleBarHeight = style.fontSize > 0
         ? barHeight * style.titleFontSize / style.fontSize
         : barHeight;
@@ -429,6 +468,7 @@ class _LoadingVeilPainter extends CustomPainter {
       oldDelegate.cover != cover ||
       oldDelegate.skeleton != skeleton ||
       oldDelegate.pulse != pulse ||
+      oldDelegate.look != look ||
       oldDelegate.spec != spec ||
       !identical(oldDelegate.lines, lines) ||
       !identical(oldDelegate.titleLines, titleLines) ||

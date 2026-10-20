@@ -19,39 +19,146 @@ double _contrast(Color a, Color b) {
 
 void main() {
   testWidgets(
-    'placeholders are visible but faint in every style and brightness',
+    'every strength is visible in every style and brightness, each a step '
+    'deeper than the last',
     (tester) async {
       for (final style in AppStyle.values) {
         for (final brightness in Brightness.values) {
-          late Color skeleton;
-          late AppChrome chrome;
-          await tester.pumpWidget(
-            MaterialApp(
-              theme: buildAppTheme(style, brightness),
-              home: Builder(
-                builder: (context) {
-                  skeleton = Skeleton.colorOf(context);
-                  chrome = AppChrome.of(context);
-                  return const SizedBox();
-                },
+          var previous = <double>[1, 1];
+          for (final strength in SkeletonStrength.values) {
+            late Color skeleton;
+            late AppChrome chrome;
+            await tester.pumpWidget(
+              MaterialApp(
+                // 和 App 一樣直接換主題；預設的主題漸變會讓這一幀量到的
+                // 還是上一輪的風格。
+                themeAnimationStyle: AnimationStyle.noAnimation,
+                theme: buildAppTheme(
+                  style,
+                  brightness,
+                  skeletonLook: SkeletonLook(strength: strength),
+                ),
+                home: Builder(
+                  builder: (context) {
+                    skeleton = Skeleton.colorOf(context);
+                    chrome = AppChrome.of(context);
+                    return const SizedBox();
+                  },
+                ),
               ),
-            ),
-          );
-          for (final background in [
-            chrome.groupedBackground,
-            chrome.groupedSurface,
-          ]) {
-            final shown = Color.alphaBlend(skeleton, background);
-            expect(
-              _contrast(shown, background),
-              inInclusiveRange(1.06, 1.4),
-              reason: '${style.name} ${brightness.name}',
             );
+            final reason = '${style.name} ${brightness.name} ${strength.name}';
+            final contrasts = [
+              for (final background in [
+                chrome.groupedBackground,
+                chrome.groupedSurface,
+              ])
+                _contrast(Color.alphaBlend(skeleton, background), background),
+            ];
+            for (var i = 0; i < contrasts.length; i++) {
+              expect(contrasts[i], greaterThan(1.06), reason: reason);
+              expect(contrasts[i], greaterThan(previous[i]), reason: reason);
+            }
+            previous = contrasts;
           }
         }
       }
     },
   );
+
+  test('whole breathing pulses every position together', () {
+    for (final phase in [0.0, 0.2, 0.5, 0.8]) {
+      expect(
+        Skeleton.breathAt(phase, 1, SkeletonBreath.whole),
+        Skeleton.breathAt(phase, 0, SkeletonBreath.whole),
+      );
+    }
+    expect(Skeleton.breathAt(0, 0, SkeletonBreath.whole), 1);
+    expect(
+      Skeleton.breathAt(0.5, 0, SkeletonBreath.whole),
+      closeTo(0.55, 1e-9),
+    );
+  });
+
+  testWidgets('left-to-right breathing follows the screen position while '
+      'the page is scaled', (tester) async {
+    tester.view.physicalSize = const Size(400, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundary = GlobalKey();
+    const black = Color(0xFF000000);
+    // 換頁途中整頁縮小一半：上排一條 400 寬、下排兩條各 200 寬，在同一個
+    // 螢幕位置要一樣深。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: boundary,
+          child: ColoredBox(
+            color: const Color(0xFFFFFFFF),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Transform.scale(
+                scale: 0.5,
+                alignment: Alignment.topLeft,
+                child: const Skeleton(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 400, height: 40, color: black),
+                      SizedBox(height: 20),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SkeletonBox(width: 200, height: 40, color: black),
+                          SkeletonBox(width: 200, height: 40, color: black),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    final bytes = await tester.runAsync(() async {
+      final image =
+          await (boundary.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
+      return image.toByteData();
+    });
+    int red(int x, int y) => bytes!.getUint8((y * 400 + x) * 4);
+    for (final x in [10, 60, 120, 180]) {
+      expect(red(x, 10), closeTo(red(x, 40), 2), reason: 'x=$x');
+    }
+    // 由左而右：左右兩端深淺不同。
+    expect(red(10, 10), isNot(closeTo(red(180, 10), 2)));
+  });
+
+  test('left-to-right breathing reaches the right edge later by its lag', () {
+    for (final breath in [
+      SkeletonBreath.gentleSweep,
+      SkeletonBreath.waveSweep,
+    ]) {
+      for (final phase in [0.1, 0.3, 0.6, 0.9]) {
+        expect(
+          Skeleton.breathAt(phase + breath.lag, 1, breath),
+          closeTo(Skeleton.breathAt(phase, 0, breath), 1e-9),
+          reason: breath.name,
+        );
+      }
+    }
+    // 緩：左右兩端一深一淺。
+    expect(Skeleton.breathAt(0, 0, SkeletonBreath.gentleSweep), 1);
+    expect(
+      Skeleton.breathAt(0, 1, SkeletonBreath.gentleSweep),
+      closeTo(0.55, 1e-9),
+    );
+  });
 
   Widget host(Widget child, {bool disableAnimations = false}) => MaterialApp(
     theme: buildAppTheme(AppStyle.paper, Brightness.light),

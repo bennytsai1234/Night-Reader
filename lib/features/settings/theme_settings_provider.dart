@@ -4,10 +4,11 @@ import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 外觀風格、玻璃強度、換頁動畫與骨架換場；深淺模式由
+/// 外觀風格、玻璃強度、換頁動畫、骨架的樣子與骨架換場；深淺模式由
 /// [SettingsProvider.themeMode] 決定。
 class ThemeSettingsProvider extends ChangeNotifier {
   ThemeSettingsProvider() : _prefs = getIt<SharedPreferences>() {
@@ -28,6 +29,14 @@ class ThemeSettingsProvider extends ChangeNotifier {
           ? SkeletonReveal.defaultDuration
           : _clampRevealDuration(Duration(milliseconds: revealMillis)),
     );
+    skeletonLook = SkeletonLook(
+      strength: SkeletonStrength.fromStorage(
+        _prefs.getString(PreferKey.skeletonStrength),
+      ),
+      breath: SkeletonBreath.fromStorage(
+        _prefs.getString(PreferKey.skeletonBreath),
+      ),
+    );
   }
 
   final SharedPreferences _prefs;
@@ -46,6 +55,9 @@ class ThemeSettingsProvider extends ChangeNotifier {
 
   /// 骨架換成內容的方式與時長。
   late SkeletonReveal skeletonReveal;
+
+  /// 骨架的深淺與呼吸方式。
+  late SkeletonLook skeletonLook;
 
   void setStyle(AppStyle value) {
     if (style == value) return;
@@ -87,6 +99,20 @@ class ThemeSettingsProvider extends ChangeNotifier {
     if (skeletonReveal.duration == duration) return;
     skeletonReveal = skeletonReveal.copyWith(duration: duration);
     _prefs.setInt(PreferKey.skeletonRevealMillis, duration.inMilliseconds);
+    notifyListeners();
+  }
+
+  void setSkeletonStrength(SkeletonStrength value) {
+    if (skeletonLook.strength == value) return;
+    skeletonLook = skeletonLook.copyWith(strength: value);
+    _prefs.setString(PreferKey.skeletonStrength, value.name);
+    notifyListeners();
+  }
+
+  void setSkeletonBreath(SkeletonBreath value) {
+    if (skeletonLook.breath == value) return;
+    skeletonLook = skeletonLook.copyWith(breath: value);
+    _prefs.setString(PreferKey.skeletonBreath, value.name);
     notifyListeners();
   }
 

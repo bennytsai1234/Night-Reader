@@ -227,7 +227,7 @@ class BookDetailSkeleton extends StatelessWidget {
 }
 
 /// 一行字的骨架：照 [text] 以 [style] 排成一行（放不下時截斷）的寬高佔位，
-/// 中間畫一條約字身高的圓角條（同 [SkeletonLine]）。
+/// 中間畫一條和字一樣高的圓角條（同 [SkeletonLine]）。
 class _TextBar extends StatelessWidget {
   const _TextBar(this.text, {required this.style});
 
@@ -252,7 +252,10 @@ class _TextBar extends StatelessWidget {
         ),
         Positioned.fill(
           child: Center(
-            child: SkeletonBox(width: double.infinity, height: fontSize * 0.75),
+            child: SkeletonBox(
+              width: double.infinity,
+              height: fontSize * Skeleton.barHeightFactor,
+            ),
           ),
         ),
       ],
@@ -261,7 +264,7 @@ class _TextBar extends StatelessWidget {
 }
 
 /// 一段字的骨架：照 [text] 以 [style] 在可用寬度裡換行，每一行在那一行字的
-/// 位置與寬度畫一條約字身高的圓角條，總高度與那段字相同。
+/// 位置與寬度畫一條和字一樣高的圓角條，總高度與那段字相同。
 class _ParagraphBars extends StatelessWidget {
   const _ParagraphBars(this.text, {required this.style});
 
@@ -274,7 +277,8 @@ class _ParagraphBars extends StatelessWidget {
     final defaults = DefaultTextStyle.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
     final merged = defaults.style.merge(style);
-    final barHeight = textScaler.scale(merged.fontSize ?? 14) * 0.75;
+    final barHeight =
+        textScaler.scale(merged.fontSize ?? 14) * Skeleton.barHeightFactor;
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(

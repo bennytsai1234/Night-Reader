@@ -21,6 +21,10 @@ class PreferKey {
   /// 骨架換場的方式（[SkeletonRevealStyle.name]）與時長（毫秒）。
   static const String skeletonRevealStyle = 'skeleton_reveal_style';
   static const String skeletonRevealMillis = 'skeleton_reveal_millis';
+
+  /// 骨架的深淺（[SkeletonStrength.name]）與呼吸方式（[SkeletonBreath.name]）。
+  static const String skeletonStrength = 'skeleton_strength';
+  static const String skeletonBreath = 'skeleton_breath';
   static const String userAgent = 'userAgent';
   static const String showUnread = 'showUnread';
   static const String bookGroupStyle = 'bookGroupStyle';

@@ -151,7 +151,7 @@ class _LaunchEntranceScope extends InheritedWidget {
 ///
 /// - 玻璃（頁首按鈕、分頁列、搜尋鈕）：骨架照它的大小與 [borderRadius] 畫
 ///   （圓鈕就是最窄的膠囊），玻璃連同模糊一起淡入（[GlassReveal]，ADR 0022）。
-/// - 一行字（[LaunchSkeleton.text]，頁首標題）：骨架是和字同寬、約字身高
+/// - 一行字（[LaunchSkeleton.text]，頁首標題）：骨架是和字同寬、和字一樣高
 ///   的長條（同 [SkeletonLine]），字只淡入。
 ///
 /// 出現前不接點擊、不給讀屏念。不在進場底下，或進場結束後才建的（例如
@@ -230,10 +230,11 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
     final child = style == null
         ? GlassReveal(animation: _glass, child: widget.child)
         : FadeTransition(opacity: _glass, child: widget.child);
-    // 字的骨架是一條約字身高的長條，置中在那一行上。
+    // 字的骨架是一條和字一樣高的長條，置中在那一行上。
     final barHeight = style == null
         ? null
-        : MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14) * 0.75;
+        : MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14) *
+              Skeleton.barHeightFactor;
     return AnimatedBuilder(
       animation: Listenable.merge([motion.skeleton, motion.reveal]),
       child: child,
