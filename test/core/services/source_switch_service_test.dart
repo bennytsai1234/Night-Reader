@@ -5,6 +5,7 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/download_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -501,6 +502,10 @@ void main() {
         targetChapterTitle: '第6章',
       );
 
+      final switched = AppEventBus()
+          .onName(AppEventBus.bookSwitched)
+          .map((event) => event.data as BookSwitchedEvent)
+          .first;
       await service.commitSwitch(
         oldBook,
         resolution,
@@ -508,6 +513,10 @@ void main() {
         chapterDao: db.chapterDao,
       );
 
+      // 從別頁開的閱讀器換源時，那一頁（例如書籍詳情）靠它找到新的書。
+      final event = await switched;
+      expect(event.fromBookUrl, oldBook.bookUrl);
+      expect(event.toBookUrl, resolution.migratedBook.bookUrl);
       expect(await db.bookDao.getByUrl(oldBook.bookUrl), isNull);
       expect(await db.chapterDao.getByBook(oldBook.bookUrl), isEmpty);
       expect(
