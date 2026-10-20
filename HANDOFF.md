@@ -1,4 +1,4 @@
-# 交接（2026-10-19）
+# 交接（2026-10-20）
 
 只寫從 repo 與 GitHub 查不到的事（ADR 0014）。合併了什麼看 PR 頁面與 `git log`，發版紀錄看 `gh run list --workflow android-release.yml`。
 
@@ -22,7 +22,7 @@
 
 - 這台機器常有好幾個 session 同時開在同一個資料夾，切分支會影響別人；自己的工作開 repo 外的 worktree 做，開工前 `git branch --show-current` 確認。本機預覽伺服器的 port（例如 8765）被別人佔用時換一個 port，不要結束別人的程序。
 - Claude Code 的子代理用 `isolation: "worktree"` 開的工作樹放在主資料夾的 `.claude/worktrees/` 底下，起點是主資料夾目前的 commit（通常是 `beta`），不是呼叫端所在的分支；要疊在別的分支上，合併時得自己解衝突，或先把那條分支併進 `beta`。
-- 2026-10-19 起日常改動進 `beta`（ADR 0027）。這台的主資料夾已切到 `beta`、`origin/HEAD` 指向 `beta`、`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。另一台電腦的資料夾還停在 `main`：開工前 `git fetch`、`git switch beta`、`git remote set-head origin -a`（T3 的自動拉取只拉預設分支，認的是 `origin/HEAD`）。在 `main` 上提交再推上去，Android Release 會直接失敗。
+- 2026-10-19 起日常改動進 `beta`（ADR 0027）。這台的主資料夾已切到 `beta`、`origin/HEAD` 指向 `beta`、`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。另一台電腦的資料夾還停在 `main`：開工前 `git fetch`、`git switch beta`、`git remote set-head origin -a`（T3 的自動拉取只拉預設分支，認的是 `origin/HEAD`）。T3 從 `origin/HEAD` 開 worktree，`git fetch` 不會更新它：這台的 `origin/HEAD` 原本還指向 `main`，#82 因此開在 `main` 上、以 `main` 為目標合併，2026-10-20 已把 `main` 用合併提交併回 `beta`（repo 只允許 squash，走 PR 會失去 `main` 的提交，之後 `main` 就無法快轉），並修正 `origin/HEAD`。`main` 收到不在 `beta` 上的提交時讓 Android Release 失敗的檢查，要等 `main` 第一次快轉到 `beta` 才生效，在那之前推上 `main` 照樣會發版。
 - `download_service_test` 有一批「`_dio` 尚未初始化」的下載失敗日誌（測試沒準備網路層，只檢查排隊與範圍），不是警告。
 - 新開的 worktree 跑 `flutter test` 時，sqlite3 的 native asset 下載可能被公司網路改掉、雜湊不符而失敗；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就會直接用快取。
 - Codex 審查的暫存 `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時會擋掉 Codex 最後一次連線，`codex exec` 因此回非零，但報告通常已經寫好；先看報告檔再判斷要不要重跑。
