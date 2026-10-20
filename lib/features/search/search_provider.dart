@@ -84,9 +84,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   SearchResultSortMode _sortMode = SearchResultSortMode.relevance;
   final Set<String> _sourceFilters = {};
   String _authorFilter = '';
-  String _kindFilter = '';
   bool _onlyInBookshelf = false;
-  bool _onlyWithCover = false;
 
   // --- Getters ---
   List<SearchKeyword> get historyKeywords => _history;
@@ -145,16 +143,12 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   SearchResultSortMode get sortMode => _sortMode;
   Set<String> get sourceFilters => Set.unmodifiable(_sourceFilters);
   String get authorFilter => _authorFilter;
-  String get kindFilter => _kindFilter;
   bool get onlyInBookshelf => _onlyInBookshelf;
-  bool get onlyWithCover => _onlyWithCover;
   List<SearchFailure> get sourceFailures => List.unmodifiable(_sourceFailures);
   bool get hasActiveResultFilters =>
       _sourceFilters.isNotEmpty ||
       _authorFilter.trim().isNotEmpty ||
-      _kindFilter.trim().isNotEmpty ||
-      _onlyInBookshelf ||
-      _onlyWithCover;
+      _onlyInBookshelf;
   List<String> get availableSourceFilters {
     final labels = <String>{};
     for (final book in _results) {
@@ -257,20 +251,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   List<SearchBook> _filteredResults(List<SearchBook> books) {
     final authorKey = normalizeSearchText(_authorFilter);
-    final kindKey = normalizeSearchText(_kindFilter);
     return books.where((book) {
       if (_sourceFilters.isNotEmpty) {
         final labels = _sourceLabelsFor(book).toSet();
         if (!_sourceFilters.any(labels.contains)) return false;
       }
       if (_onlyInBookshelf && !isInBookshelf(book)) return false;
-      if (_onlyWithCover && (coverOf(book) ?? '').trim().isEmpty) return false;
       if (authorKey.isNotEmpty &&
           !normalizeSearchText(book.author).contains(authorKey)) {
-        return false;
-      }
-      if (kindKey.isNotEmpty &&
-          !normalizeSearchText(book.kind).contains(kindKey)) {
         return false;
       }
       return true;
@@ -363,27 +351,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     notifyListeners();
   }
 
-  void setKindFilter(String value) {
-    _kindFilter = value;
-    notifyListeners();
-  }
-
   void setOnlyInBookshelf(bool value) {
     _onlyInBookshelf = value;
-    notifyListeners();
-  }
-
-  void setOnlyWithCover(bool value) {
-    _onlyWithCover = value;
     notifyListeners();
   }
 
   void clearResultFilters() {
     _sourceFilters.clear();
     _authorFilter = '';
-    _kindFilter = '';
     _onlyInBookshelf = false;
-    _onlyWithCover = false;
     notifyListeners();
   }
 

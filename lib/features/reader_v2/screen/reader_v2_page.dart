@@ -34,6 +34,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
+import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -310,12 +311,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   settings,
                 ),
               ),
-              onSettings: () => _openPanel(
-                () => ReaderV2SettingsSheets.showAdvancedSettings(
-                  context,
-                  settings,
-                ),
-              ),
+              onSettings: () => unawaited(_openReadingPreferences()),
               onAutoPage: _coordinator.toggleAutoPage,
               // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
               onToggleDayNight: () => ThemeRevealScope.of(context).run(
@@ -593,6 +589,20 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           beforeMenu: () => unawaited(_host.settings.loadSettings()),
         );
     }
+  }
+
+  /// 下方選單的「進階」：自動翻頁、繁簡、點擊區域、音量鍵這些不常邊讀邊
+  /// 調的設定只在「閱讀偏好」一個地方（ADR 0030），不另開一個內容相同的
+  /// 面板。和全域系統設定一樣等返回動畫播完才重讀設定（ADR 0018）。
+  Future<void> _openReadingPreferences() async {
+    final pushed = await _pushOverMenu(
+      _menuDeparture.depart(),
+      MaterialPageRoute<void>(builder: (_) => const ReadingSettingsPage()),
+    );
+    if (!mounted || pushed == null) return;
+    _restoreMenuWhenUncovered(
+      beforeMenu: () => unawaited(_host.settings.loadSettings()),
+    );
   }
 
   void _handleMenuHidden() => _menuDeparture.menusHidden();

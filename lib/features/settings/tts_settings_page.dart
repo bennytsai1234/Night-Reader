@@ -72,19 +72,6 @@ class TtsSettingsPage extends StatelessWidget {
                           _reportSaveFailure(context, tts.setPitch(value)),
                     ),
                   ),
-                  _stepper(
-                    NumberStepperRow(
-                      label: '音量',
-                      value: tts.volume,
-                      min: TTSService.minVolume,
-                      max: TTSService.maxVolume,
-                      step: TTSService.volumeStep,
-                      displayScale: 100,
-                      unit: '%',
-                      onChanged: (value) =>
-                          _reportSaveFailure(context, tts.setVolume(value)),
-                    ),
-                  ),
                 ],
               ),
               GroupedSection(

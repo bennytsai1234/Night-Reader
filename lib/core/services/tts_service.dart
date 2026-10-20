@@ -35,7 +35,6 @@ class TTSService extends ChangeNotifier {
 
   bool _isPlaying = false;
   double _pitch = 1.0;
-  double _volume = 1.0;
   double _rate = 1.0;
   String? _language;
   List<dynamic> _languages = [];
@@ -46,7 +45,6 @@ class TTSService extends ChangeNotifier {
 
   bool get isPlaying => _isPlaying;
   double get pitch => _pitch;
-  double get volume => _volume;
   double get rate => _rate;
   String? get language => _language;
   List<dynamic> get languages => _languages;
@@ -99,9 +97,10 @@ class TTSService extends ChangeNotifier {
   static const double minPitch = 0.5;
   static const double maxPitch = 2.0;
   static const double pitchStep = 0.1;
-  static const double minVolume = 0.0;
-  static const double maxVolume = 1.0;
-  static const double volumeStep = 0.05;
+
+  /// 朗讀引擎的音量固定滿格，大小聲照系統的媒體音量；原本另有一個 App 內的
+  /// 音量設定，和系統音量鍵是同一件事的兩個控制（ADR 0030）。
+  static const double _engineVolume = 1.0;
 
   /// flutter_tts 的語速刻度：0.5 = 正常速度。
   static const double _flutterTtsNormalRate = 0.5;
@@ -145,16 +144,11 @@ class TTSService extends ChangeNotifier {
       final pitch =
           prefs.getDouble(PreferKey.readerTtsPitch) ??
           prefs.getDouble(PreferKey.speechPitch);
-      final volume = prefs.getDouble(PreferKey.speechVolume);
       if (rate != null) _rate = _clampParam(rate, minRate, maxRate, 1.0);
       if (pitch != null) _pitch = _clampParam(pitch, minPitch, maxPitch, 1.0);
-      if (volume != null) {
-        _volume = _clampParam(volume, minVolume, maxVolume, 1.0);
-      }
       _persistedParams
         ..[PreferKey.readerTtsSpeedMultiplier] = _rate
-        ..[PreferKey.readerTtsPitch] = _pitch
-        ..[PreferKey.speechVolume] = _volume;
+        ..[PreferKey.readerTtsPitch] = _pitch;
     } catch (e) {
       AppLog.e('TTSService: load speech params failed: $e', error: e);
     }
@@ -278,7 +272,7 @@ class TTSService extends ChangeNotifier {
     await _flutterTts.setLanguage(_language!);
     await _flutterTts.setSpeechRate(_engineRate);
     await _flutterTts.setPitch(_pitch);
-    await _flutterTts.setVolume(_volume);
+    await _flutterTts.setVolume(_engineVolume);
     await _loadSystemVoiceOptions();
   }
 
@@ -434,27 +428,12 @@ class TTSService extends ChangeNotifier {
     });
   }
 
-  Future<void> setVolume(double volume) async {
-    await init();
-    _volume = _clampParam(volume, minVolume, maxVolume, _volume);
-    notifyListeners();
-    await _applyVolumeToEngine();
-    await _persistParam(PreferKey.speechVolume, _volume, (value) async {
-      _volume = value;
-      await _applyVolumeToEngine();
-    });
-  }
-
   Future<void> _applyPitchToEngine() async {
     if (_isInitialized) await _flutterTts.setPitch(_pitch);
   }
 
   Future<void> _applyRateToEngine() async {
     if (_isInitialized) await _flutterTts.setSpeechRate(_engineRate);
-  }
-
-  Future<void> _applyVolumeToEngine() async {
-    if (_isInitialized) await _flutterTts.setVolume(_volume);
   }
 
   /// 最後一次確定落地（載入或保存成功）的朗讀參數。
@@ -686,7 +665,7 @@ class TTSService extends ChangeNotifier {
     }
     await _flutterTts.setSpeechRate(_engineRate);
     await _flutterTts.setPitch(_pitch);
-    await _flutterTts.setVolume(_volume);
+    await _flutterTts.setVolume(_engineVolume);
   }
 
   Future<List<Map<String, String>>> _fetchVoices() async {

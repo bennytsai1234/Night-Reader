@@ -149,11 +149,8 @@ void main() {
       Navigator.pop(tester.element(find.text('新頁')));
       await startTrip(tester);
       final start = pose(tester);
-      // 先快後慢：第一段時間變得比下一段多。俐落平移的彈簧從靜止起步、
-      // 約 8.5% 時最快，所以比 20% 一段；其他比 10%。
-      final step =
-          transition.duration *
-          (transition == AppPageTransition.slideCrisp ? 0.2 : 0.1);
+      // 先快後慢：第一段時間變得比下一段多。
+      final step = transition.duration * 0.1;
       await tester.pump(step);
       final first = pose(tester);
       await tester.pump(step);
@@ -409,7 +406,7 @@ void main() {
     });
 
     for (final transition in AppPageTransition.values.where(
-      (t) => t != AppPageTransition.slide && t != AppPageTransition.slideCrisp,
+      (t) => t != AppPageTransition.slide,
     )) {
       testWidgets('${transition.name}: dragging back looks like its return', (
         tester,

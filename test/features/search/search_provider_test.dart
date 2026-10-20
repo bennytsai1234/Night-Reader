@@ -127,11 +127,6 @@ void main() {
       expect(provider.coverOf(replaced), 'local:///covers/甲.jpg');
       expect(provider.coverOf(provider.results.last), isNull);
 
-      // 「只看有封面」看的是卡片實際顯示的封面。
-      provider.setOnlyWithCover(true);
-      expect(names(provider), ['甲']);
-      provider.setOnlyWithCover(false);
-
       await provider.search('另一本');
       expect(provider.coverOf(replaced), isNull);
     });
