@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'launch_entrance.dart';
 
-/// 霧面紙材質：紙／墨色調、輕度背景模糊、髮絲亮邊與漫射陰影。
+/// 霧面紙材質：紙／墨色調、輕度背景模糊、框線、貼邊陰影與漫射陰影。
 ///
 /// 色調本身約 84% 不透明，即使模糊被降級仍像一張紙面，不會變成透明。
 /// 模糊走 [BackdropFilter.grouped]，同一 [BackdropGroup] 下的多塊玻璃共用
@@ -33,7 +34,8 @@ class GlassSurface extends StatelessWidget {
   final BorderRadius? borderRadius;
   final BoxShape shape;
 
-  /// 覆寫色調（例如閱讀器選單用選單主題色）；需自帶透明度。
+  /// 覆寫色調（例如閱讀器選單用選單主題色）；需自帶透明度。框線跟著改從
+  /// 這個色調推導。
   final Color? tint;
   final bool shadow;
   final bool blur;
@@ -64,21 +66,26 @@ class GlassSurface extends StatelessWidget {
     );
   }
 
-  /// [shown] 0→1：色調、亮邊、模糊強度與陰影一起從無到有；每個 [shown]
+  /// [shown] 0→1：色調、框線、模糊強度與陰影一起從無到有；每個 [shown]
   /// 建出的元件樹相同，進出場中內容的狀態不會丟。
   Widget _build(BuildContext context, double shown, Widget child) {
     final chrome = AppChrome.of(context);
     final radius = shape == BoxShape.circle ? null : borderRadius;
     final color = tint ?? chrome.glassTint;
+    final edgeColor = switch (tint) {
+      final tint? => AppLayers.edgeOn(
+        tint.withValues(alpha: 1),
+        Theme.of(context).colorScheme.onSurface,
+      ),
+      null => chrome.glassBorder,
+    };
     final decoration = BoxDecoration(
       color: color.withValues(alpha: color.a * shown),
       shape: shape,
       borderRadius: radius,
       border: Border.all(
-        color: chrome.glassBorder.withValues(
-          alpha: chrome.glassBorder.a * shown,
-        ),
-        width: AppGlass.hairline,
+        color: edgeColor.withValues(alpha: edgeColor.a * shown),
+        width: AppLayers.edgeWidth,
       ),
     );
     Widget content = DecoratedBox(decoration: decoration, child: child);
@@ -104,6 +111,10 @@ class GlassSurface extends StatelessWidget {
             ),
             blurRadius: 24,
             offset: const Offset(0, 6),
+          ),
+          AppLayers.contactShadow(
+            dark: Theme.of(context).brightness == Brightness.dark,
+            shown: shown,
           ),
         ],
       ),

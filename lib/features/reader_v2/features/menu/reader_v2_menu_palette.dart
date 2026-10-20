@@ -30,7 +30,7 @@ class ReaderV2MenuStyle {
 
   factory ReaderV2MenuStyle.of(BuildContext context) {
     final palette = StylePalette.of(context);
-    final background = palette.surface.withValues(alpha: 0.96);
+    final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
     return ReaderV2MenuStyle(
       brightness: palette.brightness,

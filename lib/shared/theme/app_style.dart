@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_layers.dart';
 import 'app_tokens.dart';
 
 // 高亮色以使用者設定的深淺（不透明度）疊在正文上，取鮮明的螢光筆色，
@@ -18,15 +19,16 @@ enum AppStyle {
     '紙墨',
     light: StylePalette(
       brightness: Brightness.light,
-      background: AppPalette.paper200,
+      background: Color(0xFFE5E1D9),
       surface: AppPalette.paper50,
-      bar: AppPalette.paper100,
+      bar: AppPalette.paper50,
       text: AppPalette.ink700,
       textMuted: AppPalette.ink300,
       border: AppPalette.paper400,
       primary: AppPalette.cinnabar,
       secondary: AppPalette.gold,
       readerBackground: AppPalette.paper100,
+      readerMenu: Color(0xFFE0DBD0),
       readerText: Color(0xFF2A241C),
       readerInfo: Color(0xFF6D675E),
       highlight: _amber,
@@ -34,14 +36,15 @@ enum AppStyle {
     dark: StylePalette(
       brightness: Brightness.dark,
       background: AppPalette.ink600,
-      surface: AppPalette.ink500,
-      bar: AppPalette.ink500,
+      surface: Color(0xFF332F28),
+      bar: Color(0xFF413D35),
       text: AppPalette.ink50,
       textMuted: Color(0xFF968F7D),
-      border: AppPalette.ink400,
+      border: Color(0xFF464239),
       primary: AppPalette.cinnabarDark,
       secondary: AppPalette.gold,
       readerBackground: Color(0xFF14110D),
+      readerMenu: Color(0xFF2E2A24),
       readerText: Color(0xFFCFC6B2),
       readerInfo: Color(0xFF938C7D),
       highlight: _amber,
@@ -51,15 +54,16 @@ enum AppStyle {
     '竹青',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFE8EEDF),
+      background: Color(0xFFDCDFD6),
       surface: Color(0xFFF6F9F0),
-      bar: Color(0xFFEFF4E7),
+      bar: Color(0xFFF6F9F0),
       text: Color(0xFF1C2619),
       textMuted: Color(0xFF5A6854),
       border: Color(0xFFC9D4BC),
       primary: Color(0xFF4A6B45),
       secondary: Color(0xFFA0844A),
       readerBackground: Color(0xFFE4ECD6),
+      readerMenu: Color(0xFFCAD2BE),
       readerText: Color(0xFF202D21),
       readerInfo: Color(0xFF56664F),
       highlight: _citron,
@@ -67,14 +71,15 @@ enum AppStyle {
     dark: StylePalette(
       brightness: Brightness.dark,
       background: Color(0xFF101713),
-      surface: Color(0xFF1A231D),
-      bar: Color(0xFF1A231D),
+      surface: Color(0xFF29302B),
+      bar: Color(0xFF363E38),
       text: Color(0xFFDCE8D6),
       textMuted: Color(0xFF82937D),
-      border: Color(0xFF2C3A2F),
+      border: Color(0xFF404741),
       primary: Color(0xFF8FB58A),
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF0F1D19),
+      readerMenu: Color(0xFF263730),
       readerText: Color(0xFFB9D7C2),
       readerInfo: Color(0xFF839B8C),
       highlight: _citron,
@@ -84,15 +89,16 @@ enum AppStyle {
     '石青',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFEDF0F3),
+      background: Color(0xFFE0E1E3),
       surface: Color(0xFFFAFBFC),
-      bar: Color(0xFFF4F6F8),
+      bar: Color(0xFFFAFBFC),
       text: Color(0xFF121820),
       textMuted: Color(0xFF586372),
       border: Color(0xFFD2D8DF),
       primary: Color(0xFF3D5F80),
       secondary: Color(0xFFB07D3A),
       readerBackground: Color(0xFFF1F4F7),
+      readerMenu: Color(0xFFD7DADE),
       readerText: Color(0xFF1E2833),
       readerInfo: Color(0xFF626972),
       highlight: _sky,
@@ -100,14 +106,15 @@ enum AppStyle {
     dark: StylePalette(
       brightness: Brightness.dark,
       background: Color(0xFF10151B),
-      surface: Color(0xFF19202A),
-      bar: Color(0xFF19202A),
+      surface: Color(0xFF292E34),
+      bar: Color(0xFF373C42),
       text: Color(0xFFE2E8EF),
       textMuted: Color(0xFF8592A2),
-      border: Color(0xFF2A3340),
+      border: Color(0xFF3C4248),
       primary: AppPalette.azuriteDark,
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF0D1217),
+      readerMenu: Color(0xFF262C32),
       readerText: Color(0xFFB6C3CF),
       readerInfo: Color(0xFF808A94),
       highlight: _sky,
@@ -117,15 +124,16 @@ enum AppStyle {
     '茶褐',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFE9DEC7),
+      background: Color(0xFFDDD4C4),
       surface: Color(0xFFF6EEDD),
-      bar: Color(0xFFF0E7D2),
+      bar: Color(0xFFF6EEDD),
       text: Color(0xFF2C2014),
       textMuted: Color(0xFF6B5840),
       border: Color(0xFFD2C2A2),
       primary: Color(0xFF7E5124),
       secondary: AppPalette.gold,
       readerBackground: Color(0xFFF0E4CA),
+      readerMenu: Color(0xFFD7CAB3),
       readerText: Color(0xFF33241A),
       readerInfo: Color(0xFF6A5945),
       highlight: _apricot,
@@ -133,14 +141,15 @@ enum AppStyle {
     dark: StylePalette(
       brightness: Brightness.dark,
       background: Color(0xFF1B140D),
-      surface: Color(0xFF292016),
-      bar: Color(0xFF292016),
+      surface: Color(0xFF342D23),
+      bar: Color(0xFF423B2F),
       text: Color(0xFFEDDFC5),
       textMuted: Color(0xFF9F8D6F),
-      border: Color(0xFF3E3122),
+      border: Color(0xFF474034),
       primary: Color(0xFFD9A66B),
       secondary: AppPalette.teaDark,
       readerBackground: Color(0xFF18120B),
+      readerMenu: Color(0xFF332B1F),
       readerText: Color(0xFFCDB892),
       readerInfo: Color(0xFF938367),
       highlight: _apricot,
@@ -150,15 +159,16 @@ enum AppStyle {
     '素色',
     light: StylePalette(
       brightness: Brightness.light,
-      background: Color(0xFFF2F2F2),
+      background: Color(0xFFE5E5E5),
       surface: Color(0xFFFFFFFF),
-      bar: Color(0xFFF8F8F8),
+      bar: Color(0xFFFFFFFF),
       text: Color(0xFF111111),
       textMuted: Color(0xFF6B6B6B),
       border: Color(0xFFDADADA),
       primary: Color(0xFF333333),
       secondary: Color(0xFF8E8E93),
       readerBackground: Color(0xFFFFFFFF),
+      readerMenu: Color(0xFFE5E5E5),
       readerText: Color(0xFF1A1A1A),
       readerInfo: Color(0xFF636363),
       highlight: _amber,
@@ -166,14 +176,15 @@ enum AppStyle {
     dark: StylePalette(
       brightness: Brightness.dark,
       background: Color(0xFF000000),
-      surface: Color(0xFF151515),
-      bar: Color(0xFF151515),
+      surface: Color(0xFF202020),
+      bar: Color(0xFF2D2D2D),
       text: Color(0xFFEDEDED),
       textMuted: Color(0xFF8A8A8A),
-      border: Color(0xFF2A2A2A),
+      border: Color(0xFF363636),
       primary: Color(0xFFD6D6D6),
       secondary: Color(0xFF8E8E93),
       readerBackground: Color(0xFF000000),
+      readerMenu: Color(0xFF202020),
       readerText: Color(0xFFC4C4C4),
       readerInfo: Color(0xFF808080),
       highlight: _amber,
@@ -253,6 +264,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     required this.primary,
     required this.secondary,
     required this.readerBackground,
+    required this.readerMenu,
     required this.readerText,
     required this.readerInfo,
     required this.highlight,
@@ -260,13 +272,11 @@ class StylePalette extends ThemeExtension<StylePalette> {
 
   final Brightness brightness;
 
-  /// App 頁面底色。
+  /// App 頁面底色、卡片與面板底色、頁首與浮動分頁列等玻璃列的色調，照
+  /// [AppLayers] 的分層規則算好：淺色頁面比卡片暗、玻璃與卡片同色；深色
+  /// 卡片比頁面亮、玻璃再亮一階。
   final Color background;
-
-  /// 卡片、面板與閱讀選單底色。
   final Color surface;
-
-  /// 頁首、浮動分頁列等玻璃列的色調。
   final Color bar;
   final Color text;
   final Color textMuted;
@@ -281,6 +291,10 @@ class StylePalette extends ThemeExtension<StylePalette> {
   /// 閱讀正文的紙張與文字。
   final Color readerBackground;
   final Color readerText;
+
+  /// 閱讀選單與閱讀器內面板的底色：閱讀底色往閱讀文字色移（[AppLayers]），
+  /// 淺色、深色都和紙分得開。
+  final Color readerMenu;
 
   /// 閱讀器頁首／頁尾資訊列的文字與圖示。
   final Color readerInfo;
@@ -314,6 +328,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
     Color? primary,
     Color? secondary,
     Color? readerBackground,
+    Color? readerMenu,
     Color? readerText,
     Color? readerInfo,
     Color? highlight,
@@ -329,6 +344,7 @@ class StylePalette extends ThemeExtension<StylePalette> {
       primary: primary ?? this.primary,
       secondary: secondary ?? this.secondary,
       readerBackground: readerBackground ?? this.readerBackground,
+      readerMenu: readerMenu ?? this.readerMenu,
       readerText: readerText ?? this.readerText,
       readerInfo: readerInfo ?? this.readerInfo,
       highlight: highlight ?? this.highlight,
