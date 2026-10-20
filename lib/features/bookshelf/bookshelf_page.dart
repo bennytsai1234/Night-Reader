@@ -17,6 +17,7 @@ import 'package:night_reader/features/bookshelf/widgets/bookshelf_motion.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_skeleton.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
+import 'package:night_reader/shared/navigation/app_route_observer.dart';
 import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -61,8 +62,38 @@ class BookshelfPage extends StatefulWidget {
 }
 
 class _BookshelfPageState extends State<BookshelfPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware {
   bool _isMultiSelect = false;
+
+  ModalRoute<void>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != _route) {
+      if (_route != null) appRouteObserver.unsubscribe(this);
+      _route = route;
+      if (route != null) appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// 別的頁面蓋上書架（書籍詳情、搜尋、閱讀器……）：背景下載完成的重讀
+  /// 先記著，不在別人的換頁動畫裡重排被蓋住的書架（ADR 0018、0029）。
+  @override
+  void didPushNext() => context.read<BookshelfProvider>().setCovered(true);
+
+  /// 書架露出來、返回動畫播完，才補做被蓋住時記下的重讀。
+  @override
+  void didPopNext() {
+    final provider = context.read<BookshelfProvider>();
+    unawaited(
+      TransitionSettled.uncovered(context).then((_) {
+        if (mounted) provider.setCovered(false);
+      }),
+    );
+  }
+
   final Set<String> _selectedUrls = {};
   _BookshelfBatchAction? _batchAction;
 
@@ -105,6 +136,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     unawaited(_hasSourcesSub?.cancel());
     _motion.dispose();
     super.dispose();

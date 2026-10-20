@@ -10,6 +10,7 @@ import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -116,6 +117,24 @@ void main() {
   });
 
   tearDown(() => provider.dispose());
+
+  test('a download finishing while the shelf is covered reloads it only '
+      'once uncovered', () async {
+    await provider.loadBooks();
+    await bookDao.upsert(shelfBook('https://a.example/1'));
+    var notified = 0;
+    provider.addListener(() => notified++);
+
+    provider.setCovered(true);
+    AppEventBus().fire(AppEventBus.upBookshelf, data: 'https://a.example/1');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(notified, 0, reason: '蓋著時不重讀');
+    expect(provider.books, isEmpty);
+
+    provider.setCovered(false);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.books.map((b) => b.bookUrl), ['https://a.example/1']);
+  });
 
   group('shelf refresh', () {
     test('skips books the user took out of updates and local books', () async {

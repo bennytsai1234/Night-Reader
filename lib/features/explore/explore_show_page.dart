@@ -7,6 +7,7 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
@@ -90,10 +91,15 @@ class ExploreShowView extends StatelessWidget {
     );
   }
 
-  /// 第一頁載入時顯示書單骨架，書到了以淡入取代。
+  /// 第一頁載入時顯示書單骨架，書到了以淡入取代。書列在骨架底下一格建一
+  /// 列（[CoverRevealSlot]）、畫面上的封面解碼好才換場：原本書單到的那一格
+  /// 一次建出畫面上的九本，電腦上就要 45–65ms（ADR 0029）。
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
     return SkeletonSwitcher(
       loading: provider.isLoading && provider.books.isEmpty,
+      waitForCovers: true,
+      // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
+      backdrop: Theme.of(context).scaffoldBackgroundColor,
       skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),
       builder: (_) => _buildLoaded(context, provider),
     );
@@ -162,13 +168,18 @@ class ExploreShowView extends StatelessWidget {
             return _buildLoadMoreIndicator(context, provider);
           }
           final book = provider.books[index];
-          return _ExploreBookRow(
+          return CoverRevealSlot(
             key: ValueKey(book.bookUrl),
-            book: book,
-            details: provider.details,
-            source: provider.source,
-            isInBookshelf: provider.isInBookshelf(book),
-            sourceName: exploreName,
+            placeholder: const SizedBox(
+              height: ExploreBookItem.coverHeight + AppSpacing.md * 2,
+            ),
+            child: _ExploreBookRow(
+              book: book,
+              details: provider.details,
+              source: provider.source,
+              isInBookshelf: provider.isInBookshelf(book),
+              sourceName: exploreName,
+            ),
           );
         },
       ),
@@ -218,7 +229,6 @@ class ExploreShowView extends StatelessWidget {
 /// （[ExploreBookItem.extras]）。
 class _ExploreBookRow extends StatefulWidget {
   const _ExploreBookRow({
-    super.key,
     required this.book,
     required this.details,
     required this.source,
