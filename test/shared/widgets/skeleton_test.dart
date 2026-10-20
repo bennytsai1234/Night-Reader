@@ -80,6 +80,65 @@ void main() {
     );
   });
 
+  testWidgets('left-to-right breathing follows the screen position while '
+      'the page is scaled', (tester) async {
+    tester.view.physicalSize = const Size(400, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundary = GlobalKey();
+    const black = Color(0xFF000000);
+    // 換頁途中整頁縮小一半：上排一條 400 寬、下排兩條各 200 寬，在同一個
+    // 螢幕位置要一樣深。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: boundary,
+          child: ColoredBox(
+            color: const Color(0xFFFFFFFF),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Transform.scale(
+                scale: 0.5,
+                alignment: Alignment.topLeft,
+                child: const Skeleton(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 400, height: 40, color: black),
+                      SizedBox(height: 20),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SkeletonBox(width: 200, height: 40, color: black),
+                          SkeletonBox(width: 200, height: 40, color: black),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    final bytes = await tester.runAsync(() async {
+      final image =
+          await (boundary.currentContext!.findRenderObject()!
+                  as RenderRepaintBoundary)
+              .toImage();
+      return image.toByteData();
+    });
+    int red(int x, int y) => bytes!.getUint8((y * 400 + x) * 4);
+    for (final x in [10, 60, 120, 180]) {
+      expect(red(x, 10), closeTo(red(x, 40), 2), reason: 'x=$x');
+    }
+    // 由左而右：左右兩端深淺不同。
+    expect(red(10, 10), isNot(closeTo(red(180, 10), 2)));
+  });
+
   test('left-to-right breathing reaches the right edge later by its lag', () {
     for (final breath in [
       SkeletonBreath.gentleSweep,

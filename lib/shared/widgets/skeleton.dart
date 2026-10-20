@@ -133,6 +133,14 @@ class Skeleton extends StatefulWidget {
     return 1 - (1 - _pulseFloor) * AppMotion.fadeCurve.transform(toFaintest);
   }
 
+  /// [box] 左右兩緣在螢幕上的橫向位置，以 [viewWidth] 為 1：給 [breathAt] 的
+  /// 位置。照實際畫在螢幕上的位置算（含換頁的平移與縮放），由左而右呼吸時
+  /// 不同方塊、書架與閱讀器才接得上。在 paint 裡呼叫。
+  static (double, double) screenSpan(RenderBox box, double viewWidth) => (
+    box.localToGlobal(Offset.zero).dx / viewWidth,
+    box.localToGlobal(Offset(box.size.width, 0)).dx / viewWidth,
+  );
+
   /// 呼吸最淺時保留的深淺比例：再淺就會在紙上消失，看不出形狀。
   static const double _pulseFloor = 0.55;
 
@@ -342,10 +350,12 @@ class _RenderSkeletonBox extends RenderBox {
         alpha: _color.a * Skeleton.breathAt(phase.value, 0, _breath),
       );
     } else {
-      final left = localToGlobal(Offset.zero).dx / _viewWidth;
-      final span = size.width / _viewWidth;
+      // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
+      // 骨架才會一樣深。
+      final (left, right) = Skeleton.screenSpan(this, _viewWidth);
+      final span = right - left;
       // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
-      final count = math.max(2, (span * 32).ceil() + 1);
+      final count = math.max(2, (span.abs() * 32).ceil() + 1);
       paint.shader = ui.Gradient.linear(
         rect.centerLeft,
         rect.centerRight,

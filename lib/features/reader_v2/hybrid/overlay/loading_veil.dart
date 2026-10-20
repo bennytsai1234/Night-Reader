@@ -290,6 +290,7 @@ class _LoadingVeilState extends State<LoadingVeil> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final viewWidth = MediaQuery.maybeSizeOf(context)?.width ?? 0;
     return RepaintBoundary(
       child: CustomPaint(
         size: Size.infinite,
@@ -298,6 +299,13 @@ class _LoadingVeilState extends State<LoadingVeil> {
           skeleton: controller._skeletonCurve,
           pulse: controller._pulse,
           look: SkeletonLook.of(context),
+          breathSpan: () {
+            final box = context.findRenderObject();
+            if (box is! RenderBox || !box.hasSize || viewWidth <= 0) {
+              return (0, 1);
+            }
+            return Skeleton.screenSpan(box, viewWidth);
+          },
           sweep: () => controller._sweep,
           skeletonSweep: () => controller._skeletonSweep,
           spec: widget.spec,
@@ -317,6 +325,7 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.skeleton,
     required this.pulse,
     required this.look,
+    required this.breathSpan,
     required this.sweep,
     required this.skeletonSweep,
     required this.spec,
@@ -332,6 +341,10 @@ class _LoadingVeilPainter extends CustomPainter {
   /// 呼吸一輪的進度（[Skeleton.breathAt]）；停著時骨架不呼吸。
   final Animation<double> pulse;
   final SkeletonLook look;
+
+  /// 紙的左右兩緣在螢幕上的位置（[Skeleton.screenSpan]）：呼吸照螢幕位置，
+  /// 換頁平移、縮放時和頁首頁尾的骨架接得上；長出與掀紙照紙上的位置。
+  final (double, double) Function() breathSpan;
 
   /// 掀紙是不是由左而右；紙蓋著時不影響畫面。
   final bool Function() sweep;
@@ -400,10 +413,17 @@ class _LoadingVeilPainter extends CustomPainter {
       return strength;
     }
 
+    final (screenLeft, screenRight) = breathing ? breathSpan() : (0.0, 1.0);
     double alphaAt(double u) =>
         base.a *
         layerAt(u) *
-        (breathing ? Skeleton.breathAt(pulse.value, u, look.breath) : 1);
+        (breathing
+            ? Skeleton.breathAt(
+                pulse.value,
+                screenLeft + (screenRight - screenLeft) * u,
+                look.breath,
+              )
+            : 1);
     // 沿橫向會變的有：骨架長出來、掀紙與由左而右的呼吸。換場的濃度在
     // 轉折點之間是直線，取轉折點就好；呼吸是曲線，每 1/32 個寬度取一點。
     final breathSweeps = breathing && look.breath.lag > 0;
