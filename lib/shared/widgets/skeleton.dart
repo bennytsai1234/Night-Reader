@@ -416,11 +416,19 @@ class SkeletonSwitcher extends StatefulWidget {
     required this.builder,
     this.waitForCovers = false,
     this.entrance,
+    this.backdrop,
   });
 
   final bool loading;
   final Widget skeleton;
   final WidgetBuilder builder;
+
+  /// 骨架與內容後面的實色（通常是頁面底色）。給了的話換場只遮骨架一層：
+  /// 骨架墊著這個顏色蓋在照常畫出的內容上，由左而右退開；內容不再套動畫
+  /// 遮罩、不另開離屏圖層，換場的每一格少合成一張整區大的圖層（ADR 0029）。
+  /// 換到一半時是骨架覆蓋著淡出，比兩層交叉淡換的骨架稍微明顯一點。
+  /// 後面不是單一實色（例如半透明、漸層或圖片）時留 null，兩層各自淡入淡出。
+  final Color? backdrop;
 
   /// 資料到了先在骨架底下建好內容，等畫面上的封面解碼好（最多
   /// [AppMotion.revealCoverWait]），再連同封面一次換場；不會先出現空白的
@@ -579,26 +587,31 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
             );
     }
     final content = _lastContent;
-    // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (!_controller.isCompleted)
-          SkeletonRevealLayer(
-            key: const ValueKey('skeleton'),
-            opacity: appearing ?? _skeleton,
-            side: SkeletonRevealSide.skeleton,
-            incoming: entrance == null
-                ? _incoming
-                : SkeletonRevealSide.skeleton,
-            sweep: entrance?.sweep ?? _sweep,
-            child: Skeleton(child: widget.skeleton),
-          ),
-        // 等封面時內容已經建在骨架底下，只是還全透明。
-        if (content != null && (!_controller.isDismissed || reveal != null))
-          SkeletonRevealLayer(
+    final backdrop = widget.backdrop;
+    final skeletonLayer = SkeletonRevealLayer(
+      key: const ValueKey('skeleton'),
+      opacity: appearing ?? _skeleton,
+      side: SkeletonRevealSide.skeleton,
+      incoming: entrance == null ? _incoming : SkeletonRevealSide.skeleton,
+      sweep: entrance?.sweep ?? _sweep,
+      child: backdrop == null
+          ? Skeleton(child: widget.skeleton)
+          // 蓋在內容上面時不擋點擊：換場途中已經露出來的書照樣點得到。
+          : IgnorePointer(
+              child: ColoredBox(
+                color: backdrop,
+                child: Skeleton(child: widget.skeleton),
+              ),
+            ),
+    );
+    // 等封面時內容已經建在骨架底下：有 [backdrop] 時被墊色的骨架整個蓋住，
+    // 沒有時是全透明。
+    final contentLayer =
+        content != null && (!_controller.isDismissed || reveal != null)
+        ? SkeletonRevealLayer(
             key: const ValueKey('content'),
-            opacity: _content,
+            // 有墊色時內容一律照常畫，交叉淡換全由上面的骨架層負責。
+            opacity: backdrop == null ? _content : kAlwaysCompleteAnimation,
             side: SkeletonRevealSide.content,
             incoming: _incoming,
             sweep: _sweep,
@@ -607,8 +620,16 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
               ignoring: hidden,
               child: ExcludeSemantics(excluding: hidden, child: content),
             ),
-          ),
-      ],
+          )
+        : null;
+    final showSkeleton = !_controller.isCompleted;
+    // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。有墊色時骨架在
+    // 上面蓋住內容；沒有時骨架在下、內容在上，各自淡入淡出。
+    return Stack(
+      fit: StackFit.expand,
+      children: backdrop == null
+          ? [?(showSkeleton ? skeletonLayer : null), ?contentLayer]
+          : [?contentLayer, ?(showSkeleton ? skeletonLayer : null)],
     );
   }
 }

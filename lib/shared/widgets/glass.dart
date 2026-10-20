@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -772,7 +773,7 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.systemOverlayStyle,
-    this.titleSheen = false,
+    this.titleSheen,
     this.morph = false,
   });
 
@@ -800,8 +801,10 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
   final Color? foregroundColor;
   final SystemUiOverlayStyle? systemOverlayStyle;
 
-  /// 標題字樣上掃過淡墨流光，表示背景作業進行中（見 [InkSheen]）。
-  final bool titleSheen;
+  /// 為 true 時標題字樣上掃過淡墨流光，表示背景作業進行中（見 [InkSheen]）。
+  /// 給一個訊號而不是 bool：作業開始與結束只重建標題，不必讓整頁重建
+  /// （ADR 0018）。
+  final ValueListenable<bool>? titleSheen;
 
   bool get _hasToolbar =>
       title != null ||
@@ -856,12 +859,19 @@ class GlassNavHeader extends StatelessWidget implements PreferredSizeWidget {
         titleWidget ??
         (title == null
             ? null
-            : NavHeaderTitle(
-                title!,
-                key: morph ? ValueKey(title) : null,
-                color: fg,
-                sheen: titleSheen,
-              ));
+            : switch (titleSheen) {
+                null => NavHeaderTitle(
+                  title!,
+                  key: morph ? ValueKey(title) : null,
+                  color: fg,
+                ),
+                final sheen => ValueListenableBuilder<bool>(
+                  key: morph ? ValueKey(title) : null,
+                  valueListenable: sheen,
+                  builder: (_, active, _) =>
+                      NavHeaderTitle(title!, color: fg, sheen: active),
+                ),
+              });
     if (morph && middle != null) {
       final duration = MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
