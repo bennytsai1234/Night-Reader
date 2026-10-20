@@ -56,12 +56,17 @@ class ReaderV2TypographySection extends StatefulWidget {
     super.key,
     required this.settings,
     this.moreChildren = const <Widget>[],
+    this.compact = false,
   });
 
   final ReaderV2SettingsController settings;
 
   /// 附加在排版卡片之後的內容（例如閱讀器面板的頁面佈局）。
   final List<Widget> moreChildren;
+
+  /// 閱讀器面板的精簡版：只放邊讀邊會調的字號、行高與段距。其他排版項目
+  /// 與「恢復預設」在閱讀偏好頁（恢復預設會連看不到的項目一起重設）。
+  final bool compact;
 
   @override
   State<ReaderV2TypographySection> createState() =>
@@ -193,13 +198,16 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
+    final full = !widget.compact;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GroupedSection(
           margin: _sectionMargin,
           header: '排版',
-          headerTrailing: _ResetButton(onPressed: _isDefault ? null : _reset),
+          headerTrailing: full
+              ? _ResetButton(onPressed: _isDefault ? null : _reset)
+              : null,
           children: [
             _stepperRow(
               NumberStepperRow(
@@ -217,20 +225,21 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
                 },
               ),
             ),
-            _stepperRow(
-              NumberStepperRow(
-                label: '標題字號',
-                value: _titleFontSize,
-                min: 14,
-                max: 48,
-                step: 1,
-                onChanged: (value) {
-                  setState(() => _titleFontSize = value);
-                  _titleFontSizeDirty = true;
-                  _scheduleTypographyCommit();
-                },
+            if (full)
+              _stepperRow(
+                NumberStepperRow(
+                  label: '標題字號',
+                  value: _titleFontSize,
+                  min: 14,
+                  max: 48,
+                  step: 1,
+                  onChanged: (value) {
+                    setState(() => _titleFontSize = value);
+                    _titleFontSizeDirty = true;
+                    _scheduleTypographyCommit();
+                  },
+                ),
               ),
-            ),
             _stepperRow(
               NumberStepperRow(
                 label: '行高',
@@ -246,21 +255,22 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
                 },
               ),
             ),
-            _stepperRow(
-              NumberStepperRow(
-                label: '字距',
-                value: _letterSpacing,
-                min: 0.0,
-                max: 4.0,
-                step: 0.1,
-                fractionDigits: 1,
-                onChanged: (value) {
-                  setState(() => _letterSpacing = value);
-                  _letterSpacingDirty = true;
-                  _scheduleTypographyCommit();
-                },
+            if (full)
+              _stepperRow(
+                NumberStepperRow(
+                  label: '字距',
+                  value: _letterSpacing,
+                  min: 0.0,
+                  max: 4.0,
+                  step: 0.1,
+                  fractionDigits: 1,
+                  onChanged: (value) {
+                    setState(() => _letterSpacing = value);
+                    _letterSpacingDirty = true;
+                    _scheduleTypographyCommit();
+                  },
+                ),
               ),
-            ),
             _stepperRow(
               NumberStepperRow(
                 label: '段距',
@@ -276,26 +286,28 @@ class _ReaderV2TypographySectionState extends State<ReaderV2TypographySection> {
                 },
               ),
             ),
-            _stepperRow(
-              NumberStepperRow(
-                label: '章節間距',
-                value: _chapterSpacing,
-                min: ReaderV2SettingsController.minChapterSpacing,
-                max: ReaderV2SettingsController.maxChapterSpacing,
-                step: 0.5,
-                fractionDigits: 1,
-                unit: '行',
-                onChanged: (value) {
-                  setState(() => _chapterSpacing = value);
-                  _chapterSpacingDirty = true;
-                  _scheduleTypographyCommit();
-                },
+            if (full)
+              _stepperRow(
+                NumberStepperRow(
+                  label: '章節間距',
+                  value: _chapterSpacing,
+                  min: ReaderV2SettingsController.minChapterSpacing,
+                  max: ReaderV2SettingsController.maxChapterSpacing,
+                  step: 0.5,
+                  fractionDigits: 1,
+                  unit: '行',
+                  onChanged: (value) {
+                    setState(() => _chapterSpacing = value);
+                    _chapterSpacingDirty = true;
+                    _scheduleTypographyCommit();
+                  },
+                ),
               ),
-            ),
-            _TextIndentSelector(
-              value: settings.textIndent,
-              onChanged: settings.setTextIndent,
-            ),
+            if (full)
+              _TextIndentSelector(
+                value: settings.textIndent,
+                onChanged: settings.setTextIndent,
+              ),
           ],
         ),
         ...widget.moreChildren,
@@ -373,9 +385,17 @@ class _LabeledRow extends StatelessWidget {
 
 /// 版面：正文邊距、系統狀態列與頁首／頁尾資訊列。
 class ReaderV2PageLayoutSection extends StatefulWidget {
-  const ReaderV2PageLayoutSection({super.key, required this.settings});
+  const ReaderV2PageLayoutSection({
+    super.key,
+    required this.settings,
+    this.compact = false,
+  });
 
   final ReaderV2SettingsController settings;
+
+  /// 閱讀器面板的精簡版：只放左右邊距。其他版面項目、狀態列與頁首頁尾在
+  /// 閱讀偏好頁。
+  final bool compact;
 
   @override
   State<ReaderV2PageLayoutSection> createState() =>
@@ -454,6 +474,23 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
+    final horizontalPadding = _stepperRow(
+      NumberStepperRow(
+        label: '左右邊距',
+        value: _pendingHorizontal ?? settings.paddingHorizontal,
+        min: ReaderV2SettingsController.minPagePadding,
+        max: ReaderV2SettingsController.maxPagePadding,
+        step: _paddingStep,
+        onChanged: (value) => _schedule(horizontal: value),
+      ),
+    );
+    if (widget.compact) {
+      return GroupedSection(
+        margin: _sectionMargin,
+        header: '版面',
+        children: [horizontalPadding],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -466,16 +503,7 @@ class _ReaderV2PageLayoutSectionState extends State<ReaderV2PageLayoutSection> {
                 : _reset,
           ),
           children: [
-            _stepperRow(
-              NumberStepperRow(
-                label: '左右邊距',
-                value: _pendingHorizontal ?? settings.paddingHorizontal,
-                min: ReaderV2SettingsController.minPagePadding,
-                max: ReaderV2SettingsController.maxPagePadding,
-                step: _paddingStep,
-                onChanged: (value) => _schedule(horizontal: value),
-              ),
-            ),
+            horizontalPadding,
             GroupedSwitchRow(
               title: '左右對齊',
               value: settings.justifyText,

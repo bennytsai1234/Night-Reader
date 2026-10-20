@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
+import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
@@ -51,9 +53,27 @@ class _ReaderInterfaceSheet extends StatelessWidget {
       children: [
         const SheetSection(title: '風格'),
         const _ReaderStyleSelector(),
+        // 面板只放邊讀邊會調的幾項；其他排版、版面、頁首頁尾在閱讀偏好頁，
+        // 用同一個設定控制器，改了正文直接跟著變。
         ReaderV2TypographySection(
           settings: settings,
-          moreChildren: [ReaderV2PageLayoutSection(settings: settings)],
+          compact: true,
+          moreChildren: [
+            ReaderV2PageLayoutSection(settings: settings, compact: true),
+          ],
+        ),
+        GroupedSection(
+          margin: EdgeInsets.zero,
+          children: [
+            GroupedRow(
+              title: '更多排版設定',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ReadingSettingsPage(settings: settings),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

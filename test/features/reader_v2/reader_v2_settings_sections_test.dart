@@ -8,6 +8,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_pref
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sheets.dart';
+import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -179,5 +180,52 @@ void main() {
     await tester.tap(last);
     await tester.pump();
     expect(themeSettings.style, AppStyle.values.last);
+  });
+
+  testWidgets('外觀與排版面板只放常調的幾項，更多排版設定用同一個設定進閱讀偏好', (tester) async {
+    final themeSettings = ThemeSettingsProvider();
+    final settings = ReaderV2SettingsController();
+    addTearDown(settings.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: themeSettings,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => ReaderV2SettingsSheets.showInterfaceSettings(
+                  context,
+                  settings,
+                ),
+                child: const Text('開啟'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+
+    for (final label in ['字號', '行高', '段距', '左右邊距']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+    for (final label in ['標題字號', '字距', '章節間距', '上邊距', '頁首與頁尾']) {
+      expect(find.text(label), findsNothing, reason: label);
+    }
+
+    final more = find.text('更多排版設定');
+    await tester.ensureVisible(more);
+    await tester.pumpAndSettle();
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+
+    final page = tester.widget<ReadingSettingsPage>(
+      find.byType(ReadingSettingsPage),
+    );
+    expect(page.settings, same(settings), reason: '改了閱讀器直接跟著變');
+    expect(find.text('標題字號'), findsOneWidget);
   });
 }
