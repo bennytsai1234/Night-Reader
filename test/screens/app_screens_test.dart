@@ -3,6 +3,10 @@
 //   flutter test --run-skipped -t screens test/screens
 //   SHOT_MODE=dark flutter test --run-skipped -t screens test/screens
 //   SHOT_ONLY=r04,s12 flutter test --run-skipped -t screens test/screens
+//   SHOT_STYLE=plain flutter test --run-skipped -t screens test/screens
+//
+// SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain），
+// 預設紙墨。
 //
 // 圖檔寫在 [screenshotDir]，檔名是「情境_深淺.png」。這組測試帶 `screens`
 // 標籤，`dart_test.yaml` 讓它平常跳過，pre-push 與 CI 的全套測試不會跑。
@@ -15,6 +19,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/constant/prefer_key.dart';
 
 import '../support/app_harness.dart';
 import '../support/screenshot.dart';
@@ -161,6 +166,7 @@ void main() {
   setUpAll(loadScreenshotFonts);
   final mode = Platform.environment['SHOT_MODE'] ?? 'light';
   final only = Platform.environment['SHOT_ONLY']?.split(',');
+  final style = Platform.environment['SHOT_STYLE'];
 
   // 全部情境在同一個測試裡依序拍：App 的單例服務（下載服務等）第一次用到
   // 時就綁在當下測試的非同步環境，換到下一個測試就不會再回應，開書會一直
@@ -174,7 +180,13 @@ void main() {
     for (final MapEntry(key: name, value: (prefs, steps))
         in scenarios.entries) {
       if (only != null && !only.any(name.startsWith)) continue;
-      await tester.runAsync(() => resetPrefs({'themeMode': mode, ...prefs}));
+      await tester.runAsync(
+        () => resetPrefs({
+          'themeMode': mode,
+          PreferKey.appStyle: ?style,
+          ...prefs,
+        }),
+      );
       await pumpApp(tester);
       await steps(tester);
       if (name.startsWith('r')) await waitForText(tester);
