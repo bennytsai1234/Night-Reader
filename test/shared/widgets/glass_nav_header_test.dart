@@ -54,8 +54,10 @@ void main() {
   testWidgets('the sheen finishes its sweep after checking ends', (
     tester,
   ) async {
+    final checking = ValueNotifier(true);
+    addTearDown(checking.dispose);
     await tester.pumpWidget(
-      page(const GlassNavHeader(title: '書架', titleSheen: true)),
+      page(GlassNavHeader(title: '書架', titleSheen: checking)),
     );
     await tester.pump(const Duration(milliseconds: 100));
     expect(sheenMask, findsOneWidget);
@@ -65,7 +67,8 @@ void main() {
     expect(sheenMask, findsOneWidget);
 
     // 檢查結束：這一輪還在掃，掃完才停。
-    await tester.pumpWidget(page(const GlassNavHeader(title: '書架')));
+    checking.value = false;
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(sheenMask, findsOneWidget);
     await tester.pump(AppMotion.sheen);
@@ -76,7 +79,7 @@ void main() {
   testWidgets('no sheen when the system turns animations off', (tester) async {
     await tester.pumpWidget(
       page(
-        const GlassNavHeader(title: '書架', titleSheen: true),
+        GlassNavHeader(title: '書架', titleSheen: ValueNotifier(true)),
         disableAnimations: true,
       ),
     );

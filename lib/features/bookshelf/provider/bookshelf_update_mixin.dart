@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:pool/pool.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/models/book.dart';
@@ -25,19 +26,27 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   static const Duration updateBadgeDuration = Duration(seconds: 5);
 
   /// 上一次書架檢查的結果，只留有新章節或檢查失敗的書；不存檔，
-  /// [updateBadgeDuration] 後一起清掉。
-  Map<String, BookUpdateCheckResult> _updateBadges = const {};
+  /// [updateBadgeDuration] 後一起清掉。書卡各自聽這個訊號，角標出現與消失
+  /// 只重建那幾張書卡，不通知整個書架（ADR 0018）。
+  final ValueNotifier<Map<String, BookUpdateCheckResult>> updateBadges =
+      ValueNotifier(const {});
   Timer? _updateBadgeTimer;
 
   /// 書卡角標：有新章節（+N）或檢查失敗（!）；沒有就是 null。
   BookUpdateCheckResult? updateBadgeOf(String bookUrl) =>
-      _updateBadges[bookUrl];
+      updateBadges.value[bookUrl];
+
+  /// 下拉或開 App 的書架檢查正在進行；書架頁首的「書架」字樣這時掃過淡墨
+  /// 流光。多選的「檢查更新」看 [updatingCount]，不算在這裡。只有頁首標題
+  /// 聽它：檢查在開 App 的換場一結束就開始，通知整個書架會讓剛換好的書架
+  /// 整頁重建一次。
+  final ValueNotifier<bool> checkingShelf = ValueNotifier(false);
 
   /// 開 App 後在背景做的事：先把書架上還沒下載完整的書排進下載（ADR
   /// 0007），再檢查更新（「啟動時檢查書架更新」關掉時不檢查）。
   Future<void> onAppLaunch() async {
     await keepShelfDownloaded();
-    if (!AppConfig.autoRefresh) return;
+    if (_closed || !AppConfig.autoRefresh) return;
     await refreshBookshelf();
   }
 
@@ -73,22 +82,20 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 章節一律標，檢查失敗只在 [userInitiated]（手動下拉）時標。略過本地書與
   /// 使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複發請求。
   Future<void> refreshBookshelf({bool userInitiated = false}) {
+    // 書架關掉之後才輪到的檢查（例如開 App 補完下載時）不開始：訊號已釋放。
+    if (_closed) return Future<void>.value();
     if (userInitiated) _userRefreshed = true;
     final running = _refreshing;
     if (running != null) return running;
     final refresh = _refreshAll().whenComplete(() {
       _refreshing = null;
       _userRefreshed = false;
-      notifyListeners();
+      if (!_closed) checkingShelf.value = false;
     });
     _refreshing = refresh;
-    notifyListeners();
+    checkingShelf.value = true;
     return refresh;
   }
-
-  /// 下拉或開 App 的書架檢查正在進行；書架頁首的「書架」字樣這時掃過淡墨
-  /// 流光。多選的「檢查更新」看 [updatingCount]，不算在這裡。
-  bool get isCheckingShelf => _refreshing != null;
 
   Future<void> _refreshAll() async {
     // 從資料庫讀：啟動時書架可能還沒載入完，記憶體裡的清單也可能是舊的。
@@ -114,23 +121,31 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       await pool.close();
     }
     _updateBadgeTimer?.cancel();
-    _updateBadges = {
+    final badges = {
       for (final result in results.nonNulls)
         if (result.hasUpdate || (result.failed && _userRefreshed))
           result.bookUrl: result,
     };
+    // 先讀回更新過的書再掛角標：書卡換上新的章節數與角標是同一次更新。
     await loadBooks();
-    if (_updateBadges.isEmpty) return;
+    if (_closed) return;
+    updateBadges.value = badges;
+    if (badges.isEmpty) return;
     _updateBadgeTimer = startTimer(updateBadgeDuration, () {
       _updateBadgeTimer = null;
-      _updateBadges = const {};
-      notifyListeners();
+      updateBadges.value = const {};
     });
   }
 
+  /// 檢查跑完前書架就關掉時，訊號已經釋放，不再設值。
+  bool _closed = false;
+
   @override
   void dispose() {
+    _closed = true;
     _updateBadgeTimer?.cancel();
+    updateBadges.dispose();
+    checkingShelf.dispose();
     super.dispose();
   }
 
