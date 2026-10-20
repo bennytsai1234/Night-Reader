@@ -7,8 +7,10 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
-/// 閱讀偏好：與閱讀器內「外觀與排版」「進階設定」面板使用同一組區塊與
-/// 同一個 controller 型別，兩處設定的讀寫路徑一致。
+/// 閱讀偏好：完整的排版、版面、頁首頁尾、自動翻頁、繁簡、點擊區域與音量鍵
+/// 設定。和閱讀器內「外觀與排版」（精簡版）「進階設定」面板用同一組區塊與
+/// 同一個 controller 型別，兩處設定的讀寫路徑一致。從閱讀器「外觀與排版 →
+/// 更多排版設定」進來時，閱讀器等這一頁關掉才重讀設定。
 class ReadingSettingsPage extends StatefulWidget {
   const ReadingSettingsPage({super.key});
 
