@@ -86,7 +86,6 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's11_reading_prefs': (const {}, (t) async => openMine(t, '閱讀偏好')),
   's12_sources': (const {}, (t) async => openMine(t, '書源管理')),
   's13_downloads': (const {}, (t) async => openMine(t, '背景下載佇列')),
-  // 「資料與隱私」要用網頁元件，截圖環境畫不出來，不列。
   's15_appearance': (const {}, (t) async => openMine(t, '外觀與主題')),
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與還原')),
