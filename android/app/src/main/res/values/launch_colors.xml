@@ -3,15 +3,15 @@
     <!-- 啟動畫面底色：各風格書架的底色（AppStyle 的 light／dark.background），
          test/features/settings/launch_screen_theme_sync_test.dart 檢查兩邊一致。
          launch_<風格> 跟隨系統深淺，深色版在 values-night/launch_colors.xml。 -->
-    <color name="launch_paper_light">#F4EFE3</color>
+    <color name="launch_paper_light">#E5E1D9</color>
     <color name="launch_paper_dark">#1A1612</color>
-    <color name="launch_bamboo_light">#E8EEDF</color>
+    <color name="launch_bamboo_light">#DCDFD6</color>
     <color name="launch_bamboo_dark">#101713</color>
-    <color name="launch_azurite_light">#EDF0F3</color>
+    <color name="launch_azurite_light">#E0E1E3</color>
     <color name="launch_azurite_dark">#10151B</color>
-    <color name="launch_tea_light">#E9DEC7</color>
+    <color name="launch_tea_light">#DDD4C4</color>
     <color name="launch_tea_dark">#1B140D</color>
-    <color name="launch_plain_light">#F2F2F2</color>
+    <color name="launch_plain_light">#E5E5E5</color>
     <color name="launch_plain_dark">#000000</color>
 
     <color name="launch_paper">@color/launch_paper_light</color>
