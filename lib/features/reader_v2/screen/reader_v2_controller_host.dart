@@ -88,8 +88,28 @@ class ReaderV2ControllerHost {
     _onChanged();
   }
 
+  /// 從選單推一整頁的期間（選單開始滑出起，到選單再打開為止）自動捲動
+  /// 保持暫停：整頁蓋著閱讀器時正文不在後面往前捲。
+  bool _awayOverMenu = false;
+
+  /// 從選單推一整頁之前呼叫，收起選單時不恢復自動捲動。
+  void holdAutoPageWhileAway() {
+    _awayOverMenu = true;
+    _syncAutoPagePause();
+  }
+
+  /// 沒推出去，或回來後不滑回選單時呼叫，自動捲動照選單狀態恢復。
+  void releaseAutoPage() {
+    _awayOverMenu = false;
+    _syncAutoPagePause();
+  }
+
+  void _syncAutoPagePause() =>
+      autoPage?.setPaused(menu.controlsVisible || _awayOverMenu);
+
   void _onMenuChanged() {
-    autoPage?.setPaused(menu.controlsVisible);
+    if (menu.controlsVisible) _awayOverMenu = false;
+    _syncAutoPagePause();
     _onChanged();
   }
 

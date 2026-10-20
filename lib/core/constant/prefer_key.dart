@@ -215,7 +215,6 @@ class PreferKey {
 
   // 音訊與朗讀
   static const String speechPitch = 'speech_pitch';
-  static const String speechVolume = 'speech_volume';
   static const String ignoreAudioFocusAloud = 'ignore_audio_focus_aloud';
   static const String systemMediaControlCompat = 'system_media_control_compat';
   static const String mediaButtonPerNext = 'media_button_per_next';

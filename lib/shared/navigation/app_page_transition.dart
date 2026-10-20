@@ -22,10 +22,6 @@ enum AppPageTransition {
   /// 陰影、轉場中帶螢幕圓角；0.5 秒彈簧。
   slide('平移', Duration(milliseconds: 500)),
 
-  /// 同 [slide]，曲線換成 Telegram 在 iOS 26 用的臨界阻尼彈簧：起步更猛、
-  /// 尾巴更短。
-  slideCrisp('俐落平移', Duration(milliseconds: 500)),
-
   /// Telegram Android：新頁從右 48dp 滑入並淡入，底頁不動；150ms。
   glide('滑入', Duration(milliseconds: 150)),
 
@@ -105,12 +101,6 @@ abstract final class _Curves {
   /// 近似，也是 Telegram Android 的 EASE_OUT_QUINT。
   static const Curve telegramSpring = Cubic(0.23, 1.0, 0.32, 1.0);
 
-  /// Telegram iOS 26：mass 1、stiffness 555.027、damping 47.118 的彈簧。
-  static const Curve crispSpring = _CriticalSpring(
-    stiffness: 555.027,
-    seconds: 0.5,
-  );
-
   /// Android DecelerateInterpolator(1.5)：1 - (1 - t)^3。
   static const Curve decelerate = _Decelerate(1.5);
 
@@ -123,23 +113,6 @@ abstract final class _Curves {
   /// LinearOutSlowIn，先快後慢。
   static Curve standard(bool closing) =>
       closing ? Easing.legacyDecelerate : Curves.fastOutSlowIn;
-}
-
-/// 臨界阻尼彈簧 x(t) = 1 - (1 + ωt)e^(-ωt)，在 [seconds] 內跑完。
-class _CriticalSpring extends Curve {
-  const _CriticalSpring({required this.stiffness, required this.seconds});
-
-  final double stiffness;
-  final double seconds;
-
-  double _at(double t) {
-    final wt = math.sqrt(stiffness) * seconds * t;
-    return 1 - (1 + wt) * math.exp(-wt);
-  }
-
-  // 0.5 秒時剩不到萬分之一，除以終點值讓 t = 1 時精確落在 1。
-  @override
-  double transformInternal(double t) => _at(t) / _at(1);
 }
 
 class _Decelerate extends Curve {
@@ -960,8 +933,6 @@ class _TopPose {
         );
       case AppPageTransition.slide:
         return _TopPose.slide(shown(_Curves.telegramSpring));
-      case AppPageTransition.slideCrisp:
-        return _TopPose.slide(shown(_Curves.crispSpring));
       case AppPageTransition.glide:
         final v = shown(_Curves.decelerate);
         return _TopPose(offset: Offset(48 * (1 - v), 0), opacity: v);
@@ -1025,7 +996,6 @@ class _TopPose {
           opacity: shown,
         );
       case AppPageTransition.slide:
-      case AppPageTransition.slideCrisp:
         return _TopPose.slide(shown);
       case AppPageTransition.glide:
         return _TopPose(offset: Offset(48 * gone, 0), opacity: shown);
@@ -1157,8 +1127,6 @@ class _UnderPose {
         return _UnderPose(dim: 0.06 * covered(Curves.easeOutCubic));
       case AppPageTransition.slide:
         return _UnderPose.slide(covered(_Curves.telegramSpring));
-      case AppPageTransition.slideCrisp:
-        return _UnderPose.slide(covered(_Curves.crispSpring));
       case AppPageTransition.glide:
         return const _UnderPose();
       case AppPageTransition.forward:
@@ -1209,7 +1177,6 @@ class _UnderPose {
       case AppPageTransition.paper:
         return _UnderPose(dim: 0.06 * covered);
       case AppPageTransition.slide:
-      case AppPageTransition.slideCrisp:
         return _UnderPose.slide(covered);
       case AppPageTransition.glide:
         return const _UnderPose();

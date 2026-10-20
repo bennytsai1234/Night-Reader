@@ -27,17 +27,6 @@ class ReaderV2SettingsSheets {
       builder: (_) => _ReaderInterfaceSheet(settings: settings),
     );
   }
-
-  static Future<void> showAdvancedSettings(
-    BuildContext context,
-    ReaderV2SettingsController settings,
-  ) {
-    return ReaderV2MenuSheet.show<void>(
-      context,
-      settings: settings,
-      builder: (_) => _ReaderAdvancedSheet(settings: settings),
-    );
-  }
 }
 
 class _ReaderInterfaceSheet extends StatelessWidget {
@@ -179,25 +168,6 @@ class _ReaderStyleSelector extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ReaderAdvancedSheet extends StatelessWidget {
-  const _ReaderAdvancedSheet({required this.settings});
-
-  final ReaderV2SettingsController settings;
-
-  @override
-  Widget build(BuildContext context) {
-    return ReaderV2SheetScaffold(
-      title: '進階設定',
-      children: [
-        ReaderV2AutoPageSection(settings: settings),
-        ReaderV2ChineseConvertSection(settings: settings),
-        ReaderV2ClickActionSection(settings: settings),
-        ReaderV2VolumeKeySection(settings: settings),
-      ],
     );
   }
 }

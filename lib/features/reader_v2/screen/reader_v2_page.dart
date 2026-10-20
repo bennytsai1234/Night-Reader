@@ -34,6 +34,7 @@ import 'package:night_reader/features/reader_v2/features/settings/reader_v2_sett
 import 'package:night_reader/features/reader_v2/screen/reader_v2_device_channel.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_window_settings.dart';
+import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
@@ -310,12 +311,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   settings,
                 ),
               ),
-              onSettings: () => _openPanel(
-                () => ReaderV2SettingsSheets.showAdvancedSettings(
-                  context,
-                  settings,
-                ),
-              ),
+              onSettings: () => unawaited(_openReadingPreferences()),
               onAutoPage: _coordinator.toggleAutoPage,
               // 深淺是整個 App 共用的設定，閱讀器切換後其他畫面一併跟著換。
               onToggleDayNight: () => ThemeRevealScope.of(context).run(
@@ -582,7 +578,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
         final pushed = await _pushOverMenu(
-          _menuDeparture.depart(),
+          _departMenu(),
           MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
         );
         if (!mounted || pushed == null) return;
@@ -595,7 +591,28 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     }
   }
 
+  /// 下方選單的「進階」：自動翻頁、繁簡、點擊區域、音量鍵這些不常邊讀邊
+  /// 調的設定只在「閱讀偏好」一個地方（ADR 0030），不另開一個內容相同的
+  /// 面板。和全域系統設定一樣等返回動畫播完才重讀設定（ADR 0018）。
+  Future<void> _openReadingPreferences() async {
+    final pushed = await _pushOverMenu(
+      _departMenu(),
+      MaterialPageRoute<void>(builder: (_) => const ReadingSettingsPage()),
+    );
+    if (!mounted || pushed == null) return;
+    _restoreMenuWhenUncovered(
+      beforeMenu: () => unawaited(_host.settings.loadSettings()),
+    );
+  }
+
   void _handleMenuHidden() => _menuDeparture.menusHidden();
+
+  /// 收起選單、開一張推頁請求；推頁期間自動捲動保持暫停，選單再打開時
+  /// 解除（見 [ReaderV2ControllerHost.holdAutoPageWhileAway]）。
+  ReaderV2MenuDepartureTicket _departMenu() {
+    _host.holdAutoPageWhileAway();
+    return _menuDeparture.depart();
+  }
 
   /// 從選單推一整頁（書籍詳情、全域設定）：等選單滑出畫面才推（見
   /// [ReaderV2MenuDeparture]）。推之前再確認這次請求沒有作廢（選單又打開、
@@ -609,6 +626,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         !mounted ||
         !ticket.canDepart ||
         !(pageRouteOf(context)?.isCurrent ?? false)) {
+      if (mounted) _host.releaseAutoPage();
       return null;
     }
     return (await Navigator.of(context).push(route),);
@@ -644,7 +662,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 從閱讀器開的詳情：點章節回來跳到那一章（見 [resolveDetailChapter]），
   /// 按閱讀鈕直接回來。
   Future<void> _showBookDetail() async {
-    final departure = _menuDeparture.depart();
+    final departure = _departMenu();
     final flushed = await _host.flushProgress();
     if (!mounted) return;
     final chapterDao = _host.dependencies.chapterDao;
@@ -672,6 +690,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       _restoreMenuWhenUncovered();
       return;
     }
+    // 點了章節回來：直接跳過去、不滑回選單，自動捲動照常接著捲。
+    _host.releaseAutoPage();
     final target = await resolveDetailChapter(
       url: targetUrl,
       readerChapters: _host.runtime?.chapters ?? widget.initialChapters,

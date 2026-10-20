@@ -721,12 +721,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       showDragHandle: true,
       // 輸入框控制器由面板擁有，退場動畫結束後才釋放。
       builder: (sheetContext) => TextControllersScope(
-        initialTexts: [provider.authorFilter, provider.kindFilter],
+        initialTexts: [provider.authorFilter],
         builder: (_, fields) => Provider.value(
           value: provider,
           child: Consumer<SearchProvider>(
             builder: (context, p, _) {
-              final [authorController, kindController] = fields;
+              final [authorController] = fields;
               final sources = p.availableSourceFilters;
               final primary = Theme.of(context).colorScheme.primary;
               return SafeArea(
@@ -748,7 +748,6 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                             label: '清除',
                             onPressed: () {
                               authorController.clear();
-                              kindController.clear();
                               p.clearResultFilters();
                             },
                           ),
@@ -762,6 +761,9 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // 「只看有封面」「分類包含」拿掉了：封面
+                                // 是書源給不給的事，分類字樣各書源寫法不
+                                // 一（ADR 0030）。
                                 GroupedSection(
                                   topGap: AppSpacing.sm,
                                   children: [
@@ -770,27 +772,11 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                                       value: p.onlyInBookshelf,
                                       onChanged: p.setOnlyInBookshelf,
                                     ),
-                                    GroupedSwitchRow(
-                                      title: '只看有封面',
-                                      value: p.onlyWithCover,
-                                      onChanged: p.setOnlyWithCover,
-                                    ),
-                                  ],
-                                ),
-                                GroupedSection(
-                                  header: '內容',
-                                  children: [
                                     GroupedTextFieldRow(
                                       label: '作者包含',
                                       controller: authorController,
                                       hintText: '不限',
                                       onChanged: p.setAuthorFilter,
-                                    ),
-                                    GroupedTextFieldRow(
-                                      label: '分類包含',
-                                      controller: kindController,
-                                      hintText: '不限',
-                                      onChanged: p.setKindFilter,
                                     ),
                                   ],
                                 ),

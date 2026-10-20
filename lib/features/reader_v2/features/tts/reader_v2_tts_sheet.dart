@@ -104,18 +104,8 @@ class ReaderV2TtsPanel extends StatelessWidget {
                         _reportSaveFailure(context, tts.setRate(value)),
                   ),
                 ),
-                _stepperRow(
-                  NumberStepperRow(
-                    label: '音調',
-                    value: tts.pitch,
-                    min: TTSService.minPitch,
-                    max: TTSService.maxPitch,
-                    step: TTSService.pitchStep,
-                    fractionDigits: 1,
-                    onChanged: (value) =>
-                        _reportSaveFailure(context, tts.setPitch(value)),
-                  ),
-                ),
+                // 音調是挑聲音時才調的，和引擎、音色一起放在「我的 → 朗讀與
+                // 語音」；朗讀中的面板只留語速（ADR 0030）。
               ],
             ),
             GroupedSection(
