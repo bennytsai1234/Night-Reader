@@ -17,7 +17,7 @@ _Avoid_: 預覽版、nightly
 _Avoid_: dev、開發分支
 
 **換頁動畫**：
-App 裡所有換頁共用的轉場，使用者在「外觀與主題」的選單從八種選一種（`AppPageTransition`）：上浮、平移（預設，Telegram iOS）、俐落平移（Telegram iOS 26）、滑入（Telegram Android）、推進（Android 系統）、覆蓋（Legado）、縮放（Material 共享 Z 軸）、展開（iOS 18 縮放）。返回不是開啟倒著播，一律先快後慢；往右拖返回與點主頁分頁也照選的那一種（ADR 0020）。
+App 裡所有換頁共用的轉場，使用者在「外觀與主題」的選單從七種選一種（`AppPageTransition`）：上浮、平移（預設，Telegram iOS）、滑入（Telegram Android）、推進（Android 系統）、覆蓋（Legado）、縮放（Material 共享 Z 軸）、展開（iOS 18 縮放）。返回不是開啟倒著播，一律先快後慢；往右拖返回與點主頁分頁也照選的那一種（ADR 0020）。
 _Avoid_: 轉場效果、頁面動畫、Hero（封面共享元素轉場已移除）
 
 **更新紀錄**：

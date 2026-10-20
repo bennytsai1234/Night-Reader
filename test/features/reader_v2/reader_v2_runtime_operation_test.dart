@@ -9,6 +9,7 @@ import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_chapter_repository.dart';
+import 'package:night_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host.dart';
@@ -833,6 +834,85 @@ void main() {
     entrance.complete();
     await tester.pump();
     expect(opened, isTrue);
+  });
+
+  testWidgets('auto page stays paused while a page pushed from the menu '
+      'covers the reader', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final getIt = GetIt.instance;
+    await getIt.reset();
+    getIt.registerSingleton<SharedPreferences>(
+      await SharedPreferences.getInstance(),
+    );
+    getIt.registerSingleton<BookDao>(_FakeBookDao());
+    getIt.registerSingleton<ChapterDao>(_FakeChapterDao());
+    getIt.registerSingleton<BookSourceDao>(_FakeSourceDao());
+
+    final host = ReaderV2ControllerHost(
+      book: Book(
+        bookUrl: 'http://auto-page-away.test',
+        name: '自動捲動測試書',
+        author: '作者',
+        origin: 'local',
+        originName: '本地',
+      ),
+      initialChapters: [chapter(0), chapter(1)],
+      openTarget: null,
+      entrance: Completer<void>().future,
+      onChanged: () {},
+      isMounted: () => true,
+    );
+    addTearDown(() async {
+      host.dispose();
+      await getIt.reset();
+    });
+    final runtime = host.ensureRuntime(
+      const Size(220, 180),
+      const ReaderV2Style(
+        fontSize: 18,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 0.8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+        textIndent: 2,
+      ),
+    );
+    // 換成看得到幀來源有沒有在跑的自動捲動。
+    host.autoPage?.dispose();
+    var framesRunning = false;
+    final autoPage = host.autoPage = ReaderV2AutoPageController(
+      runtime: runtime,
+      frameSource: (_) {
+        framesRunning = true;
+        return () => framesRunning = false;
+      },
+    );
+    autoPage.start();
+    expect(framesRunning, isTrue);
+
+    // 打開選單暫停；從選單推一整頁時選單收起，自動捲動仍停著。
+    host.menu.showControls();
+    expect(framesRunning, isFalse);
+    host.holdAutoPageWhileAway();
+    host.menu.dismissControls();
+    expect(framesRunning, isFalse);
+
+    // 回來後選單滑回：仍停著；關上選單才接著捲。
+    host.menu.showControls();
+    expect(framesRunning, isFalse);
+    host.menu.dismissControls();
+    expect(framesRunning, isTrue);
+
+    // 沒推出去（或回來不滑回選單）時照選單狀態恢復。
+    host.menu.showControls();
+    host.holdAutoPageWhileAway();
+    host.menu.dismissControls();
+    expect(framesRunning, isFalse);
+    host.releaseAutoPage();
+    expect(framesRunning, isTrue);
   });
 
   testWidgets(
