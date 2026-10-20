@@ -192,6 +192,25 @@ void main() {
 
       await expectLater(refresh, completes);
     });
+
+    test('a launch whose downloads finish after the shelf closes does not '
+        'start a check', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      final downloading = Completer<void>();
+      final shelf = BookshelfProvider(
+        keepBookDownloaded: (url, {hasNewChapters = false}) =>
+            downloading.future,
+      );
+
+      final launch = shelf.onAppLaunch();
+      await Future<void>.delayed(Duration.zero);
+      shelf.dispose();
+      downloading.complete();
+
+      // 不寫已釋放的訊號，也不開始檢查。
+      await expectLater(launch, completes);
+      expect(await lastCheckTimeOf('https://a.example/1'), 0);
+    });
   });
 
   group('App launch', () {

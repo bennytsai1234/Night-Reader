@@ -46,7 +46,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 0007），再檢查更新（「啟動時檢查書架更新」關掉時不檢查）。
   Future<void> onAppLaunch() async {
     await keepShelfDownloaded();
-    if (!AppConfig.autoRefresh) return;
+    if (_closed || !AppConfig.autoRefresh) return;
     await refreshBookshelf();
   }
 
@@ -82,6 +82,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 章節一律標，檢查失敗只在 [userInitiated]（手動下拉）時標。略過本地書與
   /// 使用者關掉「自動檢查更新」的書；已在檢查時沿用同一次，不重複發請求。
   Future<void> refreshBookshelf({bool userInitiated = false}) {
+    // 書架關掉之後才輪到的檢查（例如開 App 補完下載時）不開始：訊號已釋放。
+    if (_closed) return Future<void>.value();
     if (userInitiated) _userRefreshed = true;
     final running = _refreshing;
     if (running != null) return running;
