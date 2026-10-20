@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
@@ -16,7 +17,7 @@ import 'widgets/explore_skeletons.dart';
 /// (對標 Android ExploreShowActivity)
 ///
 /// 顯示某個書源的某個分類下的書籍列表，支援無限滾動加載。
-class ExploreShowPage extends StatelessWidget {
+class ExploreShowPage extends StatefulWidget {
   final String sourceUrl;
   final String exploreUrl;
   final String exploreName;
@@ -29,14 +30,29 @@ class ExploreShowPage extends StatelessWidget {
   });
 
   @override
+  State<ExploreShowPage> createState() => _ExploreShowPageState();
+}
+
+class _ExploreShowPageState extends State<ExploreShowPage> {
+  /// 進場動畫播完時完成；書單等它才開始載入（ADR 0018）。
+  Future<void>? _entrance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entrance ??= TransitionSettled.entered(context);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => ExploreShowProvider(
-        sourceUrl: sourceUrl,
-        exploreUrl: exploreUrl,
-        exploreName: exploreName,
+        sourceUrl: widget.sourceUrl,
+        exploreUrl: widget.exploreUrl,
+        exploreName: widget.exploreName,
+        entrance: _entrance!,
       ),
-      child: _ExploreShowContent(exploreName: exploreName),
+      child: _ExploreShowContent(exploreName: widget.exploreName),
     );
   }
 }

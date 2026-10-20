@@ -277,11 +277,16 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _init() async {
     if (_disposed) return;
-    // 新的一輪載入：骨架換成照目前手上的書排。
-    _skeletonBook = _book.copyWith();
-    _worldState = BookDetailWorldState.initializing;
-    _loadErrorMessage = null;
-    notifyListeners();
+    // 新的一輪載入（重試）：骨架換成照目前手上的書排。第一輪進頁時已經是這個
+    // 樣子，不再通知：原本進場一播完就整頁連同骨架重建一次，畫面沒有任何
+    // 改變（ADR 0018）。
+    if (_worldState != BookDetailWorldState.initializing ||
+        _loadErrorMessage != null) {
+      _skeletonBook = _book.copyWith();
+      _worldState = BookDetailWorldState.initializing;
+      _loadErrorMessage = null;
+      notifyListeners();
+    }
     try {
       final existing = await _bookDao.getByUrl(_book.bookUrl);
       if (existing != null) {

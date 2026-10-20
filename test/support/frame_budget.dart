@@ -189,7 +189,12 @@ List<AggregatedTimedBlock> _exclusive(List<TimedBlock> blocks) {
   }
   return [
       for (final MapEntry(:key, :value) in self.entries)
-        AggregatedTimedBlock(name: key, duration: value, count: counts[key]!),
+        // 計時的誤差會讓幾乎沒有自己工作的區塊算出一點負值。
+        AggregatedTimedBlock(
+          name: key,
+          duration: math.max(0, value),
+          count: counts[key]!,
+        ),
     ]
     ..sort((a, b) => b.duration.compareTo(a.duration))
     ..length = math.min(15, self.length);

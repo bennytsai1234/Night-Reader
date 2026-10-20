@@ -45,23 +45,25 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '閱讀偏好'),
+      // 每個區塊是清單裡的一列，進頁時只建畫面上看得到的幾塊；原本整頁包在
+      // 一個 Column 裡，換頁的第一幀把六個區塊全部建好、排好（ADR 0018）。
       body: GroupedListView(
         children: [
-          // 共用區塊不自帶左右外距（閱讀器面板另有內距），這裡補上分組外距。
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppGrouped.margin),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ReaderV2TypographySection(settings: _settings),
-                ReaderV2PageLayoutSection(settings: _settings),
-                ReaderV2AutoPageSection(settings: _settings),
-                ReaderV2ChineseConvertSection(settings: _settings),
-                ReaderV2ClickActionSection(settings: _settings),
-                ReaderV2VolumeKeySection(settings: _settings),
-              ],
+          for (final section in <Widget>[
+            ReaderV2TypographySection(settings: _settings),
+            ReaderV2PageLayoutSection(settings: _settings),
+            ReaderV2AutoPageSection(settings: _settings),
+            ReaderV2ChineseConvertSection(settings: _settings),
+            ReaderV2ClickActionSection(settings: _settings),
+            ReaderV2VolumeKeySection(settings: _settings),
+          ])
+            // 共用區塊不自帶左右外距（閱讀器面板另有內距），這裡補上分組外距。
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppGrouped.margin,
+              ),
+              child: section,
             ),
-          ),
         ],
       ),
     );

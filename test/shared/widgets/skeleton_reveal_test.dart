@@ -193,6 +193,12 @@ void main() {
     int fadeLayers(WidgetTester tester) =>
         tester.layers.whereType<OpacityLayer>().length;
 
+    /// 內容有三個 sliver，載入完成那一幀建第一個，再兩幀建完。
+    Future<void> finishBuilding(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump();
+    }
+
     testWidgets('the skeleton stays on top of the laid-out content, then '
         'fades into it', (tester) async {
       const reveal = SkeletonReveal(style: SkeletonRevealStyle.fade);
@@ -201,6 +207,10 @@ void main() {
       expect(find.text('內容'), findsNothing);
 
       await tester.pumpWidget(host(reveal, loading: false));
+      // 內容一幀建一個 sliver：這一幀只有第一段，骨架照舊蓋著。
+      expect(find.text('內容'), findsNothing);
+      expect(find.byKey(const Key('bar')), findsOneWidget);
+      await finishBuilding(tester);
       // 內容排好、骨架還整個蓋著，兩者在同一個位置。
       expect(find.byKey(const Key('bar')), findsOneWidget);
       expect(tester.getRect(find.byKey(const Key('row'))), skeletonBar);
@@ -229,10 +239,51 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a skeleton scrolled down stays put while the content is '
+        'built one sliver a frame', (tester) async {
+      Widget tall({required bool loading}) => MaterialApp(
+        home: Scaffold(
+          body: CustomScrollView(
+            slivers: [
+              SliverSkeletonSwitcher(
+                loading: loading,
+                skeleton: const Column(
+                  children: [
+                    SizedBox(height: 1500),
+                    SkeletonBox(key: Key('bar'), width: 80, height: 20),
+                  ],
+                ),
+                builder: (_) => [
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 1420)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(tall(loading: true));
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position;
+      position.jumpTo(500);
+      await tester.pump();
+      final bar = tester.getRect(find.byKey(const Key('bar')));
+
+      await tester.pumpWidget(tall(loading: false));
+      // 只建好 100 高的第一段，捲動範圍照舊撐住，骨架沒有被拉回去。
+      expect(position.pixels, 500);
+      expect(tester.getRect(find.byKey(const Key('bar'))), bar);
+      await tester.pumpAndSettle();
+      expect(position.pixels, 500);
+      expect(find.byKey(const Key('bar')), findsNothing);
+    });
+
     testWidgets('the content is tappable only through itself', (tester) async {
       const reveal = SkeletonReveal();
       await tester.pumpWidget(host(reveal, loading: true));
       await tester.pumpWidget(host(reveal, loading: false));
+      await finishBuilding(tester);
       await tester.pump();
       await tester.pump(reveal.duration ~/ 2);
       // 疊在上面的骨架不攔點擊：點中的是內容那一列。

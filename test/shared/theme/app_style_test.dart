@@ -114,6 +114,39 @@ void main() {
     }
   });
 
+  testWidgets('閱讀選單的主題每次推導都一樣，上層重建時選單不跟著重建', (tester) async {
+    var builds = 0;
+    late StateSetter rebuild;
+    // 同一個 widget：只有主題改變時才會重建。
+    final menu = Builder(
+      builder: (context) {
+        builds++;
+        return ColoredBox(color: AppChrome.of(context).glassTint);
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Theme(
+              data: ReaderV2MenuStyle.of(context)
+                  .toSheetTheme(Theme.of(context)),
+              child: menu,
+            );
+          },
+        ),
+      ),
+    );
+    final first = builds;
+    rebuild(() {});
+    await tester.pump();
+    // 原本每次推導出新的 AppChrome、ThemeData 不相等，用到主題的元件全部
+    // 重建，按鈕的主題漸變也重播。
+    expect(builds, first);
+  });
+
   test('強調色只換主色，其餘配色照風格', () {
     for (final accent in AppAccent.values) {
       for (final style in AppStyle.values) {
