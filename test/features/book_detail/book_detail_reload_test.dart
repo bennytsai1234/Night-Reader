@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/features/book_detail/book_detail_provider.dart';
@@ -113,5 +114,22 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await provider.reloadAfterReading();
     expect(provider.book.bookUrl, oldUrl);
+  });
+
+  test('a source edited elsewhere is read again on return', () async {
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '舊名字'),
+    );
+    final provider = await openDetail();
+    expect(provider.currentSource?.bookSourceName, '舊名字');
+
+    // 書源編輯頁存檔只寫進資料庫。
+    await db.bookSourceDao.upsert(
+      BookSource(bookSourceUrl: 'https://old.example', bookSourceName: '新名字'),
+    );
+    await provider.reloadSource();
+
+    // 下次開編輯頁拿到的是存過的規則，不會蓋掉剛才的修改。
+    expect(provider.currentSource?.bookSourceName, '新名字');
   });
 }

@@ -345,6 +345,15 @@ class BookDetailProvider extends ChangeNotifier {
     }
   }
 
+  /// 從書源編輯或除錯頁回來時重讀這本書的書源：那邊存的規則、啟用與健康
+  /// 狀態只寫進資料庫，詳情手上的還是舊的；不重讀的話，再進一次編輯頁會
+  /// 帶入舊規則，存檔就蓋掉上一次的修改。
+  Future<void> reloadSource() async {
+    if (_disposed) return;
+    await _loadSource();
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> _loadSource() async {
     _currentSource = await _sourceDao.getByUrl(_book.origin);
     final health = _currentSource?.runtimeHealth;

@@ -882,18 +882,25 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
     if (source == null || !context.mounted) return;
     if (action == 'detail') {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
       );
     } else if (action == 'debug') {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => SourceDebugPage(source: source, debugKey: b.name),
         ),
       );
+    } else {
+      return;
     }
+    // 編輯或除錯改的書源只寫進資料庫；返回動畫播完再重讀，下次進編輯頁
+    // 才不會帶著舊規則（ADR 0018）。
+    if (!mounted) return;
+    await TransitionSettled.uncovered(this.context);
+    if (mounted) await provider.reloadSource();
   }
 
   Future<void> _navigateToReader(
