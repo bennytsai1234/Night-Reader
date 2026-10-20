@@ -39,21 +39,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the Wi-Fi download row only shows while auto-check is on', (
+  testWidgets('one row picks manual, auto-check or Wi-Fi download', (
     tester,
   ) async {
     await pumpPage(tester);
-
-    expect(find.text('在 Wi-Fi 下自動下載更新'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('自動檢查更新'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('自動檢查更新'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('在 Wi-Fi 下自動下載更新'), findsNothing);
     final prefs = await SharedPreferences.getInstance();
+
+    // 預設自動檢查、Wi-Fi 下自動下載（UpdatePreferences 的預設）。
+    await tester.ensureVisible(find.text('自動更新'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wi-Fi 下自動下載'), findsOneWidget);
+
+    await tester.tap(find.text('自動更新'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('不自動').last);
+    await tester.pumpAndSettle();
     expect(prefs.getBool('update.auto_check'), isFalse);
+
+    await tester.tap(find.text('自動更新'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('自動檢查').last);
+    await tester.pumpAndSettle();
+    expect(prefs.getBool('update.auto_check'), isTrue);
+    expect(prefs.getBool('update.auto_download_unmetered'), isFalse);
+  });
+
+  testWidgets('privacy, permissions and clearing web data live here', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    for (final title in ['隱私說明', '權限', '清除網頁資料']) {
+      await tester.ensureVisible(find.text(title));
+      expect(find.text(title), findsOneWidget, reason: title);
+    }
   });
 
   testWidgets('system tools turn the launch shelf check off', (tester) async {
