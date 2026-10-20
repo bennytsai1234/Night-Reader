@@ -4,7 +4,7 @@
 
 ## 等使用者決定或動手
 
-- **視覺微調（2026-10-20，等使用者挑）**：使用者說功能豐富、動畫夠流暢，但缺乏設計；看過三個大改方向（書卷、極簡現代、夜讀氛圍）後否決大改，要在不違反既有決定的前提下微調。原型在 `prototype/visual-tune` 分支，三套用 `--dart-define=PROTO_TUNE=serif,calm,rhythm` 開關（`lib/shared/theme/proto_tune.dart`），拿 `test/screens` 拍：一「書卷字」書名與頁首標題用系統 serif（Android 9 起是思源宋體，不用內建字型）；二「素淨」分組清單圖示方塊、書籍詳情動作鈕與書架進度線改墨色單色；三「呼吸」清單列高 +8、網格書名 12／w500 且進度線移到封面正下方、詳情動作列上方多留白。選定後照正式寫法重做、寫進 `DESIGN.md`，原型分支刪掉。
+- **視覺微調（2026-10-20，等使用者挑）**：使用者說功能豐富、動畫夠流暢，但缺乏設計；看過三個大改方向（書卷、極簡現代、夜讀氛圍）後否決大改，要在不違反既有決定的前提下微調。原型在 `prototype/visual-tune` 分支，三套用 `--dart-define=PROTO_TUNE=serif,calm,rhythm` 開關（`lib/shared/theme/proto_tune.dart`），拿 `test/screens` 拍：一「書卷字」書名與頁首標題用系統 serif，使用者否決（整個 App 統一用系統字型，混進宋體不如原本）；二「素淨」分組清單圖示方塊、書籍詳情動作鈕與書架進度線改墨色單色；三「呼吸」清單列高 +8、網格書名 12／w500 且進度線移到封面正下方、詳情動作列上方多留白。選定後照正式寫法重做、寫進 `DESIGN.md`，原型分支刪掉。
 - **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。
 
