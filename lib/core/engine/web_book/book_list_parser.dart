@@ -174,14 +174,16 @@ class BookListParser {
               needsAsync: kindRuleNeedsAsync,
             ),
           )).join(',');
-          searchBook.coverUrl = await _safeString(() {
-            return _readString(
-              itemRule,
-              coverUrlRule,
-              needsAsync: coverUrlRuleNeedsAsync,
-              isUrl: true,
-            );
-          });
+          searchBook.coverUrl = BookInfoParser.coverUrlFrom(
+            await _safeString(
+              () => _readString(
+                itemRule,
+                coverUrlRule,
+                needsAsync: coverUrlRuleNeedsAsync,
+              ),
+            ),
+            baseUrl,
+          );
           searchBook.intro = HtmlFormatter.format(
             await _safeString(() {
               return _readString(

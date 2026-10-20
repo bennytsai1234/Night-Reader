@@ -43,9 +43,9 @@ class BookInfoParser {
       );
       final kind = (await rule.getStringListAsync(infoRule.kind ?? ''))
           .join(',');
-      final coverUrl = await rule.getStringAsync(
-        infoRule.coverUrl ?? '',
-        isUrl: true,
+      final coverUrl = coverUrlFrom(
+        await rule.getStringAsync(infoRule.coverUrl ?? ''),
+        baseUrl,
       );
       final intro = await rule.getStringAsync(infoRule.intro ?? '');
       final latestChapterTitle = await rule.getStringAsync(
@@ -90,6 +90,18 @@ class BookInfoParser {
   }
 
   static String _format(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// 封面規則的結果（不帶 `isUrl` 讀出）補成完整網址；抓到好幾個時取第一
+  /// 個，沒抓到時是空的。不帶 `isUrl`：那會在沒抓到時改回傳頁面網址（書籍
+  /// 與目錄網址要這樣），封面就成了一張載不出來的網頁，清單或書籍詳情原本
+  /// 有的封面也被它蓋掉。同 Legado 讀封面的做法。
+  static String coverUrlFrom(String raw, String baseUrl) {
+    for (final line in raw.split('\n')) {
+      final url = line.trim();
+      if (url.isNotEmpty) return NetworkUtils.getAbsoluteURL(baseUrl, url);
+    }
+    return '';
+  }
 
   static String _resolveFallbackTocUrl({
     required String tocUrl,

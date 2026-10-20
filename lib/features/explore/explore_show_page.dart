@@ -8,6 +8,10 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+
+import 'explore_book_details.dart';
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 import 'widgets/explore_skeletons.dart';
@@ -36,15 +40,16 @@ class ExploreShowPage extends StatelessWidget {
         exploreUrl: exploreUrl,
         exploreName: exploreName,
       ),
-      child: _ExploreShowContent(exploreName: exploreName),
+      child: ExploreShowView(exploreName: exploreName),
     );
   }
 }
 
-class _ExploreShowContent extends StatelessWidget {
+/// 分類書單的畫面；[ExploreShowProvider] 由上層提供（[ExploreShowPage]）。
+class ExploreShowView extends StatelessWidget {
   final String exploreName;
 
-  const _ExploreShowContent({required this.exploreName});
+  const ExploreShowView({super.key, required this.exploreName});
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +145,13 @@ class _ExploreShowContent extends StatelessWidget {
             }
             return _buildLoadMoreIndicator(context, provider);
           }
-          return ExploreBookItem(
-            book: provider.books[index],
-            isInBookshelf: provider.isInBookshelf(provider.books[index]),
+          final book = provider.books[index];
+          return _ExploreBookRow(
+            key: ValueKey(book.bookUrl),
+            book: book,
+            details: provider.details,
+            source: provider.source,
+            isInBookshelf: provider.isInBookshelf(book),
             sourceName: exploreName,
           );
         },
@@ -184,6 +193,67 @@ class _ExploreShowContent extends StatelessWidget {
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),
       ],
+    );
+  }
+}
+
+/// 書單的一列：建起來（畫到清單上）時，缺的封面與字數排進背景補，捲出
+/// 清單時還沒開始的就不補。補到時只重建這一列的封面與那一行字
+/// （[ExploreBookItem.extras]）。
+class _ExploreBookRow extends StatefulWidget {
+  const _ExploreBookRow({
+    super.key,
+    required this.book,
+    required this.details,
+    required this.source,
+    required this.isInBookshelf,
+    required this.sourceName,
+  });
+
+  final SearchBook book;
+  final ExploreBookDetails details;
+  final BookSource? source;
+  final bool isInBookshelf;
+  final String sourceName;
+
+  @override
+  State<_ExploreBookRow> createState() => _ExploreBookRowState();
+}
+
+class _ExploreBookRowState extends State<_ExploreBookRow> {
+  @override
+  void initState() {
+    super.initState();
+    _show();
+  }
+
+  @override
+  void didUpdateWidget(_ExploreBookRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.book, widget.book) ||
+        oldWidget.source != widget.source) {
+      _show();
+    }
+  }
+
+  void _show() {
+    final source = widget.source;
+    if (source != null) widget.details.shown(source, widget.book);
+  }
+
+  @override
+  void dispose() {
+    widget.details.hidden(widget.book.bookUrl);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ExploreBookItem(
+      book: widget.book,
+      extras: widget.details.extrasOf(widget.book.bookUrl),
+      isInBookshelf: widget.isInBookshelf,
+      sourceName: widget.sourceName,
     );
   }
 }
