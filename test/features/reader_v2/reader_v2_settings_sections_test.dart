@@ -182,7 +182,7 @@ void main() {
     expect(themeSettings.style, AppStyle.values.last);
   });
 
-  testWidgets('外觀與排版面板只放常調的幾項，更多排版設定用同一個設定進閱讀偏好', (tester) async {
+  testWidgets('外觀與排版面板只放常調的幾項，更多排版設定進閱讀偏好，關掉後閱讀器才重讀', (tester) async {
     final themeSettings = ThemeSettingsProvider();
     final settings = ReaderV2SettingsController();
     addTearDown(settings.dispose);
@@ -222,10 +222,20 @@ void main() {
     await tester.tap(more);
     await tester.pumpAndSettle();
 
-    final page = tester.widget<ReadingSettingsPage>(
-      find.byType(ReadingSettingsPage),
-    );
-    expect(page.settings, same(settings), reason: '改了閱讀器直接跟著變');
+    expect(find.byType(ReadingSettingsPage), findsOneWidget);
     expect(find.text('標題字號'), findsOneWidget);
+
+    // 閱讀偏好頁用自己的控制器寫入；閱讀器的設定等那一頁整個關掉才重讀，
+    // 不在被蓋住時排版、拖到返回動畫裡。
+    final before = settings.fontSize;
+    final pageSettings = ReaderV2SettingsController()..setFontSize(before + 1);
+    await tester.pump(const Duration(milliseconds: 200));
+    pageSettings.dispose();
+    expect(settings.fontSize, before, reason: '蓋著時不換');
+
+    Navigator.of(tester.element(find.byType(ReadingSettingsPage))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(ReadingSettingsPage), findsNothing);
+    expect(settings.fontSize, before + 1, reason: '關掉後照最後的設定重讀');
   });
 }

@@ -53,8 +53,7 @@ class _ReaderInterfaceSheet extends StatelessWidget {
       children: [
         const SheetSection(title: '風格'),
         const _ReaderStyleSelector(),
-        // 面板只放邊讀邊會調的幾項；其他排版、版面、頁首頁尾在閱讀偏好頁，
-        // 用同一個設定控制器，改了正文直接跟著變。
+        // 面板只放邊讀邊會調的幾項；其他排版、版面、頁首頁尾在閱讀偏好頁。
         ReaderV2TypographySection(
           settings: settings,
           compact: true,
@@ -67,16 +66,25 @@ class _ReaderInterfaceSheet extends StatelessWidget {
           children: [
             GroupedRow(
               title: '更多排版設定',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => ReadingSettingsPage(settings: settings),
-                ),
-              ),
+              onTap: () => _openReadingSettings(context),
             ),
           ],
         ),
       ],
     );
+  }
+
+  /// 閱讀偏好頁用自己的控制器寫入同一組偏好設定。它蓋著閱讀器時閱讀器的
+  /// 動畫是停的，在那邊改一次就排一次正文會卡在半途、拖到返回動畫裡才
+  /// 繼續；等它整個關掉（返回動畫播完）才讓閱讀器照最後的設定重讀、排一次
+  /// （ADR 0018，和閱讀器「全域系統設定」同一套）。
+  Future<void> _openReadingSettings(BuildContext context) async {
+    final route = MaterialPageRoute<void>(
+      builder: (_) => const ReadingSettingsPage(),
+    );
+    await Navigator.of(context).push(route);
+    await route.completed;
+    await settings.loadSettings();
   }
 }
 

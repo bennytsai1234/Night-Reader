@@ -9,23 +9,17 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 閱讀偏好：完整的排版、版面、頁首頁尾、自動翻頁、繁簡、點擊區域與音量鍵
 /// 設定。和閱讀器內「外觀與排版」（精簡版）「進階設定」面板用同一組區塊與
-/// 同一個 controller 型別，兩處設定的讀寫路徑一致。
-///
-/// 從閱讀器「外觀與排版 → 更多排版設定」進來時給 [settings]（閱讀器手上的
-/// 那一個）：改了正文直接跟著變，回去不必重讀。從「我的」進來時自己建一個。
+/// 同一個 controller 型別，兩處設定的讀寫路徑一致。從閱讀器「外觀與排版 →
+/// 更多排版設定」進來時，閱讀器等這一頁關掉才重讀設定。
 class ReadingSettingsPage extends StatefulWidget {
-  const ReadingSettingsPage({super.key, this.settings});
-
-  final ReaderV2SettingsController? settings;
+  const ReadingSettingsPage({super.key});
 
   @override
   State<ReadingSettingsPage> createState() => _ReadingSettingsPageState();
 }
 
 class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
-  late final ReaderV2SettingsController _settings =
-      widget.settings ?? ReaderV2SettingsController();
-  late final bool _ownsSettings = widget.settings == null;
+  final ReaderV2SettingsController _settings = ReaderV2SettingsController();
   late final StreamSubscription<String> _saveFailures;
 
   @override
@@ -44,7 +38,7 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   @override
   void dispose() {
     unawaited(_saveFailures.cancel());
-    if (_ownsSettings) _settings.dispose();
+    _settings.dispose();
     super.dispose();
   }
 
