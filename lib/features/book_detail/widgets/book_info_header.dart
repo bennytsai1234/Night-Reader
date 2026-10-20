@@ -195,6 +195,7 @@ class _ActionButton extends StatelessWidget {
           child: GlassSurface(
             borderRadius: AppRadius.cardMd,
             shadow: false,
+            floating: false,
             blur: false,
             tint: AppChrome.of(context).groupedSurface,
             child: Column(

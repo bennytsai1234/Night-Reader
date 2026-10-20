@@ -8,6 +8,7 @@ import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_pal
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_highlight_style.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -40,6 +41,55 @@ void main() {
               brightness,
             );
           }
+        });
+
+        test('$name：頁面、卡片、玻璃列與閱讀選單照分層規則拉開', () {
+          double l(Color c) => AppLayers.lightness(c);
+          final gap = AppLayers.cardGap(brightness);
+          // 寫死的色碼取整到 8 位元，允許半階的誤差。
+          const tolerance = 0.6;
+          expect(
+            l(palette.surface) - l(palette.background),
+            closeTo(gap, tolerance),
+            reason: '卡片比頁面亮',
+          );
+          if (brightness == Brightness.light) {
+            expect(palette.bar, palette.surface, reason: '淺色玻璃與卡片同色');
+          } else {
+            expect(
+              l(palette.bar) - l(palette.surface),
+              closeTo(AppLayers.floatGapDark, tolerance),
+              reason: '深色玻璃比卡片再亮一階',
+            );
+          }
+          expect(
+            (l(palette.readerMenu) - l(palette.readerBackground)).abs(),
+            closeTo(gap, tolerance),
+            reason: '閱讀選單和紙分開',
+          );
+          // 次要文字和閱讀選單的距離不比和卡片的近：選單底色移動時跟著移。
+          final menuMuted = AppLayers.keepGap(
+            palette.textMuted,
+            palette.text,
+            from: palette.surface,
+            to: palette.readerMenu,
+          );
+          expect(
+            (l(menuMuted) - l(palette.readerMenu)).abs(),
+            greaterThanOrEqualTo(
+              (l(palette.textMuted) - l(palette.surface)).abs() - tolerance,
+            ),
+            reason: '閱讀選單上的次要文字',
+          );
+          final chrome = buildAppTheme(
+            style,
+            brightness,
+          ).extension<AppChrome>()!;
+          expect(
+            (l(chrome.cardEdge) - l(palette.surface)).abs(),
+            closeTo(AppLayers.edgeGap, tolerance),
+            reason: '卡片框線',
+          );
         });
       }
     }

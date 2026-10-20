@@ -882,27 +882,35 @@ class _BookDetailPageState extends State<BookDetailPage> {
     );
     if (source == null || !context.mounted) return;
     if (action == 'detail') {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => SourceEditorPage(source: source)),
       );
     } else if (action == 'debug') {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => SourceDebugPage(source: source, debugKey: b.name),
         ),
       );
+    } else {
+      return;
     }
+    // 編輯或除錯改的書源只寫進資料庫；返回動畫播完再重讀，下次進編輯頁
+    // 才不會帶著舊規則（ADR 0018）。
+    if (!mounted) return;
+    await TransitionSettled.uncovered(this.context);
+    if (mounted) await provider.reloadSource();
   }
 
-  void _navigateToReader(
+  Future<void> _navigateToReader(
     BuildContext context,
     Book b,
     ReaderV2OpenTarget openTarget,
     List<BookChapter> initialChapters,
-  ) {
-    Navigator.push(
+  ) async {
+    final provider = context.read<BookDetailProvider>();
+    await Navigator.push(
       context,
       BookOpenRoute(
         book: b,
@@ -910,6 +918,13 @@ class _BookDetailPageState extends State<BookDetailPage> {
         initialChapters: initialChapters,
       ),
     );
+    // 閱讀器改的進度、加入書架與換源都只寫進資料庫；回來時照資料庫重新
+    // 顯示。返回動畫播完才重建，不和返回疊在一起（ADR 0018）。閱讀器裡
+    // 換源是換掉閱讀器那一頁，這時這裡就收到結果，但上面還蓋著新的閱讀
+    // 器，同樣等它關掉。
+    if (!mounted) return;
+    await TransitionSettled.uncovered(this.context);
+    if (mounted) await provider.reloadAfterReading();
   }
 
   void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) {

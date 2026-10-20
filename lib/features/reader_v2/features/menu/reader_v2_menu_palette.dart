@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 
 /// 閱讀選單（上下選單、目錄、閱讀器內面板）的配色，取自目前風格。
@@ -30,7 +31,7 @@ class ReaderV2MenuStyle {
 
   factory ReaderV2MenuStyle.of(BuildContext context) {
     final palette = StylePalette.of(context);
-    final background = palette.surface.withValues(alpha: 0.96);
+    final background = palette.readerMenu.withValues(alpha: 0.96);
     final foreground = palette.text;
     return ReaderV2MenuStyle(
       brightness: palette.brightness,
@@ -40,7 +41,13 @@ class ReaderV2MenuStyle {
         background,
       ),
       foreground: foreground,
-      mutedForeground: palette.textMuted,
+      // 次要文字是照卡片調的；閱讀選單淺色比卡片暗，跟著加深。
+      mutedForeground: AppLayers.keepGap(
+        palette.textMuted,
+        foreground,
+        from: palette.surface,
+        to: palette.readerMenu,
+      ),
       outline: palette.border,
       accent: palette.primary,
       onAccent: palette.onPrimary,

@@ -27,6 +27,10 @@ class AppEventBus {
   /// 書籍詳情讀到或存好封面；data 是 [BookCoverEvent]。
   static const String bookCover = 'bookCover';
 
+  /// 一本書換了書源（網址可能也換了，舊的那筆已刪掉）；data 是
+  /// [BookSwitchedEvent]。
+  static const String bookSwitched = 'bookSwitched';
+
   void fire(String name, {dynamic data}) {
     _eventBus.fire(AppEvent(name, data: data));
   }
@@ -54,4 +58,12 @@ class BookCoverEvent {
   final String cover;
 
   const BookCoverEvent({required this.bookUrl, required this.cover});
+}
+
+/// 換源前後這本書的網址；兩者可能相同（只換了書源）。
+class BookSwitchedEvent {
+  final String fromBookUrl;
+  final String toBookUrl;
+
+  const BookSwitchedEvent({required this.fromBookUrl, required this.toBookUrl});
 }
