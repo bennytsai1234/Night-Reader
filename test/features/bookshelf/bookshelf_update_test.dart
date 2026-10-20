@@ -136,6 +136,28 @@ void main() {
     expect(provider.books.map((b) => b.bookUrl), ['https://a.example/1']);
   });
 
+  test(
+    'returning from the reader after a download finished reloads once',
+    () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      await provider.loadBooks();
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      // 書架開書：先記下露出來要重讀，再被閱讀器蓋上。
+      provider.reloadWhenUncovered();
+      provider.setCovered(true);
+      AppEventBus().fire(AppEventBus.upBookshelf, data: 'https://a.example/1');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(notified, 0);
+
+      provider.setCovered(false);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // 書架有書時重讀只在讀完通知一次；兩個原因併成一次重讀。
+      expect(notified, 1);
+    },
+  );
+
   group('shelf refresh', () {
     test('skips books the user took out of updates and local books', () async {
       await bookDao.upsertAll([

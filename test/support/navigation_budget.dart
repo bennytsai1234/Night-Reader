@@ -42,7 +42,11 @@ Future<List<FrameCost>> measureNavigation(
   int tailFrames = 60,
 }) async {
   final done = settled ?? () => pageSettled(page!);
+  // 點下去的那一下（點擊回呼裡的同步工作，以及 action 自己推進的幀）也算進
+  // 來，記成第 -1 幀；不然它的成本落在量測之外，看起來像改善了。
+  final clock = Stopwatch()..start();
   await action();
+  final tap = clock.elapsedMicroseconds;
   final costs = await recordFrames(
     tester,
     realAsync: true,
@@ -52,12 +56,31 @@ Future<List<FrameCost>> measureNavigation(
       return note.isEmpty ? null : note;
     },
     tailFrames: tailFrames,
+    maxFrames: _maxFrames,
   );
+  final all = [
+    FrameCost(
+      index: -1,
+      beforeFrame: tap,
+      frame: 0,
+      afterFrame: 0,
+      async: 0,
+      top: const [],
+      dirty: const {},
+      note: '點下去',
+    ),
+    ...costs,
+  ];
   // ignore: avoid_print
-  print(describeFrames(label, costs));
+  print(describeFrames(label, all));
+  // 量滿上限才停的（骨架一直沒換完）不算數；尾段也要量完。
   expect(done(), isTrue, reason: '$label 沒有播完');
-  return costs;
+  expect(skeletonShown(), isFalse, reason: '$label 骨架沒有換完');
+  expect(costs.length, lessThan(_maxFrames), reason: '$label 沒量完尾段');
+  return all;
 }
+
+const int _maxFrames = 1200;
 
 /// 返回上一頁（等同按返回鍵）。
 Future<void> goBack(WidgetTester tester) async {

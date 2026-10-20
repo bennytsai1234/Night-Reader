@@ -50,6 +50,10 @@ class BookshelfProvider extends BookshelfProviderBase
     unawaited(loadBooks());
   }
 
+  /// 接下來要蓋上書架的頁面會改到書（例如閱讀器改進度）：露出來時重讀一次，
+  /// 和蓋著時收到的下載完成合併，不各讀一次。
+  void reloadWhenUncovered() => _reloadWhenUncovered = true;
+
   @override
   Future<void> loadBooks() async {
     // 書架上已經有書時，載入中不換回骨架，開始時通知只會讓整頁白白重建
