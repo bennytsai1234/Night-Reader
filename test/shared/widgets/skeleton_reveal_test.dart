@@ -130,6 +130,48 @@ void main() {
         reason: '換場結束後直接畫，不留一層遮罩',
       );
     });
+
+    testWidgets('with a backdrop only the skeleton is masked, on top', (
+      tester,
+    ) async {
+      var taps = 0;
+      Widget backed({required bool loading}) => MaterialApp(
+        home: Scaffold(
+          body: SkeletonSwitcher(
+            loading: loading,
+            backdrop: const Color(0xFFE5E1D9),
+            skeleton: const SkeletonBox(width: 40, height: 40),
+            builder: (_) =>
+                GestureDetector(onTap: () => taps++, child: const Text('內容')),
+          ),
+        ),
+      );
+      await tester.pumpWidget(backed(loading: true));
+      await tester.pumpWidget(backed(loading: false));
+      await tester.pump(const SkeletonReveal().duration ~/ 2);
+
+      // 內容照常畫、不開圖層；骨架墊著底色蓋在上面，由左而右退開。
+      expect(contentLayer(tester).alwaysNeedsCompositing, isFalse);
+      final skeleton = skeletonLayer(tester);
+      expect(skeleton.alwaysNeedsCompositing, isTrue);
+      expect(skeleton.alphaAt(0), lessThan(skeleton.alphaAt(1)));
+      final stack = tester.widget<Stack>(
+        find
+            .ancestor(
+              of: find.byType(SkeletonBox),
+              matching: find.byType(Stack),
+            )
+            .first,
+      );
+      expect((stack.children.last.key! as ValueKey<String>).value, 'skeleton');
+
+      // 蓋在上面的骨架不擋點擊。
+      await tester.tap(find.text('內容'), warnIfMissed: false);
+      expect(taps, 1);
+
+      await tester.pump(const SkeletonReveal().duration);
+      expect(find.byType(SkeletonBox), findsNothing);
+    });
   });
 
   group('SliverSkeletonSwitcher', () {

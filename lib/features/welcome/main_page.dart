@@ -156,11 +156,27 @@ class _MainPageState extends State<MainPage>
   /// 開 App 的進場播完：啟動維護、書架補下載與檢查更新、App 更新檢查這時
   /// 才開始。原本第一幀後就開始，書架讀完的那一刻正好是書架換場開始，
   /// 這些工作留在主執行緒的部分全疊在換場上（ADR 0018）。
-  void _onLaunchSettled() {
-    unawaited(_initDeferredStartupData());
-    _refreshShelfOnceLoaded();
-    unawaited(_runAutomaticUpdateCheck());
-    widget.onLaunchSettled?.call();
+  ///
+  /// 四件工作依序開始，每件之間隔一格的時間（60Hz 一格約 16ms）：各自留在
+  /// 主執行緒的同步部分落在不同的格，不會全擠在換場結束的那一格（ADR
+  /// 0029）。不用 [Priority.idle] 的閒置工作：只要畫面上還有動畫（別的
+  /// 分頁的骨架呼吸）就一直輪不到，等這些工作的資料的骨架會永遠停著。
+  void _onLaunchSettled() => unawaited(_startLaunchWork());
+
+  static const Duration _launchWorkGap = Duration(milliseconds: 16);
+
+  Future<void> _startLaunchWork() async {
+    final tasks = <void Function()>[
+      () => unawaited(_initDeferredStartupData()),
+      _refreshShelfOnceLoaded,
+      () => unawaited(_runAutomaticUpdateCheck()),
+      () => widget.onLaunchSettled?.call(),
+    ];
+    for (final task in tasks) {
+      await Future<void>.delayed(_launchWorkGap);
+      if (!mounted) return;
+      task();
+    }
   }
 
   @override

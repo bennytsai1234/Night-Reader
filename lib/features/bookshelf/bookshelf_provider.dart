@@ -35,9 +35,12 @@ class BookshelfProvider extends BookshelfProviderBase
 
   @override
   Future<void> loadBooks() async {
+    // 書架上已經有書時，載入中不換回骨架，開始時通知只會讓整頁白白重建
+    // 一次（書架檢查、下載完成都會重讀）；空書架或上次失敗時才要畫骨架。
+    final showsLoading = books.isEmpty || loadErrorMessage != null;
     isLoading = true;
     loadErrorMessage = null;
-    notifyListeners();
+    if (showsLoading) notifyListeners();
     try {
       books = await bookDao.getInBookshelf();
       _sortBooks();
