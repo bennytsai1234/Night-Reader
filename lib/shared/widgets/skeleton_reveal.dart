@@ -3,7 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-/// 骨架換場的方式，在「外觀與主題 → 骨架換場」選（ADR 0024）。
+/// 骨架換場的方式；App 固定用 [sweep]（不給選，ADR 0024），[fade] 用在骨架
+/// 自己淡掉的地方。
 enum SkeletonRevealStyle {
   /// 左緣先開始淡入，右緣在一半的時間才開始，最後同時到位；漸層跨整個
   /// 寬度，看不到一條掃過去的帶子。
@@ -15,9 +16,6 @@ enum SkeletonRevealStyle {
   const SkeletonRevealStyle(this.label);
 
   final String label;
-
-  static SkeletonRevealStyle fromStorage(String? name) =>
-      values.where((value) => value.name == name).firstOrNull ?? sweep;
 }
 
 /// 骨架換場的設定，掛在主題上；書架、發現、書籍詳情與閱讀器共用。骨架出現
@@ -32,14 +30,8 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
   final SkeletonRevealStyle style;
   final Duration duration;
 
-  /// 使用者定的預設（2026-10-17）。
+  /// 使用者定的時長（2026-10-17），App 固定用它（ADR 0024）。
   static const Duration defaultDuration = Duration(milliseconds: 600);
-
-  /// 設定頁可調的範圍與每一步。短於 0.2 秒看不出是換場、只像閃一下；
-  /// 長於 1.5 秒內容已經清楚了還在慢慢淡，等於擋著不給看。
-  static const Duration minDuration = Duration(milliseconds: 200);
-  static const Duration maxDuration = Duration(milliseconds: 1500);
-  static const Duration durationStep = Duration(milliseconds: 100);
 
   static SkeletonReveal of(BuildContext context) =>
       Theme.of(context).extension<SkeletonReveal>() ?? const SkeletonReveal();
