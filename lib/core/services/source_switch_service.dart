@@ -6,6 +6,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/app_event_bus.dart';
 import 'package:night_reader/core/exception/app_exception.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -296,6 +297,15 @@ class SourceSwitchService {
         );
       }
     }
+
+    // 從別頁開的閱讀器換源時，那一頁手上還是舊的書（例如書籍詳情）。
+    AppEventBus().fire(
+      AppEventBus.bookSwitched,
+      data: BookSwitchedEvent(
+        fromBookUrl: oldBook.bookUrl,
+        toBookUrl: migratedBook.bookUrl,
+      ),
+    );
   }
 
   String? _nextReadableChapterUrl(

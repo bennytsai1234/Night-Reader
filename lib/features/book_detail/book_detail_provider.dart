@@ -137,7 +137,6 @@ class BookDetailProvider extends ChangeNotifier {
   List<BookChapter> _displayChapters = [];
   BookDetailWorldState _worldState = BookDetailWorldState.initializing;
   String? _loadErrorMessage;
-  bool _isInBookshelf = false;
   BookSource? _currentSource;
   BookSource? get currentSource => _currentSource;
   String? _sourceIssueMessage;
@@ -161,7 +160,7 @@ class BookDetailProvider extends ChangeNotifier {
   bool get isLoading => _worldState == BookDetailWorldState.initializing;
   bool get hasReadyWorld => _worldState == BookDetailWorldState.ready;
   String? get loadErrorMessage => _loadErrorMessage;
-  bool get isInBookshelf => _isInBookshelf;
+  bool get isInBookshelf => _book.isInBookshelf;
   BookDetailCacheStatus get cacheStatus => _cacheStatus;
   bool get isCacheStatusLoading => _isCacheStatusLoading;
   bool get isCheckingUpdate => _isCheckingUpdate;
@@ -268,9 +267,50 @@ class BookDetailProvider extends ChangeNotifier {
             type: searchBook.book.type,
           );
     _skeletonBook = _book.copyWith();
+    _switchSub = AppEventBus()
+        .onName(AppEventBus.bookSwitched)
+        .listen((event) => _followSwitch(event.data as BookSwitchedEvent));
     // 進場動畫播完才讀資料庫、向書源抓資料（ADR 0018）；這之前照傳進來
     // 的書畫。
     unawaited(entrance.then((_) => _init()));
+  }
+
+  StreamSubscription<AppEvent>? _switchSub;
+
+  /// 從這裡開的閱讀器換了源：書的網址可能換了，舊的那筆已刪掉；記下新的，
+  /// 回到這頁時（[reloadAfterReading]）改顯示它。這頁自己換源時已經換好。
+  String? _switchedBookUrl;
+
+  void _followSwitch(BookSwitchedEvent event) {
+    if (_isChangingSource) return;
+    if (event.fromBookUrl != (_switchedBookUrl ?? _book.bookUrl)) return;
+    _switchedBookUrl = event.toBookUrl;
+  }
+
+  /// 從閱讀器回到這頁：閱讀器把進度、加入書架與換源都寫進資料庫，這裡照
+  /// 資料庫裡的這本書重新顯示。閱讀器沒加入書架就退出時，書與目錄已經刪
+  /// 掉，照舊顯示手上的書（不在書架上）。
+  Future<void> reloadAfterReading() async {
+    if (_disposed || !hasReadyWorld) return;
+    final switchedUrl = _switchedBookUrl;
+    _switchedBookUrl = null;
+    final stored = await _bookDao.getByUrl(switchedUrl ?? _book.bookUrl);
+    if (_disposed) return;
+    if (stored == null) {
+      _book.isInBookshelf = false;
+      notifyListeners();
+      return;
+    }
+    final switched =
+        stored.bookUrl != _book.bookUrl || stored.origin != _book.origin;
+    _book = stored;
+    if (switched) await _loadSource();
+    final chapters = await _chapterDao.getByBook(_book.bookUrl);
+    if (_disposed) return;
+    if (chapters.isNotEmpty || switched) _allChapters = chapters;
+    // 和這頁自己換源一樣，存下新書源的封面。
+    if (switched) unawaited(_storeDisplayCover());
+    _applyFilter();
   }
 
   Future<void> retryInitialization() => _init();
@@ -286,7 +326,6 @@ class BookDetailProvider extends ChangeNotifier {
       final existing = await _bookDao.getByUrl(_book.bookUrl);
       if (existing != null) {
         _book = existing;
-        _isInBookshelf = existing.isInBookshelf;
       } else {
         _book.isInBookshelf = false;
         await _bookDao.upsert(_book);
@@ -564,7 +603,6 @@ class BookDetailProvider extends ChangeNotifier {
       _book = prepared.migratedBook;
       _currentSource = prepared.source;
       _allChapters = prepared.chapters;
-      _isInBookshelf = _book.isInBookshelf;
       _sourceIssueMessage = null;
       try {
         await _refreshCacheStatus(notify: false);
@@ -590,7 +628,7 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<void> toggleInBookshelf() async {
-    await setInBookshelf(!_isInBookshelf);
+    await setInBookshelf(!isInBookshelf);
   }
 
   /// 加入或移出書架進行中（加入時可能要先抓目錄、移出時要刪正文與封面）；
@@ -612,16 +650,15 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<BookDetailOperationResult> _setInBookshelf(bool value) async {
-    if (_isInBookshelf == value) {
+    if (isInBookshelf == value) {
       return BookDetailOperationResult.success(value ? '已在書架中' : '已移出書架');
     }
 
-    final previous = _isInBookshelf;
-    _isInBookshelf = value;
+    final previous = isInBookshelf;
     _book.isInBookshelf = value;
     notifyListeners();
 
-    if (_isInBookshelf) {
+    if (value) {
       if (_book.syncTime == 0) {
         _book.syncTime = DateTime.now().millisecondsSinceEpoch;
       }
@@ -633,7 +670,6 @@ class BookDetailProvider extends ChangeNotifier {
         await _saveChapterMetadataIfPossible();
       } catch (e) {
         AppLog.e('加入書架失敗: $e', error: e);
-        _isInBookshelf = previous;
         _book.isInBookshelf = previous;
         notifyListeners();
         return BookDetailOperationResult.failure(
@@ -645,7 +681,6 @@ class BookDetailProvider extends ChangeNotifier {
         await _bookStorageService.discardBook(_book);
       } catch (e) {
         AppLog.e('移出書架失敗: $e', error: e);
-        _isInBookshelf = previous;
         _book.isInBookshelf = previous;
         notifyListeners();
         return BookDetailOperationResult.failure(
@@ -819,10 +854,7 @@ class BookDetailProvider extends ChangeNotifier {
       // 負責，這裡從資料庫重新讀出來顯示。
       final result = await _updates.check(_book.copyWith());
       final saved = await _bookDao.getByUrl(_book.bookUrl);
-      if (saved != null) {
-        _book = saved;
-        _isInBookshelf = saved.isInBookshelf;
-      }
+      if (saved != null) _book = saved;
       if (result.failed) throw result.error!;
       _allChapters = await _chapterDao.getByBook(_book.bookUrl);
       _clearBookInfoDegradation();
@@ -957,6 +989,7 @@ class BookDetailProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _debounce?.cancel();
+    _switchSub?.cancel();
     super.dispose();
   }
 }
