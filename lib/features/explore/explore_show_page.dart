@@ -8,6 +8,10 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
+import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/core/models/search_book.dart';
+
+import 'explore_book_details.dart';
 import 'explore_show_provider.dart';
 import 'widgets/explore_book_item.dart';
 import 'widgets/explore_skeletons.dart';
@@ -36,15 +40,16 @@ class ExploreShowPage extends StatelessWidget {
         exploreUrl: exploreUrl,
         exploreName: exploreName,
       ),
-      child: _ExploreShowContent(exploreName: exploreName),
+      child: ExploreShowView(exploreName: exploreName),
     );
   }
 }
 
-class _ExploreShowContent extends StatelessWidget {
+/// 分類書單的畫面；[ExploreShowProvider] 由上層提供（[ExploreShowPage]）。
+class ExploreShowView extends StatelessWidget {
   final String exploreName;
 
-  const _ExploreShowContent({required this.exploreName});
+  const ExploreShowView({super.key, required this.exploreName});
 
   @override
   Widget build(BuildContext context) {
@@ -140,9 +145,13 @@ class _ExploreShowContent extends StatelessWidget {
             }
             return _buildLoadMoreIndicator(context, provider);
           }
-          return ExploreBookItem(
-            book: provider.books[index],
-            isInBookshelf: provider.isInBookshelf(provider.books[index]),
+          final book = provider.books[index];
+          return _ExploreBookRow(
+            key: ValueKey(book.bookUrl),
+            book: book,
+            details: provider.details,
+            source: provider.source,
+            isInBookshelf: provider.isInBookshelf(book),
             sourceName: exploreName,
           );
         },
@@ -184,6 +193,111 @@ class _ExploreShowContent extends StatelessWidget {
       actions: const [
         AppAlertAction(label: '關閉', value: null, isDefault: true),
       ],
+    );
+  }
+}
+
+/// 書單的一列：建起來（畫到清單上）時，缺的封面與字數排進背景補，捲出
+/// 清單時還沒開始的就不補。補到時只重建這一列的封面與那一行字
+/// （[ExploreBookItem.extras]）。
+class _ExploreBookRow extends StatefulWidget {
+  const _ExploreBookRow({
+    super.key,
+    required this.book,
+    required this.details,
+    required this.source,
+    required this.isInBookshelf,
+    required this.sourceName,
+  });
+
+  final SearchBook book;
+  final ExploreBookDetails details;
+  final BookSource? source;
+  final bool isInBookshelf;
+  final String sourceName;
+
+  @override
+  State<_ExploreBookRow> createState() => _ExploreBookRowState();
+}
+
+class _ExploreBookRowState extends State<_ExploreBookRow> {
+  /// 清單會先建好畫面外附近的列、捲走後也留著一陣子；列建起來不等於使用者
+  /// 看得到。照它在捲動區裡實際的位置決定排不排隊。
+  ScrollPosition? _position;
+  bool _visible = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (!identical(position, _position)) {
+      _position?.removeListener(_scheduleCheck);
+      _position = position?..addListener(_scheduleCheck);
+    }
+    _scheduleCheck();
+  }
+
+  bool _checkScheduled = false;
+
+  /// 捲動位置變的當下這一格還沒重新排版，量到的是上一格的位置；等這一格
+  /// 畫完再量，同一格只量一次。
+  void _scheduleCheck() {
+    if (_checkScheduled) return;
+    _checkScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkScheduled = false;
+      _checkVisible();
+    });
+  }
+
+  @override
+  void didUpdateWidget(_ExploreBookRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.book, widget.book) ||
+        oldWidget.source != widget.source) {
+      if (_visible) widget.details.hidden(oldWidget.book.bookUrl);
+      _visible = false;
+      _scheduleCheck();
+    }
+  }
+
+  void _checkVisible() {
+    if (!mounted) return;
+    final box = context.findRenderObject();
+    final viewport = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (box is! RenderBox ||
+        viewport is! RenderBox ||
+        !box.attached ||
+        !box.hasSize ||
+        !viewport.hasSize) {
+      return;
+    }
+    final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final visible = top < viewport.size.height && top + box.size.height > 0;
+    if (visible == _visible) return;
+    _visible = visible;
+    final source = widget.source;
+    if (visible && source != null) {
+      widget.details.shown(source, widget.book);
+    } else if (!visible) {
+      widget.details.hidden(widget.book.bookUrl);
+    }
+  }
+
+  @override
+  void dispose() {
+    _position?.removeListener(_scheduleCheck);
+    widget.details.hidden(widget.book.bookUrl);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ExploreBookItem(
+      book: widget.book,
+      extras: widget.details.extrasOf(widget.book.bookUrl),
+      isInBookshelf: widget.isInBookshelf,
+      sourceName: widget.sourceName,
     );
   }
 }

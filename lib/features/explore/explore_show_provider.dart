@@ -11,6 +11,8 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/book_source_service.dart';
 import 'package:night_reader/core/services/bookshelf_state_tracker.dart';
 
+import 'explore_book_details.dart';
+
 typedef ExploreBookLoader = Future<List<SearchBook>> Function(
   BookSource source,
   String exploreUrl, {
@@ -41,7 +43,12 @@ class ExploreShowProvider extends ChangeNotifier {
   int _requestSerial = 0;
   bool _isDisposed = false;
 
+  /// 清單上畫出來的書缺的封面與字數，在背景向書源補。
+  final ExploreBookDetails details;
+
   // --- Getters ---
+  /// 這個分類的書源；找到之前是 null。
+  BookSource? get source => _bookSource;
   List<SearchBook> get books => _books;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
@@ -54,8 +61,10 @@ class ExploreShowProvider extends ChangeNotifier {
     required this.exploreName,
     BookshelfStateTracker? bookshelfTracker,
     ExploreBookLoader? exploreLoader,
+    ExploreExtrasLoader? extrasLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
-       _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks {
+       _exploreLoader = exploreLoader ?? BookSourceService().exploreBooks,
+       details = ExploreBookDetails(loader: extrasLoader) {
     _init();
   }
 
@@ -169,6 +178,7 @@ class ExploreShowProvider extends ChangeNotifier {
     _requestSerial++;
     _cancelToken?.cancel('ExploreShowProvider disposed');
     _bookshelfTracker.dispose();
+    details.dispose();
     super.dispose();
   }
 }
