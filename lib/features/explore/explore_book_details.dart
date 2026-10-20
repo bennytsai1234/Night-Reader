@@ -67,9 +67,25 @@ class ExploreBookDetails {
   ValueListenable<ExploreBookExtras?> extrasOf(String bookUrl) =>
       _extras.putIfAbsent(bookUrl, () => ValueNotifier(null));
 
-  /// [book] 畫到清單上了：缺封面或字數、還沒排過就排進去。
+  /// 詳情網址帶 `,{"webView":true}`：要開無頭瀏覽器渲染，一次只能跑一個、
+  /// 取消也停不下來。背景補資料不佔用它，這種書照清單原本的樣子，點進
+  /// 詳情時照常讀。
+  static final RegExp _webViewOption = RegExp(
+    r'''["']?webView["']?\s*:\s*(true|["']true["'])''',
+  );
+
+  static bool rendersInWebView(SearchBook book) {
+    final options = RegExp(r',\s*\{').firstMatch(book.bookUrl);
+    return options != null &&
+        _webViewOption.hasMatch(book.bookUrl.substring(options.start));
+  }
+
+  /// [book] 出現在畫面上了：缺封面或字數、還沒排過就排進去。
   void shown(BookSource source, SearchBook book) {
-    if (_disposed || !lacksExtras(book) || !_requested.add(book.bookUrl)) {
+    if (_disposed ||
+        !lacksExtras(book) ||
+        rendersInWebView(book) ||
+        !_requested.add(book.bookUrl)) {
       return;
     }
     _queue.add((source, book));
@@ -77,7 +93,7 @@ class ExploreBookDetails {
     Timer.run(_startNext);
   }
 
-  /// 這本書捲出清單了：還在排隊就不取。
+  /// 這本書捲出畫面了：還在排隊就不取。
   void hidden(String bookUrl) {
     final before = _queue.length;
     _queue.removeWhere((entry) => entry.$2.bookUrl == bookUrl);

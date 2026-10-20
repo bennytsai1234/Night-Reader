@@ -115,6 +115,33 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('only rows on screen are fetched; rows scrolled away while '
+      'queued are not', (tester) async {
+    await pumpList(tester);
+    // 畫面上的第 0–3 本先送出；清單預先建好的畫面外的列不算畫出來。
+    final viewport = tester.getRect(find.byType(Scrollable).first);
+    for (final url in calls.keys) {
+      final i = int.parse(url.split('/').last);
+      expect(tester.getRect(row(i)).overlaps(viewport), isTrue, reason: url);
+    }
+
+    // 捲到下面，排隊中的前幾本已經不在畫面上；放行一個名額時不送它們。
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.pump();
+    calls['$_origin/book/0']!.complete((coverUrl: '', wordCount: ''));
+    await tester.pumpAndSettle();
+    for (final url in calls.keys.skip(ExploreBookDetails.maxConcurrent)) {
+      final i = int.parse(url.split('/').last);
+      expect(
+        tester
+            .getRect(row(i))
+            .overlaps(tester.getRect(find.byType(Scrollable).first)),
+        isTrue,
+        reason: '$url 送出時在畫面上',
+      );
+    }
+  });
+
   testWidgets('a row with nothing for the meta line still keeps its place', (
     tester,
   ) async {

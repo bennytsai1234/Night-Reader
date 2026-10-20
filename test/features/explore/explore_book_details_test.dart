@@ -79,6 +79,28 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  test(
+    'a book whose detail page renders in a WebView is not fetched',
+    () async {
+      final details = ExploreBookDetails(loader: loader);
+      addTearDown(details.dispose);
+      details.shown(
+        source,
+        book(0)..bookUrl = 'https://s.example/book/0,{"webView":true}',
+      );
+      details.shown(
+        source,
+        book(1)..bookUrl = "https://s.example/book/1, {'webView': 'true'}",
+      );
+      details.shown(
+        source,
+        book(2)..bookUrl = 'https://s.example/book/2,{"method":"POST"}',
+      );
+      await idle();
+      expect(calls.keys, ['https://s.example/book/2,{"method":"POST"}']);
+    },
+  );
+
   test('a queued book scrolled away is not fetched', () async {
     final details = ExploreBookDetails(loader: loader);
     addTearDown(details.dispose);

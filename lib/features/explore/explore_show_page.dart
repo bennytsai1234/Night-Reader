@@ -221,10 +221,33 @@ class _ExploreBookRow extends StatefulWidget {
 }
 
 class _ExploreBookRowState extends State<_ExploreBookRow> {
+  /// 清單會先建好畫面外附近的列、捲走後也留著一陣子；列建起來不等於使用者
+  /// 看得到。照它在捲動區裡實際的位置決定排不排隊。
+  ScrollPosition? _position;
+  bool _visible = false;
+
   @override
-  void initState() {
-    super.initState();
-    _show();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (!identical(position, _position)) {
+      _position?.removeListener(_scheduleCheck);
+      _position = position?..addListener(_scheduleCheck);
+    }
+    _scheduleCheck();
+  }
+
+  bool _checkScheduled = false;
+
+  /// 捲動位置變的當下這一格還沒重新排版，量到的是上一格的位置；等這一格
+  /// 畫完再量，同一格只量一次。
+  void _scheduleCheck() {
+    if (_checkScheduled) return;
+    _checkScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkScheduled = false;
+      _checkVisible();
+    });
   }
 
   @override
@@ -232,17 +255,38 @@ class _ExploreBookRowState extends State<_ExploreBookRow> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.book, widget.book) ||
         oldWidget.source != widget.source) {
-      _show();
+      if (_visible) widget.details.hidden(oldWidget.book.bookUrl);
+      _visible = false;
+      _scheduleCheck();
     }
   }
 
-  void _show() {
+  void _checkVisible() {
+    if (!mounted) return;
+    final box = context.findRenderObject();
+    final viewport = Scrollable.maybeOf(context)?.context.findRenderObject();
+    if (box is! RenderBox ||
+        viewport is! RenderBox ||
+        !box.attached ||
+        !box.hasSize ||
+        !viewport.hasSize) {
+      return;
+    }
+    final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final visible = top < viewport.size.height && top + box.size.height > 0;
+    if (visible == _visible) return;
+    _visible = visible;
     final source = widget.source;
-    if (source != null) widget.details.shown(source, widget.book);
+    if (visible && source != null) {
+      widget.details.shown(source, widget.book);
+    } else if (!visible) {
+      widget.details.hidden(widget.book.bookUrl);
+    }
   }
 
   @override
   void dispose() {
+    _position?.removeListener(_scheduleCheck);
     widget.details.hidden(widget.book.bookUrl);
     super.dispose();
   }

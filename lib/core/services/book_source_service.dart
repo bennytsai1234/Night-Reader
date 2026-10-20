@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:night_reader/core/utils/string_utils.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -190,7 +191,11 @@ _Work<({String coverUrl, String wordCount})> _coverAndWordCountTask(
     book,
     cancelToken: cancelToken,
   );
-  return (coverUrl: info.coverUrl ?? '', wordCount: info.wordCount ?? '');
+  // 字數照書籍詳情的寫法：字數欄沒有時從分類（例如「玄幻,25萬字」）取。
+  return (
+    coverUrl: info.coverUrl ?? '',
+    wordCount: StringUtils.displayWordCount(info.wordCount, info.kind),
+  );
 };
 
 _Work<List<BookChapter>> _chapterListTask(
