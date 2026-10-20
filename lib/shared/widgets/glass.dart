@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_chrome.dart';
+import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'launch_entrance.dart';
 
-/// 霧面紙材質：紙／墨色調、輕度背景模糊、髮絲亮邊與漫射陰影。
+/// 霧面紙材質：紙／墨色調、輕度背景模糊、框線、貼邊陰影與漫射陰影。
 ///
 /// 色調本身約 84% 不透明，即使模糊被降級仍像一張紙面，不會變成透明。
 /// 模糊走 [BackdropFilter.grouped]，同一 [BackdropGroup] 下的多塊玻璃共用
@@ -25,6 +26,7 @@ class GlassSurface extends StatelessWidget {
     this.shape = BoxShape.rectangle,
     this.tint,
     this.shadow = true,
+    this.floating = true,
     this.blur = true,
     this.grouped = true,
   });
@@ -33,9 +35,16 @@ class GlassSurface extends StatelessWidget {
   final BorderRadius? borderRadius;
   final BoxShape shape;
 
-  /// 覆寫色調（例如閱讀器選單用選單主題色）；需自帶透明度。
+  /// 覆寫色調（例如閱讀器選單用選單主題色）；需自帶透明度。框線跟著改從
+  /// 這個色調推導。
   final Color? tint;
+
+  /// 散開的漫射陰影；頁首按鈕這類小玻璃不畫。
   final bool shadow;
+
+  /// 浮在內容上（頁首、選單、浮動按鈕）：畫貼邊陰影。放在卡片或頁面裡的
+  /// 玻璃（卡片上的膠囊）設為 false。
+  final bool floating;
   final bool blur;
 
   /// 與同一頁的其他玻璃共用背景取樣。疊在其他玻璃上方的元件（選單、
@@ -49,25 +58,43 @@ class GlassSurface extends StatelessWidget {
       return _GlassMorphContent._reset(child: child);
     }
     final reveal = GlassReveal._of(context);
+    // 框線色只隨主題與色調變，不隨淡入的每一格重算。
+    final chrome = AppChrome.of(context);
+    final theme = Theme.of(context);
+    final edgeColor = switch (tint) {
+      final tint? => AppLayers.edgeOn(
+        tint.withValues(alpha: 1),
+        theme.colorScheme.onSurface,
+      ),
+      null => chrome.glassBorder,
+    };
+    final dark = theme.brightness == Brightness.dark;
     // 裡面的玻璃不再跟著淡：內容已經整塊淡入，再淡一次會變成平方。
-    if (reveal == null) return _build(context, 1, child);
+    if (reveal == null) return _build(chrome, edgeColor, dark, 1, child);
     final inner = GlassReveal._reset(child: child);
     return AnimatedBuilder(
       animation: reveal,
       // 內容跟著淡入。只在淡入的玻璃包 Opacity：透明度 1 時它仍會多開一層
       // 圖層，平常的玻璃不必付這個成本。
       builder: (context, _) => _build(
-        context,
+        chrome,
+        edgeColor,
+        dark,
         reveal.value,
         Opacity(opacity: reveal.value, child: inner),
       ),
     );
   }
 
-  /// [shown] 0→1：色調、亮邊、模糊強度與陰影一起從無到有；每個 [shown]
+  /// [shown] 0→1：色調、框線、模糊強度與陰影一起從無到有；每個 [shown]
   /// 建出的元件樹相同，進出場中內容的狀態不會丟。
-  Widget _build(BuildContext context, double shown, Widget child) {
-    final chrome = AppChrome.of(context);
+  Widget _build(
+    AppChrome chrome,
+    Color edgeColor,
+    bool dark,
+    double shown,
+    Widget child,
+  ) {
     final radius = shape == BoxShape.circle ? null : borderRadius;
     final color = tint ?? chrome.glassTint;
     final decoration = BoxDecoration(
@@ -75,10 +102,8 @@ class GlassSurface extends StatelessWidget {
       shape: shape,
       borderRadius: radius,
       border: Border.all(
-        color: chrome.glassBorder.withValues(
-          alpha: chrome.glassBorder.a * shown,
-        ),
-        width: AppGlass.hairline,
+        color: edgeColor.withValues(alpha: edgeColor.a * shown),
+        width: AppLayers.edgeWidth,
       ),
     );
     Widget content = DecoratedBox(decoration: decoration, child: child);
@@ -92,19 +117,21 @@ class GlassSurface extends StatelessWidget {
     content = shape == BoxShape.circle
         ? ClipOval(child: content)
         : ClipRRect(borderRadius: radius ?? BorderRadius.zero, child: content);
-    if (!shadow) return content;
+    if (!shadow && !floating) return content;
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: shape,
         borderRadius: radius,
         boxShadow: [
-          BoxShadow(
-            color: chrome.glassShadow.withValues(
-              alpha: chrome.glassShadow.a * shown,
+          if (shadow)
+            BoxShadow(
+              color: chrome.glassShadow.withValues(
+                alpha: chrome.glassShadow.a * shown,
+              ),
+              blurRadius: 24,
+              offset: const Offset(0, 6),
             ),
-            blurRadius: 24,
-            offset: const Offset(0, 6),
-          ),
+          if (floating) AppLayers.contactShadow(dark: dark, shown: shown),
         ],
       ),
       child: content,
@@ -576,6 +603,8 @@ class GlassCapsule extends StatelessWidget {
       child: GlassSurface(
         borderRadius: AppRadius.pillShape,
         shadow: false,
+        // 篩選列與卡片上的膠囊是列裡的一顆按鈕，不是浮層。
+        floating: false,
         blur: blur,
         tint: selected ? selectedTintOf(scheme) : tint,
         child: Padding(

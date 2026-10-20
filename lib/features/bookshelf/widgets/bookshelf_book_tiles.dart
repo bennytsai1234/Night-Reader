@@ -7,6 +7,7 @@ import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
+import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -383,8 +384,8 @@ class BookshelfListCard extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: AppGrouped.cardRadius,
               side: BorderSide(
-                color: chrome.separator,
-                width: AppGlass.hairline,
+                color: chrome.cardEdge,
+                width: AppLayers.edgeWidth,
               ),
             ),
             clipBehavior: Clip.antiAlias,
