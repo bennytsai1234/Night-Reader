@@ -13,25 +13,10 @@
     <color name="launch_tea_dark">#1B140D</color>
     <color name="launch_plain_light">#F2F2F2</color>
     <color name="launch_plain_dark">#000000</color>
-    <color name="launch_rouge_light">#F7EFE8</color>
-    <color name="launch_rouge_dark">#191724</color>
-    <color name="launch_lotus_light">#E6E9EF</color>
-    <color name="launch_lotus_dark">#181825</color>
-    <color name="launch_scroll_light">#EEE8D5</color>
-    <color name="launch_scroll_dark">#00212B</color>
-    <color name="launch_amber_light">#F2E5BC</color>
-    <color name="launch_amber_dark">#1D2021</color>
-    <color name="launch_frost_light">#E5E9F0</color>
-    <color name="launch_frost_dark">#2E3440</color>
 
     <color name="launch_paper">@color/launch_paper_light</color>
     <color name="launch_bamboo">@color/launch_bamboo_light</color>
     <color name="launch_azurite">@color/launch_azurite_light</color>
     <color name="launch_tea">@color/launch_tea_light</color>
     <color name="launch_plain">@color/launch_plain_light</color>
-    <color name="launch_rouge">@color/launch_rouge_light</color>
-    <color name="launch_lotus">@color/launch_lotus_light</color>
-    <color name="launch_scroll">@color/launch_scroll_light</color>
-    <color name="launch_amber">@color/launch_amber_light</color>
-    <color name="launch_frost">@color/launch_frost_light</color>
 </resources>
