@@ -9,6 +9,8 @@ import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
+import '../../support/theme_with.dart';
+
 double _contrast(Color a, Color b) {
   final la = a.computeLuminance();
   final lb = b.computeLuminance();
@@ -33,11 +35,9 @@ void main() {
                 // 和 App 一樣直接換主題；預設的主題漸變會讓這一幀量到的
                 // 還是上一輪的風格。
                 themeAnimationStyle: AnimationStyle.noAnimation,
-                theme: buildAppTheme(
-                  style,
-                  brightness,
-                  skeletonLook: SkeletonLook(strength: strength),
-                ),
+                theme: themeWith(style, brightness, [
+                  SkeletonLook(strength: strength),
+                ]),
                 home: Builder(
                   builder: (context) {
                     skeleton = Skeleton.colorOf(context);
