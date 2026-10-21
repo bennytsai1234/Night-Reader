@@ -122,6 +122,52 @@ void main() {
     }
   });
 
+  testWidgets('退出選取的每一幀都維持有效的列寬', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.toggleSelect('https://s0.example');
+    await tester.pumpAndSettle();
+
+    provider.clearSelection();
+    await tester.pump();
+    for (
+      var elapsed = 0;
+      elapsed <= AppMotion.spring.inMilliseconds;
+      elapsed += 16
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(SourceItemTile).first).width,
+        greaterThan(0),
+      );
+    }
+    expect(find.bySemanticsLabel('書源0 啟用'), findsOneWidget);
+  });
+
+  testWidgets('搜尋框只多空白時不重新建立相同的書源清單', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.setSearchQuery('書源');
+    await tester.pumpAndSettle();
+    var changes = 0;
+    void onChanged() => changes++;
+    provider.addListener(onChanged);
+
+    provider.setSearchQuery('書源 ');
+
+    expect(changes, 0);
+    provider.removeListener(onChanged);
+  });
+
   testWidgets('entering selection crossfades the title and morphs the glass', (
     tester,
   ) async {

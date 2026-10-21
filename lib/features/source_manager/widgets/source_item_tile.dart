@@ -237,11 +237,15 @@ class _SourceRowContent extends StatelessWidget {
         children: [
           // 編輯模式的勾選圈從左側滑入。
           ClipRect(
-            child: AnimatedContainer(
+            child: TweenAnimationBuilder<double>(
               duration: AppMotion.spring,
               curve: AppMotion.springCurve,
-              width: editing ? _kCheckSlotWidth : 0,
-              alignment: Alignment.centerLeft,
+              tween: Tween(end: editing ? _kCheckSlotWidth : 0),
+              // 彈簧收回時會超過終點；保留彈簧，只把不能為負的寬度截在 0。
+              builder: (context, width, child) => SizedBox(
+                width: width.clamp(0.0, double.infinity),
+                child: child,
+              ),
               child: OverflowBox(
                 // 列表列的高度不設上限，預設的 max 會把高度撐成無限大。
                 fit: OverflowBoxFit.deferToChild,

@@ -16,10 +16,19 @@ import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/search/search_provider.dart';
 import 'package:night_reader/features/search/widgets/search_app_bar.dart';
 import 'package:night_reader/features/search/widgets/search_suggestion_view.dart';
+import 'package:night_reader/features/search/widgets/search_result_item.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 焦點測試只走畫面的送出回呼，不啟動書源與搜尋紀錄的非同步工作。
+class _IdleSearchProvider extends SearchProvider {
+  _IdleSearchProvider() : super(entrance: Future<void>.value());
+
+  @override
+  Future<void> search(String keyword) async {}
+}
 
 void main() {
   late AppDatabase db;
@@ -131,6 +140,76 @@ void main() {
 
     provider.onSearchFinish(isEmpty: false);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('只有搜尋進度改變時，結果卡與頁首不跟著重建', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: const SearchPage(),
+      ),
+    );
+    final provider = Provider.of<SearchProvider>(
+      tester.element(find.byType(SearchAppBar)),
+      listen: false,
+    );
+    await tester.runAsync(() => provider.ready);
+    provider.onSearchStart();
+    provider.onSearchSuccess([book('已經顯示的書')]);
+    await tester.pumpAndSettle();
+    final rebuilt = <Widget>[];
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element.widget);
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    provider.onSearchProgress(
+      waitingSources: ['書源'],
+      completed: 1,
+      total: 60,
+      failed: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    expect(find.text('正在搜尋 1/60'), findsOneWidget);
+    expect(rebuilt.whereType<SearchResultItem>(), isEmpty);
+    expect(rebuilt.whereType<SearchAppBar>(), isEmpty);
+    debugOnRebuildDirtyWidget = previous;
+    provider.onSearchFinish(isEmpty: false);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('送出搜尋後收起輸入焦點不會再重建整頁', (tester) async {
+    late _IdleSearchProvider provider;
+    await tester.runAsync(() async {
+      provider = _IdleSearchProvider();
+      await provider.ready;
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider<SearchProvider>(
+        create: (_) => provider,
+        child: MaterialApp(
+          theme: buildAppTheme(AppStyle.paper, Brightness.light),
+          home: const SearchView(),
+        ),
+      ),
+    );
+    tester.widget<SearchAppBar>(find.byType(SearchAppBar)).onSearch('夜');
+    provider.onSearchSuccess([book('已經顯示的書')]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    final rebuilt = <Widget>[];
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element.widget);
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+
+    expect(rebuilt.whereType<SearchView>(), isEmpty);
+    expect(rebuilt.whereType<SearchResultItem>(), isEmpty);
+    debugOnRebuildDirtyWidget = previous;
   });
 
   testWidgets('after the user scrolls, new books join at the end', (
