@@ -239,7 +239,8 @@ class ReaderV2SettingsGroups {
           _paddingStepper(_PaddingField.top, '上邊距'),
           _paddingStepper(_PaddingField.bottom, '下邊距'),
           if (_footerShown.value)
-            _stepperRow(
+            _StepperRow(
+              '頁尾位置',
               _Watch<double>(
                 listenable: settings,
                 select: () => settings.footerOffset,
@@ -315,7 +316,8 @@ class ReaderV2SettingsGroups {
     margin: margin,
     header: '自動翻頁',
     children: [
-      _stepperRow(
+      _StepperRow(
+        '速度',
         _Watch<double>(
           listenable: settings,
           select: () => settings.autoPageSpeed,
@@ -524,13 +526,23 @@ class _StagedEdits<F extends Enum> extends ChangeNotifier {
 }
 
 /// 數值步進列放進卡片時只補列的左右內距；高度由步進列本身決定。
-Widget _stepperRow(Widget stepper) => GroupedContent(
-  padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
-  child: stepper,
-);
+class _StepperRow extends StatelessWidget implements NumberStepperRowLike {
+  const _StepperRow(this.label, this.stepper);
+
+  @override
+  final String label;
+  final Widget stepper;
+
+  @override
+  Widget build(BuildContext context) => GroupedContent(
+    padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
+    child: stepper,
+  );
+}
 
 /// 暫存提交的步進列：顯示 [_StagedEdits] 裡的值，按了先暫存。
-class _StagedStepper<F extends Enum> extends StatelessWidget {
+class _StagedStepper<F extends Enum> extends StatelessWidget
+    implements NumberStepperRowLike {
   const _StagedStepper({
     required this.edits,
     required this.field,
@@ -545,6 +557,7 @@ class _StagedStepper<F extends Enum> extends StatelessWidget {
 
   final _StagedEdits<F> edits;
   final F field;
+  @override
   final String label;
   final double min;
   final double max;
@@ -555,7 +568,8 @@ class _StagedStepper<F extends Enum> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _stepperRow(
+    return _StepperRow(
+      label,
       ValueListenableBuilder<double>(
         valueListenable: edits.listenableOf(field),
         builder: (context, value, _) => NumberStepperRow(

@@ -109,6 +109,55 @@ void main() {
     );
   });
 
+  testWidgets('上百列的組不等畫面外的列，換頁播完不久就換成內容', (tester) async {
+    tester.view.physicalSize = const Size(393, 852) * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(AppStyle.paper, Brightness.light),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => Scaffold(
+                  body: GroupedListView(
+                    children: [
+                      GroupedSection(
+                        header: '規則',
+                        children: [
+                          for (var i = 0; i < 200; i++)
+                            GroupedRow(title: '規則 $i', onTap: () {}),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            child: const Text('開啟'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟'));
+    await tester.pump();
+    final route = ModalRoute.of(
+      tester.element(find.byType(GroupedListView, skipOffstage: false)),
+    )!;
+    while (!route.animation!.isCompleted) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // 第一個畫面約 17 列：一格一列加上換場，遠少於兩百格。
+    var frames = 0;
+    while (find.byType(SkeletonShapes).evaluate().isNotEmpty) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(++frames, lessThan(90), reason: '骨架等畫面外的列');
+    }
+    expect(find.text('規則 0'), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
   test('版面紀錄存進偏好設定，重新載入後一樣', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

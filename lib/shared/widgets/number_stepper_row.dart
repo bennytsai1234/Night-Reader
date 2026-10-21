@@ -20,7 +20,14 @@ import 'package:night_reader/shared/widgets/press_ink.dart';
 ///
 /// 本身不帶左右內距、高度約為分組清單單行列（44）；放進分組卡片時以
 /// `GroupedContent` 提供列內距。
-class NumberStepperRow extends StatefulWidget {
+/// 一列數值步進：[NumberStepperRow] 本身，或包著它、在外面就知道標題的那一層
+/// （各頁的內距或只聽自己的值的包裝）。分組清單進場的骨架認得它，照步進列
+/// 的樣子估（「－」、數值膠囊與「＋」，ADR 0029）。
+abstract interface class NumberStepperRowLike {
+  String get label;
+}
+
+class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
   const NumberStepperRow({
     super.key,
     required this.label,
@@ -37,6 +44,7 @@ class NumberStepperRow extends StatefulWidget {
        assert(step > 0),
        assert(displayScale > 0);
 
+  @override
   final String label;
   final double value;
   final double min;

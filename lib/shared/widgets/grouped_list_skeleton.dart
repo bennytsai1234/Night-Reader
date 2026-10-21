@@ -80,7 +80,7 @@ class GroupedItemShape {
       if (index > 0) top += AppGlass.hairline;
       final row = _row(child);
       final height = switch (row) {
-        NumberStepperRow() => _stepperHeight,
+        NumberStepperRowLike() => _stepperHeight,
         GroupedRow(:final subtitle?) when subtitle.isNotEmpty =>
           AppGrouped.rowTallMinHeight,
         _ => AppGrouped.rowMinHeight,
@@ -110,7 +110,7 @@ class GroupedItemShape {
       );
       var end = right - AppGrouped.rowPadding;
       switch (row) {
-        case NumberStepperRow():
+        case NumberStepperRowLike():
           // 「－」、數值膠囊、「＋」，和步進列一樣大。
           const button = 36.0;
           const target = 48.0;
@@ -196,18 +196,24 @@ class GroupedItemShape {
     );
   }
 
-  /// 照畫面上排好的樣子量：[slot] 是包著 [item] 的那一項。[item] 還沒建
-  /// （輪到才建，[CoverRevealSlot]）時傳回 null。
-  static GroupedItemShape? measure(Element slot, Widget item) {
+  /// 照畫面上排好的樣子量：[slot] 是包著 [item] 的那一項，[visible] 是它
+  /// 上緣到畫面底的距離，骨架只畫第一個畫面，再下面的字與色塊不記。[item]
+  /// 還沒建（輪到才建，[CoverRevealSlot]）時傳回 null。
+  static GroupedItemShape? measure(
+    Element slot,
+    Widget item, {
+    required double visible,
+  }) {
     final box = slot.renderObject;
     if (box is! RenderBox || !box.hasSize) return null;
     final rows = item is GroupedSection ? item.children : const <Widget>[];
-    final found = <Widget, RenderBox>{};
+    final rowSet = Set<Widget>.identity()..addAll(rows);
+    final found = Map<Widget, RenderBox>.identity();
     var built = false;
     void visit(Element element) {
       final widget = element.widget;
       if (identical(widget, item)) built = true;
-      if (rows.any((row) => identical(row, widget))) {
+      if (rowSet.contains(widget)) {
         final rowBox = element.renderObject;
         if (rowBox is RenderBox && rowBox.hasSize) found[widget] = rowBox;
         return;
@@ -231,7 +237,11 @@ class GroupedItemShape {
     void collect(RenderObject object) {
       if (object is RenderBox && object.hasSize && !object.size.isEmpty) {
         final rect = _rectIn(object, box);
-        if (rect.bottom <= 0 || rect.top >= box.size.height) return;
+        if (rect.bottom <= 0 ||
+            rect.top >= box.size.height ||
+            rect.top >= visible) {
+          return;
+        }
         switch (object) {
           case RenderParagraph():
             marks.addAll(_lines(object, box));
@@ -335,6 +345,9 @@ abstract final class GroupedListLayouts {
 
   /// 照更新順序排，最後一個是最近更新的。
   static final Map<String, List<GroupedItemShape?>> _byPage = {};
+
+  /// 每一頁編碼好的 JSON；和上次一樣就不重寫偏好設定。
+  static final Map<String, String> _encoded = {};
   static SharedPreferences? _prefs;
 
   /// App 啟動時載入上次存的版面；之後量到的新版面也存到這裡。沒呼叫時
@@ -346,50 +359,68 @@ abstract final class GroupedListLayouts {
     try {
       final json = jsonDecode(saved) as Map<String, Object?>;
       for (final MapEntry(:key, :value) in json.entries) {
-        if (value is! List<Object?>) continue;
+        if (value is! String) continue;
+        final items = jsonDecode(value);
+        if (items is! List<Object?>) continue;
         _byPage[key] = [
-          for (final item in value) GroupedItemShape.fromJson(item),
+          for (final item in items) GroupedItemShape.fromJson(item),
         ];
+        _encoded[key] = value;
       }
     } on Object {
       // 格式不對（舊版或損毀）就當作沒有紀錄。
       _byPage.clear();
+      _encoded.clear();
     }
   }
 
-  /// 同一個結構、寬度與字級才沿用；組的標題、列數或有無附註變了就是另一個。
+  /// 同一個結構、寬度與字級才沿用：組的標題、有無右側按鈕與附註、列數與
+  /// 每一列的元件種類有一樣變了就是另一個。種類取名稱的雜湊（FNV-1a），
+  /// 上百列的組 key 也不會太長。
   static String keyOf(List<Widget> items, double width, TextScaler scaler) {
     final parts = [width.toStringAsFixed(0), scaler.scale(100).toString()];
     for (final item in items) {
       parts.add(switch (item) {
-        GroupedSection(:final header, :final children, :final footer) =>
-          '$header/${children.length}/${footer != null}',
+        GroupedSection(
+          :final header,
+          :final headerTrailing,
+          :final children,
+          :final footer,
+        ) =>
+          '$header/${headerTrailing != null}/${footer != null}/'
+              '${children.length}/${_typesHash(children)}',
         _ => '${item.runtimeType}',
       });
     }
     return parts.join('|');
   }
 
+  static String _typesHash(List<Widget> rows) {
+    var hash = 0x811c9dc5;
+    for (final row in rows) {
+      for (final unit in '${_row(row).runtimeType};'.codeUnits) {
+        hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+      }
+    }
+    return hash.toRadixString(36);
+  }
+
   static List<GroupedItemShape?>? of(String key) => _byPage[key];
 
   static void remember(String key, List<GroupedItemShape?> shapes) {
+    final encoded = jsonEncode([for (final shape in shapes) shape?.toJson()]);
     _byPage
       ..remove(key)
       ..[key] = shapes;
+    final unchanged = _encoded.remove(key) == encoded;
+    _encoded[key] = encoded;
     while (_byPage.length > _capacity) {
+      _encoded.remove(_byPage.keys.first);
       _byPage.remove(_byPage.keys.first);
     }
     final prefs = _prefs;
-    if (prefs == null) return;
-    unawaited(
-      prefs.setString(
-        _prefsKey,
-        jsonEncode({
-          for (final MapEntry(:key, :value) in _byPage.entries)
-            key: [for (final shape in value) shape?.toJson()],
-        }),
-      ),
-    );
+    if (prefs == null || unchanged) return;
+    unawaited(prefs.setString(_prefsKey, jsonEncode(_encoded)));
   }
 }
 
@@ -511,8 +542,11 @@ List<SkeletonShape> _lines(RenderParagraph paragraph, RenderBox ancestor) {
   return shapes;
 }
 
-/// 穿過常見外框找出列本身（同 [groupedRowHasLeading]）。
+/// 穿過常見外框找出列本身（同 [groupedRowHasLeading]，另外穿過
+/// [GroupedContent] 的內距）。
 Widget _row(Widget widget) => switch (widget) {
+  NumberStepperRowLike() => widget,
+  GroupedContent(:final child) => _row(child),
   SwipeActions(:final child) => _row(child),
   KeyedSubtree(:final child) => _row(child),
   ProxyWidget(:final child) => _row(child),
@@ -523,7 +557,7 @@ Widget _row(Widget widget) => switch (widget) {
 String? _rowTitle(Widget row) => switch (row) {
   GroupedRow(:final title) => title,
   GroupedSwitchRow(:final title) => title,
-  NumberStepperRow(:final label) => label,
+  NumberStepperRowLike(:final label) => label,
   _ => null,
 };
 

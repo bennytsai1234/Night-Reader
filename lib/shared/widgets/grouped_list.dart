@@ -315,11 +315,19 @@ class _GroupedListViewState extends State<GroupedListView> {
             List<GroupedItemShape?>.filled(widget.children.length, null),
       );
       if (shapes.length != widget.children.length) return;
+      final screen = MediaQuery.sizeOf(context).height;
       void visit(Element element) {
         if (element.widget case _GroupedListSlot(:final index, :final item)) {
-          if (index < shapes.length) {
+          final box = element.renderObject;
+          if (index < shapes.length && box is RenderBox && box.attached) {
+            final top = box.localToGlobal(Offset.zero).dy;
             shapes[index] =
-                GroupedItemShape.measure(element, item) ?? shapes[index];
+                GroupedItemShape.measure(
+                  element,
+                  item,
+                  visible: screen - top,
+                ) ??
+                shapes[index];
           }
           return;
         }
@@ -352,6 +360,14 @@ class _GroupedListViewState extends State<GroupedListView> {
       );
     }
     final (key, shapes) = _shapes();
+    // 每一項上緣離畫面底還有多少：只有第一個畫面裡的列排隊、換場等它們。
+    final screen = MediaQuery.sizeOf(context).height;
+    final visible = <double>[];
+    var top = padding.top;
+    for (final shape in shapes) {
+      visible.add(screen - top);
+      top += shape.height;
+    }
     return ColoredBox(
       color: background,
       child: SkeletonSwitcher(
@@ -374,6 +390,7 @@ class _GroupedListViewState extends State<GroupedListView> {
                 key: _slotKey(widget.children[i]),
                 index: i,
                 shape: shapes[i],
+                visible: visible[i],
                 item: widget.children[i],
               ),
           ],
@@ -385,17 +402,23 @@ class _GroupedListViewState extends State<GroupedListView> {
 
 /// 清單的一項：骨架底下輪到才建，之前佔著記下或估計的高度。一組分組卡片
 /// 以列為單位排隊（組標題文字與卡片外框先建），一格建一列：像「排版」這樣一組
-/// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。
+/// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。只有第一個畫面
+/// 裡的列排隊；畫面外的列（替換規則、下載佇列這類上百列的組）和組一起建、
+/// 換場不等它們，不然一列一格，兩百列要等三秒以上。
 class _GroupedListSlot extends StatelessWidget {
   const _GroupedListSlot({
     super.key,
     required this.index,
     required this.shape,
+    required this.visible,
     required this.item,
   });
 
   final int index;
   final GroupedItemShape shape;
+
+  /// 這一項上緣到畫面底的距離；不到 0 時整項都在畫面外。
+  final double visible;
   final Widget item;
 
   @override
@@ -415,7 +438,7 @@ class _GroupedListSlot extends StatelessWidget {
       header: item.header,
       // 組標題右側的按鈕（「恢復預設」）也排隊，不和卡片外框擠在同一格。
       headerTrailing: switch (item.headerTrailing) {
-        final trailing? => CoverRevealSlot(child: trailing),
+        final trailing? => CoverRevealSlot(wait: visible > 0, child: trailing),
         null => null,
       },
       footer: item.footer,
@@ -427,15 +450,25 @@ class _GroupedListSlot extends StatelessWidget {
               : AppGrouped.rowPadding),
       margin: item.margin,
       topGap: item.topGap,
-      children: [
-        for (var i = 0; i < rows.length; i++)
-          CoverRevealSlot(
-            key: _slotKey(item.children[i]),
-            placeholder: SizedBox(height: rows[i]),
-            child: item.children[i],
-          ),
-      ],
+      children: _rows(item.children, rows),
     );
+  }
+
+  List<Widget> _rows(List<Widget> children, List<double> heights) {
+    final out = <Widget>[];
+    var top = shape.card?.top ?? 0;
+    for (var i = 0; i < children.length; i++) {
+      out.add(
+        CoverRevealSlot(
+          key: _slotKey(children[i]),
+          placeholder: SizedBox(height: heights[i]),
+          wait: top < visible,
+          child: children[i],
+        ),
+      );
+      top += heights[i] + AppGlass.hairline;
+    }
+    return out;
   }
 }
 

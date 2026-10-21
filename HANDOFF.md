@@ -1,4 +1,4 @@
-# 交接（2026-10-20）
+# 交接（2026-10-21）
 
 只寫從 repo 與 GitHub 查不到的事（ADR 0014）。合併了什麼看 PR 頁面與 `git log`，發版紀錄看 `gh run list --workflow android-release.yml`。
 
@@ -17,14 +17,6 @@
 - **別再用使用者的手機量測**（2026-10-14）。之後若使用者同意再量，做法：profile 建置用一個不提交的入口（`main()` 之後把 `developer.Service.getInfo()` 的 ws 位址寫進 `getExternalStorageDirectory()`），因為 vivo 會把 logcat 裡的 VM service 位址遮掉，intent 參數在這個 App 也不生效；電腦用 `vm_service` 連上後 `setFlag('profiler','true')`，收 `Flutter.Frame` 事件與 `getCpuSamples`，把 UI isolate 連續忙碌超過 8 ms 的區段依堆疊歸類。profile 版和正式版並存；vivo 用 adb 安裝會跳確認頁（勾「已瞭解」再按「繼續安裝」）。
 - **配色沒有對比度規則**（2026-10-14）：配色手調個大概就好，不行使用者會回報；不要照審查工具的對比度意見調色。頁面與卡片的分層規則（`AppLayers`，2026-10-20）是使用者要的，不在此限；框線 2026-10-21 使用者說不要，改成拉大底色差距（DESIGN.md「色彩與材質層次」）。還留著 `StylePalette.onPrimary`（主色上的字取紙白或墨色中看得清楚的那個）、`AppTint` 顏料色的兩個對比測試、骨架淡色的深淺測試；使用者若也要拿掉再處理。
 
-## 進行中：閱讀偏好與設定頁第一格
-
-分支 `perf/reading-prefs-first-frame`，draft PR 已開，還沒跑 Codex 審查（雲端 session 沒有 Codex）、還沒合併。
-
-- **做完的**：推入的分組清單頁第一格只畫骨架、換頁播完一格建一列再換場（ADR 0029 做法 5）；骨架照上次畫面上量到的樣子畫並存進偏好設定（`grouped_list_skeleton_v1`）；返回時頁面裡的 Focus 不再重建；閱讀偏好每列只聽自己的值。同一條分支也拿掉了卡片與玻璃的框線、拉大頁面到卡片的差距（使用者 2026-10-21 要的，截圖已給使用者看）。
-- **數字**（雲端 Linux 機器 debug，比 Windows 那台慢約一倍；第二輪、兩次）：第 0 格 beta → 現在：閱讀偏好 170／153 → 17／17、外觀 48／73 → 22／24、朗讀 45／42 → 18／18、背景下載佇列 94／80 → 20／22、關於 48／81 → 19／18、備份 23／23 → 21／19。內容建立的格最差約 20–25ms（第一格內容：清單、各組外框與第一列）。推入一頁的固定成本（導覽、`Scaffold`、頁首）約 170 個元件，空白頁在這台就要 15–20ms，所以第 0 格到不了 8ms 以下；拿掉返回鈕的 Tooltip 與頁首的 `LaunchSkeleton` 量不出差別，沒做。
-- **剩下**：Codex 審查；CI 通過後照 AGENTS.md 合併，本節刪掉。
-
 ## 接下來
 
 - **五種風格重新設計（2026-10-20 使用者提出，還沒開始）**：紙墨、竹青、石青、茶褐、素色使用者覺得還是不太行，可能要重新設計，要先和使用者談。重新設計時頁面、卡片、玻璃與閱讀選單的底色照 `AppLayers` 的規則算（DESIGN.md「色彩與材質層次」）。
@@ -37,6 +29,7 @@
 - 這台機器常有好幾個 session 同時開在同一個資料夾，切分支會影響別人；自己的工作開 repo 外的 worktree 做，開工前 `git branch --show-current` 確認。本機預覽伺服器的 port（例如 8765）被別人佔用時換一個 port，不要結束別人的程序。
 - Claude Code 的子代理用 `isolation: "worktree"` 開的工作樹放在主資料夾的 `.claude/worktrees/` 底下，起點是主資料夾目前的 commit（通常是 `beta`），不是呼叫端所在的分支；要疊在別的分支上，合併時得自己解衝突，或先把那條分支併進 `beta`。
 - 2026-10-19 起日常改動進 `beta`（ADR 0027）。這台的主資料夾已切到 `beta`、`origin/HEAD` 指向 `beta`、`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。另一台電腦的資料夾還停在 `main`：開工前 `git fetch`、`git switch beta`、`git remote set-head origin -a`（T3 的自動拉取只拉預設分支，認的是 `origin/HEAD`）。T3 從 `origin/HEAD` 開 worktree，`git fetch` 不會更新它：這台的 `origin/HEAD` 原本還指向 `main`，#82 因此開在 `main` 上、以 `main` 為目標合併，2026-10-20 已把 `main` 用合併提交併回 `beta`（repo 只允許 squash，走 PR 會失去 `main` 的提交，之後 `main` 就無法快轉），並修正 `origin/HEAD`。`main` 收到不在 `beta` 上的提交時讓 Android Release 失敗的檢查，要等 `main` 第一次快轉到 `beta` 才生效，在那之前推上 `main` 照樣會發版。
+- 在 Linux（雲端 session）跑 `test/screens`、`test/frame_budget` 這類要載字型的測試：先 `apt-get install fonts-noto-cjk`；`test/support/screenshot.dart` 用小寫的 `materialicons-regular.otf`，Linux 的 Flutter SDK 檔名是 `MaterialIcons-Regular.otf`，在 `bin/cache/artifacts/material_fonts/` 補一個小寫的連結（Windows 不分大小寫所以沒事）。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比。
 - `download_service_test` 有一批「`_dio` 尚未初始化」的下載失敗日誌（測試沒準備網路層，只檢查排隊與範圍），不是警告。
 - 新開的 worktree 跑 `flutter test` 時，sqlite3 的 native asset 下載可能被公司網路改掉、雜湊不符而失敗；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就會直接用快取。
 - Codex 審查的暫存 `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時會擋掉 Codex 最後一次連線，`codex exec` 因此回非零，但報告通常已經寫好；先看報告檔再判斷要不要重跑。
