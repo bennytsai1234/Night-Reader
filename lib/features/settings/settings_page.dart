@@ -19,7 +19,8 @@ import 'package:night_reader/features/about/check_update_row.dart';
 import 'package:night_reader/features/about/crash_log_page.dart';
 
 /// 「我的」分頁：頁首置中標題「我的」（同書架、發現），下方為帶上色圖示的
-/// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）。
+/// 分組清單。每一列都是進入下一頁的入口，不放開關（ADR 0015）；「檢查更新」
+/// 例外，點了就檢查（ADR 0030）。
 ///
 /// 依用途分兩組：閱讀（偏好、外觀、朗讀、統計），書與 App（書源、下載、
 /// 備份、檢查更新、崩潰日誌、關於）；組數少，組間的空帶只有一條。第一層
