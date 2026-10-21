@@ -351,6 +351,44 @@ class StylePalette extends ThemeExtension<StylePalette> {
     );
   }
 
+  // 強調色會讓 [AppStyle.paletteFor] 每次 copyWith 出新物件；照值比較才能
+  // 讓相同設定產生相等的 ThemeData，避免全 App 跟著重建（ADR 0029）。
+  @override
+  bool operator ==(Object other) =>
+      other is StylePalette &&
+      other.brightness == brightness &&
+      other.background == background &&
+      other.surface == surface &&
+      other.bar == bar &&
+      other.text == text &&
+      other.textMuted == textMuted &&
+      other.border == border &&
+      other.primary == primary &&
+      other.secondary == secondary &&
+      other.readerBackground == readerBackground &&
+      other.readerMenu == readerMenu &&
+      other.readerText == readerText &&
+      other.readerInfo == readerInfo &&
+      other.highlight == highlight;
+
+  @override
+  int get hashCode => Object.hash(
+    brightness,
+    background,
+    surface,
+    bar,
+    text,
+    textMuted,
+    border,
+    primary,
+    secondary,
+    readerBackground,
+    readerMenu,
+    readerText,
+    readerInfo,
+    highlight,
+  );
+
   /// 換風格或深淺時不做漸變，在動畫中點一次切換：正文段落快取以文字色
   /// 為鍵，逐幀漸變會讓每一幀都重排正文。
   @override

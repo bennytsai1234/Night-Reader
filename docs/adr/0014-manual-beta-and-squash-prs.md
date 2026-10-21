@@ -4,7 +4,7 @@
 
 測試版不再隨推上 `main` 自動發布：`main` 收到改動只跑 CI，維護者說要發時，以 `channel=beta` 手動執行 `android-release.yml`，把上一個發布之後累積的改動發成一個測試版（tag 與 versionCode 的算法照 ADR 0004）。正式版不變，仍由升版號的 commit 推上 `main` 觸發（ADR 0002）。更新說明也改在手動發測試版的那一刻檢查：上一個發布的 tag 之後改到 App 內容，`CHANGELOG.md` 的「未發布」就要跟著寫（ADR 0010 的檢查規則不變，只是時機從每次推送改成發版）。
 
-只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時直接在 `main` 上改，不開分支、不審。新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在分支上做、走 PR；跟著功能一起改的文件放在同一個 PR。`HANDOFF.md` 只寫從 repo 與 GitHub 查不到的事（還沒合併的工作、等維護者決定的事、還沒寫進其他文件的決定、環境上的坑），不寫合併了什麼、發了哪一版。交代的目標做完、驗證過，也沒有等維護者決定的事，就是告一段落，直接合併，不問維護者要不要合併：
+只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時直接在 `main` 上改，不開分支、不審。新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在分支上做、走 PR；跟著功能一起改的文件放在同一個 PR。`HANDOFF.md` 只寫從 repo 與 GitHub 查不到、而且還沒收尾的事（還沒合併的工作、等維護者決定的事、還沒寫進其他文件的決定），不寫合併了什麼、發了哪一版；環境上的坑是長期有效的事實，寫在 `AGENTS.md`「環境」（2026-10-21 起，原本放在交接裡）。交代的目標做完、驗證過，也沒有等維護者決定的事，就是告一段落，直接合併，不問維護者要不要合併：
 
 1. 這次要合併的分支（可以是好幾條）併成一條，推上去，開一個 PR。
 2. Codex 審整個 PR 一次，核對屬實的問題修在同一個 PR，再把審查摘要貼成 PR 留言：發現了什麼、核對結果、修了哪些、沒修的為什麼。

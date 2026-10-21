@@ -57,14 +57,16 @@ jobs:
           fi
       - name: Check ADR numbers are unique
         # 平行的分支各自新增 ADR 時可能取到同一個編號；檔名不同，Git 合併不會報衝突。
-        # 檔名不是「四位數-標題.md」的先擋下，編號才比得準（五位數、少補零、備份檔）。
+        # 檔名不是「四位數-標題.md」的先擋下，編號才比得準（五位數、少補零、備份檔）；
+        # README.md 是索引，不是 ADR。
         run: |
-          misnamed=$(ls docs/adr | grep -v '^[0-9]\{4\}-[^/]*\.md$' || true)
+          adrs=$(ls docs/adr | grep -v '^README\.md$' || true)
+          misnamed=$(printf '%s\n' "$adrs" | grep -v '^[0-9]\{4\}-[^/]*\.md$' || true)
           if [ -n "$misnamed" ]; then
             echo "::error::ADR file names must be NNNN-title.md: $misnamed"
             exit 1
           fi
-          duplicates=$(ls docs/adr | cut -c1-4 | sort | uniq -d)
+          duplicates=$(printf '%s\n' "$adrs" | cut -c1-4 | sort | uniq -d)
           if [ -n "$duplicates" ]; then
             echo "::error::Duplicate ADR numbers: $duplicates. Renumber the newer ADR and the links to it."
             exit 1
