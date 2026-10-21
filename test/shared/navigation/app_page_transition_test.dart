@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -443,6 +445,42 @@ void main() {
       await tester.pump();
       expect(find.text('新頁'), findsNothing);
       expect(find.text('主頁'), findsOneWidget);
+    });
+
+    // 頁面上的橫向捲動用裝置的觸控門檻（Android 約 8，測試環境預設 18）；
+    // 左緣的拖曳也要用同一個，不然慢慢拖時總是被底下的內容先接走。
+    testWidgets('from the edge it wins over content that scrolls sideways', (
+      tester,
+    ) async {
+      tester.view.gestureSettings = ui.GestureSettings(
+        physicalTouchSlop: 8 * tester.view.devicePixelRatio,
+      );
+      addTearDown(tester.view.reset);
+      await pumpApp(tester, AppPageTransition.slide);
+      Navigator.push(
+        home,
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            body: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                const SizedBox(width: 400, child: Center(child: Text('新頁'))),
+                for (var i = 0; i < 5; i++) const SizedBox(width: 400),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(const Offset(5, 300));
+      for (var i = 0; i < 40; i++) {
+        await gesture.moveBy(const Offset(3, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      // 頁面跟著手指往右，而不是清單被拖住。
+      expect(tester.getCenter(find.text('新頁')).dx, greaterThan(250));
+      await gesture.up();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('short of a fifth it springs back', (tester) async {

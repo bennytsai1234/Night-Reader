@@ -990,9 +990,6 @@ class _ReaderClockState extends State<_ReaderClock> {
   }
 }
 
-const double _controlsDismissTapToleranceSquared = kTouchSlop * kTouchSlop;
-const double _controlsDismissDragToleranceSquared = kTouchSlop * kTouchSlop;
-
 class _ReaderV2ControlsDismissLayer extends StatefulWidget {
   const _ReaderV2ControlsDismissLayer({required this.onDismiss});
 
@@ -1008,6 +1005,10 @@ class _ReaderV2ControlsDismissLayerState
   int? _pointer;
   Offset? _downPosition;
   bool _dismissed = false;
+
+  /// 裝置觸控門檻的平方（照 [TapGestureRecognizer]）：移動超過它就和正文
+  /// 開始捲動在同一刻收起選單。
+  late double _slopSquared;
 
   void _handlePointerDown(PointerDownEvent event) {
     if (event.buttons != kPrimaryButton) {
@@ -1027,8 +1028,7 @@ class _ReaderV2ControlsDismissLayerState
     if (event.pointer != _pointer || _dismissed) return;
     final downPosition = _downPosition;
     if (downPosition == null) return;
-    if ((event.position - downPosition).distanceSquared >
-        _controlsDismissDragToleranceSquared) {
+    if ((event.position - downPosition).distanceSquared > _slopSquared) {
       _dismissed = true;
       widget.onDismiss();
     }
@@ -1040,8 +1040,7 @@ class _ReaderV2ControlsDismissLayerState
     final shouldDismiss =
         !_dismissed &&
         downPosition != null &&
-        (event.position - downPosition).distanceSquared <=
-            _controlsDismissTapToleranceSquared;
+        (event.position - downPosition).distanceSquared <= _slopSquared;
     _resetTracking();
     if (shouldDismiss) widget.onDismiss();
   }
@@ -1058,6 +1057,9 @@ class _ReaderV2ControlsDismissLayerState
 
   @override
   Widget build(BuildContext context) {
+    final slop =
+        MediaQuery.maybeGestureSettingsOf(context)?.touchSlop ?? kTouchSlop;
+    _slopSquared = slop * slop;
     // 不擋住底下的正文：在正文上滑動會收起選單，同一次手勢也照常捲動。
     return Listener(
       behavior: HitTestBehavior.translucent,

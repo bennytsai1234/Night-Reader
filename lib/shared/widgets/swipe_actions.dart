@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -48,6 +47,9 @@ const double _kFullSwipeFraction = 0.6;
 /// 動作按鈕；拖過一半露出寬度放開會停在展開狀態，滑過列寬約 60% 會觸發
 /// 最外側動作（列尾為最後一個、列首為第一個）。展開時點列本身只會收合。
 /// 只使用水平拖動手勢，不攔截清單的垂直捲動；清單捲動時自動收合。
+/// 觸控門檻取裝置的（`MediaQuery.gestureSettingsOf`），和清單捲動、
+/// [PageView] 一樣：斜著拖時先越過門檻的方向勝出；放在可左右滑動的容器
+/// 裡時，在列上橫向拖動一律由列接走。
 ///
 /// 放在 [SwipeActionsGroup] 底下時，同一組同時只會有一列展開。
 class SwipeActions extends StatefulWidget {
@@ -346,21 +348,14 @@ class _SwipeActionsState extends State<SwipeActions>
             );
           },
         );
-        row = RawGestureDetector(
-          gestures: {
-            if (active)
-              HorizontalDragGestureRecognizer:
-                  GestureRecognizerFactoryWithHandlers<
-                    HorizontalDragGestureRecognizer
-                  >(HorizontalDragGestureRecognizer.new, (recognizer) {
-                    // 不設 onCancel：它只在點擊沒變成拖動時觸發，
-                    // 已開始的拖動被中斷時走 onEnd。
-                    recognizer
-                      ..onStart = _onDragStart
-                      ..onUpdate = _onDragUpdate
-                      ..onEnd = _onDragEnd;
-                  }),
-          },
+        // 用 GestureDetector：它把 MediaQuery 的裝置觸控門檻交給拖動辨識，
+        // 和外層清單的垂直捲動、PageView 用同一個門檻判斷這一下歸誰。
+        // 不設 onHorizontalDragCancel：它只在點擊沒變成拖動時觸發，
+        // 已開始的拖動被中斷時走 onEnd。
+        row = GestureDetector(
+          onHorizontalDragStart: active ? _onDragStart : null,
+          onHorizontalDragUpdate: active ? _onDragUpdate : null,
+          onHorizontalDragEnd: active ? _onDragEnd : null,
           child: row,
         );
         // 無障礙：不靠滑動也能從列的自訂動作選單執行。停用時也包同一層
