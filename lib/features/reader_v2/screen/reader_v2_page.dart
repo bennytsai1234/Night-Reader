@@ -577,9 +577,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
       case _ReaderMoreAction.bookDetail:
         await _showBookDetail();
       case _ReaderMoreAction.globalSettings:
-        // 「我的」裡也有替換規則：記下現在的規則，回來時有改才重載正文。
-        final rules = await _coordinator.replaceRulesSnapshot();
-        if (!mounted) return;
         final pushed = await _pushOverMenu(
           _departMenu(),
           MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
@@ -589,10 +586,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         // 回到閱讀器時重新載入，正文才會反映在那裡做的調整。等返回動畫
         // 播完才載入：設定變了會重排正文，不和返回動畫疊在一起（ADR 0018）。
         _restoreMenuWhenUncovered(
-          beforeMenu: () => unawaited(() async {
-            await _host.settings.loadSettings();
-            await _coordinator.reloadIfReplaceRulesChanged(rules);
-          }()),
+          beforeMenu: () => unawaited(_host.settings.loadSettings()),
         );
     }
   }

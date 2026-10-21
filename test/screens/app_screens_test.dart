@@ -97,7 +97,13 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與還原')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
-  's19_release_notes': (const {}, (t) async => openMine(t, '更新紀錄')),
+  's19_release_notes': (
+    const {},
+    (t) async {
+      await openMine(t, '關於夜讀');
+      await tapText(t, '更新紀錄');
+    },
+  ),
   // 閱讀器。
   'r01_reader': (const {}, (t) async => openReader(t)),
   'r02_menu': (const {}, openReaderMenu),
