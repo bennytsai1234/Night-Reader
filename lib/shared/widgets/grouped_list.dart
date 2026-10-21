@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../navigation/app_page_transition.dart';
+import '../navigation/transition_settled.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
 import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'press_ink.dart';
 import 'swipe_actions.dart';
 
 /// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
@@ -283,7 +286,13 @@ class GroupedSectionHeader extends StatelessWidget {
 ///
 /// 頁面搭配 [GlassNavHeader] 與 `extendBodyBehindAppBar: true` 時，上方
 /// 內距會包含頁首高度。
-class GroupedListView extends StatelessWidget {
+///
+/// 每個子元件（通常是一組 [GroupedSection]）是清單的一項，捲到才建。頁面
+/// 進場動畫播完之前不預建畫面外的項目（捲動預留區設 0）：那一段要捲動才
+/// 看得到，進場途中沒有人捲，建它只會讓換頁的第一格更晚開始；原本預設
+/// 預留 250，閱讀偏好一進頁就多建了畫面外的兩組。進場播完才照預設預留，
+/// 之後捲動時下一組已經建好。
+class GroupedListView extends StatefulWidget {
   const GroupedListView({
     super.key,
     required this.children,
@@ -298,18 +307,36 @@ class GroupedListView extends StatelessWidget {
   final ScrollPhysics? physics;
 
   @override
+  State<GroupedListView> createState() => _GroupedListViewState();
+}
+
+class _GroupedListViewState extends State<GroupedListView> {
+  /// 進場播完之前是 0，之後是 null（照捲動元件的預設）。
+  ScrollCacheExtent? _cacheExtent = const ScrollCacheExtent.pixels(0);
+  Future<void>? _entrance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entrance ??= TransitionSettled.entered(context).then((_) {
+      if (mounted) setState(() => _cacheExtent = null);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.paddingOf(context);
     return ColoredBox(
       color: AppChrome.of(context).groupedBackground,
       child: ListView(
-        controller: controller,
-        physics: physics,
+        controller: widget.controller,
+        physics: widget.physics,
+        scrollCacheExtent: _cacheExtent,
         padding: EdgeInsets.only(
           top: padding.top,
-          bottom: padding.bottom + bottomPadding,
+          bottom: padding.bottom + widget.bottomPadding,
         ),
-        children: children,
+        children: widget.children,
       ),
     );
   }
@@ -494,7 +521,7 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
       return Semantics(container: true, child: row);
     }
     return TransitionSource(
-      child: InkWell(
+      child: PressInk(
         onTap: enabled ? onTap : null,
         onLongPress: enabled ? onLongPress : null,
         child: row,

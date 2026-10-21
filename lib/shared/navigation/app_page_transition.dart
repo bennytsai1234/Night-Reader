@@ -606,7 +606,18 @@ class _AppTransitionState extends State<_AppTransition>
         widget.animation,
         widget.secondaryAnimation,
       ]),
-      child: widget.child,
+      // 頁面裡每個按鈕、開關、輸入框都有自己的 Focus，原本都直接依賴路由的
+      // FocusScope：推入後路由取得焦點、返回時路由先停止接受焦點再交出焦點，
+      // FocusScope 每變一次就通知一次，整頁的 Focus 全部重建（閱讀偏好約 48
+      // 個，推入第 1 格、返回第 0 與第 1 格各一次），重建出來的東西不變。
+      // 中間隔一層不取焦點、不進鍵盤巡覽的 Focus，頁面的控制項改依賴這一層；
+      // 它只在頁面裡真的有控制項取得或交出焦點時才通知。
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        includeSemantics: false,
+        child: widget.child,
+      ),
       builder: (context, child) {
         // 手勢是整個 Navigator 的狀態，上下兩頁同時切到跟手的樣子。
         final gesturing = _route.popGestureInProgress;

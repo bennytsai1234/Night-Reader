@@ -39,14 +39,21 @@ class AboutPage extends StatefulWidget {
 }
 
 class _AboutPageState extends State<AboutPage> {
+  // 版號與更新偏好是進頁後才讀到的，各自是一個訊號，只有用到的那一列跟著
+  // 重建：原本讀到時 setState，整頁在進場動畫途中重建一次（ADR 0029）。
   // 載入前不顯示版號；讀不到時顯示「未知版本」，不會停在錯誤的預設值。
-  String? _version;
-  String _buildNumber = '';
-  bool _checkingUpdate = false;
+  final _package = ValueNotifier<({String? version, String buildNumber})>((
+    version: null,
+    buildNumber: '',
+  ));
   final _updatePreferences = UpdatePreferences();
-  bool _betaChannel = false;
-  bool _autoCheck = true;
-  bool _autoDownload = UpdatePreferences.defaultAutoDownload;
+  final _updatePrefs =
+      ValueNotifier<({bool betaChannel, bool autoCheck, bool autoDownload})>((
+        betaChannel: false,
+        autoCheck: true,
+        autoDownload: UpdatePreferences.defaultAutoDownload,
+      ));
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
@@ -55,38 +62,61 @@ class _AboutPageState extends State<AboutPage> {
     _loadUpdatePreferences();
   }
 
+  @override
+  void dispose() {
+    _package.dispose();
+    _updatePrefs.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUpdatePreferences() async {
     final betaChannel = await _updatePreferences.betaChannel();
     final autoCheck = await _updatePreferences.autoCheck();
     final autoDownload = await _updatePreferences.autoDownload();
     if (!mounted) return;
-    setState(() {
-      _betaChannel = betaChannel;
-      _autoCheck = autoCheck;
-      _autoDownload = autoDownload;
-    });
+    _updatePrefs.value = (
+      betaChannel: betaChannel,
+      autoCheck: autoCheck,
+      autoDownload: autoDownload,
+    );
   }
 
   Future<void> _setBetaChannel(bool enabled) async {
-    setState(() => _betaChannel = enabled);
+    _updatePrefs.value = (
+      betaChannel: enabled,
+      autoCheck: _updatePrefs.value.autoCheck,
+      autoDownload: _updatePrefs.value.autoDownload,
+    );
     await _updatePreferences.setBetaChannel(enabled);
   }
 
-  _AppUpdateMode get _updateMode => !_autoCheck
+  static _AppUpdateMode _modeOf(({bool autoCheck, bool autoDownload}) prefs) =>
+      !prefs.autoCheck
       ? _AppUpdateMode.manual
-      : _autoDownload
+      : prefs.autoDownload
       ? _AppUpdateMode.download
       : _AppUpdateMode.check;
+
+  _AppUpdateMode get _updateMode => _modeOf((
+    autoCheck: _updatePrefs.value.autoCheck,
+    autoDownload: _updatePrefs.value.autoDownload,
+  ));
 
   /// 「自動檢查」與「在 Wi-Fi 下自動下載」原本是兩個開關，後者只在前者開著
   /// 時有作用；合成一列三選一。
   Future<void> _setUpdateMode(_AppUpdateMode mode) async {
-    setState(() {
-      _autoCheck = mode != _AppUpdateMode.manual;
-      if (_autoCheck) _autoDownload = mode == _AppUpdateMode.download;
-    });
-    await _updatePreferences.setAutoCheck(_autoCheck);
-    if (_autoCheck) await _updatePreferences.setAutoDownload(_autoDownload);
+    final current = _updatePrefs.value;
+    final autoCheck = mode != _AppUpdateMode.manual;
+    final autoDownload = autoCheck
+        ? mode == _AppUpdateMode.download
+        : current.autoDownload;
+    _updatePrefs.value = (
+      betaChannel: current.betaChannel,
+      autoCheck: autoCheck,
+      autoDownload: autoDownload,
+    );
+    await _updatePreferences.setAutoCheck(autoCheck);
+    if (autoCheck) await _updatePreferences.setAutoDownload(autoDownload);
   }
 
   Future<void> _pickUpdateMode(BuildContext rowContext) async {
@@ -153,18 +183,15 @@ class _AboutPageState extends State<AboutPage> {
     try {
       final info = await PackageInfo.fromPlatform();
       if (!mounted) return;
-      setState(() {
-        _version = info.version;
-        _buildNumber = info.buildNumber;
-      });
+      _package.value = (version: info.version, buildNumber: info.buildNumber);
     } catch (error, stackTrace) {
       AppLog.e('讀取版本資訊失敗', error: error, stackTrace: stackTrace);
-      if (mounted) setState(() => _version = '');
+      if (mounted) _package.value = (version: '', buildNumber: '');
     }
   }
 
   /// 頁面上顯示的版號：載入中為空字串，讀不到為「未知版本」。
-  String get _versionLabel => switch (_version) {
+  static String _versionLabel(String? version) => switch (version) {
     null => '',
     '' => '未知版本',
     final version => 'v$version',
@@ -202,9 +229,11 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => showLicensePage(
                   context: context,
                   applicationName: '夜讀',
-                  applicationVersion: _version == null || _version!.isEmpty
-                      ? null
-                      : '$_version ($_buildNumber)',
+                  applicationVersion: switch (_package.value) {
+                    (version: null || '', buildNumber: _) => null,
+                    (:final version, :final buildNumber) =>
+                      '$version ($buildNumber)',
+                  },
                 ),
               ),
               GroupedRow(
@@ -270,26 +299,33 @@ class _AboutPageState extends State<AboutPage> {
                   MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
                 ),
               ),
-              Builder(
-                builder: (rowContext) => GroupedRow(
+              ValueListenableBuilder(
+                valueListenable: _updatePrefs,
+                builder: (rowContext, prefs, _) => GroupedRow(
                   leading: const GroupedIconTile(
                     Icons.update_rounded,
                     tint: AppTint.azurite,
                   ),
                   title: '自動更新',
-                  value: _updateMode.label,
+                  value: _modeOf((
+                    autoCheck: prefs.autoCheck,
+                    autoDownload: prefs.autoDownload,
+                  )).label,
                   showChevron: false,
                   onTap: () => _pickUpdateMode(rowContext),
                 ),
               ),
-              GroupedSwitchRow(
-                leading: const GroupedIconTile(
-                  Icons.science_outlined,
-                  tint: AppTint.aubergine,
+              ValueListenableBuilder(
+                valueListenable: _updatePrefs,
+                builder: (context, prefs, _) => GroupedSwitchRow(
+                  leading: const GroupedIconTile(
+                    Icons.science_outlined,
+                    tint: AppTint.aubergine,
+                  ),
+                  title: '接收測試版更新',
+                  value: prefs.betaChannel,
+                  onChanged: _setBetaChannel,
                 ),
-                title: '接收測試版更新',
-                value: _betaChannel,
-                onChanged: _setBetaChannel,
               ),
               GroupedSwitchRow(
                 leading: const GroupedIconTile(
@@ -353,11 +389,14 @@ class _AboutPageState extends State<AboutPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            _versionLabel,
-            style: AppTextStyles.bodySm.copyWith(
-              height: 1.4,
-              color: AppChrome.of(context).sectionText,
+          ValueListenableBuilder(
+            valueListenable: _package,
+            builder: (context, package, _) => Text(
+              _versionLabel(package.version),
+              style: AppTextStyles.bodySm.copyWith(
+                height: 1.4,
+                color: AppChrome.of(context).sectionText,
+              ),
             ),
           ),
         ],

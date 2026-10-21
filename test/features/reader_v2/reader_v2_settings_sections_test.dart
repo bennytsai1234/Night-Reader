@@ -69,13 +69,11 @@ void main() {
 
   Future<ReaderV2SettingsController> pumpSection(WidgetTester tester) async {
     final settings = ReaderV2SettingsController();
+    final groups = ReaderV2SettingsGroups(settings);
+    addTearDown(groups.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ReaderV2TypographySection(settings: settings),
-          ),
-        ),
+        home: Scaffold(body: SingleChildScrollView(child: groups.typography())),
       ),
     );
     return settings;
