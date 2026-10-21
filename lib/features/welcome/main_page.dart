@@ -367,7 +367,9 @@ class _MainPageState extends State<MainPage>
         _currentIndex == 0 ||
         _tabBarHidden.value ||
         _outgoing != null ||
-        !(ModalRoute.isCurrentOf(context) ?? true)) {
+        // 用 pageRouteOf 不用 ModalRoute.isCurrentOf：後者會讓主頁從第一次
+        // 返回手勢起依賴路由狀態，之後每次推入、返回都整頁重建（ADR 0018）。
+        !(pageRouteOf(context)?.isCurrent ?? true)) {
       return false;
     }
     if (!_beginSwitch(0, follow: true)) return false;
