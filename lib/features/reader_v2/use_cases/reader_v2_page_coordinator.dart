@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
@@ -176,22 +175,6 @@ class ReaderV2PageCoordinator {
     if (_host.menu.isScrubbing) return;
     // 視窗只在換句時跟隨。
     _ttsFollower.update(_host.tts?.currentHighlight);
-  }
-
-  /// 全部替換規則的內容快照；推入別的頁（「我的」也有替換規則）回來時
-  /// 和這份比，有改動才重載正文。規則資料庫不可用時為 null。
-  Future<String?> replaceRulesSnapshot() async {
-    final replaceDao = _host.dependencies.replaceDao;
-    if (replaceDao == null) return null;
-    return jsonEncode([
-      for (final rule in await replaceDao.getAll()) rule.toJson(),
-    ]);
-  }
-
-  /// [before] 之後替換規則改過時，照原本的位置重載正文。
-  Future<void> reloadIfReplaceRulesChanged(String? before) async {
-    if (before == null || await replaceRulesSnapshot() == before) return;
-    await _host.runtime?.reloadContentPreservingLocation();
   }
 
   Future<void> openReplaceRule(BuildContext context) async {
