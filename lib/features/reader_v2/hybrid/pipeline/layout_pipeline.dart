@@ -436,9 +436,12 @@ final class HybridLayoutPipeline {
   /// 原因；不在邊緣或那一章沒有失敗時回傳 null。
   ({int chapter, ReaderV2ContentUnavailableException failure})?
   unavailableFrontier({required bool forward}) {
+    // 中心 block 之前還沒放行任何 block 時，最上緣就是中心 block 本身。
+    final center = _documentIndex.centerKey;
     final edge = forward
         ? _documentIndex.forwardEdgeKey
-        : _documentIndex.backwardEdgeKey;
+        : _documentIndex.backwardEdgeKey ??
+              (_documentIndex.metricsFor(center) == null ? null : center);
     if (edge == null) return null;
     final blocks = _blocks[edge.chapterIndex];
     if (blocks == null || blocks.blocks.isEmpty) return null;
@@ -452,6 +455,13 @@ final class HybridLayoutPipeline {
     if (failure == null) return null;
     return (chapter: chapter, failure: failure);
   }
+
+  /// 這一側已經排好的正文不會再變多：書頭或書尾已經排進來，或排好的正文
+  /// 停在章節邊緣、相鄰那一章取不到（重試前都不會再接上）。捲動在這一側
+  /// 停得住的範圍從此固定。
+  bool edgeFinal({required bool forward}) => forward
+      ? _isBookEndAdmitted() || unavailableFrontier(forward: true) != null
+      : _isBookStartAdmitted() || unavailableFrontier(forward: false) != null;
 
   /// 忘掉 [chapter] 上次取不到的紀錄，馬上再取一次。
   void retryChapter(int chapter) {
