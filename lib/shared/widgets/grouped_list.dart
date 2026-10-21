@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/scheduler.dart';
 
 import '../navigation/app_page_transition.dart';
 import '../navigation/transition_settled.dart';
@@ -7,7 +7,10 @@ import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'cover_reveal.dart';
+import 'grouped_list_skeleton.dart';
 import 'press_ink.dart';
+import 'skeleton.dart';
 import 'swipe_actions.dart';
 
 /// Telegram 式分組清單的一組：上方組標題、圓角卡片、下方附註。
@@ -50,7 +53,7 @@ class GroupedSection extends StatelessWidget {
     final chrome = AppChrome.of(context);
     final indent =
         separatorIndent ??
-        (children.any(_hasLeading)
+        (children.any(groupedRowHasLeading)
             ? AppGrouped.separatorIndentWithIcon
             : AppGrouped.rowPadding);
     final rows = <Widget>[];
@@ -195,12 +198,12 @@ abstract interface class GroupedRowLike {
 }
 
 /// 穿過常見外框（滑動動作、key、單子元件）找出列本身，判斷是否帶列首圖示。
-bool _hasLeading(Widget widget) => switch (widget) {
+bool groupedRowHasLeading(Widget widget) => switch (widget) {
   GroupedRowLike row => row.hasLeading,
-  SwipeActions(:final child) => _hasLeading(child),
-  KeyedSubtree(:final child) => _hasLeading(child),
-  ProxyWidget(:final child) => _hasLeading(child),
-  SingleChildRenderObjectWidget(:final child?) => _hasLeading(child),
+  SwipeActions(:final child) => groupedRowHasLeading(child),
+  KeyedSubtree(:final child) => groupedRowHasLeading(child),
+  ProxyWidget(:final child) => groupedRowHasLeading(child),
+  SingleChildRenderObjectWidget(:final child?) => groupedRowHasLeading(child),
   _ => false,
 };
 
@@ -230,11 +233,12 @@ class GroupedSectionHeader extends StatelessWidget {
 /// 頁面搭配 [GlassNavHeader] 與 `extendBodyBehindAppBar: true` 時，上方
 /// 內距會包含頁首高度。
 ///
-/// 每個子元件（通常是一組 [GroupedSection]）是清單的一項，捲到才建。頁面
-/// 進場動畫播完之前不預建畫面外的項目（捲動預留區設 0）：那一段要捲動才
-/// 看得到，進場途中沒有人捲，建它只會讓換頁的第一格更晚開始；原本預設
-/// 預留 250，閱讀偏好一進頁就多建了畫面外的兩組。進場播完才照預設預留，
-/// 之後捲動時下一組已經建好。
+/// 每個子元件（通常是一組 [GroupedSection]）是清單的一項，捲到才建。
+///
+/// 掛上時頁面還在進場（推入的頁面），先只畫骨架（[GroupedListSkeleton]，
+/// 整個畫面一個元件），換頁的第一格不建任何一列；進場播完的下一格才在骨架
+/// 底下一格建一組（[CoverRevealSlot]），都建好再照骨架換場換成內容
+/// （ADR 0029）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
 class GroupedListView extends StatefulWidget {
   const GroupedListView({
     super.key,
@@ -254,35 +258,141 @@ class GroupedListView extends StatefulWidget {
 }
 
 class _GroupedListViewState extends State<GroupedListView> {
-  /// 進場播完之前是 0，之後是 null（照捲動元件的預設）。
-  ScrollCacheExtent? _cacheExtent = const ScrollCacheExtent.pixels(0);
-  Future<void>? _entrance;
+  /// 掛上時所在的頁面還在進場；之後一直走骨架這條路（換掉會讓內容重建）。
+  bool? _entering;
+
+  /// 進場播完的下一格才變 false。
+  bool _loading = true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _entrance ??= TransitionSettled.entered(context).then((_) {
-      if (mounted) setState(() => _cacheExtent = null);
+    if (_entering != null) return;
+    final route = pageRouteOf(context);
+    final entering = _entering =
+        route != null &&
+        (route.offstage || !(route.animation?.isCompleted ?? true));
+    if (!entering) return;
+    TransitionSettled.entered(context).then((_) async {
+      // 進場最後一格之後再開始建內容，不和換頁擠在同一格。
+      await SchedulerBinding.instance.endOfFrame;
+      if (mounted) setState(() => _loading = false);
+    });
+  }
+
+  /// 這一頁的版面紀錄 key 與每一項的樣子（記下的，沒有就估）。
+  (String, List<GroupedItemShape>) _shapes() {
+    final scaler = MediaQuery.textScalerOf(context);
+    final key = GroupedListLayouts.keyOf(
+      widget.children,
+      MediaQuery.sizeOf(context).width,
+      scaler,
+    );
+    final known = GroupedListLayouts.of(key);
+    return (
+      key,
+      [
+        for (var i = 0; i < widget.children.length; i++)
+          (known != null && i < known.length ? known[i] : null) ??
+              GroupedItemShape.estimate(widget.children[i], scaler),
+      ],
+    );
+  }
+
+  /// 換成內容時記下畫面上各項排好的樣子，下次進這一頁的骨架照它畫。
+  void _remember(String key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final shapes = List<GroupedItemShape?>.of(
+        GroupedListLayouts.of(key) ??
+            List<GroupedItemShape?>.filled(widget.children.length, null),
+      );
+      if (shapes.length != widget.children.length) return;
+      void visit(Element element) {
+        if (element.widget case _GroupedListSlot(:final index, :final item)) {
+          if (index < shapes.length) {
+            shapes[index] =
+                GroupedItemShape.measure(element, item) ?? shapes[index];
+          }
+          return;
+        }
+        element.visitChildren(visit);
+      }
+
+      (context as Element).visitChildren(visit);
+      GroupedListLayouts.remember(key, shapes);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final padding = MediaQuery.paddingOf(context);
-    return ColoredBox(
-      color: AppChrome.of(context).groupedBackground,
-      child: ListView(
-        controller: widget.controller,
-        physics: widget.physics,
-        scrollCacheExtent: _cacheExtent,
-        padding: EdgeInsets.only(
-          top: padding.top,
-          bottom: padding.bottom + widget.bottomPadding,
+    final mediaPadding = MediaQuery.paddingOf(context);
+    final padding = EdgeInsets.only(
+      top: mediaPadding.top,
+      bottom: mediaPadding.bottom + widget.bottomPadding,
+    );
+    final chrome = AppChrome.of(context);
+    final background = chrome.groupedBackground;
+    if (_entering != true) {
+      return ColoredBox(
+        color: background,
+        child: ListView(
+          controller: widget.controller,
+          physics: widget.physics,
+          padding: padding,
+          children: widget.children,
         ),
-        children: widget.children,
+      );
+    }
+    final (key, shapes) = _shapes();
+    return ColoredBox(
+      color: background,
+      child: SkeletonSwitcher(
+        loading: _loading,
+        waitForCovers: true,
+        backdrop: background,
+        onRevealed: () => _remember(key),
+        skeleton: GroupedListSkeleton(
+          items: widget.children,
+          shapes: shapes,
+          top: padding.top,
+          cardFill: chrome.groupedSurface,
+        ),
+        builder: (context) => ListView(
+          controller: widget.controller,
+          physics: widget.physics,
+          padding: padding,
+          children: [
+            for (var i = 0; i < widget.children.length; i++)
+              _GroupedListSlot(
+                index: i,
+                height: shapes[i].height,
+                item: widget.children[i],
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// 清單的一項：骨架底下輪到才建，之前佔著估計的高度。
+class _GroupedListSlot extends StatelessWidget {
+  const _GroupedListSlot({
+    required this.index,
+    required this.height,
+    required this.item,
+  });
+
+  final int index;
+  final double height;
+  final Widget item;
+
+  @override
+  Widget build(BuildContext context) => CoverRevealSlot(
+    placeholder: SizedBox(height: height),
+    child: item,
+  );
 }
 
 /// 列首上色圓角圖示方塊（Telegram 設定頁的彩色圖示）。

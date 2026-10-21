@@ -1,7 +1,7 @@
 // 閱讀偏好頁的建構範圍（ADR 0029）：換頁那幾格不重建頁面裡的控制項、
-// 進場第一格只建畫面上看得到的組、改一個設定只重建那一列。原本這三件事
-// 都不成立：推入第 1 格與返回第 0、1 格各重建約 48 個 Focus，第 0 格把畫面
-// 外的狀態列、頁首頁尾也建好，按一下字號整頁的列都重建。
+// 進場時只畫骨架、播完才一格建一組，改一個設定只重建那一列。原本這三件事
+// 都不成立：推入第 1 格與返回第 0、1 格各重建約 48 個 Focus，第 0 格把整頁
+// 的列都建好，按一下字號整頁的列都重建。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -12,6 +12,7 @@ import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,32 +81,38 @@ void main() {
     expect(rebuilt, isEmpty);
   });
 
-  testWidgets('進場第一格只建畫面上看得到的組，畫面外的捲到才建', (tester) async {
+  testWidgets('進場時只畫骨架，播完後一格建一組，都建好才換成內容', (tester) async {
     await pumpHost(tester);
-    final screenHeight =
-        tester.view.physicalSize.height / tester.view.devicePixelRatio;
-
-    await tester.tap(find.text('開啟'));
-    // 推入的第一格：頁面在 offstage 排好位置，還沒畫出來。
-    await tester.pump();
     final sections = find.descendant(
       of: find.byType(ReadingSettingsPage, skipOffstage: false),
       matching: find.byType(GroupedSection, skipOffstage: false),
     );
-    expect(sections, findsWidgets);
-    for (final section in sections.evaluate()) {
-      final top = (section.renderObject! as RenderBox)
-          .localToGlobal(Offset.zero)
-          .dy;
-      expect(
-        top,
-        lessThan(screenHeight),
-        reason: '${(section.widget as GroupedSection).header} 在畫面外',
-      );
+    final skeleton = find.byType(SkeletonShapes, skipOffstage: false);
+
+    await tester.tap(find.text('開啟'));
+    // 推入的第一格：整個畫面的骨架是一個元件，一列都還沒建。
+    await tester.pump();
+    expect(sections, findsNothing);
+    expect(skeleton, findsOneWidget);
+
+    final route = ModalRoute.of(
+      tester.element(find.byType(ReadingSettingsPage, skipOffstage: false)),
+    )!;
+    var built = 0;
+    for (var frame = 1; skeleton.evaluate().isNotEmpty; frame++) {
+      expect(frame, lessThan(300), reason: '骨架一直沒換掉');
+      await tester.pump(const Duration(milliseconds: 16));
+      final now = sections.evaluate().length;
+      if (!route.animation!.isCompleted) {
+        expect(now, 0, reason: '第 $frame 格還在換頁，不建內容');
+      }
+      expect(now - built, lessThanOrEqualTo(1), reason: '第 $frame 格建了好幾組');
+      built = now;
     }
+    expect(built, greaterThan(0));
 
     await tester.pumpAndSettle();
-    // 頁裡還有一個不能捲的清單，指定捲主清單。
+    // 頁裡還有一個不能捲的清單，指定捲主清單；畫面外的組捲到才建。
     await tester.scrollUntilVisible(
       find.text('音量鍵翻頁'),
       300,

@@ -334,41 +334,172 @@ class _RenderSkeletonBox extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
-    final rect = offset & size;
-    final paint = Paint();
-    final phase = _phase;
-    if (phase == null) {
-      paint.color = _color;
-    } else if (_breath.lag == 0 || _viewWidth <= 0) {
-      paint.color = _color.withValues(
-        alpha: _color.a * Skeleton.breathAt(phase.value, 0, _breath),
-      );
-    } else {
-      // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
-      // 骨架才會一樣深。
-      final (left, right) = Skeleton.screenSpan(this, _viewWidth);
-      final span = right - left;
-      // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
-      final count = math.max(2, (span.abs() * 32).ceil() + 1);
-      paint.shader = ui.Gradient.linear(
-        rect.centerLeft,
-        rect.centerRight,
-        [
-          for (var i = 0; i < count; i++)
-            _color.withValues(
-              alpha:
-                  _color.a *
-                  Skeleton.breathAt(
-                    phase.value,
-                    left + span * i / (count - 1),
-                    _breath,
-                  ),
-            ),
-        ],
-        [for (var i = 0; i < count; i++) i / (count - 1)],
+    context.canvas.drawRRect(
+      _borderRadius.toRRect(offset & size),
+      _breathingPaint(
+        this,
+        offset,
+        Offset.zero & size,
+        color: _color,
+        phase: _phase,
+        breath: _breath,
+        viewWidth: _viewWidth,
+      ),
+    );
+  }
+}
+
+/// 佔位形狀在呼吸這一刻的畫筆。[local] 是形狀在 [box] 裡的位置，[offset]
+/// 是 [box] 這次畫在圖層上的位置。
+Paint _breathingPaint(
+  RenderBox box,
+  Offset offset,
+  Rect local, {
+  required Color color,
+  required Animation<double>? phase,
+  required SkeletonBreath breath,
+  required double viewWidth,
+}) {
+  final paint = Paint();
+  if (phase == null) {
+    paint.color = color;
+  } else if (breath.lag == 0 || viewWidth <= 0) {
+    paint.color = color.withValues(
+      alpha: color.a * Skeleton.breathAt(phase.value, 0, breath),
+    );
+  } else {
+    // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
+    // 骨架才會一樣深。
+    final left = box.localToGlobal(local.topLeft).dx / viewWidth;
+    final right = box.localToGlobal(local.topRight).dx / viewWidth;
+    final span = right - left;
+    final rect = local.shift(offset);
+    // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
+    final count = math.max(2, (span.abs() * 32).ceil() + 1);
+    paint.shader = ui.Gradient.linear(
+      rect.centerLeft,
+      rect.centerRight,
+      [
+        for (var i = 0; i < count; i++)
+          color.withValues(
+            alpha:
+                color.a *
+                Skeleton.breathAt(
+                  phase.value,
+                  left + span * i / (count - 1),
+                  breath,
+                ),
+          ),
+      ],
+      [for (var i = 0; i < count; i++) i / (count - 1)],
+    );
+  }
+  return paint;
+}
+
+/// [SkeletonShapes] 畫的一個形狀：[fill] 為 null 時是跟著呼吸的佔位色，
+/// 給了就是不呼吸的實色（例如卡片底）。
+@immutable
+class SkeletonShape {
+  const SkeletonShape(this.rect, {this.radius = AppRadius.cardXs, this.fill});
+
+  final Rect rect;
+  final BorderRadius radius;
+  final Color? fill;
+}
+
+/// 一次畫好一整塊骨架（一組設定卡片：卡片底、組標題條、每列的文字條與
+/// 圖示方塊），整塊只有一個元件。換頁的第一格要建的骨架越少越好，一條條
+/// [SkeletonBox] 各是好幾個元件（ADR 0029）。
+///
+/// 寬度撐滿父層、高度是 [height]；[shapes] 照實際寬度給出各形狀在這塊裡的
+/// 位置，照順序畫。
+class SkeletonShapes extends LeafRenderObjectWidget {
+  const SkeletonShapes({super.key, required this.height, required this.shapes});
+
+  final double height;
+  final List<SkeletonShape> Function(Size size) shapes;
+
+  @override
+  RenderBox createRenderObject(BuildContext context) => _RenderSkeletonShapes(
+    height: height,
+    shapes: shapes,
+    color: Skeleton.colorOf(context),
+    phase: _SkeletonScope.maybeOf(context)?.phase,
+    breath: SkeletonLook.of(context).breath,
+    viewWidth: MediaQuery.sizeOf(context).width,
+  );
+
+  @override
+  void updateRenderObject(BuildContext context, RenderBox renderObject) {
+    (renderObject as _RenderSkeletonShapes)
+      ..height = height
+      ..shapes = shapes
+      ..color = Skeleton.colorOf(context)
+      ..phase = _SkeletonScope.maybeOf(context)?.phase
+      ..breath = SkeletonLook.of(context).breath
+      ..viewWidth = MediaQuery.sizeOf(context).width;
+  }
+}
+
+class _RenderSkeletonShapes extends _RenderSkeletonBox {
+  _RenderSkeletonShapes({
+    required this._height,
+    required this._shapes,
+    required super.color,
+    required super.phase,
+    required super.breath,
+    required super.viewWidth,
+  }) : super(borderRadius: BorderRadius.zero);
+
+  double _height;
+  set height(double value) {
+    if (_height == value) return;
+    _height = value;
+    markNeedsLayout();
+  }
+
+  List<SkeletonShape> Function(Size size) _shapes;
+  set shapes(List<SkeletonShape> Function(Size size) value) {
+    if (identical(_shapes, value)) return;
+    _shapes = value;
+    markNeedsPaint();
+  }
+
+  @override
+  bool get sizedByParent => false;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      constraints.constrain(Size(constraints.maxWidth, _height));
+
+  @override
+  void performLayout() {
+    size = computeDryLayout(constraints);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (size.isEmpty) return;
+    final canvas = context.canvas;
+    for (final shape in _shapes(size)) {
+      final rrect = shape.radius.toRRect(shape.rect.shift(offset));
+      final fill = shape.fill;
+      canvas.drawRRect(
+        rrect,
+        fill != null
+            ? (Paint()..color = fill)
+            : _breathingPaint(
+                this,
+                offset,
+                shape.rect,
+                color: _color,
+                phase: _phase,
+                breath: _breath,
+                viewWidth: _viewWidth,
+              ),
       );
     }
-    context.canvas.drawRRect(_borderRadius.toRRect(rect), paint);
   }
 }
 
@@ -417,11 +548,15 @@ class SkeletonSwitcher extends StatefulWidget {
     this.waitForCovers = false,
     this.entrance,
     this.backdrop,
+    this.onRevealed,
   });
 
   final bool loading;
   final Widget skeleton;
   final WidgetBuilder builder;
+
+  /// 骨架換成內容、換場播完的那一刻（內容已經照常排好）。
+  final VoidCallback? onRevealed;
 
   /// 骨架與內容後面的實色（通常是頁面底色）。給了的話換場只遮骨架一層：
   /// 骨架墊著這個顏色蓋在照常畫出的內容上，由左而右退開；內容不再套動畫
@@ -450,12 +585,17 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     value: widget.loading || _entering ? 0 : 1,
-  )..addStatusListener((_) => setState(() {}));
+  )..addStatusListener(_onStatus);
   late final Animation<double> _content = CurvedAnimation(
     parent: _controller,
     curve: AppMotion.fadeCurve,
   );
   late final Animation<double> _skeleton = ReverseAnimation(_content);
+
+  void _onStatus(AnimationStatus status) {
+    setState(() {});
+    if (status.isCompleted && !widget.loading) widget.onRevealed?.call();
+  }
 
   /// 這一次換進來的是哪一層：換成內容，或重新載入時長回骨架。
   SkeletonRevealSide _incoming = SkeletonRevealSide.content;
