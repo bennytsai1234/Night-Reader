@@ -351,9 +351,8 @@ class StylePalette extends ThemeExtension<StylePalette> {
     );
   }
 
-  // 照值比較：選了強調色時 [AppStyle.paletteFor] 每次都 copyWith 出一份新
-  // 的掛進主題，沒有照值比較時同一組設定算出的兩份 ThemeData 不相等，App
-  // 根部一重建，整個 App 讀主題的元件都跟著重建（ADR 0018）。
+  // 強調色會讓 [AppStyle.paletteFor] 每次 copyWith 出新物件；照值比較才能
+  // 讓相同設定產生相等的 ThemeData，避免全 App 跟著重建（ADR 0029）。
   @override
   bool operator ==(Object other) =>
       other is StylePalette &&

@@ -58,10 +58,8 @@ enum AppPageTransition {
 /// 把 [AppPageTransition] 掛到 [PageTransitionsTheme]，所有
 /// [MaterialPageRoute]（含開書的 `BookOpenRoute`）都用它。
 ///
-/// 照值比較：`buildAppTheme` 每次都新建一個掛進主題，沒有照值比較時同一組
-/// 設定算出的兩份 `ThemeData` 永遠不相等，App 根部一重建（任何一個設定變
-/// 了），整個 App 讀 `Theme.of` 的元件（含被蓋住的頁面）都跟著重建
-/// （ADR 0018）。
+/// 相同的換頁設定照值比較，App 根部重新套用相同主題時，不連帶重建所有讀
+/// `Theme.of` 的元件（ADR 0018、0029）。
 class AppPageTransitionsBuilder extends PageTransitionsBuilder {
   const AppPageTransitionsBuilder(this.transition);
 

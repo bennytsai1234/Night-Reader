@@ -9,9 +9,14 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/about/about_page.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/settings/reading_settings_page.dart';
+import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/features/settings/tts_settings_page.dart';
+import 'package:night_reader/features/welcome/main_page.dart';
+import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 
 import '../support/app_harness.dart';
@@ -73,17 +78,16 @@ void main() {
     await goBack(tester);
     await rest(tester);
 
-    // 朗讀與語音：開關走頁面自己的狀態。
+    // 朗讀與語音沒有開關，量真正的語速步進，確認值有送進朗讀服務。
     await _open(tester, '朗讀與語音', find.byType(TtsSettingsPage));
-    final ttsSwitch = find.byType(Switch).first;
-    if (ttsSwitch.evaluate().isNotEmpty) {
-      await _measureChange(
-        tester,
-        '朗讀與語音 切換第一個開關',
-        action: () => tester.tap(ttsSwitch),
-      );
-      await rest(tester);
-    }
+    final rate = TTSService().rate;
+    await _measureChange(
+      tester,
+      '朗讀與語音 語速「＋」',
+      action: () => tester.tap(find.byIcon(Icons.add_rounded).first),
+    );
+    expect(TTSService().rate, closeTo(rate + TTSService.rateStep, 0.0001));
+    await rest(tester);
     await goBack(tester);
     await rest(tester);
 
@@ -112,6 +116,45 @@ Future<List<FrameCost>> _measureChange(
   String label, {
   required Future<void> Function() action,
   int frames = 30,
+}) async {
+  final previousRebuild = debugOnRebuildDirtyWidget;
+  final pageBuilds = {
+    for (final type in [
+      ReaderApp,
+      MaterialApp,
+      MainPage,
+      BookshelfPage,
+      SettingsPage,
+      AboutPage,
+      ReadingSettingsPage,
+      TtsSettingsPage,
+    ])
+      type: 0,
+  };
+  debugOnRebuildDirtyWidget = (element, builtOnce) {
+    final type = element.widget.runtimeType;
+    if (pageBuilds.containsKey(type)) {
+      pageBuilds[type] = pageBuilds[type]! + 1;
+    }
+    previousRebuild?.call(element, builtOnce);
+  };
+  try {
+    return await _recordChange(tester, label, action: action, frames: frames);
+  } finally {
+    debugOnRebuildDirtyWidget = previousRebuild;
+    // ignore: avoid_print
+    print(
+      '  頁面重建：'
+      '${pageBuilds.entries.map((entry) => '${entry.key}×${entry.value}').join('、')}',
+    );
+  }
+}
+
+Future<List<FrameCost>> _recordChange(
+  WidgetTester tester,
+  String label, {
+  required Future<void> Function() action,
+  required int frames,
 }) async {
   final clock = Stopwatch()..start();
   await action();

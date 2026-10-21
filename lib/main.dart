@@ -286,8 +286,14 @@ class ReaderApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SettingsProvider, ThemeSettingsProvider>(
-      builder: (context, settings, themeSettings, child) {
+    // 一般設定只有深淺與語言影響 App 根部；更新與替換規則等通知不必重建
+    // 整個 MaterialApp。外觀的每一項都用在主題，仍整體監聽（ADR 0029）。
+    final (themeMode, locale) = context
+        .select<SettingsProvider, (ThemeMode, Locale?)>(
+          (settings) => (settings.themeMode, settings.locale),
+        );
+    return Consumer<ThemeSettingsProvider>(
+      builder: (context, themeSettings, child) {
         return MaterialApp(
           title: kAppDisplayName,
           navigatorKey: rootNavigatorKey,
@@ -308,12 +314,12 @@ class ReaderApp extends StatelessWidget {
             accent: themeSettings.accent,
             pageTransition: themeSettings.pageTransition,
           ),
-          themeMode: settings.themeMode,
+          themeMode: themeMode,
           // 使用者切換深淺或風格時由 ThemeRevealScope 從觸發點暈開新配色，
           // 底下的主題要一次到位；預設 200ms 的漸變會讓暈開的圓裡先露出
           // 半新半舊的顏色。系統自己切換深淺時也直接換。
           themeAnimationStyle: AnimationStyle.noAnimation,
-          locale: settings.locale,
+          locale: locale,
           // 玻璃元件以 BackdropFilter.grouped 共用這裡的背景取樣。
           builder: (context, child) => TransitionOriginRecorder(
             child: ThemeRevealScope(
