@@ -167,19 +167,26 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('偏垂直的拖動捲動清單，不滑出動作', (tester) async {
-      useDeviceTouchSlop(tester);
-      await pumpList(tester, count: 40);
-      final before = tester.getTopLeft(find.text('row3')).dy;
-      await slowDrag(
-        tester,
-        tester.getCenter(find.text('row1')),
-        const Offset(-1, -2),
-        50,
-      );
-      expect(tester.getTopLeft(find.text('row3')).dy, lessThan(before - 50));
-      expect(find.text('刪除'), findsNothing);
-    });
+    // 快快拖時第一個移動事件就兩軸都越過門檻（橫 12、直 18），同時越過時列
+    // 先處理；偏直向的拖動仍要交給清單。
+    for (final (name, step, steps) in [
+      ('慢慢拖', const Offset(-1, -2), 50),
+      ('快快拖', const Offset(-12, -18), 6),
+    ]) {
+      testWidgets('$name：偏垂直的拖動捲動清單，不滑出動作', (tester) async {
+        useDeviceTouchSlop(tester);
+        await pumpList(tester, count: 40);
+        final before = tester.getTopLeft(find.text('row3')).dy;
+        await slowDrag(
+          tester,
+          tester.getCenter(find.text('row1')),
+          step,
+          steps,
+        );
+        expect(tester.getTopLeft(find.text('row3')).dy, lessThan(before - 50));
+        expect(find.text('刪除'), findsNothing);
+      });
+    }
 
     testWidgets('偏水平的拖動滑出動作，清單不捲動', (tester) async {
       useDeviceTouchSlop(tester);

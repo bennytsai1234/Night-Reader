@@ -1006,8 +1006,8 @@ class _ReaderV2ControlsDismissLayerState
   Offset? _downPosition;
   bool _dismissed = false;
 
-  /// 裝置觸控門檻的平方（照 [TapGestureRecognizer]）：移動超過它就和正文
-  /// 開始捲動在同一刻收起選單。
+  /// 裝置觸控門檻的平方（照 [TapGestureRecognizer]）：移動超過它就收起選單，
+  /// 和正文開始捲動用同一個門檻。
   late double _slopSquared;
 
   void _handlePointerDown(PointerDownEvent event) {
