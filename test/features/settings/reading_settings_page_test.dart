@@ -105,7 +105,17 @@ void main() {
     }
 
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('音量鍵翻頁'), 300);
+    // 頁裡還有一個不能捲的清單，指定捲主清單。
+    await tester.scrollUntilVisible(
+      find.text('音量鍵翻頁'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(GroupedListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text('音量鍵翻頁'), findsOneWidget);
   });
 
