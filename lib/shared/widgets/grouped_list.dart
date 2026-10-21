@@ -5,7 +5,6 @@ import '../navigation/app_page_transition.dart';
 import '../navigation/transition_settled.dart';
 import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
-import '../theme/app_layers.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
 import 'press_ink.dart';
@@ -92,14 +91,6 @@ class GroupedSection extends StatelessWidget {
               borderRadius: AppGrouped.cardRadius,
               child: Material(
                 color: chrome.groupedSurface,
-                // 框線畫在列的按下高亮上面，按下時邊不會被蓋掉。
-                shape: RoundedRectangleBorder(
-                  borderRadius: AppGrouped.cardRadius,
-                  side: BorderSide(
-                    color: chrome.cardEdge,
-                    width: AppLayers.edgeWidth,
-                  ),
-                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
@@ -133,8 +124,7 @@ class GroupedSection extends StatelessWidget {
 ///
 /// [GroupedSection] 一次建出所有列；書源、章節這類可能上百列的清單改由
 /// builder 逐列建立，每列自己畫出卡片的對應段落：第一列帶上圓角、最後一列
-/// 帶下圓角，其餘列上方畫髮絲分隔線；外框也每列畫自己那一段，連起來與
-/// [GroupedSection] 的卡片一致。
+/// 帶下圓角，其餘列上方畫髮絲分隔線；連起來與 [GroupedSection] 的卡片一致。
 class GroupedSliceItem extends StatelessWidget {
   const GroupedSliceItem({
     super.key,
@@ -164,65 +154,18 @@ class GroupedSliceItem extends StatelessWidget {
         ),
         child: Material(
           color: chrome.groupedSurface,
-          child: CustomPaint(
-            foregroundPainter: _SliceEdgePainter(
-              color: chrome.cardEdge,
-              first: first,
-              last: last,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!first) InsetSeparator(indent: separatorIndent),
-                child,
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!first) InsetSeparator(indent: separatorIndent),
+              child,
+            ],
           ),
         ),
       ),
     );
   }
-}
-
-/// [GroupedSliceItem] 那一段的外框：整張卡片的圓角框，不是第一列就把上緣
-/// 移到這一列外面、不是最後一列就把下緣移出去，由外層的裁切切掉。
-class _SliceEdgePainter extends CustomPainter {
-  const _SliceEdgePainter({
-    required this.color,
-    required this.first,
-    required this.last,
-  });
-
-  final Color color;
-  final bool first;
-  final bool last;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const inset = AppLayers.edgeWidth / 2;
-    const outside = AppGrouped.radius * 2;
-    final rect = Rect.fromLTRB(
-      inset,
-      first ? inset : -outside,
-      size.width - inset,
-      last ? size.height - inset : size.height + outside,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect,
-        const Radius.circular(AppGrouped.radius - inset),
-      ),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = AppLayers.edgeWidth
-        ..color = color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_SliceEdgePainter old) =>
-      color != old.color || first != old.first || last != old.last;
 }
 
 /// 從 [indent] 起畫的髮絲分隔線；分組卡片與平鋪清單（搜尋結果、發現書籍）

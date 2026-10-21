@@ -14,7 +14,7 @@
 - **搜尋相關度排序先不改**（2026-10-15）：使用者聽完「完全相符／部分相符／其他結果，段內照書源數」的說明後覺得可能不用改。曾提出但沒做的三個選項：部分相符裡書名命中排在只有作者命中前、同書源數時書名開頭命中優先、空白分開的多個詞各自比對。使用者回報某個關鍵字排序不對時再從這裡挑。
 - **搜尋結果不顯示書源名稱**（2026-10-15）：使用者說沒人在乎來源；書名旁的「N 個書源」數量標記保留，使用者沒說要拿掉。
 - **別再用使用者的手機量測**（2026-10-14）。之後若使用者同意再量，做法：profile 建置用一個不提交的入口（`main()` 之後把 `developer.Service.getInfo()` 的 ws 位址寫進 `getExternalStorageDirectory()`），因為 vivo 會把 logcat 裡的 VM service 位址遮掉，intent 參數在這個 App 也不生效；電腦用 `vm_service` 連上後 `setFlag('profiler','true')`，收 `Flutter.Frame` 事件與 `getCpuSamples`，把 UI isolate 連續忙碌超過 8 ms 的區段依堆疊歸類。profile 版和正式版並存；vivo 用 adb 安裝會跳確認頁（勾「已瞭解」再按「繼續安裝」）。
-- **配色沒有對比度規則**（2026-10-14）：配色手調個大概就好，不行使用者會回報；不要照審查工具的對比度意見調色。頁面、卡片與框線的分層規則（`AppLayers`，2026-10-20）是使用者要的，不在此限。還留著 `StylePalette.onPrimary`（主色上的字取紙白或墨色中看得清楚的那個）、`AppTint` 顏料色的兩個對比測試、骨架淡色的深淺測試；使用者若也要拿掉再處理。
+- **配色沒有對比度規則**（2026-10-14）：配色手調個大概就好，不行使用者會回報；不要照審查工具的對比度意見調色。頁面與卡片的分層規則（`AppLayers`，2026-10-20）是使用者要的，不在此限；框線 2026-10-21 使用者說不要，改成拉大底色差距（DESIGN.md「色彩與材質層次」）。還留著 `StylePalette.onPrimary`（主色上的字取紙白或墨色中看得清楚的那個）、`AppTint` 顏料色的兩個對比測試、骨架淡色的深淺測試；使用者若也要拿掉再處理。
 
 ## 進行中：閱讀偏好與設定頁第一格
 
@@ -27,6 +27,7 @@
   - 閱讀偏好的設定區塊改成 `ReaderV2SettingsGroups`（`reader_v2_settings_sections.dart`），每列只依賴自己的值（`_Watch`、`_StagedStepper`，步進 120 ms 沒再按才提交）；閱讀偏好頁與閱讀器排版面板共用。
   - 關於夜讀的版本與自動更新列改用 `ValueNotifier`，只重建那一列。
   - 新測試：`test/frame_budget/reader_settings_frame_budget_test.dart`（從閱讀器推入閱讀偏好）；`test/features/settings/reading_settings_page_test.dart`（**目前會失敗**：`tester.pageBack()` 要改成 `Navigator.pop`；「第一格只建畫面上的組」那條要照骨架做法改寫；「按字號只重建字號那一列」收到空集合，要查）。
+- **同一條分支順便做了（2026-10-21 使用者要求）**：卡片、書卡與玻璃拿掉框線，頁面到卡片的差距淺色 9→12、深色 12→15，五種風格的底色與 Android 啟動畫面底色重算；紙墨淺深的前後截圖已給使用者看。
 - **還沒做**：`GroupedListView` 的骨架進場（設計：掛載時路由還在進場 `route.offstage || !animation.isCompleted` 才用；骨架每組畫標題條＋同樣的卡片＋每列一條 `SkeletonLine`，有列首就畫圖示方塊；列高照上次看過那一頁時記下的版面，沒有紀錄時照列的種類估 44／高列；`CoverRevealSlot` 的佔位給同樣高度）；拿掉 cacheExtent 0；改上面那個失敗的測試、加骨架與建構次數的回歸測試；量每頁第 0 格與換場中最差的一格；ADR 0029 補取捨（PressInk 不接鍵盤焦點、路由焦點邊界、設定頁骨架進場）、DESIGN.md「載入骨架」寫設定頁先畫骨架、CHANGELOG `## 未發布`、本節改成合併後的狀態；Codex 審查、PR。
 - **目前數字**（電腦 debug，中位數 ms，`<8` 表示沒超過 8 ms；骨架還沒做）：第 0 格 beta → 現在：閱讀偏好 51.4 → 36.1、外觀與主題 21.5 → 22.3、朗讀與語音 19.9 → 23.6、閱讀統計 <8 → 8.9、書源管理 16.9 → 18.6、背景下載佇列 28.3 → 31.1、備份與還原 11.3 → 9.1、關於夜讀 21.4 → 20.8；閱讀偏好第 1 格 8.3 → <8、關於夜讀第 1 格 8.9 → <8；返回「我的」全部 <8。第 0 格建的元件數 beta → 現在：閱讀偏好 1296 → 607、關於 458 → 358、外觀 373 → 323、朗讀 325 → 259、備份 212 → 190、統計 152 → 146。推入一頁的固定成本（導覽、Scaffold、`GlassNavHeader`）約 140–150 個元件、9–12 ms，只靠精簡內容到不了 8 ms，所以才要骨架。機器上同時有別的測試在跑時數字很飄，要和 beta 交錯跑、看中位數與最小值，元件數最穩。
 - **量法**：開一個 beta 的對照 worktree（`git worktree add %TEMP%\nr-prefs-base beta`，sqlite3.dll 照下面「注意」複製），兩邊交錯各跑兩次：`FRAME_ATTRIBUTE=1 flutter test --run-skipped -t frame_budget test/frame_budget/mine_frame_budget_test.dart`（從「我的」推入與返回各頁）與 `test/frame_budget/reader_settings_frame_budget_test.dart`（從閱讀器推入閱讀偏好）；`FRAME_ATTRIBUTE=1` 會把超過 8 ms 的格依元件類型歸類。元件數用 `debugOnRebuildDirtyWidget` 數。

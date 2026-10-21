@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'app_layers.dart';
 import 'app_tokens.dart';
 
 /// 分組清單與玻璃元件使用的衍生色。
@@ -13,12 +12,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
   const AppChrome({
     required this.groupedBackground,
     required this.groupedSurface,
-    required this.cardEdge,
     required this.separator,
     required this.sectionText,
     required this.pressedHighlight,
     required this.glassTint,
-    required this.glassBorder,
     required this.glassShadow,
     required this.selectionLens,
     required this.barrier,
@@ -34,9 +31,6 @@ class AppChrome extends ThemeExtension<AppChrome> {
   /// 分組卡片底色。
   final Color groupedSurface;
 
-  /// 卡片（分組卡片、書架書卡）外圍的框線，寬 [AppLayers.edgeWidth]。
-  final Color cardEdge;
-
   /// 列與列之間的髮絲分隔線。
   final Color separator;
 
@@ -48,9 +42,6 @@ class AppChrome extends ThemeExtension<AppChrome> {
 
   /// 玻璃材質的紙／墨色調（已含透明度）。
   final Color glassTint;
-
-  /// 玻璃外圍的框線，寬 [AppLayers.edgeWidth]。
-  final Color glassBorder;
 
   /// 浮動玻璃元件的漫射陰影。
   final Color glassShadow;
@@ -86,12 +77,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
       glassStrength: glassStrength,
       groupedBackground: background,
       groupedSurface: surface,
-      cardEdge: AppLayers.edgeOn(surface, textPrimary),
       separator: border.withValues(alpha: isLight ? 0.75 : 0.9),
       sectionText: textSecondary,
       pressedHighlight: textPrimary.withValues(alpha: isLight ? 0.06 : 0.08),
       glassTint: bar.withValues(alpha: glassStrength.opacity(dark: !isLight)),
-      glassBorder: AppLayers.edgeOn(bar, textPrimary),
       glassShadow: isLight
           ? textPrimary.withValues(alpha: 0.1)
           : const Color(0x59000000),
@@ -141,12 +130,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
   AppChrome copyWith({
     Color? groupedBackground,
     Color? groupedSurface,
-    Color? cardEdge,
     Color? separator,
     Color? sectionText,
     Color? pressedHighlight,
     Color? glassTint,
-    Color? glassBorder,
     Color? glassShadow,
     Color? selectionLens,
     Color? barrier,
@@ -158,12 +145,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
     return AppChrome(
       groupedBackground: groupedBackground ?? this.groupedBackground,
       groupedSurface: groupedSurface ?? this.groupedSurface,
-      cardEdge: cardEdge ?? this.cardEdge,
       separator: separator ?? this.separator,
       sectionText: sectionText ?? this.sectionText,
       pressedHighlight: pressedHighlight ?? this.pressedHighlight,
       glassTint: glassTint ?? this.glassTint,
-      glassBorder: glassBorder ?? this.glassBorder,
       glassShadow: glassShadow ?? this.glassShadow,
       selectionLens: selectionLens ?? this.selectionLens,
       barrier: barrier ?? this.barrier,
@@ -182,12 +167,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
       other is AppChrome &&
       other.groupedBackground == groupedBackground &&
       other.groupedSurface == groupedSurface &&
-      other.cardEdge == cardEdge &&
       other.separator == separator &&
       other.sectionText == sectionText &&
       other.pressedHighlight == pressedHighlight &&
       other.glassTint == glassTint &&
-      other.glassBorder == glassBorder &&
       other.glassShadow == glassShadow &&
       other.selectionLens == selectionLens &&
       other.barrier == barrier &&
@@ -200,12 +183,10 @@ class AppChrome extends ThemeExtension<AppChrome> {
   int get hashCode => Object.hash(
     groupedBackground,
     groupedSurface,
-    cardEdge,
     separator,
     sectionText,
     pressedHighlight,
     glassTint,
-    glassBorder,
     glassShadow,
     selectionLens,
     barrier,
@@ -225,7 +206,6 @@ class AppChrome extends ThemeExtension<AppChrome> {
         t,
       )!,
       groupedSurface: Color.lerp(groupedSurface, other.groupedSurface, t)!,
-      cardEdge: Color.lerp(cardEdge, other.cardEdge, t)!,
       separator: Color.lerp(separator, other.separator, t)!,
       sectionText: Color.lerp(sectionText, other.sectionText, t)!,
       pressedHighlight: Color.lerp(
@@ -234,7 +214,6 @@ class AppChrome extends ThemeExtension<AppChrome> {
         t,
       )!,
       glassTint: Color.lerp(glassTint, other.glassTint, t)!,
-      glassBorder: Color.lerp(glassBorder, other.glassBorder, t)!,
       glassShadow: Color.lerp(glassShadow, other.glassShadow, t)!,
       selectionLens: Color.lerp(selectionLens, other.selectionLens, t)!,
       barrier: Color.lerp(barrier, other.barrier, t)!,
