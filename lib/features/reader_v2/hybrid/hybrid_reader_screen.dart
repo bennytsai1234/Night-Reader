@@ -126,7 +126,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   HybridScrollController? _scrollController;
   _PageTurn? _pageTurn;
   Size _viewportSize = Size.zero;
-  double? _pendingScrollOffset;
+
+  /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，
+  /// 每次照當下的大小與範圍用 [_restingOffset] 算：等 viewport 的這幾幀
+  /// 正文區變了大小，建立捲動時用的也是新的位置。
+  ({HybridAnchor anchor, ChapterBlocks blocks})? _pendingAnchor;
+
+  double? get _pendingScrollOffset {
+    final pending = _pendingAnchor;
+    return pending == null
+        ? null
+        : _restingOffset(pending.anchor, pending.blocks);
+  }
+
   ReaderV2OperationToken? _demandOwner;
   int _windowCenter = 0;
   int _lastLayoutGeneration = 0;
@@ -452,76 +464,47 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           !await _showFirstPage(anchor, blocks, isCurrent: isCurrent)) {
         return false;
       }
-      restoreLoop:
-      while (isCurrent()) {
-        final revision = _documentIndex.revisionNumber;
-        final target = _offsetForAnchor(anchor, blocks);
-        final readyTop = _readyWorldTop(
-          target: target ?? 0,
-          operationOwnsReadyWorld: operationOwnsReadyWorld,
+      Future<bool> layOut() async {
+        final target = await _layOutAround(
+          anchor,
+          blocks,
+          withLead: operationOwnsReadyWorld,
+          isCurrent: isCurrent,
         );
-        final readyBottom = _readyWorldBottom(
-          target: target ?? 0,
-          operationOwnsReadyWorld: operationOwnsReadyWorld,
-        );
-        pipeline.requestWindow(
-          readyTop,
-          readyBottom,
-          anchorKey: anchor.blockKey,
-        );
-        final positionedTarget = _offsetForAnchor(anchor, blocks);
-        if (positionedTarget != null &&
-            pipeline.windowReady(
-              _readyWorldTop(
-                target: positionedTarget,
-                operationOwnsReadyWorld: operationOwnsReadyWorld,
-              ),
-              _readyWorldBottom(
-                target: positionedTarget,
-                operationOwnsReadyWorld: operationOwnsReadyWorld,
-              ),
-            )) {
-          break;
+        if (!isCurrent()) return false;
+        if (target == null) {
+          throw StateError(
+            'Hybrid restore target has no admitted anchor geometry after '
+            'materialization completed.',
+          );
         }
-        // Cached exact metrics may advance admission synchronously, without
-        // creating a layout task. Re-evaluate that progress before waiting.
-        if (_documentIndex.revisionNumber != revision) continue;
-        final wait = await pipeline.waitForProgress(isCurrent);
-        switch (wait) {
-          case MaterializationWait.progressed:
-            continue;
-          case MaterializationWait.frontierUnavailable:
-            break restoreLoop;
-          case MaterializationWait.cancelled:
-            return false;
-        }
+        return true;
       }
-      if (!isCurrent()) return false;
-      final target = _offsetForAnchor(anchor, blocks);
-      if (target == null) {
-        throw StateError(
-          'Hybrid restore target has no admitted anchor geometry after '
-          'materialization completed.',
-        );
-      }
-      _pendingScrollOffset = target;
+
+      if (!await layOut()) return false;
+      var laidOutFor = _viewportSize;
+      _pendingAnchor = (anchor: anchor, blocks: blocks);
       _lastReportedLocation = normalized;
       _setRestoreCompleted(true);
       pipeline.onScrollStateChanged(PumpState.rebuilding);
       _scheduleRebuild();
-      // Return only after the native viewport exists and has applied the
-      // position. This is a Flutter frame transaction, not a prefetch barrier.
-      do {
-        await _nextFrame();
-        if (!isCurrent()) return false;
-      } while (_rebuildQueued || !(_scrollController?.hasClients ?? false));
-      final position = _scrollController!.position;
-      position.jumpTo(
-        target
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble(),
-      );
-      _pendingScrollOffset = null;
+      while (true) {
+        // Return only after the native viewport exists and has applied the
+        // position. This is a Flutter frame transaction, not a prefetch
+        // barrier.
+        do {
+          await _nextFrame();
+          if (!isCurrent()) return false;
+        } while (_rebuildQueued || !(_scrollController?.hasClients ?? false));
+        if (_viewportSize == laidOutFor) break;
+        // 等這幾幀時正文區的大小變了：要排好的範圍跟著高度走，照新的大小
+        // 排好、等 viewport 套上新的範圍再提交。
+        laidOutFor = _viewportSize;
+        if (!await layOut()) return false;
+      }
+      // 照提交這一刻的大小與範圍算停住的位置，不用再夾。
+      _scrollController!.position.jumpTo(_restingOffset(anchor, blocks)!);
+      _pendingAnchor = null;
       await _nextFrame();
       if (!isCurrent()) return false;
       _reconcileVisibleWindow();
@@ -536,24 +519,92 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
-  double _readyWorldTop({
-    required double target,
-    required bool operationOwnsReadyWorld,
-  }) {
-    if (!operationOwnsReadyWorld) return target;
-    // Open and jump commit into the same backward lead invariant used by
-    // steady-state scrolling. The first interactive frame therefore starts
-    // warm instead of asking the user gesture to build the lead afterward.
-    return target - _admission.backwardGuaranteedWindow;
+  /// 還原到 [anchor] 時捲動最後停住的位置：錨點那一行對到錨線的位置，在
+  /// 正文不會再變多的一側（[HybridLayoutPipeline.edgeFinal]）夾進可捲的
+  /// 範圍，和 viewport 自己夾的一樣（有中心 sliver：最小
+  /// min(0, −beforeExtent)，最大 max(0, afterExtent − 高)）。還會排進正文
+  /// 的一側不夾，範圍還會變大。第一頁的骨架、還原前要排好的範圍與最後的
+  /// `jumpTo` 都照這個位置，錨點還沒排進來時回傳 null。
+  double? _restingOffset(HybridAnchor anchor, ChapterBlocks blocks) {
+    final offset = _offsetForAnchor(anchor, blocks);
+    if (offset == null) return null;
+    var result = offset;
+    if (_pipeline.edgeFinal(forward: true)) {
+      result = math.min(
+        result,
+        math.max(0.0, _documentIndex.afterExtent - _viewportSize.height),
+      );
+    }
+    if (_pipeline.edgeFinal(forward: false)) {
+      result = math.max(result, math.min(0.0, -_documentIndex.beforeExtent));
+    }
+    return result;
   }
 
-  double _readyWorldBottom({
-    required double target,
-    required bool operationOwnsReadyWorld,
+  /// 捲動停在 [resting] 時還原完成前要排好的範圍：那一屏；[withLead] 時
+  /// 再加上前後的領先量（開書與跳章，和平常捲動時相同，第一個能操作的
+  /// 畫面不用等手勢再補）。正文不會再變多的一側只到排好的邊緣為止。
+  ({double top, double bottom}) _readyWindow(
+    double resting, {
+    required bool withLead,
   }) {
-    final viewportBottom = target + math.max(1, _viewportSize.height);
-    if (!operationOwnsReadyWorld) return viewportBottom;
-    return viewportBottom + _admission.guaranteedWindow;
+    var top = resting;
+    var bottom = resting + math.max(1, _viewportSize.height);
+    if (withLead) {
+      top -= _admission.backwardGuaranteedWindow;
+      bottom += _admission.guaranteedWindow;
+    }
+    if (_pipeline.edgeFinal(forward: false)) {
+      top = math.max(top, -_documentIndex.beforeExtent);
+    }
+    if (_pipeline.edgeFinal(forward: true)) {
+      bottom = math.min(bottom, _documentIndex.afterExtent);
+    }
+    return (top: top, bottom: bottom);
+  }
+
+  /// 排到捲動停在 [anchor] 時 [_readyWindow] 的正文都排好，回傳停住的位置。
+  /// 剛取不到的章節讓那一側不再變多、停住的位置跟著移動時，照新的位置
+  /// 再排；再也排不進更多時照已經排好的回傳。錨點一直沒排進來或作廢時
+  /// 回傳 null。
+  Future<double?> _layOutAround(
+    HybridAnchor anchor,
+    ChapterBlocks blocks, {
+    required bool withLead,
+    required bool Function() isCurrent,
+  }) async {
+    final pipeline = _pipeline;
+    while (isCurrent()) {
+      final revision = _documentIndex.revisionNumber;
+      final requested = _readyWindow(
+        _restingOffset(anchor, blocks) ?? 0,
+        withLead: withLead,
+      );
+      pipeline.requestWindow(
+        requested.top,
+        requested.bottom,
+        anchorKey: anchor.blockKey,
+      );
+      final resting = _restingOffset(anchor, blocks);
+      if (resting != null) {
+        final ready = _readyWindow(resting, withLead: withLead);
+        if (pipeline.windowReady(ready.top, ready.bottom)) return resting;
+      }
+      // Cached exact metrics may advance admission synchronously, without
+      // creating a layout task. Re-evaluate that progress before waiting.
+      if (_documentIndex.revisionNumber != revision) continue;
+      switch (await pipeline.waitForProgress(isCurrent)) {
+        case MaterializationWait.progressed:
+          continue;
+        case MaterializationWait.frontierUnavailable:
+          final settled = _restingOffset(anchor, blocks);
+          if (settled != null && settled != resting) continue;
+          return settled;
+        case MaterializationWait.cancelled:
+          return null;
+      }
+    }
+    return null;
   }
 
   Future<void> _nextFrame() {
@@ -1559,47 +1610,23 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   /// 先只排第一頁、照它淡入骨架，淡入播完才回去排前後其他頁（ADR 0016、
-  /// 0023）。前後取不到時，第一頁照捲動實際停得住的位置重排。
+  /// 0023）。第一頁照捲動停住的位置（[_restingOffset]）排，和掀開後的正文
+  /// 一致。
   Future<bool> _showFirstPage(
     HybridAnchor anchor,
     ChapterBlocks blocks, {
     required bool Function() isCurrent,
   }) async {
-    final pipeline = _pipeline;
-    final height = math.max(1.0, _viewportSize.height);
-    var edgesFinal = false;
-    while (isCurrent()) {
-      final revision = _documentIndex.revisionNumber;
-      final top = _settledScrollOffset(
-        _offsetForAnchor(anchor, blocks) ?? 0,
-        edgesFinal: edgesFinal,
-      );
-      pipeline.requestWindow(top, top + height, anchorKey: anchor.blockKey);
-      final positioned = _offsetForAnchor(anchor, blocks);
-      final page = positioned == null
-          ? null
-          : _settledScrollOffset(positioned, edgesFinal: edgesFinal);
-      if (page != null && pipeline.windowReady(page, page + height)) {
-        return _fadeInPageSkeleton(page, isCurrent);
-      }
-      if (_documentIndex.revisionNumber != revision) continue;
-      switch (await pipeline.waitForProgress(isCurrent)) {
-        case MaterializationWait.progressed:
-          continue;
-        case MaterializationWait.frontierUnavailable:
-          if (!edgesFinal) {
-            edgesFinal = true;
-            continue;
-          }
-          // 再也排不進更多：照已經排好的那些行畫。
-          return page == null
-              ? isCurrent()
-              : _fadeInPageSkeleton(page, isCurrent);
-        case MaterializationWait.cancelled:
-          return false;
-      }
-    }
-    return false;
+    final page = await _layOutAround(
+      anchor,
+      blocks,
+      withLead: false,
+      isCurrent: isCurrent,
+    );
+    if (!isCurrent()) return false;
+    // 一行都沒排進來：沒有骨架可畫，交給後面的還原。
+    if (page == null) return true;
+    return _fadeInPageSkeleton(page, isCurrent);
   }
 
   /// 紙上的骨架換成捲動位置在 [offset] 時的那一頁：畫著的骨架先淡完，
@@ -1620,24 +1647,6 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (!isCurrent()) return false;
     }
     return isCurrent();
-  }
-
-  /// 捲動實際停得住的位置，和還原最後的 `jumpTo` 夾的範圍相同（有中心
-  /// sliver 的 viewport：最小 -beforeExtent，最大 max(0, afterExtent − 高)）。
-  /// 書頭書尾排進來、或 [edgesFinal]（前後再也取不到）時才夾那一側：
-  /// 否則還有內容會排進來，範圍還會變大。
-  double _settledScrollOffset(double offset, {required bool edgesFinal}) {
-    var result = offset;
-    if (edgesFinal || _admission.atForwardBookBoundary) {
-      result = math.min(
-        result,
-        math.max(0.0, _documentIndex.afterExtent - _viewportSize.height),
-      );
-    }
-    if (edgesFinal || _admission.atBackwardBookBoundary) {
-      result = math.max(result, -_documentIndex.beforeExtent);
-    }
-    return result;
   }
 
   /// 捲動位置在 [offset] 時畫面上每一行字的位置（viewport 座標），與其中
