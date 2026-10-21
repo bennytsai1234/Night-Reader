@@ -1130,6 +1130,69 @@ void main() {
     );
   });
 
+  testWidgets('a resize while the text appears restores for the new size', (
+    tester,
+  ) async {
+    // 一章很短的書，從一章往下 120 的位置打開：矮的正文區還捲得到那裡，
+    // 變高之後整章不到一屏、捲動只能停在 0。
+    tester.view.physicalSize = const Size(400, 100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    runtime = _makeRuntime(
+      chapterCount: 1,
+      paragraphs: 5,
+      initialLocation: const ReaderV2Location(
+        chapterIndex: 0,
+        charOffset: 0,
+        visualOffsetPx: 120,
+      ),
+    );
+    addTearDown(runtime.dispose);
+    final outside = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification.metrics.outOfRange) {
+              outside.add(notification.metrics.pixels);
+            }
+            return false;
+          },
+          child: HybridReaderScreen(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style,
+            enableDiskCache: false,
+            preprocessor: const TextPreprocessor(useIsolate: false),
+          ),
+        ),
+      ),
+    );
+    unawaited(runtime.openBook());
+    var resized = false;
+    for (
+      var frame = 0;
+      frame < 2000 && !runtime.state.hasStableWorld;
+      frame++
+    ) {
+      // 紙開始掀開時停住的位置已經算好，正文的捲動位置還沒套上。
+      final veil = find.byType(LoadingVeil);
+      if (!resized &&
+          veil.evaluate().isNotEmpty &&
+          tester.widget<LoadingVeil>(veil).controller.isRevealing) {
+        tester.view.physicalSize = _viewport;
+        resized = true;
+      }
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(resized, isTrue);
+    expect(runtime.state.hasStableWorld, isTrue);
+    expect(outside, isEmpty, reason: '還原不會跳到捲不到的位置');
+    final position = scrollPosition(tester);
+    expect(position.pixels, closeTo(position.maxScrollExtent, 0.5));
+  });
+
   testWidgets('opened at a chapter start, an unavailable previous chapter is '
       'reported and retried at the top', (tester) async {
     var requests = 0;

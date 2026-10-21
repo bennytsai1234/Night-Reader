@@ -126,7 +126,19 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   HybridScrollController? _scrollController;
   _PageTurn? _pageTurn;
   Size _viewportSize = Size.zero;
-  double? _pendingScrollOffset;
+
+  /// 還原已經排好、原生捲動位置還沒套上時要停的錨點。位置不存成數字，
+  /// 每次照當下的大小與範圍用 [_restingOffset] 算：等 viewport 的這幾幀
+  /// 正文區變了大小，建立捲動時用的也是新的位置。
+  ({HybridAnchor anchor, ChapterBlocks blocks})? _pendingAnchor;
+
+  double? get _pendingScrollOffset {
+    final pending = _pendingAnchor;
+    return pending == null
+        ? null
+        : _restingOffset(pending.anchor, pending.blocks);
+  }
+
   ReaderV2OperationToken? _demandOwner;
   int _windowCenter = 0;
   int _lastLayoutGeneration = 0;
@@ -452,33 +464,47 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           !await _showFirstPage(anchor, blocks, isCurrent: isCurrent)) {
         return false;
       }
-      final target = await _layOutAround(
-        anchor,
-        blocks,
-        withLead: operationOwnsReadyWorld,
-        isCurrent: isCurrent,
-      );
-      if (!isCurrent()) return false;
-      if (target == null) {
-        throw StateError(
-          'Hybrid restore target has no admitted anchor geometry after '
-          'materialization completed.',
+      Future<bool> layOut() async {
+        final target = await _layOutAround(
+          anchor,
+          blocks,
+          withLead: operationOwnsReadyWorld,
+          isCurrent: isCurrent,
         );
+        if (!isCurrent()) return false;
+        if (target == null) {
+          throw StateError(
+            'Hybrid restore target has no admitted anchor geometry after '
+            'materialization completed.',
+          );
+        }
+        return true;
       }
-      _pendingScrollOffset = target;
+
+      if (!await layOut()) return false;
+      var laidOutFor = _viewportSize;
+      _pendingAnchor = (anchor: anchor, blocks: blocks);
       _lastReportedLocation = normalized;
       _setRestoreCompleted(true);
       pipeline.onScrollStateChanged(PumpState.rebuilding);
       _scheduleRebuild();
-      // Return only after the native viewport exists and has applied the
-      // position. This is a Flutter frame transaction, not a prefetch barrier.
-      do {
-        await _nextFrame();
-        if (!isCurrent()) return false;
-      } while (_rebuildQueued || !(_scrollController?.hasClients ?? false));
-      // target 已經是捲動停得住的位置（見 [_restingOffset]），不用再夾。
-      _scrollController!.position.jumpTo(target);
-      _pendingScrollOffset = null;
+      while (true) {
+        // Return only after the native viewport exists and has applied the
+        // position. This is a Flutter frame transaction, not a prefetch
+        // barrier.
+        do {
+          await _nextFrame();
+          if (!isCurrent()) return false;
+        } while (_rebuildQueued || !(_scrollController?.hasClients ?? false));
+        if (_viewportSize == laidOutFor) break;
+        // 等這幾幀時正文區的大小變了：要排好的範圍跟著高度走，照新的大小
+        // 排好、等 viewport 套上新的範圍再提交。
+        laidOutFor = _viewportSize;
+        if (!await layOut()) return false;
+      }
+      // 照提交這一刻的大小與範圍算停住的位置，不用再夾。
+      _scrollController!.position.jumpTo(_restingOffset(anchor, blocks)!);
+      _pendingAnchor = null;
       await _nextFrame();
       if (!isCurrent()) return false;
       _reconcileVisibleWindow();
