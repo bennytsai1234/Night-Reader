@@ -58,9 +58,12 @@ void main() {
 
   testWidgets('推入與返回時，頁面裡的控制項不跟著路由的焦點重建', (tester) async {
     await pumpHost(tester);
+    // `builtOnce` 只在 debugPrintRebuildDirtyWidgets 開著時才會是 true，
+    // 自己記：第二次經過的元素才是重建。
+    final built = <Element>{};
     final rebuilt = <String>[];
-    debugOnRebuildDirtyWidget = (element, builtOnce) {
-      if (builtOnce && element.widget is Focus && inPage(element)) {
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is Focus && inPage(element) && !built.add(element)) {
         rebuilt.add(element.widget.toStringShort());
       }
     };
@@ -68,7 +71,7 @@ void main() {
       await tester.tap(find.text('開啟'));
       await tester.pumpAndSettle();
       expect(find.byType(ReadingSettingsPage), findsOneWidget);
-      await tester.pageBack();
+      Navigator.of(tester.element(find.byType(ReadingSettingsPage))).pop();
       await tester.pumpAndSettle();
       expect(find.byType(ReadingSettingsPage), findsNothing);
     } finally {
@@ -111,19 +114,26 @@ void main() {
     await tester.tap(find.text('開啟'));
     await tester.pumpAndSettle();
 
-    final rebuilt = <String>[];
-    debugOnRebuildDirtyWidget = (element, builtOnce) {
-      if (!builtOnce || !inPage(element)) return;
-      switch (element.widget) {
-        case NumberStepperRow(:final label):
-          rebuilt.add(label);
-        case GroupedSwitchRow(:final title):
-          rebuilt.add(title);
-        case GroupedRow(:final title):
-          rebuilt.add(title);
-        case GlassSegmented():
-          rebuilt.add('GlassSegmented');
-      }
+    // 每個重建的元件記在它所在的那一列（往上找）；不在任何一列裡的（清單
+    // 的 keep-alive、組標題的「恢復預設」）不算。子元件換了新的 widget 也會
+    // 經過這個回呼，整頁重建時每一列都會被記到。
+    final rebuilt = <String>{};
+    String? rowLabel(Widget widget) => switch (widget) {
+      NumberStepperRow(:final label) => label,
+      GroupedSwitchRow(:final title) => title,
+      GroupedRow(:final title) => title,
+      GlassSegmented() => 'GlassSegmented',
+      _ => null,
+    };
+    // 頁面已經建好，這之後經過的都是重建。
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (!inPage(element)) return;
+      var label = rowLabel(element.widget);
+      element.visitAncestorElements((ancestor) {
+        label ??= rowLabel(ancestor.widget);
+        return label == null;
+      });
+      if (label != null) rebuilt.add(label!);
     };
     try {
       await tester.tap(find.byIcon(Icons.add_rounded).first);
@@ -135,6 +145,6 @@ void main() {
       debugOnRebuildDirtyWidget = null;
     }
     expect(find.text('18.5'), findsOneWidget);
-    expect(rebuilt.toSet(), {'字號'});
+    expect(rebuilt, {'字號'});
   });
 }
