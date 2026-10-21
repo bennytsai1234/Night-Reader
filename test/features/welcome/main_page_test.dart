@@ -324,6 +324,35 @@ void main() {
       expect(find.text('丙10'), findsOneWidget);
     });
 
+    testWidgets('after a gesture the main page is not rebuilt when a page is '
+        'pushed over it or comes back', (tester) async {
+      await openThirdTab(tester);
+      // 開始手勢時要看主頁是不是最上層；看的方式不能讓主頁從此依賴路由狀態。
+      await send(tester, 'startBackGesture', event(0, 0));
+      await tester.pump();
+      await send(tester, 'cancelBackGesture');
+      await tester.pumpAndSettle();
+
+      var builds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget is MainPage) builds++;
+      };
+      try {
+        Navigator.push(
+          tester.element(find.text('丙10')),
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('上面那頁')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        Navigator.pop(tester.element(find.text('上面那頁')));
+        await tester.pumpAndSettle();
+      } finally {
+        debugOnRebuildDirtyWidget = null;
+      }
+      expect(builds, 0);
+    });
+
     testWidgets('on the shelf the gesture is left to the system', (
       tester,
     ) async {
