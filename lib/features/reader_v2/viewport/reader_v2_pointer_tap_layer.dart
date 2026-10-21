@@ -5,8 +5,6 @@ import 'package:flutter/rendering.dart';
 /// 按下的那一刻詢問：這次觸碰是否只是用來停住正在進行的捲動。
 typedef ReaderV2PointerDownTapPolicy = bool Function();
 
-const double _stationaryTapToleranceSquared = kTouchSlop * kTouchSlop;
-
 class ReaderV2PointerTapLayer extends StatefulWidget {
   const ReaderV2PointerTapLayer({
     super.key,
@@ -37,6 +35,10 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
   /// 最近一次命中測試的結果；緊接著派送的按下事件會取走它。
   bool _suppressAtHitTest = false;
 
+  /// 裝置觸控門檻的平方（照 [TapGestureRecognizer]）：移動超過它就不算點擊。
+  /// 正文的捲動也用這個門檻，拖一小段捲了正文就不會再翻頁或開選單。
+  late double _slopSquared;
+
   void _handleHitTest() {
     _suppressAtHitTest =
         widget.onTapUp != null &&
@@ -66,8 +68,7 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
     if (event.pointer != _pointer) return;
     final downPosition = _downPosition;
     if (downPosition == null) return;
-    if ((event.position - downPosition).distanceSquared >
-        _stationaryTapToleranceSquared) {
+    if ((event.position - downPosition).distanceSquared > _slopSquared) {
       _dragged = true;
     }
   }
@@ -106,6 +107,9 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
 
   @override
   Widget build(BuildContext context) {
+    final slop =
+        MediaQuery.maybeGestureSettingsOf(context)?.touchSlop ?? kTouchSlop;
+    _slopSquared = slop * slop;
     final enabled = widget.onTapUp != null;
     // 樹的形狀不隨啟用與否改變，正文（含捲動位置）才不會被重新掛載。
     return _HitTestProbe(
