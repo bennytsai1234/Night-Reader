@@ -68,11 +68,13 @@ final bool frameAttribution = Platform.environment['FRAME_ATTRIBUTE'] == '1';
 /// 一幀一幀推進（每幀 [frameDuration]），直到 [until] 成立後再多 [tailFrames]
 /// 幀，記下每一幀的成本。[realAsync] 時每幀之間讓出真實時間，給跑在真的
 /// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
-/// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。
+/// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。[onFrame] 在每一幀
+/// 開始前呼叫（帶幀序號），拖動這類手勢一幀送一步；它花的時間算在幀前。
 Future<List<FrameCost>> recordFrames(
   WidgetTester tester, {
   required bool Function() until,
   String? Function()? note,
+  Future<void> Function(int frame)? onFrame,
   int tailFrames = 0,
   int maxFrames = 1200,
   Duration frameDuration = const Duration(milliseconds: 16),
@@ -125,6 +127,7 @@ Future<List<FrameCost>> recordFrames(
       });
       if (frameAttribution) FlutterTimeline.debugReset();
       final start = clock.elapsedMicroseconds;
+      if (onFrame != null) await onFrame(index);
       await tester.pump(frameDuration);
       final stop = clock.elapsedMicroseconds;
       final top = frameAttribution
