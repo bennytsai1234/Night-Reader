@@ -22,7 +22,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   /// 時才標出檢查失敗的書。
   bool _userRefreshed = false;
 
-  /// 書架檢查後角標掛多久（DESIGN.md「書籍卡片與清單」）。
+  /// 書架檢查後角標掛多久（DESIGN.md「各畫面 → 書架」）。
   static const Duration updateBadgeDuration = Duration(seconds: 5);
 
   /// 上一次書架檢查的結果，只留有新章節或檢查失敗的書；不存檔，
