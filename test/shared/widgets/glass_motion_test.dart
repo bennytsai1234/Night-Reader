@@ -14,10 +14,10 @@ import '../../support/glass_motion.dart';
 // 最後一幀就是靜止時的樣子（ADR 0022）。
 
 void main() {
-  Widget app(Widget home) => MaterialApp(
-    theme: buildAppTheme(AppStyle.paper, Brightness.light),
-    home: home,
-  );
+  // 同一份主題：每次重建都算一份新的話，MaterialApp 會把兩份當成不同
+  // （`AppPageTransitionsBuilder` 沒有 `==`）而播主題漸變。
+  final theme = buildAppTheme(AppStyle.paper, Brightness.light);
+  Widget app(Widget home) => MaterialApp(theme: theme, home: home);
 
   /// 每一塊玻璃此刻的模糊強度。
   List<String> blursOf(WidgetTester tester) => [
@@ -105,6 +105,55 @@ void main() {
             .visible,
         isFalse,
       );
+    });
+
+    // 閱讀器的上下選單收起時還在元件樹裡：開書時「上一章／下一章」從停用
+    // 變成可按，按鈕的主題與字色漸變原本在畫面外每格重算一次，剛好落在
+    // 開書的換頁動畫裡。
+    testWidgets('hidden content does not animate and is at rest once shown', (
+      tester,
+    ) async {
+      const enabled = Color(0xFF102030);
+      Future<void> pumpButton(double shown, {required bool canPress}) =>
+          tester.pumpWidget(
+            app(
+              Align(
+                alignment: Alignment.bottomLeft,
+                child: GlassSlide(
+                  shown: shown,
+                  edge: AxisDirection.down,
+                  child: TextButton(
+                    onPressed: canPress ? () {} : null,
+                    style: TextButton.styleFrom(
+                      foregroundColor: enabled,
+                      disabledForegroundColor: const Color(0xFF999999),
+                    ),
+                    child: const Text('下一章'),
+                  ),
+                ),
+              ),
+            ),
+          );
+      Color? labelColor() => tester
+          .widget<RichText>(
+            find.descendant(
+              of: find.text('下一章'),
+              matching: find.byType(RichText),
+            ),
+          )
+          .text
+          .style
+          ?.color;
+
+      await pumpButton(0, canPress: false);
+      await pumpButton(0, canPress: true);
+      // 沒有動畫在等下一格。
+      expect(tester.binding.transientCallbackCount, 0);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      await pumpButton(0.1, canPress: true);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(labelColor(), enabled);
     });
   });
 

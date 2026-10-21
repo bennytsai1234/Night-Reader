@@ -263,7 +263,10 @@ class _GlassMorphContent extends InheritedWidget {
 /// 玻璃從畫面 [edge] 那一側滑進滑出，不淡（ADR 0022）。
 ///
 /// [shown] 為 0 時完全在畫面外：移開自身大小，再加上離螢幕邊緣的 [gap] 與
-/// 陰影伸出的 [AppGlass.shadowReach]；這時不畫、不接點擊也不進讀屏。
+/// 陰影伸出的 [AppGlass.shadowReach]；這時不畫、不接點擊也不進讀屏，
+/// 裡面的動畫也停著（[TickerMode]）：收起的選單仍留在元件樹裡，按鈕從
+/// 停用變成可按這類漸變不在畫面外每格重算，滑進來時已經是最後的樣子。
+/// 推動 [shown] 的動畫要放在這一層外面。
 class GlassSlide extends StatelessWidget {
   const GlassSlide({
     super.key,
@@ -287,14 +290,19 @@ class GlassSlide extends StatelessWidget {
       AxisDirection.left => const Offset(-1, 0),
       AxisDirection.right => const Offset(1, 0),
     };
+    // Visibility 要保留大小就得保留動畫（maintainSize 需要
+    // maintainAnimation），停動畫另外包一層。
     return Visibility(
       visible: shown > 0,
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
-      child: Transform.translate(
-        offset: unit * ((gap + AppGlass.shadowReach) * away),
-        child: FractionalTranslation(translation: unit * away, child: child),
+      child: TickerMode(
+        enabled: shown > 0,
+        child: Transform.translate(
+          offset: unit * ((gap + AppGlass.shadowReach) * away),
+          child: FractionalTranslation(translation: unit * away, child: child),
+        ),
       ),
     );
   }
