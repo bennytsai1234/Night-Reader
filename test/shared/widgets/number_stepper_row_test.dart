@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/press_ink.dart';
 
 void main() {
   group('NumberStepperRow.snap', () {
@@ -72,13 +73,17 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pump();
     expect(changes, isEmpty);
-    final plus = tester.widget<IconButton>(
+    final plus = tester.widget<PressInk>(
       find.ancestor(
         of: find.byIcon(Icons.add_rounded),
-        matching: find.byType(IconButton),
+        matching: find.byType(PressInk),
       ),
     );
-    expect(plus.onPressed, isNull);
+    expect(plus.onTap, isNull);
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('增加字號')),
+      isSemantics(isButton: true, hasEnabledState: true, isEnabled: false),
+    );
   });
 
   testWidgets('long press repeats until released', (tester) async {

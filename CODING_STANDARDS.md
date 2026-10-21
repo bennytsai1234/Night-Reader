@@ -16,7 +16,7 @@
 
 - 玻璃（`GlassSurface`、`BackdropFilter`）不包在 `Opacity`、`FadeTransition` 或 `AnimatedOpacity` 裡：從畫面邊緣進出用 `GlassSlide`，原地出現要淡入時用 `GlassReveal`（ADR 0022）。玻璃進出場的測試在動畫途中呼叫 `expectNoGlassUnderFade`（`test/support/glass_motion.dart`），只量透明度數值看不出模糊在哪一幀生效。
 - 宣稱某段工作已離開主執行緒、拿掉一段等待，或改了骨架換場、開 App 進場、跳章的流程時，跑 `test/frame_budget/`（用法在 `test/support/frame_budget.dart` 檔頭）比對改動前後每一幀的成本，結果寫進 commit message（ADR 0018）。
-- 新增或修改轉場、骨架換場與換場之後才開始的背景工作時，照 ADR 0029 的五點做：先骨架後內容、後面是實色時給 `SkeletonSwitcher.backdrop` 只遮一層、會在動畫前後變動的小狀態用獨立的 `ValueListenable` 不通知整頁、換場後的工作依序隔一格啟動（不用 `Priority.idle`）、量測涵蓋到骨架換完再多一秒。
+- 新增或修改轉場、骨架換場與換場之後才開始的背景工作時，照 ADR 0029 的六點做：先骨架後內容、後面是實色時給 `SkeletonSwitcher.backdrop` 只遮一層、會在動畫前後變動的小狀態用獨立的 `ValueListenable` 不通知整頁、換場後的工作依序隔一格啟動（不用 `Priority.idle`）、推入的頁面第一格只畫骨架（分組清單頁用 `GroupedListView` 就有）、量測涵蓋到骨架換完再多一秒。
 
 ## Reader V2
 

@@ -297,11 +297,15 @@ final class VisualLineLayoutEngine {
     }
 
     // 一段寬 width 的字補到半格後，左側該補多少：補白平分兩側，但每側
-    // 不少於該側的最小間隙，不足的從另一側讓出（總補白至少是兩側間隙
-    // 之和，所以讓得出來）。
+    // 不少於該側的最小間隙，不足的從另一側讓出。[snap] 有容許誤差，總補白
+    // 可能比兩側間隙之和少一點點（不到 [_fitEpsilon]）；這時兩個界線對調，
+    // 照平分，不然 clamp 的下限大於上限會拋例外（0.3.6-beta.4 的崩潰）。
     double leftPadding(double width, double gapLeft, double gapRight) {
       final padding = snap(width + gapLeft + gapRight) - width;
-      return (padding / 2).clamp(gapLeft, padding - gapRight).toDouble();
+      final upper = padding - gapRight;
+      return upper < gapLeft
+          ? (padding / 2).clamp(upper, gapLeft).toDouble()
+          : (padding / 2).clamp(gapLeft, upper).toDouble();
     }
 
     final lines = <_LineRange>[];

@@ -29,10 +29,28 @@ class ReaderV2SettingsSheets {
   }
 }
 
-class _ReaderInterfaceSheet extends StatelessWidget {
+class _ReaderInterfaceSheet extends StatefulWidget {
   const _ReaderInterfaceSheet({required this.settings});
 
   final ReaderV2SettingsController settings;
+
+  @override
+  State<_ReaderInterfaceSheet> createState() => _ReaderInterfaceSheetState();
+}
+
+class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
+  // 面板自己有左右內距，各組卡片不再加外距。關掉面板時還沒提交的步進
+  // 在 dispose 提交。
+  late final ReaderV2SettingsGroups _groups = ReaderV2SettingsGroups(
+    widget.settings,
+    margin: EdgeInsets.zero,
+  );
+
+  @override
+  void dispose() {
+    _groups.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,13 +61,8 @@ class _ReaderInterfaceSheet extends StatelessWidget {
         const SheetSection(title: '風格'),
         const _ReaderStyleSelector(),
         // 面板只放邊讀邊會調的幾項；其他排版、版面、頁首頁尾在閱讀偏好頁。
-        ReaderV2TypographySection(
-          settings: settings,
-          compact: true,
-          moreChildren: [
-            ReaderV2PageLayoutSection(settings: settings, compact: true),
-          ],
-        ),
+        _groups.typography(compact: true),
+        ..._groups.pageLayout(compact: true),
         GroupedSection(
           margin: EdgeInsets.zero,
           children: [
@@ -73,7 +86,7 @@ class _ReaderInterfaceSheet extends StatelessWidget {
     );
     await Navigator.of(context).push(route);
     await route.completed;
-    await settings.loadSettings();
+    await widget.settings.loadSettings();
   }
 }
 

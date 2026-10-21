@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 
 import 'app_chrome.dart';
-import 'app_layers.dart';
 import 'app_style.dart';
 import 'app_text_styles.dart';
 import 'app_tokens.dart';
@@ -140,10 +139,7 @@ ThemeData buildAppTheme(
     ),
     cardTheme: CardThemeData(
       elevation: brightness == Brightness.light ? 1 : 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.cardLg,
-        side: BorderSide(color: chrome.cardEdge, width: AppLayers.edgeWidth),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardLg),
       color: colors.surface,
       shadowColor: brightness == Brightness.light
           ? const Color(0x0A241C10)

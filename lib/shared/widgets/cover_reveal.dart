@@ -105,10 +105,15 @@ class CoverRevealSlot extends StatefulWidget {
   const CoverRevealSlot({
     super.key,
     this.placeholder = const SizedBox.shrink(),
+    this.wait = true,
     required this.child,
   });
 
   final Widget placeholder;
+
+  /// false 時不排隊、直接建，換場也不等它（畫面外的列）。只看建立當下的
+  /// 值；同一個位置之後改了也不會換掉已經建好的內容。
+  final bool wait;
   final Widget child;
 
   @override
@@ -123,7 +128,7 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_granted) return;
-    final reveal = CoverRevealScope.waitingOf(context);
+    final reveal = widget.wait ? CoverRevealScope.waitingOf(context) : null;
     if (reveal == null) {
       _release();
       _granted = true;

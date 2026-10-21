@@ -81,15 +81,6 @@ void main() {
             ),
             reason: '閱讀選單上的次要文字',
           );
-          final chrome = buildAppTheme(
-            style,
-            brightness,
-          ).extension<AppChrome>()!;
-          expect(
-            (l(chrome.cardEdge) - l(palette.surface)).abs(),
-            closeTo(AppLayers.edgeGap, tolerance),
-            reason: '卡片框線',
-          );
         });
       }
     }

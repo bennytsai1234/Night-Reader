@@ -3,7 +3,6 @@ import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/features/bookshelf/provider/bookshelf_provider_base.dart';
 import 'package:night_reader/features/bookshelf/widgets/bookshelf_book_tiles.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
-import 'package:night_reader/shared/theme/app_layers.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
@@ -153,7 +152,6 @@ class _ListCardSkeleton extends StatelessWidget {
       decoration: BoxDecoration(
         color: chrome.groupedSurface,
         borderRadius: AppGrouped.cardRadius,
-        border: Border.all(color: chrome.cardEdge, width: AppLayers.edgeWidth),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),

@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/press_ink.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///
@@ -19,7 +20,14 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 ///
 /// 本身不帶左右內距、高度約為分組清單單行列（44）；放進分組卡片時以
 /// `GroupedContent` 提供列內距。
-class NumberStepperRow extends StatefulWidget {
+/// 一列數值步進：[NumberStepperRow] 本身，或包著它、在外面就知道標題的那一層
+/// （各頁的內距或只聽自己的值的包裝）。分組清單進場的骨架認得它，照步進列
+/// 的樣子估（「－」、數值膠囊與「＋」，ADR 0029）。
+abstract interface class NumberStepperRowLike {
+  String get label;
+}
+
+class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
   const NumberStepperRow({
     super.key,
     required this.label,
@@ -36,6 +44,7 @@ class NumberStepperRow extends StatefulWidget {
        assert(step > 0),
        assert(displayScale > 0);
 
+  @override
   final String label;
   final double value;
   final double min;
@@ -266,36 +275,87 @@ class _StepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    // 原本是 IconButton：每顆各帶一套按鈕樣式解析、主題複本、狀態控制器與
+    // 動畫控制器，一列三顆，閱讀偏好一進頁要建二十顆，是那一格最大的一塊。
+    // 畫面照 IconButton 的樣子畫：36 的淡墨圓、18 的圖示、按下疊前景色
+    // 10%、停用時圖示 38%，點擊範圍是外圍 48×48（Material 的最小點擊範圍）。
     return GestureDetector(
       onLongPressStart: enabled ? (_) => onLongPressStart() : null,
       onLongPressEnd: enabled ? (_) => onLongPressEnd() : null,
       onLongPressCancel: enabled ? onLongPressEnd : null,
-      // 不使用 IconButton.tooltip：Tooltip 自帶長按手勢，會與連續調整競爭。
+      // 不使用 Tooltip：Tooltip 自帶長按手勢，會與連續調整競爭。
       child: Semantics(
+        container: true,
         label: tooltip,
-        child: IconButton(
-          onPressed: enabled ? onTap : null,
-          iconSize: 18,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(
-            width: _kStepperControlHeight,
-            height: _kStepperControlHeight,
+        button: true,
+        enabled: enabled,
+        child: SizedBox.square(
+          dimension: _kStepperTapTarget,
+          // 按下的淡墨畫在所在卡片的 Material 上、淡墨圓的下面；兩層都是
+          // 前景色，疊的順序不影響顏色。
+          child: PressInk(
+            onTap: enabled ? onTap : null,
+            customBorder: const _CenteredCircle(_kStepperControlHeight),
+            // 和 IconButton.styleFrom 按下時一樣：前景色 10%。
+            highlightColor: onSurface.withValues(alpha: 0.1),
+            child: Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _controlFill(context),
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox.square(
+                  dimension: _kStepperControlHeight,
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: enabled
+                        ? onSurface
+                        : onSurface.withValues(alpha: 0.38),
+                  ),
+                ),
+              ),
+            ),
           ),
-          style: IconButton.styleFrom(
-            backgroundColor: _controlFill(context),
-            disabledBackgroundColor: _controlFill(context),
-            foregroundColor: Theme.of(context).colorScheme.onSurface,
-            shape: const CircleBorder(),
-          ),
-          icon: Icon(icon),
         ),
       ),
     );
   }
 }
 
+/// 外框中央一個直徑 [diameter] 的圓：步進鈕的點擊範圍是 48×48，按下的
+/// 高亮只畫在中間 36 的圓上。
+class _CenteredCircle extends ShapeBorder {
+  const _CenteredCircle(this.diameter);
+
+  final double diameter;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  Path _circle(Rect rect) =>
+      Path()
+        ..addOval(Rect.fromCircle(center: rect.center, radius: diameter / 2));
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => _circle(rect);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => _circle(rect);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+
+  @override
+  ShapeBorder scale(double t) => _CenteredCircle(diameter * t);
+}
+
 /// 步進鈕與數值鈕的高度；加上列的上下內距約等於分組清單單行列高。
 const double _kStepperControlHeight = 36;
+
+/// 步進鈕的點擊範圍（Material 的最小點擊範圍 48×48），也是它佔的大小。
+const double _kStepperTapTarget = kMinInteractiveDimension;
 
 /// 步進控件的淡墨底：同時適用 App 分組卡片與閱讀器選單主題的面板。
 Color _controlFill(BuildContext context) =>
@@ -315,7 +375,7 @@ class _ValueButton extends StatelessWidget {
       child: Material(
         color: _controlFill(context),
         borderRadius: AppRadius.pillShape,
-        child: InkWell(
+        child: PressInk(
           onTap: onTap,
           borderRadius: AppRadius.pillShape,
           child: ConstrainedBox(

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_controller.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_settings_sections.dart';
-import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 
@@ -20,6 +19,7 @@ class ReadingSettingsPage extends StatefulWidget {
 
 class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   final ReaderV2SettingsController _settings = ReaderV2SettingsController();
+  late final ReaderV2SettingsGroups _groups = ReaderV2SettingsGroups(_settings);
   late final StreamSubscription<String> _saveFailures;
 
   @override
@@ -38,6 +38,8 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
   @override
   void dispose() {
     unawaited(_saveFailures.cancel());
+    // 還沒提交的步進先提交，再釋放控制器。
+    _groups.dispose();
     _settings.dispose();
     super.dispose();
   }
@@ -47,26 +49,20 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const GlassNavHeader(title: '閱讀偏好'),
-      // 每個區塊是清單裡的一列，進頁時只建畫面上看得到的幾塊；原本整頁包在
-      // 一個 Column 裡，換頁的第一幀把六個區塊全部建好、排好（ADR 0018）。
-      body: GroupedListView(
-        children: [
-          for (final section in <Widget>[
-            ReaderV2TypographySection(settings: _settings),
-            ReaderV2PageLayoutSection(settings: _settings),
-            ReaderV2AutoPageSection(settings: _settings),
-            ReaderV2ChineseConvertSection(settings: _settings),
-            ReaderV2ClickActionSection(settings: _settings),
-            ReaderV2VolumeKeySection(settings: _settings),
-          ])
-            // 共用區塊不自帶左右外距（閱讀器面板另有內距），這裡補上分組外距。
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppGrouped.margin,
-              ),
-              child: section,
-            ),
-        ],
+      // 一組是清單的一項，進頁時只建畫面上看得到的組；每一列只聽自己的值。
+      // 「頁尾位置」這一列的有無跟著頁尾設定變，變了才重排各組（ADR 0029）。
+      body: ValueListenableBuilder<bool>(
+        valueListenable: _groups.shape,
+        builder: (context, _, _) => GroupedListView(
+          children: [
+            _groups.typography(),
+            ..._groups.pageLayout(),
+            _groups.autoPage(),
+            _groups.chineseConvert(),
+            _groups.clickActions(),
+            _groups.volumeKey(),
+          ],
+        ),
       ),
     );
   }

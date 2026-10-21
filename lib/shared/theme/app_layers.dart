@@ -11,18 +11,15 @@ class AppLayers {
   AppLayers._();
 
   /// 頁面到卡片。原本淺色 3.9–5.5、深色 5.4–8.1，看久了分不出卡片；iOS 分組
-  /// 清單淺色 4.4、深色 10.3。深色同樣的差距看起來比較小，多拉一些。
-  static const double cardGapLight = 9;
-  static const double cardGapDark = 12;
+  /// 清單淺色 4.4、深色 10.3。卡片與玻璃沒有框線（2026-10-21 使用者拿掉），
+  /// 只靠底色分開，所以比加框時的 9／12 再拉開。深色同樣的差距看起來比較
+  /// 小，多拉一些。
+  static const double cardGapLight = 12;
+  static const double cardGapDark = 15;
 
   /// 深色的玻璃列（頁首、分頁列）比卡片再亮一階；淺色玻璃與卡片同色，
-  /// 靠框線與貼邊陰影浮起來。閱讀選單和閱讀底色的差距同頁面到卡片。
+  /// 靠貼邊陰影浮起來。閱讀選單和閱讀底色的差距同頁面到卡片。
   static const double floatGapDark = 6;
-
-  /// 框線和它所在的面的差距與寬度。0.5 的髮絲在 3 倍密度上只有 1.5 個
-  /// 像素，淺色、深色都看不出來。
-  static const double edgeGap = 24;
-  static const double edgeWidth = 1;
 
   static double cardGap(Brightness brightness) =>
       brightness == Brightness.dark ? cardGapDark : cardGapLight;
@@ -61,10 +58,6 @@ class AppLayers {
     final lost = (l - lightness(from)).abs() - (l - lightness(to)).abs();
     return lost > 0 ? step(color, toward, lost) : color;
   }
-
-  /// 畫在 [surface] 上的框線色。
-  static Color edgeOn(Color surface, Color text) =>
-      step(surface, text, edgeGap);
 
   /// 浮動玻璃貼著邊的那一圈陰影，補上散開的漫射陰影畫不出的邊界；深色
   /// 同樣的透明度看不出來，疊多一些。[shown] 0→1 是玻璃進出場的程度。
