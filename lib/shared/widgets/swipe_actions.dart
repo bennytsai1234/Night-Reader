@@ -48,6 +48,9 @@ const double _kFullSwipeFraction = 0.6;
 /// 動作按鈕；拖過一半露出寬度放開會停在展開狀態，滑過列寬約 60% 會觸發
 /// 最外側動作（列尾為最後一個、列首為第一個）。展開時點列本身只會收合。
 /// 只使用水平拖動手勢，不攔截清單的垂直捲動；清單捲動時自動收合。
+/// 觸控門檻取裝置的（`MediaQuery.gestureSettingsOf`），和清單捲動、
+/// [PageView] 一樣；斜著拖時偏橫向才由列接走。放在可左右滑動的容器裡時，
+/// 在列上橫向拖動一律由列接走。
 ///
 /// 放在 [SwipeActionsGroup] 底下時，同一組同時只會有一列展開。
 class SwipeActions extends StatefulWidget {
@@ -346,20 +349,29 @@ class _SwipeActionsState extends State<SwipeActions>
             );
           },
         );
+        // 辨識器的設定照 GestureDetector 對水平拖動的做法（裝置觸控門檻、
+        // 多指策略），和外層清單的垂直捲動、PageView 用同一個門檻判斷這一下
+        // 歸誰；只是換成 [_RowSwipeRecognizer]，偏直向的拖動不接。
+        final gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+        final dragStrategy = ScrollConfiguration.of(context)
+            .getMultitouchDragStrategy(context);
         row = RawGestureDetector(
           gestures: {
             if (active)
-              HorizontalDragGestureRecognizer:
-                  GestureRecognizerFactoryWithHandlers<
-                    HorizontalDragGestureRecognizer
-                  >(HorizontalDragGestureRecognizer.new, (recognizer) {
-                    // 不設 onCancel：它只在點擊沒變成拖動時觸發，
-                    // 已開始的拖動被中斷時走 onEnd。
-                    recognizer
-                      ..onStart = _onDragStart
-                      ..onUpdate = _onDragUpdate
-                      ..onEnd = _onDragEnd;
-                  }),
+              _RowSwipeRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_RowSwipeRecognizer>(
+                    () => _RowSwipeRecognizer(debugOwner: this),
+                    (recognizer) {
+                      // 不設 onCancel：它只在點擊沒變成拖動時觸發，
+                      // 已開始的拖動被中斷時走 onEnd。
+                      recognizer
+                        ..onStart = _onDragStart
+                        ..onUpdate = _onDragUpdate
+                        ..onEnd = _onDragEnd
+                        ..gestureSettings = gestureSettings
+                        ..multitouchDragStrategy = dragStrategy;
+                    },
+                  ),
           },
           child: row,
         );
@@ -378,6 +390,54 @@ class _SwipeActionsState extends State<SwipeActions>
           child: row,
         );
       },
+    );
+  }
+}
+
+/// 列的水平拖動：越過裝置觸控門檻、而且橫向位移大於直向時才接下手勢
+/// （Android `ItemTouchHelper` 判斷列滑動的規則）。
+///
+/// 單靠門檻不夠：快速往上捲時第一個移動事件可能兩軸同時越過門檻，同時
+/// 越過時由列這個內層的辨識器先接走，偏直向的拖動就變成滑出動作。這裡
+/// 讓偏直向的拖動不接，交給外層的垂直捲動。
+class _RowSwipeRecognizer extends HorizontalDragGestureRecognizer {
+  _RowSwipeRecognizer({super.debugOwner});
+
+  final Map<int, Offset> _downAt = {};
+
+  /// 目前這個事件的手指從按下到現在的位移；觸控板的平移沒有按下位置，
+  /// 不限制。
+  Offset? _moved;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    _downAt[event.pointer] = event.position;
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    final down = _downAt[event.pointer];
+    _moved = down == null ? null : event.position - down;
+    super.handleEvent(event);
+  }
+
+  @override
+  void stopTrackingPointer(int pointer) {
+    _downAt.remove(pointer);
+    super.stopTrackingPointer(pointer);
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) {
+    final moved = _moved;
+    if (moved != null && moved.dx.abs() <= moved.dy.abs()) return false;
+    return super.hasSufficientGlobalDistanceToAccept(
+      pointerDeviceKind,
+      deviceTouchSlop,
     );
   }
 }

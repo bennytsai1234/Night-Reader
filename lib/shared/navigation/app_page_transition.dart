@@ -410,6 +410,15 @@ class _AppTransitionState extends State<_AppTransition>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 自己建的辨識器不會自動帶上裝置的觸控門檻（GestureDetector 與捲動
+    // 元件才會），照 Flutter 的 Draggable 補上：左緣和底下橫向捲動的內容
+    // 用同一個門檻搶這一下。
+    _drag.gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+  }
+
+  @override
   void didUpdateWidget(_AppTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.animation != widget.animation) {

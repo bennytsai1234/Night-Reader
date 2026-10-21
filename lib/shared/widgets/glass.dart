@@ -242,8 +242,16 @@ class _GlassMorphContent extends InheritedWidget {
 /// 玻璃從畫面 [edge] 那一側滑進滑出，不淡（ADR 0022）。
 ///
 /// [shown] 為 0 時完全在畫面外：移開自身大小，再加上離螢幕邊緣的 [gap] 與
-/// 陰影伸出的 [AppGlass.shadowReach]；這時不畫、不接點擊也不進讀屏。
-class GlassSlide extends StatelessWidget {
+/// 陰影伸出的 [AppGlass.shadowReach]；這時不畫、不接點擊也不進讀屏，
+/// 裡面的動畫也停著（[TickerMode]）：收起的選單仍留在元件樹裡，按鈕從
+/// 停用變成可按這類漸變不在畫面外每格重算。推動 [shown] 的動畫要放在
+/// 這一層外面。
+///
+/// 停著的動畫打開後要到下一格才追上經過的時間。從收起直接到位（[shown]
+/// 由 0 跳到 1，系統關閉動畫時）的那一格先不畫，下一格才出現，不然會先
+/// 露出一格收起前的樣子；滑進來時第一格大半還在畫面外、正在移動，照常畫，
+/// 不讓滑入晚一格開始。
+class GlassSlide extends StatefulWidget {
   const GlassSlide({
     super.key,
     required this.shown,
@@ -258,22 +266,49 @@ class GlassSlide extends StatelessWidget {
   final Widget child;
 
   @override
+  State<GlassSlide> createState() => _GlassSlideState();
+}
+
+class _GlassSlideState extends State<GlassSlide> {
+  /// 剛從收起直接到位、動畫還在追上的那一格。
+  bool _waking = false;
+
+  @override
+  void didUpdateWidget(GlassSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.shown > 0 || widget.shown < 1) return;
+    _waking = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _waking) setState(() => _waking = false);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final shown = widget.shown;
     final away = 1 - shown;
-    final unit = switch (edge) {
+    final unit = switch (widget.edge) {
       AxisDirection.up => const Offset(0, -1),
       AxisDirection.down => const Offset(0, 1),
       AxisDirection.left => const Offset(-1, 0),
       AxisDirection.right => const Offset(1, 0),
     };
+    // Visibility 要保留大小就得保留動畫（maintainSize 需要
+    // maintainAnimation），停動畫另外包一層。
     return Visibility(
-      visible: shown > 0,
+      visible: shown > 0 && !_waking,
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
-      child: Transform.translate(
-        offset: unit * ((gap + AppGlass.shadowReach) * away),
-        child: FractionalTranslation(translation: unit * away, child: child),
+      child: TickerMode(
+        enabled: shown > 0,
+        child: Transform.translate(
+          offset: unit * ((widget.gap + AppGlass.shadowReach) * away),
+          child: FractionalTranslation(
+            translation: unit * away,
+            child: widget.child,
+          ),
+        ),
       ),
     );
   }
