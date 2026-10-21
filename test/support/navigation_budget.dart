@@ -11,6 +11,7 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'app_harness.dart';
@@ -20,10 +21,15 @@ import 'frame_budget.dart';
 bool skeletonShown() => find.byType(SkeletonBox).evaluate().isNotEmpty;
 
 /// [page] 在畫面上、所在的頁面進場播完，上面也沒有頁面蓋著或正在移走。
+///
+/// 路由用 [pageRouteOf] 取得：`ModalRoute.of(元件)` 會讓 [page] 從此依賴
+/// 路由狀態，之後每次有頁面推入或移走它都整頁重建。原本這樣寫，量過「返回
+/// 書架」「返回我的」之後，下一趟推入的第 0 格就多出書架與「我的」的重建，
+/// 那是量測本身造成的，App 裡不會發生。
 bool pageSettled(Finder page) {
   final elements = page.evaluate();
   if (elements.isEmpty) return false;
-  final route = ModalRoute.of(elements.first);
+  final route = pageRouteOf(elements.first);
   if (route == null) return true;
   return (route.animation?.isCompleted ?? true) &&
       (route.secondaryAnimation?.isDismissed ?? true) &&
