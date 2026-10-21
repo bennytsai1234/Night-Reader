@@ -1094,6 +1094,76 @@ void main() {
     );
   });
 
+  testWidgets('with the previous chapter unavailable the forward lead is '
+      'counted from where the scroll stops', (tester) async {
+    await pumpReader(
+      tester,
+      waitForOpen: false,
+      customRuntime: _makeRuntime(
+        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        contentLoader: (index, chapter) => index == 0
+            ? Future.error(
+                const ReaderV2ContentUnavailableException('第 0 章暫時取不到'),
+              )
+            : Future.value(chapter.content),
+      ),
+    );
+    // 開書一完成就量：之後捲動位置附近的補排會把差距補上。
+    for (
+      var frame = 0;
+      frame < 2000 && !runtime.state.hasStableWorld;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(runtime.state.hasStableWorld, isTrue);
+    final position = scrollPosition(tester);
+    expect(
+      position.pixels,
+      position.minScrollExtent,
+      reason: '前面沒有正文，章名頂在最上面。',
+    );
+    expect(
+      position.maxScrollExtent - position.pixels,
+      greaterThanOrEqualTo(3000),
+      reason: '開書完成時，停住的位置之後已經排好一整段領先量。',
+    );
+  });
+
+  testWidgets('opened at a chapter start, an unavailable previous chapter is '
+      'reported and retried at the top', (tester) async {
+    var requests = 0;
+    var available = false;
+    await pumpReader(
+      tester,
+      customRuntime: _makeRuntime(
+        chapterCount: 2,
+        initialLocation: const ReaderV2Location(chapterIndex: 1, charOffset: 0),
+        contentLoader: (index, chapter) async {
+          if (index != 0) return chapter.content;
+          requests += 1;
+          if (!available) {
+            throw const ReaderV2ContentUnavailableException('第 0 章暫時取不到');
+          }
+          return chapter.content;
+        },
+      ),
+    );
+    final position = scrollPosition(tester);
+    final afterOpen = requests;
+    expect(position.pixels, closeTo(position.minScrollExtent, 0.5));
+
+    available = true;
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 200));
+    await settle(tester);
+    expect(runtime.takeUserNotice(), '第 0 章暫時取不到');
+    expect(requests, afterOpen + 1, reason: '停在上緣時重試一次');
+    for (var frame = 0; frame < 200; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(position.minScrollExtent, lessThan(0), reason: '重試成功後前一章接在上面');
+  });
+
   testWidgets('an unavailable next chapter is reported at the edge, not '
       'requested every frame', (tester) async {
     var requests = 0;
