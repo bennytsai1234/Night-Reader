@@ -168,6 +168,44 @@ void main() {
     provider.removeListener(onChanged);
   });
 
+  testWidgets('首次內容在骨架下面一幀只建立一列書源', (tester) async {
+    gatedDao.gate = Completer<void>();
+    await pumpPage(tester, sources: 30);
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.byType(SourceListSkeleton)),
+      listen: false,
+    );
+    final perFrame = <int>[];
+    var rows = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is SourceItemTile) rows++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    gatedDao.gate!.complete();
+    for (var frame = 0; frame < 180; frame++) {
+      rows = 0;
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 16));
+      perFrame.add(rows);
+      if (!provider.isLoading &&
+          find.byType(SourceListSkeleton).evaluate().isEmpty) {
+        break;
+      }
+    }
+    debugOnRebuildDirtyWidget = previous;
+
+    expect(provider.totalSourceCount, 30);
+    expect(find.byType(SourceListSkeleton), findsNothing);
+    expect(find.byType(SourceItemTile), findsWidgets);
+    expect(
+      perFrame.every((count) => count <= 1),
+      isTrue,
+      reason: '每一幀建立的書源列數：$perFrame',
+    );
+  });
+
   testWidgets('entering selection crossfades the title and morphs the glass', (
     tester,
   ) async {
