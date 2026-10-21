@@ -102,6 +102,32 @@ void main() {
     expect(_box(drawn, 5).left, closeTo(80, 0.01), reason: '「三」回到字格上');
   });
 
+  test('補到半格時差在容許誤差內，補白照樣分得出來（不拋例外）', () {
+    // i 寬 5，字距 0.005 讓它寬 5.005；加上兩側最小間隙 5 是 10.005，
+    // 在容許誤差 0.01 內，補到 10。補白 4.995 比兩側間隙之和少一點點：
+    // 原本 clamp 的下限比上限大，閱讀器排版時拋例外（0.3.6-beta.4 的
+    // 崩潰日誌）。
+    const style = HybridBlockTextStyle(
+      fontSize: _cell,
+      lineHeight: 1.5,
+      letterSpacing: 0.005,
+    );
+    const text = '一i二';
+    final plan = _engine.planBlock(
+      text: text,
+      start: 0,
+      maxBlockChars: 10000,
+      textStyle: style,
+      contentWidth: 200,
+      cellWidth: _cell,
+      indentChars: 0,
+    );
+    expect(plan.visualLineBreakOffsets, isEmpty);
+    final total = plan.spacers.fold<double>(0, (sum, s) => sum + s.width);
+    expect(total, closeTo(4.995, 0.02));
+    expect(plan.spacers.first.width, greaterThanOrEqualTo(2.5 - 0.01));
+  });
+
   test('數字也補到半格', () {
     const text = '一3二';
     final plan = _plan(text, 200);
