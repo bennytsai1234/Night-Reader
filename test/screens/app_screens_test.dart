@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import '../support/app_harness.dart';
 import '../support/screenshot.dart';
@@ -50,6 +51,12 @@ Future<void> tapTooltip(WidgetTester tester, String tooltip) async {
 Future<void> openMine(WidgetTester tester, String row) async {
   await tapText(tester, '我的');
   await tapText(tester, row);
+  // 設定各頁推入時先是骨架，一格建一列（ADR 0029）；這裡一步推 50ms，比
+  // 手機慢得多，等骨架換完再拍。
+  for (var i = 0; i < 100; i++) {
+    if (find.byType(SkeletonShapes).evaluate().isEmpty) break;
+    await settle(tester, const Duration(milliseconds: 100));
+  }
 }
 
 Future<void> openReaderMenu(WidgetTester tester) async {
@@ -90,13 +97,7 @@ final scenarios = <String, (Map<String, Object>, Steps)>{
   's16_tts': (const {}, (t) async => openMine(t, '朗讀與語音')),
   's17_backup': (const {}, (t) async => openMine(t, '備份與還原')),
   's18_about': (const {}, (t) async => openMine(t, '關於夜讀')),
-  's19_release_notes': (
-    const {},
-    (t) async {
-      await openMine(t, '關於夜讀');
-      await tapText(t, '更新紀錄');
-    },
-  ),
+  's19_release_notes': (const {}, (t) async => openMine(t, '更新紀錄')),
   // 閱讀器。
   'r01_reader': (const {}, (t) async => openReader(t)),
   'r02_menu': (const {}, openReaderMenu),

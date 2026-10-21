@@ -17,7 +17,6 @@ import 'package:provider/provider.dart';
 import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
 import 'privacy_pages.dart';
-import 'release_notes_page.dart';
 import 'update_check_runner.dart';
 
 /// 「自動更新」的三種：不自動檢查、自動檢查（有新版時問要不要下載）、自動
@@ -287,17 +286,6 @@ class _AboutPageState extends State<AboutPage> {
                     : null,
                 showChevron: !_checkingUpdate,
                 onTap: _checkUpdate,
-              ),
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.history_rounded,
-                  tint: AppTint.ink,
-                ),
-                title: '更新紀錄',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
-                ),
               ),
               ValueListenableBuilder(
                 valueListenable: _updatePrefs,
