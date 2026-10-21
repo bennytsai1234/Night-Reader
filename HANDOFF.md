@@ -7,6 +7,7 @@
 - **公司那台電腦的殘留**：`prototype/glass-border` 原型使用者說丟掉（2026-10-20），遠端分支已刪；那台若還有 `%TEMP%\nr-border` worktree 與本機分支，直接刪。
 - **視覺方向已否決，別再提**：使用者說版型與動畫已經很好（2026-10-20），只要小修。否決過的：三個大改方向（書卷：宋體標題與「正在讀」主卡；極簡現代：黑白清單；夜讀氛圍：深色金色），使用者不要大改；書名與標題改宋體（整個 App 統一用系統字型，混進宋體不如原本）；圖示方塊與進度線改墨色單色（「沒料」）；列高與網格間距重排（「沒意思」）。
 - **網站曝光（#60，只能使用者做，已告知；先擱著）**：使用者說（2026-10-15）自己的閱讀體驗滿意之前不推薦給別人，所以不用提醒。到時要做的是：用自己的 Google 帳號在 Search Console 驗證網站、提交 `https://bennytsai1234.github.io/Night-Reader/sitemap.xml`；到 Legado 社群、PTT、V2EX、Reddit 等發文帶連結。
+- **書架書卡要不要恢復左滑動作**：當初拿掉是因為 `SwipeActions` 和主畫面的 `PageView` 觸控門檻不同、搶輸搶贏看手速；門檻已統一，結果不再看手速。恢復的話，在書卡上橫拖一律滑出動作、不換分頁（DESIGN.md「清單列」），要不要恢復由使用者決定。
 - **手機上的 profile 版**：使用者手機上還裝著 `com.inkpage.reader.debug`（裡面是還原進去的書架），要不要移除由使用者決定。
 
 ## 使用者定下、還沒寫進其他文件的事
@@ -34,4 +35,3 @@
 - Flutter 測試環境的預設字型每個字一樣寬，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderV2PunctFontFamily)` 載入，範例在 `test/features/reader_v2/hybrid/half_cell_layout_test.dart`）。
 - 用 `test/screens` 拍閱讀器時，換行結果快取在系統暫存區的 `hybrid_plans`、`hybrid_metrics`（截圖環境把 App 的資料夾指到 `%TEMP%`），換行快取只認 App 版本號；改了換行規則或排版程式卻沒換版號時，先把這兩個資料夾移到垃圾桶再拍，不然拍到的是舊的換行。
 - 重新產生 `NightReaderPunct`：思源黑體繁中版從 `https://github.com/notofonts/noto-cjk/raw/Sans2.004/Sans/OTF/TraditionalChinese/NotoSansCJKtc-{Regular,Bold}.otf` 下載，fontTools 用 pip 在 repo 外的 venv 安裝；`assets/fonts/generate_punct_font.py` 產出與 repo 內字型只差 `head` 的時間戳。
-- `SwipeActions` 的拖動辨識沒有讀 `MediaQuery` 的觸控門檻（用 Flutter 預設 18，`PageView` 用裝置的，Android 約 8），放進可左右滑動的容器會搶輸搶贏不定；書架因此拿掉了左滑（DESIGN.md）。
