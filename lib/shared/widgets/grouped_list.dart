@@ -289,12 +289,19 @@ class _GroupedListViewState extends State<GroupedListView> {
       scaler,
     );
     final known = GroupedListLayouts.of(key);
+    final width = MediaQuery.sizeOf(context).width;
+    final direction = Directionality.of(context);
     return (
       key,
       [
         for (var i = 0; i < widget.children.length; i++)
           (known != null && i < known.length ? known[i] : null) ??
-              GroupedItemShape.estimate(widget.children[i], scaler),
+              GroupedItemShape.estimate(
+                widget.children[i],
+                width: width,
+                scaler: scaler,
+                direction: direction,
+              ),
       ],
     );
   }
@@ -353,7 +360,6 @@ class _GroupedListViewState extends State<GroupedListView> {
         backdrop: background,
         onRevealed: () => _remember(key),
         skeleton: GroupedListSkeleton(
-          items: widget.children,
           shapes: shapes,
           top: padding.top,
           cardFill: chrome.groupedSurface,
@@ -365,8 +371,9 @@ class _GroupedListViewState extends State<GroupedListView> {
           children: [
             for (var i = 0; i < widget.children.length; i++)
               _GroupedListSlot(
+                key: _slotKey(widget.children[i]),
                 index: i,
-                height: shapes[i].height,
+                shape: shapes[i],
                 item: widget.children[i],
               ),
           ],
@@ -376,24 +383,68 @@ class _GroupedListViewState extends State<GroupedListView> {
   }
 }
 
-/// 清單的一項：骨架底下輪到才建，之前佔著估計的高度。
+/// 清單的一項：骨架底下輪到才建，之前佔著記下或估計的高度。一組分組卡片
+/// 以列為單位排隊（組標題文字與卡片外框先建），一格建一列：像「排版」這樣一組
+/// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。
 class _GroupedListSlot extends StatelessWidget {
   const _GroupedListSlot({
+    super.key,
     required this.index,
-    required this.height,
+    required this.shape,
     required this.item,
   });
 
   final int index;
-  final double height;
+  final GroupedItemShape shape;
   final Widget item;
 
   @override
-  Widget build(BuildContext context) => CoverRevealSlot(
-    placeholder: SizedBox(height: height),
-    child: item,
-  );
+  Widget build(BuildContext context) {
+    final item = this.item;
+    final rows = shape.rowHeights;
+    if (item is! GroupedSection ||
+        rows == null ||
+        rows.length != item.children.length) {
+      return CoverRevealSlot(
+        placeholder: SizedBox(height: shape.height),
+        child: item,
+      );
+    }
+    return GroupedSection(
+      key: item.key,
+      header: item.header,
+      // 組標題右側的按鈕（「恢復預設」）也排隊，不和卡片外框擠在同一格。
+      headerTrailing: switch (item.headerTrailing) {
+        final trailing? => CoverRevealSlot(child: trailing),
+        null => null,
+      },
+      footer: item.footer,
+      // 列包了一層，自動判斷列首圖示看不到列本身，先照原本的列算好。
+      separatorIndent:
+          item.separatorIndent ??
+          (item.children.any(groupedRowHasLeading)
+              ? AppGrouped.separatorIndentWithIcon
+              : AppGrouped.rowPadding),
+      margin: item.margin,
+      topGap: item.topGap,
+      children: [
+        for (var i = 0; i < rows.length; i++)
+          CoverRevealSlot(
+            key: _slotKey(item.children[i]),
+            placeholder: SizedBox(height: rows[i]),
+            child: item.children[i],
+          ),
+      ],
+    );
+  }
 }
+
+/// 包著 [child] 的那一層沿用它的 key（列有 key 時，增刪重排照樣對得上）；
+/// 包一層 [ValueKey]，[GlobalKey] 才不會用到兩次。
+Key? _slotKey(Widget child) => switch (child.key) {
+  final key? => ValueKey<Key>(key),
+  null => null,
+};
 
 /// 列首上色圓角圖示方塊（Telegram 設定頁的彩色圖示）。
 class GroupedIconTile extends StatelessWidget {

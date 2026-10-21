@@ -19,26 +19,17 @@
 
 ## 進行中：閱讀偏好與設定頁第一格
 
-分支 `perf/reading-prefs-first-frame`（WIP，還沒開正式 PR、沒跑 Codex 審查）。
+分支 `perf/reading-prefs-first-frame`，draft PR 已開，還沒跑 Codex 審查（雲端 session 沒有 Codex）、還沒合併。
 
-- **目標**：從「我的」推入每個設定頁（閱讀偏好、外觀與主題、朗讀與語音、閱讀統計、書源管理、背景下載佇列、備份與還原、關於夜讀）與返回，以及從閱讀器「進階」／「更多排版設定」推入閱讀偏好與返回，第 0 格（電腦 debug、`test/frame_budget/` 的量法）壓到 8 ms 以下（120 Hz 一格 8.3 ms）。協調者已核准：推入時第 0 格只建骨架（照真實頁面的幾何，用現成的 `SkeletonSwitcher(waitForCovers: true, backdrop: groupedBackground)`＋`CoverRevealSlot` 一幀建一組），`TransitionSettled.entered` 之後再錯開一格才建內容，換場與之後的格也不能掉幀，量到換場結束再加一秒；所有設定頁共用一套（放在 `GroupedListView`），不各頁手刻。返回那幾格要結構性修掉約 48 個 Focus 的重建。只為了把整頁塞進第 0 格而做的事（例如 `GroupedListView` 進場前 cacheExtent 設 0），有了骨架就拿掉。
-- **已做（工作區內，畫面與 beta 截圖逐張比對一致）**：
-  - `app_page_transition.dart` 的 `_AppTransition` 在頁面外包一層 `Focus(canRequestFocus: false, skipTraversal: true, includeSemantics: false)`：頁面裡的 Focus 原本依賴路由的 FocusScope，推入第 1 格、返回第 0／1 格整頁約 48 個 Focus 重建（輸出不變）。
-  - 新的 `lib/shared/widgets/press_ink.dart`（`PressInk`）：InkWell 的按下高亮與點擊回饋，不帶每個 InkWell 的 Focus／Actions／MouseRegion；`GroupedRow` 與 `NumberStepperRow` 的按鈕改用它（步進鈕不再用 IconButton）。
-  - 閱讀偏好的設定區塊改成 `ReaderV2SettingsGroups`（`reader_v2_settings_sections.dart`），每列只依賴自己的值（`_Watch`、`_StagedStepper`，步進 120 ms 沒再按才提交）；閱讀偏好頁與閱讀器排版面板共用。
-  - 關於夜讀的版本與自動更新列改用 `ValueNotifier`，只重建那一列。
-  - 新測試：`test/frame_budget/reader_settings_frame_budget_test.dart`（從閱讀器推入閱讀偏好）；`test/features/settings/reading_settings_page_test.dart`（**目前會失敗**：`tester.pageBack()` 要改成 `Navigator.pop`；「第一格只建畫面上的組」那條要照骨架做法改寫；「按字號只重建字號那一列」收到空集合，要查）。
-- **同一條分支順便做了（2026-10-21 使用者要求）**：卡片、書卡與玻璃拿掉框線，頁面到卡片的差距淺色 9→12、深色 12→15，五種風格的底色與 Android 啟動畫面底色重算；紙墨淺深的前後截圖已給使用者看。
-- **還沒做**：`GroupedListView` 的骨架進場（設計：掛載時路由還在進場 `route.offstage || !animation.isCompleted` 才用；骨架每組畫標題條＋同樣的卡片＋每列一條 `SkeletonLine`，有列首就畫圖示方塊；列高照上次看過那一頁時記下的版面，沒有紀錄時照列的種類估 44／高列；`CoverRevealSlot` 的佔位給同樣高度）；拿掉 cacheExtent 0；改上面那個失敗的測試、加骨架與建構次數的回歸測試；量每頁第 0 格與換場中最差的一格；ADR 0029 補取捨（PressInk 不接鍵盤焦點、路由焦點邊界、設定頁骨架進場）、DESIGN.md「載入骨架」寫設定頁先畫骨架、CHANGELOG `## 未發布`、本節改成合併後的狀態；Codex 審查、PR。
-- **目前數字**（電腦 debug，中位數 ms，`<8` 表示沒超過 8 ms；骨架還沒做）：第 0 格 beta → 現在：閱讀偏好 51.4 → 36.1、外觀與主題 21.5 → 22.3、朗讀與語音 19.9 → 23.6、閱讀統計 <8 → 8.9、書源管理 16.9 → 18.6、背景下載佇列 28.3 → 31.1、備份與還原 11.3 → 9.1、關於夜讀 21.4 → 20.8；閱讀偏好第 1 格 8.3 → <8、關於夜讀第 1 格 8.9 → <8；返回「我的」全部 <8。第 0 格建的元件數 beta → 現在：閱讀偏好 1296 → 607、關於 458 → 358、外觀 373 → 323、朗讀 325 → 259、備份 212 → 190、統計 152 → 146。推入一頁的固定成本（導覽、Scaffold、`GlassNavHeader`）約 140–150 個元件、9–12 ms，只靠精簡內容到不了 8 ms，所以才要骨架。機器上同時有別的測試在跑時數字很飄，要和 beta 交錯跑、看中位數與最小值，元件數最穩。
-- **量法**：開一個 beta 的對照 worktree（`git worktree add %TEMP%\nr-prefs-base beta`，sqlite3.dll 照下面「注意」複製），兩邊交錯各跑兩次：`FRAME_ATTRIBUTE=1 flutter test --run-skipped -t frame_budget test/frame_budget/mine_frame_budget_test.dart`（從「我的」推入與返回各頁）與 `test/frame_budget/reader_settings_frame_budget_test.dart`（從閱讀器推入閱讀偏好）；`FRAME_ATTRIBUTE=1` 會把超過 8 ms 的格依元件類型歸類。元件數用 `debugOnRebuildDirtyWidget` 數。
+- **做完的**：推入的分組清單頁第一格只畫骨架、換頁播完一格建一列再換場（ADR 0029 做法 5）；骨架照上次畫面上量到的樣子畫並存進偏好設定（`grouped_list_skeleton_v1`）；返回時頁面裡的 Focus 不再重建；閱讀偏好每列只聽自己的值。同一條分支也拿掉了卡片與玻璃的框線、拉大頁面到卡片的差距（使用者 2026-10-21 要的，截圖已給使用者看）。
+- **數字**（雲端 Linux 機器 debug，比 Windows 那台慢約一倍；第二輪、兩次）：第 0 格 beta → 現在：閱讀偏好 170／153 → 17／17、外觀 48／73 → 22／24、朗讀 45／42 → 18／18、背景下載佇列 94／80 → 20／22、關於 48／81 → 19／18、備份 23／23 → 21／19。內容建立的格最差約 20–25ms（第一格內容：清單、各組外框與第一列）。推入一頁的固定成本（導覽、`Scaffold`、頁首）約 170 個元件，空白頁在這台就要 15–20ms，所以第 0 格到不了 8ms 以下；拿掉返回鈕的 Tooltip 與頁首的 `LaunchSkeleton` 量不出差別，沒做。
+- **剩下**：Codex 審查；CI 通過後照 AGENTS.md 合併，本節刪掉。
 
 ## 接下來
 
-- **進行中：閱讀偏好與設定頁第一格（2026-10-21，還沒合併）**：分支 `perf/reading-prefs-first-frame`（半成品，用 `--no-verify` 推上去，`reading_settings_page_test.dart` 有 3 個測試還沒過）。目標、已做完的、剩下的（各設定頁共用的骨架先行、文件、Codex 審查、開 PR）與量測指令，寫在那條分支的 `HANDOFF.md`「進行中：閱讀偏好與設定頁第一格」。接手就在那條分支上做。
 - **五種風格重新設計（2026-10-20 使用者提出，還沒開始）**：紙墨、竹青、石青、茶褐、素色使用者覺得還是不太行，可能要重新設計，要先和使用者談。重新設計時頁面、卡片、玻璃與閱讀選單的底色照 `AppLayers` 的規則算（DESIGN.md「色彩與材質層次」）。
 - **選項精簡（2026-10-20 使用者說選項多到控制不完、分級看不懂，交給 agent 自主決定、不再過問）**：全部選項的去留與分級規則在 ADR 0030。把閱讀器面板改成兩層推翻了 10-15 #69「面板所有項目直接列出」的做法，使用者若要面板也看得到全部，再改回。
-- **開 App 與轉場掉幀（2026-10-20，#88、#90）**：做法寫在 ADR 0029。量不到手機上的合成（raster）成本；測試的資料庫與書源解析在主執行緒，`test/frame_budget/` 的「幀前」數字比手機上重。閱讀偏好第 0 格約 220–250ms（停在起點，開始得晚）。
+- **開 App 與轉場掉幀（2026-10-20，#88、#90）**：做法寫在 ADR 0029。量不到手機上的合成（raster）成本；測試的資料庫與書源解析在主執行緒，`test/frame_budget/` 的「幀前」數字比手機上重。
 - **已知小差距，沒修**：`AppPageTransitionsBuilder` 沒有 `==`，`buildAppTheme` 每次算出的主題都不相等：`SettingsProvider` 每通知一次（例如改「自動刷新」），整個 App 讀 `Theme.of` 的元件（含被蓋住的頁面）都重建一次（2026-10-21 量到，只在改這幾個設定時發生，沒修）。
 
 ## 注意

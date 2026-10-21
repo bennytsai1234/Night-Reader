@@ -9,6 +9,7 @@ import 'package:night_reader/features/settings/reading_settings_page.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
@@ -81,13 +82,29 @@ void main() {
     expect(rebuilt, isEmpty);
   });
 
-  testWidgets('進場時只畫骨架，播完後一格建一組，都建好才換成內容', (tester) async {
+  testWidgets('進場時只畫骨架，播完後一格建一列，都建好才換成內容', (tester) async {
     await pumpHost(tester);
     final sections = find.descendant(
       of: find.byType(ReadingSettingsPage, skipOffstage: false),
       matching: find.byType(GroupedSection, skipOffstage: false),
     );
     final skeleton = find.byType(SkeletonShapes, skipOffstage: false);
+    // 已經建好的列：排隊的位置（[CoverRevealSlot]）底下不再是佔位的空白。
+    int rowsBuilt() {
+      var count = 0;
+      for (final slot
+          in find
+              .descendant(
+                of: find.byType(ReadingSettingsPage, skipOffstage: false),
+                matching: find.byType(CoverRevealSlot, skipOffstage: false),
+              )
+              .evaluate()) {
+        slot.visitChildren((child) {
+          if (child.widget is! SizedBox) count++;
+        });
+      }
+      return count;
+    }
 
     await tester.tap(find.text('開啟'));
     // 推入的第一格：整個畫面的骨架是一個元件，一列都還沒建。
@@ -102,14 +119,15 @@ void main() {
     for (var frame = 1; skeleton.evaluate().isNotEmpty; frame++) {
       expect(frame, lessThan(300), reason: '骨架一直沒換掉');
       await tester.pump(const Duration(milliseconds: 16));
-      final now = sections.evaluate().length;
+      final now = rowsBuilt();
       if (!route.animation!.isCompleted) {
-        expect(now, 0, reason: '第 $frame 格還在換頁，不建內容');
+        expect(sections, findsNothing, reason: '第 $frame 格還在換頁，不建內容');
       }
-      expect(now - built, lessThanOrEqualTo(1), reason: '第 $frame 格建了好幾組');
+      expect(now - built, lessThanOrEqualTo(1), reason: '第 $frame 格建了好幾列');
       built = now;
     }
-    expect(built, greaterThan(0));
+    expect(built, greaterThan(5));
+    expect(sections, findsWidgets);
 
     await tester.pumpAndSettle();
     // 頁裡還有一個不能捲的清單，指定捲主清單；畫面外的組捲到才建。
