@@ -150,9 +150,22 @@ void main() {
       // 沒有動畫在等下一格。
       expect(tester.binding.transientCallbackCount, 0);
 
+      bool drawn() => tester
+          .widget<Visibility>(
+            find.ancestor(
+              of: find.text('下一章'),
+              matching: find.byType(Visibility),
+            ),
+          )
+          .visible;
+
+      // 系統關閉動畫時選單直接到位：畫出來的每一格都是可按的顏色，不先
+      // 露出一格停用色。
       await tester.pump(const Duration(milliseconds: 500));
-      await pumpButton(0.1, canPress: true);
+      await pumpButton(1, canPress: true);
+      if (drawn()) expect(labelColor(), enabled);
       await tester.pump(const Duration(milliseconds: 16));
+      expect(drawn(), isTrue);
       expect(labelColor(), enabled);
     });
   });
