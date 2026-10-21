@@ -14,10 +14,9 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
-import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
 import 'privacy_pages.dart';
-import 'update_check_runner.dart';
+import 'release_notes_page.dart';
 
 /// 「自動更新」的三種：不自動檢查、自動檢查（有新版時問要不要下載）、自動
 /// 檢查並在 Wi-Fi 下直接下載。
@@ -52,7 +51,6 @@ class _AboutPageState extends State<AboutPage> {
         autoCheck: true,
         autoDownload: UpdatePreferences.defaultAutoDownload,
       ));
-  bool _checkingUpdate = false;
 
   @override
   void initState() {
@@ -270,22 +268,17 @@ class _AboutPageState extends State<AboutPage> {
           GroupedSection(
             header: '系統工具',
             children: [
+              // 「檢查更新」與「崩潰日誌」在「我的」第一層（ADR 0030）。
               GroupedRow(
                 leading: const GroupedIconTile(
-                  Icons.system_update_alt_rounded,
-                  tint: AppTint.moss,
+                  Icons.history_rounded,
+                  tint: AppTint.ink,
                 ),
-                title: '檢查更新',
-                // 目前版本寫在頁頂圖示下方，這裡只在檢查時顯示狀態。
-                value: _checkingUpdate ? '檢查中…' : null,
-                trailing: _checkingUpdate
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : null,
-                showChevron: !_checkingUpdate,
-                onTap: _checkUpdate,
+                title: '更新紀錄',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
+                ),
               ),
               ValueListenableBuilder(
                 valueListenable: _updatePrefs,
@@ -335,17 +328,6 @@ class _AboutPageState extends State<AboutPage> {
                 showChevron: false,
                 enabled: !_clearingWebData,
                 onTap: _clearWebData,
-              ),
-              GroupedRow(
-                leading: const GroupedIconTile(
-                  Icons.report_problem_outlined,
-                  tint: AppTint.rust,
-                ),
-                title: '崩潰日誌',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CrashLogPage()),
-                ),
               ),
             ],
           ),
@@ -409,24 +391,5 @@ class _AboutPageState extends State<AboutPage> {
         AppAlertAction(label: '我已閱讀並知曉', value: null, isDefault: true),
       ],
     );
-  }
-
-  Future<void> _checkUpdate() async {
-    if (_checkingUpdate) return;
-    setState(() => _checkingUpdate = true);
-    final outcome = await UpdateCheckRunner().runManual(context);
-    if (!mounted) return;
-    setState(() => _checkingUpdate = false);
-    final message = switch (outcome) {
-      UpdateCheckOutcome.shown => null,
-      UpdateCheckOutcome.upToDate => '已是最新版',
-      UpdateCheckOutcome.failed => '檢查更新失敗，請稍後再試',
-      UpdateCheckOutcome.dismissed => null,
-      UpdateCheckOutcome.notSupported => '目前平台不支援自動更新',
-    };
-    if (message != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    }
   }
 }
