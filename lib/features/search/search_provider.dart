@@ -52,6 +52,11 @@ class SearchSuggestion {
   final bool fromBookshelf;
 }
 
+/// 進度的訂閱與結果清單分開，書源每次送出或回來不必重建搜尋結果。
+class _ProgressUpdates extends ChangeNotifier {
+  void publish() => notifyListeners();
+}
+
 /// SearchProvider - 搜尋頁面狀態管理
 /// (對標 Legado SearchViewModel.kt)
 ///
@@ -105,17 +110,24 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _progressNotify?.cancel();
     _progressNotify = null;
     _resultsCache = null;
+    _progressUpdates.publish();
     super.notifyListeners();
   }
 
-  /// 每個書源送出、回來、失敗都會回報一次，搜尋頁每次都整頁重建；上百個
-  /// 書源時 100ms 內的回報合成一次通知（與搜尋結果的合併間隔相同），其他
-  /// 變動照常立刻通知並一起帶上。
+  /// 每個書源送出、回來、失敗都會回報一次，100ms 內的回報合成一次進度
+  /// 通知（與搜尋結果的合併間隔相同）；結果等其他變動照常立刻通知。
   static const Duration _progressNotifyDelay = Duration(milliseconds: 100);
   Timer? _progressNotify;
+  final _progressUpdates = _ProgressUpdates();
+
+  /// 只讀進度、等待書源與失敗數的小區塊訂閱這個訊號。
+  Listenable get progressUpdates => _progressUpdates;
 
   void _notifySoon() {
-    _progressNotify ??= Timer(_progressNotifyDelay, notifyListeners);
+    _progressNotify ??= Timer(_progressNotifyDelay, () {
+      _progressNotify = null;
+      _progressUpdates.publish();
+    });
   }
 
   /// 這次搜尋的書源總數；重試失敗書源時不會被縮成重試的數量。
@@ -158,13 +170,15 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   }
 
   /// [entrance] 是搜尋頁的進場動畫；播完才讀書架、分組與搜尋紀錄（ADR 0018）。
+  /// [searchLoader] 換掉向書源搜尋的那一步（測試從記憶體回傳）。
   SearchProvider({
     required Future<void> entrance,
     BookshelfStateTracker? bookshelfTracker,
     SearchScope? initialScope,
+    SearchBookLoader? searchLoader,
   }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
        _initialScope = initialScope {
-    _searchModel = SearchModel(callback: this);
+    _searchModel = SearchModel(callback: this, loader: searchLoader);
     _searchScope = initialScope ?? SearchScope();
     _coverSubscription = AppEventBus()
         .onName(AppEventBus.bookCover)
@@ -588,6 +602,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   void dispose() {
     _disposed = true;
     _progressNotify?.cancel();
+    _progressUpdates.dispose();
     _coverSubscription?.cancel();
     _searchModel.cancelSearch();
     _isSearching = false;
