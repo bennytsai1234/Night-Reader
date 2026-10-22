@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -120,6 +122,132 @@ void main() {
     for (var i = 0; i < 3; i++) {
       expect(find.text('書源$i'), findsOneWidget);
     }
+  });
+
+  testWidgets('退出選取的每一幀都維持有效的列寬', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.toggleSelect('https://s0.example');
+    await tester.pumpAndSettle();
+
+    provider.clearSelection();
+    await tester.pump();
+    for (
+      var elapsed = 0;
+      elapsed <= AppMotion.spring.inMilliseconds;
+      elapsed += 16
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(SourceItemTile).first).width,
+        greaterThan(0),
+      );
+    }
+    expect(find.bySemanticsLabel('書源0 啟用'), findsOneWidget);
+  });
+
+  testWidgets('不在多選時看不到勾選圈', (tester) async {
+    // 勾選圈在槽外溢出，看得到多寬取決於它和列之間的裁切。
+    double visibleCircleWidth() {
+      final tile = find.byType(SourceItemTile).first;
+      final circle = tester.renderObject<RenderBox>(
+        find.descendant(
+          of: tile,
+          matching: find.byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_SelectionCircle',
+          ),
+        ),
+      );
+      final tileBox = tester.renderObject(tile);
+      var visible = circle.localToGlobal(Offset.zero) & circle.size;
+      for (var node = circle.parent; node != null && node != tileBox;) {
+        if (node is RenderClipRect) {
+          visible = visible.intersect(
+            node.localToGlobal(Offset.zero) & node.size,
+          );
+        }
+        node = node.parent;
+      }
+      return math.max(0, visible.width);
+    }
+
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), 0);
+
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.toggleSelect('https://s0.example');
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), greaterThan(0));
+
+    provider.clearSelection();
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), 0);
+  });
+
+  testWidgets('搜尋框只多空白時不重新建立相同的書源清單', (tester) async {
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.setSearchQuery('書源');
+    await tester.pumpAndSettle();
+    var changes = 0;
+    void onChanged() => changes++;
+    provider.addListener(onChanged);
+
+    provider.setSearchQuery('書源 ');
+
+    expect(changes, 0);
+    provider.removeListener(onChanged);
+  });
+
+  testWidgets('首次內容在骨架下面一幀只建立一列書源', (tester) async {
+    gatedDao.gate = Completer<void>();
+    await pumpPage(tester, sources: 30);
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.byType(SourceListSkeleton)),
+      listen: false,
+    );
+    final perFrame = <int>[];
+    var rows = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is SourceItemTile) rows++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    gatedDao.gate!.complete();
+    for (var frame = 0; frame < 180; frame++) {
+      rows = 0;
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 16));
+      perFrame.add(rows);
+      if (!provider.isLoading &&
+          find.byType(SourceListSkeleton).evaluate().isEmpty) {
+        break;
+      }
+    }
+    debugOnRebuildDirtyWidget = previous;
+
+    expect(provider.totalSourceCount, 30);
+    expect(find.byType(SourceListSkeleton), findsNothing);
+    expect(find.byType(SourceItemTile), findsWidgets);
+    expect(
+      perFrame.every((count) => count <= 1),
+      isTrue,
+      reason: '每一幀建立的書源列數：$perFrame',
+    );
   });
 
   testWidgets('entering selection crossfades the title and morphs the glass', (

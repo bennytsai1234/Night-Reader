@@ -184,6 +184,14 @@ class SearchFailure {
   const SearchFailure({required this.source, required this.message});
 }
 
+/// 向一個書源搜尋一個關鍵字；預設是 [BookSourceService.searchBooks]（在書源
+/// isolate 執行），測試換成直接從記憶體回傳。
+typedef SearchBookLoader = Future<List<SearchBook>> Function(
+  BookSource source,
+  String key, {
+  CancelToken? cancelToken,
+});
+
 /// SearchModel - 多書源並行搜尋引擎
 /// (對標 Legado model/webBook/SearchModel.kt)
 ///
@@ -196,7 +204,7 @@ class SearchModel {
   /// 分組裡保留逐源回傳的原始書本，合併卡另外複製。
   final _ResultGroups _groups = _ResultGroups();
   final _SameSourceIndex _rawIndex = _SameSourceIndex();
-  final BookSourceService _sources = BookSourceService();
+  final SearchBookLoader _searchSource;
   List<SearchBook> _searchBooks = [];
   CancelToken? _cancelToken;
 
@@ -213,7 +221,8 @@ class SearchModel {
   /// 暫停中時不為 null，[resume] 時完成。
   Completer<void>? _resumed;
 
-  SearchModel({required this.callback});
+  SearchModel({required this.callback, SearchBookLoader? loader})
+    : _searchSource = loader ?? BookSourceService().searchBooks;
 
   /// 執行搜尋
   Future<void> search({
@@ -421,8 +430,7 @@ class SearchModel {
     (Object, StackTrace)? firstError;
     final found = await Future.wait([
       for (final variant in searchKeyVariants(key))
-        _sources
-            .searchBooks(source, variant, cancelToken: cancelToken)
+        _searchSource(source, variant, cancelToken: cancelToken)
             .timeout(const Duration(seconds: 30))
             .then<List<SearchBook>?>(
               (books) => books,
