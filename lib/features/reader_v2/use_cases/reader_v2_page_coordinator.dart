@@ -202,7 +202,7 @@ class ReaderV2PageCoordinator {
     // 兩樣都先讀好再開；資料庫在背景 isolate，等的這一下主執行緒沒在忙。
     final (sample, enabledRules) = await (
       _replaceTestSample(),
-      _enabledRules(replaceDao),
+      ReaderV2ReplaceRuleSheet.loadEnabledRules(replaceDao, _host.book),
     ).wait;
     if (!context.mounted) return;
     await AppBottomSheet.showCustom<void>(
@@ -219,16 +219,6 @@ class ReaderV2PageCoordinator {
         enabledRules: enabledRules,
       ),
     );
-  }
-
-  /// 這本書啟用的規則；讀不到時交給面板自己再讀一次，失敗就顯示在那一列。
-  Future<List<ReplaceRule>?> _enabledRules(ReplaceRuleDao dao) async {
-    try {
-      return await dao.getEnabledForBook(_host.book.name, _host.book.origin);
-    } catch (error, stack) {
-      AppLog.e('讀取啟用的替換規則失敗: $error', error: error, stackTrace: stack);
-      return null;
-    }
   }
 
   /// 選字選單的「隱藏」：新增一條把這段字換成空白的替換規則，套用到所有

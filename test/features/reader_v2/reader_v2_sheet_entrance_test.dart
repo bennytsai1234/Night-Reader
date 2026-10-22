@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
 import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
@@ -43,16 +45,23 @@ void main() {
 
   Future<void> openReaderOn(
     WidgetTester tester, {
+    Size size = screen,
     double textScale = 1,
     Brightness brightness = Brightness.light,
     bool longSample = false,
+    ReplaceRuleDao Function(AppDatabase db)? replaceDao,
   }) async {
-    setUpScreenshot(tester, size: screen);
+    setUpScreenshot(tester, size: size);
     tester.platformDispatcher.platformBrightnessTestValue = brightness;
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearAllTestValues);
     await tester.runAsync(() async {
       await setUpApp();
+      if (replaceDao != null) {
+        getIt
+          ..unregister<ReplaceRuleDao>()
+          ..registerSingleton<ReplaceRuleDao>(replaceDao(getIt<AppDatabase>()));
+      }
       await seedLibrary();
       if (longSample) {
         final chapter = (await getIt<ChapterDao>().getByBook(kBookUrl))[2];
@@ -69,7 +78,7 @@ void main() {
     });
     await pumpApp(tester);
     await openReader(tester);
-    await tester.tapAt(Offset(screen.width / 2, screen.height / 2));
+    await tester.tapAt(Offset(size.width / 2, size.height / 2));
     await settle(tester, const Duration(milliseconds: 800));
     await waitForText(tester);
   }
@@ -223,4 +232,48 @@ void main() {
     await closePanel(tester);
     await finish(tester);
   });
+
+  // 讀不到啟用的規則時，「管理規則」換成「規則讀取失敗／重試」；骨架一開始
+  // 就照這一列畫。窄畫面放大字級時這一列會換行、比「管理規則」高，照錯的
+  // 那一列畫，換成內容時面板會長高。
+  testWidgets('讀不到啟用的規則時，替換規則面板照失敗那一列畫、高度不變', (tester) async {
+    late _FlakyReplaceRuleDao dao;
+    await openReaderOn(
+      tester,
+      size: const Size(320, 1600),
+      textScale: 2,
+      replaceDao: (db) => dao = _FlakyReplaceRuleDao(db),
+    );
+    // 閱讀器開書時已經讀好、記住了規則；之後才讀不到，只影響開面板前的讀取。
+    dao.failing = true;
+    await expectSteadyEntrance(tester, '替換規則');
+    expect(find.text('規則讀取失敗'), findsOneWidget);
+
+    // 重試仍讀不到時留在失敗那一列，錯誤不外漏；讀得到了就換回規則數。
+    await tester.tap(find.text('重試'));
+    await settle(tester, const Duration(milliseconds: 300));
+    expect(find.text('規則讀取失敗'), findsOneWidget);
+    dao.failing = false;
+    await tester.tap(find.text('重試'));
+    await settle(tester, const Duration(milliseconds: 300));
+    expect(find.text('管理規則'), findsOneWidget);
+    await closePanel(tester);
+    await finish(tester);
+  });
+}
+
+/// [failing] 時讀不到這本書啟用的規則。
+class _FlakyReplaceRuleDao extends ReplaceRuleDao {
+  _FlakyReplaceRuleDao(super.attachedDatabase);
+
+  bool failing = false;
+
+  @override
+  Future<List<ReplaceRule>> getEnabledForBook(
+    String name,
+    String origin,
+  ) async {
+    if (failing) throw StateError('資料庫讀不到');
+    return super.getEnabledForBook(name, origin);
+  }
 }
