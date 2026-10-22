@@ -40,7 +40,7 @@ void main() {
   );
 
   /// 這本書目前讀到的第三章，第一段換成很長的一段：替換規則的即時測試框
-  /// 會填進這一段，撐到五行。
+  /// 會填進這一段，超過三行。
   final longParagraph = kParagraphs.take(5).join();
 
   Future<void> openReaderOn(
@@ -221,22 +221,22 @@ void main() {
     });
   }
 
-  testWidgets('即時測試框填進很長的一段時，替換規則面板高度不變', (tester) async {
+  // 點下去面板就滑上來，原文是之後才讀到、填進測試框的；測試框固定三行高，
+  // 長的原文在框內捲動，面板從第一幀到換完都一樣高。
+  testWidgets('即時測試框之後才填進很長的一段，替換規則面板高度不變', (tester) async {
     await openReaderOn(tester, longSample: true);
     await expectSteadyEntrance(tester, '替換規則');
-    // 測試框打開就是那一段，撐到五行。
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).controller!.text,
-      longParagraph,
-    );
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, longParagraph);
+    expect((field.minLines, field.maxLines), (3, 3));
     await closePanel(tester);
     await finish(tester);
   });
 
-  // 讀不到啟用的規則時，「管理規則」換成「規則讀取失敗／重試」；骨架一開始
-  // 就照這一列畫。窄畫面放大字級時這一列會換行、比「管理規則」高，照錯的
-  // 那一列畫，換成內容時面板會長高。
-  testWidgets('讀不到啟用的規則時，替換規則面板照失敗那一列畫、高度不變', (tester) async {
+  // 規則數是面板打開後才讀的：讀不到時「管理規則」換成「規則讀取失敗／
+  // 重試」。窄畫面放大字級時「規則讀取失敗」放不下一行，這一列只排一行
+  // （截斷），換成失敗那一列面板也不長高。
+  testWidgets('讀不到啟用的規則時，換成失敗那一列面板高度也不變', (tester) async {
     late _FlakyReplaceRuleDao dao;
     await openReaderOn(
       tester,
@@ -244,7 +244,7 @@ void main() {
       textScale: 2,
       replaceDao: (db) => dao = _FlakyReplaceRuleDao(db),
     );
-    // 閱讀器開書時已經讀好、記住了規則；之後才讀不到，只影響開面板前的讀取。
+    // 閱讀器開書時已經讀好、記住了規則；之後才讀不到，只影響面板自己的讀取。
     dao.failing = true;
     await expectSteadyEntrance(tester, '替換規則');
     expect(find.text('規則讀取失敗'), findsOneWidget);
