@@ -66,8 +66,16 @@ Future<void> loadScreenshotFonts() async {
 
   final flutterRoot = Platform.environment['FLUTTER_ROOT'];
   if (flutterRoot != null) {
+    // Windows 的 SDK 是小寫檔名，Linux 的是大寫；Linux 分大小寫。
+    final icons = [
+      'materialicons-regular.otf',
+      'MaterialIcons-Regular.otf',
+    ].map((name) => '$flutterRoot/bin/cache/artifacts/material_fonts/$name');
     await _loadFont('MaterialIcons', [
-      '$flutterRoot/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+      icons.firstWhere(
+        (path) => File(path).existsSync(),
+        orElse: () => icons.first,
+      ),
     ]);
   }
 }
