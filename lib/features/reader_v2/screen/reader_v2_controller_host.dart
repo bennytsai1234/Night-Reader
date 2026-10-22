@@ -28,7 +28,7 @@ class ReaderV2ControllerHost {
     required this._isMounted,
   }) {
     settings.addListener(_onSettingsChanged);
-    menu.addListener(_onMenuChanged);
+    menu.controlsVisible.addListener(_onMenuChanged);
     dependencies = ReaderV2Dependencies(
       book: book,
       initialChapters: initialChapters,
@@ -105,12 +105,13 @@ class ReaderV2ControllerHost {
   }
 
   void _syncAutoPagePause() =>
-      autoPage?.setPaused(menu.controlsVisible || _awayOverMenu);
+      autoPage?.setPaused(menu.controlsVisible.value || _awayOverMenu);
 
+  /// 選單開關只改自動捲動的暫停，不通知閱讀頁：選單、收起手勢與正文的
+  /// 點擊層各自聽 [ReaderV2MenuController.controlsVisible]。
   void _onMenuChanged() {
-    if (menu.controlsVisible) _awayOverMenu = false;
+    if (menu.controlsVisible.value) _awayOverMenu = false;
     _syncAutoPagePause();
-    _onChanged();
   }
 
   /// 朗讀跟隨與自動捲動都會移動正文，同一時間只留一個：朗讀一開始播放
@@ -447,7 +448,7 @@ class ReaderV2ControllerHost {
   void dispose() {
     _lifecycleListener.dispose();
     settings.removeListener(_onSettingsChanged);
-    menu.removeListener(_onMenuChanged);
+    menu.controlsVisible.removeListener(_onMenuChanged);
     autoPage?.removeListener(_onControllerChanged);
     tts?.removeListener(_onTtsChanged);
     runtime?.removeListener(_onControllerChanged);

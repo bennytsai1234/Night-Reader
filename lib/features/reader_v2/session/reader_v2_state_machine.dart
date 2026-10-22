@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:night_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 
 import 'reader_v2_location.dart';
@@ -5,9 +6,25 @@ import 'reader_v2_operation_token.dart';
 import 'reader_v2_state.dart';
 
 class ReaderV2StateMachine {
-  ReaderV2StateMachine(this.state);
+  ReaderV2StateMachine(ReaderV2State state)
+    : _state = state,
+      _visibleChapterIndex = ValueNotifier(state.visibleLocation.chapterIndex);
 
-  ReaderV2State state;
+  ReaderV2State _state;
+  ReaderV2State get state => _state;
+  set state(ReaderV2State value) {
+    _state = value;
+    _visibleChapterIndex.value = value.visibleLocation.chapterIndex;
+  }
+
+  /// 畫面上這一章（[ReaderV2State.visibleLocation] 的章）。每一次寫入位置
+  /// 都跟著更新，捲動途中悄悄記下的位置也一樣；章名、上一章／下一章、
+  /// 目錄的目前章各自聽它，換章時只有它們更新，閱讀頁不重建（ADR 0029
+  /// 做法 3）。未正規化，用的人自己夾在章數內。
+  final ValueNotifier<int> _visibleChapterIndex;
+  ValueListenable<int> get visibleChapterIndex => _visibleChapterIndex;
+
+  void dispose() => _visibleChapterIndex.dispose();
   int _nextOperationId = 0;
   ReaderV2OperationToken? _currentOperation;
   ReaderV2LayoutSpec? _stagedLayoutSpec;

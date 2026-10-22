@@ -1,9 +1,8 @@
 // 閱讀器裡開書與跳章以外的互動，每一幀的成本（ADR 0018、0029）：叫出與
 // 收起選單、打開幾千章的目錄並在裡面甩動與拖快速捲軸、從目錄點一章、從
 // 選單開外觀與排版、朗讀、替換規則面板，步進字號、行高與語速，拖章節
-// 進度條、點擊翻頁與自動翻頁。量的範圍從點下去（或手勢的第一步）開始，
-// 到動畫播完、正文排好，
-// 再多看一秒。用法見 `test/support/frame_budget.dart`；帶 `frame_budget`
+// 進度條、慢慢拖過章界、點擊翻頁與自動翻頁。量的範圍從點下去（或手勢的
+// 第一步）開始，到動畫播完、正文排好，再多看一秒。用法見 `test/support/frame_budget.dart`；帶 `frame_budget`
 // 標籤，平常的全套測試跳過。
 @Tags(['frame_budget'])
 library;
@@ -399,6 +398,35 @@ void main() {
       await tester.tapAt(centre);
       await settle(tester, const Duration(milliseconds: 800));
       expect(_menuHidden(), isTrue);
+
+      // 手指慢慢往上推、不甩，推過章界後停住再放開：換章那一格只更新章名
+      // 這幾個小元件。
+      final startChapter = runtime.state.visibleLocation.chapterIndex;
+      bool crossed() =>
+          runtime.state.visibleLocation.chapterIndex != startChapter;
+      TestGesture? slowDrag;
+      var heldFrames = 0;
+      var slowReleased = false;
+      await measureNavigation(
+        tester,
+        '$round 慢慢拖過章界',
+        action: () async {},
+        settled: () => slowReleased,
+        note: () => crossed() ? '換章後' : '拖動',
+        onFrame: (frame) async {
+          final timeStamp = Duration(milliseconds: 16 * frame);
+          if (frame == 0) {
+            slowDrag = await tester.startGesture(const Offset(196, 600));
+          } else if (!crossed() && frame < 400) {
+            await slowDrag!.moveBy(const Offset(0, -24), timeStamp: timeStamp);
+          } else if (heldFrames++ == 20 && !slowReleased) {
+            await slowDrag!.up(timeStamp: timeStamp);
+            slowReleased = true;
+          }
+        },
+      );
+      await rest(tester);
+      expect(crossed(), isTrue, reason: '$round 要真的拖過章界');
 
       // 點右欄翻下一頁，連點兩下。
       final position = _textPosition(tester);

@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
+import 'reader_v2_bottom_menu.dart' show ReaderV2ChapterNavigationState;
 import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_palette.dart';
 
@@ -13,16 +15,19 @@ class ReaderV2TopMenu extends StatelessWidget {
     super.key,
     required this.controlsVisible,
     required this.bookName,
-    required this.chapterTitle,
+    required this.navigation,
     required this.originName,
     required this.showReadTitleAddition,
     required this.onBack,
     required this.onMore,
   });
 
-  final bool controlsVisible;
+  /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
+  final ValueListenable<bool> controlsVisible;
   final String bookName;
-  final String chapterTitle;
+
+  /// 章節卡的章名照它的目前章。
+  final ReaderV2ChapterNavigationState navigation;
   final String originName;
   final bool showReadTitleAddition;
   final VoidCallback onBack;
@@ -123,13 +128,17 @@ class ReaderV2TopMenu extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                chapterTitle,
-                style: AppTextStyles.labelSm.copyWith(
-                  color: menuStyle.foreground,
+              // 只有章名聽換章（捲動途中換章不重建選單）。
+              child: ValueListenableBuilder<int>(
+                valueListenable: navigation.current,
+                builder: (context, _, _) => Text(
+                  navigation.currentTitle,
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: menuStyle.foreground,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (originName.isNotEmpty) ...[

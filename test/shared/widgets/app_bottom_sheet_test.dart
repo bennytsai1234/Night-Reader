@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
@@ -61,6 +63,10 @@ void main() {
     tester.view.physicalSize = const Size(360, 780);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final visible = ValueNotifier(true);
+    addTearDown(visible.dispose);
+    final menu = ReaderV2MenuController();
+    addTearDown(menu.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -69,9 +75,14 @@ void main() {
           body: Stack(
             children: [
               ReaderV2TopMenu(
-                controlsVisible: true,
+                controlsVisible: visible,
                 bookName: '書名',
-                chapterTitle: '第一章 開始',
+                navigation: ReaderV2ChapterNavigationState(
+                  chapterCount: 1,
+                  current: const AlwaysStoppedAnimation(0),
+                  scrub: menu.scrub,
+                  titleFor: (_) => '第一章 開始',
+                ),
                 originName: '🔥 筆趣閣（優+發現）[2024.05 更新] 精品書源合集',
                 showReadTitleAddition: true,
                 onBack: () {},
