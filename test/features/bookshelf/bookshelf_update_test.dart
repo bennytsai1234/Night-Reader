@@ -151,6 +151,8 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(notified, 0);
 
+      // 蓋著時書架多了一本，露出來重讀時清單變了才通知整頁。
+      await bookDao.upsert(shelfBook('https://a.example/2'));
       provider.setCovered(false);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       // 書架有書時重讀只在讀完通知一次；兩個原因併成一次重讀。
@@ -210,16 +212,75 @@ void main() {
       },
     );
 
-    test('a shelf reload with books on it notifies once, at the end', () async {
+    test(
+      'a shelf reload notifies the page only when the list changed, once, '
+      'at the end; a book that looks different notifies only its card',
+      () async {
+        await bookDao.upsertAll([
+          shelfBook('https://a.example/1'),
+          shelfBook('https://a.example/2'),
+        ]);
+        await provider.loadBooks();
+        var notified = 0;
+        provider.addListener(() => notified++);
+        final firstShown = provider.books.first;
+        final first = provider.bookListenable(firstShown);
+        final second = provider.bookListenable(provider.books.last);
+        final cards = <String>[];
+        first.addListener(() => cards.add(first.value.bookUrl));
+        second.addListener(() => cards.add(second.value.bookUrl));
+
+        // 檢查更新做完、只改了檢查時間：清單與書卡上看得到的都沒變。
+        await bookDao.upsert(provider.books.first.copyWith(lastCheckTime: 1));
+        await provider.loadBooks();
+        expect(notified, 0, reason: '書架有書時不換回骨架，清單沒變不必讓整頁重建');
+        expect(cards, isEmpty);
+        // 書卡沒重建，手上還是畫的時候那一本；按下去時拿的是書架上現在的。
+        final pressed = provider.current(firstShown);
+        expect(pressed, isNot(same(firstShown)));
+        expect(pressed.lastCheckTime, 1, reason: '點開、選單用的是最新的那一本');
+
+        // 一本讀到下一章：只有那張書卡更新。
+        final url = provider.books.last.bookUrl;
+        await bookDao.upsert(
+          provider.books.last.copyWith(totalChapterNum: 10, chapterIndex: 3),
+        );
+        await provider.loadBooks();
+        expect(notified, 0);
+        expect(cards, [url]);
+
+        // 多了一本：清單變了，讀完通知整頁一次。
+        await bookDao.upsert(shelfBook('https://a.example/3'));
+        await provider.loadBooks();
+        expect(notified, 1);
+      },
+    );
+
+    test('a reload that changes nothing still tells whoever waits that the '
+        'shelf has been read', () async {
       await bookDao.upsert(shelfBook('https://a.example/1'));
       await provider.loadBooks();
       var notified = 0;
       provider.addListener(() => notified++);
 
-      await provider.loadBooks();
+      final reload = provider.loadBooks();
+      var loaded = false;
+      unawaited(provider.loaded.then((_) => loaded = true));
+      await reload;
+      await Future<void>.delayed(Duration.zero);
+      expect(notified, 0, reason: '清單沒變，不通知');
+      expect(loaded, isTrue, reason: '等讀完的照樣等得到');
+    });
 
-      // 書架有書時不換回骨架，開始時不必讓整頁重建。
-      expect(notified, 1);
+    test('changing the sort mode tells the page even when the order stays '
+        'the same', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      await provider.loadBooks();
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      await provider.setSortMode(BookshelfSortMode.custom);
+      expect(notified, 1, reason: '頁面照排序方式決定能不能拖曳');
     });
 
     test('a check that ends after the provider is disposed stays '

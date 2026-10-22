@@ -1,22 +1,26 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../theme/app_tokens.dart';
-import 'glass.dart';
 import 'skeleton.dart';
 import 'skeleton_reveal.dart';
+import 'snapshot_sweep.dart';
 
 /// 開 App 的進場（ADR 0025）：系統啟動畫面只有底色，Flutter 第一幀也只畫
 /// 底色；接著整個畫面照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：
 /// 書架、頁首的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。
-/// 骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架換場時標題、
-/// 按鈕與分頁列跟著同一段換成真的（[LaunchEntranceMotion.reveal]）。
+/// 骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架換場時整個畫面
+/// 一起換成真的：換場前把骨架畫面與換好的畫面各畫成一張圖，換場的 0.6 秒
+/// 只把兩張圖照每個像素的橫向位置混合（[SnapshotSweep]，ADR 0029），頁首、
+/// 分頁列與書架照同一條曲線由左而右換過去。
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架用
-/// [maybeOf] 取得各自的進度。從主頁面推出去的頁面不在底下，不受影響。
-/// 系統要求減少動態時骨架直接到位。
+/// [maybeOf] 取得進場的狀態。從主頁面推出去的頁面不在底下，不受影響。
+/// 系統要求減少動態時骨架直接到位、換場直接換好。
 class LaunchEntrance extends StatefulWidget {
   const LaunchEntrance({super.key, required this.child, this.onFinished});
 
@@ -34,7 +38,7 @@ class LaunchEntrance extends StatefulWidget {
   State<LaunchEntrance> createState() => _LaunchEntranceState();
 }
 
-/// 進場各部分的進度，0 還沒出現、1 到位。
+/// 進場的狀態。
 class LaunchEntranceMotion {
   LaunchEntranceMotion._(this._controller, {required this.sweep});
 
@@ -47,46 +51,71 @@ class LaunchEntranceMotion {
   /// 骨架出現是不是由左而右。
   final bool sweep;
 
-  /// 書架換成內容的進度（經過的時間比例）：書架開始換場前是 0，換完之後
-  /// 一直是 1。
-  /// 由書架的 `SkeletonSwitcher` 用 [revealWith] 接上。
-  Animation<double> get reveal => _reveal;
-  final ProxyAnimation _reveal = ProxyAnimation(kAlwaysDismissedAnimation);
+  /// 整個主頁面的定格換場，書架第一次換成內容時用（[reveal]）。
+  final SnapshotSweepController screen = SnapshotSweepController();
 
-  /// 書架換場是不是由左而右。
-  bool get revealSweep => _revealSweep;
-  bool _revealSweep = false;
+  /// 頁首按鈕、標題與分頁列已經換成真的（[LaunchSkeleton] 聽它）；一旦換了
+  /// 就一直是 true，之後書架重新載入不再影響它們。
+  ValueListenable<bool> get revealed => _revealed;
+  final ValueNotifier<bool> _revealed = ValueNotifier(false);
 
-  /// 整段進場（骨架出現到換成內容）已經結束。
-  bool get done => _reveal.parent == kAlwaysCompleteAnimation;
+  /// 書架第一次換成內容已經開始（[reveal] 或 [revealNow]）。
+  bool get revealStarted => _revealStarted;
+  bool _revealStarted = false;
+
+  /// 骨架長完之後至少停多久才換成內容：一個骨架呼吸（由深到淺一次，
+  /// [AppMotion.skeletonPulse]）。準備得比這久就等到準備好；使用者在候選
+  /// 動圖上選的（2026-10-23）：不固定的停頓短時，兩次由左而右的掃動像同一個
+  /// 動作中途頓住。
+  static const Duration pause = AppMotion.skeletonPulse;
+
+  /// 骨架長完、停過 [pause] 時完成；系統要求減少動態時不停。
+  Future<void> get _paused => _pauseOver.future;
+  final Completer<void> _pauseOver = Completer<void>();
 
   /// 整段進場結束時完成。
   Future<void> get finished => _finished.future;
   final Completer<void> _finished = Completer<void>();
 
-  void _finish() {
-    _reveal.parent = kAlwaysCompleteAnimation;
-    _finished.complete();
-  }
-
-  /// 書架第一次換成內容時呼叫：按鈕與分頁列跟著 [progress] 換成玻璃。之後
-  /// 書架重新載入不再影響它們。
-  void revealWith(Animation<double> progress, {required bool sweep}) {
-    if (_reveal.parent != kAlwaysDismissedAnimation) return;
-    _revealSweep = sweep;
-    if (progress.isCompleted) {
-      _finish();
+  /// 書架第一次換成內容：骨架長完停過 [pause] 後，[change] 把書架換成內容，
+  /// 頁首按鈕、標題與分頁列同時換成真的，整個畫面照 [screen] 換場（[sweep]
+  /// 時由左而右）；播完才算整段進場結束。之後再呼叫（書架重新載入）只做
+  /// [change]。
+  Future<void> reveal({
+    required VoidCallback change,
+    required Duration duration,
+    required bool sweep,
+  }) async {
+    if (_revealStarted) {
+      change();
       return;
     }
-    _reveal.parent = progress;
-    void onStatus(AnimationStatus status) {
-      if (!status.isCompleted) return;
-      progress.removeStatusListener(onStatus);
-      _finish();
-    }
-
-    progress.addStatusListener(onStatus);
+    _revealStarted = true;
+    await _paused;
+    await screen.play(
+      duration: duration,
+      sweep: sweep,
+      change: () {
+        change();
+        _revealed.value = true;
+      },
+    );
+    _finish();
   }
+
+  /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。
+  void revealNow() {
+    if (_revealStarted) return;
+    _revealStarted = true;
+    _revealed.value = true;
+    _finish();
+  }
+
+  void _finish() {
+    if (!_finished.isCompleted) _finished.complete();
+  }
+
+  void _dispose() => _revealed.dispose();
 }
 
 class _LaunchEntranceState extends State<LaunchEntrance>
@@ -116,23 +145,43 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     );
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
+      motion._pauseOver.complete();
       return;
     }
+    // 骨架長完才開始算停頓；停頓用計時器，不靠哪一格畫完。
+    void onStatus(AnimationStatus status) {
+      if (!status.isCompleted) return;
+      _controller.removeStatusListener(onStatus);
+      _pause = Timer(LaunchEntranceMotion.pause, () {
+        if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
+      });
+    }
+
+    _controller.addStatusListener(onStatus);
     // 第一幀只畫底色、和系統啟動畫面一樣，畫完才開始進場。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _controller.forward();
     });
   }
 
+  Timer? _pause;
+
   @override
   void dispose() {
+    _pause?.cancel();
     _controller.dispose();
+    _motion?._dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) =>
-      _LaunchEntranceScope(motion: _motion!, child: widget.child);
+  Widget build(BuildContext context) {
+    final motion = _motion!;
+    return _LaunchEntranceScope(
+      motion: motion,
+      child: SnapshotSweep(controller: motion.screen, child: widget.child),
+    );
+  }
 }
 
 class _LaunchEntranceScope extends InheritedWidget {
@@ -146,15 +195,16 @@ class _LaunchEntranceScope extends InheritedWidget {
 }
 
 /// 開 App 進場時，頁首與分頁列的一個元件先畫成骨架，和書架的骨架一起
-/// 出現、一起呼吸；書架換場時骨架淡掉、元件出現。由左而右時照元件中心的
-/// 橫向位置決定先後，和書架的掃動對齊。
+/// 出現、一起呼吸；書架換場時整個畫面一起換成真的（[LaunchEntrance]）。
+/// 骨架出現由左而右時照元件中心的橫向位置決定先後，和書架的掃動對齊。
 ///
 /// - 玻璃（頁首按鈕、分頁列、搜尋鈕）：骨架照它的大小與 [borderRadius] 畫
-///   （圓鈕就是最窄的膠囊），玻璃連同模糊一起淡入（[GlassReveal]，ADR 0022）。
+///   （圓鈕就是最窄的膠囊）。
 /// - 一行字（[LaunchSkeleton.text]，頁首標題）：骨架是和字同寬、和字一樣高
-///   的長條（同 [SkeletonLine]），字只淡入。
+///   的長條（同 [SkeletonLine]）。
 ///
-/// 出現前不接點擊、不給讀屏念。不在進場底下，或進場結束後才建的（例如
+/// 換成真的之前 [child] 不畫（玻璃不取樣背景）、不接點擊、不給讀屏念，但
+/// 一直在元件樹裡，按鈕的狀態不丟。不在進場底下，或進場結束後才建的（例如
 /// 之後才打開的分頁），直接畫 [child]。
 class LaunchSkeleton extends StatefulWidget {
   const LaunchSkeleton({
@@ -184,19 +234,9 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   /// 開始出現，先取中央。
   double _u = 0.5;
 
-  /// 照 [_u] 換算的濃度；跟著書架換場走。
-  late final Animation<double> _glass = _SweptAnimation(
-    parent: _motion!.reveal,
-    opacityAt: (progress) => SkeletonReveal.incomingOpacityAt(
-      progress,
-      _u,
-      sweep: _motion!.revealSweep,
-    ),
-  );
-
   LaunchEntranceMotion? _motion;
 
-  /// 建立時進場已經結束（或不在進場底下）：一直直接畫。
+  /// 建立時進場已經換成真的（或不在進場底下）：一直直接畫。
   bool _passThrough = true;
 
   @override
@@ -205,9 +245,9 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
     final motion = LaunchEntrance.maybeOf(context);
     if (_motion == null) {
       _motion = motion;
-      _passThrough = motion == null || motion.done;
+      _passThrough = motion == null || motion.revealed.value;
     }
-    if (_passThrough || _motion!.done) return;
+    if (_passThrough || _motion!.revealed.value) return;
     // 螢幕大小改變時（登記在這裡）重新量位置。
     MediaQuery.sizeOf(context);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
@@ -227,46 +267,49 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
     final motion = _motion;
     if (_passThrough || motion == null) return widget.child;
     final style = widget.textStyle;
-    final child = style == null
-        ? GlassReveal(animation: _glass, child: widget.child)
-        : FadeTransition(opacity: _glass, child: widget.child);
     // 字的骨架是一條和字一樣高的長條，置中在那一行上。
     final barHeight = style == null
         ? null
         : MediaQuery.textScalerOf(context).scale(style.fontSize ?? 14) *
               Skeleton.barHeightFactor;
-    return AnimatedBuilder(
-      animation: Listenable.merge([motion.skeleton, motion.reveal]),
-      child: child,
-      builder: (context, child) {
-        final done = motion.done || motion.reveal.isCompleted;
-        // 玻璃出現前不接點擊、不給讀屏念；元件樹一直相同，按鈕的狀態不丟。
-        final hidden = !done;
-        final appeared = SkeletonReveal.incomingOpacityAt(
-          motion.skeleton.value,
-          _u,
-          sweep: motion.sweep,
-        );
-        final skeleton = appeared * (1 - _glass.value);
-        final base = Skeleton.colorOf(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: motion.revealed,
+      child: widget.child,
+      builder: (context, revealed, child) {
+        final hidden = !revealed;
+        // 元件樹一直相同，換成真的時按鈕的狀態不丟。
         return Stack(
           fit: StackFit.passthrough,
           children: [
-            IgnorePointer(
-              ignoring: hidden,
-              child: ExcludeSemantics(excluding: hidden, child: child),
+            _PaintedWhen(
+              shown: revealed,
+              child: IgnorePointer(
+                ignoring: hidden,
+                child: ExcludeSemantics(excluding: hidden, child: child),
+              ),
             ),
-            if (!done)
+            if (hidden)
               Positioned.fill(
                 child: IgnorePointer(
                   child: Center(
-                    child: Skeleton(
-                      child: SkeletonBox(
-                        width: double.infinity,
-                        height: barHeight ?? double.infinity,
-                        borderRadius: widget.borderRadius,
-                        color: base.withValues(alpha: base.a * skeleton),
-                      ),
+                    child: AnimatedBuilder(
+                      animation: motion.skeleton,
+                      builder: (context, _) {
+                        final appeared = SkeletonReveal.incomingOpacityAt(
+                          motion.skeleton.value,
+                          _u,
+                          sweep: motion.sweep,
+                        );
+                        final base = Skeleton.colorOf(context);
+                        return Skeleton(
+                          child: SkeletonBox(
+                            width: double.infinity,
+                            height: barHeight ?? double.infinity,
+                            borderRadius: widget.borderRadius,
+                            color: base.withValues(alpha: base.a * appeared),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -278,16 +321,37 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
   }
 }
 
-/// 把 [parent] 的進度換算成某個位置上的濃度。
-class _SweptAnimation extends Animation<double>
-    with AnimationWithParentMixin<double> {
-  _SweptAnimation({required this.parent, required this.opacityAt});
+/// [shown] 為 false 時排版照常、不畫：玻璃不取樣背景，也不另開圖層。
+class _PaintedWhen extends SingleChildRenderObjectWidget {
+  const _PaintedWhen({required this.shown, required super.child});
+
+  final bool shown;
 
   @override
-  final Animation<double> parent;
-
-  final double Function(double progress) opacityAt;
+  _RenderPaintedWhen createRenderObject(BuildContext context) =>
+      _RenderPaintedWhen(shown);
 
   @override
-  double get value => opacityAt(parent.value);
+  void updateRenderObject(
+    BuildContext context,
+    _RenderPaintedWhen renderObject,
+  ) {
+    renderObject.shown = shown;
+  }
+}
+
+class _RenderPaintedWhen extends RenderProxyBox {
+  _RenderPaintedWhen(this._shown);
+
+  bool _shown;
+  set shown(bool value) {
+    if (_shown == value) return;
+    _shown = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (_shown) super.paint(context, offset);
+  }
 }

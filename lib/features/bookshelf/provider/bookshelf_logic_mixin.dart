@@ -112,6 +112,9 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
   Future<void> setSortMode(BookshelfSortMode value) async {
     if (sortMode == value) return;
     sortMode = value;
+    // 排序方式本身是頁面看的狀態（整理選單的勾選、自訂排序時可以拖曳），
+    // 換了就通知；書的順序有沒有跟著變，由重讀自己判斷。
+    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(PreferKey.bookshelfSort, value.index);
     await loadBooks();

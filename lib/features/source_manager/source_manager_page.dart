@@ -416,7 +416,7 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     // 列數照上次讀完時的書源數；上次沒有書源時不畫列，空著等空頁淡入。
     return SkeletonSwitcher(
       loading: p.isLoading && p.totalSourceCount == 0,
-      waitForCovers: true,
+      waitForCovers: CoverWait.brief,
       backdrop: AppChrome.of(context).groupedBackground,
       skeleton: p.expectsSources
           ? SourceListSkeleton(

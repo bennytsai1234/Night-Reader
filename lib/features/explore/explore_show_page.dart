@@ -97,7 +97,7 @@ class ExploreShowView extends StatelessWidget {
   Widget _buildBody(BuildContext context, ExploreShowProvider provider) {
     return SkeletonSwitcher(
       loading: provider.isLoading && provider.books.isEmpty,
-      waitForCovers: true,
+      waitForCovers: CoverWait.brief,
       // 書單直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
       skeleton: ExploreBookListSkeleton(padding: _listPadding(context)),

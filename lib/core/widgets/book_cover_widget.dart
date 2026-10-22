@@ -295,6 +295,62 @@ class _CoverImageState extends State<_CoverImage> {
 
   Set<String> get _failed => BookCoverWidget._failedCoverSources;
 
+  /// 這張封面登記在哪一次等待裡（[CoverReveal]），畫得出來、失敗或拆掉時
+  /// 拿掉。
+  CoverReveal? _waitingOn;
+
+  /// 網路封面是不是已經存在手機裡（磁碟快取）；null 是還沒查或還在查。
+  /// 只在 [CoverWait.onDevice] 的等待裡查：不在手機裡的要上網抓，換場不等它。
+  bool? _onDevice;
+  bool _checking = false;
+
+  @override
+  void dispose() {
+    _unregister();
+    super.dispose();
+  }
+
+  /// 這張封面還畫不出來，換場要等它。[network] 的封面在
+  /// [CoverWait.onDevice] 的等待裡，查到不在手機裡就不等。
+  void _register(CoverReveal? reveal, {bool network = false}) {
+    if (reveal == null) return;
+    if (network && reveal.wait == CoverWait.onDevice) {
+      if (_onDevice == false) return;
+      _checkOnDevice(widget.source!);
+    }
+    if (identical(_waitingOn, reveal)) return;
+    _unregister();
+    _waitingOn = reveal..add(this);
+  }
+
+  /// 畫得出來、失敗、改畫別的，或不再顯示：換場不再等這一張。每一條不等的
+  /// 路都要走到這裡，[CoverWait.onDevice] 沒有時間上限，漏一張整頁就停在
+  /// 骨架。
+  void _unregister() {
+    _waitingOn?.remove(this);
+    _waitingOn = null;
+  }
+
+  /// 查一次這張網路封面是不是已經在手機裡（`CachedNetworkImageProvider`
+  /// 用的同一個磁碟快取）；查不到或出錯都算不在。
+  void _checkOnDevice(String source) {
+    if (_checking || _onDevice != null) return;
+    _checking = true;
+    CachedNetworkImageProvider.defaultCacheManager
+        .getFileFromCache(source)
+        .then(
+          (file) => _onDeviceChecked(file != null),
+          onError: (Object _) => _onDeviceChecked(false),
+        );
+  }
+
+  void _onDeviceChecked(bool onDevice) {
+    _checking = false;
+    if (!mounted) return;
+    _onDevice = onDevice;
+    if (!onDevice) _unregister();
+  }
+
   String get bookName => widget.bookName;
   double get width => widget.width;
   double get height => widget.height;
@@ -306,12 +362,14 @@ class _CoverImageState extends State<_CoverImage> {
   Widget build(BuildContext context) {
     final source = widget.source;
     if (source == null) {
+      _unregister();
       onReady(null);
       return _buildDefaultCover();
     }
     if (_failed.contains(source)) {
       // 失敗過的不再重抓。剛才在這裡失敗、還在淡入的照原本的淡入接著播；
       // 之前就記下失敗的（新建的封面）直接畫。
+      _unregister();
       onReady(source);
       return _FadeInOnce(
         key: _fallbackKey,
@@ -339,7 +397,7 @@ class _CoverImageState extends State<_CoverImage> {
           final reveal = CoverRevealScope.waitingOf(context);
           if (bytes == null || bytes.isEmpty) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              reveal?.add(source);
+              _register(reveal);
               return _buildPlaceholder(context);
             }
             return _buildFailedCover(context, source);
@@ -390,7 +448,7 @@ class _CoverImageState extends State<_CoverImage> {
       width: width,
       height: height,
       frameBuilder: (context, child, frame, sync) =>
-          _fadeInFrame(context, source, child, frame, sync),
+          _fadeInFrame(context, source, child, frame, sync, network: true),
       errorBuilder: (context, error, stackTrace) =>
           _buildFailedCover(context, source),
     );
@@ -416,13 +474,14 @@ class _CoverImageState extends State<_CoverImage> {
     String source,
     Widget child,
     int? frame,
-    bool wasSynchronouslyLoaded,
-  ) {
+    bool wasSynchronouslyLoaded, {
+    bool network = false,
+  }) {
     final reveal = CoverRevealScope.waitingOf(context);
     if (frame == null) {
-      reveal?.add(source);
+      _register(reveal, network: network);
     } else {
-      reveal?.remove(source);
+      _unregister();
       onReady(source);
     }
     if (wasSynchronouslyLoaded) return child;
@@ -446,7 +505,7 @@ class _CoverImageState extends State<_CoverImage> {
   /// 以 [AppMotion.fade] 淡入，不在載入底上一幀冒出來。
   Widget _buildFailedCover(BuildContext context, String source) {
     final reveal = CoverRevealScope.waitingOf(context);
-    reveal?.remove(source);
+    _unregister();
     _failed.add(source);
     onReady(source);
     return _FadeInOnce(

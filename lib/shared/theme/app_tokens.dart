@@ -156,8 +156,9 @@ class AppMotion {
   static const Duration fade = Duration(milliseconds: 250);
   static const Curve fadeCurve = Curves.easeInOut;
 
-  /// 一次淡入前最多等封面解碼多久。等待時骨架照常呼吸；再久就寧可讓還
-  /// 沒好的封面晚點各自淡入，不讓整頁卡在骨架。
+  /// 換場前最多等封面解碼多久（`CoverWait.brief`：發現的書單等頁面）。等待時
+  /// 骨架照常呼吸；再久就寧可讓還沒好的封面晚點各自淡入，不讓整頁卡在
+  /// 骨架。開 App 的書架不設上限（ADR 0031）。
   static const Duration revealCoverWait = Duration(milliseconds: 300);
 
   /// 選單、面板滑入。

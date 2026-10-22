@@ -54,25 +54,61 @@ class BookshelfProvider extends BookshelfProviderBase
   /// 和蓋著時收到的下載完成合併，不各讀一次。
   void reloadWhenUncovered() => _reloadWhenUncovered = true;
 
+  int _loadsInFlight = 0;
+  Completer<void>? _allLoaded;
+
+  @override
+  Future<void> get loaded => _loadsInFlight == 0
+      ? Future<void>.value()
+      : (_allLoaded ??= Completer<void>()).future;
+
   @override
   Future<void> loadBooks() async {
+    _loadsInFlight++;
+    try {
+      await _load();
+    } finally {
+      _loadsInFlight--;
+      if (_loadsInFlight == 0) {
+        _allLoaded?.complete();
+        _allLoaded = null;
+      }
+    }
+  }
+
+  Future<void> _load() async {
     // 書架上已經有書時，載入中不換回骨架，開始時通知只會讓整頁白白重建
     // 一次（書架檢查、下載完成都會重讀）；空書架或上次失敗時才要畫骨架。
     final showsLoading = books.isEmpty || loadErrorMessage != null;
     isLoading = true;
     loadErrorMessage = null;
     if (showsLoading) notifyListeners();
+    // 讀回來的書和原本同樣幾本、同樣順序時，書架本身沒變：不通知整頁，
+    // 只有畫面上看得到的內容變了的那幾張書卡各自更新（[bookListenable]，
+    // ADR 0029）。書架檢查、下載完成都會重讀，多半只改了其中幾本。
+    var listChanged = true;
     try {
+      final previous = books;
       books = await bookDao.getInBookshelf();
       _sortBooks();
       rememberShelf(books);
+      listChanged = showsLoading || !_sameOrder(previous, books);
     } catch (error, stackTrace) {
       AppLog.e('載入書架失敗: $error', error: error, stackTrace: stackTrace);
       loadErrorMessage = '書架載入失敗，請重試';
     } finally {
       isLoading = false;
-      notifyListeners();
+      publishBooks();
+      if (listChanged) notifyListeners();
     }
+  }
+
+  static bool _sameOrder(List<Book> a, List<Book> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].bookUrl != b[i].bookUrl) return false;
+    }
+    return true;
   }
 
   void _sortBooks() {

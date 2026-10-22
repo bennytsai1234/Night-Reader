@@ -4,15 +4,34 @@ import 'dart:collection';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-/// 骨架換成內容前，等內容建好、裡面的封面解碼好（[SkeletonSwitcher.waitForCovers]）。
+import '../theme/app_tokens.dart';
+
+/// 換場前怎麼等封面（[SkeletonSwitcher.waitForCovers]）。
+enum CoverWait {
+  /// 畫面上的封面（網路的也算）最多等 [AppMotion.revealCoverWait]，還沒好的
+  /// 換場後各自淡入：發現的書單、分組清單、書源管理。
+  brief,
+
+  /// 手機裡已經有的封面全部畫得出來才換場，不設時間上限；要上網抓的網路
+  /// 封面不等：開 App 的書架（ADR 0031）。
+  onDevice,
+}
+
+/// 骨架換成內容前，等內容建好、裡面的封面畫得出來（[SkeletonSwitcher.waitForCovers]）。
 ///
 /// 內容先在骨架底下以全透明建好。較重的一塊（一張書卡，[CoverRevealSlot]）
 /// 排隊，一幀只建一塊：整頁擠在同一幀建完，骨架的呼吸會頓一下（ADR 0018）。
-/// 裡面的封面（`BookCoverWidget`）解碼前 [add]、解碼好或失敗時 [remove]；
-/// [settle] 等排隊的都建好，再等封面都好了（或逾時）就結束等待，整頁連同
-/// 封面一次淡入。等待中解碼好的封面直接顯示，不另外淡入。
+/// 裡面的封面（`BookCoverWidget`）解碼前 [add]、解碼好、失敗或不再顯示時
+/// [remove]（[CoverWait.onDevice] 時要上網抓的封面不登記）。[settle] 等排隊的
+/// 都建好，再照 [wait] 等登記的封面，整頁連同封面一次換場。
+/// [CoverWait.onDevice] 不設時間上限：每一個登記都一定會以解碼好、失敗或
+/// 拆掉結束。等待中解碼好的封面直接顯示，不另外淡入。
 class CoverReveal extends ChangeNotifier {
-  final Set<String> _pending = {};
+  CoverReveal(this.wait);
+
+  final CoverWait wait;
+
+  final Set<Object> _pending = {};
   Completer<void>? _drained;
   bool _waiting = true;
 
@@ -25,12 +44,15 @@ class CoverReveal extends ChangeNotifier {
   /// 還在等封面；結束後新解碼的封面照常各自淡入。
   bool get waiting => _waiting;
 
-  void add(String source) {
-    if (_waiting) _pending.add(source);
+  /// 登記一張還畫不出來的封面；[cover] 是那一張封面自己（同一張重複登記
+  /// 只算一次，同一個來源的兩張封面各算各的）。
+  void add(Object cover) {
+    if (_waiting) _pending.add(cover);
   }
 
-  void remove(String source) {
-    if (!_pending.remove(source) || _pending.isNotEmpty) return;
+  /// [cover] 畫得出來了、失敗了，或不再顯示。
+  void remove(Object cover) {
+    if (!_pending.remove(cover) || _pending.isNotEmpty) return;
     _drained?.complete();
     _drained = null;
   }
@@ -62,17 +84,25 @@ class CoverReveal extends ChangeNotifier {
     SchedulerBinding.instance.ensureVisualUpdate();
   }
 
-  /// 等這一幀建好內容；排隊的一塊塊建完、封面都登記過，再等到封面都好了
-  /// 或 [timeout]。排隊的不算在逾時裡：沒建完就換場會露出空格。
-  Future<void> settle(Duration timeout) async {
+  /// 等這一幀建好內容；排隊的一塊塊建完、封面都登記過，再等到登記的封面
+  /// 都畫得出來（或失敗、拆掉）；[CoverWait.brief] 最多等
+  /// [AppMotion.revealCoverWait]。排隊的不算在逾時裡：沒建完就換場會露出
+  /// 空格。
+  Future<void> settle() async {
     await SchedulerBinding.instance.endOfFrame;
     // 看的是「還沒建好」而不是「還在排隊」：最後一塊放行後下一幀才建，它的
     // 封面那時才登記。這一塊建好的那一幀，封面在同一個 build 裡登記，接下
     // 來的封面等待照樣等它。
     if (_unbuilt > 0) await (_allBuilt ??= Completer<void>()).future;
     if (_pending.isNotEmpty) {
-      final drained = _drained = Completer<void>();
-      await drained.future.timeout(timeout, onTimeout: () {});
+      final drained = (_drained = Completer<void>()).future;
+      await switch (wait) {
+        CoverWait.brief => drained.timeout(
+          AppMotion.revealCoverWait,
+          onTimeout: () {},
+        ),
+        CoverWait.onDevice => drained,
+      };
     }
     _waiting = false;
     _pending.clear();
