@@ -236,16 +236,14 @@ class _SourceRowContent extends StatelessWidget {
       child: Row(
         children: [
           // 編輯模式的勾選圈從左側滑入。
-          ClipRect(
-            child: TweenAnimationBuilder<double>(
-              duration: AppMotion.spring,
-              curve: AppMotion.springCurve,
-              tween: Tween(end: editing ? _kCheckSlotWidth : 0),
-              // 彈簧收回時會超過終點；保留彈簧，只把不能為負的寬度截在 0。
-              builder: (context, width, child) => SizedBox(
-                width: width.clamp(0.0, double.infinity),
-                child: child,
-              ),
+          // 彈簧收回時會越過寬度 0；AnimatedSize 在排版時照約束定出尺寸，
+          // 越過的部分自然停在 0，展開那側的回彈照舊。它也負責裁切。
+          AnimatedSize(
+            duration: AppMotion.spring,
+            curve: AppMotion.springCurve,
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: editing ? _kCheckSlotWidth : 0,
               child: OverflowBox(
                 // 列表列的高度不設上限，預設的 max 會把高度撐成無限大。
                 fit: OverflowBoxFit.deferToChild,
