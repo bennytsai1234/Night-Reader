@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../theme/app_tokens.dart';
+
 /// 骨架換場的方式；App 固定用 [sweep]（不給選，ADR 0024），[fade] 用在骨架
 /// 自己淡掉的地方。
 enum SkeletonRevealStyle {
@@ -39,19 +41,27 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
   bool get sweeps => style == SkeletonRevealStyle.sweep;
 
   /// 換進來的那一層（換成內容時是內容，骨架出現時是骨架）在橫向位置
-  /// [u]（0 左緣、1 右緣）的濃度：[progress] 是整段換場套過曲線的進度，
-  /// 0 還沒開始、1 完全換好。
+  /// [u]（0 左緣、1 右緣）的濃度：[progress] 是整段換場經過的時間比例（不套
+  /// 曲線），0 還沒開始、1 完全換好。
+  ///
+  /// 由左而右時每個位置在自己那一半的時間裡各自套一次 [AppMotion.fadeCurve]：
+  /// 左緣在前一半、右緣在後一半，中間依位置錯開，每一處都是慢慢開始、慢慢
+  /// 停住。原本是整段套一次曲線、每個位置照進度直線淡入，左半邊在最快的
+  /// 時候急停、右半邊一開始就急衝出來，畫面看起來在抖（2026-10-22）。
   static double incomingOpacityAt(
     double progress,
     double u, {
     bool sweep = true,
-  }) => sweep ? (2 * progress - u).clamp(0.0, 1.0) : progress;
+  }) => AppMotion.fadeCurve.transform(
+    sweep ? (2 * progress - u).clamp(0.0, 1.0) : progress.clamp(0.0, 1.0),
+  );
 
-  /// 由左而右時，換進來那一層的濃度沿橫向的轉折點（位置、濃度），依位置
-  /// 排好。濃度在轉折點之間是直線，畫成漸層只要這幾個停點。
+  /// 由左而右時，畫成漸層用的停點（位置、換進來那一層的濃度），依位置排好。
+  /// 正在變的那一段取 [_rampSegments] 段直線，兩側已經到底的部分只要兩端。
   static List<(double, double)> sweepStops(double progress) {
     final points = <double>{0, 1};
-    for (final u in [2 * progress - 1, 2 * progress]) {
+    for (var i = 0; i <= _rampSegments; i++) {
+      final u = 2 * progress - 1 + i / _rampSegments;
       if (u > 0 && u < 1) points.add(u);
     }
     return [
@@ -59,6 +69,10 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
         (u, incomingOpacityAt(progress, u)),
     ];
   }
+
+  /// [sweepStops] 在正在變的那一段取幾段直線：16 段時直線與曲線最多差
+  /// 0.22% 的濃度，看不出來。
+  static const int _rampSegments = 16;
 
   @override
   SkeletonReveal copyWith({SkeletonRevealStyle? style, Duration? duration}) =>
@@ -84,11 +98,13 @@ class SkeletonReveal extends ThemeExtension<SkeletonReveal> {
 /// 換場時的哪一層：骨架或內容。
 enum SkeletonRevealSide { content, skeleton }
 
-/// 骨架換場的一層：照 [opacity] 淡入淡出；[sweep] 時改成換進來的那一層
+/// 骨架換場的一層：照 [presence] 淡入淡出；[sweep] 時改成換進來的那一層
 /// 左邊先、右邊後出現（[SkeletonReveal.incomingOpacityAt]），換出去的那一層
 /// 在每個位置補滿剩下的濃度。
 ///
-/// [opacity] 是這一層自己的濃度；[incoming] 是這一次換進來的是哪一層：換成
+/// [presence] 是這一層自己出現的進度，0 不在、1 完全在，是經過的時間比例、
+/// 不套曲線（曲線由 [SkeletonReveal.incomingOpacityAt] 套）；[incoming] 是
+/// 這一次換進來的是哪一層：換成
 /// 內容時是 [SkeletonRevealSide.content]，骨架出現時是
 /// [SkeletonRevealSide.skeleton]。同一次換場的兩層要給同一個 [incoming]。
 /// 完全不透明時直接畫、不另開圖層，換場結束後沒有額外負擔；子樹一直在
@@ -96,14 +112,14 @@ enum SkeletonRevealSide { content, skeleton }
 class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
   const SkeletonRevealLayer({
     super.key,
-    required this.opacity,
+    required this.presence,
     required this.side,
     this.incoming = SkeletonRevealSide.content,
     this.sweep = false,
     super.child,
   });
 
-  final Animation<double> opacity;
+  final Animation<double> presence;
   final SkeletonRevealSide side;
   final SkeletonRevealSide incoming;
   final bool sweep;
@@ -111,7 +127,7 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
   @override
   RenderSkeletonRevealLayer createRenderObject(BuildContext context) =>
       RenderSkeletonRevealLayer(
-        opacity: opacity,
+        presence: presence,
         side: side,
         incoming: incoming,
         sweep: sweep,
@@ -123,7 +139,7 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
     RenderSkeletonRevealLayer renderObject,
   ) {
     renderObject
-      ..opacity = opacity
+      ..presence = presence
       ..side = side
       ..incoming = incoming
       ..sweep = sweep;
@@ -132,18 +148,18 @@ class SkeletonRevealLayer extends SingleChildRenderObjectWidget {
 
 class RenderSkeletonRevealLayer extends RenderProxyBox {
   RenderSkeletonRevealLayer({
-    required this._opacity,
+    required this._presence,
     required this._side,
     required this._incoming,
     required this._sweep,
   });
 
-  Animation<double> _opacity;
-  set opacity(Animation<double> value) {
-    if (identical(_opacity, value)) return;
-    if (attached) _opacity.removeListener(_onTick);
-    _opacity = value;
-    if (attached) _opacity.addListener(_onTick);
+  Animation<double> _presence;
+  set presence(Animation<double> value) {
+    if (identical(_presence, value)) return;
+    if (attached) _presence.removeListener(_onTick);
+    _presence = value;
+    if (attached) _presence.addListener(_onTick);
     _onTick();
   }
 
@@ -175,8 +191,8 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
 
   bool get _isIncoming => _side == _incoming;
 
-  /// 換場進度（0 還沒開始、1 換好），由這一層自己的濃度換算。
-  double get _progress => _isIncoming ? _opacity.value : 1 - _opacity.value;
+  /// 換場進度（0 還沒開始、1 換好），由這一層自己出現的進度換算。
+  double get _progress => _isIncoming ? _presence.value : 1 - _presence.value;
 
   /// 這一層在橫向位置 [u]（0 左緣、1 右緣）的濃度。
   @visibleForTesting
@@ -203,13 +219,13 @@ class RenderSkeletonRevealLayer extends RenderProxyBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _opacity.addListener(_onTick);
+    _presence.addListener(_onTick);
     _partial = !_fullyOpaque && !_fullyClear;
   }
 
   @override
   void detach() {
-    _opacity.removeListener(_onTick);
+    _presence.removeListener(_onTick);
     super.detach();
   }
 

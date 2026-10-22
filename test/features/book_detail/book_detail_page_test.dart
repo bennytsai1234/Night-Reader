@@ -201,14 +201,14 @@ void main() {
       await untilContentLaidOut(tester);
       // 內容已經排好，骨架還整個蓋著；骨架沒有被重建，呼吸接著走。
       expect(textIn(tocHeader, skeleton: true), findsOneWidget);
-      expect(skeletonLayer(tester).opacity.value, 1);
+      expect(skeletonLayer(tester).presence.value, 1);
       expect(tester.state(find.byType(Skeleton).last), same(breathing));
 
       // 下一幀才開始換場，照設定由左而右（預設）。
       await tester.pump();
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       expect(skeletonLayer(tester).sweep, isTrue);
-      expect(skeletonLayer(tester).opacity.value, inExclusiveRange(0, 1));
+      expect(skeletonLayer(tester).presence.value, inExclusiveRange(0, 1));
 
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
@@ -243,7 +243,7 @@ void main() {
       final before = tester.getRect(textIn(tocHeader, skeleton: true)).top;
 
       await untilContentLaidOut(tester);
-      expect(skeletonLayer(tester).opacity.value, 1, reason: '換場還沒開始');
+      expect(skeletonLayer(tester).presence.value, 1, reason: '換場還沒開始');
       expect(
         tester.getRect(textIn(tocHeader, skeleton: true)).top,
         before,
@@ -253,7 +253,7 @@ void main() {
       // 換場途中骨架也照同一本書，只有透明度在變。
       await tester.pump();
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
-      expect(skeletonLayer(tester).opacity.value, inExclusiveRange(0, 1));
+      expect(skeletonLayer(tester).presence.value, inExclusiveRange(0, 1));
       expect(tester.getRect(textIn(tocHeader, skeleton: true)).top, before);
       await tester.pumpAndSettle();
       expect(textIn(tocHeader, skeleton: true), findsNothing);

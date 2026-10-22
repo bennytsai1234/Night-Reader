@@ -514,14 +514,6 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
     vsync: this,
     duration: AppMotion.fade,
   )..addStatusListener(_onFadeStatus);
-  late final Animation<double> _skeletonOpacity = CurvedAnimation(
-    parent: _skeleton,
-    curve: AppMotion.fadeCurve,
-  );
-  late final Animation<double> _infoOpacity = CurvedAnimation(
-    parent: _info,
-    curve: AppMotion.fadeCurve,
-  );
 
   /// null 表示還沒讀過 MediaQuery，第一次讀到時才開始同步狀態。
   bool? _reduceMotion;
@@ -606,7 +598,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
         if (showInfo)
           SkeletonRevealLayer(
             key: const ValueKey(SkeletonRevealSide.content),
-            opacity: _infoOpacity,
+            presence: _info,
             side: SkeletonRevealSide.content,
             incoming: _incoming,
             sweep: _sweep,
@@ -615,7 +607,7 @@ class _InfoLayerState extends State<_InfoLayer> with TickerProviderStateMixin {
         if (showSkeleton)
           SkeletonRevealLayer(
             key: const ValueKey(SkeletonRevealSide.skeleton),
-            opacity: _skeletonOpacity,
+            presence: _skeleton,
             side: SkeletonRevealSide.skeleton,
             incoming: _incoming,
             sweep: _sweep,
