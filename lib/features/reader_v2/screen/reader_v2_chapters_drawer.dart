@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_palette.dart';
@@ -14,7 +15,7 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   const ReaderV2ChaptersDrawer({
     super.key,
     required this.chapters,
-    required this.currentChapterIndex,
+    required this.currentChapter,
     required this.titleFor,
     required this.onChapterTap,
     this.onClosed,
@@ -22,7 +23,9 @@ class ReaderV2ChaptersDrawer extends StatefulWidget {
   });
 
   final List<BookChapter> chapters;
-  final int currentChapterIndex;
+
+  /// 畫面上這一章（打勾、捲到它）。目錄開著時換章也跟著換。
+  final ValueListenable<int> currentChapter;
   final String Function(int index) titleFor;
 
   /// 點了一章。收起目錄、蓋紙與載入都由呼叫端負責。
@@ -46,10 +49,19 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   final ScrollController _scrollController = ScrollController();
   int _lastScrolledChapterIndex = -1;
 
+  int get _currentChapterIndex => widget.currentChapter.value;
+
   @override
   void initState() {
     super.initState();
     widget.listenable?.addListener(_handleChanged);
+    widget.currentChapter.addListener(_handleCurrentChapterChanged);
+  }
+
+  void _handleCurrentChapterChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _scheduleScrollToCurrentChapter();
   }
 
   @override
@@ -66,12 +78,17 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
       widget.listenable?.addListener(_handleChanged);
       _lastScrolledChapterIndex = -1;
     }
+    if (!identical(oldWidget.currentChapter, widget.currentChapter)) {
+      oldWidget.currentChapter.removeListener(_handleCurrentChapterChanged);
+      widget.currentChapter.addListener(_handleCurrentChapterChanged);
+    }
     _scheduleScrollToCurrentChapter();
   }
 
   @override
   void dispose() {
     widget.listenable?.removeListener(_handleChanged);
+    widget.currentChapter.removeListener(_handleCurrentChapterChanged);
     _scrollController.dispose();
     widget.onClosed?.call();
     super.dispose();
@@ -83,7 +100,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
   Widget _buildChapterTile(BuildContext context, int index) {
     final scheme = Theme.of(context).colorScheme;
     final chapterTitle = widget.titleFor(index);
-    final isCurrentChapter = widget.currentChapterIndex == index;
+    final isCurrentChapter = _currentChapterIndex == index;
     final Widget? trailing = isCurrentChapter
         ? Icon(Icons.check_rounded, size: 20, color: scheme.primary)
         : index < widget.chapters.length && widget.chapters[index].isLocked
@@ -124,7 +141,7 @@ class _ReaderV2ChaptersDrawerState extends State<ReaderV2ChaptersDrawer> {
 
   void _scrollToCurrentChapter() {
     if (!mounted || !_scrollController.hasClients) return;
-    final currentChapterIndex = widget.currentChapterIndex;
+    final currentChapterIndex = _currentChapterIndex;
     if (currentChapterIndex == _lastScrolledChapterIndex) return;
     _lastScrolledChapterIndex = currentChapterIndex;
 

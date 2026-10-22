@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -198,7 +199,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (forward == null) return false;
     if (!mounted ||
         !_host.settings.volumeKeyPage ||
-        _host.menu.controlsVisible ||
+        _host.menu.controlsVisible.value ||
         (_host.tts?.isPlaying ?? false) ||
         !(pageRouteOf(context)?.isCurrent ?? false) ||
         (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
@@ -228,10 +229,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final runtime = _host.runtime;
     final palette = StylePalette.of(context);
     final isDarkBackground = palette.brightness == Brightness.dark;
-    final chapterIndex = _currentChapterIndex(runtime);
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
-      currentIndex: chapterIndex,
+      // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
+      current: runtime?.visibleChapterIndex ?? const _NoChapterYet(),
       scrub: menu.scrub,
       titleFor: _chapterTitleAt,
     );
@@ -269,7 +270,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               content: _buildContent(context),
               drawer: ReaderV2ChaptersDrawer(
                 chapters: runtime?.chapters ?? widget.initialChapters,
-                currentChapterIndex: chapterIndex,
+                currentChapter: navigation.current,
                 titleFor: _chapterTitleAt,
                 listenable: runtime,
                 onChapterTap: _jumpToChapterFromDrawer,
@@ -281,7 +282,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               controlsVisible: menu.controlsVisible,
               showReadTitleAddition: settings.showReadTitleAddition,
               infoState: _infoStateOf(runtime),
-              chapterTitle: _chapterTitleAt(chapterIndex),
               originName: widget.book.originName,
               progressListenable: _progress,
               navigation: navigation,
@@ -386,18 +386,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               style: style,
               viewportController: _host.viewportController,
               ttsHighlight: _host.tts?.currentHighlight,
+              controlsVisible: _host.menu.controlsVisible,
               textSelectionEnabled:
-                  !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
               onHideText: (selection) =>
                   unawaited(_coordinator.hideText(selection)),
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
-              // 選單開著時，點正文只收起選單（由選單的收起層處理）。
-              onContentTapUp: _host.menu.controlsVisible
-                  ? null
-                  : _handleContentTap,
+              onContentTapUp: _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
               skeletonPages: _host.dependencies.skeletonPages,
@@ -458,7 +455,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 離開閱讀器。
   void _handleSystemBack() {
     if (_host.viewportController.dismissSelection?.call() ?? false) return;
-    if (_host.menu.controlsVisible) {
+    if (_host.menu.controlsVisible.value) {
       _host.menu.dismissControls();
       return;
     }
@@ -729,10 +726,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 從選單開面板：開著時上下選單與亮度條收起，正文整頁露出來（排版面板
   /// 沒有暗色遮罩，邊調邊看）；面板關掉後回到選單打開的樣子。
+  ///
+  /// 選單從面板滑上來的下一格才開始滑出：面板的第一格要建整個面板的骨架，
+  /// 選單開始滑出那一格要重算整組選單的讀屏資訊，兩件事錯開一格（ADR 0029
+  /// 做法 4；擠在同一格時那一格多 1–2ms）。
   void _openPanel(Future<void> Function() open) {
-    _host.menu.dismissControls();
+    var closed = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !closed) _host.menu.dismissControls();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
     unawaited(
       open().whenComplete(() {
+        closed = true;
         if (!mounted || !(pageRouteOf(context)?.isCurrent ?? false)) return;
         _host.menu.showControls();
       }),
@@ -940,6 +946,21 @@ enum _ReaderMoreAction {
   refetchChapter,
   bookDetail,
   globalSettings,
+}
+
+/// 第一幀還沒有 Runtime 時的目前章：第 0 章，不會變。Runtime 建好後開書
+/// 會通知閱讀頁重建，改聽 [ReaderV2Runtime.visibleChapterIndex]。
+class _NoChapterYet implements ValueListenable<int> {
+  const _NoChapterYet();
+
+  @override
+  int get value => 0;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
 
 /// 亮度拉進加暗段時疊在整個閱讀畫面（含選單）上的黑色；不攔點擊。

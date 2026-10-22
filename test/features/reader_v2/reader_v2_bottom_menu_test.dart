@@ -8,7 +8,9 @@ import 'package:night_reader/shared/widgets/glass.dart';
 
 void main() {
   Future<ReaderV2MenuController> pumpMenu(WidgetTester tester) async {
-    final menu = ReaderV2MenuController()..onScrubEnd(70);
+    final menu = ReaderV2MenuController()
+      ..showControls()
+      ..onScrubEnd(70);
     addTearDown(menu.dispose);
     void noop() {}
     void noopPercent(double _) {}
@@ -18,10 +20,10 @@ void main() {
           body: Align(
             alignment: Alignment.bottomCenter,
             child: ReaderV2BottomMenu(
-              controlsVisible: true,
+              controlsVisible: menu.controlsVisible,
               navigation: ReaderV2ChapterNavigationState(
                 chapterCount: 3,
-                currentIndex: 1,
+                current: const AlwaysStoppedAnimation(1),
                 scrub: menu.scrub,
                 titleFor: (_) => '',
               ),

@@ -18,7 +18,7 @@ void main() {
         home: Scaffold(
           body: ReaderV2ChaptersDrawer(
             chapters: chapters,
-            currentChapterIndex: 3,
+            currentChapter: ValueNotifier(3),
             titleFor: (index) => chapters[index].title,
             onChapterTap: (_) {},
           ),
