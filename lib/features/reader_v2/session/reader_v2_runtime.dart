@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -96,6 +97,10 @@ class ReaderV2Runtime extends ChangeNotifier {
 
   ReaderV2State get state => stateMachine.state;
 
+  /// 畫面上這一章，見 [ReaderV2StateMachine.visibleChapterIndex]。
+  ValueListenable<int> get visibleChapterIndex =>
+      stateMachine.visibleChapterIndex;
+
   int get chapterCount => repository.chapterCount;
   List<BookChapter> get chapters => repository.chapters;
 
@@ -136,8 +141,8 @@ class ReaderV2Runtime extends ChangeNotifier {
     notifyListeners();
   }
 
-  ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
-      viewportBridge.captureVisibleLocation(notifyIfChanged: notifyIfChanged);
+  ReaderV2Location? captureVisibleLocation() =>
+      viewportBridge.captureVisibleLocation();
 
   Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
@@ -376,10 +381,12 @@ class ReaderV2Runtime extends ChangeNotifier {
     throw StateError(message);
   }
 
-  void updateVisibleLocation(ReaderV2Location location, {bool notify = true}) {
+  /// 捲動讀到的位置。不通知整個 Runtime 的監聽者：位置每一格都在變，
+  /// 要跟著位置變的只有章（[visibleChapterIndex]）與章內進度（正文發布的
+  /// 進度），各自是小訊號；Runtime 的通知只留給操作、排版與內容換代。
+  void updateVisibleLocation(ReaderV2Location location) {
     if (disposed) return;
     stateMachine.updateVisibleLocation(location);
-    if (notify) notifyListeners();
   }
 
   void commitProgressLocation(ReaderV2Location location) {
@@ -600,6 +607,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     disposed = true;
     progressController.dispose();
     _viewportGeometryNotifier.dispose();
+    stateMachine.dispose();
     super.dispose();
   }
 }

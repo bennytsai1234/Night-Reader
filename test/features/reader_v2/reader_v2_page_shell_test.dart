@@ -32,6 +32,7 @@ void main() {
     bool controlsVisible = false,
     ValueListenable<bool>? controls,
     ValueListenable<ReaderV2InfoState>? infoStates,
+    ValueListenable<int>? chapters,
     ReaderV2InfoSlots headerInfo = const ReaderV2InfoSlots(
       left: ReaderV2InfoItem.none,
       right: ReaderV2InfoItem.none,
@@ -55,6 +56,9 @@ void main() {
     final fixed = ValueNotifier(controlsVisible);
     addTearDown(fixed.dispose);
     final visibility = controls ?? fixed;
+    final firstChapter = ValueNotifier(0);
+    addTearDown(firstChapter.dispose);
+    final chapter = chapters ?? firstChapter;
     void noop() {}
     void noopPercent(double _) {}
     await tester.pumpWidget(
@@ -79,7 +83,7 @@ void main() {
             ),
             drawer: ReaderV2ChaptersDrawer(
               chapters: const [],
-              currentChapterIndex: 0,
+              currentChapter: chapter,
               titleFor: (_) => '',
               onChapterTap: (_) {},
               onClosed: onDrawerClosed,
@@ -90,13 +94,12 @@ void main() {
             controlsVisible: visibility,
             showReadTitleAddition: true,
             infoState: infoStates?.value ?? ReaderV2InfoState.ready,
-            chapterTitle: '第一章',
             originName: '本地',
             navigation: ReaderV2ChapterNavigationState(
               chapterCount: 3,
-              currentIndex: 0,
+              current: chapter,
               scrub: menu.scrub,
-              titleFor: (_) => '',
+              titleFor: (index) => const ['第一章', '第二章', '第三章'][index],
             ),
             isAutoPaging: false,
             hideStatusBar: true,
@@ -263,6 +266,55 @@ void main() {
       Icon,
     ]) {
       expect(rebuilds[type] ?? 0, 0, reason: '選單開關不應重建 $type');
+    }
+  });
+
+  testWidgets('a chapter change updates the chapter titles and the prev/next '
+      'buttons without rebuilding the frame or the menus', (tester) async {
+    final chapter = ValueNotifier(0);
+    addTearDown(chapter.dispose);
+    await pumpShell(
+      tester,
+      controlsVisible: true,
+      chapters: chapter,
+      headerInfo: const ReaderV2InfoSlots(
+        left: ReaderV2InfoItem.chapterTitle,
+        right: ReaderV2InfoItem.none,
+      ),
+    );
+    await tester.pumpAndSettle();
+    TextButton button(String label) => tester.widget<TextButton>(
+      find.ancestor(of: find.text(label), matching: find.byType(TextButton)),
+    );
+    // 上方選單的章節卡與頁首各一份。
+    expect(find.text('第一章'), findsNWidgets(2));
+    expect(button('上一章').onPressed, isNull);
+
+    final rebuilds = <Type, int>{};
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      final type = element.widget.runtimeType;
+      rebuilds[type] = (rebuilds[type] ?? 0) + 1;
+    };
+    try {
+      chapter.value = 1;
+      await tester.pump();
+    } finally {
+      debugOnRebuildDirtyWidget = previous;
+    }
+
+    expect(find.text('第一章'), findsNothing);
+    expect(find.text('第二章'), findsNWidgets(2));
+    expect(button('上一章').onPressed, isNotNull);
+    expect(button('下一章').onPressed, isNotNull);
+    for (final type in [
+      ReaderV2PageShell,
+      ReaderV2TopMenu,
+      ReaderV2BottomMenu,
+      GlassIconButton,
+    ]) {
+      expect(rebuilds[type] ?? 0, 0, reason: '換章不應重建 $type');
     }
   });
 

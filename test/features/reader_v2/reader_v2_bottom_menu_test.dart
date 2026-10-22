@@ -23,7 +23,7 @@ void main() {
               controlsVisible: menu.controlsVisible,
               navigation: ReaderV2ChapterNavigationState(
                 chapterCount: 3,
-                currentIndex: 1,
+                current: const AlwaysStoppedAnimation(1),
                 scrub: menu.scrub,
                 titleFor: (_) => '',
               ),

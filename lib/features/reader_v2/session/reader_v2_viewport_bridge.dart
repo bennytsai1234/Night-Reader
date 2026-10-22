@@ -39,23 +39,31 @@ class ReaderV2ViewportBridge {
     return true;
   }
 
-  ReaderV2Location? captureVisibleLocation({bool notifyIfChanged = true}) =>
-      _captureVisibleLocation(notifyIfChanged: notifyIfChanged);
+  /// 照正文目前的捲動位置更新 [ReaderV2State.visibleLocation]（見
+  /// [ReaderV2Runtime.updateVisibleLocation]：不通知整個 Runtime）。
+  ReaderV2Location? captureVisibleLocation() {
+    if (_runtime.disposed || !_runtime.state.hasStableWorld) return null;
+    final capture = _visibleLocationCapture;
+    if (capture == null) return null;
+    final captured = _normalizeCapturedLocation(capture());
+    if (captured == null) return null;
+    if (captured != _runtime.state.visibleLocation) {
+      _runtime.updateVisibleLocation(captured);
+    }
+    return captured;
+  }
 
   Future<ReaderV2Location?> saveProgress({
     ReaderV2Location? location,
     bool immediate = true,
   }) async {
-    final targetLocation =
-        location ?? captureVisibleLocation(notifyIfChanged: false);
+    final targetLocation = location ?? captureVisibleLocation();
     if (targetLocation == null) return null;
     return _saveProgressLocation(targetLocation, immediate: immediate);
   }
 
   Future<ReaderV2Location?> flushProgress() {
-    final location =
-        captureVisibleLocation(notifyIfChanged: false) ??
-        _runtime.state.visibleLocation;
+    final location = captureVisibleLocation() ?? _runtime.state.visibleLocation;
     return _saveProgressLocation(location);
   }
 
@@ -92,17 +100,6 @@ class ReaderV2ViewportBridge {
       _runtime.progressController.schedule(normalized);
     }
     return normalized;
-  }
-
-  ReaderV2Location? _captureVisibleLocation({bool notifyIfChanged = true}) {
-    if (_runtime.disposed || !_runtime.state.hasStableWorld) return null;
-    final capture = _visibleLocationCapture;
-    if (capture == null) return null;
-    final captured = _normalizeCapturedLocation(capture());
-    if (captured == null) return null;
-    if (captured == _runtime.state.visibleLocation) return captured;
-    _runtime.updateVisibleLocation(captured, notify: notifyIfChanged);
-    return captured;
   }
 
   ReaderV2Location? _normalizeCapturedLocation(ReaderV2Location? location) {

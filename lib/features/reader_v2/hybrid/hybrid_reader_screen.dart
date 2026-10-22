@@ -736,7 +736,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         return;
       }
       if (widget.runtime.pendingLocation != null) return;
-      final location = _captureAndReport(notify: false);
+      final location = _captureAndReport();
       if (location != null) _windowCenter = location.chapterIndex;
       _reconcileVisibleWindow();
       _publishProgress();
@@ -749,7 +749,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
         widget.runtime.pendingLocation != null) {
       return;
     }
-    final location = _captureAndReport(notify: true);
+    final location = _captureAndReport();
     if (location != null) _windowCenter = location.chapterIndex;
     _reconcileVisibleWindow();
     _publishProgress();
@@ -1067,10 +1067,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     return _pendingScrollOffset;
   }
 
-  ReaderV2Location? _captureAndReport({required bool notify}) {
-    final location = widget.runtime.captureVisibleLocation(
-      notifyIfChanged: notify,
-    );
+  ReaderV2Location? _captureAndReport() {
+    final location = widget.runtime.captureVisibleLocation();
     if (location != null) _lastReportedLocation = location;
     return location;
   }

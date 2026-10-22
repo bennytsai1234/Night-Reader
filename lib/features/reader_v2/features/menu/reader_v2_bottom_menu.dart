@@ -12,19 +12,27 @@ import 'reader_v2_menu_entrance.dart';
 import 'reader_v2_menu_controller.dart';
 import 'reader_v2_menu_palette.dart';
 
+/// 選單與頁首頁尾用到的章節資訊。目前這一章（[current]）是小訊號：捲動
+/// 途中換章時，只有章名、上一章／下一章這幾個聽它的小元件更新，閱讀頁
+/// 不重建。
 class ReaderV2ChapterNavigationState {
   const ReaderV2ChapterNavigationState({
     required this.chapterCount,
-    required this.currentIndex,
+    required this.current,
     required this.scrub,
     required this.titleFor,
   });
 
   final int chapterCount;
-  final int currentIndex;
+
+  /// 畫面上這一章（未正規化，讀 [currentIndex]）。
+  final ValueListenable<int> current;
   final ValueListenable<ReaderV2ScrubState> scrub;
   final String Function(int index) titleFor;
 
+  int get currentIndex =>
+      chapterCount <= 0 ? 0 : current.value.clamp(0, chapterCount - 1).toInt();
+  String get currentTitle => titleFor(currentIndex);
   bool get canNavigateToPrev => chapterCount > 1 && currentIndex > 0;
   bool get canNavigateToNext =>
       chapterCount > 1 && currentIndex < chapterCount - 1;
@@ -216,7 +224,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
       children: [
         _chapterJumpButton(
           '上一章',
-          navigation.canNavigateToPrev ? onPrevChapter : null,
+          () => navigation.canNavigateToPrev,
+          onPrevChapter,
           menuStyle,
         ),
         Expanded(
@@ -250,7 +259,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
         ),
         _chapterJumpButton(
           '下一章',
-          navigation.canNavigateToNext ? onNextChapter : null,
+          () => navigation.canNavigateToNext,
+          onNextChapter,
           menuStyle,
         ),
       ],
@@ -297,10 +307,13 @@ class ReaderV2BottomMenu extends StatelessWidget {
 
   Widget _chapterJumpButton(
     String label,
-    VoidCallback? onPressed,
+    bool Function() enabled,
+    VoidCallback onPressed,
     ReaderV2MenuStyle menuStyle,
   ) {
-    return TextButton(
+    return _ChapterJumpButton(
+      current: navigation.current,
+      enabled: enabled,
       onPressed: onPressed,
       style: TextButton.styleFrom(
         foregroundColor: menuStyle.foreground,
@@ -311,7 +324,7 @@ class ReaderV2BottomMenu extends StatelessWidget {
         minimumSize: const Size(AppGlass.buttonSize, AppGlass.buttonSize),
         shape: const StadiumBorder(),
       ),
-      child: Text(label),
+      label: label,
     );
   }
 
@@ -395,6 +408,67 @@ class ReaderV2BottomMenu extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 上一章／下一章：自己聽目前這一章，只有「能不能按」真的變了（到了第一章
+/// 或最後一章）才重建；捲動途中一般的換章不動它。
+class _ChapterJumpButton extends StatefulWidget {
+  const _ChapterJumpButton({
+    required this.current,
+    required this.enabled,
+    required this.onPressed,
+    required this.style,
+    required this.label,
+  });
+
+  final ValueListenable<int> current;
+  final bool Function() enabled;
+  final VoidCallback onPressed;
+  final ButtonStyle style;
+  final String label;
+
+  @override
+  State<_ChapterJumpButton> createState() => _ChapterJumpButtonState();
+}
+
+class _ChapterJumpButtonState extends State<_ChapterJumpButton> {
+  late bool _enabled = widget.enabled();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.current.addListener(_sync);
+  }
+
+  @override
+  void didUpdateWidget(_ChapterJumpButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.current, widget.current)) {
+      oldWidget.current.removeListener(_sync);
+      widget.current.addListener(_sync);
+    }
+    _enabled = widget.enabled();
+  }
+
+  @override
+  void dispose() {
+    widget.current.removeListener(_sync);
+    super.dispose();
+  }
+
+  void _sync() {
+    final enabled = widget.enabled();
+    if (enabled != _enabled) setState(() => _enabled = enabled);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: _enabled ? widget.onPressed : null,
+      style: widget.style,
+      child: Text(widget.label),
     );
   }
 }

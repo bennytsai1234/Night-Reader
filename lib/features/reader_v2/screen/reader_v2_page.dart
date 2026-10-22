@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:night_reader/core/engine/app_event_bus.dart';
@@ -228,10 +229,10 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final runtime = _host.runtime;
     final palette = StylePalette.of(context);
     final isDarkBackground = palette.brightness == Brightness.dark;
-    final chapterIndex = _currentChapterIndex(runtime);
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
-      currentIndex: chapterIndex,
+      // 換章不通知閱讀頁：用到目前章的小元件各自聽它。
+      current: runtime?.visibleChapterIndex ?? const _NoChapterYet(),
       scrub: menu.scrub,
       titleFor: _chapterTitleAt,
     );
@@ -269,7 +270,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               content: _buildContent(context),
               drawer: ReaderV2ChaptersDrawer(
                 chapters: runtime?.chapters ?? widget.initialChapters,
-                currentChapterIndex: chapterIndex,
+                currentChapter: navigation.current,
                 titleFor: _chapterTitleAt,
                 listenable: runtime,
                 onChapterTap: _jumpToChapterFromDrawer,
@@ -281,7 +282,6 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               controlsVisible: menu.controlsVisible,
               showReadTitleAddition: settings.showReadTitleAddition,
               infoState: _infoStateOf(runtime),
-              chapterTitle: _chapterTitleAt(chapterIndex),
               originName: widget.book.originName,
               progressListenable: _progress,
               navigation: navigation,
@@ -946,6 +946,21 @@ enum _ReaderMoreAction {
   refetchChapter,
   bookDetail,
   globalSettings,
+}
+
+/// 第一幀還沒有 Runtime 時的目前章：第 0 章，不會變。Runtime 建好後開書
+/// 會通知閱讀頁重建，改聽 [ReaderV2Runtime.visibleChapterIndex]。
+class _NoChapterYet implements ValueListenable<int> {
+  const _NoChapterYet();
+
+  @override
+  int get value => 0;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
 
 /// 亮度拉進加暗段時疊在整個閱讀畫面（含選單）上的黑色；不攔點擊。

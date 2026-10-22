@@ -118,7 +118,6 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.controlsVisible,
     required this.showReadTitleAddition,
     required this.infoState,
-    required this.chapterTitle,
     required this.originName,
     this.progressListenable,
     required this.navigation,
@@ -177,9 +176,11 @@ class ReaderV2PageShell extends StatelessWidget {
   final ValueListenable<bool> controlsVisible;
   final bool showReadTitleAddition;
   final ReaderV2InfoState infoState;
-  final String chapterTitle;
   final String originName;
   final ValueListenable<HybridProgressSnapshot?>? progressListenable;
+
+  /// 章數、目前章（小訊號）與章名；上方選單的章名、上一章／下一章與頁首
+  /// 頁尾的章名都照它，捲動途中換章時只有這幾處更新。
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
   final bool hideStatusBar;
@@ -374,7 +375,7 @@ class ReaderV2PageShell extends StatelessWidget {
                       child: ReaderV2TopMenu(
                         controlsVisible: controlsVisible,
                         bookName: context.zh(book.name),
-                        chapterTitle: chapterTitle,
+                        navigation: navigation,
                         originName: originName,
                         showReadTitleAddition: showReadTitleAddition,
                         onBack: onExitIntent,
@@ -675,11 +676,14 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 章內進度與目前章各自是小訊號，資訊列自己聽，捲動途中不重建閱讀頁。
     final progressListenable = shell.progressListenable;
-    if (progressListenable == null) return _buildRow(context, null);
-    return ValueListenableBuilder<HybridProgressSnapshot?>(
-      valueListenable: progressListenable,
-      builder: (context, progress, _) => _buildRow(context, progress),
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        progressListenable,
+        shell.navigation.current,
+      ]),
+      builder: (context, _) => _buildRow(context, progressListenable?.value),
     );
   }
 
@@ -822,7 +826,7 @@ class _InfoRow extends StatelessWidget {
       ReaderV2InfoItem.battery ||
       ReaderV2InfoItem.batteryWithIcon => null,
       ReaderV2InfoItem.bookName => context.zh(shell.book.name),
-      ReaderV2InfoItem.chapterTitle => shell.chapterTitle,
+      ReaderV2InfoItem.chapterTitle => navigation.currentTitle,
       ReaderV2InfoItem.chapterIndex =>
         progress?.chapterIndexLabel ??
             (navigation.chapterCount > 0
