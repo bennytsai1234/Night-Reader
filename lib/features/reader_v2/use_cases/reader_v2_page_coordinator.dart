@@ -1,7 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/exception/user_error.dart';
+import 'package:night_reader/core/models/book/book_extensions.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/chinese_utils.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/selection_source_text.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
 import 'package:night_reader/features/reader_v2/use_cases/coordinators/reader_v2_chapter_navigation_resolver.dart';
@@ -11,7 +18,13 @@ import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight_follower.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
-typedef ReaderV2NoticeSink = void Function(String message);
+typedef ReaderV2NoticeSink = void Function(
+  String message, {
+  ReaderV2NoticeAction? action,
+});
+
+/// 提示列右側的按鈕，例如「復原」。
+typedef ReaderV2NoticeAction = ({String label, VoidCallback onPressed});
 
 class ReaderV2PageCoordinator {
   ReaderV2PageCoordinator({required this._host, required this._showNotice}) {
@@ -196,6 +209,75 @@ class ReaderV2PageCoordinator {
         loadTestSample: _replaceTestSample,
       ),
     );
+  }
+
+  /// 選字選單的「隱藏」：新增一條把這段字換成空白的替換規則，套用到所有
+  /// 書，重新排版後提示可以復原。規則用原文裡對應的那一段，畫面上的字經過
+  /// 排版整理與繁簡轉換，直接用常常對不到原文（見 [findSourceText]）。
+  Future<void> hideText(int chapterIndex, String text) async {
+    final replaceDao = _host.dependencies.replaceDao;
+    final contentDao = _host.dependencies.readerChapterContentDao;
+    final chapter = _host.runtime?.chapterAt(chapterIndex);
+    if (replaceDao == null || contentDao == null || chapter == null) {
+      _showNotice('無法隱藏這段字');
+      return;
+    }
+    try {
+      final raw = await ReaderChapterContentStore(
+        chapterDao: _host.dependencies.chapterDao,
+        contentDao: contentDao,
+      ).getRawContent(book: _host.book, chapter: chapter);
+      if (_host.settings.chineseConvert != 0) await ChineseUtils.initialize();
+      final pattern = raw == null
+          ? null
+          : findSourceText(
+              source: raw,
+              shown: text,
+              toSimplified: ChineseUtils.t2s,
+            );
+      if (pattern == null) {
+        _showNotice('找不到這段字的原文，沒有隱藏');
+        return;
+      }
+      final id = await replaceDao.insert(
+        ReplaceRule(
+          name: pattern,
+          group: _hiddenTextGroup,
+          pattern: pattern,
+          replacement: '',
+          isRegex: false,
+          order: (await replaceDao.getAll()).length,
+        ),
+      );
+      if (!_host.book.getUseReplaceRule()) {
+        _showNotice('已新增規則；這本書沒有套用替換規則，打開後才會隱藏');
+        return;
+      }
+      await _host.runtime?.reloadContentPreservingLocation();
+      _showNotice(
+        '已隱藏「$pattern」',
+        action: (
+          label: '復原',
+          onPressed: () => unawaited(_restoreHiddenText(replaceDao, id)),
+        ),
+      );
+    } catch (error, stackTrace) {
+      AppLog.e('隱藏選字失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('隱藏', error));
+    }
+  }
+
+  /// 「隱藏」新增的規則都放在這一組，在替換規則清單裡找得到。
+  static const String _hiddenTextGroup = '選字隱藏';
+
+  Future<void> _restoreHiddenText(ReplaceRuleDao replaceDao, int id) async {
+    try {
+      await replaceDao.deleteById(id);
+      await _host.runtime?.reloadContentPreservingLocation();
+    } catch (error, stackTrace) {
+      AppLog.e('復原隱藏的字失敗', error: error, stackTrace: stackTrace);
+      _showNotice(failureMessage('復原', error));
+    }
   }
 
   /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（套用替換規則之前，
