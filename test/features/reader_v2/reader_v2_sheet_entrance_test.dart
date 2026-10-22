@@ -9,6 +9,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_sheet.dart';
+import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_page.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
@@ -256,17 +257,56 @@ void main() {
     dao.failing = false;
     await tester.tap(find.text('重試'));
     await settle(tester, const Duration(milliseconds: 300));
+    final enabled = await tester.runAsync(
+      () => dao.getEnabledForBook('夜雨聽書', kOrigin),
+    );
+    expect(
+      tester.widget<GroupedRow>(find.widgetWithText(GroupedRow, '管理規則')).value,
+      '${enabled!.length}',
+    );
+    await closePanel(tester);
+    await finish(tester);
+  });
+
+  // 進管理頁前要先讀全部規則的快照，用來判斷回來時有沒有改動；讀不到時
+  // 照樣進管理頁，回來當作有改動重載，錯誤不留給沒人等的 Future。
+  testWidgets('進管理規則前讀不到規則快照，照樣進得去、錯誤不外漏', (tester) async {
+    late _FlakyReplaceRuleDao dao;
+    await openReaderOn(
+      tester,
+      replaceDao: (db) => dao = _FlakyReplaceRuleDao(db),
+    );
+    await expectSteadyEntrance(tester, '替換規則');
+    dao.failNextGetAll = true;
+    await tester.tap(find.text('管理規則'));
+    await settle(tester, const Duration(milliseconds: 800));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ReaderV2ReplaceRulePage), findsOneWidget);
+    await goBack(tester);
+    await settle(tester, const Duration(milliseconds: 800));
+    expect(tester.takeException(), isNull);
     expect(find.text('管理規則'), findsOneWidget);
     await closePanel(tester);
     await finish(tester);
   });
 }
 
-/// [failing] 時讀不到這本書啟用的規則。
+/// [failing] 時讀不到這本書啟用的規則；[failNextGetAll] 時下一次讀全部規則
+/// 失敗一次。
 class _FlakyReplaceRuleDao extends ReplaceRuleDao {
   _FlakyReplaceRuleDao(super.attachedDatabase);
 
   bool failing = false;
+  bool failNextGetAll = false;
+
+  @override
+  Future<List<ReplaceRule>> getAll() async {
+    if (failNextGetAll) {
+      failNextGetAll = false;
+      throw StateError('資料庫讀不到');
+    }
+    return super.getAll();
+  }
 
   @override
   Future<List<ReplaceRule>> getEnabledForBook(

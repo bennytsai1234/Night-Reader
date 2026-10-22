@@ -175,16 +175,40 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   }
 
   Future<void> _manageRules(BuildContext context) async {
-    final before = await _rulesSnapshot();
+    // 讀不到快照時照樣進管理頁，回來後當作有改動重載。
+    final before = await _rulesSnapshotOrNull();
     if (!context.mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
     );
+    if (!mounted) return;
     // 只是進去看看、沒有改動時不重載正文。
-    if (!mounted || await _rulesSnapshot() == before) return;
+    if (before != null && await _rulesSnapshotOrNull() == before) return;
+    await _applyRuleChange();
+  }
+
+  Future<String?> _rulesSnapshotOrNull() async {
+    try {
+      return await _rulesSnapshot();
+    } catch (error, stack) {
+      AppLog.e('讀取替換規則快照失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
+  }
+
+  /// 規則有改動：重讀規則數，正文照新規則重載。這兩條路徑由列的點擊觸發，
+  /// 錯誤在這裡接住，不留給沒人等的 Future。
+  Future<void> _applyRuleChange() async {
     unawaited(_reloadEnabledRules());
-    await widget.onReload();
+    try {
+      await widget.onReload();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failureMessage('套用替換規則', error))));
+    }
   }
 
   @override
@@ -223,8 +247,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 );
                 // 取消時不重載：重載會重新排版並打斷朗讀。
                 if (!mounted || !saved) return;
-                unawaited(_reloadEnabledRules());
-                await widget.onReload();
+                await _applyRuleChange();
               },
             ),
             // 右側是這本書目前啟用的規則數。

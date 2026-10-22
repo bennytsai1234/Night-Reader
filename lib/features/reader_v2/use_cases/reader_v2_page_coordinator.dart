@@ -331,11 +331,8 @@ class ReaderV2PageCoordinator {
       return null;
     }
     if (raw == null) return null;
-    final paragraphs = ReaderV2Content.fromRaw(
-      chapterIndex: location.chapterIndex,
-      title: '',
-      rawText: raw,
-    ).paragraphs;
+    // 讀到時面板常還在滑入，只切段落、不算整章的雜湊。
+    final paragraphs = ReaderV2Content.paragraphsOf(raw);
     if (paragraphs.isEmpty) return null;
     final shown = runtime.repository.cachedContent(location.chapterIndex);
     final index = shown == null
