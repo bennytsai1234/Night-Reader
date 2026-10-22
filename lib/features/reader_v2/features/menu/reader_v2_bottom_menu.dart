@@ -9,23 +9,20 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 
 import 'reader_v2_menu_entrance.dart';
+import 'reader_v2_menu_controller.dart';
 import 'reader_v2_menu_palette.dart';
 
 class ReaderV2ChapterNavigationState {
   const ReaderV2ChapterNavigationState({
     required this.chapterCount,
     required this.currentIndex,
-    required this.isScrubbing,
-    required this.scrubPercent,
+    required this.scrub,
     required this.titleFor,
   });
 
   final int chapterCount;
   final int currentIndex;
-  final bool isScrubbing;
-
-  /// 拖動中的章內進度（0–100）。
-  final double scrubPercent;
+  final ValueListenable<ReaderV2ScrubState> scrub;
   final String Function(int index) titleFor;
 
   bool get canNavigateToPrev => chapterCount > 1 && currentIndex > 0;
@@ -273,18 +270,21 @@ class ReaderV2BottomMenu extends StatelessWidget {
       child: IgnorePointer(
         // 讀屏由拖動條自己念出同樣的「本章 n/10」。
         child: ExcludeSemantics(
-          child: AnimatedOpacity(
-            opacity: navigation.isScrubbing ? 1 : 0,
-            duration: reduceMotion ? Duration.zero : AppMotion.fade,
-            curve: AppMotion.fadeCurve,
-            // 以文字中線對齊空白的中線，字級放大時往上下兩側長。
-            child: FractionalTranslation(
-              translation: const Offset(0, -0.5),
-              child: Text(
-                '本章 ${(navigation.scrubPercent / 10).round()}/10',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.labelXs.copyWith(
-                  color: menuStyle.mutedForeground,
+          child: ValueListenableBuilder<ReaderV2ScrubState>(
+            valueListenable: navigation.scrub,
+            builder: (context, scrub, _) => AnimatedOpacity(
+              opacity: scrub.isScrubbing ? 1 : 0,
+              duration: reduceMotion ? Duration.zero : AppMotion.fade,
+              curve: AppMotion.fadeCurve,
+              // 以文字中線對齊空白的中線，字級放大時往上下兩側長。
+              child: FractionalTranslation(
+                translation: const Offset(0, -0.5),
+                child: Text(
+                  '本章 ${(scrub.percent / 10).round()}/10',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.labelXs.copyWith(
+                    color: menuStyle.mutedForeground,
+                  ),
                 ),
               ),
             ),
@@ -318,26 +318,22 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 閱讀進度（經 progressListenable 窄通道，不觸發整頁 rebuild）；
   /// 拖動跨檔位時由外層做預覽跳轉，放開才落定存進度。
   Widget _buildProgressSlider(bool canScrub) {
-    final listenable = progressListenable;
-    if (listenable == null) {
-      return _progressSlider(canScrub, currentPercent: 0);
-    }
-    return ValueListenableBuilder<HybridProgressSnapshot?>(
-      valueListenable: listenable,
-      builder: (context, progress, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([navigation.scrub, progressListenable]),
+      builder: (context, _) {
         return _progressSlider(
           canScrub,
-          currentPercent: progress?.chapterPercent ?? 0,
+          currentPercent: progressListenable?.value?.chapterPercent ?? 0,
         );
       },
     );
   }
 
   Widget _progressSlider(bool canScrub, {required double currentPercent}) {
-    final value =
-        (navigation.isScrubbing ? navigation.scrubPercent : currentPercent)
-            .clamp(0.0, 100.0)
-            .toDouble();
+    final scrub = navigation.scrub.value;
+    final value = (scrub.isScrubbing ? scrub.percent : currentPercent)
+        .clamp(0.0, 100.0)
+        .toDouble();
     return Semantics(
       label: '本章進度',
       child: Slider(

@@ -9,6 +9,8 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
@@ -92,10 +94,53 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
 
 /// 風格選擇：與「外觀與主題」頁是同一個設定，換了整個 App 一起換。
 /// 色票顯示各風格在目前深淺下的正文紙張與文字。
-class _ReaderStyleSelector extends StatelessWidget {
+class _ReaderStyleSelector extends StatelessWidget
+    implements GroupedSkeletonItem {
   const _ReaderStyleSelector();
 
   static const double _swatchSize = 52;
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final labels = [
+      for (final style in AppStyle.values)
+        GroupedItemShape.text(
+          context,
+          style.label,
+          style: AppTextStyles.labelSm,
+          width: double.infinity,
+        ),
+    ];
+    final rowWidth = width.clamp(
+      AppStyle.values.length * _swatchSize +
+          (AppStyle.values.length - 1) * AppSpacing.md,
+      double.infinity,
+    );
+    final stride = (rowWidth - _swatchSize) / (AppStyle.values.length - 1);
+    return GroupedItemShape(
+      _swatchSize + AppSpacing.xs + labels.first.height,
+      marks: [
+        for (var i = 0; i < labels.length; i++) ...[
+          SkeletonShape(
+            Rect.fromLTWH(i * stride, 0, _swatchSize, _swatchSize),
+            radius: AppRadius.pillShape,
+          ),
+          for (final mark in labels[i].marks)
+            SkeletonShape(
+              mark.rect.shift(
+                Offset(
+                  i * stride + (_swatchSize - mark.rect.width) / 2,
+                  _swatchSize + AppSpacing.xs,
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

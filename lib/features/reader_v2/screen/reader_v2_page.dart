@@ -232,8 +232,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final navigation = ReaderV2ChapterNavigationState(
       chapterCount: runtime?.chapterCount ?? widget.initialChapters.length,
       currentIndex: chapterIndex,
-      isScrubbing: menu.isScrubbing,
-      scrubPercent: menu.scrubPercent,
+      scrub: menu.scrub,
       titleFor: _chapterTitleAt,
     );
 

@@ -12,7 +12,9 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 abstract class ReaderV2TtsSheetController extends Listenable {
   bool get isPlaying;
@@ -130,16 +132,73 @@ Widget _stepperRow(Widget stepper) => GroupedContent(
 
 /// 定時選項與倒數。倒數不靠定時器逐秒通知，這裡自己每秒重讀剩餘時間，
 /// 只重建這一小塊。
-class _SleepTimerSection extends StatefulWidget {
+class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
   const _SleepTimerSection({required this.timer});
 
   final ReaderV2TtsSleepTimer timer;
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    // 分段控制的軌道、自訂分鐘的步進列與倒數文字，各自照元件本身的高度。
+    var height = GlassSegmented.trackHeight;
+    final marks = <SkeletonShape>[
+      SkeletonShape(
+        Rect.fromLTWH(0, 0, width, height),
+        radius: AppRadius.pillShape,
+      ),
+    ];
+    if (timer.option == ReaderV2TtsSleepOption.custom) {
+      final stepper = _SleepTimerSectionState._customStepper(timer);
+      height += NumberStepperRow.heightOf(
+        context,
+        label: stepper.label,
+        valueText: stepper.displayText,
+        width: width,
+      );
+    }
+    final status = _SleepTimerSectionState._status(timer);
+    if (status != null) {
+      final text = GroupedItemShape.text(
+        context,
+        status,
+        style: _SleepTimerSectionState.statusStyle,
+        width: width,
+      );
+      height += _SleepTimerSectionState.statusGap;
+      for (final mark in text.marks) {
+        marks.add(
+          SkeletonShape(
+            mark.rect.shift(Offset((width - mark.rect.width) / 2, height)),
+          ),
+        );
+      }
+      height += text.height;
+    }
+    return GroupedItemShape(height, marks: marks);
+  }
 
   @override
   State<_SleepTimerSection> createState() => _SleepTimerSectionState();
 }
 
 class _SleepTimerSectionState extends State<_SleepTimerSection> {
+  /// 倒數文字的字樣與上方間距；骨架照同一份排。
+  static const TextStyle statusStyle = AppTextStyles.labelSm;
+  static const double statusGap = AppSpacing.sm;
+
+  static NumberStepperRow _customStepper(ReaderV2TtsSleepTimer timer) =>
+      NumberStepperRow(
+        label: '分鐘',
+        value: timer.customMinutes.toDouble(),
+        min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
+        max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
+        step: 1,
+        onChanged: (value) => unawaited(timer.setCustomMinutes(value.round())),
+      );
+
   late final Timer _ticker;
 
   @override
@@ -176,22 +235,14 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
               onChanged: (option) => unawaited(timer.choose(option)),
             ),
             if (timer.option == ReaderV2TtsSleepOption.custom)
-              NumberStepperRow(
-                label: '分鐘',
-                value: timer.customMinutes.toDouble(),
-                min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
-                max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
-                step: 1,
-                onChanged: (value) =>
-                    unawaited(timer.setCustomMinutes(value.round())),
-              ),
+              _customStepper(timer),
             if (status != null)
               Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                padding: const EdgeInsets.only(top: statusGap),
                 child: Text(
                   status,
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.labelSm.copyWith(
+                  style: statusStyle.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -215,10 +266,67 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
 
 /// 高亮預覽、色票與深淺。拖動深淺時只更新面板內的暫存值與預覽，放開才
 /// 寫入偏好：每一格都寫入會連帶整個閱讀器重建。
-class _HighlightSection extends StatefulWidget {
+class _HighlightSection extends StatefulWidget implements GroupedSkeletonItem {
   const _HighlightSection({required this.settings});
 
   final ReaderV2SettingsController settings;
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final text = GroupedItemShape.text(
+      context,
+      _HighlightPreview.before +
+          _HighlightPreview.sentence +
+          _HighlightPreview.after,
+      style: _HighlightPreview.textStyle,
+      width: width - _HighlightPreview.padding.horizontal,
+    ).padded(_HighlightPreview.padding);
+    final label = GroupedItemShape.text(
+      context,
+      ReaderV2HighlightColor.theme.label,
+      style: _HighlightColorRow.labelStyle,
+      width: double.infinity,
+    );
+    const swatch = _HighlightColorRow._swatchSize;
+    final colorHeight = swatch + _HighlightColorRow.labelGap + label.height;
+    final colorTop = text.height + _previewGap;
+    final count = ReaderV2HighlightColor.values.length;
+    final stride = (width - swatch) / (count - 1);
+    return GroupedItemShape(
+      colorTop + colorHeight + _strengthRowHeight,
+      marks: [
+        ...text.marks,
+        for (var i = 0; i < count; i++) ...[
+          SkeletonShape(
+            Rect.fromLTWH(i * stride, colorTop, swatch, swatch),
+            radius: AppRadius.pillShape,
+          ),
+          for (final mark in label.marks)
+            SkeletonShape(
+              mark.rect.shift(
+                Offset(
+                  i * stride + (swatch - mark.rect.width) / 2,
+                  colorTop + swatch + _HighlightColorRow.labelGap,
+                ),
+              ),
+            ),
+        ],
+        SkeletonShape(
+          Rect.fromLTWH(0, colorTop + colorHeight + 18, width, 12),
+          radius: AppRadius.pillShape,
+        ),
+      ],
+    );
+  }
+
+  /// 預覽與色票之間的間距。
+  static const double _previewGap = AppSpacing.md;
+
+  /// 「深淺」拉桿那一列的高度（拉桿的點擊範圍）。
+  static const double _strengthRowHeight = kMinInteractiveDimension;
 
   @override
   State<_HighlightSection> createState() => _HighlightSectionState();
@@ -235,29 +343,32 @@ class _HighlightSectionState extends State<_HighlightSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _HighlightPreview(settings: settings, strength: strength),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: _HighlightSection._previewGap),
         _HighlightColorRow(settings: settings),
-        Row(
-          children: [
-            const ExcludeSemantics(
-              child: Text('深淺', style: AppTextStyles.uiMd),
-            ),
-            Expanded(
-              child: Semantics(
-                label: '高亮深淺',
-                child: Slider(
-                  value: strength,
-                  min: ReaderV2HighlightStrength.min,
-                  max: ReaderV2HighlightStrength.max,
-                  onChanged: (value) => setState(() => _dragging = value),
-                  onChangeEnd: (value) {
-                    setState(() => _dragging = null);
-                    settings.setHighlightStrength(value);
-                  },
+        SizedBox(
+          height: _HighlightSection._strengthRowHeight,
+          child: Row(
+            children: [
+              const ExcludeSemantics(
+                child: Text('深淺', style: AppTextStyles.uiMd),
+              ),
+              Expanded(
+                child: Semantics(
+                  label: '高亮深淺',
+                  child: Slider(
+                    value: strength,
+                    min: ReaderV2HighlightStrength.min,
+                    max: ReaderV2HighlightStrength.max,
+                    onChanged: (value) => setState(() => _dragging = value),
+                    onChangeEnd: (value) {
+                      setState(() => _dragging = null);
+                      settings.setHighlightStrength(value);
+                    },
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -274,17 +385,19 @@ class _HighlightPreview extends StatelessWidget {
   /// 預覽用的深淺；拖動中是尚未寫入的暫存值。
   final double strength;
 
+  static const before = '夜深了，屋外的雨聲漸漸停歇。';
+  static const sentence = '他放下手中的書，望向窗外的月光。';
+  static const after = '遠處傳來幾聲犬吠。';
+  static const textStyle = TextStyle(fontSize: 17, height: 1.6);
+  static const padding = EdgeInsets.all(AppSpacing.lg);
+
   @override
   Widget build(BuildContext context) {
     final palette = StylePalette.of(context);
-    final style = TextStyle(
-      color: palette.readerText,
-      fontSize: 17,
-      height: 1.6,
-    );
+    final style = textStyle.copyWith(color: palette.readerText);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: padding,
       decoration: BoxDecoration(
         color: palette.readerBackground,
         borderRadius: AppRadius.cardMd,
@@ -293,9 +406,9 @@ class _HighlightPreview extends StatelessWidget {
         TextSpan(
           style: style,
           children: [
-            const TextSpan(text: '夜深了，屋外的雨聲漸漸停歇。'),
+            const TextSpan(text: before),
             TextSpan(
-              text: '他放下手中的書，望向窗外的月光。',
+              text: sentence,
               style: TextStyle(
                 background: Paint()
                   ..color = settings.highlightColor
@@ -303,7 +416,7 @@ class _HighlightPreview extends StatelessWidget {
                       .withValues(alpha: strength),
               ),
             ),
-            const TextSpan(text: '遠處傳來幾聲犬吠。'),
+            const TextSpan(text: after),
           ],
         ),
       ),
@@ -317,6 +430,10 @@ class _HighlightColorRow extends StatelessWidget {
   final ReaderV2SettingsController settings;
 
   static const double _swatchSize = 30;
+
+  /// 色票下方名稱的字樣與間距。
+  static const TextStyle labelStyle = AppTextStyles.labelSm;
+  static const double labelGap = AppSpacing.xs;
 
   @override
   Widget build(BuildContext context) {
@@ -369,8 +486,8 @@ class _HighlightColorRow extends StatelessWidget {
                           )
                         : null,
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(option.label, style: AppTextStyles.labelSm),
+                  const SizedBox(height: labelGap),
+                  Text(option.label, style: labelStyle),
                 ],
               ),
             ),

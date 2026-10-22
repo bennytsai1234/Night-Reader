@@ -13,6 +13,12 @@ import 'number_stepper_row.dart';
 import 'skeleton.dart';
 import 'swipe_actions.dart';
 
+/// 不是一般分組列的區塊（色票列、分段控制、輸入框），自己給骨架的樣子：
+/// 高度照區塊本身的版面常數與字樣算，和換上的內容一樣高。
+abstract interface class GroupedSkeletonItem {
+  GroupedItemShape skeletonShape(BuildContext context, {required double width});
+}
+
 /// 分組清單進場時的骨架（[GroupedListView]，ADR 0029）：照真的畫面畫，每一
 /// 行字一條、每個圖示、圖片、開關與色塊（列首圖示方塊、數值膠囊）一塊，
 /// 卡片照卡片的範圍鋪底色；整個畫面的骨架只用一個 [SkeletonShapes]。
@@ -41,14 +47,117 @@ class GroupedItemShape {
   /// 字、圖示與色塊的位置（相對這一項）。
   final List<SkeletonShape> marks;
 
+  /// 形狀與內容共用內距，不能只把骨架撐高而漏掉內容的留白。
+  GroupedItemShape padded(EdgeInsets padding) => GroupedItemShape(
+    height + padding.vertical,
+    card: card?.shift(padding.topLeft),
+    rowHeights: rowHeights,
+    marks: [
+      for (final mark in marks)
+        SkeletonShape(
+          mark.rect.shift(padding.topLeft),
+          radius: mark.radius,
+          fill: mark.fill,
+        ),
+    ],
+  );
+
+  /// [text] 以 [style] 在 [width] 裡排出來的樣子：和 [Text] 一樣先合併
+  /// [context] 的預設字樣，照系統字級、行高規則與語系排，高度就是那段字的
+  /// 高度。自訂區塊的骨架用它，第一次打開就和換上的字一樣高。
+  static GroupedItemShape text(
+    BuildContext context,
+    String text, {
+    required TextStyle style,
+    required double width,
+    int? maxLines,
+  }) {
+    final painter = _layoutText(context, text, style, width, maxLines);
+    final font = MediaQuery.textScalerOf(context)
+        .scale(painter.text!.style!.fontSize ?? 14);
+    final shape = GroupedItemShape(
+      painter.height,
+      marks: [
+        for (final line in painter.computeLineMetrics())
+          _bar(
+            line.left,
+            line.baseline - line.ascent + line.height / 2,
+            line.width,
+            math.min(font, line.height),
+          ),
+      ],
+    );
+    painter.dispose();
+    return shape;
+  }
+
+  /// [text] 照 [Text] 的方式排在最寬 [maxWidth] 裡的大小（見 [text]）。
+  static Size textSize(
+    BuildContext context,
+    String text, {
+    required TextStyle style,
+    required double maxWidth,
+    int? maxLines,
+  }) {
+    final painter = _layoutText(context, text, style, maxWidth, maxLines);
+    final size = painter.size;
+    painter.dispose();
+    return size;
+  }
+
+  static TextPainter _layoutText(
+    BuildContext context,
+    String text,
+    TextStyle style,
+    double maxWidth,
+    int? maxLines,
+  ) {
+    final defaults = DefaultTextStyle.of(context);
+    return TextPainter(
+      text: TextSpan(text: text, style: defaults.style.merge(style)),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      textHeightBehavior: defaults.textHeightBehavior,
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: maxLines,
+      ellipsis: maxLines == null ? null : '…',
+    )..layout(maxWidth: math.max(0, maxWidth));
+  }
+
   /// 一般列與帶副標的列的高度、步進列與開關列右側的控件照元件本身的尺寸；
-  /// 包在私有元件裡認不出種類的列只畫標題條。
+  /// 包在私有元件裡認不出種類的列只畫標題條。不是一般分組列的區塊
+  /// （[GroupedSkeletonItem]）照它自己給的形狀，組標題與附註照字排出來的
+  /// 高度：面板（[GroupedSheetContent]）的高度就是這些高度加起來。
   static GroupedItemShape estimate(
     Widget item, {
+    required BuildContext context,
     required double width,
-    required TextScaler scaler,
-    required TextDirection direction,
   }) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    if (item case GroupedSkeletonItem shapeItem) {
+      return shapeItem.skeletonShape(context, width: width);
+    }
+    if (item is GroupedContent) {
+      final padding = item.padding.resolve(direction);
+      final inner = estimate(
+        item.child,
+        context: context,
+        width: width - padding.horizontal,
+      );
+      return inner.height > 0 ? inner.padded(padding) : inner;
+    }
+    if (item case NumberStepperRowLike(:final label, :final current)) {
+      return GroupedItemShape(
+        NumberStepperRow.heightOf(
+          context,
+          label: label,
+          valueText: current?.displayText,
+          width: width,
+        ),
+      );
+    }
+    if (item case SizedBox(:final height?)) return GroupedItemShape(height);
     if (item is! GroupedSection) return const GroupedItemShape(0);
     final margin = (item.margin ?? _defaultMargin).resolve(direction);
     final left = margin.left;
@@ -61,7 +170,12 @@ class GroupedItemShape {
 
     var top = item.topGap;
     if (item.header != null || item.headerTrailing != null) {
-      final line = header * (AppTextStyles.uiSm.height ?? 1);
+      final line = text(
+        context,
+        item.header ?? '',
+        style: GroupedSectionHeader.textStyle(context),
+        width: right - left - AppGrouped.rowPadding * 2,
+      ).height;
       if (item.header case final text?) {
         marks.add(
           _bar(
@@ -79,13 +193,36 @@ class GroupedItemShape {
     for (final (index, child) in item.children.indexed) {
       if (index > 0) top += AppGlass.hairline;
       final row = _row(child);
-      final height = switch (row) {
-        NumberStepperRowLike() => _stepperHeight,
-        GroupedRow(:final subtitle?) when subtitle.isNotEmpty =>
-          AppGrouped.rowTallMinHeight,
-        _ => AppGrouped.rowMinHeight,
-      };
+      // 列自己算得出高度（一般列、開關列、步進列與自訂區塊）就照它；包在
+      // 外框裡的，穿過外框找列本身。都認不出的私有列照單行列估。
+      var custom = estimate(child, context: context, width: right - left);
+      if (custom.height <= 0 && !identical(row, child)) {
+        custom = estimate(row, context: context, width: right - left);
+      }
+      final height = custom.height > 0
+          ? custom.height
+          : math.max(
+              AppGrouped.rowMinHeight,
+              AppSpacing.md * 2 +
+                  math.max(
+                    title * 1.3,
+                    groupedRowHasLeading(child) ? AppGrouped.iconTile : 0,
+                  ),
+            );
       rowHeights.add(height);
+      if (custom.marks.isNotEmpty) {
+        for (final mark in custom.marks) {
+          marks.add(
+            SkeletonShape(
+              mark.rect.shift(Offset(left, top)),
+              radius: mark.radius,
+              fill: mark.fill,
+            ),
+          );
+        }
+        top += height;
+        continue;
+      }
       final centre = top + height / 2;
       var textLeft = left + AppGrouped.rowPadding;
       if (groupedRowHasLeading(child)) {
@@ -177,7 +314,12 @@ class GroupedItemShape {
     final card = Rect.fromLTRB(left, cardTop, right, top);
     if (item.footer case final text?) {
       top += AppSpacing.sm;
-      final line = small * (AppTextStyles.bodySm.height ?? 1);
+      final line = GroupedItemShape.text(
+        context,
+        text,
+        style: AppTextStyles.bodySm,
+        width: right - left - AppGrouped.rowPadding * 2,
+      ).height;
       marks.add(
         _bar(
           left + AppGrouped.rowPadding,
@@ -472,9 +614,6 @@ class GroupedListSkeleton extends StatelessWidget {
 const EdgeInsetsGeometry _defaultMargin = EdgeInsets.symmetric(
   horizontal: AppGrouped.margin,
 );
-
-/// 步進列：上下各 [AppSpacing.xs] 加 48 的點擊範圍。
-const double _stepperHeight = 48 + AppSpacing.xs * 2;
 
 /// 一行字的佔位條：和字號一樣高，以 [centreY] 為中線。
 SkeletonShape _bar(double left, double centreY, double width, double height) =>

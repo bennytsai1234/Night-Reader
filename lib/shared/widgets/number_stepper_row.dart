@@ -8,6 +8,7 @@ import 'package:night_reader/shared/theme/app_haptics.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
@@ -25,6 +26,10 @@ import 'package:night_reader/shared/widgets/press_ink.dart';
 /// 的樣子估（「－」、數值膠囊與「＋」，ADR 0029）。
 abstract interface class NumberStepperRowLike {
   String get label;
+
+  /// 現在畫出來的那一列；骨架照它的標題與數值算高度。外層拿不到數值
+  /// （只在裡面聽自己的值）時為 null，骨架照最窄的數值鈕算。
+  NumberStepperRow? get current;
 }
 
 class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
@@ -63,6 +68,62 @@ class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
 
   /// 數值剛好是整數時不寫小數（18、18.5），而不是固定 [fractionDigits] 位。
   final bool trimZeroFraction;
+
+  /// 標題與數值的字樣；骨架照同一份量高度。
+  static final TextStyle _labelStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+  );
+  static final TextStyle _valueStyle = AppTextStyles.uiMd.copyWith(
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
+  @override
+  NumberStepperRow get current => this;
+
+  /// 數值鈕上的字（對齊格點、換算顯示單位、接上單位）。
+  String get displayText => displayTextOf(snap(value, min, max, step));
+
+  String displayTextOf(double value) => withUnit(_format(value), unit);
+
+  String _format(double value) {
+    final scaled = value * displayScale;
+    if (trimZeroFraction && scaled == scaled.roundToDouble()) {
+      return scaled.toStringAsFixed(0);
+    }
+    return scaled.toStringAsFixed(fractionDigits);
+  }
+
+  /// 一列放在 [width] 寬裡的高度（分組清單的骨架照它佔位）：步進鈕的點擊
+  /// 範圍、數值鈕與照可用寬度排的標題取最高，再加上下內距；用的是 build
+  /// 裡同一份字樣與尺寸。字大時標題會換行、數值鈕會變寬變高。[valueText]
+  /// 是數值鈕上的字，null 時照最窄的數值鈕算。
+  static double heightOf(
+    BuildContext context, {
+    required String label,
+    required String? valueText,
+    required double width,
+  }) {
+    var valueWidth = _kValueMinWidth;
+    var valueHeight = _kStepperControlHeight;
+    if (valueText != null) {
+      final size = GroupedItemShape.textSize(
+        context,
+        valueText,
+        style: _valueStyle,
+        maxWidth: double.infinity,
+      );
+      valueWidth = math.max(valueWidth, size.width + _kValuePadding * 2);
+      valueHeight = math.max(valueHeight, size.height);
+    }
+    final labelHeight = GroupedItemShape.textSize(
+      context,
+      label,
+      style: _labelStyle,
+      maxWidth: width - _kStepperTapTarget * 2 - valueWidth - _kValueMargin * 2,
+    ).height;
+    return math.max(_kStepperTapTarget, math.max(labelHeight, valueHeight)) +
+        _kRowPadding * 2;
+  }
 
   /// 數字接上單位：`%` 緊貼，其他單位隔一格（`1.5 倍`、`2 行`）。
   static String withUnit(String number, String unit) {
@@ -129,18 +190,12 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
   bool get _canDecrease => _value > widget.min;
   bool get _canIncrease => _value < widget.max;
 
-  String _format(double value) {
-    final scaled = value * widget.displayScale;
-    if (widget.trimZeroFraction && scaled == scaled.roundToDouble()) {
-      return scaled.toStringAsFixed(0);
-    }
-    return scaled.toStringAsFixed(widget.fractionDigits);
-  }
+  String _format(double value) => widget._format(value);
 
   String _withUnit(String number) =>
       NumberStepperRow.withUnit(number, widget.unit);
 
-  String get _displayText => _withUnit(_format(_value));
+  String get _displayText => widget.displayTextOf(_value);
 
   void _setValue(double next) {
     final normalized = _normalized(next);
@@ -216,15 +271,14 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
       onIncrease: _canIncrease ? () => _stepBy(1) : null,
       onDecrease: _canDecrease ? () => _stepBy(-1) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(vertical: _kRowPadding),
         child: Row(
           children: [
             Expanded(
               child: ExcludeSemantics(
                 child: Text(
                   widget.label,
-                  style: AppTextStyles.bodyBase.copyWith(
-                    height: 1.3,
+                  style: NumberStepperRow._labelStyle.copyWith(
                     color: colorScheme.onSurface,
                   ),
                 ),
@@ -357,6 +411,14 @@ const double _kStepperControlHeight = 36;
 /// 步進鈕的點擊範圍（Material 的最小點擊範圍 48×48），也是它佔的大小。
 const double _kStepperTapTarget = kMinInteractiveDimension;
 
+/// 列的上下內距。
+const double _kRowPadding = AppSpacing.xs;
+
+/// 數值鈕最窄的寬度、字左右的內距，以及和步進鈕的間距。
+const double _kValueMinWidth = 64;
+const double _kValuePadding = AppSpacing.md;
+const double _kValueMargin = AppSpacing.sm;
+
 /// 步進控件的淡墨底：同時適用 App 分組卡片與閱讀器選單主題的面板。
 Color _controlFill(BuildContext context) =>
     Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07);
@@ -371,7 +433,7 @@ class _ValueButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: _kValueMargin),
       child: Material(
         color: _controlFill(context),
         borderRadius: AppRadius.pillShape,
@@ -380,18 +442,17 @@ class _ValueButton extends StatelessWidget {
           borderRadius: AppRadius.pillShape,
           child: ConstrainedBox(
             constraints: const BoxConstraints(
-              minWidth: 64,
+              minWidth: _kValueMinWidth,
               minHeight: _kStepperControlHeight,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              padding: const EdgeInsets.symmetric(horizontal: _kValuePadding),
               child: Center(
                 widthFactor: 1,
                 child: Text(
                   text,
-                  style: AppTextStyles.uiMd.copyWith(
+                  style: NumberStepperRow._valueStyle.copyWith(
                     color: colorScheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),

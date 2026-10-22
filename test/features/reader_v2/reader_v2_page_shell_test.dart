@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_bottom_menu.dart';
+import 'package:night_reader/features/reader_v2/features/menu/reader_v2_menu_controller.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_top_menu.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_info_item.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep_timer.dart';
@@ -48,6 +49,8 @@ void main() {
     scaffoldKey = GlobalKey<ScaffoldState>();
     final scroll = ScrollController();
     addTearDown(scroll.dispose);
+    final menu = ReaderV2MenuController();
+    addTearDown(menu.dispose);
     void noop() {}
     void noopPercent(double _) {}
     await tester.pumpWidget(
@@ -88,8 +91,7 @@ void main() {
             navigation: ReaderV2ChapterNavigationState(
               chapterCount: 3,
               currentIndex: 0,
-              isScrubbing: false,
-              scrubPercent: 0,
+              scrub: menu.scrub,
               titleFor: (_) => '',
             ),
             isAutoPaging: false,

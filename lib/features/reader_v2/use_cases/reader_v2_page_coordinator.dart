@@ -198,6 +198,13 @@ class ReaderV2PageCoordinator {
       _showNotice('替換規則資料庫不可用');
       return;
     }
+    // 面板滑上來的第一幀，骨架就照輸入框裡的字與啟用的規則數算高度，所以
+    // 兩樣都先讀好再開；資料庫在背景 isolate，等的這一下主執行緒沒在忙。
+    final (sample, enabledRules) = await (
+      _replaceTestSample(),
+      ReaderV2ReplaceRuleSheet.loadEnabledRules(replaceDao, _host.book),
+    ).wait;
+    if (!context.mounted) return;
     await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
@@ -208,7 +215,8 @@ class ReaderV2PageCoordinator {
         onReload: () async {
           await _host.runtime?.reloadContentPreservingLocation();
         },
-        loadTestSample: _replaceTestSample,
+        testSample: sample,
+        enabledRules: enabledRules,
       ),
     );
   }
@@ -319,10 +327,16 @@ class ReaderV2PageCoordinator {
     final location = runtime.state.visibleLocation;
     final chapter = runtime.chapterAt(location.chapterIndex);
     if (chapter == null) return null;
-    final raw = await ReaderChapterContentStore(
-      chapterDao: _host.dependencies.chapterDao,
-      contentDao: contentDao,
-    ).getRawContent(book: _host.book, chapter: chapter);
+    final String? raw;
+    try {
+      raw = await ReaderChapterContentStore(
+        chapterDao: _host.dependencies.chapterDao,
+        contentDao: contentDao,
+      ).getRawContent(book: _host.book, chapter: chapter);
+    } catch (error, stack) {
+      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
     if (raw == null) return null;
     final paragraphs = ReaderV2Content.fromRaw(
       chapterIndex: location.chapterIndex,

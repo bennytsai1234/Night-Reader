@@ -19,7 +19,9 @@ import 'app_harness.dart';
 import 'frame_budget.dart';
 
 /// 畫面上（不含被蓋住的頁面與保留著的其他分頁）還有骨架。
-bool skeletonShown() => find.byType(SkeletonBox).evaluate().isNotEmpty;
+bool skeletonShown() =>
+    find.byType(SkeletonBox).evaluate().isNotEmpty ||
+    find.byType(SkeletonShapes).evaluate().isNotEmpty;
 
 /// [page] 在畫面上、所在的頁面進場播完，上面也沒有頁面蓋著或正在移走。
 ///
@@ -39,13 +41,16 @@ bool pageSettled(Finder page) {
 
 /// 做 [action]（點一下、返回）後一幀一幀量，直到 [settled] 成立、畫面上的
 /// 骨架都換成內容，再多看一秒；印出摘要並傳回每一幀的成本。[settled] 的
-/// 預設是 [page] 進場播完。
+/// 預設是 [page] 進場播完。[note] 換掉預設的「換頁」字樣（量的不是換頁時
+/// 寫自己的階段）；[onFrame] 見 [recordFrames]。
 Future<List<FrameCost>> measureNavigation(
   WidgetTester tester,
   String label, {
   required Future<void> Function() action,
   Finder? page,
   bool Function()? settled,
+  String? Function()? note,
+  Future<void> Function(int frame)? onFrame,
   int tailFrames = 60,
 }) async {
   final done = settled ?? () => pageSettled(page!);
@@ -59,9 +64,13 @@ Future<List<FrameCost>> measureNavigation(
     realAsync: true,
     until: () => done() && !skeletonShown(),
     note: () {
-      final note = [if (!done()) '換頁', if (skeletonShown()) '骨架'].join('、');
-      return note.isEmpty ? null : note;
+      final stage = [
+        if (!done()) note?.call() ?? '換頁',
+        if (skeletonShown()) '骨架',
+      ].join('、');
+      return stage.isEmpty ? null : stage;
     },
+    onFrame: onFrame,
     tailFrames: tailFrames,
     maxFrames: _maxFrames,
   );

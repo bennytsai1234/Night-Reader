@@ -5,6 +5,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
 
 /// 閱讀器內設定面板的唯一開啟入口。
 ///
@@ -124,18 +125,15 @@ class ReaderV2SheetScaffold extends StatelessWidget {
               ),
             ),
             Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppGrouped.margin,
+              child: GroupedSheetContent(
+                background: scheme.surface,
+                padding: const EdgeInsets.fromLTRB(
+                  AppGrouped.margin,
+                  0,
+                  AppGrouped.margin,
+                  AppSpacing.xxl,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...children,
-                    const SizedBox(height: AppSpacing.xxl),
-                  ],
-                ),
+                children: children,
               ),
             ),
           ],

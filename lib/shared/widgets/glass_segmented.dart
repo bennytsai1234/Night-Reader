@@ -24,6 +24,8 @@ class GlassSegment<T> {
 ///
 /// 為受控元件：只透過 [onChanged] 回報，選取塊最終位置以 [selected] 為準。
 class GlassSegmented<T> extends StatefulWidget {
+  /// Telegram 分段控制的軌道高度，載入形狀與實際控制共用。
+  static const double trackHeight = 36;
   const GlassSegmented({
     super.key,
     required this.segments,
@@ -49,7 +51,7 @@ class GlassSegmented<T> extends StatefulWidget {
 }
 
 /// 軌道高度與選取塊內縮（Telegram 36pt 膠囊、2pt 內縮）。
-const double _kTrackHeight = 36.0;
+const double _kTrackHeight = GlassSegmented.trackHeight;
 const double _kThumbInset = 2.0;
 
 class _GlassSegmentedState<T> extends State<GlassSegmented<T>>

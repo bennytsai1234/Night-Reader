@@ -15,6 +15,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({
@@ -23,7 +24,8 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
     required this.bookDao,
     required this.replaceDao,
     required this.onReload,
-    this.loadTestSample,
+    this.testSample,
+    required this.enabledRules,
   });
 
   final Book book;
@@ -32,7 +34,28 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   final Future<void> Function() onReload;
 
   /// 即時測試框一打開就填好的文字（畫面上那一段的原文）；取不到時留空。
-  final Future<String?> Function()? loadTestSample;
+  /// 和 [enabledRules] 一樣在開面板前讀好：面板滑上來的第一幀，骨架就得
+  /// 照輸入框裡的字與「管理規則」右側的數字算高度（ADR 0029）。
+  final String? testSample;
+
+  /// 這本書目前啟用的規則，開面板前用 [loadEnabledRules] 讀好；null 是讀不到，
+  /// 那一列一開始就是「規則讀取失敗」，骨架也照它畫。
+  final List<ReplaceRule>? enabledRules;
+
+  /// 讀這本書啟用的規則；讀不到時記下錯誤、回傳 null。開面板前與面板裡的
+  /// 重讀共用，錯誤在這裡就接住，不交給之後才建的列（面板的列在滑到位後
+  /// 才建，交給它時錯誤已經沒人接）。
+  static Future<List<ReplaceRule>?> loadEnabledRules(
+    ReplaceRuleDao dao,
+    Book book,
+  ) async {
+    try {
+      return await dao.getEnabledForBook(book.name, book.origin);
+    } catch (error, stack) {
+      AppLog.e('讀取啟用的替換規則失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
+  }
 
   @override
   State<ReaderV2ReplaceRuleSheet> createState() =>
@@ -41,8 +64,12 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
 
 class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   late bool _useReplaceRule;
-  Future<List<ReplaceRule>>? _enabledRulesFuture;
-  final TextEditingController _testController = TextEditingController();
+
+  /// 「管理規則」右側的規則數；null 是讀不到。
+  late List<ReplaceRule>? _enabledRules = widget.enabledRules;
+  late final TextEditingController _testController = TextEditingController(
+    text: widget.testSample,
+  );
 
   /// 還沒按「執行測試」時為 null，結果區不顯示。
   String? _testResult;
@@ -53,21 +80,6 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   void initState() {
     super.initState();
     _useReplaceRule = widget.book.getUseReplaceRule();
-    _reloadEnabledRules();
-    unawaited(_fillTestSample());
-  }
-
-  Future<void> _fillTestSample() async {
-    final String? sample;
-    try {
-      sample = await widget.loadTestSample?.call();
-    } catch (error, stack) {
-      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
-      return;
-    }
-    // 使用者已經開始打字就不覆蓋。
-    if (!mounted || sample == null || _testController.text.isNotEmpty) return;
-    _testController.text = sample;
   }
 
   @override
@@ -76,11 +88,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     super.dispose();
   }
 
-  void _reloadEnabledRules() {
-    _enabledRulesFuture = widget.replaceDao.getEnabledForBook(
-      widget.book.name,
-      widget.book.origin,
+  Future<void> _reloadEnabledRules() async {
+    final rules = await ReaderV2ReplaceRuleSheet.loadEnabledRules(
+      widget.replaceDao,
+      widget.book,
     );
+    if (mounted) setState(() => _enabledRules = rules);
   }
 
   /// 全部規則的內容快照，用來判斷管理頁裡有沒有改動。
@@ -148,24 +161,17 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     }
   }
 
-  Widget _manageRow(BuildContext context, int? enabledCount) {
-    return GroupedRow(
-      leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
-      title: '管理規則',
-      value: enabledCount == null ? null : '$enabledCount',
-      onTap: () async {
-        final before = await _rulesSnapshot();
-        if (!context.mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
-        );
-        // 只是進去看看、沒有改動時不重載正文。
-        if (!mounted || await _rulesSnapshot() == before) return;
-        setState(_reloadEnabledRules);
-        await widget.onReload();
-      },
+  Future<void> _manageRules(BuildContext context) async {
+    final before = await _rulesSnapshot();
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
     );
+    // 只是進去看看、沒有改動時不重載正文。
+    if (!mounted || await _rulesSnapshot() == before) return;
+    unawaited(_reloadEnabledRules());
+    await widget.onReload();
   }
 
   @override
@@ -173,6 +179,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     return AppBottomSheet(
       title: '替換規則',
       icon: Icons.rule_rounded,
+      skeletonEntrance: true,
       children: [
         GroupedSection(
           margin: EdgeInsets.zero,
@@ -203,25 +210,15 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 );
                 // 取消時不重載：重載會重新排版並打斷朗讀。
                 if (!mounted || !saved) return;
-                setState(_reloadEnabledRules);
+                unawaited(_reloadEnabledRules());
                 await widget.onReload();
               },
             ),
             // 右側是這本書目前啟用的規則數。
-            FutureBuilder<List<ReplaceRule>>(
-              future: _enabledRulesFuture,
-              builder: (context, snapshot) => snapshot.hasError
-                  ? GroupedRow(
-                      leading: const GroupedIconTile(
-                        Icons.error_outline_rounded,
-                        tint: AppTint.rust,
-                      ),
-                      title: '規則讀取失敗',
-                      value: '重試',
-                      showChevron: false,
-                      onTap: () => setState(_reloadEnabledRules),
-                    )
-                  : _manageRow(context, snapshot.data?.length),
+            _RuleManagementRow(
+              rules: _enabledRules,
+              onRetry: _reloadEnabledRules,
+              onManage: () => _manageRules(context),
             ),
           ],
         ),
@@ -284,4 +281,50 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       ],
     );
   }
+}
+
+/// 「管理規則」列，右側是啟用的規則數；讀不到（[rules] 為 null）時換成
+/// 「規則讀取失敗」。骨架與內容照同一個 [rules] 畫同一列，第一幀就一樣高。
+class _RuleManagementRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
+  const _RuleManagementRow({
+    required this.rules,
+    required this.onRetry,
+    required this.onManage,
+  });
+
+  final List<ReplaceRule>? rules;
+  final VoidCallback onRetry;
+  final VoidCallback onManage;
+
+  @override
+  bool get hasLeading => true;
+
+  GroupedRow get _row => switch (rules) {
+    final rules? => GroupedRow(
+      leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
+      title: '管理規則',
+      value: '${rules.length}',
+      onTap: onManage,
+    ),
+    null => GroupedRow(
+      leading: const GroupedIconTile(
+        Icons.error_outline_rounded,
+        tint: AppTint.rust,
+      ),
+      title: '規則讀取失敗',
+      value: '重試',
+      showChevron: false,
+      onTap: onRetry,
+    ),
+  };
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row.skeletonShape(context, width: width);
+
+  @override
+  Widget build(BuildContext context) => _row;
 }
