@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:night_reader/core/exception/user_error.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
@@ -24,8 +25,7 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
     required this.bookDao,
     required this.replaceDao,
     required this.onReload,
-    this.testSample,
-    required this.enabledRules,
+    this.loadTestSample,
   });
 
   final Book book;
@@ -33,18 +33,13 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   final ReplaceRuleDao replaceDao;
   final Future<void> Function() onReload;
 
-  /// 即時測試框一打開就填好的文字（畫面上那一段的原文）；取不到時留空。
-  /// 和 [enabledRules] 一樣在開面板前讀好：面板滑上來的第一幀，骨架就得
-  /// 照輸入框裡的字與「管理規則」右側的數字算高度（ADR 0029）。
-  final String? testSample;
+  /// 即時測試框的預設文字（畫面上那一段的原文），面板打開後才讀、讀到才
+  /// 填；取不到時留空。測試框固定三行高，字什麼時候填進來都不影響面板
+  /// 高度（ADR 0029）。
+  final Future<String?> Function()? loadTestSample;
 
-  /// 這本書目前啟用的規則，開面板前用 [loadEnabledRules] 讀好；null 是讀不到，
-  /// 那一列一開始就是「規則讀取失敗」，骨架也照它畫。
-  final List<ReplaceRule>? enabledRules;
-
-  /// 讀這本書啟用的規則；讀不到時記下錯誤、回傳 null。開面板前與面板裡的
-  /// 重讀共用，錯誤在這裡就接住，不交給之後才建的列（面板的列在滑到位後
-  /// 才建，交給它時錯誤已經沒人接）。
+  /// 讀這本書啟用的規則；讀不到時記下錯誤、回傳 null。錯誤在這裡就接住，
+  /// 不交給之後才建的列（面板的列在滑到位後才建，交給它時錯誤已經沒人接）。
   static Future<List<ReplaceRule>?> loadEnabledRules(
     ReplaceRuleDao dao,
     Book book,
@@ -65,11 +60,12 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
 class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   late bool _useReplaceRule;
 
-  /// 「管理規則」右側的規則數；null 是讀不到。
-  late List<ReplaceRule>? _enabledRules = widget.enabledRules;
-  late final TextEditingController _testController = TextEditingController(
-    text: widget.testSample,
+  /// 「管理規則」右側的規則數。讀到時只有那一列聽它重建：常在面板滑入途中
+  /// 讀到，通知整個面板會在那一格重建全部的列、重算骨架（ADR 0029 做法 3）。
+  final ValueNotifier<_RulesState> _rules = ValueNotifier(
+    const _RulesState.loading(),
   );
+  final TextEditingController _testController = TextEditingController();
 
   /// 還沒按「執行測試」時為 null，結果區不顯示。
   String? _testResult;
@@ -80,11 +76,27 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   void initState() {
     super.initState();
     _useReplaceRule = widget.book.getUseReplaceRule();
+    unawaited(_reloadEnabledRules());
+    unawaited(_fillTestSample());
+  }
+
+  Future<void> _fillTestSample() async {
+    final String? sample;
+    try {
+      sample = await widget.loadTestSample?.call();
+    } catch (error, stack) {
+      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
+      return;
+    }
+    // 使用者已經開始打字就不覆蓋。
+    if (!mounted || sample == null || _testController.text.isNotEmpty) return;
+    _testController.text = sample;
   }
 
   @override
   void dispose() {
     _testController.dispose();
+    _rules.dispose();
     super.dispose();
   }
 
@@ -93,7 +105,8 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       widget.replaceDao,
       widget.book,
     );
-    if (mounted) setState(() => _enabledRules = rules);
+    if (!mounted) return;
+    _rules.value = _RulesState.loaded(rules);
   }
 
   /// 全部規則的內容快照，用來判斷管理頁裡有沒有改動。
@@ -162,16 +175,40 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   }
 
   Future<void> _manageRules(BuildContext context) async {
-    final before = await _rulesSnapshot();
+    // 讀不到快照時照樣進管理頁，回來後當作有改動重載。
+    final before = await _rulesSnapshotOrNull();
     if (!context.mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
     );
+    if (!mounted) return;
     // 只是進去看看、沒有改動時不重載正文。
-    if (!mounted || await _rulesSnapshot() == before) return;
+    if (before != null && await _rulesSnapshotOrNull() == before) return;
+    await _applyRuleChange();
+  }
+
+  Future<String?> _rulesSnapshotOrNull() async {
+    try {
+      return await _rulesSnapshot();
+    } catch (error, stack) {
+      AppLog.e('讀取替換規則快照失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
+  }
+
+  /// 規則有改動：重讀規則數，正文照新規則重載。這兩條路徑由列的點擊觸發，
+  /// 錯誤在這裡接住，不留給沒人等的 Future。
+  Future<void> _applyRuleChange() async {
     unawaited(_reloadEnabledRules());
-    await widget.onReload();
+    try {
+      await widget.onReload();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failureMessage('套用替換規則', error))));
+    }
   }
 
   @override
@@ -210,13 +247,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
                 );
                 // 取消時不重載：重載會重新排版並打斷朗讀。
                 if (!mounted || !saved) return;
-                unawaited(_reloadEnabledRules());
-                await widget.onReload();
+                await _applyRuleChange();
               },
             ),
             // 右側是這本書目前啟用的規則數。
             _RuleManagementRow(
-              rules: _enabledRules,
+              rules: _rules,
               onRetry: _reloadEnabledRules,
               onManage: () => _manageRules(context),
             ),
@@ -226,10 +262,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
           margin: EdgeInsets.zero,
           header: '即時測試',
           children: [
+            // 固定三行高，長的原文在框內捲動：原文是面板打開後才讀到、填進
+            // 來的，框的高度不能跟著它變（骨架第一幀就照三行畫）。
             GroupedTextFieldRow(
               controller: _testController,
               minLines: 3,
-              maxLines: 5,
+              maxLines: 3,
             ),
             GroupedRow(
               title: _testing ? '測試中…' : '執行測試',
@@ -283,8 +321,10 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   }
 }
 
-/// 「管理規則」列，右側是啟用的規則數；讀不到（[rules] 為 null）時換成
-/// 「規則讀取失敗」。骨架與內容照同一個 [rules] 畫同一列，第一幀就一樣高。
+/// 「管理規則」列，右側是啟用的規則數（讀到前空著）；讀不到時換成「規則
+/// 讀取失敗」。規則數是面板打開後才讀到的，三種樣子都是一行標題（放不下
+/// 時截斷，不換行）、同樣大小的列首圖示，讀到什麼只換字，不改列高；骨架
+/// 照打開時這一列畫。
 class _RuleManagementRow extends StatelessWidget
     implements GroupedRowLike, GroupedSkeletonItem {
   const _RuleManagementRow({
@@ -293,29 +333,31 @@ class _RuleManagementRow extends StatelessWidget
     required this.onManage,
   });
 
-  final List<ReplaceRule>? rules;
+  final ValueListenable<_RulesState> rules;
   final VoidCallback onRetry;
   final VoidCallback onManage;
 
   @override
   bool get hasLeading => true;
 
-  GroupedRow get _row => switch (rules) {
-    final rules? => GroupedRow(
-      leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
-      title: '管理規則',
-      value: '${rules.length}',
-      onTap: onManage,
-    ),
-    null => GroupedRow(
+  GroupedRow _row(_RulesState state) => switch (state) {
+    _RulesState(loaded: true, rules: null) => GroupedRow(
       leading: const GroupedIconTile(
         Icons.error_outline_rounded,
         tint: AppTint.rust,
       ),
       title: '規則讀取失敗',
+      maxTitleLines: 1,
       value: '重試',
       showChevron: false,
       onTap: onRetry,
+    ),
+    _RulesState(:final rules) => GroupedRow(
+      leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
+      title: '管理規則',
+      maxTitleLines: 1,
+      value: rules == null ? null : '${rules.length}',
+      onTap: onManage,
     ),
   };
 
@@ -323,8 +365,21 @@ class _RuleManagementRow extends StatelessWidget
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
-  }) => _row.skeletonShape(context, width: width);
+  }) => _row(rules.value).skeletonShape(context, width: width);
 
   @override
-  Widget build(BuildContext context) => _row;
+  Widget build(BuildContext context) => ValueListenableBuilder<_RulesState>(
+    valueListenable: rules,
+    builder: (context, state, _) => _row(state),
+  );
+}
+
+/// 啟用的規則讀到了沒有；讀到後 [rules] 為 null 是讀不到。
+@immutable
+class _RulesState {
+  const _RulesState.loading() : loaded = false, rules = null;
+  const _RulesState.loaded(this.rules) : loaded = true;
+
+  final bool loaded;
+  final List<ReplaceRule>? rules;
 }

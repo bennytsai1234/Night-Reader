@@ -647,6 +647,7 @@ class GroupedRow extends StatelessWidget
     this.accent = false,
     this.enabled = true,
     this.maxSubtitleLines = 2,
+    this.maxTitleLines,
   });
 
   final String title;
@@ -678,6 +679,10 @@ class GroupedRow extends StatelessWidget
   final bool accent;
   final bool enabled;
   final int maxSubtitleLines;
+
+  /// 標題最多幾行，超過以「…」截斷；null 時照寬度換行。右側的字會之後才
+  /// 讀到、或同一列會換成另一個標題時，設成 1 讓列高不跟著字變。
+  final int? maxTitleLines;
 
   @override
   bool get hasLeading => leading != null;
@@ -735,6 +740,7 @@ class GroupedRow extends StatelessWidget
         fontWeight: accent ? FontWeight.w500 : FontWeight.w400,
       ),
       maxWidth: available,
+      maxLines: maxTitleLines,
     ).height;
     final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
     if (hasSubtitle) {
@@ -805,6 +811,10 @@ class GroupedRow extends StatelessWidget
                   titleWidget ??
                       Text(
                         title,
+                        maxLines: maxTitleLines,
+                        overflow: maxTitleLines == null
+                            ? null
+                            : TextOverflow.ellipsis,
                         style: _textStyle.copyWith(
                           color: titleColor,
                           fontWeight: accent
@@ -1129,8 +1139,15 @@ class GroupedTextFieldRow extends StatelessWidget
     final textStyle = _textStyle(context);
     final fieldWidth =
         width - AppGrouped.rowPadding * 2 - (label == null ? 0 : labelWidth);
+    final maxLines = _maxLines;
+    // 行數固定（最少與最多一樣）的框，高度只看行數，不看裡面現在有什麼
+    // 字：字可能之後才填進來。行數會變的框照現在的字排。
+    final fixed = maxLines != null && (minLines ?? 1) == maxLines;
     final painter = TextPainter(
-      text: TextSpan(text: controller?.text ?? '', style: textStyle),
+      text: TextSpan(
+        text: fixed ? '' : controller?.text ?? '',
+        style: textStyle,
+      ),
       strutStyle: StrutStyle.fromTextStyle(textStyle, forceStrutHeight: true),
       textScaler: scaler,
       textDirection: direction,
@@ -1140,8 +1157,10 @@ class GroupedTextFieldRow extends StatelessWidget
       textStyle.fontSize ?? AppTextStyles.bodyBase.fontSize!,
     );
     final lower = line * (minLines ?? maxLines ?? 1);
-    final upper = maxLines == null ? double.infinity : line * maxLines!;
-    final fieldHeight = painter.height.clamp(lower, upper);
+    final upper = maxLines == null ? double.infinity : line * maxLines;
+    final fieldHeight = fixed
+        ? line * maxLines
+        : painter.height.clamp(lower, upper);
     painter.dispose();
     final height = (fieldHeight + AppSpacing.md * 2).clamp(
       AppGrouped.rowMinHeight,
@@ -1162,6 +1181,9 @@ class GroupedTextFieldRow extends StatelessWidget
       ],
     );
   }
+
+  /// 輸入框實際的最多行數（密碼只有一行）；骨架與 build 共用。
+  int? get _maxLines => obscureText ? 1 : maxLines;
 
   /// TextField 會先合併 Material 的輸入字體；骨架也從這份字體量行高，
   /// 不能只用字號乘行高（不同字體的 strut 會得到不同整數行高）。
@@ -1205,7 +1227,7 @@ class GroupedTextFieldRow extends StatelessWidget
       ),
     );
     final effectiveStyle = _textStyle(context);
-    final effectiveMaxLines = obscureText ? 1 : maxLines;
+    final effectiveMaxLines = _maxLines;
     final field = validator == null
         ? TextField(
             controller: controller,

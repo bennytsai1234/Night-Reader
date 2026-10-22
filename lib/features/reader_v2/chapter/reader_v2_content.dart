@@ -32,14 +32,7 @@ class ReaderV2Content {
     required String title,
     required String rawText,
   }) {
-    final normalized = normalizeRawText(rawText);
-    final paragraphs = normalized.isEmpty
-        ? <String>[]
-        : normalized
-              .split(RegExp(r'\n+'))
-              .map((line) => line.trim())
-              .where((line) => line.isNotEmpty)
-              .toList(growable: false);
+    final paragraphs = paragraphsOf(rawText);
     final plainText = paragraphs.join('\n\n');
     final normalizedTitle = title.trim();
     final displayText = normalizedTitle.isEmpty
@@ -61,6 +54,19 @@ class ReaderV2Content {
       displayText: displayText,
       contentHash: sha1.convert(utf8.encode(hashMaterial)).toString(),
     );
+  }
+
+  /// 原文切成的段落，和 [ReaderV2Content.fromRaw] 的 [paragraphs] 相同。
+  /// 只要段落時用這個：[ReaderV2Content.fromRaw] 還會對整章算雜湊，那只在
+  /// 背景做（`reader_v2_content_transformer.dart`）。
+  static List<String> paragraphsOf(String rawText) {
+    final normalized = normalizeRawText(rawText);
+    if (normalized.isEmpty) return const <String>[];
+    return normalized
+        .split(RegExp(r'\n+'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
   }
 
   static String normalizeRawText(String rawText) {
