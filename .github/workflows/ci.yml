@@ -84,6 +84,10 @@ jobs:
         # *.g.dart 由 build_runner 產生，格式不在這裡把關。
         run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
       - run: flutter analyze --no-pub
+      - name: Install CJK fonts
+        # 打開真的閱讀器的測試要真的中文字型：排版引擎照字寬斷行，測試預設的
+        # 方塊字型會讓實際斷行和預先排的不同而拋錯（test/support/screenshot.dart）。
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - run: flutter test --no-pub --reporter compact
       - name: Verify validation did not modify tracked source
         if: always()
