@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:night_reader/core/models/replace_rule.dart';
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart';
@@ -183,6 +186,13 @@ class ReaderV2PageCoordinator {
       _showNotice('替換規則資料庫不可用');
       return;
     }
+    // 面板滑上來的第一幀，骨架就照輸入框裡的字與啟用的規則數算高度，所以
+    // 兩樣都先讀好再開；資料庫在背景 isolate，等的這一下主執行緒沒在忙。
+    final (sample, enabledRules) = await (
+      _replaceTestSample(),
+      _enabledRules(replaceDao),
+    ).wait;
+    if (!context.mounted) return;
     await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
@@ -193,9 +203,20 @@ class ReaderV2PageCoordinator {
         onReload: () async {
           await _host.runtime?.reloadContentPreservingLocation();
         },
-        loadTestSample: _replaceTestSample,
+        testSample: sample,
+        enabledRules: enabledRules,
       ),
     );
+  }
+
+  /// 這本書啟用的規則；讀不到時交給面板自己再讀一次，失敗就顯示在那一列。
+  Future<List<ReplaceRule>?> _enabledRules(ReplaceRuleDao dao) async {
+    try {
+      return await dao.getEnabledForBook(_host.book.name, _host.book.origin);
+    } catch (error, stack) {
+      AppLog.e('讀取啟用的替換規則失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
   }
 
   /// 替換規則即時測試的預設文字：畫面頂端那一段的原文（套用替換規則之前，
@@ -207,10 +228,16 @@ class ReaderV2PageCoordinator {
     final location = runtime.state.visibleLocation;
     final chapter = runtime.chapterAt(location.chapterIndex);
     if (chapter == null) return null;
-    final raw = await ReaderChapterContentStore(
-      chapterDao: _host.dependencies.chapterDao,
-      contentDao: contentDao,
-    ).getRawContent(book: _host.book, chapter: chapter);
+    final String? raw;
+    try {
+      raw = await ReaderChapterContentStore(
+        chapterDao: _host.dependencies.chapterDao,
+        contentDao: contentDao,
+      ).getRawContent(book: _host.book, chapter: chapter);
+    } catch (error, stack) {
+      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
+      return null;
+    }
     if (raw == null) return null;
     final paragraphs = ReaderV2Content.fromRaw(
       chapterIndex: location.chapterIndex,

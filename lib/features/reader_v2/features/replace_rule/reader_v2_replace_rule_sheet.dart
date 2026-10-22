@@ -15,6 +15,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 
 class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   const ReaderV2ReplaceRuleSheet({
@@ -23,7 +24,8 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
     required this.bookDao,
     required this.replaceDao,
     required this.onReload,
-    this.loadTestSample,
+    this.testSample,
+    this.enabledRules,
   });
 
   final Book book;
@@ -32,7 +34,12 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
   final Future<void> Function() onReload;
 
   /// 即時測試框一打開就填好的文字（畫面上那一段的原文）；取不到時留空。
-  final Future<String?> Function()? loadTestSample;
+  /// 和 [enabledRules] 一樣在開面板前讀好：面板滑上來的第一幀，骨架就得
+  /// 照輸入框裡的字與「管理規則」右側的數字算高度（ADR 0029）。
+  final String? testSample;
+
+  /// 這本書目前啟用的規則；沒讀到時面板自己讀。
+  final List<ReplaceRule>? enabledRules;
 
   @override
   State<ReaderV2ReplaceRuleSheet> createState() =>
@@ -42,7 +49,9 @@ class ReaderV2ReplaceRuleSheet extends StatefulWidget {
 class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   late bool _useReplaceRule;
   Future<List<ReplaceRule>>? _enabledRulesFuture;
-  final TextEditingController _testController = TextEditingController();
+  late final TextEditingController _testController = TextEditingController(
+    text: widget.testSample,
+  );
 
   /// 還沒按「執行測試」時為 null，結果區不顯示。
   String? _testResult;
@@ -53,21 +62,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   void initState() {
     super.initState();
     _useReplaceRule = widget.book.getUseReplaceRule();
-    _reloadEnabledRules();
-    unawaited(_fillTestSample());
-  }
-
-  Future<void> _fillTestSample() async {
-    final String? sample;
-    try {
-      sample = await widget.loadTestSample?.call();
-    } catch (error, stack) {
-      AppLog.e('讀取替換規則測試文字失敗: $error', error: error, stackTrace: stack);
-      return;
+    final enabled = widget.enabledRules;
+    if (enabled != null) {
+      _enabledRulesFuture = Future.value(enabled);
+    } else {
+      _reloadEnabledRules();
     }
-    // 使用者已經開始打字就不覆蓋。
-    if (!mounted || sample == null || _testController.text.isNotEmpty) return;
-    _testController.text = sample;
   }
 
   @override
@@ -204,6 +204,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             // 右側是這本書目前啟用的規則數。
             _RuleManagementRow(
               future: _enabledRulesFuture,
+              initialRules: widget.enabledRules,
               onRetry: () => setState(_reloadEnabledRules),
               onManage: () => _manageRules(context),
             ),
@@ -270,24 +271,42 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   }
 }
 
-/// 管理列載入前後都帶列首圖示；非同步狀態不改變分組列的布局描述。
-class _RuleManagementRow extends StatelessWidget implements GroupedRowLike {
+/// 「管理規則」列，右側是啟用的規則數；讀不到時換成「規則讀取失敗」。
+/// 載入前後都帶列首圖示，骨架照第一幀會畫的那一列（[initialRules]）算。
+class _RuleManagementRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const _RuleManagementRow({
     required this.future,
+    required this.initialRules,
     required this.onRetry,
     required this.onManage,
   });
 
   final Future<List<ReplaceRule>>? future;
+  final List<ReplaceRule>? initialRules;
   final VoidCallback onRetry;
   final VoidCallback onManage;
 
   @override
   bool get hasLeading => true;
 
+  GroupedRow _manageRow(List<ReplaceRule>? rules) => GroupedRow(
+    leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
+    title: '管理規則',
+    value: rules == null ? null : '${rules.length}',
+    onTap: onManage,
+  );
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _manageRow(initialRules).skeletonShape(context, width: width);
+
   @override
   Widget build(BuildContext context) => FutureBuilder<List<ReplaceRule>>(
     future: future,
+    initialData: initialRules,
     builder: (context, snapshot) => snapshot.hasError
         ? GroupedRow(
             leading: const GroupedIconTile(
@@ -299,14 +318,6 @@ class _RuleManagementRow extends StatelessWidget implements GroupedRowLike {
             showChevron: false,
             onTap: onRetry,
           )
-        : GroupedRow(
-            leading: const GroupedIconTile(
-              Icons.settings_rounded,
-              tint: AppTint.ink,
-            ),
-            title: '管理規則',
-            value: snapshot.hasData ? '${snapshot.data!.length}' : null,
-            onTap: onManage,
-          ),
+        : _manageRow(snapshot.data),
   );
 }

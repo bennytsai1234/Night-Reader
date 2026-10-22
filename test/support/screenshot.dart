@@ -83,7 +83,9 @@ Future<void> _loadFont(String family, List<String> paths) async {
 }
 
 /// 把測試畫面設成手機尺寸（預設 393×852 邏輯像素、3 倍），並讓 path_provider
-/// 指向暫存資料夾，避免畫面裡用到它的元件拋錯。測試結束時自動還原。
+/// 指向這個測試自己的空資料夾，避免畫面裡用到它的元件拋錯。測試結束時
+/// 還原並刪掉那個資料夾：閱讀器的換行與段落尺寸快取寫在這裡，留下來的話
+/// 下一次（可能換了字型或排版程式）會照舊快取排，換行對不上。
 void setUpScreenshot(
   WidgetTester tester, {
   Size size = const Size(393, 852),
@@ -94,12 +96,22 @@ void setUpScreenshot(
   addTearDown(tester.view.reset);
 
   final previous = PathProviderPlatform.instance;
-  PathProviderPlatform.instance = _TempPathProvider();
-  addTearDown(() => PathProviderPlatform.instance = previous);
+  final dir = Directory.systemTemp.createTempSync('night-reader-test-');
+  PathProviderPlatform.instance = _TempPathProvider(dir.path);
+  addTearDown(() {
+    PathProviderPlatform.instance = previous;
+    try {
+      dir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // 還有檔案開著（Windows）就留給系統暫存區清理。
+    }
+  });
 }
 
 class _TempPathProvider extends PathProviderPlatform {
-  final String _path = Directory.systemTemp.path;
+  _TempPathProvider(this._path);
+
+  final String _path;
 
   @override
   Future<String?> getTemporaryPath() async => _path;

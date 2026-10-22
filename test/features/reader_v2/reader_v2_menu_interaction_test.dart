@@ -10,11 +10,8 @@ import 'package:night_reader/features/reader_v2/session/reader_v2_location.dart'
 import '../../support/app_harness.dart';
 import '../../support/glass_motion.dart';
 import '../../support/navigation_budget.dart';
-import '../../support/screenshot.dart';
 
 void main() {
-  setUpAll(loadScreenshotFonts);
-
   testWidgets('拖動章內進度只更新拖動條與提示，玻璃選單和正文不重建', (tester) async {
     setUpPhone(tester);
     await tester.runAsync(() async {

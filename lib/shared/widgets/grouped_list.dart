@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -352,36 +354,76 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
     });
   }
 
-  /// 這一頁的版面紀錄 key 與每一項的樣子（記下的，沒有就估）。
+  /// 換成內容的那一刻；之後骨架用不到，樣子不再重算。
+  bool _revealed = false;
+
+  /// 上一次算好的 key 與樣子，以及算的時候的寬度、字級與項目。
+  (String, List<GroupedItemShape>)? _cached;
+  (double, double, List<Widget>)? _cachedFor;
+
+  /// 這一頁的版面紀錄 key 與每一項的樣子。骨架還在時，寬度、字級或項目
+  /// 變了才重算；換成內容後只有項目數變了（例如多出測試結果）才補算，
+  /// 鍵盤升降、面板重建都不再重排骨架的字。
   (String, List<GroupedItemShape>) _shapes(double width) {
     final items = widget.items;
+    final scale = MediaQuery.textScalerOf(context).scale(100);
+    final cached = _cached;
+    if (cached != null) {
+      final (cachedWidth, cachedScale, cachedItems) = _cachedFor!;
+      final same = _revealed
+          ? cached.$2.length == items.length
+          : cachedWidth == width &&
+                cachedScale == scale &&
+                identical(cachedItems, items);
+      if (same) return cached;
+    }
+    _cachedFor = (width, scale, items);
+    return _cached = _computeShapes(width);
+  }
+
+  (String, List<GroupedItemShape>) _computeShapes(double width) {
+    final items = widget.items;
     final scaler = MediaQuery.textScalerOf(context);
-    // 面板的高度就是骨架的高度，每一項都照它本身算（估的就是換上內容後的
-    // 高度）。同一種元件也會換高度（朗讀定時選了自訂分鐘多一列步進），
-    // 紀錄要連高度一起對得上才沿用。整頁撐滿畫面，高度差一點不會跳，有
-    // 紀錄就不必估，key 維持原樣。
-    final estimated = widget.fit == StackFit.loose
-        ? [
-            for (final item in items)
-              GroupedItemShape.estimate(item, context: context, width: width),
-          ]
-        : null;
     final base = GroupedListLayouts.keyOf(items, width, scaler);
-    final key = estimated != null
-        ? '$base|${estimated.map((shape) => shape.height).join(',')}'
-        : base;
+    if (widget.fit != StackFit.loose) {
+      // 整頁撐滿畫面，高度差一點不會跳：有紀錄就照紀錄畫，沒有才估。
+      final known = GroupedListLayouts.of(base);
+      return (
+        base,
+        [
+          for (var i = 0; i < items.length; i++)
+            (known != null && i < known.length ? known[i] : null) ??
+                GroupedItemShape.estimate(
+                  items[i],
+                  context: context,
+                  width: width,
+                ),
+        ],
+      );
+    }
+    // 面板的高度就是骨架的高度：每一項的高度一律照它本身算，第一次打開就
+    // 是換上內容後的高度。紀錄只換掉字條、色塊的位置（照上次真的字寬畫），
+    // 不決定高度；同一種元件也會換高度（朗讀定時選了自訂分鐘多一列步進），
+    // key 連各項高度一起比，位置才對得上。
+    final estimated = [
+      for (final item in items)
+        GroupedItemShape.estimate(item, context: context, width: width),
+    ];
+    final key = '$base|${estimated.map((shape) => shape.height).join(',')}';
     final known = GroupedListLayouts.of(key);
     return (
       key,
       [
         for (var i = 0; i < items.length; i++)
-          (known != null && i < known.length ? known[i] : null) ??
-              estimated?[i] ??
-              GroupedItemShape.estimate(
-                items[i],
-                context: context,
-                width: width,
-              ),
+          switch (known != null && i < known.length ? known[i] : null) {
+            final record? => GroupedItemShape(
+              estimated[i].height,
+              card: record.card,
+              rowHeights: estimated[i].rowHeights,
+              marks: record.marks,
+            ),
+            null => estimated[i],
+          },
       ],
     );
   }
@@ -463,7 +505,10 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
             loading: _loading,
             waitForCovers: true,
             backdrop: background,
-            onRevealed: () => _remember(key),
+            onRevealed: () {
+              _revealed = true;
+              _remember(key);
+            },
             skeleton: skeleton,
             builder: (context) => widget.builder(context, [
               for (final (i, item) in widget.items.indexed)
@@ -585,7 +630,8 @@ class GroupedIconTile extends StatelessWidget {
 
 /// 分組清單的一列：列首（圖示方塊或任意 widget）、標題、副標、右側數值、
 /// 右側控件與箭頭。按下時整列高亮，不畫水波紋。
-class GroupedRow extends StatelessWidget implements GroupedRowLike {
+class GroupedRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const GroupedRow({
     super.key,
     required this.title,
@@ -636,6 +682,90 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
   @override
   bool get hasLeading => leading != null;
 
+  /// 標題與右側數值的字樣、副標的字樣；骨架照同一份排。
+  static final TextStyle _textStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+  );
+  static final TextStyle _subtitleStyle = AppTextStyles.bodySm.copyWith(
+    height: 1.3,
+  );
+  static const double _subtitleGap = 2;
+  static const double _chevronSize = 22;
+
+  /// 這一列放在 [width] 寬的卡片裡的高度：照 build 的同一份內距、字樣與
+  /// 元件尺寸，標題與副標照可用的寬度真的排（字大時標題會換行）。列首與
+  /// 右側控件認得 [GroupedIconTile]、[GroupedSwitch] 與定了大小的
+  /// [SizedBox]，其他的照列首圖示方塊的大小、右側控件不佔寬算。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    var available = width - AppGrouped.rowPadding * 2;
+    var content = 0.0;
+    if (leading case final leading?) {
+      final size = _sizeOf(leading) ?? const Size.square(AppGrouped.iconTile);
+      available -= size.width + AppGrouped.iconGap;
+      content = math.max(content, size.height);
+    }
+    if (value case final value?) {
+      final size = GroupedItemShape.textSize(
+        context,
+        value,
+        style: _textStyle,
+        maxWidth: MediaQuery.sizeOf(context).width * 0.4,
+        maxLines: 1,
+      );
+      available -= AppSpacing.md + size.width;
+      content = math.max(content, size.height);
+    }
+    if (trailing case final trailing?) {
+      final size = _sizeOf(trailing) ?? Size.zero;
+      available -= AppSpacing.md + size.width;
+      content = math.max(content, size.height);
+    }
+    if (showChevron ?? (onTap != null && trailing == null)) {
+      available -= AppSpacing.sm + _chevronSize;
+      content = math.max(content, _chevronSize);
+    }
+    var text = GroupedItemShape.textSize(
+      context,
+      title,
+      style: _textStyle.copyWith(
+        fontWeight: accent ? FontWeight.w500 : FontWeight.w400,
+      ),
+      maxWidth: available,
+    ).height;
+    final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
+    if (hasSubtitle) {
+      text +=
+          _subtitleGap +
+          GroupedItemShape.textSize(
+            context,
+            subtitle!,
+            style: _subtitleStyle,
+            maxWidth: available,
+            maxLines: maxSubtitleLines,
+          ).height;
+    }
+    return GroupedItemShape(
+      math.max(
+        hasSubtitle ? AppGrouped.rowTallMinHeight : AppGrouped.rowMinHeight,
+        math.max(content, text) + AppSpacing.md * 2,
+      ),
+    );
+  }
+
+  static Size? _sizeOf(Widget widget) => switch (widget) {
+    GroupedIconTile() => const Size.square(AppGrouped.iconTile),
+    GroupedSwitch() => const Size(
+      GroupedSwitch.trackWidth,
+      GroupedSwitch.trackHeight,
+    ),
+    SizedBox(:final width?, :final height) => Size(width, height ?? 0),
+    _ => null,
+  };
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -675,8 +805,7 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
                   titleWidget ??
                       Text(
                         title,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
+                        style: _textStyle.copyWith(
                           color: titleColor,
                           fontWeight: accent
                               ? FontWeight.w500
@@ -684,15 +813,12 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
                         ),
                       ),
                   if (hasSubtitle) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: _subtitleGap),
                     Text(
                       subtitle!,
                       maxLines: maxSubtitleLines,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodySm.copyWith(
-                        height: 1.3,
-                        color: chrome.sectionText,
-                      ),
+                      style: _subtitleStyle.copyWith(color: chrome.sectionText),
                     ),
                   ],
                 ],
@@ -709,10 +835,7 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
-                  style: AppTextStyles.bodyBase.copyWith(
-                    height: 1.3,
-                    color: chrome.sectionText,
-                  ),
+                  style: _textStyle.copyWith(color: chrome.sectionText),
                 ),
               ),
             ],
@@ -724,7 +847,7 @@ class GroupedRow extends StatelessWidget implements GroupedRowLike {
               const SizedBox(width: AppSpacing.sm),
               Icon(
                 Icons.chevron_right_rounded,
-                size: 22,
+                size: _chevronSize,
                 color: chrome.sectionText.withValues(alpha: 0.6),
               ),
             ],
@@ -820,7 +943,8 @@ class GroupedSwitch extends StatelessWidget {
 }
 
 /// 帶開關的列；點整列也會切換。
-class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
+class GroupedSwitchRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const GroupedSwitchRow({
     super.key,
     required this.title,
@@ -839,27 +963,34 @@ class GroupedSwitchRow extends StatelessWidget implements GroupedRowLike {
   @override
   bool get hasLeading => leading != null;
 
-  @override
-  Widget build(BuildContext context) {
+  GroupedRow get _row {
     final active = enabled && onChanged != null;
-    return MergeSemantics(
-      child: GroupedRow(
-        title: title,
-        leading: leading,
-        enabled: enabled,
-        showChevron: false,
-        onTap: active ? () => GroupedSwitch.toggle(value, onChanged!) : null,
-        trailing: GroupedSwitch(
-          value: value,
-          onChanged: active ? onChanged : null,
-        ),
+    return GroupedRow(
+      title: title,
+      leading: leading,
+      enabled: enabled,
+      showChevron: false,
+      onTap: active ? () => GroupedSwitch.toggle(value, onChanged!) : null,
+      trailing: GroupedSwitch(
+        value: value,
+        onChanged: active ? onChanged : null,
       ),
     );
   }
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row.skeletonShape(context, width: width);
+
+  @override
+  Widget build(BuildContext context) => MergeSemantics(child: _row);
 }
 
 /// 單選清單的一列：選中時右側打勾（取代 Radio）。
-class GroupedCheckRow extends StatelessWidget implements GroupedRowLike {
+class GroupedCheckRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const GroupedCheckRow({
     super.key,
     required this.title,
@@ -880,29 +1011,40 @@ class GroupedCheckRow extends StatelessWidget implements GroupedRowLike {
   @override
   bool get hasLeading => leading != null;
 
+  static const double _checkSize = 22;
+
+  GroupedRow _row(BuildContext context) => GroupedRow(
+    title: title,
+    subtitle: subtitle,
+    leading: leading,
+    enabled: enabled,
+    showChevron: false,
+    onTap: onTap,
+    trailing: SizedBox(
+      width: _checkSize,
+      height: selected ? _checkSize : null,
+      child: selected
+          ? Icon(
+              Icons.check_rounded,
+              size: _checkSize,
+              color: Theme.of(context).colorScheme.primary,
+            )
+          : null,
+    ),
+  );
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row(context).skeletonShape(context, width: width);
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      child: GroupedRow(
-        title: title,
-        subtitle: subtitle,
-        leading: leading,
-        enabled: enabled,
-        showChevron: false,
-        onTap: onTap,
-        trailing: SizedBox(
-          width: 22,
-          child: selected
-              ? Icon(
-                  Icons.check_rounded,
-                  size: 22,
-                  color: Theme.of(context).colorScheme.primary,
-                )
-              : null,
-        ),
-      ),
+      child: _row(context),
     );
   }
 }

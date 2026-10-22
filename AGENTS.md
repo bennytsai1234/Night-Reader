@@ -88,7 +88,6 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **T3 的自動拉取與 worktree 都認 `origin/HEAD`**，`git fetch` 不會更新它。資料夾還停在 `main` 的電腦開工前先 `git fetch`、`git switch beta`、`git remote set-head origin -a`。這台已經是 `beta`，`core.hooksPath` 是相對的 `.githooks`（每個 worktree 跑自己那份 hook）。`main` 收到不在 `beta` 上的提交就讓 Android Release 失敗的檢查，要等 `main` 第一次快轉到 `beta` 才生效。
 - **新 worktree 的 sqlite3**：`flutter test` 要下載 sqlite3 的 native asset，公司網路會改掉檔案讓雜湊不符；把主資料夾 `.dart_tool\hooks_runner\shared\sqlite3\build\download-98b4be67\sqlite3.dll` 複製到 worktree 的同一個位置就直接用快取。
 - **Linux（雲端 session）跑要字型的測試**（`test/screens`、`test/frame_budget`）：先 `apt-get install fonts-noto-cjk`；`test/support/screenshot.dart` 用小寫的 `materialicons-regular.otf`，Linux 的 Flutter SDK 檔名是 `MaterialIcons-Regular.otf`，在 `bin/cache/artifacts/material_fonts/` 補一個小寫的連結。雲端機器比 Windows 那台慢約一倍，frame budget 的數字只能同一台交錯比；量不到手機上的合成（raster）成本，測試的資料庫與書源解析在主執行緒，「幀前」數字比手機上重。
-- **`test/screens` 拍閱讀器**：換行結果快取在系統暫存區的 `hybrid_plans`、`hybrid_metrics`（截圖環境把 App 的資料夾指到 `%TEMP%`），快取只認 App 版本號；改了換行規則或排版程式卻沒換版號時，先把這兩個資料夾移到垃圾桶再拍。
 - **測試字型每個字一樣寬**，量不出英數字補半格；用 `test/fixtures/fonts/mixed_width_test.ttf`（以 `FontLoader(kReaderV2PunctFontFamily)` 載入，範例在 `test/features/reader_v2/hybrid/half_cell_layout_test.dart`）。
 - **`download_service_test` 的「`_dio` 尚未初始化」日誌**不是警告：測試沒準備網路層，只檢查排隊與範圍。
 - **Codex 審查的暫存** `%TEMP%\night-reader-codex-out` 是共用的，收尾只刪自己那一輪（`<tag>-*`）的檔案。公司網路的 McAfee 有時擋掉 Codex 最後一次連線，`codex exec` 回非零但報告通常已經寫好；先看報告檔再決定要不要重跑。

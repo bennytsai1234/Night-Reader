@@ -11,6 +11,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
 // 閱讀設定的各組：閱讀器內的外觀與排版面板與「閱讀偏好」頁共用，都透過
@@ -526,23 +527,54 @@ class _StagedEdits<F extends Enum> extends ChangeNotifier {
 }
 
 /// 數值步進列放進卡片時只補列的左右內距；高度由步進列本身決定。
-class _StepperRow extends StatelessWidget implements NumberStepperRowLike {
+const EdgeInsets _stepperPadding = EdgeInsets.symmetric(
+  horizontal: AppGrouped.rowPadding,
+);
+
+/// 骨架裡步進列的高度：照補了左右內距之後的寬度與現在的數值算。
+GroupedItemShape _stepperShape(
+  BuildContext context,
+  String label,
+  NumberStepperRow? current,
+  double width,
+) => GroupedItemShape(
+  NumberStepperRow.heightOf(
+    context,
+    label: label,
+    valueText: current?.displayText,
+    width: width - _stepperPadding.horizontal,
+  ),
+);
+
+class _StepperRow extends StatelessWidget
+    implements NumberStepperRowLike, GroupedSkeletonItem {
   const _StepperRow(this.label, this.stepper);
 
   @override
   final String label;
   final Widget stepper;
 
+  /// 裡面只聽自己的值（[_Watch]），外面拿不到數值。
   @override
-  Widget build(BuildContext context) => GroupedContent(
-    padding: const EdgeInsets.symmetric(horizontal: AppGrouped.rowPadding),
-    child: stepper,
-  );
+  NumberStepperRow? get current => switch (stepper) {
+    final NumberStepperRow row => row,
+    _ => null,
+  };
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _stepperShape(context, label, current, width);
+
+  @override
+  Widget build(BuildContext context) =>
+      GroupedContent(padding: _stepperPadding, child: stepper);
 }
 
 /// 暫存提交的步進列：顯示 [_StagedEdits] 裡的值，按了先暫存。
 class _StagedStepper<F extends Enum> extends StatelessWidget
-    implements NumberStepperRowLike {
+    implements NumberStepperRowLike, GroupedSkeletonItem {
   const _StagedStepper({
     required this.edits,
     required this.field,
@@ -566,23 +598,34 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   final bool trimZeroFraction;
   final String unit;
 
+  NumberStepperRow _row(double value) => NumberStepperRow(
+    label: label,
+    value: value,
+    min: min,
+    max: max,
+    step: step,
+    fractionDigits: fractionDigits,
+    trimZeroFraction: trimZeroFraction,
+    unit: unit,
+    onChanged: (next) => edits.stage(field, next),
+  );
+
+  @override
+  NumberStepperRow get current => _row(edits.listenableOf(field).value);
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _stepperShape(context, label, current, width);
+
   @override
   Widget build(BuildContext context) {
     return _StepperRow(
       label,
       ValueListenableBuilder<double>(
         valueListenable: edits.listenableOf(field),
-        builder: (context, value, _) => NumberStepperRow(
-          label: label,
-          value: value,
-          min: min,
-          max: max,
-          step: step,
-          fractionDigits: fractionDigits,
-          trimZeroFraction: trimZeroFraction,
-          unit: unit,
-          onChanged: (next) => edits.stage(field, next),
-        ),
+        builder: (context, value, _) => _row(value),
       ),
     );
   }

@@ -70,18 +70,11 @@ class GroupedItemShape {
     String text, {
     required TextStyle style,
     required double width,
+    int? maxLines,
   }) {
-    final defaults = DefaultTextStyle.of(context);
-    final merged = defaults.style.merge(style);
-    final scaler = MediaQuery.textScalerOf(context);
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: merged),
-      textScaler: scaler,
-      textDirection: Directionality.of(context),
-      textHeightBehavior: defaults.textHeightBehavior,
-      locale: Localizations.maybeLocaleOf(context),
-    )..layout(maxWidth: math.max(0, width));
-    final font = scaler.scale(merged.fontSize ?? 14);
+    final painter = _layoutText(context, text, style, width, maxLines);
+    final font = MediaQuery.textScalerOf(context)
+        .scale(painter.text!.style!.fontSize ?? 14);
     final shape = GroupedItemShape(
       painter.height,
       marks: [
@@ -96,6 +89,39 @@ class GroupedItemShape {
     );
     painter.dispose();
     return shape;
+  }
+
+  /// [text] 照 [Text] 的方式排在最寬 [maxWidth] 裡的大小（見 [text]）。
+  static Size textSize(
+    BuildContext context,
+    String text, {
+    required TextStyle style,
+    required double maxWidth,
+    int? maxLines,
+  }) {
+    final painter = _layoutText(context, text, style, maxWidth, maxLines);
+    final size = painter.size;
+    painter.dispose();
+    return size;
+  }
+
+  static TextPainter _layoutText(
+    BuildContext context,
+    String text,
+    TextStyle style,
+    double maxWidth,
+    int? maxLines,
+  ) {
+    final defaults = DefaultTextStyle.of(context);
+    return TextPainter(
+      text: TextSpan(text: text, style: defaults.style.merge(style)),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      textHeightBehavior: defaults.textHeightBehavior,
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: maxLines,
+      ellipsis: maxLines == null ? null : '…',
+    )..layout(maxWidth: math.max(0, maxWidth));
   }
 
   /// 一般列與帶副標的列的高度、步進列與開關列右側的控件照元件本身的尺寸；
@@ -121,8 +147,15 @@ class GroupedItemShape {
       );
       return inner.height > 0 ? inner.padded(padding) : inner;
     }
-    if (item is NumberStepperRowLike) {
-      return const GroupedItemShape(_stepperHeight);
+    if (item case NumberStepperRowLike(:final label, :final current)) {
+      return GroupedItemShape(
+        NumberStepperRow.heightOf(
+          context,
+          label: label,
+          valueText: current?.displayText,
+          width: width,
+        ),
+      );
     }
     if (item case SizedBox(:final height?)) return GroupedItemShape(height);
     if (item is! GroupedSection) return const GroupedItemShape(0);
@@ -160,22 +193,22 @@ class GroupedItemShape {
     for (final (index, child) in item.children.indexed) {
       if (index > 0) top += AppGlass.hairline;
       final row = _row(child);
-      final custom = estimate(child, context: context, width: right - left);
+      // 列自己算得出高度（一般列、開關列、步進列與自訂區塊）就照它；包在
+      // 外框裡的，穿過外框找列本身。都認不出的私有列照單行列估。
+      var custom = estimate(child, context: context, width: right - left);
+      if (custom.height <= 0 && !identical(row, child)) {
+        custom = estimate(row, context: context, width: right - left);
+      }
       final height = custom.height > 0
           ? custom.height
-          : switch (row) {
-              NumberStepperRowLike() => _stepperHeight,
-              GroupedRow(:final subtitle?) when subtitle.isNotEmpty =>
-                AppGrouped.rowTallMinHeight,
-              _ => math.max(
-                AppGrouped.rowMinHeight,
-                AppSpacing.md * 2 +
-                    math.max(
-                      title * 1.3,
-                      groupedRowHasLeading(child) ? AppGrouped.iconTile : 0,
-                    ),
-              ),
-            };
+          : math.max(
+              AppGrouped.rowMinHeight,
+              AppSpacing.md * 2 +
+                  math.max(
+                    title * 1.3,
+                    groupedRowHasLeading(child) ? AppGrouped.iconTile : 0,
+                  ),
+            );
       rowHeights.add(height);
       if (custom.marks.isNotEmpty) {
         for (final mark in custom.marks) {
@@ -581,8 +614,6 @@ class GroupedListSkeleton extends StatelessWidget {
 const EdgeInsetsGeometry _defaultMargin = EdgeInsets.symmetric(
   horizontal: AppGrouped.margin,
 );
-
-const double _stepperHeight = NumberStepperRow.height;
 
 /// 一行字的佔位條：和字號一樣高，以 [centreY] 為中線。
 SkeletonShape _bar(double left, double centreY, double width, double height) =>

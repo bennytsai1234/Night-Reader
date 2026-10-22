@@ -151,7 +151,13 @@ class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
       ),
     ];
     if (timer.option == ReaderV2TtsSleepOption.custom) {
-      height += NumberStepperRow.height;
+      final stepper = _SleepTimerSectionState._customStepper(timer);
+      height += NumberStepperRow.heightOf(
+        context,
+        label: stepper.label,
+        valueText: stepper.displayText,
+        width: width,
+      );
     }
     final status = _SleepTimerSectionState._status(timer);
     if (status != null) {
@@ -182,6 +188,16 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
   /// 倒數文字的字樣與上方間距；骨架照同一份排。
   static const TextStyle statusStyle = AppTextStyles.labelSm;
   static const double statusGap = AppSpacing.sm;
+
+  static NumberStepperRow _customStepper(ReaderV2TtsSleepTimer timer) =>
+      NumberStepperRow(
+        label: '分鐘',
+        value: timer.customMinutes.toDouble(),
+        min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
+        max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
+        step: 1,
+        onChanged: (value) => unawaited(timer.setCustomMinutes(value.round())),
+      );
 
   late final Timer _ticker;
 
@@ -219,15 +235,7 @@ class _SleepTimerSectionState extends State<_SleepTimerSection> {
               onChanged: (option) => unawaited(timer.choose(option)),
             ),
             if (timer.option == ReaderV2TtsSleepOption.custom)
-              NumberStepperRow(
-                label: '分鐘',
-                value: timer.customMinutes.toDouble(),
-                min: ReaderV2TtsSleepTimer.minCustomMinutes.toDouble(),
-                max: ReaderV2TtsSleepTimer.maxCustomMinutes.toDouble(),
-                step: 1,
-                onChanged: (value) =>
-                    unawaited(timer.setCustomMinutes(value.round())),
-              ),
+              _customStepper(timer),
             if (status != null)
               Padding(
                 padding: const EdgeInsets.only(top: statusGap),
