@@ -23,19 +23,26 @@ class SourceListSkeleton extends StatelessWidget {
   /// 上次讀完時的書源數；null（沒有紀錄）時鋪滿畫面。
   final int? count;
 
+  /// 載入時的列高也交給內容分幀建立的空位，避免零高度把整份書源都建出來。
+  static double rowHeightOf(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return AppSpacing.md * 2 +
+        scaler.scale(AppTextStyles.bodyBase.fontSize!) * 1.3 +
+        2 +
+        scaler.scale(AppTextStyles.bodySm.fontSize!) * 1.3 +
+        AppSpacing.xs +
+        _tagHeightOf(context);
+  }
+
+  static double _tagHeightOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(AppTextStyles.labelXs.fontSize!) *
+          1.15 +
+      4;
+
   @override
   Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-    double lineHeight(TextStyle style, double height) =>
-        scaler.scale(style.fontSize!) * height;
-    final tagHeight = lineHeight(AppTextStyles.labelXs, 1.15) + 4;
-    final rowHeight =
-        AppSpacing.md * 2 +
-        lineHeight(AppTextStyles.bodyBase, 1.3) +
-        2 +
-        lineHeight(AppTextStyles.bodySm, 1.3) +
-        AppSpacing.xs +
-        tagHeight;
+    final tagHeight = _tagHeightOf(context);
+    final rowHeight = rowHeightOf(context);
     return ExcludeSemantics(
       child: LayoutBuilder(
         builder: (context, constraints) {

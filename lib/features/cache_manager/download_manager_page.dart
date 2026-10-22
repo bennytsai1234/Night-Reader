@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/download_service.dart';
 import 'package:night_reader/core/models/download_task.dart';
@@ -13,16 +14,51 @@ import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
+typedef _QueueShape = ({
+  List<DownloadTask> tasks,
+  bool paused,
+  bool hasActive,
+  bool hasCompleted,
+});
+
+typedef _QueueSummary = ({
+  int waiting,
+  int running,
+  int paused,
+  int failed,
+  int latestUpdate,
+});
+
 /// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {
   const DownloadManagerPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final service = context.watch<DownloadService>();
-    final tasks = service.tasks;
-    final hasActiveTasks = tasks.any((task) => !task.isCompleted);
-    final hasCompletedTasks = tasks.any((task) => task.isCompleted);
+    final service = context.read<DownloadService>();
+    return Selector<DownloadService, _QueueShape>(
+      selector: (_, service) => (
+        tasks: List<DownloadTask>.of(service.tasks),
+        paused: service.isPaused,
+        hasActive: service.tasks.any((task) => !task.isCompleted),
+        hasCompleted: service.tasks.any((task) => task.isCompleted),
+      ),
+      // 任務會原地更新進度，清單只看身分與順序；進度由對應的列訂閱。
+      shouldRebuild: (before, after) =>
+          !listEquals(before.tasks, after.tasks) ||
+          before.paused != after.paused ||
+          before.hasActive != after.hasActive ||
+          before.hasCompleted != after.hasCompleted,
+      builder: (context, queue, _) => _buildPage(context, service, queue),
+    );
+  }
+
+  Widget _buildPage(
+    BuildContext context,
+    DownloadService service,
+    _QueueShape queue,
+  ) {
+    final tasks = queue.tasks;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -34,12 +70,12 @@ class DownloadManagerPage extends StatelessWidget {
                 ? Icons.play_arrow_rounded
                 : Icons.pause_rounded,
             tooltip: service.isPaused ? '恢復全部' : '暫停全部',
-            onPressed: hasActiveTasks ? service.togglePause : null,
+            onPressed: queue.hasActive ? service.togglePause : null,
           ),
           GlassIconButton(
             icon: Icons.delete_sweep_outlined,
             tooltip: '清除已完成',
-            onPressed: hasCompletedTasks
+            onPressed: queue.hasCompleted
                 ? () {
                     for (final task
                         in tasks.where((task) => task.isCompleted).toList()) {
@@ -62,7 +98,7 @@ class DownloadManagerPage extends StatelessWidget {
           : SwipeActionsGroup(
               child: GroupedListView(
                 children: [
-                  _buildQueueSummary(context, service, tasks),
+                  _buildQueueSummary(),
                   GroupedSection(
                     header: '任務',
                     children: [
@@ -82,11 +118,8 @@ class DownloadManagerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildQueueSummary(
-    BuildContext context,
-    DownloadService service,
-    List<DownloadTask> tasks,
-  ) {
+  _QueueSummary _queueSummary(DownloadService service) {
+    final tasks = service.tasks;
     // 「暫停全部」時進行中與等待中的任務都算暫停。
     final globallyPaused = service.isPaused;
     final waiting = globallyPaused
@@ -109,23 +142,34 @@ class DownloadManagerPage extends StatelessWidget {
           task.lastUpdateTime > latest ? task.lastUpdateTime : latest,
     );
 
-    return GroupedSection(
+    return (
+      waiting: waiting,
+      running: running,
+      paused: paused,
+      failed: failed,
+      latestUpdate: latestUpdate,
+    );
+  }
+
+  Widget _buildQueueSummary() => Selector<DownloadService, _QueueSummary>(
+    selector: (_, service) => _queueSummary(service),
+    builder: (context, summary, _) => GroupedSection(
       topGap: AppSpacing.sm,
-      footer: '最近任務更新：${_formatTimestamp(latestUpdate)}',
+      footer: '最近任務更新：${_formatTimestamp(summary.latestUpdate)}',
       children: [
         GroupedContent(
           child: Row(
             children: [
-              _summaryStat(context, '等待', waiting),
-              _summaryStat(context, '下載中', running),
-              _summaryStat(context, '暫停', paused),
-              _summaryStat(context, '失敗', failed),
+              _summaryStat(context, '等待', summary.waiting),
+              _summaryStat(context, '下載中', summary.running),
+              _summaryStat(context, '暫停', summary.paused),
+              _summaryStat(context, '失敗', summary.failed),
             ],
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
 
   Widget _summaryStat(BuildContext context, String label, int value) {
     final scheme = Theme.of(context).colorScheme;
@@ -152,6 +196,28 @@ class DownloadManagerPage extends StatelessWidget {
   }
 
   Widget _buildTaskTile(
+    BuildContext context,
+    DownloadService service,
+    DownloadTask task,
+    int index,
+    int taskCount,
+  ) => Selector<DownloadService, (bool, int, int, int, int, String?)>(
+    // 列的狀態跟著書走，上移、下移時整列一起搬。
+    key: ValueKey(task.bookUrl),
+    // 任務是可變物件，取值而不是取物件本身，才能辨認哪一列有變。
+    selector: (_, service) => (
+      service.isPaused,
+      task.totalCount,
+      task.successCount,
+      task.errorCount,
+      task.status,
+      task.failureSummary,
+    ),
+    builder: (context, _, _) =>
+        _buildTaskContent(context, service, task, index, taskCount),
+  );
+
+  Widget _buildTaskContent(
     BuildContext context,
     DownloadService service,
     DownloadTask task,

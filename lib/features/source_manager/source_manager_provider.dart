@@ -522,7 +522,9 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.trim();
+    final normalized = query.trim();
+    if (_searchQuery == normalized) return;
+    _searchQuery = normalized;
     _markVisibleSourcesDirty();
     notifyListeners();
   }

@@ -65,7 +65,7 @@ class _SearchPageState extends State<SearchPage> {
             ? SearchScope.fromSource(initialSource)
             : null,
       ),
-      child: _SearchPageContent(
+      child: SearchView(
         initialQuery: widget.initialQuery,
         initialSource: initialSource,
       ),
@@ -73,17 +73,18 @@ class _SearchPageState extends State<SearchPage> {
   }
 }
 
-class _SearchPageContent extends StatefulWidget {
+/// 搜尋頁的畫面；[SearchProvider] 由上層提供（[SearchPage]）。
+class SearchView extends StatefulWidget {
   final String? initialQuery;
   final BookSource? initialSource;
 
-  const _SearchPageContent({this.initialQuery, this.initialSource});
+  const SearchView({super.key, this.initialQuery, this.initialSource});
 
   @override
-  State<_SearchPageContent> createState() => _SearchPageContentState();
+  State<SearchView> createState() => _SearchViewState();
 }
 
-class _SearchPageContentState extends State<_SearchPageContent> {
+class _SearchViewState extends State<SearchView> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
 
@@ -193,7 +194,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
 
   void _onSearch(String value) {
     if (value.isNotEmpty) {
-      FocusScope.of(context).unfocus();
+      FocusScope.of(context, createDependency: false).unfocus();
       context.read<SearchProvider>().search(value);
     }
   }
@@ -250,11 +251,14 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                     // 搜尋結束時停在最後的進度淡出，不在一幀內消失。
                     child: _FadeSwap(
                       child: provider.isSearching
-                          ? LinearProgressIndicator(
+                          ? ListenableBuilder(
                               key: const ValueKey('progress'),
-                              value: provider.progress,
-                              minHeight: 2,
-                              backgroundColor: Colors.transparent,
+                              listenable: provider.progressUpdates,
+                              builder: (context, _) => LinearProgressIndicator(
+                                value: provider.progress,
+                                minHeight: 2,
+                                backgroundColor: Colors.transparent,
+                              ),
                             )
                           : const SizedBox(width: double.infinity, height: 2),
                     ),
@@ -507,7 +511,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   /// 大致排得進一行。
   static const _namedWaitingLimit = 3;
 
-  Widget _buildSearchProgress(SearchProvider p) {
+  Widget _buildSearchProgress(SearchProvider p) => ListenableBuilder(
+    listenable: p.progressUpdates,
+    builder: (context, _) => _buildSearchProgressContent(p),
+  );
+
+  Widget _buildSearchProgressContent(SearchProvider p) {
     final remaining = p.totalSources - p.completedSources;
     final waiting = p.waitingSources;
     final namesWaiting =
@@ -641,8 +650,13 @@ class _SearchPageContentState extends State<_SearchPageContent> {
       isScrollControlled: true,
       builder: (sheetContext) => Provider.value(
         value: searchProvider,
-        child: Consumer<SearchProvider>(
-          builder: (context, provider, _) {
+        child: ListenableBuilder(
+          listenable: Listenable.merge([
+            searchProvider,
+            searchProvider.progressUpdates,
+          ]),
+          builder: (context, _) {
+            final provider = searchProvider;
             final failures = provider.sourceFailures;
             return SafeArea(
               child: ConstrainedBox(

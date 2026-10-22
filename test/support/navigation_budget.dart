@@ -1,6 +1,7 @@
 // 換頁的每一幀成本（ADR 0018）：從點下去、換頁動畫、骨架、骨架換成內容，
 // 到全部停下後再一秒。`test/frame_budget/` 的換頁情境共用。
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -87,6 +88,50 @@ Future<List<FrameCost>> measureNavigation(
 }
 
 const int _maxFrames = 1200;
+
+/// 在已經停好的頁面上做一件事（改排序、進入選取、打一個字、資料陸續到達）
+/// 後一幀一幀量：[action] 開始後直到 [until] 成立（沒給就是馬上）再多
+/// [tailFrames] 幀；印出摘要並傳回每一幀的成本。[action] 等短的 UI 操作做完；
+/// 搜尋、批次作業以不等待的方式啟動，再由 [until] 等它結束，讓作業中的幀
+/// 也量得到。點下去那一下記成第 -1 幀，同 [measureNavigation]。
+Future<List<FrameCost>> measureActivity(
+  WidgetTester tester,
+  String label, {
+  required FutureOr<void> Function() action,
+  bool Function()? until,
+  String? Function()? note,
+  int tailFrames = 60,
+}) async {
+  final clock = Stopwatch()..start();
+  await action();
+  final tap = clock.elapsedMicroseconds;
+  final costs = await recordFrames(
+    tester,
+    realAsync: true,
+    until: until ?? () => true,
+    note: note,
+    tailFrames: tailFrames,
+    maxFrames: _maxFrames,
+  );
+  final all = [
+    FrameCost(
+      index: -1,
+      beforeFrame: tap,
+      frame: 0,
+      afterFrame: 0,
+      async: 0,
+      top: const [],
+      dirty: const {},
+      note: '點下去',
+    ),
+    ...costs,
+  ];
+  // ignore: avoid_print
+  print(describeFrames(label, all));
+  expect(until?.call() ?? true, isTrue, reason: '$label 沒有完成');
+  expect(costs.length, lessThan(_maxFrames), reason: '$label 沒量完尾段');
+  return all;
+}
 
 /// 返回上一頁（等同按返回鍵）。
 Future<void> goBack(WidgetTester tester) async {

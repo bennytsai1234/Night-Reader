@@ -21,6 +21,7 @@ import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
@@ -415,8 +416,8 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
     // 列數照上次讀完時的書源數；上次沒有書源時不畫列，空著等空頁淡入。
     return SkeletonSwitcher(
       loading: p.isLoading && p.totalSourceCount == 0,
-      // 底色就是頁面底色（分組清單的底色與頁面相同），骨架不另鋪底，
-      // 換場時兩層一起淡也不會透出別的顏色。
+      waitForCovers: true,
+      backdrop: AppChrome.of(context).groupedBackground,
       skeleton: p.expectsSources
           ? SourceListSkeleton(
               padding: EdgeInsets.only(
@@ -504,18 +505,23 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent>
 
     final canReorder = p.showsManualOrder;
     final editing = _isEditing(p);
+    final rowHeight = SourceListSkeleton.rowHeightOf(context);
 
     Widget itemAt(int i) {
       final isLastInGroup = i == list.length - 1 || startsHostGroup(i + 1);
-      return _buildItem(
-        p,
-        list[i],
-        index: i,
-        editing: editing,
-        showHostHeader: !canReorder && startsHostGroup(i),
-        hostLabel: groupByHost ? hostLabels[i] : '',
-        firstInGroup: i == 0 || startsHostGroup(i),
-        showSeparator: !isLastInGroup,
+      return CoverRevealSlot(
+        key: ValueKey(list[i].bookSourceUrl),
+        placeholder: SizedBox(height: rowHeight),
+        child: _buildItem(
+          p,
+          list[i],
+          index: i,
+          editing: editing,
+          showHostHeader: !canReorder && startsHostGroup(i),
+          hostLabel: groupByHost ? hostLabels[i] : '',
+          firstInGroup: i == 0 || startsHostGroup(i),
+          showSeparator: !isLastInGroup,
+        ),
       );
     }
 
