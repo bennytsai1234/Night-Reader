@@ -28,7 +28,7 @@ void main() {
     );
     var settled = false;
     unawaited(
-      reveal.settle(const Duration(milliseconds: 300)).then((_) {
+      reveal.settle().then((_) {
         settled = true;
       }),
     );
@@ -68,7 +68,7 @@ void main() {
     );
     var settled = false;
     unawaited(
-      reveal.settle(const Duration(seconds: 5)).then((_) {
+      reveal.settle().then((_) {
         settled = true;
       }),
     );
@@ -89,7 +89,7 @@ void main() {
     addTearDown(reveal.dispose);
     // settle 要等一幀畫完。
     await tester.pumpWidget(const SizedBox.shrink());
-    unawaited(reveal.settle(Duration.zero));
+    unawaited(reveal.settle());
     await tester.pump();
     await tester.pump();
     expect(reveal.waiting, isFalse);

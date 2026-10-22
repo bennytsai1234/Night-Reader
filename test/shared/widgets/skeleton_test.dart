@@ -274,16 +274,56 @@ void main() {
       expect(contentOpacity(tester), 1);
     });
 
-    testWidgets('a cover that never decodes stops holding the page', (
-      tester,
-    ) async {
+    testWidgets('a slow cover holds the page however long it takes; one that '
+        'fails or goes away stops holding it', (tester) async {
       await tester.pumpWidget(switcher(true));
       await tester.pumpWidget(switcher(false));
+      // 沒有時間上限：解碼得再久也等（原本 300ms 就不等了）。
+      await tester.pump(const Duration(seconds: 3));
+      expect(contentOpacity(tester), 0);
+      expect(find.byType(SkeletonBox), findsOneWidget);
+
+      // 失敗也算畫得出來（改畫預設封面）：不再等它。
+      decoded.value = true;
       await tester.pump();
-      await tester.pump(AppMotion.revealCoverWait);
       await tester.pump();
       await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
       expect(contentOpacity(tester), inExclusiveRange(0, 1));
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonBox), findsNothing);
+    });
+
+    testWidgets('a cover taken off the page stops holding it', (tester) async {
+      final shown = ValueNotifier(true);
+      addTearDown(shown.dispose);
+      await tester.pumpWidget(
+        host(
+          SkeletonSwitcher(
+            loading: true,
+            waitForCovers: true,
+            skeleton: const SkeletonBox(width: 40, height: 40),
+            builder: (_) => const SizedBox(),
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        host(
+          SkeletonSwitcher(
+            loading: false,
+            waitForCovers: true,
+            skeleton: const SkeletonBox(width: 40, height: 40),
+            builder: (_) => ValueListenableBuilder<bool>(
+              valueListenable: shown,
+              builder: (context, visible, _) =>
+                  visible ? const _PendingCover() : const Text('內容'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(SkeletonBox), findsOneWidget, reason: '封面還沒好');
+
+      shown.value = false;
       await tester.pumpAndSettle();
       expect(find.byType(SkeletonBox), findsNothing);
     });
@@ -300,4 +340,29 @@ void main() {
     );
     expect(tester.hasRunningAnimations, isFalse);
   });
+}
+
+/// 一張還畫不出來的封面：建好時登記在等待裡，拆掉時拿掉（像
+/// `BookCoverWidget`）。
+class _PendingCover extends StatefulWidget {
+  const _PendingCover();
+
+  @override
+  State<_PendingCover> createState() => _PendingCoverState();
+}
+
+class _PendingCoverState extends State<_PendingCover> {
+  CoverReveal? _waitingOn;
+
+  @override
+  void dispose() {
+    _waitingOn?.remove(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _waitingOn ??= CoverRevealScope.waitingOf(context)?..add(this);
+    return const SizedBox(width: 40, height: 40);
+  }
 }

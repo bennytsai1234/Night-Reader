@@ -7,7 +7,9 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:provider/provider.dart';
 
@@ -34,9 +36,21 @@ void main() {
         ),
       );
       var sawSkeleton = false;
+      LaunchEntranceMotion? entrance;
       final costs = await recordFrames(
         tester,
         realAsync: true,
+        // 書架換場（兩張定格畫面，ADR 0031）在哪一段：拍圖那幾格要多畫一次
+        // 換好的畫面，混合那幾格只貼兩張圖。
+        note: () {
+          final shelf = find.byType(BookshelfPage).evaluate();
+          if (shelf.isNotEmpty) {
+            entrance ??= LaunchEntrance.maybeOf(shelf.first);
+          }
+          final screen = entrance?.screen;
+          if (screen == null || !screen.isPlaying) return null;
+          return screen.progress == null ? '換場前拍圖' : '換場中';
+        },
         // 骨架出現過、又全部換成內容，就是整段進場播完；之後再看一秒，開
         // App 的背景工作從這時開始。
         until: () {
@@ -48,6 +62,23 @@ void main() {
       );
       // ignore: avoid_print
       print(describeFrames(label, costs));
+      // 拍圖兩格：拍下骨架畫面（記為「換場前拍圖」的那一格，拍在它畫完之後）
+      // 與下一格（底下換成內容、畫好後拍下來；螢幕上蓋著骨架那張）。之後
+      // 才是只貼兩張圖的換場。
+      String ms(int us) => (us / 1000).toStringAsFixed(1);
+      final first = costs.indexWhere((cost) => cost.note == '換場前拍圖');
+      if (first >= 0 && first + 1 < costs.length) {
+        final mixing = [
+          for (final cost in costs.skip(first + 2))
+            if (cost.note == '換場中') cost.total,
+        ]..sort();
+        // ignore: avoid_print
+        print(
+          '  拍圖兩格 ${ms(costs[first].total)}、${ms(costs[first + 1].total)}ms；'
+          '換場中 ${mixing.length} 格，中位數 ${ms(mixing[mixing.length ~/ 2])}ms，'
+          '最大 ${ms(mixing.last)}ms',
+        );
+      }
       expect(sawSkeleton, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
       // 下載服務是單例，跨兩次開 App；等上一次開 App 排的下載跑完（測試

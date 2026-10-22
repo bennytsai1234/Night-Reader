@@ -2,10 +2,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 /// 1×1 的 PNG。
 final _png = Uint8List.fromList([
@@ -258,5 +261,99 @@ void main() {
     expect(find.byType(DefaultBookCover), findsNothing);
     expect(imageOf(coverUrl), findsNothing);
     expect(layerOpacity(tester, imageOf(otherUrl)), 1);
+  });
+
+  group('waiting for a page of covers', () {
+    Widget page({required bool loading}) => MaterialApp(
+      home: Scaffold(
+        body: SkeletonSwitcher(
+          loading: loading,
+          waitForCovers: true,
+          skeleton: const SkeletonBox(width: 40, height: 40),
+          builder: (_) => Row(
+            children: [
+              for (final url in [coverUrl, otherUrl])
+                BookCoverWidget(bookName: '書', coverUrl: url),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    double revealed(WidgetTester tester) => tester
+        .widget<SkeletonRevealLayer>(find.byKey(const ValueKey('content')))
+        .presence
+        .value;
+
+    bool allDrawn() => find
+        .byType(RawImage)
+        .evaluate()
+        .every((element) => (element.widget as RawImage).image != null);
+
+    testWidgets('covers already on the phone hold the reveal however slowly '
+        'they decode, then appear with the page instead of fading in later', (
+      tester,
+    ) async {
+      await tester.pumpWidget(page(loading: true));
+      await tester.pumpWidget(page(loading: false));
+      // 檔案還沒讀到（不讓出真實時間）：等多久都不換場，原本 300ms 就換了。
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), 0, reason: '封面還畫不出來，骨架照常呼吸');
+      expect(find.byType(SkeletonBox), findsOneWidget);
+
+      // 讀到、解碼好：換場開始時兩張封面都已經畫得出來，之後不再各自淡入。
+      var started = false;
+      for (var i = 0; i < 200 && !started; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        started = revealed(tester) > 0;
+      }
+      expect(started, isTrue);
+      expect(find.byType(RawImage), findsNWidgets(2));
+      expect(allDrawn(), isTrue, reason: '換場開始時封面都到位');
+      for (var i = 0; i < 50; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        for (final fade in tester.renderObjectList<RenderAnimatedOpacity>(
+          find.descendant(
+            of: find.byType(BookCoverWidget),
+            matching: find.byType(AnimatedOpacity),
+          ),
+        )) {
+          expect(fade.opacity.value, 1, reason: '封面跟著整頁出現，不另外淡入');
+        }
+      }
+      expect(find.byType(SkeletonBox), findsNothing);
+    });
+
+    testWidgets('a network cover that is not on the phone does not hold it', (
+      tester,
+    ) async {
+      final previous = BookCoverWidget.isOnDevice;
+      BookCoverWidget.isOnDevice = (_) async => false;
+      addTearDown(() => BookCoverWidget.isOnDevice = previous);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SkeletonSwitcher(
+              loading: false,
+              waitForCovers: true,
+              skeleton: const SkeletonBox(width: 40, height: 40),
+              builder: (_) => const BookCoverWidget(
+                bookName: '書',
+                coverUrl: 'https://covers.example/never.jpg',
+              ),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), greaterThan(0), reason: '要上網抓的封面不等');
+    });
   });
 }

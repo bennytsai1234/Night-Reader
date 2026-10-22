@@ -789,7 +789,7 @@ class _BookshelfPageState extends State<BookshelfPage>
 
   Widget _buildListCard(
     BookshelfProvider provider,
-    Book book, {
+    Book shown, {
     bool reorderable = false,
   }) {
     final selecting = _isMultiSelect;
@@ -800,23 +800,27 @@ class _BookshelfPageState extends State<BookshelfPage>
         placeholder: const SizedBox(
           height: BookshelfListCard.coverHeight + AppSpacing.md * 2,
         ),
-        child: _UpdateBadgeOf(
-          badges: provider.updateBadges,
-          bookUrl: book.bookUrl,
-          builder: (badge) => BookshelfListCard(
-            book: book,
-            updateBadge: selecting ? null : badge,
-            selecting: selecting,
-            selected: _selectedUrls.contains(book.bookUrl),
-            onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
-            onLongPress: selecting || reorderable
-                ? null
-                : (rect) => _showBookMenu(provider, book, rect, grid: false),
+        // 書架重讀時只有這本書看得到的內容變了才重建這張書卡。
+        child: ValueListenableBuilder<Book>(
+          valueListenable: provider.bookListenable(shown),
+          builder: (context, book, _) => _UpdateBadgeOf(
+            badges: provider.updateBadges,
+            bookUrl: book.bookUrl,
+            builder: (badge) => BookshelfListCard(
+              book: book,
+              updateBadge: selecting ? null : badge,
+              selecting: selecting,
+              selected: _selectedUrls.contains(book.bookUrl),
+              onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+              onLongPress: selecting || reorderable
+                  ? null
+                  : (rect) => _showBookMenu(provider, book, rect, grid: false),
+            ),
           ),
         ),
       ),
     );
-    return BookshelfMotionItem(id: book.bookUrl, motion: _motion, child: card);
+    return BookshelfMotionItem(id: shown.bookUrl, motion: _motion, child: card);
   }
 
   Widget _buildGridView(
@@ -849,24 +853,29 @@ class _BookshelfPageState extends State<BookshelfPage>
       ),
       itemCount: books.length,
       itemBuilder: (context, index) {
-        final book = books[index];
+        final shown = books[index];
         return BookshelfMotionItem(
-          id: book.bookUrl,
+          id: shown.bookUrl,
           motion: _motion,
           child: CoverRevealSlot(
-            child: _UpdateBadgeOf(
-              badges: provider.updateBadges,
-              bookUrl: book.bookUrl,
-              builder: (badge) => BookshelfGridTile(
-                book: book,
-                updateBadge: badge,
-                selecting: _isMultiSelect,
-                selected: _selectedUrls.contains(book.bookUrl),
-                onTap: () =>
-                    _isMultiSelect ? _toggleSelected(book) : _openBook(book),
-                onLongPress: _isMultiSelect
-                    ? null
-                    : (rect) => _showBookMenu(provider, book, rect, grid: true),
+            // 書架重讀時只有這本書看得到的內容變了才重建這張書卡。
+            child: ValueListenableBuilder<Book>(
+              valueListenable: provider.bookListenable(shown),
+              builder: (context, book, _) => _UpdateBadgeOf(
+                badges: provider.updateBadges,
+                bookUrl: book.bookUrl,
+                builder: (badge) => BookshelfGridTile(
+                  book: book,
+                  updateBadge: badge,
+                  selecting: _isMultiSelect,
+                  selected: _selectedUrls.contains(book.bookUrl),
+                  onTap: () =>
+                      _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+                  onLongPress: _isMultiSelect
+                      ? null
+                      : (rect) =>
+                            _showBookMenu(provider, book, rect, grid: true),
+                ),
               ),
             ),
           ),

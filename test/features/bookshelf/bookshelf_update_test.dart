@@ -151,6 +151,8 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(notified, 0);
 
+      // 蓋著時書架多了一本，露出來重讀時清單變了才通知整頁。
+      await bookDao.upsert(shelfBook('https://a.example/2'));
       provider.setCovered(false);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       // 書架有書時重讀只在讀完通知一次；兩個原因併成一次重讀。
@@ -210,17 +212,45 @@ void main() {
       },
     );
 
-    test('a shelf reload with books on it notifies once, at the end', () async {
-      await bookDao.upsert(shelfBook('https://a.example/1'));
-      await provider.loadBooks();
-      var notified = 0;
-      provider.addListener(() => notified++);
+    test(
+      'a shelf reload notifies the page only when the list changed, once, '
+      'at the end; a book that looks different notifies only its card',
+      () async {
+        await bookDao.upsertAll([
+          shelfBook('https://a.example/1'),
+          shelfBook('https://a.example/2'),
+        ]);
+        await provider.loadBooks();
+        var notified = 0;
+        provider.addListener(() => notified++);
+        final first = provider.bookListenable(provider.books.first);
+        final second = provider.bookListenable(provider.books.last);
+        final cards = <String>[];
+        first.addListener(() => cards.add(first.value.bookUrl));
+        second.addListener(() => cards.add(second.value.bookUrl));
 
-      await provider.loadBooks();
+        // 檢查更新做完、只改了檢查時間：清單與書卡上看得到的都沒變。
+        await bookDao.upsert(provider.books.first.copyWith(lastCheckTime: 1));
+        await provider.loadBooks();
+        expect(notified, 0, reason: '書架有書時不換回骨架，清單沒變不必讓整頁重建');
+        expect(cards, isEmpty);
+        expect(first.value.lastCheckTime, 1, reason: '書卡手上仍是最新的那一本');
 
-      // 書架有書時不換回骨架，開始時不必讓整頁重建。
-      expect(notified, 1);
-    });
+        // 一本讀到下一章：只有那張書卡更新。
+        final url = provider.books.last.bookUrl;
+        await bookDao.upsert(
+          provider.books.last.copyWith(totalChapterNum: 10, chapterIndex: 3),
+        );
+        await provider.loadBooks();
+        expect(notified, 0);
+        expect(cards, [url]);
+
+        // 多了一本：清單變了，讀完通知整頁一次。
+        await bookDao.upsert(shelfBook('https://a.example/3'));
+        await provider.loadBooks();
+        expect(notified, 1);
+      },
+    );
 
     test('a check that ends after the provider is disposed stays '
         'quiet', () async {
