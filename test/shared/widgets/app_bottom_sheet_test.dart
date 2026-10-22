@@ -61,6 +61,8 @@ void main() {
     tester.view.physicalSize = const Size(360, 780);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final visible = ValueNotifier(true);
+    addTearDown(visible.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -69,7 +71,7 @@ void main() {
           body: Stack(
             children: [
               ReaderV2TopMenu(
-                controlsVisible: true,
+                controlsVisible: visible,
                 bookName: '書名',
                 chapterTitle: '第一章 開始',
                 originName: '🔥 筆趣閣（優+發現）[2024.05 更新] 精品書源合集',

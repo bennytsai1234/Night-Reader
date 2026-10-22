@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import 'package:night_reader/shared/theme/app_text_styles.dart';
@@ -49,6 +50,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.onContentTapUp,
     this.viewportController,
     this.ttsHighlight,
+    this.controlsVisible,
     this.textSelectionEnabled = false,
     this.onHideText,
     this.highlightColor = const Color(0xFFFFC857),
@@ -69,8 +71,13 @@ class HybridReaderScreen extends StatefulWidget {
   final ReaderV2ViewportController? viewportController;
   final ReaderV2TtsHighlight? ttsHighlight;
 
-  /// 長按選字。朗讀、自動翻頁與閱讀選單開著時由上層關閉；關閉時清掉
-  /// 既有選取。
+  /// 閱讀選單開著：點正文由選單的收起層處理（這裡不翻頁、不叫選單），
+  /// 也不能選字，打開時清掉既有選取。只有點擊與長按那一層聽它，選單開關
+  /// 時正文不重建。
+  final ValueListenable<bool>? controlsVisible;
+
+  /// 長按選字。朗讀與自動翻頁時由上層關閉；關閉時清掉既有選取。閱讀選單
+  /// 開著時也不能選字（[controlsVisible]）。
   final bool textSelectionEnabled;
 
   /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
@@ -241,6 +248,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _coverUntilFirstPage();
     }
     _lifecycle = AppLifecycleListener(onHide: _rememberPage);
+    widget.controlsVisible?.addListener(_onControlsVisibleChanged);
     WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _restoreAttachedRuntime();
@@ -297,9 +305,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       _attachController();
     }
     if (oldWidget.textColor != widget.textColor) _reconcileVisibleWindow();
-    if (oldWidget.runtime != widget.runtime || !widget.textSelectionEnabled) {
+    if (!identical(oldWidget.controlsVisible, widget.controlsVisible)) {
+      oldWidget.controlsVisible?.removeListener(_onControlsVisibleChanged);
+      widget.controlsVisible?.addListener(_onControlsVisibleChanged);
+    }
+    if (oldWidget.runtime != widget.runtime ||
+        !widget.textSelectionEnabled ||
+        _controlsVisible) {
       _clearSelection();
     }
+  }
+
+  bool get _controlsVisible => widget.controlsVisible?.value ?? false;
+
+  void _onControlsVisibleChanged() {
+    if (_controlsVisible) _clearSelection();
   }
 
   /// 離開閱讀器時記下目前這一頁。在 [dispose] 時正文的捲動位置已經拆掉，
@@ -313,6 +333,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   @override
   void dispose() {
     _lifecycle.dispose();
+    widget.controlsVisible?.removeListener(_onControlsVisibleChanged);
     _unregisterRuntime(widget.runtime);
     _detachController(widget.viewportController);
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
@@ -1480,6 +1501,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     if (!mounted ||
         request != _selectionRequest ||
         !widget.textSelectionEnabled ||
+        _controlsVisible ||
         epoch != _pipeline.epoch ||
         !identical(_pipeline.blocksOf(hit.blocks.chapterIndex), hit.blocks)) {
       return;
@@ -1765,8 +1787,11 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final message = unavailable ? _friendlyErrorMessage : '正在準備閱讀內容';
     return ColoredBox(
       color: widget.backgroundColor,
-      child: ReaderV2PointerTapLayer(
-        onTapUp: widget.onContentTapUp,
+      child: _whileControls(
+        (controlsVisible, child) => ReaderV2PointerTapLayer(
+          onTapUp: controlsVisible ? null : widget.onContentTapUp,
+          child: child,
+        ),
         child: Semantics(
           liveRegion: true,
           excludeSemantics: true,
@@ -1889,21 +1914,42 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
                 ? null
                 : (selection) => widget.onHideText!(selection.inParagraph),
             highlightColor: widget.highlightColor,
-            child: ReaderV2PointerTapLayer(
-              onTapUp: widget.onContentTapUp == null
-                  ? null
-                  : _handleContentTapUp,
-              suppressTapAtPointerDown: _isUserFlingInProgress,
-              child: GestureDetector(
-                onLongPressStart: widget.textSelectionEnabled && !_veilHoldsText
-                    ? (details) => unawaited(_handleLongPressStart(details))
-                    : null,
-                child: readerStack,
+            child: _whileControls(
+              (controlsVisible, child) => ReaderV2PointerTapLayer(
+                onTapUp: widget.onContentTapUp == null || controlsVisible
+                    ? null
+                    : _handleContentTapUp,
+                suppressTapAtPointerDown: _isUserFlingInProgress,
+                child: GestureDetector(
+                  onLongPressStart:
+                      widget.textSelectionEnabled &&
+                          !controlsVisible &&
+                          !_veilHoldsText
+                      ? (details) => unawaited(_handleLongPressStart(details))
+                      : null,
+                  child: child,
+                ),
               ),
+              child: readerStack,
             ),
           ),
         );
       },
+    );
+  }
+
+  /// 照閱讀選單開著與否（[HybridReaderScreen.controlsVisible]）包上點擊
+  /// 與長按層；選單開關時只重建 [builder] 這一層，[child] 原封不動。
+  Widget _whileControls(
+    Widget Function(bool controlsVisible, Widget child) builder, {
+    required Widget child,
+  }) {
+    final controls = widget.controlsVisible;
+    if (controls == null) return builder(false, child);
+    return ValueListenableBuilder<bool>(
+      valueListenable: controls,
+      builder: (context, visible, child) => builder(visible, child!),
+      child: child,
     );
   }
 

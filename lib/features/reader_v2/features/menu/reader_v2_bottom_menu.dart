@@ -68,7 +68,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   /// 拖動條圓鈕的半徑（直徑 26）。
   static const double _thumbRadius = 13;
 
-  final bool controlsVisible;
+  /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
+  final ValueListenable<bool> controlsVisible;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
   final IconData dayNightIcon;

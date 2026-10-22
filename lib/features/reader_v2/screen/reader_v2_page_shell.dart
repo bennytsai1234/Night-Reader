@@ -171,7 +171,10 @@ class ReaderV2PageShell extends StatelessWidget {
 
   /// 正文色：資訊列的載入骨架與正文骨架同色。
   final Color textColor;
-  final bool controlsVisible;
+
+  /// 閱讀選單開著。只有選單的滑動、收起手勢與頁首頁尾的點擊層聽它，選單
+  /// 開關時這個框架與選單內容都不重建（ADR 0029 做法 3）。
+  final ValueListenable<bool> controlsVisible;
   final bool showReadTitleAddition;
   final ReaderV2InfoState infoState;
   final String chapterTitle;
@@ -314,11 +317,9 @@ class ReaderV2PageShell extends StatelessWidget {
                   left: 0,
                   right: 0,
                   height: layout.headerExtent,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
-                    // 選單開著時由收起層處理。
-                    onTap: controlsVisible ? null : onShowControls,
+                  child: _ShowControlsTap(
+                    controlsVisible: controlsVisible,
+                    onShowControls: onShowControls,
                     child: ColoredBox(
                       color: backgroundColor,
                       child: layout.showHeaderInfo && infoShown
@@ -349,27 +350,22 @@ class ReaderV2PageShell extends StatelessWidget {
                   left: 0,
                   right: 0,
                   height: layout.footerExtent,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    // 完成點擊才叫出選單；從這裡起手的滑動與長按不算。
-                    // 選單開著時由收起層處理。
-                    onTap: controlsVisible ? null : onShowControls,
+                  child: _ShowControlsTap(
+                    controlsVisible: controlsVisible,
+                    onShowControls: onShowControls,
                     child: _PermanentInfoBar(
                       shell: this,
                       rowBottom: layout.footerRowBottom,
                     ),
                   ),
                 ),
-              if (controlsVisible)
-                Positioned.fill(
-                  child: _ReaderV2ControlsDismissLayer(
-                    onDismiss: onDismissControls,
-                  ),
-                ),
-              // 收起層隨選單開關進出，前面的子元件會錯位；有 key 選單才會
-              // 留在原處播動畫，不被重建成終點狀態。
               Positioned.fill(
-                key: const ValueKey('reader-menus'),
+                child: _ReaderV2ControlsDismissLayer(
+                  controlsVisible: controlsVisible,
+                  onDismiss: onDismissControls,
+                ),
+              ),
+              Positioned.fill(
                 child: CustomMultiChildLayout(
                   delegate: _MenuLayoutDelegate(),
                   children: [
@@ -982,9 +978,43 @@ class _ReaderClockState extends State<_ReaderClock> {
   }
 }
 
-class _ReaderV2ControlsDismissLayer extends StatefulWidget {
-  const _ReaderV2ControlsDismissLayer({required this.onDismiss});
+/// 頁首、頁尾：選單收著時，完成點擊才叫出選單；從這裡起手的滑動與長按
+/// 不算。選單開著時由收起層處理。只有這一層聽選單的開關，[child]（資訊
+/// 列）不跟著重建。
+class _ShowControlsTap extends StatelessWidget {
+  const _ShowControlsTap({
+    required this.controlsVisible,
+    required this.onShowControls,
+    required this.child,
+  });
 
+  final ValueListenable<bool> controlsVisible;
+  final VoidCallback onShowControls;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: controlsVisible,
+      builder: (context, visible, child) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: visible ? null : onShowControls,
+        child: child,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// 選單開著時，在正文、頁首或頁尾上點一下或開始滑動就收起選單。一直
+/// 掛著、在按下的那一刻看選單開著沒有，選單開關時不必重建或搬動這一層。
+class _ReaderV2ControlsDismissLayer extends StatefulWidget {
+  const _ReaderV2ControlsDismissLayer({
+    required this.controlsVisible,
+    required this.onDismiss,
+  });
+
+  final ValueListenable<bool> controlsVisible;
   final VoidCallback onDismiss;
 
   @override
@@ -1003,7 +1033,7 @@ class _ReaderV2ControlsDismissLayerState
   late double _slopSquared;
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (event.buttons != kPrimaryButton) {
+    if (!widget.controlsVisible.value || event.buttons != kPrimaryButton) {
       _resetTracking();
       return;
     }

@@ -19,16 +19,13 @@ void main() {
     });
     await tester.pumpWidget(
       MaterialApp(
-        home: ListenableBuilder(
-          listenable: menu,
-          builder: (context, _) => Align(
-            alignment: Alignment.bottomCenter,
-            child: ReaderV2MenuEntrance(
-              visible: menu.controlsVisible,
-              edge: AxisDirection.down,
-              onHidden: departure.menusHidden,
-              child: const SizedBox(width: 100, height: 50),
-            ),
+        home: Align(
+          alignment: Alignment.bottomCenter,
+          child: ReaderV2MenuEntrance(
+            visible: menu.controlsVisible,
+            edge: AxisDirection.down,
+            onHidden: departure.menusHidden,
+            child: const SizedBox(width: 100, height: 50),
           ),
         ),
       ),
@@ -55,7 +52,7 @@ void main() {
 
     final ticket = departure.depart();
     final result = outcome(ticket);
-    expect(menu.controlsVisible, isFalse, reason: '開始收起選單');
+    expect(menu.controlsVisible.value, isFalse, reason: '開始收起選單');
     await tester.pump(AppMotion.readerMenuOut ~/ 2);
     expect(result, isEmpty, reason: '滑出途中不推頁');
     expect(ticket.canDepart, isFalse);

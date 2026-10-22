@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -20,7 +21,8 @@ class ReaderV2TopMenu extends StatelessWidget {
     required this.onMore,
   });
 
-  final bool controlsVisible;
+  /// 選單開著；只有滑動那一層聽它（見 [ReaderV2MenuEntrance]）。
+  final ValueListenable<bool> controlsVisible;
   final String bookName;
   final String chapterTitle;
   final String originName;

@@ -175,7 +175,7 @@ class ReaderV2PageCoordinator {
     final autoPage = _host.autoPage;
     if (autoPage == null) return;
     if (!autoPage.isRunning) {
-      _host.menu.hideControlsForAutoPage();
+      _host.menu.dismissControls();
       // 自動捲動與朗讀跟隨不同時移動正文；後開的接手。
       final tts = _host.tts;
       if (tts != null && (tts.isPlaying || tts.currentHighlight != null)) {

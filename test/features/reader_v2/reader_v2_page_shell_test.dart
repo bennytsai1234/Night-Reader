@@ -10,6 +10,7 @@ import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_sleep
 import 'package:night_reader/features/reader_v2/screen/reader_v2_chapters_drawer.dart';
 import 'package:night_reader/features/reader_v2/screen/reader_v2_page_shell.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,12 +52,15 @@ void main() {
     addTearDown(scroll.dispose);
     final menu = ReaderV2MenuController();
     addTearDown(menu.dispose);
+    final fixed = ValueNotifier(controlsVisible);
+    addTearDown(fixed.dispose);
+    final visibility = controls ?? fixed;
     void noop() {}
     void noopPercent(double _) {}
     await tester.pumpWidget(
       MaterialApp(
         home: ListenableBuilder(
-          listenable: Listenable.merge([controls, infoStates]),
+          listenable: Listenable.merge([infoStates]),
           builder: (context, _) => ReaderV2PageShell(
             book: Book(
               bookUrl: 'http://shell.test',
@@ -83,7 +87,7 @@ void main() {
             backgroundColor: Colors.white,
             infoColor: Colors.black,
             textColor: Colors.black,
-            controlsVisible: controls?.value ?? controlsVisible,
+            controlsVisible: visibility,
             showReadTitleAddition: true,
             infoState: infoStates?.value ?? ReaderV2InfoState.ready,
             chapterTitle: '第一章',
@@ -195,7 +199,7 @@ void main() {
         .translation
         .distance;
 
-    // 開關選單時收起層進出 Stack；選單不能因此被重建、直接跳到終點。
+    // 選單不能被重建成終點狀態、直接跳到位。
     controls.value = true;
     await tester.pump();
     await tester.pump(AppMotion.readerMenuIn ~/ 2);
@@ -215,6 +219,64 @@ void main() {
     expectNoGlassUnderFade(tester);
     await tester.pumpAndSettle();
     expect(awayOf(ReaderV2BottomMenu), 1);
+  });
+
+  testWidgets('opening and closing the menus only moves them; buttons, titles, '
+      'the progress bar and the info rows are not rebuilt', (tester) async {
+    final controls = ValueNotifier(false);
+    addTearDown(controls.dispose);
+    await pumpShell(
+      tester,
+      controls: controls,
+      brightnessControl: const SizedBox.expand(),
+    );
+    await tester.pumpAndSettle();
+
+    final rebuilds = <Type, int>{};
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      final type = element.widget.runtimeType;
+      rebuilds[type] = (rebuilds[type] ?? 0) + 1;
+    };
+    try {
+      for (final shown in [true, false]) {
+        controls.value = shown;
+        await tester.pump();
+        await tester.pump(AppMotion.readerMenuOut ~/ 2);
+        expectNoGlassUnderFade(tester);
+        await tester.pumpAndSettle();
+      }
+    } finally {
+      debugOnRebuildDirtyWidget = previous;
+    }
+
+    expect(rebuilds[GlassSlide] ?? 0, greaterThan(0), reason: '選單要真的滑動');
+    for (final type in [
+      ReaderV2PageShell,
+      ReaderV2TopMenu,
+      ReaderV2BottomMenu,
+      GlassIconButton,
+      TextButton,
+      Slider,
+      Text,
+      Icon,
+    ]) {
+      expect(rebuilds[type] ?? 0, 0, reason: '選單開關不應重建 $type');
+    }
+  });
+
+  testWidgets('a tap on the header or footer with the menu open only closes '
+      'it', (tester) async {
+    await pumpShell(tester, controlsVisible: true);
+    final size = tester.getSize(find.byType(ReaderV2PageShell));
+
+    // 頁尾最底下兩點，在下方選單底下的留白裡。
+    await tester.tapAt(Offset(size.width / 2, size.height - 2));
+    await tester.pumpAndSettle();
+
+    expect(dismissControls, 1);
+    expect(showControls, 0);
   });
 
   testWidgets('the page hears when the menus are fully off screen', (

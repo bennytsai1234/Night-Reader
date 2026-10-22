@@ -198,7 +198,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     if (forward == null) return false;
     if (!mounted ||
         !_host.settings.volumeKeyPage ||
-        _host.menu.controlsVisible ||
+        _host.menu.controlsVisible.value ||
         (_host.tts?.isPlaying ?? false) ||
         !(pageRouteOf(context)?.isCurrent ?? false) ||
         (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
@@ -386,18 +386,15 @@ class _ReaderV2PageState extends State<ReaderV2Page>
               style: style,
               viewportController: _host.viewportController,
               ttsHighlight: _host.tts?.currentHighlight,
+              controlsVisible: _host.menu.controlsVisible,
               textSelectionEnabled:
-                  !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
               onHideText: (selection) =>
                   unawaited(_coordinator.hideText(selection)),
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
-              // 選單開著時，點正文只收起選單（由選單的收起層處理）。
-              onContentTapUp: _host.menu.controlsVisible
-                  ? null
-                  : _handleContentTap,
+              onContentTapUp: _handleContentTap,
               progressListenable: _progress,
               bookUrl: widget.book.bookUrl,
               skeletonPages: _host.dependencies.skeletonPages,
@@ -458,7 +455,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   /// 離開閱讀器。
   void _handleSystemBack() {
     if (_host.viewportController.dismissSelection?.call() ?? false) return;
-    if (_host.menu.controlsVisible) {
+    if (_host.menu.controlsVisible.value) {
       _host.menu.dismissControls();
       return;
     }
@@ -729,10 +726,19 @@ class _ReaderV2PageState extends State<ReaderV2Page>
 
   /// 從選單開面板：開著時上下選單與亮度條收起，正文整頁露出來（排版面板
   /// 沒有暗色遮罩，邊調邊看）；面板關掉後回到選單打開的樣子。
+  ///
+  /// 選單從面板滑上來的下一格才開始滑出：面板的第一格要建整個面板的骨架，
+  /// 選單開始滑出那一格要重算整組選單的讀屏資訊，兩件事錯開一格（ADR 0029
+  /// 做法 4；擠在同一格時那一格多 1–2ms）。
   void _openPanel(Future<void> Function() open) {
-    _host.menu.dismissControls();
+    var closed = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !closed) _host.menu.dismissControls();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
     unawaited(
       open().whenComplete(() {
+        closed = true;
         if (!mounted || !(pageRouteOf(context)?.isCurrent ?? false)) return;
         _host.menu.showControls();
       }),

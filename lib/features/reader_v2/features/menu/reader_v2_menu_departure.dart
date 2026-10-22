@@ -10,8 +10,9 @@ import 'reader_v2_menu_controller.dart';
 /// 新的一張）、選單在滑出途中又被打開，或閱讀器拆掉時，舊的那張作廢：
 /// 它不會等到之後另一次不相關的收起才推頁。
 class ReaderV2MenuDeparture {
-  ReaderV2MenuDeparture(this._menu) : _offScreen = !_menu.controlsVisible {
-    _menu.addListener(_onMenuChanged);
+  ReaderV2MenuDeparture(this._menu)
+    : _offScreen = !_menu.controlsVisible.value {
+    _menu.controlsVisible.addListener(_onMenuChanged);
   }
 
   final ReaderV2MenuController _menu;
@@ -36,7 +37,7 @@ class ReaderV2MenuDeparture {
   }
 
   void _onMenuChanged() {
-    if (!_menu.controlsVisible) return;
+    if (!_menu.controlsVisible.value) return;
     // 選單又打開（含滑出途中被叫回來）：還沒推出去的請求作廢。
     _offScreen = false;
     _current?._settle(false);
@@ -44,7 +45,7 @@ class ReaderV2MenuDeparture {
   }
 
   void dispose() {
-    _menu.removeListener(_onMenuChanged);
+    _menu.controlsVisible.removeListener(_onMenuChanged);
     _current?._settle(false);
     _current = null;
   }

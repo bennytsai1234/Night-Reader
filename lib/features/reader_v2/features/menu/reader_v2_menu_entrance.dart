@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
@@ -8,7 +9,9 @@ import 'package:night_reader/shared/widgets/glass.dart';
 /// 玻璃，淡入時模糊到最後一幀才突然糊上去。[delay] 只用在進場，讓幾塊錯開
 /// 出發。
 ///
-/// 收起時不接點擊；系統關閉動畫時直接到位。
+/// 自己聽 [visible]，選單開關時只有滑動與擋點擊這兩層跟著變，[child]
+/// （按鈕、章名、進度條、亮度條）不重建（ADR 0029 做法 3）。收起時不接
+/// 點擊；系統關閉動畫時直接到位。
 class ReaderV2MenuEntrance extends StatefulWidget {
   const ReaderV2MenuEntrance({
     super.key,
@@ -20,7 +23,7 @@ class ReaderV2MenuEntrance extends StatefulWidget {
     required this.child,
   });
 
-  final bool visible;
+  final ValueListenable<bool> visible;
 
   /// 從哪一側滑出去。
   final AxisDirection edge;
@@ -44,7 +47,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
     vsync: this,
     duration: AppMotion.readerMenuIn + widget.delay,
     reverseDuration: AppMotion.readerMenuOut,
-    value: widget.visible ? 1 : 0,
+    value: widget.visible.value ? 1 : 0,
   )..addStatusListener(_onStatus);
 
   late final CurvedAnimation _progress = CurvedAnimation(
@@ -53,9 +56,23 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
     reverseCurve: Curves.easeInCubic.flipped,
   );
 
+  bool _reduceMotion = false;
+
   double get _delayFraction {
     final total = AppMotion.readerMenuIn + widget.delay;
     return widget.delay.inMicroseconds / total.inMicroseconds;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.visible.addListener(_onVisibleChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
   }
 
   void _onStatus(AnimationStatus status) {
@@ -65,10 +82,17 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
   @override
   void didUpdateWidget(ReaderV2MenuEntrance oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.visible == oldWidget.visible) return;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = widget.visible ? 1 : 0;
-    } else if (widget.visible) {
+    if (identical(widget.visible, oldWidget.visible)) return;
+    oldWidget.visible.removeListener(_onVisibleChanged);
+    widget.visible.addListener(_onVisibleChanged);
+    _onVisibleChanged();
+  }
+
+  void _onVisibleChanged() {
+    final visible = widget.visible.value;
+    if (_reduceMotion) {
+      _controller.value = visible ? 1 : 0;
+    } else if (visible) {
       _controller.forward();
     } else {
       _controller.reverse();
@@ -77,6 +101,7 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   @override
   void dispose() {
+    widget.visible.removeListener(_onVisibleChanged);
     _progress.dispose();
     _controller.dispose();
     super.dispose();
@@ -84,8 +109,10 @@ class _ReaderV2MenuEntranceState extends State<ReaderV2MenuEntrance>
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: !widget.visible,
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.visible,
+      builder: (context, visible, child) =>
+          IgnorePointer(ignoring: !visible, child: child),
       child: AnimatedBuilder(
         animation: _progress,
         child: widget.child,
