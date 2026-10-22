@@ -390,6 +390,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
+              onHideText: (selection) =>
+                  unawaited(_coordinator.hideText(selection)),
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               // 選單開著時，點正文只收起選單（由選單的收起層處理）。
@@ -497,13 +499,22 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     _showNotice(notice);
   }
 
-  void _showNotice(String message) {
+  void _showNotice(String message, {ReaderV2NoticeAction? action}) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (!mounted || messenger == null) return;
     if (_visibleNoticeMessage == message) return;
     _visibleNoticeMessage = message;
     messenger.hideCurrentSnackBar();
-    final controller = messenger.showSnackBar(SnackBar(content: Text(message)));
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action == null
+            ? null
+            : SnackBarAction(label: action.label, onPressed: action.onPressed),
+        // 帶按鈕的提示預設不會自己收起，會一直蓋在正文上。
+        persist: false,
+      ),
+    );
     unawaited(
       controller.closed.then<void>((_) {
         if (_visibleNoticeMessage == message) {

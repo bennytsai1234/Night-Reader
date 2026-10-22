@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
@@ -22,22 +23,42 @@ void main() {
       expect(at(1, 1), 1, reason: '最後一幀整片都是內容');
     });
 
-    test('a whole-page fade is the same everywhere', () {
-      expect(SkeletonReveal.incomingOpacityAt(0.3, 0, sweep: false), 0.3);
-      expect(SkeletonReveal.incomingOpacityAt(0.3, 1, sweep: false), 0.3);
+    test('every position starts and lands slowly', () {
+      // 原本每個位置照進度直線淡入：左緣在最快時急停、右緣一開始就急衝，
+      // 一格（16ms，0.6 秒的 1/37）就差 5% 以上，看起來在抖。
+      const frame = 16 / 600;
+      expect(at(0.5, 0) - at(0.5 - frame, 0), lessThan(0.01), reason: '左緣停住');
+      expect(at(0.5 + frame, 1) - at(0.5, 1), lessThan(0.01), reason: '右緣開始');
+      expect(at(frame, 0), lessThan(0.01), reason: '左緣開始');
+      expect(at(1, 1) - at(1 - frame, 1), lessThan(0.01), reason: '右緣停住');
     });
 
-    test('the gradient stops follow the bends of the ramp', () {
-      expect(SkeletonReveal.sweepStops(0.25), [
-        (0.0, 0.5),
-        (0.5, 0.0),
-        (1.0, 0.0),
-      ]);
-      expect(SkeletonReveal.sweepStops(0.75), [
-        (0.0, 1.0),
-        (0.5, 1.0),
-        (1.0, 0.5),
-      ]);
+    test('a whole-page fade is the same everywhere', () {
+      final eased = AppMotion.fadeCurve.transform(0.3);
+      expect(SkeletonReveal.incomingOpacityAt(0.3, 0, sweep: false), eased);
+      expect(SkeletonReveal.incomingOpacityAt(0.3, 1, sweep: false), eased);
+    });
+
+    test('the gradient stops trace the curve across the moving part', () {
+      for (final progress in [0.1, 0.25, 0.5, 0.75, 0.9]) {
+        final stops = SkeletonReveal.sweepStops(progress);
+        expect(stops.first.$1, 0);
+        expect(stops.last.$1, 1);
+        // 停點之間畫成直線，和每個位置真正的濃度幾乎一樣。
+        for (var i = 0; i < stops.length - 1; i++) {
+          final (u0, a0) = stops[i];
+          final (u1, a1) = stops[i + 1];
+          for (var k = 1; k < 8; k++) {
+            final u = u0 + (u1 - u0) * k / 8;
+            final drawn = a0 + (a1 - a0) * k / 8;
+            expect(
+              drawn,
+              closeTo(at(progress, u), 0.005),
+              reason: '$progress $u',
+            );
+          }
+        }
+      }
       expect(SkeletonReveal.sweepStops(1), [(0.0, 1.0), (1.0, 1.0)]);
     });
   });
@@ -222,7 +243,7 @@ void main() {
               )
               .first,
         )
-        .opacity
+        .presence
         .value;
 
     int fadeLayers(WidgetTester tester) =>

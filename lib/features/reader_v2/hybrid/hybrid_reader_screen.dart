@@ -50,6 +50,7 @@ class HybridReaderScreen extends StatefulWidget {
     this.viewportController,
     this.ttsHighlight,
     this.textSelectionEnabled = false,
+    this.onHideText,
     this.highlightColor = const Color(0xFFFFC857),
     this.highlightStrength = ReaderV2HighlightStrength.defaultValue,
     this.progressListenable,
@@ -71,6 +72,10 @@ class HybridReaderScreen extends StatefulWidget {
   /// 長按選字。朗讀、自動翻頁與閱讀選單開著時由上層關閉；關閉時清掉
   /// 既有選取。
   final bool textSelectionEnabled;
+
+  /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
+  /// 新增替換規則；沒給就不顯示這個按鈕。
+  final ValueChanged<ParagraphSelection>? onHideText;
 
   /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
   /// 反白固定深淺以保持可辨識。
@@ -1880,6 +1885,9 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             repaint: controller,
             boxesFor: _selectionBoxes,
             caretAt: _selectionCaretAt,
+            onHide: widget.onHideText == null
+                ? null
+                : (selection) => widget.onHideText!(selection.inParagraph),
             highlightColor: widget.highlightColor,
             child: ReaderV2PointerTapLayer(
               onTapUp: widget.onContentTapUp == null

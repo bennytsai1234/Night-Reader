@@ -542,7 +542,7 @@ void main() {
             )
             .first,
       );
-      expect(opacity.opacity.value, 1);
+      expect(opacity.presence.value, 1);
     });
 
     testWidgets('nothing is drawn when the text is unavailable', (

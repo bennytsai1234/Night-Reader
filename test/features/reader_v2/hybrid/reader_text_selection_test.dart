@@ -1,7 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/selection_service.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/text_selection_overlay.dart';
 import 'package:night_reader/features/reader_v2/hybrid/text/word_segmenter.dart';
 
 ChapterBlock _block(
@@ -257,6 +259,98 @@ void main() {
       );
       expect(WordSegmenter.characterAt(text, 1), const HybridTextRange(1, 3));
       expect(WordSegmenter.characterAt(text, 3), const HybridTextRange(3, 4));
+    });
+  });
+
+  group('選字選單', () {
+    Future<SelectionService> pumpSelected(
+      WidgetTester tester, {
+      ValueChanged<ReaderTextSelection>? onHide,
+    }) async {
+      final chapter = _chapter();
+      final start = chapter.displayText.indexOf('城門');
+      final service = SelectionService()
+        ..select(
+          ReaderTextSelection(
+            blocks: chapter,
+            epoch: LayoutEpoch.initial,
+            paragraph: chapter.sourceParagraphRange(
+              const BlockKey(chapterIndex: 0, blockIndex: 1),
+            )!,
+            range: HybridTextRange(start, start + 2),
+          ),
+        );
+      addTearDown(service.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderTextSelectionLayer(
+            selection: service,
+            repaint: service,
+            boxesFor: (_) => const <HybridLineBox>[
+              HybridLineBox(left: 100, top: 300, right: 140, bottom: 320),
+            ],
+            caretAt: (_, _) => null,
+            onHide: onHide,
+            highlightColor: Colors.amber,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+      return service;
+    }
+
+    testWidgets('只有複製、搜尋與隱藏，不列出系統的文字處理 App', (tester) async {
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.processText,
+        (call) async {
+          calls.add(call);
+          return <String, String>{'translate': '翻譯'};
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.processText,
+          null,
+        ),
+      );
+
+      await pumpSelected(tester, onHide: (_) {});
+      await tester.pump();
+
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('搜尋'), findsOneWidget);
+      expect(find.text('隱藏'), findsOneWidget);
+      expect(find.text('翻譯'), findsNothing);
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('按「隱藏」交出選到的字並收起選取', (tester) async {
+      ReaderTextSelection? hidden;
+      final service = await pumpSelected(
+        tester,
+        onHide: (selection) => hidden = selection,
+      );
+
+      await tester.tap(find.text('隱藏'));
+      await tester.pump();
+
+      expect(hidden?.text, '城門');
+      expect(hidden?.inParagraph, (
+        chapterIndex: 0,
+        paragraphIndex: 0,
+        paragraph: '天色漸暗，城門即將關閉。',
+        start: 5,
+        end: 7,
+      ));
+      expect(service.active, isFalse);
+    });
+
+    testWidgets('沒有接上隱藏時不顯示這個按鈕', (tester) async {
+      await pumpSelected(tester);
+
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('隱藏'), findsNothing);
     });
   });
 }

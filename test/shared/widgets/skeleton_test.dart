@@ -225,7 +225,7 @@ void main() {
               )
               .first,
         )
-        .opacity
+        .presence
         .value;
 
     testWidgets('the page waits for its covers, then fades in once', (

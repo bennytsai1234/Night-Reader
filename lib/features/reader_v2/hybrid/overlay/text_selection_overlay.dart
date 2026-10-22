@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/selection_service.dart';
@@ -21,6 +20,7 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
     required this.repaint,
     required this.boxesFor,
     required this.caretAt,
+    this.onHide,
     required this.highlightColor,
     required this.child,
   });
@@ -36,6 +36,10 @@ final class ReaderTextSelectionLayer extends StatefulWidget {
   /// viewport 上一點在選取段落內最近的游標位置（章內 offset）。
   final int? Function(ReaderTextSelection selection, Offset point) caretAt;
 
+  /// 選單的「隱藏」：用選到的字新增一條換成空白的替換規則（例如藏掉廣
+  /// 告）；沒給就不顯示。
+  final ValueChanged<ReaderTextSelection>? onHide;
+
   final Color highlightColor;
   final Widget child;
 
@@ -48,21 +52,8 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   static const double _selectionAlpha = 0.35;
   static const String _webSearchUrl = 'https://www.google.com/search?q=';
 
-  final ProcessTextService _processText = DefaultProcessTextService();
-  List<ProcessTextAction> _processTextActions = const <ProcessTextAction>[];
   SelectionEdge? _dragEdge;
   Offset? _dragPoint;
-
-  @override
-  void initState() {
-    super.initState();
-    // 與 EditableText 相同：系統可處理文字的 App（翻譯、字典…）只查一次。
-    unawaited(
-      _processText.queryTextActions().then((actions) {
-        if (mounted) setState(() => _processTextActions = actions);
-      }),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,10 +184,13 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
         label: '搜尋',
         onPressed: () => unawaited(_webSearch(selection)),
       ),
-      for (final action in _processTextActions)
+      if (widget.onHide case final onHide?)
         ContextMenuButtonItem(
-          label: action.label,
-          onPressed: () => _processTextAction(selection, action),
+          label: '隱藏',
+          onPressed: () {
+            widget.selection.clear();
+            onHide(selection);
+          },
         ),
     ];
     // 工具列以父層為座標系；正文區不在螢幕頂端，狀態列 padding 不適用。
@@ -224,28 +218,6 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
     final query = Uri.encodeQueryComponent(selection.text.trim());
     widget.selection.clear();
     await launchExternalUrlWithFeedback(context, '$_webSearchUrl$query');
-  }
-
-  void _processTextAction(
-    ReaderTextSelection selection,
-    ProcessTextAction action,
-  ) {
-    final text = selection.text;
-    widget.selection.clear();
-    // 正文唯讀；對方 App 回傳的文字不需要，結果要等使用者從對方 App 返回
-    // 才完成，所以不等待。
-    unawaited(
-      _processText
-          .processTextAction(action.id, text, true)
-          .then<void>(
-            (_) {},
-            onError: (Object error, StackTrace stackTrace) => AppLog.e(
-              '文字處理動作失敗: ${action.label}',
-              error: error,
-              stackTrace: stackTrace,
-            ),
-          ),
-    );
   }
 }
 

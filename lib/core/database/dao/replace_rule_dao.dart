@@ -26,6 +26,10 @@ class ReplaceRuleDao extends DatabaseAccessor<AppDatabase>
   Future<void> upsert(ReplaceRule rule) =>
       into(replaceRules).insertOnConflictUpdate(_toInsertable(rule));
 
+  /// 新增一條規則，回傳它的 id。
+  Future<int> insert(ReplaceRule rule) =>
+      into(replaceRules).insert(_toInsertable(rule));
+
   Future<void> upsertAll(List<ReplaceRule> rules) async {
     await batch(
       (b) => b.insertAllOnConflictUpdate(

@@ -590,10 +590,9 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     vsync: this,
     value: widget.loading || _entering ? 0 : 1,
   )..addStatusListener(_onStatus);
-  late final Animation<double> _content = CurvedAnimation(
-    parent: _controller,
-    curve: AppMotion.fadeCurve,
-  );
+
+  /// 內容出現的進度（經過的時間比例，曲線由 [SkeletonReveal] 套）。
+  late final Animation<double> _content = _controller;
   late final Animation<double> _skeleton = ReverseAnimation(_content);
 
   void _onStatus(AnimationStatus status) {
@@ -734,7 +733,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     final backdrop = widget.backdrop;
     final skeletonLayer = SkeletonRevealLayer(
       key: const ValueKey('skeleton'),
-      opacity: appearing ?? _skeleton,
+      presence: appearing ?? _skeleton,
       side: SkeletonRevealSide.skeleton,
       incoming: entrance == null ? _incoming : SkeletonRevealSide.skeleton,
       sweep: entrance?.sweep ?? _sweep,
@@ -755,7 +754,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
         ? SkeletonRevealLayer(
             key: const ValueKey('content'),
             // 有墊色時內容一律照常畫，交叉淡換全由上面的骨架層負責。
-            opacity: backdrop == null ? _content : kAlwaysCompleteAnimation,
+            presence: backdrop == null ? _content : kAlwaysCompleteAnimation,
             side: SkeletonRevealSide.content,
             incoming: _incoming,
             sweep: _sweep,
@@ -811,10 +810,9 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
     vsync: this,
     value: widget.loading ? 0 : 1,
   )..addStatusListener(_onStatus);
-  late final Animation<double> _content = CurvedAnimation(
-    parent: _controller,
-    curve: AppMotion.fadeCurve,
-  );
+
+  /// 內容出現的進度（經過的時間比例，曲線由 [SkeletonReveal] 套）。
+  late final Animation<double> _content = _controller;
   late final Animation<double> _skeleton = ReverseAnimation(_content);
 
   /// 這一次換場是不是由左而右。
@@ -884,7 +882,7 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
   }
 
   Widget _buildSkeleton() => SkeletonRevealLayer(
-    opacity: _skeleton,
+    presence: _skeleton,
     side: SkeletonRevealSide.skeleton,
     sweep: _sweep,
     child: ExcludeSemantics(child: Skeleton(child: widget.skeleton)),
@@ -944,7 +942,7 @@ class _SliverSkeletonSwitcherState extends State<SliverSkeletonSwitcher>
         if (!loading)
           _SliverRevealLayer(
             key: const ValueKey('content'),
-            opacity: _content,
+            presence: _content,
             sweep: _sweep,
             // 還在一個個建的內容全透明，不接點擊。
             sliver: SliverIgnorePointer(
@@ -1133,23 +1131,23 @@ class _RenderSliverHold extends RenderSliver {
   }
 }
 
-/// 換場時內容那一層：照 [opacity] 淡入；[sweep] 時左邊先、右邊後
+/// 換場時內容那一層：照 [presence]（經過的時間比例，同 [SkeletonRevealLayer]）淡入；[sweep] 時左邊先、右邊後
 /// （[SkeletonReveal.incomingOpacityAt]）。box 版是 [SkeletonRevealLayer]；
 /// 完全不透明時直接畫、不另開圖層。
 class _SliverRevealLayer extends SingleChildRenderObjectWidget {
   const _SliverRevealLayer({
     super.key,
-    required this.opacity,
+    required this.presence,
     required this.sweep,
     required Widget sliver,
   }) : super(child: sliver);
 
-  final Animation<double> opacity;
+  final Animation<double> presence;
   final bool sweep;
 
   @override
   _RenderSliverRevealLayer createRenderObject(BuildContext context) =>
-      _RenderSliverRevealLayer(opacity: opacity, sweep: sweep);
+      _RenderSliverRevealLayer(presence: presence, sweep: sweep);
 
   @override
   void updateRenderObject(
@@ -1157,20 +1155,20 @@ class _SliverRevealLayer extends SingleChildRenderObjectWidget {
     _RenderSliverRevealLayer renderObject,
   ) {
     renderObject
-      ..opacity = opacity
+      ..presence = presence
       ..sweep = sweep;
   }
 }
 
 class _RenderSliverRevealLayer extends RenderProxySliver {
-  _RenderSliverRevealLayer({required this._opacity, required this._sweep});
+  _RenderSliverRevealLayer({required this._presence, required this._sweep});
 
-  Animation<double> _opacity;
-  set opacity(Animation<double> value) {
-    if (identical(_opacity, value)) return;
-    if (attached) _opacity.removeListener(_onTick);
-    _opacity = value;
-    if (attached) _opacity.addListener(_onTick);
+  Animation<double> _presence;
+  set presence(Animation<double> value) {
+    if (identical(_presence, value)) return;
+    if (attached) _presence.removeListener(_onTick);
+    _presence = value;
+    if (attached) _presence.addListener(_onTick);
     _onTick();
   }
 
@@ -1187,7 +1185,7 @@ class _RenderSliverRevealLayer extends RenderProxySliver {
   bool _partial = false;
 
   double _alphaAt(double u) =>
-      SkeletonReveal.incomingOpacityAt(_opacity.value, u, sweep: _sweep);
+      SkeletonReveal.incomingOpacityAt(_presence.value, u, sweep: _sweep);
   bool get _fullyOpaque => _alphaAt(0) >= 1 && _alphaAt(1) >= 1;
   bool get _fullyClear => _alphaAt(0) <= 0 && _alphaAt(1) <= 0;
 
@@ -1203,13 +1201,13 @@ class _RenderSliverRevealLayer extends RenderProxySliver {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _opacity.addListener(_onTick);
+    _presence.addListener(_onTick);
     _partial = !_fullyOpaque && !_fullyClear;
   }
 
   @override
   void detach() {
-    _opacity.removeListener(_onTick);
+    _presence.removeListener(_onTick);
     super.detach();
   }
 
@@ -1248,7 +1246,7 @@ class _RenderSliverRevealLayer extends RenderProxySliver {
       return;
     }
     _opacityLayer.layer = null;
-    final stops = SkeletonReveal.sweepStops(_opacity.value);
+    final stops = SkeletonReveal.sweepStops(_presence.value);
     final size = Size(constraints.crossAxisExtent, geometry!.paintExtent);
     final shader = LinearGradient(
       colors: [
