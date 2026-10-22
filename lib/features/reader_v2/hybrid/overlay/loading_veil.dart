@@ -53,14 +53,6 @@ class LoadingVeilController {
   final AnimationController _cover;
   final AnimationController _skeleton;
   final AnimationController _pulse;
-  late final Animation<double> _coverCurve = CurvedAnimation(
-    parent: _cover,
-    curve: AppMotion.fadeCurve,
-  );
-  late final Animation<double> _skeletonCurve = CurvedAnimation(
-    parent: _skeleton,
-    curve: AppMotion.fadeCurve,
-  );
   int _attachedVeils = 0;
   bool _reduceMotion = false;
 
@@ -294,8 +286,8 @@ class _LoadingVeilState extends State<LoadingVeil> {
       child: CustomPaint(
         size: Size.infinite,
         painter: _LoadingVeilPainter(
-          cover: controller._coverCurve,
-          skeleton: controller._skeletonCurve,
+          cover: controller._cover,
+          skeleton: controller._skeleton,
           pulse: controller._pulse,
           look: SkeletonLook.of(context),
           breathSpan: () {
@@ -334,6 +326,8 @@ class _LoadingVeilPainter extends CustomPainter {
     required this.textColor,
   }) : super(repaint: Listenable.merge([cover, skeleton, pulse]));
 
+  /// 紙與骨架出現的進度：經過的時間比例，不套曲線。整頁淡時在這裡套
+  /// [AppMotion.fadeCurve]，由左而右時交給 [SkeletonReveal] 每個位置各自套。
   final Animation<double> cover;
   final Animation<double> skeleton;
 
@@ -358,13 +352,14 @@ class _LoadingVeilPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final coverStrength = cover.value;
-    if (coverStrength <= 0) return;
+    final cover = this.cover.value;
+    if (cover <= 0) return;
+    final coverStrength = AppMotion.fadeCurve.transform(cover);
     // 由左而右掀紙時，紙與骨架在每個橫向位置各自淡出：濃度是 1 減該處
     // 正文的濃度。
-    final sweeping = sweep() && coverStrength < 1;
+    final sweeping = sweep() && cover < 1;
     final stops = sweeping
-        ? SkeletonReveal.sweepStops(1 - coverStrength)
+        ? SkeletonReveal.sweepStops(1 - cover)
         : const <(double, double)>[];
     Paint shade(Color color, double strength) {
       if (!sweeping) {
@@ -387,7 +382,9 @@ class _LoadingVeilPainter extends CustomPainter {
       shade(backgroundColor, sweeping ? 1 : coverStrength),
     );
 
-    final strength = skeleton.value * (sweeping ? 1 : coverStrength);
+    final strength =
+        AppMotion.fadeCurve.transform(skeleton.value) *
+        (sweeping ? 1 : coverStrength);
     if (strength <= 0) return;
     final lines = this.lines;
     if (lines == null) return;
@@ -406,8 +403,7 @@ class _LoadingVeilPainter extends CustomPainter {
             SkeletonReveal.incomingOpacityAt(skeleton.value, u);
       }
       if (sweeping) {
-        return strength *
-            (1 - SkeletonReveal.incomingOpacityAt(1 - coverStrength, u));
+        return strength * (1 - SkeletonReveal.incomingOpacityAt(1 - cover, u));
       }
       return strength;
     }
@@ -423,8 +419,8 @@ class _LoadingVeilPainter extends CustomPainter {
                 look.breath,
               )
             : 1);
-    // 沿橫向會變的有：骨架長出來、掀紙與由左而右的呼吸。換場的濃度在
-    // 轉折點之間是直線，取轉折點就好；呼吸是曲線，每 1/32 個寬度取一點。
+    // 沿橫向會變的有：骨架長出來、掀紙與由左而右的呼吸。換場取
+    // [SkeletonReveal.sweepStops] 的停點；呼吸每 1/32 個寬度取一點。
     final breathSweeps = breathing && look.breath.lag > 0;
     final points = <double>{0, 1};
     if (growing) {

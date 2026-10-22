@@ -36,19 +36,19 @@ class LaunchEntrance extends StatefulWidget {
 
 /// 進場各部分的進度，0 還沒出現、1 到位。
 class LaunchEntranceMotion {
-  LaunchEntranceMotion._(this._controller, {required this.sweep}) {
-    skeleton = CurvedAnimation(parent: _controller, curve: AppMotion.fadeCurve);
-  }
+  LaunchEntranceMotion._(this._controller, {required this.sweep});
 
   final AnimationController _controller;
 
-  /// 骨架出現；完成時才讀進書架的內容。
-  late final Animation<double> skeleton;
+  /// 骨架出現的進度（經過的時間比例，曲線由 [SkeletonReveal] 套）；完成時才
+  /// 讀進書架的內容。
+  Animation<double> get skeleton => _controller;
 
   /// 骨架出現是不是由左而右。
   final bool sweep;
 
-  /// 書架換成內容的進度（套過曲線）：書架開始換場前是 0，換完之後一直是 1。
+  /// 書架換成內容的進度（經過的時間比例）：書架開始換場前是 0，換完之後
+  /// 一直是 1。
   /// 由書架的 `SkeletonSwitcher` 用 [revealWith] 接上。
   Animation<double> get reveal => _reveal;
   final ProxyAnimation _reveal = ProxyAnimation(kAlwaysDismissedAnimation);
