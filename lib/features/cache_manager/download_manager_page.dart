@@ -202,6 +202,8 @@ class DownloadManagerPage extends StatelessWidget {
     int index,
     int taskCount,
   ) => Selector<DownloadService, (bool, int, int, int, int, String?)>(
+    // 列的狀態跟著書走，上移、下移時整列一起搬。
+    key: ValueKey(task.bookUrl),
     // 任務是可變物件，取值而不是取物件本身，才能辨認哪一列有變。
     selector: (_, service) => (
       service.isPaused,

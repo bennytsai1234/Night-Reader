@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:night_reader/core/database/app_database.dart';
@@ -147,6 +149,48 @@ void main() {
       );
     }
     expect(find.bySemanticsLabel('書源0 啟用'), findsOneWidget);
+  });
+
+  testWidgets('不在多選時看不到勾選圈', (tester) async {
+    // 勾選圈在槽外溢出，看得到多寬取決於它和列之間的裁切。
+    double visibleCircleWidth() {
+      final tile = find.byType(SourceItemTile).first;
+      final circle = tester.renderObject<RenderBox>(
+        find.descendant(
+          of: tile,
+          matching: find.byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_SelectionCircle',
+          ),
+        ),
+      );
+      final tileBox = tester.renderObject(tile);
+      var visible = circle.localToGlobal(Offset.zero) & circle.size;
+      for (var node = circle.parent; node != null && node != tileBox;) {
+        if (node is RenderClipRect) {
+          visible = visible.intersect(
+            node.localToGlobal(Offset.zero) & node.size,
+          );
+        }
+        node = node.parent;
+      }
+      return math.max(0, visible.width);
+    }
+
+    await pumpPage(tester);
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), 0);
+
+    final provider = Provider.of<SourceManagerProvider>(
+      tester.element(find.text('書源0')),
+      listen: false,
+    );
+    provider.toggleSelect('https://s0.example');
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), greaterThan(0));
+
+    provider.clearSelection();
+    await tester.pumpAndSettle();
+    expect(visibleCircleWidth(), 0);
   });
 
   testWidgets('搜尋框只多空白時不重新建立相同的書源清單', (tester) async {

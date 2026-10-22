@@ -237,20 +237,24 @@ class _SourceRowContent extends StatelessWidget {
         children: [
           // 編輯模式的勾選圈從左側滑入。
           // 彈簧收回時會越過寬度 0；AnimatedSize 在排版時照約束定出尺寸，
-          // 越過的部分自然停在 0，展開那側的回彈照舊。它也負責裁切。
-          AnimatedSize(
-            duration: AppMotion.spring,
-            curve: AppMotion.springCurve,
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: editing ? _kCheckSlotWidth : 0,
-              child: OverflowBox(
-                // 列表列的高度不設上限，預設的 max 會把高度撐成無限大。
-                fit: OverflowBoxFit.deferToChild,
-                alignment: Alignment.centerLeft,
-                minWidth: _kCheckSlotWidth,
-                maxWidth: _kCheckSlotWidth,
-                child: _SelectionCircle(selected: isSelected),
+          // 越過的部分自然停在 0，展開那側的回彈照舊。AnimatedSize 只在
+          // 自己比子元件小時裁切，收合時子元件寬 0、勾選圈從 OverflowBox
+          // 溢出，所以裁切由外層 ClipRect 照槽目前的寬度負責。
+          ClipRect(
+            child: AnimatedSize(
+              duration: AppMotion.spring,
+              curve: AppMotion.springCurve,
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: editing ? _kCheckSlotWidth : 0,
+                child: OverflowBox(
+                  // 列表列的高度不設上限，預設的 max 會把高度撐成無限大。
+                  fit: OverflowBoxFit.deferToChild,
+                  alignment: Alignment.centerLeft,
+                  minWidth: _kCheckSlotWidth,
+                  maxWidth: _kCheckSlotWidth,
+                  child: _SelectionCircle(selected: isSelected),
+                ),
               ),
             ),
           ),
