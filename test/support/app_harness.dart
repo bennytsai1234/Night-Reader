@@ -241,12 +241,13 @@ Future<void> seedLibrary({bool withContent = true}) async {
   }
 }
 
-/// 整個 App（同 `main.dart` 的 runApp）。
+/// 整個 App（同 `main.dart` 的 runApp），等開 App 的進場播完：骨架長出
+/// 0.6 秒、停 0.8 秒、換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。
 Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
     MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
   );
-  await settle(tester);
+  await settle(tester, const Duration(seconds: 3));
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進
