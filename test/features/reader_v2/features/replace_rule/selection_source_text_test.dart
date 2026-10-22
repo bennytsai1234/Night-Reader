@@ -2,15 +2,19 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/engine/reader/chinese_text_converter.dart';
+import 'package:night_reader/core/models/book.dart';
+import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/core/services/chinese_utils.dart';
+import 'package:night_reader/features/reader_v2/chapter/reader_v2_content.dart';
 import 'package:night_reader/features/reader_v2/chapter/reader_v2_content_transformer.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/selection_source_text.dart';
 
-/// 選字「隱藏」要用原文建規則：畫面上的字是原文經過排版整理（與繁簡轉換）
-/// 的結果，這裡用真的整理程式產生畫面上的字，再確認找回來的原文當成規則
-/// 能把原文那一段刪掉。
+/// 選字「隱藏」的契約：用真的內容轉換流程排出畫面上的段落，選其中一段的
+/// 字，找回原文建成規則接在既有規則之後，再排一次，那一段只少了選到的字，
+/// 其他段落不受影響。
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
     ChineseUtils.initializeFromDictionaryData([
       for (final path in ChineseUtils.dictionaryAssetPaths)
@@ -18,58 +22,182 @@ void main() {
     ]);
   });
 
-  String hide(String raw, String shown) {
-    final pattern = findSourceText(
-      source: raw,
-      shown: shown,
-      toSimplified: ChineseUtils.t2s,
+  final book = Book(
+    bookUrl: 'http://hide.test',
+    name: '隱藏測試書',
+    origin: 'http://source.test',
+  )..readConfig = ReadConfig(useReplaceRule: true);
+
+  Future<List<String>> shown(
+    String raw, {
+    required String title,
+    List<ReplaceRule> rules = const <ReplaceRule>[],
+    int convert = 0,
+  }) async {
+    final result = await ReaderV2ContentTransformWorker.instance.process({
+      'chapterIndex': 0,
+      'bookName': book.name,
+      'bookOrigin': book.origin,
+      'chapterTitle': title,
+      'rawContent': raw,
+      'rulesJson': rules.map((rule) => rule.toJson()).toList(),
+      'useReplaceRules': true,
+      'reSegmentEnabled': false,
+      'chineseConvertType': 0,
+    });
+    // worker 拿不到 rootBundle 的字典，轉換照它的做法在這裡做。
+    final content = const ChineseTextConverter().convert(
+      result['content']! as String,
+      convertType: convert,
     );
-    expect(pattern, isNotNull, reason: '找不到「$shown」的原文');
-    return ReplaceRule(
-      pattern: pattern!,
-      replacement: '',
-      isRegex: false,
-    ).apply(raw);
+    return ReaderV2Content.fromRaw(
+      chapterIndex: 0,
+      title: '',
+      rawText: content,
+    ).paragraphs;
   }
 
-  test('半形標點與中文之間的空白排版後不同，仍找得到原文', () {
-    const raw = '他走了。請記住本站網址: www.Example.com ,最快更新!下一句';
-    final display = normalizeTypography(raw);
-    expect(display, isNot(contains(': www')));
-    final start = display.indexOf('請記住');
-    final end = display.indexOf('下一句');
-    expect(hide(raw, display.substring(start, end)), '他走了。下一句');
-  });
-
-  test('刪節號與破折號排版後長度不同，仍找得到原文', () {
-    const raw = '她說...本章未完--請翻頁。';
-    final display = normalizeTypography(raw);
-    expect(display, contains('……'));
-    expect(display, contains('——'));
-    expect(hide(raw, display.substring(2)), '她說');
-  });
-
-  test('開了簡轉繁時，畫面上的繁體字找得到簡體原文', () {
-    const raw = '正文。本章未完，请点击下一页继续阅读。正文';
-    final display = const ChineseTextConverter().convert(
-      normalizeTypography(raw),
-      convertType: 1,
+  /// 選第 [paragraph] 段裡的 [text]（段內第 [occurrence] 個），隱藏後重排。
+  Future<List<String>> hide(
+    String raw, {
+    required int paragraph,
+    required String text,
+    int occurrence = 0,
+    String title = '第一章',
+    List<ReplaceRule> rules = const <ReplaceRule>[],
+    int convert = 0,
+  }) async {
+    final before = await shown(
+      raw,
+      title: title,
+      rules: rules,
+      convert: convert,
     );
-    expect(display, contains('請點擊下一頁'));
-    final start = display.indexOf('本章');
-    final end = display.lastIndexOf('正文');
-    expect(hide(raw, display.substring(start, end)), '正文。正文');
+    final line = before[paragraph];
+    var start = -1;
+    for (var i = 0; i <= occurrence; i += 1) {
+      start = line.indexOf(text, start + 1);
+    }
+    expect(start, isNonNegative, reason: '第 $paragraph 段沒有「$text」');
+    final sources = await ReaderV2ContentTransformer.ruleStageParagraphs(
+      book: book,
+      chapter: BookChapter(url: 'c', title: title),
+      rawContent: raw,
+      enabledRules: rules,
+    );
+    expect(sources, hasLength(before.length));
+    final source = sources[paragraph];
+    final range = sourceRangeOf(
+      source: source,
+      shown: line,
+      start: start,
+      end: start + text.length,
+    );
+    expect(range, isNotNull, reason: '「$text」對不回原文「$source」');
+    final rule = ReplaceRule(
+      pattern: source.substring(range!.start, range.end),
+      replacement: '',
+      isRegex: false,
+      order: 99,
+    );
+    return shown(raw, title: title, rules: [...rules, rule], convert: convert);
+  }
+
+  test('半形標點與中文之間的空白排版後不同，仍刪得掉', () async {
+    expect(
+      await hide(
+        '他走了。請記住本站網址: www.Example.com ,最快更新!下一句',
+        paragraph: 0,
+        text: '請記住本站網址：www.Example.com，最快更新！',
+      ),
+      ['他走了。下一句'],
+    );
   });
 
-  test('只選括號裡外的字，不多吃前面的句號', () {
-    const raw = '正文。【广告】正文';
-    final display = normalizeTypography(raw);
-    final start = display.indexOf('广告') - 1;
-    expect(hide(raw, display.substring(start, start + 4)), '正文。正文');
+  test('刪節號與破折號排版後長度不同，仍刪得掉', () async {
+    expect(await hide('她說...本章未完--請翻頁。', paragraph: 0, text: '……本章未完——請翻頁。'), [
+      '她說',
+    ]);
   });
 
-  test('原文裡沒有、或只選到空白時找不到', () {
-    expect(findSourceText(source: '甲乙丙', shown: '丁'), isNull);
-    expect(findSourceText(source: '甲乙丙', shown: '　 '), isNull);
+  test('開了簡轉繁，詞組轉換過的字也對得回簡體原文', () async {
+    expect(await hide('一目了然。广告词。', paragraph: 0, text: '一目瞭然。', convert: 1), [
+      '廣告詞。',
+    ]);
+  });
+
+  test('只刪選到的那一段，大小寫不同的字不受影響', () async {
+    expect(await hide('正文ad仍有用。\n正文AD應隱藏。', paragraph: 1, text: 'AD'), [
+      '正文ad仍有用。',
+      '正文應隱藏。',
+    ]);
+  });
+
+  test('不同的符號不會被當成同一個', () async {
+    expect(await hide('正文😀仍有用。\n正文🚫應隱藏。', paragraph: 1, text: '🚫'), [
+      '正文😀仍有用。',
+      '正文應隱藏。',
+    ]);
+  });
+
+  test('排版成一樣的括號，刪的是選到那段的原文', () async {
+    expect(await hide('正文「廣告」仍有用。\n正文【廣告】應隱藏。', paragraph: 1, text: '「廣告」'), [
+      '正文「廣告」仍有用。',
+      '正文應隱藏。',
+    ]);
+  });
+
+  test('只選連續標點的一部分，不多刪沒選到的', () async {
+    expect(await hide('甲——乙', paragraph: 0, text: '—乙'), ['甲—']);
+    // 刪完剩下的「甲…」排版時又補成「……」，所以直接看規則取到的範圍。
+    expect(sourceRangeOf(source: '甲……乙', shown: '甲……乙', start: 2, end: 4), (
+      start: 2,
+      end: 4,
+    ));
+  });
+
+  test('排版刪掉標點之間的空白，仍刪得掉', () async {
+    expect(await hide('甲。 。乙丙', paragraph: 0, text: '。。乙'), ['甲丙']);
+  });
+
+  test('既有規則改過的字，用改過之後的樣子建規則', () async {
+    final colon = ReplaceRule(
+      pattern: ':',
+      replacement: '：',
+      isRegex: false,
+      order: 1,
+    );
+    expect(
+      await hide('正文。廣告:內容。正文', paragraph: 0, text: '廣告：內容。', rules: [colon]),
+      ['正文。正文'],
+    );
+  });
+
+  test('開頭重複的章名不算，選到正文裡同樣的字照樣刪', () async {
+    expect(
+      await hide(
+        '第一章  廣告\n正文\n第一章廣告',
+        paragraph: 1,
+        text: '第一章廣告',
+        title: '第一章 廣告',
+      ),
+      ['正文'],
+    );
+  });
+
+  test('原文行首的空白不影響對到哪一段', () async {
+    expect(await hide('正文廣\n  告。\n正文廣告。', paragraph: 2, text: '廣告'), [
+      '正文廣',
+      '告。',
+      '正文。',
+    ]);
+  });
+
+  test('只選到空白，或排版改了字數對不齊時回傳 null', () {
+    expect(
+      sourceRangeOf(source: '甲 乙', shown: '甲　乙', start: 1, end: 2),
+      isNull,
+    );
+    expect(sourceRangeOf(source: '甲乙', shown: '甲乙丙', start: 0, end: 1), isNull);
   });
 }

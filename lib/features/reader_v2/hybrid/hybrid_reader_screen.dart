@@ -73,9 +73,9 @@ class HybridReaderScreen extends StatefulWidget {
   /// 既有選取。
   final bool textSelectionEnabled;
 
-  /// 選字選單的「隱藏」：把第 chapterIndex 章選到的字交給上層新增替換
-  /// 規則；沒給就不顯示這個按鈕。
-  final void Function(int chapterIndex, String text)? onHideText;
+  /// 選字選單的「隱藏」：把選到的字（連同所在段落與段內位置）交給上層
+  /// 新增替換規則；沒給就不顯示這個按鈕。
+  final ValueChanged<ParagraphSelection>? onHideText;
 
   /// 朗讀高亮與選字反白的顏色；[highlightStrength] 只套在朗讀高亮，選字
   /// 反白固定深淺以保持可辨識。
@@ -1887,10 +1887,7 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
             caretAt: _selectionCaretAt,
             onHide: widget.onHideText == null
                 ? null
-                : (selection) => widget.onHideText!(
-                    selection.chapterIndex,
-                    selection.text,
-                  ),
+                : (selection) => widget.onHideText!(selection.inParagraph),
             highlightColor: widget.highlightColor,
             child: ReaderV2PointerTapLayer(
               onTapUp: widget.onContentTapUp == null

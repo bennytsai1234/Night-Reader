@@ -4,6 +4,15 @@ import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 
 enum SelectionEdge { start, end }
 
+/// 一段選取在它所在正文段落裡的位置（見 [ReaderTextSelection.inParagraph]）。
+typedef ParagraphSelection = ({
+  int chapterIndex,
+  int paragraphIndex,
+  String paragraph,
+  int start,
+  int end,
+});
+
 /// 正文上的一段選取。offset 是章內 displayText 的 UTF-16 位置，範圍不會
 /// 超出長按時那個來源段落 [paragraph]。
 final class ReaderTextSelection {
@@ -25,6 +34,18 @@ final class ReaderTextSelection {
   int get chapterIndex => blocks.chapterIndex;
 
   String get text => blocks.displayText.substring(range.start, range.end);
+
+  /// 選取落在第幾段正文（`ReaderV2Content.paragraphs` 的序號）、那一段的字，
+  /// 與選取在段內的位置；交給上層對回原文。
+  ParagraphSelection get inParagraph => (
+    chapterIndex: chapterIndex,
+    paragraphIndex: blocks.blocks
+        .firstWhere((block) => block.charRange.start == paragraph.start)
+        .sourceParagraphIndex,
+    paragraph: blocks.displayText.substring(paragraph.start, paragraph.end),
+    start: range.start - paragraph.start,
+    end: range.end - paragraph.start,
+  );
 
   /// 把 [edge] 拖到 [offset]。夾在段落內；越過另一端時兩端互換，且至少
   /// 保留一個字。回傳新選取與目前拖動中的那一端。

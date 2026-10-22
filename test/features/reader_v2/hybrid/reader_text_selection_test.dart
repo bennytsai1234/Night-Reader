@@ -336,6 +336,13 @@ void main() {
       await tester.pump();
 
       expect(hidden?.text, '城門');
+      expect(hidden?.inParagraph, (
+        chapterIndex: 0,
+        paragraphIndex: 0,
+        paragraph: '天色漸暗，城門即將關閉。',
+        start: 5,
+        end: 7,
+      ));
       expect(service.active, isFalse);
     });
 

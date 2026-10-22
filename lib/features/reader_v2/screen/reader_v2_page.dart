@@ -391,8 +391,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
                   !_host.menu.controlsVisible &&
                   !(_host.autoPage?.isRunning ?? false) &&
                   !(_host.tts?.isPlaying ?? false),
-              onHideText: (chapterIndex, text) =>
-                  unawaited(_coordinator.hideText(chapterIndex, text)),
+              onHideText: (selection) =>
+                  unawaited(_coordinator.hideText(selection)),
               highlightColor: _host.settings.highlightColor.resolve(palette),
               highlightStrength: _host.settings.highlightStrength,
               // 選單開著時，點正文只收起選單（由選單的收起層處理）。

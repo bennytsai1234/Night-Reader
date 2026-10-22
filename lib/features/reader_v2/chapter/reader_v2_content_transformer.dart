@@ -690,23 +690,10 @@ class ReaderV2ContentTransformer {
     final bookOrigin = args['bookOrigin'] as String? ?? '';
     final chapterTitle = args['chapterTitle'] as String? ?? '';
     final rawContent = args['rawContent'] as String? ?? '';
-    final rulesJson = (args['rulesJson'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>();
     final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
     final reSegmentEnabled = args['reSegmentEnabled'] as bool? ?? true;
-    final rules =
-        rulesJson
-            .map(ReplaceRule.fromJson)
-            .where((rule) => rule.isEnabled)
-            .toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
-
-    final titleRules = rules
-        .where(
-          (rule) =>
-              rule.appliesToTitle(bookName: bookName, bookOrigin: bookOrigin),
-        )
-        .toList(growable: false);
+    final rules = _rulesFrom(args);
+    final titleRules = _titleRulesOf(rules, bookName, bookOrigin);
     final content = _processContent(
       bookName: bookName,
       bookOrigin: bookOrigin,
@@ -726,7 +713,116 @@ class ReaderV2ContentTransformer {
     return <String, Object?>{'displayTitle': displayTitle, 'content': content};
   }
 
+  /// 這一章正文的每一段在替換規則全部套用之後、排版整理之前的樣子，和
+  /// [ReaderV2Content.paragraphs] 一一對應。接在既有規則之後的新規則看到的
+  /// 就是這些字（選字「隱藏」用它找原文）。在另一個 isolate 處理，整章跑
+  /// 規則的正規表示式不佔畫面執行緒。
+  static Future<List<String>> ruleStageParagraphs({
+    required Book book,
+    required BookChapter chapter,
+    required String rawContent,
+    required List<ReplaceRule> enabledRules,
+  }) {
+    final args = <String, Object?>{
+      'bookName': book.name,
+      'bookOrigin': book.origin,
+      'chapterTitle': chapter.title,
+      'rawContent': rawContent,
+      'rulesJson': enabledRules.map((rule) => rule.toJson()).toList(),
+      'useReplaceRules': book.getUseReplaceRule(),
+      'reSegmentEnabled': book.getReSegment(),
+    };
+    return Isolate.run(() => _ruleStageParagraphsInBackground(args));
+  }
+
+  static List<String> _ruleStageParagraphsInBackground(
+    Map<String, Object?> args,
+  ) {
+    final bookName = args['bookName'] as String? ?? '';
+    final bookOrigin = args['bookOrigin'] as String? ?? '';
+    final chapterTitle = args['chapterTitle'] as String? ?? '';
+    final rules = _rulesFrom(args);
+    final useReplaceRules = args['useReplaceRules'] as bool? ?? true;
+    final content = _applyRules(
+      bookName: bookName,
+      bookOrigin: bookOrigin,
+      chapterTitle: chapterTitle,
+      rawContent: args['rawContent'] as String? ?? '',
+      rules: rules,
+      titleRules: _titleRulesOf(rules, bookName, bookOrigin),
+      useReplaceRules: useReplaceRules,
+      reSegmentEnabled: args['reSegmentEnabled'] as bool? ?? true,
+    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    // 排版整理逐行處理、不增減行，整理後是空白的行不成段。
+    final lines = content.split('\n');
+    final shown = normalizeTypography(content).split('\n');
+    return <String>[
+      for (var i = 0; i < lines.length; i += 1)
+        if (_paragraphOf(shown[i]).isNotEmpty) lines[i],
+    ];
+  }
+
+  static List<ReplaceRule> _rulesFrom(Map<String, Object?> args) {
+    final rulesJson = (args['rulesJson'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    return rulesJson
+        .map(ReplaceRule.fromJson)
+        .where((rule) => rule.isEnabled)
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  static List<ReplaceRule> _titleRulesOf(
+    List<ReplaceRule> rules,
+    String bookName,
+    String bookOrigin,
+  ) => rules
+      .where(
+        (rule) =>
+            rule.appliesToTitle(bookName: bookName, bookOrigin: bookOrigin),
+      )
+      .toList(growable: false);
+
+  static String _paragraphOf(String line) =>
+      line.trim().replaceAll('\u00A0', ' ');
+
   static String _processContent({
+    required String bookName,
+    required String bookOrigin,
+    required String chapterTitle,
+    required String rawContent,
+    required List<ReplaceRule> rules,
+    required List<ReplaceRule> titleRules,
+    required bool useReplaceRules,
+    required bool reSegmentEnabled,
+  }) {
+    final content = normalizeTypography(
+      _applyRules(
+        bookName: bookName,
+        bookOrigin: bookOrigin,
+        chapterTitle: chapterTitle,
+        rawContent: rawContent,
+        rules: rules,
+        titleRules: titleRules,
+        useReplaceRules: useReplaceRules,
+        reSegmentEnabled: reSegmentEnabled,
+      ),
+    );
+
+    final paragraphs = <String>[];
+    const indent = '　　';
+    for (final line in content.split('\n')) {
+      final paragraph = _paragraphOf(line);
+      if (paragraph.isNotEmpty) {
+        paragraphs.add('$indent$paragraph');
+      }
+    }
+
+    return paragraphs.join('\n');
+  }
+
+  /// 去掉開頭重複的章名、重新分段、每行 trim 並套用替換規則；排版整理之前。
+  static String _applyRules({
     required String bookName,
     required String bookOrigin,
     required String chapterTitle,
@@ -799,18 +895,7 @@ class ReaderV2ContentTransformer {
       }
     }
 
-    content = normalizeTypography(content);
-
-    final paragraphs = <String>[];
-    const indent = '　　';
-    for (final line in content.split('\n')) {
-      final paragraph = line.trim().replaceAll('\u00A0', ' ');
-      if (paragraph.isNotEmpty) {
-        paragraphs.add('$indent$paragraph');
-      }
-    }
-
-    return paragraphs.join('\n');
+    return content;
   }
 
   static String _reSegment(String content) {
