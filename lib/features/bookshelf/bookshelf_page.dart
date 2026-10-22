@@ -395,7 +395,7 @@ class _BookshelfPageState extends State<BookshelfPage>
           empty &&
               (provider.isLoading || _hasSources == null && !_contentShown) ||
           !_contentShown && !ChineseDisplay.readyOf(context),
-      waitForCovers: true,
+      waitForCovers: CoverWait.onDevice,
       entrance: LaunchEntrance.maybeOf(context),
       // 書架直接畫在頁面底色上：換場只遮骨架一層（ADR 0029）。
       backdrop: Theme.of(context).scaffoldBackgroundColor,
@@ -800,7 +800,9 @@ class _BookshelfPageState extends State<BookshelfPage>
         placeholder: const SizedBox(
           height: BookshelfListCard.coverHeight + AppSpacing.md * 2,
         ),
-        // 書架重讀時只有這本書看得到的內容變了才重建這張書卡。
+        // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、長按
+        // 在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位可能已經
+        // 換過）。
         child: ValueListenableBuilder<Book>(
           valueListenable: provider.bookListenable(shown),
           builder: (context, book, _) => _UpdateBadgeOf(
@@ -811,10 +813,17 @@ class _BookshelfPageState extends State<BookshelfPage>
               updateBadge: selecting ? null : badge,
               selecting: selecting,
               selected: _selectedUrls.contains(book.bookUrl),
-              onTap: () => selecting ? _toggleSelected(book) : _openBook(book),
+              onTap: () => selecting
+                  ? _toggleSelected(book)
+                  : _openBook(provider.current(book)),
               onLongPress: selecting || reorderable
                   ? null
-                  : (rect) => _showBookMenu(provider, book, rect, grid: false),
+                  : (rect) => _showBookMenu(
+                      provider,
+                      provider.current(book),
+                      rect,
+                      grid: false,
+                    ),
             ),
           ),
         ),
@@ -858,7 +867,9 @@ class _BookshelfPageState extends State<BookshelfPage>
           id: shown.bookUrl,
           motion: _motion,
           child: CoverRevealSlot(
-            // 書架重讀時只有這本書看得到的內容變了才重建這張書卡。
+            // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、
+            // 長按在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位
+            // 可能已經換過）。
             child: ValueListenableBuilder<Book>(
               valueListenable: provider.bookListenable(shown),
               builder: (context, book, _) => _UpdateBadgeOf(
@@ -869,12 +880,17 @@ class _BookshelfPageState extends State<BookshelfPage>
                   updateBadge: badge,
                   selecting: _isMultiSelect,
                   selected: _selectedUrls.contains(book.bookUrl),
-                  onTap: () =>
-                      _isMultiSelect ? _toggleSelected(book) : _openBook(book),
+                  onTap: () => _isMultiSelect
+                      ? _toggleSelected(book)
+                      : _openBook(provider.current(book)),
                   onLongPress: _isMultiSelect
                       ? null
-                      : (rect) =>
-                            _showBookMenu(provider, book, rect, grid: true),
+                      : (rect) => _showBookMenu(
+                          provider,
+                          provider.current(book),
+                          rect,
+                          grid: true,
+                        ),
                 ),
               ),
             ),

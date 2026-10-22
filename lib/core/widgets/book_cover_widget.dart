@@ -38,17 +38,6 @@ class BookCoverWidget extends StatefulWidget {
   /// 只是一時逾時；每次新搜尋都重來一次，不會整個 App 開著都不再試。
   static void forgetFailedCovers() => _failedCoverSources.clear();
 
-  /// 網路封面是不是已經存在手機裡（磁碟快取）：書架換場等它畫得出來，要
-  /// 上網抓的不等（[CoverReveal]）。查不到或出錯都算不在。測試可以換掉。
-  @visibleForTesting
-  static Future<bool> Function(String url) isOnDevice = _inDiskCache;
-
-  static Future<bool> _inDiskCache(String url) async =>
-      await CachedNetworkImageProvider.defaultCacheManager.getFileFromCache(
-        url,
-      ) !=
-      null;
-
   @override
   State<BookCoverWidget> createState() => _BookCoverWidgetState();
 }
@@ -310,10 +299,10 @@ class _CoverImageState extends State<_CoverImage> {
   /// 拿掉。
   CoverReveal? _waitingOn;
 
-  /// 網路封面是不是已經存在手機裡；null 是還在查。不在手機裡的要上網抓，
-  /// 換場不等它。
+  /// 網路封面是不是已經存在手機裡（磁碟快取）；null 是還沒查或還在查。
+  /// 只在 [CoverWait.onDevice] 的等待裡查：不在手機裡的要上網抓，換場不等它。
   bool? _onDevice;
-  String? _checkedSource;
+  bool _checking = false;
 
   @override
   void dispose() {
@@ -321,31 +310,43 @@ class _CoverImageState extends State<_CoverImage> {
     super.dispose();
   }
 
-  /// 這張封面還畫不出來，換場要等它。
-  void _register(CoverReveal? reveal) {
-    if (reveal == null || identical(_waitingOn, reveal)) return;
+  /// 這張封面還畫不出來，換場要等它。[network] 的封面在
+  /// [CoverWait.onDevice] 的等待裡，查到不在手機裡就不等。
+  void _register(CoverReveal? reveal, {bool network = false}) {
+    if (reveal == null) return;
+    if (network && reveal.wait == CoverWait.onDevice) {
+      if (_onDevice == false) return;
+      _checkOnDevice(widget.source!);
+    }
+    if (identical(_waitingOn, reveal)) return;
     _unregister();
     _waitingOn = reveal..add(this);
   }
 
+  /// 畫得出來、失敗、改畫別的，或不再顯示：換場不再等這一張。每一條不等的
+  /// 路都要走到這裡，[CoverWait.onDevice] 沒有時間上限，漏一張整頁就停在
+  /// 骨架。
   void _unregister() {
     _waitingOn?.remove(this);
     _waitingOn = null;
   }
 
-  /// 網路封面第一次要畫時查一次是不是已經在手機裡。
+  /// 查一次這張網路封面是不是已經在手機裡（`CachedNetworkImageProvider`
+  /// 用的同一個磁碟快取）；查不到或出錯都算不在。
   void _checkOnDevice(String source) {
-    if (_checkedSource == source) return;
-    _checkedSource = source;
-    _onDevice = null;
-    BookCoverWidget.isOnDevice(source).then(
-      (onDevice) => _onDeviceChecked(source, onDevice),
-      onError: (Object _) => _onDeviceChecked(source, false),
-    );
+    if (_checking || _onDevice != null) return;
+    _checking = true;
+    CachedNetworkImageProvider.defaultCacheManager
+        .getFileFromCache(source)
+        .then(
+          (file) => _onDeviceChecked(file != null),
+          onError: (Object _) => _onDeviceChecked(false),
+        );
   }
 
-  void _onDeviceChecked(String source, bool onDevice) {
-    if (!mounted || _checkedSource != source) return;
+  void _onDeviceChecked(bool onDevice) {
+    _checking = false;
+    if (!mounted) return;
     _onDevice = onDevice;
     if (!onDevice) _unregister();
   }
@@ -361,12 +362,14 @@ class _CoverImageState extends State<_CoverImage> {
   Widget build(BuildContext context) {
     final source = widget.source;
     if (source == null) {
+      _unregister();
       onReady(null);
       return _buildDefaultCover();
     }
     if (_failed.contains(source)) {
       // 失敗過的不再重抓。剛才在這裡失敗、還在淡入的照原本的淡入接著播；
       // 之前就記下失敗的（新建的封面）直接畫。
+      _unregister();
       onReady(source);
       return _FadeInOnce(
         key: _fallbackKey,
@@ -434,8 +437,7 @@ class _CoverImageState extends State<_CoverImage> {
     }
 
     // 與檔案、記憶體封面走同一條淡入（[_fadeInFrame]）；磁碟快取照舊由
-    // CachedNetworkImageProvider 負責。換場只等已經存在手機裡的。
-    _checkOnDevice(source);
+    // CachedNetworkImageProvider 負責。
     return Image(
       image: ResizeImage.resizeIfNeeded(
         cacheWidth,
@@ -446,7 +448,7 @@ class _CoverImageState extends State<_CoverImage> {
       width: width,
       height: height,
       frameBuilder: (context, child, frame, sync) =>
-          _fadeInFrame(context, source, child, frame, sync),
+          _fadeInFrame(context, source, child, frame, sync, network: true),
       errorBuilder: (context, error, stackTrace) =>
           _buildFailedCover(context, source),
     );
@@ -472,12 +474,12 @@ class _CoverImageState extends State<_CoverImage> {
     String source,
     Widget child,
     int? frame,
-    bool wasSynchronouslyLoaded,
-  ) {
+    bool wasSynchronouslyLoaded, {
+    bool network = false,
+  }) {
     final reveal = CoverRevealScope.waitingOf(context);
     if (frame == null) {
-      // 網路封面查到不在手機裡就不等；還在查時先等。
-      if (_checkedSource != source || _onDevice != false) _register(reveal);
+      _register(reveal, network: network);
     } else {
       _unregister();
       onReady(source);

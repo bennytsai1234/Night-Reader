@@ -546,9 +546,8 @@ class SkeletonSwitcher extends StatefulWidget {
     required this.loading,
     required this.skeleton,
     required this.builder,
-    this.waitForCovers = false,
+    this.waitForCovers,
     this.entrance,
-    this.snapshot,
     this.backdrop,
     this.onRevealed,
     this.fit = StackFit.expand,
@@ -571,21 +570,16 @@ class SkeletonSwitcher extends StatefulWidget {
   /// 後面不是單一實色（例如半透明、漸層或圖片）時留 null，兩層各自淡入淡出。
   final Color? backdrop;
 
-  /// 資料到了先在骨架底下建好內容，等畫面上手機裡已經有的封面都畫得出來
+  /// 給了的話，資料到了先在骨架底下建好內容，照這個方式等畫面上的封面
   /// （[CoverReveal]），再連同封面一次換場；不會先出現空白的書卡、封面再
-  /// 一張張浮出來。
-  final bool waitForCovers;
+  /// 一張張浮出來。null 時不等。
+  final CoverWait? waitForCovers;
 
   /// 開 App 的進場（書架的骨架，見 [LaunchEntrance]）：骨架照它的進度、以
   /// 骨架換場的方式出現；這段期間資料到了也先不建內容、不換場，播完才接著
   /// 做（ADR 0018）。第一次換成內容時整個主頁面一起照兩張定格畫面換場
-  /// （[LaunchEntranceMotion.reveal]）。null 時骨架一開始就在。
+  /// （[LaunchEntranceMotion.reveal]，ADR 0031）。null 時骨架一開始就在。
   final LaunchEntranceMotion? entrance;
-
-  /// 換成內容時改成兩張定格畫面之間的換場（[SnapshotSweep]，範圍是它包住
-  /// 的整塊畫面）；重新載入時長回骨架照常兩層換場。開 App 的書架由
-  /// [entrance] 帶進來，不用給這個。
-  final SnapshotSweepController? snapshot;
 
   @override
   State<SkeletonSwitcher> createState() => _SkeletonSwitcherState();
@@ -670,8 +664,9 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   }
 
   void _onLoaded({bool duringBuild = false}) {
-    if (widget.waitForCovers) {
-      final reveal = _reveal = CoverReveal();
+    final wait = widget.waitForCovers;
+    if (wait != null) {
+      final reveal = _reveal = CoverReveal(wait);
       // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。建畫面途中歸零
       // 會在別人建構時通知聽換場進度的元件；先停住，這一幀畫完再歸零
       // （封面最快也要下一輪才等完）。
@@ -695,30 +690,27 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
 
   void _revealContent() {
     _prepare(SkeletonRevealSide.content);
-    final duration = _controller.duration!;
-    // 開 App 的第一次換場由進場整個畫面一起換；之後重新載入照 [snapshot]。
-    final entrance = widget.entrance?.revealStarted == false
-        ? widget.entrance
-        : null;
-    final snapshot = entrance?.screen ?? widget.snapshot;
-    if (snapshot == null) {
+    // 開 App 的第一次換場由進場整個畫面一起照兩張定格畫面換（ADR 0031）；
+    // 之後重新載入照常兩層換場。
+    final entrance = widget.entrance;
+    if (entrance == null || entrance.revealStarted) {
       _controller.forward();
       return;
     }
-    // 定格換場：拍下骨架畫面後內容一下就換好（這時螢幕上蓋著骨架那張圖），
-    // 換場由兩張圖混合播完。
-    _snapshotting = snapshot;
+    // 拍下骨架畫面後內容一下就換好（這時螢幕上蓋著骨架那張圖），換場由兩張
+    // 圖混合播完。
+    final snapshot = _snapshotting = entrance.screen;
     void showContent() {
-      if (mounted) _controller.value = 1;
+      if (mounted && identical(_snapshotting, snapshot) && !widget.loading) {
+        _controller.value = 1;
+      }
     }
 
-    final played = entrance != null
-        ? entrance.reveal(
-            change: showContent,
-            duration: duration,
-            sweep: _sweep,
-          )
-        : snapshot.play(change: showContent, duration: duration, sweep: _sweep);
+    final played = entrance.reveal(
+      change: showContent,
+      duration: _controller.duration!,
+      sweep: _sweep,
+    );
     unawaited(
       played.whenComplete(() {
         if (!mounted || !identical(_snapshotting, snapshot)) return;

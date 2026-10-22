@@ -7,7 +7,7 @@ import 'package:night_reader/shared/widgets/cover_reveal.dart';
 void main() {
   testWidgets('slots under a waiting reveal are built one per frame, and '
       'the wait ends only after all of them are', (tester) async {
-    final reveal = CoverReveal();
+    final reveal = CoverReveal(CoverWait.onDevice);
     addTearDown(reveal.dispose);
     await tester.pumpWidget(
       Directionality(
@@ -47,7 +47,7 @@ void main() {
 
   testWidgets('a single slot is still under the wait when it is built, so its '
       'cover holds the reveal', (tester) async {
-    final reveal = CoverReveal();
+    final reveal = CoverReveal(CoverWait.onDevice);
     addTearDown(reveal.dispose);
     bool? waitingWhenBuilt;
     await tester.pumpWidget(
@@ -85,7 +85,7 @@ void main() {
   testWidgets('a slot built after the wait ends is built right away', (
     tester,
   ) async {
-    final reveal = CoverReveal();
+    final reveal = CoverReveal(CoverWait.onDevice);
     addTearDown(reveal.dispose);
     // settle 要等一幀畫完。
     await tester.pumpWidget(const SizedBox.shrink());

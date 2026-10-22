@@ -63,16 +63,24 @@ class LaunchEntranceMotion {
   bool get revealStarted => _revealStarted;
   bool _revealStarted = false;
 
-  /// 整段進場（骨架出現到換成內容）已經結束。
-  bool get done => _finished.isCompleted;
+  /// 骨架長完之後至少停多久才換成內容：一個骨架呼吸（由深到淺一次，
+  /// [AppMotion.skeletonPulse]）。準備得比這久就等到準備好；使用者在候選
+  /// 動圖上選的（2026-10-23）：不固定的停頓短時，兩次由左而右的掃動像同一個
+  /// 動作中途頓住。
+  static const Duration pause = AppMotion.skeletonPulse;
+
+  /// 骨架長完、停過 [pause] 時完成；系統要求減少動態時不停。
+  Future<void> get _paused => _pauseOver.future;
+  final Completer<void> _pauseOver = Completer<void>();
 
   /// 整段進場結束時完成。
   Future<void> get finished => _finished.future;
   final Completer<void> _finished = Completer<void>();
 
-  /// 書架第一次換成內容：[change] 把書架換成內容，頁首按鈕、標題與分頁列
-  /// 同時換成真的，整個畫面照 [screen] 換場（[sweep] 時由左而右）；播完才算
-  /// 整段進場結束。之後再呼叫（書架重新載入）只做 [change]。
+  /// 書架第一次換成內容：骨架長完停過 [pause] 後，[change] 把書架換成內容，
+  /// 頁首按鈕、標題與分頁列同時換成真的，整個畫面照 [screen] 換場（[sweep]
+  /// 時由左而右）；播完才算整段進場結束。之後再呼叫（書架重新載入）只做
+  /// [change]。
   Future<void> reveal({
     required VoidCallback change,
     required Duration duration,
@@ -83,6 +91,7 @@ class LaunchEntranceMotion {
       return;
     }
     _revealStarted = true;
+    await _paused;
     await screen.play(
       duration: duration,
       sweep: sweep,
@@ -136,16 +145,30 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     );
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
+      motion._pauseOver.complete();
       return;
     }
+    // 骨架長完才開始算停頓；停頓用計時器，不靠哪一格畫完。
+    void onStatus(AnimationStatus status) {
+      if (!status.isCompleted) return;
+      _controller.removeStatusListener(onStatus);
+      _pause = Timer(LaunchEntranceMotion.pause, () {
+        if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
+      });
+    }
+
+    _controller.addStatusListener(onStatus);
     // 第一幀只畫底色、和系統啟動畫面一樣，畫完才開始進場。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _controller.forward();
     });
   }
 
+  Timer? _pause;
+
   @override
   void dispose() {
+    _pause?.cancel();
     _controller.dispose();
     _motion?._dispose();
     super.dispose();

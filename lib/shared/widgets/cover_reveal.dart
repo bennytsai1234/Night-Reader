@@ -4,16 +4,33 @@ import 'dart:collection';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../theme/app_tokens.dart';
+
+/// 換場前怎麼等封面（[SkeletonSwitcher.waitForCovers]）。
+enum CoverWait {
+  /// 畫面上的封面（網路的也算）最多等 [AppMotion.revealCoverWait]，還沒好的
+  /// 換場後各自淡入：發現的書單、分組清單、書源管理。
+  brief,
+
+  /// 手機裡已經有的封面全部畫得出來才換場，不設時間上限；要上網抓的網路
+  /// 封面不等：開 App 的書架（ADR 0031）。
+  onDevice,
+}
+
 /// 骨架換成內容前，等內容建好、裡面的封面畫得出來（[SkeletonSwitcher.waitForCovers]）。
 ///
 /// 內容先在骨架底下以全透明建好。較重的一塊（一張書卡，[CoverRevealSlot]）
 /// 排隊，一幀只建一塊：整頁擠在同一幀建完，骨架的呼吸會頓一下（ADR 0018）。
-/// 裡面手機上已經有的封面（`BookCoverWidget`）解碼前 [add]、解碼好、失敗或
-/// 不再顯示時 [remove]；要上網抓的封面不登記。[settle] 等排隊的都建好，
-/// 再等登記的封面都畫得出來才結束等待，整頁連同封面一次換場；不設時間
-/// 上限，每一個登記都一定會以解碼好、失敗或拆掉結束（ADR 0029）。等待中
-/// 解碼好的封面直接顯示，不另外淡入。
+/// 裡面的封面（`BookCoverWidget`）解碼前 [add]、解碼好、失敗或不再顯示時
+/// [remove]（[CoverWait.onDevice] 時要上網抓的封面不登記）。[settle] 等排隊的
+/// 都建好，再照 [wait] 等登記的封面，整頁連同封面一次換場。
+/// [CoverWait.onDevice] 不設時間上限：每一個登記都一定會以解碼好、失敗或
+/// 拆掉結束。等待中解碼好的封面直接顯示，不另外淡入。
 class CoverReveal extends ChangeNotifier {
+  CoverReveal(this.wait);
+
+  final CoverWait wait;
+
   final Set<Object> _pending = {};
   Completer<void>? _drained;
   bool _waiting = true;
@@ -68,7 +85,9 @@ class CoverReveal extends ChangeNotifier {
   }
 
   /// 等這一幀建好內容；排隊的一塊塊建完、封面都登記過，再等到登記的封面
-  /// 都畫得出來（或失敗、拆掉）。
+  /// 都畫得出來（或失敗、拆掉）；[CoverWait.brief] 最多等
+  /// [AppMotion.revealCoverWait]。排隊的不算在逾時裡：沒建完就換場會露出
+  /// 空格。
   Future<void> settle() async {
     await SchedulerBinding.instance.endOfFrame;
     // 看的是「還沒建好」而不是「還在排隊」：最後一塊放行後下一幀才建，它的
@@ -76,7 +95,14 @@ class CoverReveal extends ChangeNotifier {
     // 來的封面等待照樣等它。
     if (_unbuilt > 0) await (_allBuilt ??= Completer<void>()).future;
     if (_pending.isNotEmpty) {
-      await (_drained = Completer<void>()).future;
+      final drained = (_drained = Completer<void>()).future;
+      await switch (wait) {
+        CoverWait.brief => drained.timeout(
+          AppMotion.revealCoverWait,
+          onTimeout: () {},
+        ),
+        CoverWait.onDevice => drained,
+      };
     }
     _waiting = false;
     _pending.clear();

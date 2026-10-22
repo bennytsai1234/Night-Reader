@@ -223,7 +223,8 @@ void main() {
         await provider.loadBooks();
         var notified = 0;
         provider.addListener(() => notified++);
-        final first = provider.bookListenable(provider.books.first);
+        final firstShown = provider.books.first;
+        final first = provider.bookListenable(firstShown);
         final second = provider.bookListenable(provider.books.last);
         final cards = <String>[];
         first.addListener(() => cards.add(first.value.bookUrl));
@@ -234,7 +235,10 @@ void main() {
         await provider.loadBooks();
         expect(notified, 0, reason: '書架有書時不換回骨架，清單沒變不必讓整頁重建');
         expect(cards, isEmpty);
-        expect(first.value.lastCheckTime, 1, reason: '書卡手上仍是最新的那一本');
+        // 書卡沒重建，手上還是畫的時候那一本；按下去時拿的是書架上現在的。
+        final pressed = provider.current(firstShown);
+        expect(pressed, isNot(same(firstShown)));
+        expect(pressed.lastCheckTime, 1, reason: '點開、選單用的是最新的那一本');
 
         // 一本讀到下一章：只有那張書卡更新。
         final url = provider.books.last.bookUrl;
@@ -251,6 +255,33 @@ void main() {
         expect(notified, 1);
       },
     );
+
+    test('a reload that changes nothing still tells whoever waits that the '
+        'shelf has been read', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      await provider.loadBooks();
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      final reload = provider.loadBooks();
+      var loaded = false;
+      unawaited(provider.loaded.then((_) => loaded = true));
+      await reload;
+      await Future<void>.delayed(Duration.zero);
+      expect(notified, 0, reason: '清單沒變，不通知');
+      expect(loaded, isTrue, reason: '等讀完的照樣等得到');
+    });
+
+    test('changing the sort mode tells the page even when the order stays '
+        'the same', () async {
+      await bookDao.upsert(shelfBook('https://a.example/1'));
+      await provider.loadBooks();
+      var notified = 0;
+      provider.addListener(() => notified++);
+
+      await provider.setSortMode(BookshelfSortMode.custom);
+      expect(notified, 1, reason: '頁面照排序方式決定能不能拖曳');
+    });
 
     test('a check that ends after the provider is disposed stays '
         'quiet', () async {

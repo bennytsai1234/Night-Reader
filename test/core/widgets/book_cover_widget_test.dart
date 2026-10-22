@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file/local.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/core/widgets/default_book_cover.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
@@ -264,21 +269,36 @@ void main() {
   });
 
   group('waiting for a page of covers', () {
-    Widget page({required bool loading}) => MaterialApp(
+    // 網路封面讀的是 CachedNetworkImageProvider 的磁碟快取；換成假的，測試
+    // 決定哪些網址算已經在手機裡、什麼時候讀到（這個檔案裡其他測試不讀網路
+    // 封面，不必換回去）。
+    late _DiskCache cache;
+    setUp(
+      () =>
+          CachedNetworkImageProvider.defaultCacheManager = cache = _DiskCache(),
+    );
+
+    Widget page({
+      required bool loading,
+      CoverWait wait = CoverWait.onDevice,
+      List<String>? urls,
+    }) => MaterialApp(
       home: Scaffold(
         body: SkeletonSwitcher(
           loading: loading,
-          waitForCovers: true,
+          waitForCovers: wait,
           skeleton: const SkeletonBox(width: 40, height: 40),
           builder: (_) => Row(
             children: [
-              for (final url in [coverUrl, otherUrl])
+              for (final url in urls ?? [coverUrl, otherUrl])
                 BookCoverWidget(bookName: '書', coverUrl: url),
             ],
           ),
         ),
       ),
     );
+
+    const network = 'https://covers.example/a.jpg';
 
     double revealed(WidgetTester tester) => tester
         .widget<SkeletonRevealLayer>(find.byKey(const ValueKey('content')))
@@ -329,31 +349,97 @@ void main() {
       expect(find.byType(SkeletonBox), findsNothing);
     });
 
-    testWidgets('a network cover that is not on the phone does not hold it', (
-      tester,
-    ) async {
-      final previous = BookCoverWidget.isOnDevice;
-      BookCoverWidget.isOnDevice = (_) async => false;
-      addTearDown(() => BookCoverWidget.isOnDevice = previous);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SkeletonSwitcher(
-              loading: false,
-              waitForCovers: true,
-              skeleton: const SkeletonBox(width: 40, height: 40),
-              builder: (_) => const BookCoverWidget(
-                bookName: '書',
-                coverUrl: 'https://covers.example/never.jpg',
-              ),
-            ),
-          ),
-        ),
-      );
+    testWidgets('a network cover already in the disk cache holds the reveal '
+        'until it is drawn', (tester) async {
+      cache.onDevice[network] = Uri.parse(coverUrl).toFilePath();
+      await tester.pumpWidget(page(loading: true, urls: [network]));
+      await tester.pumpWidget(page(loading: false, urls: [network]));
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), 0, reason: '手機裡有的封面讀得再慢都等');
+
+      cache.release(network);
+      var started = false;
+      for (var i = 0; i < 200 && !started; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        started = revealed(tester) > 0;
+      }
+      expect(started, isTrue);
+      expect(allDrawn(), isTrue, reason: '換場開始時封面已經到位');
+    });
+
+    testWidgets('a network cover that is not on the phone does not hold the '
+        'shelf', (tester) async {
+      // 要上網抓：一直抓不到也不等。
+      await tester.pumpWidget(page(loading: true, urls: [network]));
+      await tester.pumpWidget(page(loading: false, urls: [network]));
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
       expect(revealed(tester), greaterThan(0), reason: '要上網抓的封面不等');
     });
+
+    testWidgets('other pages still wait briefly for any cover, network '
+        'included, and let it fade in later', (tester) async {
+      await tester.pumpWidget(
+        page(loading: true, wait: CoverWait.brief, urls: [network]),
+      );
+      await tester.pumpWidget(
+        page(loading: false, wait: CoverWait.brief, urls: [network]),
+      );
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), 0, reason: '最多等 0.3 秒，網路封面也等');
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(revealed(tester), greaterThan(0), reason: '0.3 秒到了就換場');
+    });
   });
+}
+
+/// 網路封面的磁碟快取：[onDevice] 裡的網址算已經存在手機裡；讀取（不論
+/// 從快取或網路）要等測試 [release] 才完成，不放行就一直讀不到。
+class _DiskCache implements BaseCacheManager {
+  /// 網址 → 快取檔案的路徑。
+  final Map<String, String> onDevice = {};
+  final Map<String, Completer<String>> _reads = {};
+
+  void release(String url) =>
+      (_reads[url] ??= Completer<String>()).complete(onDevice[url]);
+
+  FileInfo _info(String path, String url) => FileInfo(
+    const LocalFileSystem().file(path),
+    FileSource.Cache,
+    DateTime(2100),
+    url,
+  );
+
+  @override
+  Future<FileInfo?> getFileFromCache(
+    String key, {
+    bool ignoreMemCache = false,
+  }) async {
+    final path = onDevice[key];
+    return path == null ? null : _info(path, key);
+  }
+
+  @override
+  Stream<FileResponse> getFileStream(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+    bool withProgress = false,
+  }) async* {
+    final path = await (_reads[url] ??= Completer<String>()).future;
+    yield _info(path, url);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

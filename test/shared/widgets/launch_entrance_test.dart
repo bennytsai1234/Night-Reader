@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/floating_tab_bar.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
@@ -19,7 +20,7 @@ void main() {
   Widget host({
     required bool loading,
     Widget? later,
-    bool waitForCovers = false,
+    CoverWait? waitForCovers,
   }) => MaterialApp(
     theme: buildAppTheme(AppStyle.paper, Brightness.light),
     home: LaunchEntrance(
@@ -74,9 +75,6 @@ void main() {
     finished = 0;
   });
 
-  LaunchEntranceMotion motion(WidgetTester tester) =>
-      LaunchEntrance.maybeOf(tester.element(find.byType(Scaffold).first))!;
-
   /// 這一格畫面上有幾塊玻璃在取樣背景（真的畫出來的背景模糊）。
   int paintedGlass(WidgetTester tester) {
     var count = 0;
@@ -89,6 +87,25 @@ void main() {
 
     visit(tester.binding.renderViews.first.debugLayer);
     return count;
+  }
+
+  /// 換場中：骨架已經換掉（只在第一張圖裡）、內容在底下建好了，但畫面上
+  /// 沒有在畫的玻璃（兩張圖裡的玻璃不另外取樣背景）。
+  bool crossfading(WidgetTester tester) =>
+      find.byType(SkeletonBox).evaluate().isEmpty &&
+      find.text('內容').evaluate().isNotEmpty &&
+      paintedGlass(tester) == 0;
+
+  /// 一格一格推進，直到換場開始（最多 [frames] 格）；回傳推進了幾格。
+  Future<int> pumpUntilCrossfading(
+    WidgetTester tester, {
+    int frames = 10,
+  }) async {
+    for (var i = 0; i < frames; i++) {
+      if (crossfading(tester)) return i;
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    return frames;
   }
 
   /// 按鈕位置上骨架的濃度；骨架拿掉後是 0。
@@ -156,39 +173,58 @@ void main() {
     await tester.pumpWidget(host(loading: false));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('內容'), findsNothing);
-    expect(motion(tester).revealStarted, isFalse);
 
-    // 骨架出現播完（0.6 秒）才換場：拍下骨架畫面、換成內容、拍下換好的
-    // 畫面，之後兩張圖混合。
-    await tester.pump(const Duration(milliseconds: 400));
-    for (var i = 0; i < 4 && motion(tester).screen.progress == null; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(motion(tester).screen.progress, 0, reason: '拍好兩張圖，從頭開始混合');
-    expect(find.text('內容'), findsOneWidget, reason: '底下已經換成內容');
-    expect(find.byType(SkeletonBox), findsNothing, reason: '骨架只在第一張圖裡');
-
-    // 下一格開始計時、只貼兩張圖。
+    // 骨架出現播完（0.6 秒）後再停一個骨架呼吸（0.8 秒）才換場，書早就
+    // 準備好了也一樣。
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 16));
-    expect(motion(tester).screen.progress, 0);
-    expect(paintedGlass(tester), 0, reason: '換場中只貼兩張圖，玻璃已經畫在圖裡');
+    await tester.pump(
+      LaunchEntranceMotion.pause - const Duration(milliseconds: 50),
+    );
+    expect(find.byType(SkeletonBox), findsWidgets, reason: '還在停頓，骨架照常呼吸');
+    expect(crossfading(tester), isFalse);
+
+    // 停完：拍下骨架畫面、換成內容、拍下換好的畫面，之後只貼兩張圖。
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(await pumpUntilCrossfading(tester), lessThan(10));
+    expect(find.text('內容'), findsOneWidget, reason: '底下已經換成內容');
 
     await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
-    expect(motion(tester).screen.progress, closeTo(0.5, 0.05));
-    expect(paintedGlass(tester), 0);
+    expect(crossfading(tester), isTrue, reason: '換場的 0.6 秒裡只貼兩張圖');
     await tester.tap(find.byIcon(Icons.menu), warnIfMissed: false);
     expect(leftTaps, 0, reason: '換場中不接點擊');
     expect(finished, 0);
 
     await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
     await tester.pump(const Duration(milliseconds: 16));
-    expect(motion(tester).screen.progress, isNull, reason: '換回真的畫面');
-    expect(paintedGlass(tester), greaterThan(0), reason: '玻璃照常畫');
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(paintedGlass(tester), greaterThan(0), reason: '換回真的畫面，玻璃照常畫');
     expectNoGlassUnderFade(tester);
     await tester.pump();
     expect(finished, 1, reason: '換場播完才開始背景工作');
     await tester.tap(find.byIcon(Icons.menu));
     expect(leftTaps, 1);
+  });
+
+  testWidgets('a screen size change mid-crossfade ends it and shows the real '
+      'screen at once', (tester) async {
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(host(loading: false));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 620));
+    await tester.pump(LaunchEntranceMotion.pause);
+    expect(await pumpUntilCrossfading(tester), lessThan(10));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(crossfading(tester), isTrue);
+
+    // 例如旋轉：兩張圖對不上新的大小。
+    tester.view.physicalSize = const Size(1600, 900);
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(paintedGlass(tester), greaterThan(0), reason: '換回真的畫面');
+    await tester.pump();
+    expect(finished, 1);
   });
 
   testWidgets('says it finished only once, not again on later reloads', (
@@ -216,21 +252,19 @@ void main() {
   testWidgets('reloading mid-reveal ends the crossfade and grows the skeleton '
       'back live, without errors', (tester) async {
     Widget at({required bool loading}) =>
-        host(loading: loading, waitForCovers: true);
+        host(loading: loading, waitForCovers: CoverWait.onDevice);
     await tester.pumpWidget(at(loading: false));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 650));
-    for (var i = 0; i < 6 && motion(tester).screen.progress == null; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(LaunchEntranceMotion.pause);
+    expect(await pumpUntilCrossfading(tester), lessThan(10));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(motion(tester).screen.progress, inExclusiveRange(0, 1));
+    expect(crossfading(tester), isTrue);
 
     await tester.pumpWidget(at(loading: true));
     await tester.pump(const Duration(milliseconds: 50));
     expect(tester.takeException(), isNull);
-    expect(motion(tester).screen.progress, isNull, reason: '換回真的畫面');
+    expect(paintedGlass(tester), greaterThan(0), reason: '換回真的畫面');
     await tester.pumpWidget(at(loading: false));
     await tester.pumpAndSettle();
     expect(find.text('內容'), findsOneWidget);

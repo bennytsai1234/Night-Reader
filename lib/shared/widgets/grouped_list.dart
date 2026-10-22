@@ -503,7 +503,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
           child: SkeletonSwitcher(
             fit: widget.fit,
             loading: _loading,
-            waitForCovers: true,
+            waitForCovers: CoverWait.brief,
             backdrop: background,
             onRevealed: () {
               _revealed = true;

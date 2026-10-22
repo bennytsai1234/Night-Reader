@@ -54,8 +54,29 @@ class BookshelfProvider extends BookshelfProviderBase
   /// 和蓋著時收到的下載完成合併，不各讀一次。
   void reloadWhenUncovered() => _reloadWhenUncovered = true;
 
+  int _loadsInFlight = 0;
+  Completer<void>? _allLoaded;
+
+  @override
+  Future<void> get loaded => _loadsInFlight == 0
+      ? Future<void>.value()
+      : (_allLoaded ??= Completer<void>()).future;
+
   @override
   Future<void> loadBooks() async {
+    _loadsInFlight++;
+    try {
+      await _load();
+    } finally {
+      _loadsInFlight--;
+      if (_loadsInFlight == 0) {
+        _allLoaded?.complete();
+        _allLoaded = null;
+      }
+    }
+  }
+
+  Future<void> _load() async {
     // 書架上已經有書時，載入中不換回骨架，開始時通知只會讓整頁白白重建
     // 一次（書架檢查、下載完成都會重讀）；空書架或上次失敗時才要畫骨架。
     final showsLoading = books.isEmpty || loadErrorMessage != null;

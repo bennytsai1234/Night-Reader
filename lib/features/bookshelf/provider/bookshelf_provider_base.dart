@@ -49,6 +49,10 @@ Future<void> _keepWithDownloadService(
 abstract class BookshelfProviderBase extends ChangeNotifier {
   Future<void> loadBooks();
 
+  /// 進行中的讀取（[loadBooks]）都讀完時完成；沒有在讀時馬上完成。要等
+  /// 「書架讀完」的地方等這個，不等通知：讀回來的書沒變時不通知。
+  Future<void> get loaded;
+
   final BookDao bookDao = getIt<BookDao>();
   final BookSourceDao sourceDao = getIt<BookSourceDao>();
   final BookSourceService service = BookSourceService();
@@ -66,6 +70,19 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
   /// 移出書架、淡出中的書照它畫。
   ValueListenable<Book> bookListenable(Book book) =>
       _cardBooks.putIfAbsent(book.bookUrl, () => _ShelfCardBook(book));
+
+  /// 書架上這本書現在的樣子：點開、長按選單這類動作在按下的那一刻用它，
+  /// 不用書卡畫的時候手上那一本（書卡只在看得到的內容變了才重建，閱讀
+  /// 位置、自動檢查更新這些看不到的欄位可能已經換過）。不在書架上（淡出中）
+  /// 時就是 [shown]。
+  Book current(Book shown) {
+    final card = _cardBooks[shown.bookUrl];
+    if (card != null) return card.value;
+    for (final book in books) {
+      if (book.bookUrl == shown.bookUrl) return book;
+    }
+    return shown;
+  }
 
   /// 把 [books] 交給各張書卡；畫面上的內容沒變的書卡不通知。
   @protected
@@ -128,29 +145,48 @@ abstract class BookshelfProviderBase extends ChangeNotifier {
 /// 一張書卡的書：一直拿著最新的那一本（點開時用），書卡上看得到的內容
 /// 變了才通知。
 class _ShelfCardBook extends ChangeNotifier implements ValueListenable<Book> {
-  _ShelfCardBook(this._book);
+  _ShelfCardBook(this._book) : _face = _faceOf(_book);
 
   Book _book;
+
+  /// 上次通知書卡時，書卡上看得到的那組值。比的是這份當時抄下來的值，
+  /// 不是書物件本身：閱讀器會直接改它手上那本書（就是書卡拿著的同一個
+  /// 物件）的章節與時間，拿物件比，讀回來的新書和被改過的舊物件一樣，
+  /// 進度線就停在舊的樣子。
+  _CardFace _face;
 
   @override
   Book get value => _book;
 
   void update(Book book) {
-    if (identical(book, _book)) return;
-    final changed = !_sameOnCard(_book, book);
     _book = book;
-    if (changed) notifyListeners();
+    final face = _faceOf(book);
+    if (face == _face) return;
+    _face = face;
+    notifyListeners();
   }
 
   /// 書卡（網格與列表）上畫得到的東西：書名、作者、封面、是否在書架上
   /// （統一封面看它）、進度線。
-  static bool _sameOnCard(Book a, Book b) =>
-      a.name == b.name &&
-      a.author == b.author &&
-      a.getDisplayCover() == b.getDisplayCover() &&
-      a.isInBookshelf == b.isInBookshelf &&
-      a.type == b.type &&
-      a.totalChapterNum == b.totalChapterNum &&
-      a.chapterIndex == b.chapterIndex &&
-      a.hasStartedReading == b.hasStartedReading;
+  static _CardFace _faceOf(Book book) => (
+    name: book.name,
+    author: book.author,
+    cover: book.getDisplayCover(),
+    isInBookshelf: book.isInBookshelf,
+    type: book.type,
+    totalChapterNum: book.totalChapterNum,
+    chapterIndex: book.chapterIndex,
+    startedReading: book.hasStartedReading,
+  );
 }
+
+typedef _CardFace = ({
+  String name,
+  String author,
+  String? cover,
+  bool isInBookshelf,
+  int type,
+  int totalChapterNum,
+  int chapterIndex,
+  bool startedReading,
+});

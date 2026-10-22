@@ -203,7 +203,7 @@ void main() {
     Widget switcher(bool loading) => host(
       SkeletonSwitcher(
         loading: loading,
-        waitForCovers: true,
+        waitForCovers: CoverWait.onDevice,
         skeleton: const SkeletonBox(width: 40, height: 40),
         builder: (_) => ValueListenableBuilder<bool>(
           valueListenable: decoded,
@@ -300,7 +300,7 @@ void main() {
         host(
           SkeletonSwitcher(
             loading: true,
-            waitForCovers: true,
+            waitForCovers: CoverWait.onDevice,
             skeleton: const SkeletonBox(width: 40, height: 40),
             builder: (_) => const SizedBox(),
           ),
@@ -310,7 +310,7 @@ void main() {
         host(
           SkeletonSwitcher(
             loading: false,
-            waitForCovers: true,
+            waitForCovers: CoverWait.onDevice,
             skeleton: const SkeletonBox(width: 40, height: 40),
             builder: (_) => ValueListenableBuilder<bool>(
               valueListenable: shown,

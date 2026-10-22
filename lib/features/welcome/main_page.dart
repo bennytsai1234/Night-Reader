@@ -74,9 +74,6 @@ class _MainPageState extends State<MainPage>
   DateTime _lastTapTime = DateTime(0);
   DateTime? _lastBackPressedAt;
 
-  BookshelfProvider? _launchShelf;
-  VoidCallback? _launchShelfListener;
-
   late final PageController _pageController = PageController(
     initialPage: _currentIndex,
   );
@@ -124,7 +121,6 @@ class _MainPageState extends State<MainPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _detachLaunchShelfListener();
     for (final controller in _scrollToTopControllers.values) {
       controller.dispose();
     }
@@ -484,34 +480,19 @@ class _MainPageState extends State<MainPage>
     }
   }
 
-  /// 書架讀完書才在背景補排下載、檢查書架更新。
+  /// 書架讀完書才在背景補排下載、檢查書架更新。等的是讀取本身做完
+  /// （[BookshelfProvider.loaded]），不是書架的通知：讀回來的書沒變時不通知，
+  /// 等通知的話這一次就永遠不會開始。
   void _refreshShelfOnceLoaded() {
     final shelf = context.read<BookshelfProvider?>();
     if (shelf == null) return;
-    if (!shelf.isLoading) {
-      unawaited(_runAutomaticShelfRefresh(shelf));
-      return;
-    }
-    void listener() {
-      if (shelf.isLoading) return;
-      _detachLaunchShelfListener();
-      unawaited(_runAutomaticShelfRefresh(shelf));
-    }
-
-    _launchShelf = shelf;
-    _launchShelfListener = listener;
-    shelf.addListener(listener);
-  }
-
-  void _detachLaunchShelfListener() {
-    final listener = _launchShelfListener;
-    if (listener != null) _launchShelf?.removeListener(listener);
-    _launchShelf = null;
-    _launchShelfListener = null;
+    unawaited(_runAutomaticShelfRefresh(shelf));
   }
 
   Future<void> _runAutomaticShelfRefresh(BookshelfProvider shelf) async {
     try {
+      await shelf.loaded;
+      if (!mounted) return;
       await shelf.onAppLaunch();
     } catch (e, stack) {
       AppLog.e('Bookshelf refresh failed: $e', error: e, stackTrace: stack);

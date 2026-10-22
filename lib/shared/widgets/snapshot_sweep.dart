@@ -16,7 +16,10 @@ import 'skeleton_reveal.dart';
 /// 「之後」那張圖裡畫好一次，不必每一格重新合成；畫面上每個像素都照同一條
 /// 曲線從之前換到之後，頁首按鈕、標題與分頁列不會各有各的時機。代價是換場
 /// 前多畫一格（畫出換好的樣子、拍下來，這一格螢幕上蓋著「之前」那張圖，
-/// 看起來不動），換場期間多佔兩張螢幕大小的圖，也不接點擊與捲動。
+/// 看起來不動），換場期間多佔兩張螢幕大小的圖，也不接點擊與捲動。換場的
+/// 0.6 秒裡底下又有變化（網路封面到了、換深淺色）時照舊播完，播完才一次
+/// 換到最新的樣子；畫面大小變了（旋轉、視窗縮放）時兩張圖對不上，直接
+/// 結束換場、換回真的畫面。
 ///
 /// 包在要換場的範圍外面（例如整個主頁面）；要換場的地方用 [controller] 的
 /// [SnapshotSweepController.play]。
@@ -37,16 +40,6 @@ class SnapshotSweep extends StatefulWidget {
 /// 交給 [SnapshotSweep] 播一次換場。
 class SnapshotSweepController {
   _SnapshotSweepState? _state;
-
-  /// 正在換場：拍圖或兩張圖混合中。
-  bool get isPlaying => (_state?._phase ?? _Phase.live) != _Phase.live;
-
-  /// 兩張圖混合的進度（經過的時間比例）；不在混合時為 null。
-  double? get progress {
-    final state = _state;
-    if (state == null || state._phase != _Phase.playing) return null;
-    return state._progress.value;
-  }
 
   /// 拍下現在的畫面，呼叫 [change] 把底下換成換好的樣子，下一格畫好後拍下
   /// 來，再花 [duration] 把之前換成之後：[sweep] 時由左而右（同
@@ -245,6 +238,11 @@ class _SnapshotSweepState extends State<SnapshotSweep>
 
   double get _pixelRatio => MediaQuery.devicePixelRatioOf(context);
 
+  /// 兩張圖和畫面大小對不上了：結束這一次換場、換回真的畫面。
+  void _onStale() {
+    if (mounted && _phase == _Phase.playing) _end();
+  }
+
   @override
   Widget build(BuildContext context) => _SnapshotSweepPaint(
     phase: _phase,
@@ -252,6 +250,8 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     after: _after,
     progress: _progress,
     sweep: _sweep,
+    pixelRatio: _pixelRatio,
+    onStale: _onStale,
     child: RepaintBoundary(key: _boundaryKey, child: widget.child),
   );
 }
@@ -263,6 +263,8 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
     required this.after,
     required this.progress,
     required this.sweep,
+    required this.pixelRatio,
+    required this.onStale,
     required super.child,
   });
 
@@ -271,14 +273,17 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
   final ui.Image? after;
   final Animation<double> progress;
   final bool sweep;
+  final double pixelRatio;
+  final VoidCallback onStale;
 
   @override
   _RenderSnapshotSweep createRenderObject(BuildContext context) =>
-      _RenderSnapshotSweep(progress)
+      _RenderSnapshotSweep(progress, onStale)
         ..phase = phase
         ..before = before
         ..after = after
-        ..sweep = sweep;
+        ..sweep = sweep
+        ..pixelRatio = pixelRatio;
 
   @override
   void updateRenderObject(
@@ -289,14 +294,27 @@ class _SnapshotSweepPaint extends SingleChildRenderObjectWidget {
       ..phase = phase
       ..before = before
       ..after = after
-      ..sweep = sweep;
+      ..sweep = sweep
+      ..pixelRatio = pixelRatio
+      ..onStale = onStale;
   }
 }
 
 class _RenderSnapshotSweep extends RenderProxyBox {
-  _RenderSnapshotSweep(this._progress);
+  _RenderSnapshotSweep(this._progress, this.onStale);
 
   final Animation<double> _progress;
+
+  /// 兩張圖和畫面大小對不上時呼叫：結束這一次換場。
+  VoidCallback onStale;
+
+  /// 拍圖用的裝置像素比，用來判斷兩張圖還對不對得上畫面。
+  double _pixelRatio = 1;
+  set pixelRatio(double value) {
+    if (_pixelRatio == value) return;
+    _pixelRatio = value;
+    markNeedsPaint();
+  }
 
   _Phase _phase = _Phase.live;
   set phase(_Phase value) {
@@ -371,8 +389,13 @@ class _RenderSnapshotSweep extends RenderProxyBox {
         super.paint(context, offset);
         if (before != null) _drawWhole(context.canvas, before, offset);
       case _Phase.playing:
-        if (before == null || after == null) {
+        if (before == null ||
+            after == null ||
+            !_fits(before) ||
+            !_fits(after)) {
+          // 畫面大小在換場中變了：畫真的畫面，這一格畫完就結束換場。
           super.paint(context, offset);
+          SchedulerBinding.instance.addPostFrameCallback((_) => onStale());
           return;
         }
         _paintMix(context.canvas, offset, before, after, _progress.value);
@@ -388,9 +411,16 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     );
   }
 
-  /// 每一行像素：之後那張照該行的濃度疊在之前那張上，等於兩張照濃度混合。
-  /// 已經換好的部分只畫之後、還沒開始的部分只畫之前，正在換的那一段一行
-  /// 一行疊（一次 [Canvas.drawAtlas]），不另開圖層。
+  /// 兩張圖照畫面現在的大小拍的：大小變了（旋轉、視窗縮放）就對不上。
+  bool _fits(ui.Image image) =>
+      image.width == (size.width * _pixelRatio).ceil() &&
+      image.height == (size.height * _pixelRatio).ceil();
+
+  /// 之前那張整片畫上，之後那張照每一行像素的濃度疊上去，等於兩張照濃度
+  /// 混合。濃度先換成 8 位元的透明度，透明度相同、相鄰的行合成一段，每段
+  /// 一次 [Canvas.drawImageRect]、用畫筆的透明度（兩種繪圖引擎行為一致的
+  /// 畫法）；已經換好的部分只畫之後、還沒開始的只畫之前，不另開圖層。透明度
+  /// 只有 256 種，正在換的那一段最多 254 段。
   void _paintMix(
     Canvas canvas,
     Offset offset,
@@ -401,39 +431,6 @@ class _RenderSnapshotSweep extends RenderProxyBox {
     final width = after.width;
     final height = after.height.toDouble();
     final scale = size.width / width;
-    if (!_sweep) {
-      final alpha = SkeletonReveal.incomingOpacityAt(progress, 0, sweep: false);
-      _drawWhole(canvas, before, offset);
-      if (alpha > 0) {
-        canvas.drawImageRect(
-          after,
-          Rect.fromLTWH(0, 0, width.toDouble(), height),
-          offset & size,
-          Paint()
-            ..filterQuality = FilterQuality.none
-            ..color = Color.fromRGBO(0, 0, 0, alpha),
-        );
-      }
-      return;
-    }
-    // 濃度由左往右遞減：[0, done) 已經換好、[done, untouched) 正在換。
-    var done = width;
-    var untouched = width;
-    final alphas = <int>[];
-    for (var x = 0; x < width; x++) {
-      final alpha = SkeletonReveal.incomingOpacityAt(
-        progress,
-        (x + 0.5) / width,
-      );
-      final byte = (alpha * 255).round();
-      if (byte >= 255) continue;
-      if (done == width) done = x;
-      if (byte <= 0) {
-        untouched = x;
-        break;
-      }
-      alphas.add(byte);
-    }
     Rect columns(int from, int to) =>
         Rect.fromLTWH(from.toDouble(), 0, (to - from).toDouble(), height);
     Rect onScreen(int from, int to) => Rect.fromLTWH(
@@ -442,40 +439,46 @@ class _RenderSnapshotSweep extends RenderProxyBox {
       (to - from) * scale,
       size.height,
     );
-    if (done < width) {
+    void draw(ui.Image image, int from, int to, int alpha) {
+      if (to <= from || alpha <= 0) return;
       canvas.drawImageRect(
-        before,
-        columns(done, width),
-        onScreen(done, width),
-        _exact,
+        image,
+        columns(from, to),
+        onScreen(from, to),
+        alpha >= 255
+            ? _exact
+            : (Paint()
+                ..filterQuality = FilterQuality.none
+                ..color = Color.fromARGB(alpha, 0, 0, 0)),
       );
     }
-    if (done > 0) {
-      canvas.drawImageRect(after, columns(0, done), onScreen(0, done), _exact);
+
+    int alphaAt(int x) =>
+        (SkeletonReveal.incomingOpacityAt(
+                  progress,
+                  (x + 0.5) / width,
+                  sweep: _sweep,
+                ) *
+                255)
+            .round();
+
+    // 濃度由左往右遞減：[0, done) 已經換好，之後的才要畫之前那張。
+    var done = 0;
+    while (done < width && alphaAt(done) >= 255) {
+      done++;
     }
-    if (alphas.isEmpty) return;
-    canvas.drawAtlas(
-      after,
-      [
-        for (var i = 0; i < alphas.length; i++)
-          RSTransform.fromComponents(
-            rotation: 0,
-            scale: scale,
-            anchorX: 0,
-            anchorY: 0,
-            translateX: offset.dx + (done + i) * scale,
-            translateY: offset.dy,
-          ),
-      ],
-      [
-        for (var i = 0; i < alphas.length; i++)
-          Rect.fromLTWH((done + i).toDouble(), 0, 1, height),
-      ],
-      [for (final alpha in alphas) Color.fromARGB(alpha, 255, 255, 255)],
-      BlendMode.srcIn,
-      null,
-      _exact,
-    );
-    assert(done + alphas.length == untouched || untouched == width);
+    draw(before, done, width, 255);
+    draw(after, 0, done, 255);
+    var from = done;
+    while (from < width) {
+      final alpha = alphaAt(from);
+      if (alpha <= 0) break;
+      var to = from + 1;
+      while (to < width && alphaAt(to) == alpha) {
+        to++;
+      }
+      draw(after, from, to, alpha);
+      from = to;
+    }
   }
 }
