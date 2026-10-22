@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 
 /// Telegram 式底部面板：分組底色、拖曳把手、置中標題與右側圓形關閉鈕，
 /// 下方為可捲動內容。
@@ -13,6 +14,11 @@ class AppBottomSheet extends StatelessWidget {
   /// 舊版標題旁的圖示；新版面板只顯示置中標題，保留參數讓既有呼叫端相容。
   final IconData? icon;
   final List<Widget> children;
+
+  /// 滑入時內容先畫骨架，滑到位才在骨架底下逐列建立、再換成內容
+  /// （[GroupedSheetContent]，ADR 0029）。骨架照分組卡片的樣子畫，只放
+  /// 分組卡片的面板才開。
+  final bool skeletonEntrance;
 
   /// 關閉鈕左側的附加動作。
   final Widget? trailing;
@@ -26,6 +32,7 @@ class AppBottomSheet extends StatelessWidget {
     required this.title,
     this.icon,
     required this.children,
+    this.skeletonEntrance = false,
     this.trailing,
     this.showDragHandle = true,
     this.maxHeightFactor = 0.9,
@@ -34,6 +41,14 @@ class AppBottomSheet extends StatelessWidget {
   static const double _handleWidth = 36;
   static const double _handleHeight = 5;
   static const double _closeSize = 32;
+
+  /// 內容左右對齊分組卡片的外距，底下留一段空白。
+  static const EdgeInsets _contentPadding = EdgeInsets.fromLTRB(
+    AppGrouped.margin,
+    0,
+    AppGrouped.margin,
+    AppSpacing.xxl,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -124,19 +139,20 @@ class AppBottomSheet extends StatelessWidget {
 
             // 可捲動的內容區域
             Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppGrouped.margin,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...children,
-                    const SizedBox(height: AppSpacing.xxl),
-                  ],
-                ),
-              ),
+              child: skeletonEntrance
+                  ? GroupedSheetContent(
+                      padding: _contentPadding,
+                      background: chrome.groupedBackground,
+                      children: children,
+                    )
+                  : SingleChildScrollView(
+                      padding: _contentPadding,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: children,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -243,14 +259,30 @@ class SheetHeader extends StatelessWidget {
 }
 
 /// 閱讀器面板內的區塊標題，字階與色彩同分組清單的組標題。
-class SheetSection extends StatelessWidget {
+class SheetSection extends StatelessWidget implements GroupedSkeletonItem {
   final String title;
   const SheetSection({super.key, required this.title});
+
+  static const EdgeInsets _padding = EdgeInsets.only(
+    top: AppSpacing.xl,
+    bottom: AppSpacing.sm,
+  );
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => GroupedItemShape.text(
+    context,
+    title,
+    style: GroupedSectionHeader.textStyle(context),
+    width: width,
+  ).padded(_padding);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.xl, bottom: AppSpacing.sm),
+      padding: _padding,
       child: Align(
         alignment: AlignmentDirectional.centerStart,
         child: GroupedSectionHeader(title),

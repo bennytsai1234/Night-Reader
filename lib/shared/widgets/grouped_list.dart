@@ -213,17 +213,18 @@ class GroupedSectionHeader extends StatelessWidget {
 
   final String text;
 
+  /// 組標題的字樣；骨架照同一份字樣量組標題的高度。
+  static TextStyle textStyle(BuildContext context) =>
+      AppTextStyles.uiSm.copyWith(
+        color: AppChrome.of(context).sectionText,
+        fontWeight: FontWeight.w400,
+      );
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       header: true,
-      child: Text(
-        text,
-        style: AppTextStyles.uiSm.copyWith(
-          color: AppChrome.of(context).sectionText,
-          fontWeight: FontWeight.w400,
-        ),
-      ),
+      child: Text(text, style: textStyle(context)),
     );
   }
 }
@@ -239,7 +240,7 @@ class GroupedSectionHeader extends StatelessWidget {
 /// 整個畫面一個元件），換頁的第一格不建任何一列；進場播完的下一格才在骨架
 /// 底下一格建一組（[CoverRevealSlot]），都建好再照骨架換場換成內容
 /// （ADR 0029）。不是在進場中掛上的（分頁、已經在畫面上的頁面）直接建內容。
-class GroupedListView extends StatefulWidget {
+class GroupedListView extends StatelessWidget {
   const GroupedListView({
     super.key,
     required this.children,
@@ -254,10 +255,81 @@ class GroupedListView extends StatefulWidget {
   final ScrollPhysics? physics;
 
   @override
-  State<GroupedListView> createState() => _GroupedListViewState();
+  Widget build(BuildContext context) {
+    final mediaPadding = MediaQuery.paddingOf(context);
+    final padding = EdgeInsets.only(
+      top: mediaPadding.top,
+      bottom: mediaPadding.bottom + bottomPadding,
+    );
+    return _GroupedEntrance(
+      items: children,
+      padding: padding,
+      background: AppChrome.of(context).groupedBackground,
+      builder: (context, items) => ListView(
+        controller: controller,
+        physics: physics,
+        padding: padding,
+        children: items,
+      ),
+    );
+  }
 }
 
-class _GroupedListViewState extends State<GroupedListView> {
+/// 頁面與面板共用的進場：先骨架、進場播完才在骨架底下逐列建立，再一次
+/// 換成內容。[builder] 照原本的捲動方式與內距排 [items]（還在排隊的項目
+/// 換成佔位）；面板以 [StackFit.loose] 照內容的高度收縮。
+class _GroupedEntrance extends StatefulWidget {
+  const _GroupedEntrance({
+    required this.items,
+    required this.padding,
+    required this.background,
+    required this.builder,
+    this.fit = StackFit.expand,
+  });
+
+  final List<Widget> items;
+  final EdgeInsets padding;
+  final Color background;
+  final Widget Function(BuildContext context, List<Widget> items) builder;
+  final StackFit fit;
+
+  @override
+  State<_GroupedEntrance> createState() => _GroupedEntranceState();
+}
+
+/// 閱讀器面板這類照內容收縮的底部面板的捲動內容：和 [GroupedListView]
+/// 一樣滑入時先只畫骨架，滑到位才逐列建立；骨架的高度照每一項的樣子算
+/// （[GroupedItemShape.estimate]），換成內容時面板高度不變。
+class GroupedSheetContent extends StatelessWidget {
+  const GroupedSheetContent({
+    super.key,
+    required this.children,
+    required this.padding,
+    required this.background,
+  });
+
+  final List<Widget> children;
+  final EdgeInsets padding;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => _GroupedEntrance(
+    items: children,
+    padding: padding,
+    background: background,
+    fit: StackFit.loose,
+    builder: (context, items) => SingleChildScrollView(
+      padding: padding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: items,
+      ),
+    ),
+  );
+}
+
+class _GroupedEntranceState extends State<_GroupedEntrance> {
   /// 掛上時所在的頁面還在進場；之後一直走骨架這條路（換掉會讓內容重建）。
   bool? _entering;
 
@@ -281,26 +353,34 @@ class _GroupedListViewState extends State<GroupedListView> {
   }
 
   /// 這一頁的版面紀錄 key 與每一項的樣子（記下的，沒有就估）。
-  (String, List<GroupedItemShape>) _shapes() {
+  (String, List<GroupedItemShape>) _shapes(double width) {
+    final items = widget.items;
     final scaler = MediaQuery.textScalerOf(context);
-    final key = GroupedListLayouts.keyOf(
-      widget.children,
-      MediaQuery.sizeOf(context).width,
-      scaler,
-    );
+    // 面板的高度就是骨架的高度，每一項都照它本身算（估的就是換上內容後的
+    // 高度）。同一種元件也會換高度（朗讀定時選了自訂分鐘多一列步進），
+    // 紀錄要連高度一起對得上才沿用。整頁撐滿畫面，高度差一點不會跳，有
+    // 紀錄就不必估，key 維持原樣。
+    final estimated = widget.fit == StackFit.loose
+        ? [
+            for (final item in items)
+              GroupedItemShape.estimate(item, context: context, width: width),
+          ]
+        : null;
+    final base = GroupedListLayouts.keyOf(items, width, scaler);
+    final key = estimated != null
+        ? '$base|${estimated.map((shape) => shape.height).join(',')}'
+        : base;
     final known = GroupedListLayouts.of(key);
-    final width = MediaQuery.sizeOf(context).width;
-    final direction = Directionality.of(context);
     return (
       key,
       [
-        for (var i = 0; i < widget.children.length; i++)
+        for (var i = 0; i < items.length; i++)
           (known != null && i < known.length ? known[i] : null) ??
+              estimated?[i] ??
               GroupedItemShape.estimate(
-                widget.children[i],
+                items[i],
+                context: context,
                 width: width,
-                scaler: scaler,
-                direction: direction,
               ),
       ],
     );
@@ -312,10 +392,12 @@ class _GroupedListViewState extends State<GroupedListView> {
       if (!mounted) return;
       final shapes = List<GroupedItemShape?>.of(
         GroupedListLayouts.of(key) ??
-            List<GroupedItemShape?>.filled(widget.children.length, null),
+            List<GroupedItemShape?>.filled(widget.items.length, null),
       );
-      if (shapes.length != widget.children.length) return;
-      final screen = MediaQuery.sizeOf(context).height;
+      if (shapes.length != widget.items.length) return;
+      final viewport = context.findRenderObject()! as RenderBox;
+      final bottom =
+          viewport.localToGlobal(Offset.zero).dy + viewport.size.height;
       void visit(Element element) {
         if (element.widget case _GroupedListSlot(:final index, :final item)) {
           final box = element.renderObject;
@@ -325,7 +407,7 @@ class _GroupedListViewState extends State<GroupedListView> {
                 GroupedItemShape.measure(
                   element,
                   item,
-                  visible: screen - top,
+                  visible: bottom - top,
                 ) ??
                 shapes[index];
           }
@@ -341,61 +423,61 @@ class _GroupedListViewState extends State<GroupedListView> {
 
   @override
   Widget build(BuildContext context) {
-    final mediaPadding = MediaQuery.paddingOf(context);
-    final padding = EdgeInsets.only(
-      top: mediaPadding.top,
-      bottom: mediaPadding.bottom + widget.bottomPadding,
-    );
     final chrome = AppChrome.of(context);
-    final background = chrome.groupedBackground;
+    final background = widget.background;
     if (_entering != true) {
       return ColoredBox(
         color: background,
-        child: ListView(
-          controller: widget.controller,
-          physics: widget.physics,
-          padding: padding,
-          children: widget.children,
-        ),
+        child: widget.builder(context, widget.items),
       );
     }
-    final (key, shapes) = _shapes();
-    // 每一項上緣離畫面底還有多少：只有第一個畫面裡的列排隊、換場等它們。
-    final screen = MediaQuery.sizeOf(context).height;
-    final visible = <double>[];
-    var top = padding.top;
-    for (final shape in shapes) {
-      visible.add(screen - top);
-      top += shape.height;
-    }
-    return ColoredBox(
-      color: background,
-      child: SkeletonSwitcher(
-        loading: _loading,
-        waitForCovers: true,
-        backdrop: background,
-        onRevealed: () => _remember(key),
-        skeleton: GroupedListSkeleton(
-          shapes: shapes,
-          top: padding.top,
-          cardFill: chrome.groupedSurface,
-        ),
-        builder: (context) => ListView(
-          controller: widget.controller,
-          physics: widget.physics,
-          padding: padding,
-          children: [
-            for (var i = 0; i < widget.children.length; i++)
-              _GroupedListSlot(
-                key: _slotKey(widget.children[i]),
-                index: i,
-                shape: shapes[i],
-                visible: visible[i],
-                item: widget.children[i],
-              ),
-          ],
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final padding = widget.padding;
+        final (key, shapes) = _shapes(
+          constraints.maxWidth - padding.horizontal,
+        );
+        // 只有實際視窗裡的列排隊；面板不能借用整個螢幕的高度。
+        final visible = <double>[];
+        var height = padding.top;
+        for (final shape in shapes) {
+          visible.add(constraints.maxHeight - height);
+          height += shape.height;
+        }
+        height += padding.bottom;
+        Widget skeleton = Padding(
+          padding: EdgeInsets.only(left: padding.left, right: padding.right),
+          child: GroupedListSkeleton(
+            shapes: shapes,
+            top: padding.top,
+            cardFill: chrome.groupedSurface,
+          ),
+        );
+        if (widget.fit == StackFit.loose) {
+          skeleton = SizedBox(height: height, child: skeleton);
+        }
+        return ColoredBox(
+          color: background,
+          child: SkeletonSwitcher(
+            fit: widget.fit,
+            loading: _loading,
+            waitForCovers: true,
+            backdrop: background,
+            onRevealed: () => _remember(key),
+            skeleton: skeleton,
+            builder: (context) => widget.builder(context, [
+              for (final (i, item) in widget.items.indexed)
+                _GroupedListSlot(
+                  key: _slotKey(item),
+                  index: i,
+                  shape: shapes[i],
+                  visible: visible[i],
+                  item: item,
+                ),
+            ]),
+          ),
+        );
+      },
     );
   }
 }
@@ -429,6 +511,7 @@ class _GroupedListSlot extends StatelessWidget {
         rows == null ||
         rows.length != item.children.length) {
       return CoverRevealSlot(
+        wait: visible > 0,
         placeholder: SizedBox(height: shape.height),
         child: item,
       );
@@ -845,7 +928,8 @@ class GroupedContent extends StatelessWidget {
 }
 
 /// 分組卡片內的單行輸入列（Telegram ItemListSingleLineInputItem）。
-class GroupedTextFieldRow extends StatelessWidget {
+class GroupedTextFieldRow extends StatelessWidget
+    implements GroupedSkeletonItem {
   const GroupedTextFieldRow({
     super.key,
     this.label,
@@ -894,6 +978,66 @@ class GroupedTextFieldRow extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
 
   @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final textStyle = _textStyle(context);
+    final fieldWidth =
+        width - AppGrouped.rowPadding * 2 - (label == null ? 0 : labelWidth);
+    final painter = TextPainter(
+      text: TextSpan(text: controller?.text ?? '', style: textStyle),
+      strutStyle: StrutStyle.fromTextStyle(textStyle, forceStrutHeight: true),
+      textScaler: scaler,
+      textDirection: direction,
+    )..layout(maxWidth: fieldWidth);
+    final line = painter.preferredLineHeight;
+    final fontSize = scaler.scale(
+      textStyle.fontSize ?? AppTextStyles.bodyBase.fontSize!,
+    );
+    final lower = line * (minLines ?? maxLines ?? 1);
+    final upper = maxLines == null ? double.infinity : line * maxLines!;
+    final fieldHeight = painter.height.clamp(lower, upper);
+    painter.dispose();
+    final height = (fieldHeight + AppSpacing.md * 2).clamp(
+      AppGrouped.rowMinHeight,
+      double.infinity,
+    );
+    return GroupedItemShape(
+      height,
+      marks: [
+        for (var i = 0; i < (fieldHeight / line).round(); i++)
+          SkeletonShape(
+            Rect.fromLTWH(
+              AppGrouped.rowPadding + (label == null ? 0 : labelWidth),
+              AppSpacing.md + i * line + (line - fontSize) / 2,
+              fieldWidth,
+              fontSize,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// TextField 會先合併 Material 的輸入字體；骨架也從這份字體量行高，
+  /// 不能只用字號乘行高（不同字體的 strut 會得到不同整數行高）。
+  TextStyle _textStyle(BuildContext context) {
+    final theme = Theme.of(context);
+    return (theme.useMaterial3
+            ? theme.textTheme.bodyLarge!
+            : theme.textTheme.titleMedium!)
+        .merge(
+          style ??
+              AppTextStyles.bodyBase.copyWith(
+                height: 1.3,
+                color: theme.colorScheme.onSurface,
+              ),
+        );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final chrome = AppChrome.of(context);
     final scheme = Theme.of(context).colorScheme;
@@ -918,9 +1062,7 @@ class GroupedTextFieldRow extends StatelessWidget {
         minHeight: AppGrouped.rowMinHeight,
       ),
     );
-    final effectiveStyle =
-        style ??
-        AppTextStyles.bodyBase.copyWith(height: 1.3, color: scheme.onSurface);
+    final effectiveStyle = _textStyle(context);
     final effectiveMaxLines = obscureText ? 1 : maxLines;
     final field = validator == null
         ? TextField(

@@ -64,6 +64,9 @@ class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
   /// 數值剛好是整數時不寫小數（18、18.5），而不是固定 [fractionDigits] 位。
   final bool trimZeroFraction;
 
+  /// 一列的高度：步進鈕的點擊範圍加上下內距；分組清單的骨架照它佔位。
+  static const double height = _kStepperTapTarget + _kRowPadding * 2;
+
   /// 數字接上單位：`%` 緊貼，其他單位隔一格（`1.5 倍`、`2 行`）。
   static String withUnit(String number, String unit) {
     if (unit.isEmpty) return number;
@@ -216,7 +219,7 @@ class _NumberStepperRowState extends State<NumberStepperRow> {
       onIncrease: _canIncrease ? () => _stepBy(1) : null,
       onDecrease: _canDecrease ? () => _stepBy(-1) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(vertical: _kRowPadding),
         child: Row(
           children: [
             Expanded(
@@ -356,6 +359,9 @@ const double _kStepperControlHeight = 36;
 
 /// 步進鈕的點擊範圍（Material 的最小點擊範圍 48×48），也是它佔的大小。
 const double _kStepperTapTarget = kMinInteractiveDimension;
+
+/// 列的上下內距。
+const double _kRowPadding = AppSpacing.xs;
 
 /// 步進控件的淡墨底：同時適用 App 分組卡片與閱讀器選單主題的面板。
 Color _controlFill(BuildContext context) =>

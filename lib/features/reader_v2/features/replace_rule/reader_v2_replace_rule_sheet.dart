@@ -148,24 +148,17 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     }
   }
 
-  Widget _manageRow(BuildContext context, int? enabledCount) {
-    return GroupedRow(
-      leading: const GroupedIconTile(Icons.settings_rounded, tint: AppTint.ink),
-      title: '管理規則',
-      value: enabledCount == null ? null : '$enabledCount',
-      onTap: () async {
-        final before = await _rulesSnapshot();
-        if (!context.mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
-        );
-        // 只是進去看看、沒有改動時不重載正文。
-        if (!mounted || await _rulesSnapshot() == before) return;
-        setState(_reloadEnabledRules);
-        await widget.onReload();
-      },
+  Future<void> _manageRules(BuildContext context) async {
+    final before = await _rulesSnapshot();
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReaderV2ReplaceRulePage()),
     );
+    // 只是進去看看、沒有改動時不重載正文。
+    if (!mounted || await _rulesSnapshot() == before) return;
+    setState(_reloadEnabledRules);
+    await widget.onReload();
   }
 
   @override
@@ -173,6 +166,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
     return AppBottomSheet(
       title: '替換規則',
       icon: Icons.rule_rounded,
+      skeletonEntrance: true,
       children: [
         GroupedSection(
           margin: EdgeInsets.zero,
@@ -208,20 +202,10 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
               },
             ),
             // 右側是這本書目前啟用的規則數。
-            FutureBuilder<List<ReplaceRule>>(
+            _RuleManagementRow(
               future: _enabledRulesFuture,
-              builder: (context, snapshot) => snapshot.hasError
-                  ? GroupedRow(
-                      leading: const GroupedIconTile(
-                        Icons.error_outline_rounded,
-                        tint: AppTint.rust,
-                      ),
-                      title: '規則讀取失敗',
-                      value: '重試',
-                      showChevron: false,
-                      onTap: () => setState(_reloadEnabledRules),
-                    )
-                  : _manageRow(context, snapshot.data?.length),
+              onRetry: () => setState(_reloadEnabledRules),
+              onManage: () => _manageRules(context),
             ),
           ],
         ),
@@ -284,4 +268,45 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
       ],
     );
   }
+}
+
+/// 管理列載入前後都帶列首圖示；非同步狀態不改變分組列的布局描述。
+class _RuleManagementRow extends StatelessWidget implements GroupedRowLike {
+  const _RuleManagementRow({
+    required this.future,
+    required this.onRetry,
+    required this.onManage,
+  });
+
+  final Future<List<ReplaceRule>>? future;
+  final VoidCallback onRetry;
+  final VoidCallback onManage;
+
+  @override
+  bool get hasLeading => true;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<ReplaceRule>>(
+    future: future,
+    builder: (context, snapshot) => snapshot.hasError
+        ? GroupedRow(
+            leading: const GroupedIconTile(
+              Icons.error_outline_rounded,
+              tint: AppTint.rust,
+            ),
+            title: '規則讀取失敗',
+            value: '重試',
+            showChevron: false,
+            onTap: onRetry,
+          )
+        : GroupedRow(
+            leading: const GroupedIconTile(
+              Icons.settings_rounded,
+              tint: AppTint.ink,
+            ),
+            title: '管理規則',
+            value: snapshot.hasData ? '${snapshot.data!.length}' : null,
+            onTap: onManage,
+          ),
+  );
 }

@@ -18,7 +18,9 @@ import 'app_harness.dart';
 import 'frame_budget.dart';
 
 /// 畫面上（不含被蓋住的頁面與保留著的其他分頁）還有骨架。
-bool skeletonShown() => find.byType(SkeletonBox).evaluate().isNotEmpty;
+bool skeletonShown() =>
+    find.byType(SkeletonBox).evaluate().isNotEmpty ||
+    find.byType(SkeletonShapes).evaluate().isNotEmpty;
 
 /// [page] 在畫面上、所在的頁面進場播完，上面也沒有頁面蓋著或正在移走。
 ///

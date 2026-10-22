@@ -537,8 +537,8 @@ class SkeletonLine extends StatelessWidget {
 /// 與時長）換成內容；重新載入時骨架也照同樣的方式
 /// 與時長長回來。
 ///
-/// 兩者都撐滿父層（呼叫端給的是整頁內容區）。[builder] 只在載入完成後
-/// 才呼叫。
+/// 預設兩者都撐滿父層（整頁內容區）；可收縮的面板以 [fit] 保留自然高度。
+/// [builder] 只在載入完成後才呼叫。
 class SkeletonSwitcher extends StatefulWidget {
   const SkeletonSwitcher({
     super.key,
@@ -549,6 +549,7 @@ class SkeletonSwitcher extends StatefulWidget {
     this.entrance,
     this.backdrop,
     this.onRevealed,
+    this.fit = StackFit.expand,
   });
 
   final bool loading;
@@ -557,6 +558,9 @@ class SkeletonSwitcher extends StatefulWidget {
 
   /// 骨架換成內容、換場播完的那一刻（內容已經照常排好）。
   final VoidCallback? onRevealed;
+
+  /// 頁面撐滿內容區；依內容收縮的面板沿用自然高度。
+  final StackFit fit;
 
   /// 骨架與內容後面的實色（通常是頁面底色）。給了的話換場只遮骨架一層：
   /// 骨架墊著這個顏色蓋在照常畫出的內容上，由左而右退開；內容不再套動畫
@@ -766,7 +770,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     // 兩層各有 key：另一層進出 Stack 時不會被錯配、重建。有墊色時骨架在
     // 上面蓋住內容；沒有時骨架在下、內容在上，各自淡入淡出。
     return Stack(
-      fit: StackFit.expand,
+      fit: widget.fit,
       children: backdrop == null
           ? [?(showSkeleton ? skeletonLayer : null), ?contentLayer]
           : [?contentLayer, ?(showSkeleton ? skeletonLayer : null)],
