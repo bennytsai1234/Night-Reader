@@ -240,6 +240,9 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   void setGroupFilter(String? group) {
+    // 選單開著時書源可能剛讀完、這個分組已經不在：不接受，免得整個清單被
+    // 濾空。重讀書源時也會把不存在的分組清掉（見上面）。
+    if (group != null && !_groupCounts.containsKey(group)) return;
     if (_selectedGroup == group) {
       _selectedGroup = null;
     } else {

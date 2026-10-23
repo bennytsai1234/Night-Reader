@@ -330,6 +330,39 @@ void main() {
       expect(provider.selectedGroup, isNull);
       expect(find.text('書源0'), findsOneWidget);
     });
+
+    testWidgets('a group gone while the menu is open is ignored', (
+      tester,
+    ) async {
+      final sources = StreamController<List<BookSource>>();
+      addTearDown(sources.close);
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao.stream(sources.stream),
+      );
+      sources.add([
+        ...groupedSources(),
+        BookSource(
+          bookSourceUrl: 'https://t.example',
+          bookSourceName: '書源乙',
+          bookSourceGroup: '乙',
+          exploreUrl: 'https://t.example/explore',
+          customOrder: 3,
+        ),
+      ]);
+      await tester.pumpAndSettle();
+
+      await tester.tap(groupButton);
+      await tester.pumpAndSettle();
+      // 選單開著時書源讀完，「乙」已經沒有了；選單裡還留著舊的那一項。
+      sources.add(groupedSources());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('乙　1'));
+      await tester.pumpAndSettle();
+
+      expect(provider.selectedGroup, isNull);
+      expect(find.text('書源0'), findsOneWidget);
+    });
   });
 
   testWidgets('collapsing keeps the categories until the last frame', (
