@@ -10,10 +10,14 @@ const _allowed = [
   'test/_screens/',
   'test/frame_budget/',
   'test/support/screenshot.dart',
+  // 這支檢查自己的失敗訊息裡有這個名字。
+  'test/system_fonts_scope_test.dart',
 ];
 
-// 呼叫或當成 setUpAll 的參數傳進去；只在說明裡提到不算。
-final _use = RegExp(r'loadScreenshotFonts\s*[(),]');
+// 呼叫、當成 setUpAll 的參數、先存成變數都算；只在 // 註解裡提到、或名字只是
+// 另一個識別字的一部分（例如 fake_loadScreenshotFonts）不算。
+final _comment = RegExp(r'//.*');
+final _use = RegExp(r'(?<![\w$])loadScreenshotFonts(?![\w$])');
 
 void main() {
   test('只有截圖與量幀數的測試載入系統字型', () {
@@ -25,7 +29,9 @@ void main() {
         ]..retainWhere(
           (path) =>
               !_allowed.any(path.startsWith) &&
-              _use.hasMatch(File(path).readAsStringSync()),
+              _use.hasMatch(
+                File(path).readAsStringSync().replaceAll(_comment, ''),
+              ),
         );
     expect(
       offenders,

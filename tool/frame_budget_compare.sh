@@ -8,7 +8,7 @@
 # 把 <改前的提交> 開在暫時的 worktree，和目前的工作目錄（含還沒 commit 的改動）交錯各跑
 # n 次（預設 3），印出一張 Markdown 表：每個情境「最大一幀」與「中位數」在 n 次裡的中位數，
 # 括號裡是 n 次最大一幀的範圍。表可以直接貼進 commit message。測試檔路徑相對於 repo 根目錄；
-# 改前沒有的測試檔只跑改後。
+# 改前沒有的測試檔只跑改後。任何一次測試沒有全過就停下來，不印表。
 #
 # - 全機同時只跑一個量測：別的 session 正在用這支指令時排隊等它結束。電腦上還有其他
 #   flutter_tester 在跑（別人直接跑 flutter test）時只提醒，數字可能偏高；不結束任何程序。
@@ -24,7 +24,15 @@ set -euo pipefail
 # 從 describeFrames 的摘要行（「<情境>：N 幀，中位數 Xms，最大 Yms，超過 Zms 的 K 幀」）
 # 收集兩邊每次的數字，印成對照表。
 summarize() {
-  local dir=$1
+  local dir=$1 logs=()
+  # 改前沒有這些測試檔時只有改後的 log；一份都沒有時 awk 會改讀標準輸入，先擋下來。
+  shopt -s nullglob
+  logs=("$dir"/base-*.log "$dir"/head-*.log)
+  shopt -u nullglob
+  if [ ${#logs[@]} -eq 0 ]; then
+    echo "$dir 裡沒有 base-*.log 或 head-*.log" >&2
+    return 1
+  fi
   LC_ALL=C awk '
     function median(list,    v, n, i, j, t) {
       n = split(list, v, " ")
@@ -63,7 +71,7 @@ summarize() {
         printf "| %s | %s → %s | %s → %s |\n", l, cell("base", l, "max"), cell("head", l, "max"), cell("base", l, "med"), cell("head", l, "med")
       }
     }
-  ' "$dir"/base-*.log "$dir"/head-*.log
+  ' "${logs[@]}"
 }
 
 if [ "${1:-}" = summarize ]; then
@@ -92,27 +100,52 @@ lock="$tmp/night-reader-frame-budget.lock"
 out=$(mktemp -d "$tmp/nr-frame-budget-XXXXXX")
 base="$out/base"
 
+# 清理在 set -e 底下也要每一步都做到：worktree 刪不掉時照樣放掉鎖。
 cleanup() {
-  [ -d "$base" ] && git worktree remove --force "$base" 2>/dev/null
+  set +e
+  if [ -d "$base" ] && ! git worktree remove --force "$base" 2>/dev/null; then
+    echo "暫時的 worktree 刪不掉，手動刪：$base（再跑 git worktree prune）" >&2
+  fi
   [ "$(cat "$lock/owner" 2>/dev/null)" = "$owner" ] && rm -rf "$lock"
-  return 0
 }
 owner="$$ $root $(date '+%m-%d %H:%M')"
 trap cleanup EXIT
+# flutter test 收到 Ctrl+C 會自己正常結束，bash 就不會跟著停；明確結束，不再跑下一輪。
+trap 'echo "中斷了" >&2; exit 130' INT TERM
 
 # 鎖是一個資料夾：mkdir 不是成功就是已經存在，兩個 session 不會同時拿到。
 # 拿著鎖的程序已經不在（被中斷），或建好資料夾卻沒寫進擁有者就停住超過一分鐘，就接手。
-waited=""
-until mkdir "$lock" 2>/dev/null; do
+stale() {
+  local holder pid
   holder=$(cat "$lock/owner" 2>/dev/null || true)
   pid=${holder%% *}
-  if { [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; } ||
-    { [ -z "$holder" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }; then
-    echo "上一個量測（${holder:-沒有記下是誰}）已經不在了，接手它的鎖" >&2
-    rm -rf "$lock"
-    continue
+  if [ -n "$pid" ]; then
+    ! kill -0 "$pid" 2>/dev/null
+  else
+    [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]
   fi
-  [ -n "$waited" ] || echo "等別的量測結束：$holder" >&2
+}
+# 接手也要互斥：兩個等待的人同時看到舊鎖失效時，後刪的那個會刪掉先接手那個剛拿到的鎖。
+# 拿到 reclaim 的人在裡面重新確認一次才刪；鎖只有 reclaim 的持有者會刪，確認後不會再換手。
+reclaim() {
+  mkdir "$lock.reclaim" 2>/dev/null || {
+    # 持有 reclaim 的程序在這幾毫秒裡被中斷，留下的資料夾一分鐘後清掉。
+    [ -n "$(find "$lock.reclaim" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$lock.reclaim" 2>/dev/null
+    return 1
+  }
+  local took=1
+  if stale; then
+    echo "上一個量測（$(cat "$lock/owner" 2>/dev/null || echo 沒有記下是誰)）已經不在了，接手它的鎖" >&2
+    rm -rf "$lock"
+    took=0
+  fi
+  rmdir "$lock.reclaim"
+  return $took
+}
+waited=""
+until mkdir "$lock" 2>/dev/null; do
+  stale && reclaim && continue
+  [ -n "$waited" ] || echo "等別的量測結束：$(cat "$lock/owner" 2>/dev/null)" >&2
   waited=1
   sleep 10
 done
@@ -145,8 +178,11 @@ run() {
   busy=$(others)
   [ "${busy:-0}" -gt 0 ] && echo "  提醒：電腦上還有 $busy 個 flutter_tester 在跑，這次的數字可能偏高" >&2
   echo "  $side 第 $i 次" >&2
+  # 摘要在測試的檢查之前印出，沒全過的那次數字可能是沒量完的，不算進表。
   if ! (cd "$dir" && flutter test --run-skipped -t frame_budget "${present[@]}") > "$out/$side-$i.log" 2>&1; then
-    echo "  $side 第 $i 次測試沒有全過，看 $out/$side-$i.log" >&2
+    mv "$out/$side-$i.log" "$out/failed-$side-$i.log"
+    echo "  $side 第 $i 次測試沒有全過，停下來；看 $out/failed-$side-$i.log" >&2
+    exit 1
   fi
 }
 
