@@ -88,8 +88,15 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Run tests (shard ${{ matrix.shard }} of 4)
-        # 測試用提交的 *.g.dart；過時與否由 codegen 那台檢查。
-        run: flutter test --no-pub --reporter compact --total-shards 4 --shard-index $(( ${{ matrix.shard }} - 1 ))
+        # 照測試檔分：每台只編譯、載入自己那幾個檔。flutter test 內建的
+        # --total-shards 是把每個檔裡的測試案例分給各台，每台仍要編譯全部的
+        # 檔（一份 2 分 20 秒，四份加起來比不分還多），同一個檔的測試也會被
+        # 拆散到不同台。測試用提交的 *.g.dart；過時與否由 codegen 那台檢查。
+        run: |
+          git ls-files 'test/*_test.dart' 'test/**/*_test.dart' | sort -u \
+            | awk -v n=4 -v i=${{ matrix.shard }} 'NR % n == i % n' > shard.txt
+          echo "$(wc -l < shard.txt) test files"
+          xargs -a shard.txt flutter test --no-pub --reporter compact
       - name: Verify tests did not modify tracked source
         if: always()
         run: git diff --exit-code
