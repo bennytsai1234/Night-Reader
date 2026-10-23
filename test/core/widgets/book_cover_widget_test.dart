@@ -401,6 +401,81 @@ void main() {
       expect(revealed(tester), greaterThan(0), reason: '0.3 秒到了就換場');
     });
   });
+
+  // 開 App 的書架在骨架底下一幀一步準備（CoverReveal.inSteps，ADR 0031）。
+  group('a stepped reveal', () {
+    Widget stepped(CoverReveal reveal, Widget child) => MaterialApp(
+      home: CoverRevealScope(
+        reveal: reveal,
+        child: Center(child: child),
+      ),
+    );
+
+    testWidgets('a cover already in the memory cache still waits for its own '
+        'step after the card is first painted', (tester) async {
+      await tester.pumpWidget(cover(coverUrl));
+      await settleIo(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      final reveal = CoverReveal(CoverWait.onDevice, inSteps: true);
+      await tester.pumpWidget(
+        stepped(
+          reveal,
+          CoverRevealSlot(
+            child: BookCoverWidget(bookName: '書', coverUrl: coverUrl),
+          ),
+        ),
+      );
+      await tester.pump(); // 建書卡
+      await tester.pump(); // 第一次畫書卡
+      final raw = find.byType(RawImage);
+      expect(tester.widget<RawImage>(raw).image, isNotNull);
+      final gate = find.ancestor(
+        of: raw,
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(gate, findsOneWidget, reason: '快取裡的封面也要排隊換上');
+      expect(tester.widget<AnimatedOpacity>(gate).opacity, 0);
+      await tester.pump(); // 換上封面
+      await tester.pump();
+      expect(find.byType(AnimatedOpacity), findsNothing, reason: '換上後直接畫圖');
+    });
+
+    testWidgets('a show step left over from an earlier round cannot undo the '
+        'current round, so the wait still ends', (tester) async {
+      final a = CoverReveal(CoverWait.onDevice, inSteps: true);
+      final b = CoverReveal(CoverWait.onDevice, inSteps: true)..add('另一張慢的封面');
+      // a 的佇列前面塞滿別的步驟：這張封面在 a 的那一步很晚才輪到。
+      for (var i = 0; i < 50; i++) {
+        a.showCover(() {});
+      }
+      Widget page(CoverReveal reveal) =>
+          stepped(reveal, BookCoverWidget(bookName: '書', coverUrl: coverUrl));
+      await tester.pumpWidget(page(a));
+      await settleIo(tester);
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+        0,
+      );
+
+      // 換一輪：b 先放行這張封面，a 排著的那一步之後才到。
+      await tester.pumpWidget(page(b));
+      var done = false;
+      unawaited(b.settle().then((_) => done = true));
+      for (var i = 0; i < 70; i++) {
+        await tester.pump();
+      }
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+        1,
+      );
+      b.remove('另一張慢的封面');
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+      expect(done, isTrue, reason: '所有封面都換上了，等待要結束');
+    });
+  });
 }
 
 /// 網路封面的磁碟快取：[onDevice] 裡的網址算已經存在手機裡；讀取（不論

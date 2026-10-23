@@ -1,7 +1,12 @@
 // 整個 App 的截圖環境：記憶體資料庫＋真的 DAO＋假資料，畫出來的就是 App
 // 實際的頁面（閱讀器走真的排版引擎）。
 
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:drift/native.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
@@ -30,6 +35,8 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
@@ -241,13 +248,106 @@ Future<void> seedLibrary({bool withContent = true}) async {
   }
 }
 
+/// 書架上再多放 [count] 本書（書名、作者與進度各不相同），量一整個畫面的
+/// 書架用。在 `runAsync` 裡、[seedLibrary] 之後呼叫。
+Future<void> seedMoreBooks(int count) async {
+  final now = DateTime(2026, 10, 15, 21).millisecondsSinceEpoch;
+  await getIt<BookDao>().upsertAll([
+    for (var i = 0; i < count; i++)
+      Book(
+        bookUrl: 'https://www.example.com/book/${3000 + i}/',
+        origin: kOrigin,
+        originName: '筆趣閣',
+        name: '書架上的第${i + 7}本書${'長' * (i % 5)}',
+        author: '作者${String.fromCharCode(0x7532 + i)}',
+        latestChapterTitle: '第${100 + i}章',
+        totalChapterNum: 100 + i,
+        chapterIndex: i * 3,
+        durChapterTitle: '第${i * 3 + 1}章',
+        durChapterTime: now - (i + 10) * 3600000,
+        isInBookshelf: true,
+      ),
+  ]);
+}
+
+/// 放書架封面的暫存資料夾；測試結束時刪掉。
+Directory coverDirectory() {
+  final covers = Directory.systemTemp.createTempSync('night-reader-covers-');
+  addTearDown(() {
+    try {
+      covers.deleteSync(recursive: true);
+    } on FileSystemException {
+      // 還開著（Windows）就留給系統暫存區清理。
+    }
+  });
+  return covers;
+}
+
+/// 書架上的每一本書都換成 [covers] 裡的本機封面（手機裡已經有的封面，開
+/// App 換場前要等它們畫得出來，ADR 0031）。在 `runAsync` 裡呼叫。
+Future<void> seedCovers(Directory covers) async {
+  final dao = getIt<BookDao>();
+  final books = await dao.getInBookshelf();
+  await dao.upsertAll([
+    for (final (i, book) in books.indexed)
+      book.copyWith(
+        coverUrl: 'local://${covers.path}${Platform.pathSeparator}$i.png',
+      ),
+  ]);
+  for (var i = 0; i < books.length; i++) {
+    File('${covers.path}${Platform.pathSeparator}$i.png')
+        .writeAsBytesSync(await _encodeCover(i));
+  }
+}
+
+Future<Uint8List> _encodeCover(int seed) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final hue = seed * 57.0 % 360;
+  canvas.drawRect(
+    const Rect.fromLTWH(0, 0, 120, 168),
+    Paint()
+      ..shader = ui.Gradient.linear(Offset.zero, const Offset(0, 168), [
+        HSVColor.fromAHSV(1, hue, 0.6, 0.9).toColor(),
+        HSVColor.fromAHSV(1, (hue + 40) % 360, 0.7, 0.4).toColor(),
+      ]),
+  );
+  canvas.drawCircle(
+    const Offset(60, 70),
+    30,
+    Paint()..color = const Color(0xFFF0E6C8),
+  );
+  final image = await recorder.endRecording().toImage(120, 168);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
+}
+
 /// 整個 App（同 `main.dart` 的 runApp），等開 App 的進場播完：骨架長出
-/// 0.6 秒、停 0.8 秒、換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。
+/// 0.6 秒、至少停 0.8 秒（書架在骨架底下一格一步準備好才換，書多時更久）、
+/// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。準備是照格數走的，
+/// 一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
     MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
   );
-  await settle(tester, const Duration(seconds: 3));
+  LaunchEntranceMotion? entrance;
+  var finished = false;
+  for (var i = 0; i < 1000 && !finished; i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 16));
+    if (entrance != null) continue;
+    final shelf = find.byType(BookshelfPage).evaluate();
+    if (shelf.isEmpty) continue;
+    entrance = LaunchEntrance.maybeOf(shelf.first);
+    if (entrance == null) break;
+    unawaited(entrance.finished.then((_) => finished = true));
+  }
+  // 推到上限還沒播完是進場卡住了（換場一直不來），不能當成開好了。
+  if (entrance != null && !finished) {
+    fail('開 App 的進場推進 1000 格（16 秒）仍沒播完');
+  }
+  await settle(tester, const Duration(milliseconds: 500));
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進

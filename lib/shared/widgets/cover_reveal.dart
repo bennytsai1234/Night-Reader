@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/app_tokens.dart';
+import 'painted_when.dart';
 
 /// 換場前怎麼等封面（[SkeletonSwitcher.waitForCovers]）。
 enum CoverWait {
@@ -26,18 +27,31 @@ enum CoverWait {
 /// 都建好，再照 [wait] 等登記的封面，整頁連同封面一次換場。
 /// [CoverWait.onDevice] 不設時間上限：每一個登記都一定會以解碼好、失敗或
 /// 拆掉結束。等待中解碼好的封面直接顯示，不另外淡入。
-class CoverReveal extends ChangeNotifier {
-  CoverReveal(this.wait);
+///
+/// [inSteps] 時每一塊再拆成更小的步驟，和建好的塊一起排隊、一幀只放行一步：
+/// 建好、排好版的那一幀先不畫，下一步才第一次畫出來（字第一次出現要先畫
+/// 進字形快取）；等待中解碼好的封面也排隊，一步只換上一張（[showCover]）。
+/// 開 App 的書架用：內容在骨架呼吸時於底下準備，呼吸的每一格只多一小步。
+///
+/// 等待結束時不通知底下的元件：各自下次重建（例如封面解碼好）時才看到
+/// 已經不在等待中，結果一樣；一起通知會讓整頁的書卡與封面擠在同一幀重建。
+class CoverReveal {
+  CoverReveal(this.wait, {this.inSteps = false});
 
   final CoverWait wait;
+
+  /// 第一次畫與換上封面也拆成各自一步，見 [CoverReveal]。
+  final bool inSteps;
 
   final Set<Object> _pending = {};
   Completer<void>? _drained;
   bool _waiting = true;
 
-  final Queue<VoidCallback> _builds = Queue();
+  /// 排隊的步驟：建一塊、第一次畫一塊、換上一張封面。
+  final Queue<VoidCallback> _steps = Queue();
 
-  /// 排進來、還沒真的建好的塊數，包括已經放行、下一幀才建的。
+  /// 排進來、還沒真的建好（[inSteps] 時是還沒畫出來）的塊數，包括已經放行、
+  /// 下一幀才建的。
   int _unbuilt = 0;
   Completer<void>? _allBuilt;
 
@@ -61,8 +75,16 @@ class CoverReveal extends ChangeNotifier {
   /// 不再需要時由那一塊呼叫 [_slotDone]。
   void _queueBuild(VoidCallback build) {
     _unbuilt++;
-    _builds.add(build);
-    if (_builds.length == 1) _grantNext();
+    _queueStep(build);
+  }
+
+  /// [inSteps] 時，等待中解碼好的一張封面排隊換上去：輪到時呼叫 [show]
+  /// （之後那一幀才換上）。封面換上之前照樣登記著，換場等它。
+  void showCover(VoidCallback show) => _queueStep(show);
+
+  void _queueStep(VoidCallback step) {
+    _steps.add(step);
+    if (_steps.length == 1) _grantNext();
   }
 
   void _slotDone() {
@@ -73,13 +95,13 @@ class CoverReveal extends ChangeNotifier {
     _allBuilt = null;
   }
 
-  /// 每一幀畫完放行一塊：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
+  /// 每一幀畫完放行一步：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
   /// 下；整頁一起建要 40ms 以上（`test/frame_budget/`）。
   void _grantNext() {
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (_builds.isEmpty) return;
-      _builds.removeFirst()();
-      if (_builds.isNotEmpty) _grantNext();
+      if (_steps.isEmpty) return;
+      _steps.removeFirst()();
+      if (_steps.isNotEmpty) _grantNext();
     });
     SchedulerBinding.instance.ensureVisualUpdate();
   }
@@ -92,8 +114,11 @@ class CoverReveal extends ChangeNotifier {
     await SchedulerBinding.instance.endOfFrame;
     // 看的是「還沒建好」而不是「還在排隊」：最後一塊放行後下一幀才建，它的
     // 封面那時才登記。這一塊建好的那一幀，封面在同一個 build 裡登記，接下
-    // 來的封面等待照樣等它。
-    if (_unbuilt > 0) await (_allBuilt ??= Completer<void>()).future;
+    // 來的封面等待照樣等它。塊裡還有塊（清單裡的書卡）時，外層建好的瞬間
+    // 數到零，裡面的塊在同一個 build 裡才排進來：醒來再數一次。
+    while (_unbuilt > 0) {
+      await (_allBuilt ??= Completer<void>()).future;
+    }
     if (_pending.isNotEmpty) {
       final drained = (_drained = Completer<void>()).future;
       await switch (wait) {
@@ -106,26 +131,31 @@ class CoverReveal extends ChangeNotifier {
     }
     _waiting = false;
     _pending.clear();
-    notifyListeners();
   }
 }
 
 /// 把 [CoverReveal] 交給底下的封面。
-class CoverRevealScope extends InheritedNotifier<CoverReveal> {
+class CoverRevealScope extends InheritedWidget {
   const CoverRevealScope({
     super.key,
-    required CoverReveal super.notifier,
+    required this.reveal,
     required super.child,
   });
 
-  /// 還在等待中的 [CoverReveal]；不在等待中或不在範圍內時為 null。等待結束
-  /// 時依賴的元件會重建。
+  final CoverReveal reveal;
+
+  /// 還在等待中的 [CoverReveal]；不在等待中或不在範圍內時為 null。換了一輪
+  /// 等待時依賴的元件會重建；等待結束不會（見 [CoverReveal]）。
   static CoverReveal? waitingOf(BuildContext context) {
     final reveal = context
         .dependOnInheritedWidgetOfExactType<CoverRevealScope>()
-        ?.notifier;
+        ?.reveal;
     return reveal != null && reveal.waiting ? reveal : null;
   }
+
+  @override
+  bool updateShouldNotify(CoverRevealScope oldWidget) =>
+      !identical(reveal, oldWidget.reveal);
 }
 
 /// 骨架底下等著換場的內容裡較重的一塊（一張書卡）：輪到才建 [child]，之前
@@ -154,23 +184,51 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   bool _granted = false;
   CoverReveal? _queuedOn;
 
+  /// 建好時那一輪是 [CoverReveal.inSteps]：[child] 外面一直包著
+  /// [PaintedWhen]，元件樹的形狀不變。
+  bool _inSteps = false;
+
+  /// [_inSteps] 時，建好之後排到的下一步才畫出來。
+  bool _painted = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_granted) return;
+    // 建好、也畫出來了（或不分步）就不再排隊。
+    if (_granted && (!_inSteps || _painted)) return;
     final reveal = widget.wait ? CoverRevealScope.waitingOf(context) : null;
+    if (reveal != null && identical(_queuedOn, reveal)) return;
+    // 換了一輪等待（重新載入）或等待結束：舊的那一輪不再等這一塊，它排著的
+    // 這一塊的步驟一律作廢（每一步執行前都核對還是不是這一輪的）。
+    _release();
     if (reveal == null) {
-      _release();
       _granted = true;
+      _painted = true;
       return;
     }
-    if (identical(_queuedOn, reveal)) return;
-    // 換了一輪等待（重新載入）：舊的那一輪不再等這一塊。
-    _release();
     _queuedOn = reveal;
+    void paint() {
+      if (mounted && identical(_queuedOn, reveal)) {
+        setState(() => _painted = true);
+      }
+    }
+
+    if (_granted) {
+      // 上一輪建好、還沒畫：畫的那一步改由這一輪排、這一輪等。
+      reveal._queueBuild(paint);
+      return;
+    }
     reveal._queueBuild(() {
-      if (mounted && !_granted) setState(() => _granted = true);
+      if (!mounted || !identical(_queuedOn, reveal)) return;
+      setState(() {
+        _granted = true;
+        _inSteps = reveal.inSteps;
+      });
     });
+    // 建的那一步只建、只排版，緊接著的下一步才第一次畫。兩步一起排進去：
+    // 這一塊的封面要等建好才開始解碼，換上封面的那一步一定排在畫之後，字和
+    // 封面不會擠在同一幀第一次畫。
+    if (reveal.inSteps) reveal._queueStep(paint);
   }
 
   /// 告訴排隊的那一輪這一塊建好了，或不再需要。
@@ -189,7 +247,12 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   @override
   Widget build(BuildContext context) {
     if (!_granted) return widget.placeholder;
-    _release();
-    return widget.child;
+    if (!_inSteps) {
+      _release();
+      return widget.child;
+    }
+    // 畫出來了才算這一塊好了，換場等它。
+    if (_painted) _release();
+    return PaintedWhen(shown: _painted, child: widget.child);
   }
 }

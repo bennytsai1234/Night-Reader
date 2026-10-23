@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../theme/app_tokens.dart';
+import 'painted_when.dart';
 import 'skeleton.dart';
 import 'skeleton_reveal.dart';
 import 'snapshot_sweep.dart';
@@ -281,7 +281,7 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
         return Stack(
           fit: StackFit.passthrough,
           children: [
-            _PaintedWhen(
+            PaintedWhen(
               shown: revealed,
               child: IgnorePointer(
                 ignoring: hidden,
@@ -318,40 +318,5 @@ class _LaunchSkeletonState extends State<LaunchSkeleton> {
         );
       },
     );
-  }
-}
-
-/// [shown] 為 false 時排版照常、不畫：玻璃不取樣背景，也不另開圖層。
-class _PaintedWhen extends SingleChildRenderObjectWidget {
-  const _PaintedWhen({required this.shown, required super.child});
-
-  final bool shown;
-
-  @override
-  _RenderPaintedWhen createRenderObject(BuildContext context) =>
-      _RenderPaintedWhen(shown);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderPaintedWhen renderObject,
-  ) {
-    renderObject.shown = shown;
-  }
-}
-
-class _RenderPaintedWhen extends RenderProxyBox {
-  _RenderPaintedWhen(this._shown);
-
-  bool _shown;
-  set shown(bool value) {
-    if (_shown == value) return;
-    _shown = value;
-    markNeedsPaint();
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    if (_shown) super.paint(context, offset);
   }
 }
