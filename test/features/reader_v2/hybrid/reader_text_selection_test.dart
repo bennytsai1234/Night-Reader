@@ -299,13 +299,19 @@ void main() {
       return service;
     }
 
-    testWidgets('只有複製、搜尋與隱藏，不列出系統的文字處理 App', (tester) async {
+    testWidgets('列上只有複製、搜尋與隱藏，系統的文字處理 App 收在「⋮」裡', (tester) async {
       final calls = <MethodCall>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.processText,
         (call) async {
           calls.add(call);
-          return <String, String>{'translate': '翻譯'};
+          return switch (call.method) {
+            'ProcessText.queryTextActions' => <String, String>{
+              'translate': '翻譯',
+              'dict': '字典',
+            },
+            _ => null,
+          };
         },
       );
       addTearDown(
@@ -315,14 +321,60 @@ void main() {
         ),
       );
 
-      await pumpSelected(tester, onHide: (_) {});
+      final service = await pumpSelected(tester, onHide: (_) {});
       await tester.pump();
 
       expect(find.text('複製'), findsOneWidget);
       expect(find.text('搜尋'), findsOneWidget);
       expect(find.text('隱藏'), findsOneWidget);
       expect(find.text('翻譯'), findsNothing);
-      expect(calls, isEmpty);
+      expect(find.text('字典'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsNothing);
+      expect(find.text('翻譯'), findsOneWidget);
+      expect(find.text('字典'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('翻譯'), findsNothing);
+
+      // 展開後改選別的字，選單回到收起的樣子。
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      final current = service.selection!;
+      service.select(
+        ReaderTextSelection(
+          blocks: current.blocks,
+          epoch: current.epoch,
+          paragraph: current.paragraph,
+          range: HybridTextRange(current.range.start, current.range.end - 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('翻譯'), findsNothing);
+      service.select(current);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('翻譯'));
+      await tester.pump();
+
+      expect(calls.last.method, 'ProcessText.processTextAction');
+      expect(calls.last.arguments, <Object>['translate', '城門', true]);
+      expect(service.active, isFalse);
+    });
+
+    testWidgets('手機上沒有文字處理 App 時不顯示「⋮」', (tester) async {
+      await pumpSelected(tester, onHide: (_) {});
+      await tester.pump();
+
+      expect(find.text('隱藏'), findsOneWidget);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
     });
 
     testWidgets('按「隱藏」交出選到的字並收起選取', (tester) async {

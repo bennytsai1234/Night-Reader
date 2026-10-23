@@ -53,14 +53,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('風格卡一列五張，一頁放得下到玻璃效果', (tester) async {
+  testWidgets('風格卡兩列、每列五張，一頁放得下到玻璃效果', (tester) async {
     await pumpPage(tester);
     final tops = <double>[];
     for (final style in AppStyle.values) {
       tops.add(tester.getTopLeft(find.bySemanticsLabel(style.label)).dy);
     }
-    expect(tops, hasLength(5));
-    expect(tops.toSet(), hasLength(1), reason: '五張排成一列');
+    expect(tops.toSet(), hasLength(2), reason: '十張排成兩列');
+    expect(tops.where((top) => top == tops.first), hasLength(5));
     final glass = tester.getBottomLeft(find.text('玻璃'));
     expect(glass.dy, lessThan(852), reason: '不用往下捲就看得到玻璃效果');
   });

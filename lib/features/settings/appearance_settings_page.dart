@@ -182,7 +182,7 @@ class _AccentDot extends StatelessWidget {
   );
 }
 
-/// 風格卡：每個風格一張直式小書頁，一列五張，一頁放得下全部風格與
+/// 風格卡：每個風格一張直式小書頁，兩列、每列五張，一頁放得下全部風格與
 /// 下面的強調色、深淺與玻璃效果。顯示各風格在目前深淺下的樣子。
 class _StyleGrid extends StatelessWidget {
   const _StyleGrid({

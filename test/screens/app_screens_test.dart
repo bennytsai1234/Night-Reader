@@ -5,8 +5,8 @@
 //   SHOT_ONLY=r04,s12 flutter test --run-skipped -t screens test/screens
 //   SHOT_STYLE=plain flutter test --run-skipped -t screens test/screens
 //
-// SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain），
-// 預設紙墨。
+// SHOT_STYLE 是 `AppStyle` 的名稱（paper、bamboo、azurite、tea、plain、rouge、
+// lotus、scroll、amber、frost），預設紙墨。
 //
 // 圖檔寫在 [screenshotDir]，檔名是「情境_深淺.png」。這組測試帶 `screens`
 // 標籤，`dart_test.yaml` 讓它平常跳過，pre-push 與 CI 的全套測試不會跑。
