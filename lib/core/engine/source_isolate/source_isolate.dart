@@ -86,7 +86,7 @@ abstract final class SourceIsolate {
       // 測試多半不開書源 isolate；照樣試送一次，捕捉了送不出去的東西時
       // 在測試裡就失敗，不等到 App 裡才改回主 isolate。
       assert(_sendable(task));
-      return task(cancelToken ?? CancelToken());
+      return _runCancellable(task, cancelToken);
     }
     final id = _nextTaskId++;
     final Future<Object?> result;
@@ -95,7 +95,7 @@ abstract final class SourceIsolate {
     } on ArgumentError catch (e) {
       assert(_sendable(task));
       AppLog.e('書源工作送不進書源 isolate，改在主 isolate 執行: $e', error: e);
-      return task(cancelToken ?? CancelToken());
+      return _runCancellable(task, cancelToken);
     }
     unawaited(
       cancelToken?.whenCancel.then((_) => channel.notify(_CancelTask(id))),
@@ -280,6 +280,24 @@ abstract final class SourceIsolate {
   }
 }
 
+/// 正在執行的書源工作的取消訊號。規則 JS 自己發的請求（`java.ajax` 這類）
+/// 和規則裡的資源載入拿不到呼叫端傳的 [CancelToken]，從這裡取；工作被取消
+/// 時它們跟著停。
+CancelToken? get currentSourceCancelToken =>
+    Zone.current[_cancelTokenZoneKey] as CancelToken?;
+
+final Object _cancelTokenZoneKey = Object();
+
+/// 在記著 [cancelToken] 的 Zone 裡執行 [task]。沒給時沿用外層工作的：書源
+/// 工作裡又叫 [SourceIsolate.run] 的（原地執行），跟著外層一起取消。
+Future<R> _runCancellable<R>(
+  Future<R> Function(CancelToken cancelToken) task,
+  CancelToken? cancelToken,
+) {
+  final token = cancelToken ?? currentSourceCancelToken ?? CancelToken();
+  return runZoned(() => task(token), zoneValues: {_cancelTokenZoneKey: token});
+}
+
 /// 快取裡存的值理論上都是字串；送不過去的不同步，只記下來。
 void _tryNotify(IsolateChannel? channel, Object notice) {
   if (channel == null) return;
@@ -304,7 +322,7 @@ void _main(SendPort mainPort) {
           final cancelToken = CancelToken();
           tasks[id] = cancelToken;
           try {
-            return await task(cancelToken);
+            return await _runCancellable(task, cancelToken);
           } finally {
             tasks.remove(id);
           }

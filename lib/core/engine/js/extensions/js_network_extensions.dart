@@ -8,6 +8,8 @@ import '../js_extensions.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/engine/analyze_url.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/network/cancellation.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/services/backstage_webview.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
@@ -319,7 +321,10 @@ extension JsNetworkExtensions on JsExtensions {
             url: url,
             javaScript: js,
           );
-          final response = await webView.getStrResponse();
+          final response = await untilCancelled(
+            webView.getStrResponse(),
+            currentSourceCancelToken,
+          );
           resolveJsPending(parsed.callId, response['body']?.toString() ?? '');
         } catch (e) {
           AppLog.e('java.webView failed: $e', error: e);
@@ -354,7 +359,10 @@ extension JsNetworkExtensions on JsExtensions {
             javaScript: js,
             sourceRegex: sourceRegex,
           );
-          final response = await webView.getStrResponse();
+          final response = await untilCancelled(
+            webView.getStrResponse(),
+            currentSourceCancelToken,
+          );
           resolveJsPending(parsed.callId, response['body']?.toString() ?? '');
         } catch (e) {
           AppLog.e('java.webViewGetSource failed: $e', error: e);
@@ -391,7 +399,10 @@ extension JsNetworkExtensions on JsExtensions {
             javaScript: js,
             overrideUrlRegex: overrideUrlRegex,
           );
-          final response = await webView.getStrResponse();
+          final response = await untilCancelled(
+            webView.getStrResponse(),
+            currentSourceCancelToken,
+          );
           resolveJsPending(parsed.callId, response['body']?.toString() ?? '');
         } catch (e) {
           AppLog.e('java.webViewGetOverrideUrl failed: $e', error: e);
@@ -511,6 +522,7 @@ extension JsNetworkExtensions on JsExtensions {
       extra: <String, dynamic>{
         AppInterceptor.disableManualRedirectHandlingKey: true,
       },
+      cancelToken: currentSourceCancelToken,
     );
     return HttpClient().client.fetch<dynamic>(requestOptions);
   }

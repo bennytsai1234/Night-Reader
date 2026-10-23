@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -35,6 +36,10 @@ abstract class DownloadBase extends ChangeNotifier {
   final Map<String, Completer<void>> _retirementSignals =
       <String, Completer<void>>{};
 
+  /// 每本書正在跑的那一輪下載的取消訊號：退役時取消，已經送出的請求與
+  /// 還沒開始的重試跟著停下，移出書架與換源不必等它們自己結束。
+  final Map<String, CancelToken> _runCancelTokens = <String, CancelToken>{};
+
   final int maxConcurrent = 3;
   final int maxChapterConcurrent = 5;
 
@@ -64,6 +69,17 @@ abstract class DownloadBase extends ChangeNotifier {
     );
     if (!signal.isCompleted) {
       signal.complete();
+    }
+    _runCancelTokens[bookUrl]?.cancel('這本書的下載已停止');
+  }
+
+  /// 開始一輪下載，拿到這一輪的取消訊號；跑完交給 [endRun]。
+  CancelToken beginRun(String bookUrl) =>
+      _runCancelTokens[bookUrl] = CancelToken();
+
+  void endRun(String bookUrl, CancelToken cancelToken) {
+    if (identical(_runCancelTokens[bookUrl], cancelToken)) {
+      _runCancelTokens.remove(bookUrl);
     }
   }
 

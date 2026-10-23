@@ -13,6 +13,8 @@ import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/source_validation_context.dart';
 import 'package:night_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:night_reader/core/network/str_response.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
+import 'package:night_reader/core/network/cancellation.dart';
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
 class AnalyzeUrl {
@@ -454,6 +456,8 @@ class AnalyzeUrl {
   /// 3. HTML <meta> 標籤中的 charset
   /// 4. 自動偵測 (UTF-8 / GBK)
   Future<StrResponse> getStrResponse({CancelToken? cancelToken}) async {
+    // 規則 JS 裡的請求（java.ajax 這類）沒有傳，跟著所在的書源工作取消。
+    cancelToken ??= currentSourceCancelToken;
     final limiter = ConcurrentRateLimiter(
       source is BaseSource ? source as BaseSource : null,
     );
@@ -481,11 +485,15 @@ class AnalyzeUrl {
             '批量校驗不執行 WebView 載入或互動驗證',
           );
         }
-        final finalBody = await HeadlessWebViewService().getRenderedHtml(
-          url: url,
-          headers: headerMap,
-          js: webJs,
-          delayTime: webViewDelayTime,
+        // WebView 渲染沒辦法中途停下；取消時不再等它，結果丟掉。
+        final finalBody = await untilCancelled(
+          HeadlessWebViewService().getRenderedHtml(
+            url: url,
+            headers: headerMap,
+            js: webJs,
+            delayTime: webViewDelayTime,
+          ),
+          cancelToken,
         );
         return StrResponse(
           url: url,
@@ -517,7 +525,7 @@ class AnalyzeUrl {
         responseType: ResponseType.bytes,
       );
 
-      // 網路連線類錯誤重試：最多 3 次 (初次 + 2 retries)，指數退避 300ms / 900ms
+      // 網路連線類錯誤重試：最多 3 次 (初次 + 2 retries)，退避 300ms / 1200ms
       // 對標 Android OkHttp RetryAndFollowUpInterceptor 行為
       Response<List<int>> rawResponse;
       const int maxAttempts = 3;
@@ -541,7 +549,14 @@ class AnalyzeUrl {
         } on DioException catch (e) {
           if (attempt >= maxAttempts || !_isRetryable(e)) rethrow;
           AppLog.d('AnalyzeUrl: 請求失敗 (${e.type}) → 第 $attempt 次重試: $url');
-          await Future.delayed(Duration(milliseconds: 300 * attempt * attempt));
+          // 退避期間取消就不再試。
+          await Future.any<Object?>([
+            Future<void>.delayed(
+              Duration(milliseconds: 300 * attempt * attempt),
+            ),
+            ?cancelToken?.whenCancel,
+          ]);
+          if (cancelToken?.cancelError case final cancelled?) throw cancelled;
         }
       }
 
@@ -554,7 +569,7 @@ class AnalyzeUrl {
         headers: rawResponse.headers.map,
         raw: rawResponse,
       );
-    });
+    }, cancelToken: cancelToken);
   }
 
   /// 判斷 Dio 錯誤是否屬於可重試的暫時性網路故障
@@ -633,6 +648,7 @@ class AnalyzeUrl {
 
   /// 獲取位元組回應內容
   Future<Uint8List> getByteArray() async {
+    final cancelToken = currentSourceCancelToken;
     final limiter = ConcurrentRateLimiter(
       source is BaseSource ? source as BaseSource : null,
     );
@@ -657,16 +673,18 @@ class AnalyzeUrl {
           url,
           data: body,
           options: options,
+          cancelToken: cancelToken,
         );
       } else {
         response = await httpClient.client.get<List<int>>(
           url,
           options: options,
+          cancelToken: cancelToken,
         );
       }
 
       return Uint8List.fromList(response.data ?? []);
-    });
+    }, cancelToken: cancelToken);
   }
 
   Map<String, String> _buildRequestHeaders() {
