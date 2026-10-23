@@ -22,7 +22,6 @@ import 'package:night_reader/features/source_manager/source_manager_page.dart';
 import 'explore_provider.dart';
 import 'explore_show_page.dart';
 
-import 'package:night_reader/shared/widgets/group_filter_bar.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import 'widgets/explore_skeletons.dart';
@@ -46,35 +45,11 @@ class _ExplorePageContent extends StatefulWidget {
 
 enum _SourceAction { edit, top, search, refresh, delete }
 
-class _ExplorePageContentState extends State<_ExplorePageContent>
-    with SingleTickerProviderStateMixin {
+/// 分組選單裡「全部」的值；分組名稱都是字串，不會和它撞在一起。
+const Object _allGroups = Object();
+
+class _ExplorePageContentState extends State<_ExplorePageContent> {
   final _scrollController = ScrollController();
-
-  /// 分組篩選列出現的進度，1 是完整出現。第一幀照 provider 手上的分組
-  /// （讀到書源前是上次的紀錄）直接到位；之後有無分組改變（紀錄不準、
-  /// 分組刪光或新增）時，篩選列從頁首下緣長出或收回，清單連續讓位。
-  late final AnimationController _filterBar = AnimationController(
-    vsync: this,
-    duration: AppMotion.menu,
-  );
-  late final Animation<double> _filterBarShown = CurvedAnimation(
-    parent: _filterBar,
-    curve: AppMotion.menuCurve,
-  );
-  bool? _filterBarTarget;
-
-  void _syncFilterBar(BuildContext context, bool shown) {
-    if (_filterBarTarget == shown) return;
-    final first = _filterBarTarget == null;
-    _filterBarTarget = shown;
-    if (first || MediaQuery.disableAnimationsOf(context)) {
-      _filterBar.value = shown ? 1 : 0;
-    } else if (shown) {
-      _filterBar.forward();
-    } else {
-      _filterBar.reverse();
-    }
-  }
 
   /// 沒有發現書源時用到：連一個書源都沒有時改成帶去匯入。
   late final Stream<bool> _hasSources = getIt.isRegistered<BookSourceDao>()
@@ -91,7 +66,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent>
 
   @override
   void dispose() {
-    _filterBar.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -99,11 +73,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExploreProvider>();
-    // 讀到書源前 provider 的分組是上次的紀錄，篩選列從第一幀就留好。
-    _syncFilterBar(
-      context,
-      provider.sourceLoadError == null && provider.groups.isNotEmpty,
-    );
     // 內距要從 Scaffold 內取得：延伸到頁首下方時 top 才包含頁首高度。
     final body = Builder(
       builder: (bodyContext) {
@@ -116,62 +85,50 @@ class _ExplorePageContentState extends State<_ExplorePageContent>
       },
     );
 
-    // 篩選列長出、收回時頁首每一幀變高，Scaffold 要重新量；清單是同一個
-    // [body]，只隨讓位的內距重排。
-    return AnimatedBuilder(
-      animation: _filterBarShown,
-      builder: (context, _) => Scaffold(
-        extendBodyBehindAppBar: true,
-        backgroundColor: AppChrome.of(context).groupedBackground,
-        appBar: _buildHeader(provider),
-        body: body,
-      ),
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: AppChrome.of(context).groupedBackground,
+      appBar: _buildHeader(provider),
+      body: body,
     );
   }
 
+  /// 頁首和書架一樣是「圓鈕＋置中標題」，清單從頁首下方同一條線開始。
+  /// 有分組時左側是分組鈕；讀到書源前 provider 的分組是上次的紀錄，鈕從
+  /// 第一幀就在，之後有無分組改變時從一個點長出或收回（GlassMorph）。
   GlassNavHeader _buildHeader(ExploreProvider provider) {
-    final shown = _filterBarShown.value;
+    final hasGroups =
+        provider.sourceLoadError == null && provider.groups.isNotEmpty;
     return GlassNavHeader(
+      morph: true,
       title: '發現',
       backgroundColor: AppChrome.of(context).groupedBackground,
-      bottom: shown > 0
-          ? ClipRect(
-              // 完整出現時不裁，膠囊的陰影照常伸出去。
-              clipBehavior: shown < 1 ? Clip.hardEdge : Clip.none,
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                heightFactor: shown,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppGrouped.margin,
-                    0,
-                    AppGrouped.margin,
-                    AppSpacing.sm,
-                  ),
-                  child: GroupFilterBar<String?>(
-                    all: GroupFilterOption<String?>(
-                      null,
-                      '全部',
-                      count: provider.filterAllCount,
-                    ),
-                    groups: [
-                      for (final group in provider.groups)
-                        GroupFilterOption<String?>(
-                          group,
-                          group,
-                          count: provider.groupCounts[group],
-                        ),
-                    ],
-                    selected: provider.selectedGroup,
-                    // provider 對同一分組是切換語意；篩選列只在選到不同分組時
-                    // 回報，因此不會誤觸取消。
-                    onChanged: provider.setGroupFilter,
-                  ),
+      leading: hasGroups
+          ? GlassMenuButton<Object>(
+              icon: Icons.filter_list_rounded,
+              tooltip: '分組',
+              entriesBuilder: (_) => [
+                GlassMenuItem(
+                  value: _allGroups,
+                  label: '全部　${provider.allGroupCount}',
+                  checked: provider.selectedGroup == null,
                 ),
-              ),
+                for (final group in provider.groups)
+                  GlassMenuItem(
+                    value: group,
+                    label: '$group　${provider.groupCounts[group] ?? 0}',
+                    checked: provider.selectedGroup == group,
+                  ),
+              ],
+              onSelected: (value) {
+                final group = value == _allGroups ? null : value as String;
+                // provider 對同一分組是切換語意；再點一次已選的分組不取消。
+                if (group != provider.selectedGroup) {
+                  provider.setGroupFilter(group);
+                }
+              },
             )
           : null,
-      bottomHeight: (GroupFilterBar.height + AppSpacing.sm) * shown,
     );
   }
 
@@ -186,7 +143,8 @@ class _ExplorePageContentState extends State<_ExplorePageContent>
 
   /// 書源清單讓出頁首與底部浮動分頁列。
   EdgeInsets get _listPadding => EdgeInsets.only(
-    top: _bodyPadding.top + AppSpacing.sm,
+    // 和書架、我的一樣從頁首下方同一條線開始。
+    top: _bodyPadding.top + AppSpacing.xs,
     bottom: _bodyPadding.bottom + AppSpacing.xl,
   );
 
@@ -566,7 +524,7 @@ class _ExplorePageContentState extends State<_ExplorePageContent>
     if (target == null) return;
     final viewport = RenderAbstractViewport.maybeOf(target);
     if (viewport == null) return;
-    // 展開的書源捲到玻璃頁首與分組篩選列下方，而不是被頁首蓋住。
+    // 展開的書源捲到玻璃頁首下方，而不是被頁首蓋住。
     final headerExtent = _bodyPadding.top;
     final position = _scrollController.position;
     final offset = (viewport.getOffsetToReveal(target, 0).offset - headerExtent)
