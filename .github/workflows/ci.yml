@@ -31,15 +31,97 @@ jobs:
         # 有沒有寫更新說明，在推上 beta 發測試版時才檢查（android-release.yml，ADR 0027）。
         run: sh tool/changelog_test.sh
 
-  verify:
-    name: Analyze and test
+  # 三種檢查分在不同的機器上同時跑，全套測試再切成幾份：原本同一台依序跑約
+  # 6 分鐘（測試 3.6 分、重新產生 Drift 1.4 分、analyze 0.5 分），拆開後最久的
+  # 一台約 2 分鐘。每台各自裝一次 Flutter（約 20 秒），公開 repo 不另計費。
+  #
+  # 每個 job 的 concurrency 群組各自帶上自己的名稱（測試再帶分片）：同一群組
+  # 只能跑一個，共用一個群組會讓同一次的幾台互相排隊或取消。推分支直接觸發
+  # 的，有新的一次就取消舊的：舊提交的結果已經沒有用，留著只會讓新的一次排在
+  # 它後面。發版呼叫的（帶 ref）不取消：每次合併各發一版，發版前的驗證要跑完
+  # （ADR 0027）。
+  codegen:
+    name: Drift code is current
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}
-      # 推分支直接觸發的，有新的一次就取消舊的：舊提交的結果已經沒有用，留著
-      # 只會讓新的一次排在它後面。發版呼叫的（帶 ref）不取消：每次合併各發
-      # 一版，發版前的驗證要跑完（ADR 0027）。
+      group: ci-${{ github.workflow }}-${{ github.ref }}-codegen
+      cancel-in-progress: ${{ !inputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Regenerate Drift code
+        # 提交的 *.g.dart 過時時，最後的 git diff 會擋下來。
+        run: dart run build_runner build
+      - name: Verify generated code matches the commit
+        if: always()
+        run: git diff --exit-code
+
+  test:
+    name: Test (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # 一份失敗時其他份照樣跑完，一次看到所有失敗。
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-test-${{ matrix.shard }}
+      cancel-in-progress: ${{ !inputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run tests (shard ${{ matrix.shard }} of 4)
+        # 照測試檔分：每台只編譯、載入自己那幾個檔。flutter test 內建的
+        # --total-shards 是把每個檔裡的測試案例分給各台，每台仍要編譯全部的
+        # 檔（一份 2 分 20 秒，四份加起來比不分還多），同一個檔的測試也會被
+        # 拆散到不同台。測試用提交的 *.g.dart；過時與否由 codegen 那台檢查。
+        # 檔名全程以 NUL 分隔，含空白或中文的路徑也照原樣傳給 flutter test。
+        run: |
+          mapfile -d '' -t files < <(git ls-files -z -- 'test/*_test.dart' 'test/**/*_test.dart' | sort -zu)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No test files found."
+            exit 1
+          fi
+          shard=()
+          for i in "${!files[@]}"; do
+            if [ $(( i % 4 + 1 )) -eq ${{ matrix.shard }} ]; then
+              shard+=("${files[$i]}")
+            fi
+          done
+          echo "${#shard[@]} of ${#files[@]} test files"
+          # 測試檔少於四個時這一份可能分不到；不帶檔名的 flutter test 會跑全套。
+          if [ ${#shard[@]} -eq 0 ]; then
+            exit 0
+          fi
+          flutter test --no-pub --reporter compact "${shard[@]}"
+      - name: Verify tests did not modify tracked source
+        if: always()
+        run: git diff --exit-code
+
+  verify:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-verify
       cancel-in-progress: ${{ !inputs.ref }}
     steps:
       - uses: actions/checkout@v6
@@ -77,14 +159,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Regenerate Drift code
-        # 提交的 *.g.dart 過時時，最後的 git diff 會擋下來。
-        run: dart run build_runner build
       - name: Check formatting
         # *.g.dart 由 build_runner 產生，格式不在這裡把關。
         run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
       - run: flutter analyze --no-pub
-      - run: flutter test --no-pub --reporter compact
       - name: Test frame budget compare tool
         run: sh tool/frame_budget_compare_test.sh
       - name: Verify validation did not modify tracked source
