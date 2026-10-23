@@ -11,7 +11,6 @@ import 'package:night_reader/features/explore/explore_provider.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
-import 'package:night_reader/shared/widgets/group_filter_bar.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:provider/provider.dart';
@@ -210,7 +209,9 @@ void main() {
   double headerHeight(WidgetTester tester) =>
       tester.getSize(find.byType(GlassNavHeader)).height;
 
-  group('group filter row', () {
+  final groupButton = find.byTooltip('分組');
+
+  group('group button', () {
     testWidgets('is in place from the first frame when groups were seen', (
       tester,
     ) async {
@@ -223,7 +224,7 @@ void main() {
       await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
       await tester.pump();
 
-      expect(find.byType(GroupFilterBar<String?>), findsOneWidget);
+      expect(groupButton, findsOneWidget);
       final before = headerHeight(tester);
       final skeletonTop = tester
           .getTopLeft(find.byType(GroupedSliceItem).first)
@@ -261,11 +262,11 @@ void main() {
         await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
         await tester.pump();
 
-        // 和沒有紀錄一樣：先不留篩選列，讀到書源才長出來並重新記下。
-        expect(find.byType(GroupFilterBar<String?>), findsNothing);
+        // 和沒有紀錄一樣：先沒有分組鈕，讀到書源才長出來並重新記下。
+        expect(groupButton, findsNothing);
         sources.add(groupedSources());
         await tester.pumpAndSettle();
-        expect(find.byType(GroupFilterBar<String?>), findsOneWidget);
+        expect(groupButton, findsOneWidget);
         expect(prefs.get('explore_filter_bar'), '{"all":3,"groups":[["甲",3]]}');
       });
     }
@@ -275,23 +276,59 @@ void main() {
       addTearDown(sources.close);
       await pumpExplore(tester, _FakeSourceDao.stream(sources.stream));
       await tester.pump();
-      expect(find.byType(GroupFilterBar<String?>), findsNothing);
+      expect(groupButton, findsNothing);
       final before = headerHeight(tester);
 
       sources.add(groupedSources());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 60));
-      final mid = headerHeight(tester);
       await tester.pumpAndSettle();
-      final after = headerHeight(tester);
 
-      expect(mid, greaterThan(before));
-      expect(mid, lessThan(after));
+      // 鈕長在頁首原有的位置上，頁首不變高，清單不讓位。
+      expect(groupButton, findsOneWidget);
+      expect(headerHeight(tester), before);
       // 記下這次的分組，下次開 App 從第一幀就留好。
       expect(
         getIt<SharedPreferences>().getString('explore_filter_bar'),
         '{"all":3,"groups":[["甲",3]]}',
       );
+    });
+
+    testWidgets('picks a group from the menu; picking it again keeps it', (
+      tester,
+    ) async {
+      final provider = await pumpExplore(
+        tester,
+        _FakeSourceDao([
+          ...groupedSources(),
+          BookSource(
+            bookSourceUrl: 'https://t.example',
+            bookSourceName: '書源乙',
+            bookSourceGroup: '乙',
+            exploreUrl: 'https://t.example/explore',
+            customOrder: 3,
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> pick(String label) async {
+        await tester.tap(groupButton);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+
+      await pick('乙　1');
+      expect(provider.selectedGroup, '乙');
+      expect(find.text('書源乙'), findsOneWidget);
+      expect(find.text('書源0'), findsNothing);
+
+      // 分組在 provider 裡是切換語意；從選單再點一次已選的不會取消。
+      await pick('乙　1');
+      expect(provider.selectedGroup, '乙');
+
+      await pick('全部　4');
+      expect(provider.selectedGroup, isNull);
+      expect(find.text('書源0'), findsOneWidget);
     });
   });
 
