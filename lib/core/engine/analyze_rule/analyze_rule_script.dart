@@ -7,6 +7,7 @@ import '../js/js_engine.dart';
 
 import 'package:night_reader/core/services/cookie_store.dart';
 import 'package:night_reader/core/services/cache_manager.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/services/http_client.dart';
 import 'package:night_reader/core/models/base_source.dart';
 import 'package:night_reader/core/models/book_source.dart';
@@ -156,7 +157,10 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
     final urlStr = url is List ? url.first.toString() : url.toString();
     log('  ◇ JS 調用 ajax: $urlStr');
     try {
-      final response = await HttpClient().client.get(urlStr);
+      final response = await HttpClient().client.get(
+        urlStr,
+        cancelToken: currentSourceCancelToken,
+      );
       return response.data?.toString();
     } catch (e) {
       log('  ❌ ajax 失敗: $e');

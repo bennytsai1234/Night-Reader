@@ -135,6 +135,8 @@ class ChapterContentPreparationPipeline {
         sourceOverride: sourceOverride,
         cancelToken: cancelToken,
       );
+      // 規則 JS 可能把取消接住、當成抓不到：取消了就什麼都不寫。
+      if (cancelToken?.cancelError case final cancelled?) throw cancelled;
       if (result.isReady || attempt == attempts - 1) {
         await _storeResult(
           chapter: chapter,

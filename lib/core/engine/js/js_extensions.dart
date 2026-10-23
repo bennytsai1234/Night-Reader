@@ -8,6 +8,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:night_reader/core/engine/analyze_rule/analyze_rule_support.dart';
 import 'package:night_reader/core/engine/parsers/css/analyze_by_css_support.dart';
 import 'package:night_reader/core/engine/rule_data_fields.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/core/models/rule_data_interface.dart';
@@ -921,7 +922,10 @@ class JsExtensions extends JsExtensionsBase {
     final cached = await cacheManager.get(key);
     if (cached != null) return cached;
     try {
-      final response = await HttpClient().client.get(url);
+      final response = await HttpClient().client.get(
+        url,
+        cancelToken: currentSourceCancelToken,
+      );
       final content = response.data.toString();
       if (content.isNotEmpty) await cacheManager.put(key, content);
       return content;

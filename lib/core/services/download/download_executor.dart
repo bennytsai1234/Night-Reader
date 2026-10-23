@@ -337,65 +337,55 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
 
         poolCount++;
-        unawaited(
-          downloadChapterInSourceIsolate(
+        unawaited(() async {
+          // 每章不論怎麼結束都只放掉一次名額：名額提早歸零的話，退役會在
+          // 這章還沒結束時就刪資料，這章之後又把正文寫回去。
+          try {
+            DownloadChapterResult result;
+            // 分類看原文（英文例外名稱也算數），畫面上的原因用白話。
+            String rawFailure;
+            try {
+              result = await downloadChapterInSourceIsolate(
                 run: plan.run,
                 chapterUrl: chapter.url,
                 maxAttempts: _maxRetries,
                 cancelToken: cancelToken,
-              )
-              .then((result) {
-                if (result.success) {
-                  task.successCount++;
-                  consecutiveFailures = 0;
-                } else {
-                  task.errorCount++;
-                  consecutiveFailures++;
-                  final message = result.failureMessage ?? '下載失敗';
-                  task.setFailure(
-                    reason: classifyDownloadFailureReason(message),
-                    message: message,
-                    chapterIndex: chapter.index,
-                  );
-                }
-                endChapter();
-                task.currentChapterIndex = chapter.index;
-                task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-                downloadDao.updateProgress(
-                  task.bookUrl,
-                  currentChapterIndex: chapter.index,
-                  successCount: task.successCount,
-                  errorCount: task.errorCount,
-                );
-                update();
-              })
-              .catchError((Object error, StackTrace stack) {
-                // 退役取消的不是失敗：不記錯誤、不寫進度。
-                if (cancelToken.isCancelled) {
-                  endChapter();
-                  return;
-                }
-                AppLog.w('Download chapter failed ${chapter.title}: $error');
-                task.errorCount++;
-                consecutiveFailures++;
-                // 分類看原文（英文例外名稱也算數），畫面上的原因用白話。
-                task.setFailure(
-                  reason: classifyDownloadFailureReason(error.toString()),
-                  message: userErrorReason(error),
-                  chapterIndex: chapter.index,
-                );
-                endChapter();
-                task.currentChapterIndex = chapter.index;
-                task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-                downloadDao.updateProgress(
-                  task.bookUrl,
-                  currentChapterIndex: chapter.index,
-                  successCount: task.successCount,
-                  errorCount: task.errorCount,
-                );
-                update();
-              }),
-        );
+              );
+              rawFailure = result.failureMessage ?? '';
+            } catch (error) {
+              // 退役取消的不是失敗：不記錯誤、不寫進度。
+              if (cancelToken.isCancelled) return;
+              AppLog.w('Download chapter failed ${chapter.title}: $error');
+              result = DownloadChapterResult.failed(userErrorReason(error));
+              rawFailure = error.toString();
+            }
+            if (result.success) {
+              task.successCount++;
+              consecutiveFailures = 0;
+            } else {
+              task.errorCount++;
+              consecutiveFailures++;
+              task.setFailure(
+                reason: classifyDownloadFailureReason(rawFailure),
+                message: result.failureMessage!,
+                chapterIndex: chapter.index,
+              );
+            }
+            task.currentChapterIndex = chapter.index;
+            task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
+            unawaited(
+              downloadDao.updateProgress(
+                task.bookUrl,
+                currentChapterIndex: chapter.index,
+                successCount: task.successCount,
+                errorCount: task.errorCount,
+              ),
+            );
+            update();
+          } finally {
+            endChapter();
+          }
+        }());
       }
 
       while (poolCount > 0) {

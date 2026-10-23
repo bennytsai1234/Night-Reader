@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -11,8 +12,8 @@ import 'package:night_reader/core/database/app_database.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/database/dao/chapter_dao.dart';
-import 'package:night_reader/core/database/dao/download_dao.dart';
-import 'package:night_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:night_reader/core/di/injection.dart';
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
@@ -33,9 +34,9 @@ class _MinimalServicesBinding extends BindingBase
   }
 }
 
-/// 第一次抓正文就失敗（不是網路斷線那種會在請求層重試的），讓流程進到
+/// 每次抓正文都抓到空的（不是網路斷線那種會在請求層重試的），讓流程進到
 /// 重試前的等待。
-class _FailingContentService extends BookSourceService {
+class _EmptyContentService extends BookSourceService {
   int calls = 0;
 
   @override
@@ -55,100 +56,185 @@ class _FailingContentService extends BookSourceService {
 /// 網路差時移出書架或換源：這本書正在下載的請求一直不回，不能讓移出等到
 /// 它自己逾時。
 void main() {
-  setupTestDI();
   _MinimalServicesBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
+  late DriftIsolate databaseIsolate;
   late AppDatabase db;
   late HttpServer server;
-  late String origin;
-  final requests = <HttpRequest>[];
+  late String base;
+  final arrived = <String>[];
 
   setUpAll(() async {
-    final getIt = GetIt.instance;
-    db = AppDatabase.forTesting(NativeDatabase.memory());
-    getIt
-      ..registerSingleton<BookDao>(BookDao(db))
-      ..registerSingleton<BookSourceDao>(BookSourceDao(db))
-      ..registerSingleton<ChapterDao>(ChapterDao(db))
-      ..registerSingleton<ReaderChapterContentDao>(ReaderChapterContentDao(db))
-      ..registerSingleton<DownloadDao>(DownloadDao(db));
-    await NetworkService().init();
-    // 收下請求就不回（連線逾時與接收逾時各 15 秒、共試 3 次）。
+    await GetIt.instance.reset();
+    databaseIsolate = await DriftIsolate.spawn(NativeDatabase.memory);
+    db = AppDatabase.connected(await databaseIsolate.connect());
+    registerDatabase(db);
+    await NetworkService().init(ephemeral: true);
+    // `/outer/` 立刻回一頁；其他請求收下就不回（連線與接收逾時各 15 秒、
+    // 共試 3 次）。
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    origin = 'http://${server.address.address}:${server.port}';
-    server.listen(requests.add);
+    base = 'http://${server.address.address}:${server.port}';
+    server.listen((request) async {
+      arrived.add(request.uri.path);
+      if (!request.uri.path.startsWith('/outer/')) return;
+      request.response.headers.contentType = ContentType.html;
+      request.response.write('<p>外層頁面</p>');
+      await request.response.close();
+    });
   });
 
   tearDownAll(() async {
+    await SourceIsolate.stop();
+    SourceIsolate.enabled = false;
     await server.close(force: true);
     await db.close();
+    await databaseIsolate.shutdownAll();
+    await GetIt.instance.reset();
   });
 
-  test('removing a book stops its stalled downloads at once', () async {
-    final book = Book(
-      bookUrl: '$origin/book/1',
-      origin: origin,
-      name: '網路很差的書',
-      isInBookshelf: true,
-    );
-    await GetIt.instance<BookSourceDao>().upsert(
-      BookSource.fromJson({'bookSourceName': '慢', 'bookSourceUrl': origin}),
-    );
-    await GetIt.instance<BookDao>().upsert(book);
-    await GetIt.instance<ChapterDao>().insertChapters([
-      for (var i = 0; i < 3; i++)
-        BookChapter(
-          url: '$origin/c/$i',
-          title: '第 $i 章',
-          index: i,
-          bookUrl: book.bookUrl,
-        ),
-    ]);
+  Future<void> until(bool Function() condition, String what) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!condition()) {
+      if (DateTime.now().isAfter(deadline)) fail('等不到$what');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
+  /// 開始下載 [book] 的 [chapters]，等 [held] 那些請求都送到伺服器卡住後
+  /// 移出書架，回傳移出花的時間。
+  Future<Duration> retireWhileStalled({
+    required Book book,
+    required BookSource source,
+    required List<BookChapter> chapters,
+    required List<String> held,
+  }) async {
+    await getIt<BookSourceDao>().upsert(source);
+    await getIt<BookDao>().upsert(book);
+    await getIt<ChapterDao>().insertChapters(chapters);
     final service = DownloadService();
     final task = DownloadTask(
       bookUrl: book.bookUrl,
       bookName: book.name,
-      totalCount: 3,
+      totalCount: chapters.length,
     );
     service.tasks.add(task);
     service.isDownloading = true;
     addTearDown(() => service.isDownloading = false);
 
     final run = service.processTask(task);
-    final deadline = DateTime.now().add(const Duration(seconds: 5));
-    while (requests.length < 3) {
-      if (DateTime.now().isAfter(deadline)) fail('正文請求沒有送出');
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
+    await until(() => held.every(arrived.contains), '卡住的請求');
 
     final stopwatch = Stopwatch()..start();
     await service.retireBook(book.bookUrl);
     await run;
+    stopwatch.stop();
 
-    // 改前要等每個請求各自逾時（至少 15 秒）。
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
     expect(service.tasks.where((t) => t.bookUrl == book.bookUrl), isEmpty);
     // 取消不是下載失敗。
     expect(task.errorCount, 0);
     expect(task.lastErrorMessage, isNull);
+    return stopwatch.elapsed;
+  }
+
+  test('removing a book stops its stalled downloads at once', () async {
+    final book = Book(
+      bookUrl: '$base/book/http',
+      origin: '$base/source/http',
+      name: '網路很差的書',
+      isInBookshelf: true,
+    );
+
+    final elapsed = await retireWhileStalled(
+      book: book,
+      source: BookSource.fromJson({
+        'bookSourceName': '慢',
+        'bookSourceUrl': book.origin,
+      }),
+      chapters: [
+        for (var i = 0; i < 3; i++)
+          BookChapter(
+            url: '$base/stall/$i',
+            title: '第 $i 章',
+            index: i,
+            bookUrl: book.bookUrl,
+          ),
+      ],
+      held: [for (var i = 0; i < 3; i++) '/stall/$i'],
+    );
+
+    // 改前要等每個請求各自逾時（至少 15 秒）。
+    expect(elapsed, lessThan(const Duration(seconds: 2)));
   });
 
+  for (final isolated in [false, true]) {
+    test(
+      'a request the rule JS made itself stops too '
+      '(source isolate ${isolated ? 'on' : 'off'})',
+      skip: quickJsSkip,
+      () async {
+        if (isolated) {
+          SourceIsolate.enabled = true;
+          SourceIsolate.start(database: Future.value(databaseIsolate));
+          addTearDown(() async {
+            await SourceIsolate.stop();
+            SourceIsolate.enabled = false;
+          });
+        }
+        final id = isolated ? 'on' : 'off';
+        final book = Book(
+          bookUrl: '$base/book/js-$id',
+          origin: '$base/source/js-$id',
+          name: '規則自己抓正文的書',
+          isInBookshelf: true,
+        );
+
+        // 外層頁面立刻回來，規則 JS 再用 java.ajax 抓真正的正文，卡住。
+        final elapsed = await retireWhileStalled(
+          book: book,
+          source: BookSource.fromJson({
+            'bookSourceName': '規則 JS',
+            'bookSourceUrl': book.origin,
+            'ruleContent': {'content': "@js:java.ajax('$base/ajax/$id')"},
+          }),
+          chapters: [
+            BookChapter(
+              url: '$base/outer/$id',
+              title: '正文',
+              index: 0,
+              bookUrl: book.bookUrl,
+            ),
+          ],
+          held: ['/ajax/$id'],
+        );
+
+        expect(elapsed, lessThan(const Duration(seconds: 2)));
+      },
+    );
+  }
+
   test('a chapter waiting to retry stops when cancelled', () async {
-    final book = Book(bookUrl: '$origin/book/2', origin: origin, name: '書');
+    final book = Book(
+      bookUrl: '$base/book/retry',
+      origin: '$base/source/retry',
+      name: '書',
+    );
     final chapter = BookChapter(
-      url: '$origin/c/x',
+      url: '$base/retry',
       title: '一章',
       index: 0,
       bookUrl: book.bookUrl,
     );
-    final contentService = _FailingContentService();
+    final contentService = _EmptyContentService();
     final pipeline = ChapterContentPreparationPipeline(
       book: book,
       contentStore: null,
-      sourceDao: GetIt.instance<BookSourceDao>(),
+      sourceDao: getIt<BookSourceDao>(),
       service: contentService,
-      getSource: () =>
-          BookSource.fromJson({'bookSourceName': '慢', 'bookSourceUrl': origin}),
+      getSource: () => BookSource.fromJson({
+        'bookSourceName': '空',
+        'bookSourceUrl': book.origin,
+      }),
       retryDelay: (_) => const Duration(minutes: 1),
     );
     final cancelToken = CancelToken();
@@ -160,7 +246,7 @@ void main() {
       maxAttempts: 3,
       cancelToken: cancelToken,
     );
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await until(() => contentService.calls == 1, '第一次抓正文');
     cancelToken.cancel();
 
     await expectLater(
