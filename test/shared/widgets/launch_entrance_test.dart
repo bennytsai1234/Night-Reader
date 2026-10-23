@@ -16,6 +16,9 @@ void main() {
   var leftTaps = 0;
   var finished = 0;
 
+  /// 書架的內容建了幾次（[SkeletonSwitcher.builder]）。
+  var contentBuilds = 0;
+
   /// 像主頁：頁首左右各一顆玻璃按鈕，內容是書架的骨架換場。
   Widget host({
     required bool loading,
@@ -60,7 +63,10 @@ void main() {
                 waitForCovers: waitForCovers,
                 entrance: LaunchEntrance.maybeOf(context),
                 skeleton: const SkeletonBox(width: 40, height: 40),
-                builder: (_) => const Text('內容'),
+                builder: (_) {
+                  contentBuilds++;
+                  return const Text('內容');
+                },
               ),
             ),
             ?later,
@@ -73,6 +79,7 @@ void main() {
   setUp(() {
     leftTaps = 0;
     finished = 0;
+    contentBuilds = 0;
   });
 
   /// 這一格畫面上有幾塊玻璃在取樣背景（真的畫出來的背景模糊）。
@@ -291,5 +298,90 @@ void main() {
     await tester.pump();
     expect(find.byType(SkeletonBox), findsNothing);
     expect(find.byIcon(Icons.close).hitTestable(), findsOneWidget);
+  });
+
+  group('the shelf is prepared only once the breath has rested', () {
+    /// 一格一格推進，直到內容第一次建出來；回傳那一格之前，畫面是不是已經
+    /// 靜止（沒有動畫在跑）。整段長出、停頓與收住，內容都不能建。
+    Future<bool> pumpUntilBuilt(WidgetTester tester) async {
+      for (var i = 0; i < 300; i++) {
+        final stillBefore = !tester.hasRunningAnimations;
+        await tester.pump(const Duration(milliseconds: 16));
+        if (contentBuilds > 0) return stillBefore;
+      }
+      fail('內容一直沒有建');
+    }
+
+    /// 播完拍圖、靜止（[LaunchEntranceMotion.hold] 是計時器，不是動畫）與
+    /// 換場，到通知進場結束的那一格。
+    Future<void> playOut(WidgetTester tester) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(LaunchEntranceMotion.hold);
+      await tester.pumpAndSettle();
+      await tester.pump();
+    }
+
+    testWidgets('books read before the skeleton has grown: nothing is built '
+        'while it grows, pauses and rests, and the shelf is built in a later '
+        'frame than the last breath', (tester) async {
+      await tester.pumpWidget(
+        host(loading: false, waitForCovers: CoverWait.onDevice),
+      );
+      await tester.pump();
+      // 長出（0.6 秒）、停一個呼吸（0.8 秒）都還沒建。
+      await tester.pump(const Duration(milliseconds: 620));
+      await tester.pump(LaunchEntranceMotion.pause);
+      expect(contentBuilds, 0);
+      expect(
+        await pumpUntilBuilt(tester),
+        isTrue,
+        reason: '收住的最後一格畫完、畫面靜止了，下一格才建書架',
+      );
+      expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
+      await playOut(tester);
+      expect(finished, 1);
+    });
+
+    testWidgets('books read only after the pause: the rest starts then, and '
+        'nothing is built until it is still', (tester) async {
+      await tester.pumpWidget(
+        host(loading: true, waitForCovers: CoverWait.onDevice),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 620));
+      await tester.pump(LaunchEntranceMotion.pause * 2);
+      expect(tester.hasRunningAnimations, isTrue, reason: '書還沒到，骨架照常呼吸');
+
+      await tester.pumpWidget(
+        host(loading: false, waitForCovers: CoverWait.onDevice),
+      );
+      expect(await pumpUntilBuilt(tester), isTrue);
+      await playOut(tester);
+      expect(finished, 1);
+    });
+
+    testWidgets('a reload while resting builds nothing early and still ends '
+        'the entrance once', (tester) async {
+      Widget at({required bool loading}) =>
+          host(loading: loading, waitForCovers: CoverWait.onDevice);
+      await tester.pumpWidget(at(loading: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 620));
+      await tester.pump(LaunchEntranceMotion.pause);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.hasRunningAnimations, isTrue, reason: '還在收住');
+
+      await tester.pumpWidget(at(loading: true));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(at(loading: false));
+      expect(contentBuilds, 0);
+      expect(await pumpUntilBuilt(tester), isTrue);
+      await playOut(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('內容'), findsOneWidget);
+      expect(finished, 1);
+    });
   });
 }

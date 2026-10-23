@@ -324,9 +324,9 @@ Future<Uint8List> _encodeCover(int seed) async {
 }
 
 /// 整個 App（同 `main.dart` 的 runApp），等開 App 的進場播完：骨架長出
-/// 0.6 秒、至少停 0.8 秒（書架在骨架底下一格一步準備好才換，書多時更久）、
-/// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。準備是照格數走的，
-/// 一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
+/// 0.6 秒、至少停 0.8 秒、收住呼吸（最多 1.6 秒）、靜止時準備書架與拍圖、
+/// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。收住、拍圖都要等某一格
+/// 畫完，一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
     MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),

@@ -832,6 +832,10 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   /// 淡入前等封面的那一輪；等完或重新載入就換掉。
   CoverReveal? _reveal;
 
+  /// 開 App 第一次換場前，資料到了、正在等骨架收住呼吸
+  /// （[LaunchEntranceMotion.settleBreath]）；這段期間當作還在載入，內容不建。
+  Future<void>? _resting;
+
   /// 重新載入、淡回骨架時，淡出中的內容沿用上一次建好的樣子。
   Widget? _lastContent;
 
@@ -862,6 +866,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     }
     if (widget.loading == oldWidget.loading) return;
     _reveal = null;
+    _resting = null;
     if (widget.loading) {
       // 定格換場還沒播完就要長回骨架：先換回真的畫面，從內容接著長回去。
       _snapshotting?.finish();
@@ -881,14 +886,24 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
 
   void _onLoaded({bool duringBuild = false}) {
     final wait = widget.waitForCovers;
-    if (wait != null) {
-      // 開 App 第一次換場前，內容在骨架呼吸時於底下準備：拆成一幀一小步，
-      // 呼吸不跟著頓（[CoverReveal.inSteps]）。
-      final entrance = widget.entrance;
-      final reveal = _reveal = CoverReveal(
-        wait,
-        inSteps: entrance != null && !entrance.revealStarted,
+    final entrance = widget.entrance;
+    final launching = entrance != null && !entrance.revealStarted;
+    // 開 App 第一次換場前：先等骨架收住呼吸，畫面靜止了才在底下一次建好
+    // 內容、等封面（ADR 0031）。呼吸的每一格底下都不做事：拆成一格一小步
+    // 時，手機稍慢一點，每一步都讓呼吸那一格晚出來，一路頓頓地走過去。
+    if (launching && !entrance.breathSettled) {
+      final resting = _resting = entrance.settleBreath();
+      unawaited(
+        resting.then((_) {
+          if (!mounted || !identical(_resting, resting)) return;
+          setState(() => _resting = null);
+          if (!widget.loading) _onLoaded();
+        }),
       );
+      return;
+    }
+    if (wait != null) {
+      final reveal = _reveal = CoverReveal(wait, paced: !launching);
       // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。建畫面途中歸零
       // 會在別人建構時通知聽換場進度的元件；先停住，這一幀畫完再歸零
       // （封面最快也要下一輪才等完）。
@@ -969,7 +984,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
     final reveal = _reveal;
     final entrance = _entering ? widget.entrance : null;
     final appearing = entrance?.skeleton;
-    final loading = widget.loading || entrance != null;
+    final loading = widget.loading || entrance != null || _resting != null;
     final hidden = loading || reveal != null && reveal.waiting;
     // 換場開始與結束時只是自己的動畫狀態變了，沿用同一個內容元件，整頁內容
     // 不重建；上層給了新的 [SkeletonSwitcher] 或換了一輪等封面才重新建。原本
@@ -984,11 +999,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
           ? Builder(builder: widget.builder)
           : CoverRevealScope(
               reveal: reveal,
-              // 一步一步準備時，連內容最外層也排成一步：骨架進場結束的那一格
-              // 不同時建整頁內容（[CoverReveal.inSteps]）。
-              child: reveal.inSteps
-                  ? CoverRevealSlot(child: Builder(builder: widget.builder))
-                  : Builder(builder: widget.builder),
+              child: Builder(builder: widget.builder),
             );
     }
     final content = _lastContent;
