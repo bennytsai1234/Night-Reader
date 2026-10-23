@@ -1,5 +1,5 @@
-// 書架列表檢視的書卡左滑出「檢查更新」「移出書架」；在書卡上橫拖一律滑出
-// 動作、不換分頁，在書卡以外的地方橫拖照常換分頁（DESIGN.md「按壓回饋」）。
+// 書架列表檢視的書卡沒有左滑動作（使用者 2026-10-23 決定）：在書卡上橫拖
+// 是主畫面換分頁，不滑出「檢查更新」「移出書架」（DESIGN.md「按壓回饋」）。
 // 整個 App（記憶體資料庫）跑一次。
 
 import 'dart:ui' as ui;
@@ -17,22 +17,6 @@ void main() {
     );
   }
 
-  /// 從 [start] 以每格 [step] 慢慢拖 [steps] 格。
-  Future<void> slowDrag(
-    WidgetTester tester,
-    Offset start,
-    Offset step,
-    int steps,
-  ) async {
-    final gesture = await tester.startGesture(start);
-    for (var i = 0; i < steps; i++) {
-      await gesture.moveBy(step);
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await gesture.up();
-    await settle(tester, const Duration(seconds: 1));
-  }
-
   double page(WidgetTester tester) =>
       tester.widget<PageView>(find.byType(PageView).first).controller!.page!;
 
@@ -40,7 +24,7 @@ void main() {
     ('慢慢拖', const Offset(-3, 0), 40),
     ('快快拖', const Offset(-40, 0), 3),
   ]) {
-    testWidgets('$name：在書卡上橫拖滑出動作，不換分頁', (tester) async {
+    testWidgets('$name：在書卡上橫拖是換分頁，不滑出動作', (tester) async {
       setUpPhone(tester);
       useDeviceTouchSlop(tester);
       await tester.runAsync(() async {
@@ -48,17 +32,19 @@ void main() {
         await seedLibrary(withContent: false);
       });
       await pumpApp(tester);
-      expect(find.text('移出書架'), findsNothing);
 
-      await slowDrag(
-        tester,
+      final gesture = await tester.startGesture(
         tester.getCenter(find.text('夜雨聽書').first),
-        step,
-        steps,
       );
-      expect(find.text('檢查更新'), findsOneWidget);
-      expect(find.text('移出書架'), findsOneWidget);
-      expect(page(tester), 0);
+      for (var i = 0; i < steps; i++) {
+        await gesture.moveBy(step);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(page(tester), greaterThan(0), reason: '分頁跟著手指移動');
+      expect(find.text('檢查更新'), findsNothing);
+      expect(find.text('移出書架'), findsNothing);
+      await gesture.up();
+      await settle(tester, const Duration(seconds: 1));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(minutes: 1));
