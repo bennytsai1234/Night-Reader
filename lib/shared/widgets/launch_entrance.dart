@@ -104,16 +104,18 @@ class LaunchEntranceMotion {
     _revealStarted = true;
     await _paused;
     await rest.settle();
+    // 等的期間整個進場被拆掉了（例如 App 換掉主頁面）：不再換場。
+    if (_disposed) return;
     await screen.play(
       duration: duration,
       sweep: sweep,
       hold: hold,
       change: () {
         change();
-        _revealed.value = true;
+        if (!_disposed) _revealed.value = true;
       },
     );
-    _finish();
+    if (!_disposed) _finish();
   }
 
   /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。
@@ -129,7 +131,12 @@ class LaunchEntranceMotion {
     if (!_finished.isCompleted) _finished.complete();
   }
 
-  void _dispose() => _revealed.dispose();
+  bool _disposed = false;
+
+  void _dispose() {
+    _disposed = true;
+    _revealed.dispose();
+  }
 }
 
 class _LaunchEntranceState extends State<LaunchEntrance>

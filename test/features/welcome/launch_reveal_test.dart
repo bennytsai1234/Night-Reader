@@ -321,6 +321,29 @@ void main() {
         reason: '換場前靜止了 ${start - stillFrom} 格',
       );
 
+      // 靜止前呼吸已經收住：左中右三本書的封面骨架都停在呼吸最深的那一刻
+      // （離底色最遠），不是呼吸到一半定住、只是多停一會兒。
+      int red(int k, Offset p) =>
+          shots[k].pixels[(p.dy.toInt() * width + p.dx.toInt()) * 4];
+      final paper = red(start, const Offset(196, 600));
+      for (final cover in const [
+        Offset(70, 180),
+        Offset(196, 180),
+        Offset(320, 180),
+      ]) {
+        var deepest = red(start, cover);
+        for (var k = first; k < stillFrom; k++) {
+          if ((red(k, cover) - paper).abs() > (deepest - paper).abs()) {
+            deepest = red(k, cover);
+          }
+        }
+        expect(
+          red(start, cover),
+          closeTo(deepest, 1),
+          reason: '$cover 停住時不在最深',
+        );
+      }
+
       // 同一個起點下，每一格、每個區域都要對得上。
       final from = shots[start].pixels;
       final to = shots[start + _span].pixels;

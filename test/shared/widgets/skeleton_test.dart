@@ -163,39 +163,72 @@ void main() {
     );
   });
 
-  testWidgets('resting finishes each position\'s breath and stops it at the '
-      'deepest, without a jump', (tester) async {
-    tester.view.physicalSize = const Size(400, 40);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  group('resting the breath (launch reveal)', () {
+    const frame = Duration(milliseconds: 16);
+    // 一輪呼吸的格數，加一格捨入：收住最多再呼一輪。
+    final cycleFrames =
+        (Skeleton.breathCycle.inMicroseconds / frame.inMicroseconds).ceil() + 1;
     final boundary = GlobalKey();
-    const black = Color(0xFF000000);
     late LaunchEntranceMotion motion;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LaunchEntrance(
-          child: Builder(
-            builder: (context) {
-              motion = LaunchEntrance.maybeOf(context)!;
-              return RepaintBoundary(
-                key: boundary,
-                child: const ColoredBox(
-                  color: Color(0xFFFFFFFF),
-                  child: Skeleton(
-                    child: SkeletonBox(width: 400, height: 40, color: black),
-                  ),
-                ),
-              );
-            },
+
+    /// 兩條 400 寬的黑色骨架疊在白底上（第二條 [second] 時才有），包在
+    /// 開 App 的進場底下。[ticking] 是外層的 TickerMode，[reduce] 是減少
+    /// 動態；重新 pump 時元件樹不變，骨架的狀態留著。
+    Widget host({
+      bool ticking = true,
+      bool reduce = false,
+      bool second = false,
+    }) {
+      const black = Color(0xFF000000);
+      return MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+            child: LaunchEntrance(
+              child: Builder(
+                builder: (context) {
+                  motion = LaunchEntrance.maybeOf(context)!;
+                  return RepaintBoundary(
+                    key: boundary,
+                    child: ColoredBox(
+                      color: const Color(0xFFFFFFFF),
+                      child: TickerMode(
+                        enabled: ticking,
+                        child: Column(
+                          children: [
+                            const Skeleton(
+                              child: SkeletonBox(
+                                width: 400,
+                                height: 20,
+                                color: black,
+                              ),
+                            ),
+                            if (second)
+                              const Skeleton(
+                                child: SkeletonBox(
+                                  width: 400,
+                                  height: 20,
+                                  color: black,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
         ),
-      ),
-    );
-    // 呼吸到一半：左右兩端深淺不同，都還在變。
-    await tester.pump(const Duration(milliseconds: 300));
+      );
+    }
 
     const xs = [5, 100, 200, 300, 395];
-    Future<List<int>> sample() async {
+
+    /// 第 [row] 條骨架在 [xs] 的紅色：黑色骨架疊在白底上，越小越深，
+    /// 最深是 0。
+    Future<List<int>> sample(WidgetTester tester, {int row = 0}) async {
       final bytes = await tester.runAsync(() async {
         final image =
             await (boundary.currentContext!.findRenderObject()!
@@ -203,34 +236,153 @@ void main() {
                 .toImage();
         return image.toByteData();
       });
-      // 黑色的骨架疊在白底上：紅色越小越深，最深是 0。
-      return [for (final x in xs) bytes!.getUint8((20 * 400 + x) * 4)];
+      final y = 10 + row * 20;
+      return [for (final x in xs) bytes!.getUint8((y * 400 + x) * 4)];
     }
 
-    var previous = await sample();
-    expect(previous.toSet(), hasLength(greaterThan(1)), reason: '由左而右呼吸');
-    var rested = false;
-    unawaited(motion.rest.settle().then((_) => rested = true));
-    final stopped = <int>{};
-    var frames = 0;
-    while (!rested) {
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(++frames, lessThan(110), reason: '最多再呼一輪（1.6 秒）就停好');
-      final now = await sample();
-      for (var i = 0; i < xs.length; i++) {
-        // 黑色骨架呼吸最快時一格變約 4/255（曲線最陡處）：收住時沒有比
-        // 這更大的跳動，不是一下跳到最深。
-        expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(5));
-        // 停在最深的位置不再動。
-        if (stopped.contains(i)) expect(now[i], 0, reason: 'x=${xs[i]}');
-        if (now[i] == 0) stopped.add(i);
-      }
-      previous = now;
+    Future<void> setUpView(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(400, 40);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
     }
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(await sample(), everyElement(0), reason: '整條都停在最深');
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(await sample(), everyElement(0), reason: '停住不再呼吸');
+
+    /// 一格一格推進 [frames] 格，每一格每個取樣點都和上一格接得上：黑色
+    /// 骨架呼吸最快時一格變約 4/255（曲線最陡處），不能比這更大。
+    Future<List<int>> pumpSmoothly(
+      WidgetTester tester,
+      List<int> previous,
+      int frames,
+    ) async {
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(frame);
+        final now = await sample(tester);
+        for (var j = 0; j < xs.length; j++) {
+          expect(
+            (now[j] - previous[j]).abs(),
+            lessThanOrEqualTo(5),
+            reason: '第 $i 格 x=${xs[j]}',
+          );
+        }
+        previous = now;
+      }
+      return previous;
+    }
+
+    testWidgets('finishes each position\'s breath and stops it at the '
+        'deepest, without a jump', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      // 呼吸到一半：左右兩端深淺不同，都還在變。
+      await tester.pump(const Duration(milliseconds: 300));
+      var previous = await sample(tester);
+      expect(previous.toSet(), hasLength(greaterThan(1)), reason: '由左而右呼吸');
+
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      final stopped = <int>{};
+      var frames = 0;
+      while (!rested) {
+        await tester.pump(frame);
+        expect(++frames, lessThanOrEqualTo(cycleFrames), reason: '最多再呼一輪');
+        final now = await sample(tester);
+        for (var i = 0; i < xs.length; i++) {
+          expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(5));
+          // 停在最深的位置不再動。
+          if (stopped.contains(i)) expect(now[i], 0, reason: 'x=${xs[i]}');
+          if (now[i] == 0) stopped.add(i);
+        }
+        previous = now;
+      }
+      await tester.pump(frame);
+      expect(await sample(tester), everyElement(0), reason: '整條都停在最深');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(await sample(tester), everyElement(0), reason: '停住不再呼吸');
+      expect(tester.hasRunningAnimations, isFalse);
+
+      // 換場後還留著的骨架接著呼吸：從整片最深由左而右重新開始，不跳。
+      motion.rest.release();
+      previous = await pumpSmoothly(tester, previous, cycleFrames * 2);
+      expect(previous.toSet(), hasLength(greaterThan(1)), reason: '又在呼吸');
+    });
+
+    testWidgets('a skeleton hidden mid-rest counts as rested instead of '
+        'holding the launch forever', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await tester.pump(const Duration(milliseconds: 300));
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      await tester.pump(frame);
+      await tester.pump(frame);
+      expect(rested, isFalse);
+
+      await tester.pumpWidget(host(ticking: false));
+      await tester.pump(frame);
+      expect(rested, isTrue);
+      // 再出現時停在最深，不接著呼吸。
+      await tester.pumpWidget(host());
+      await tester.pump(frame);
+      expect(await sample(tester), everyElement(0));
+    });
+
+    testWidgets('turning animations off mid-rest leaves nothing ticking after '
+        'the release', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await tester.pump(const Duration(milliseconds: 700));
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      await tester.pump(frame);
+
+      await tester.pumpWidget(host(reduce: true));
+      await tester.pump(frame);
+      expect(rested, isTrue);
+      motion.rest.release();
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('a skeleton that appears mid-rest starts at the deepest and '
+        'does not stretch the rest', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await tester.pump(const Duration(milliseconds: 300));
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      await tester.pump(const Duration(milliseconds: 480));
+
+      await tester.pumpWidget(host(second: true));
+      expect(await sample(tester, row: 1), everyElement(0), reason: '一出現就最深');
+      var frames = 30;
+      while (!rested) {
+        await tester.pump(frame);
+        expect(++frames, lessThanOrEqualTo(cycleFrames), reason: '總共最多再呼一輪');
+        expect(await sample(tester, row: 1), everyElement(0));
+      }
+    });
+
+    testWidgets('tearing the launch down mid-rest ends the reveal quietly', (
+      tester,
+    ) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      // 骨架長完（0.6 秒）、停過一個呼吸（0.8 秒）後開始收住。
+      unawaited(
+        motion.reveal(
+          change: () {},
+          duration: const Duration(milliseconds: 600),
+          sweep: true,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(const Duration(milliseconds: 820));
+      await tester.pump(frame);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(frame);
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+    });
   });
 
   Widget host(Widget child, {bool disableAnimations = false}) => MaterialApp(

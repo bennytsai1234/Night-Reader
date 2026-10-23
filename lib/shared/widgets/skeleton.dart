@@ -160,16 +160,14 @@ class _SkeletonState extends State<Skeleton>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _breathing = !MediaQuery.disableAnimationsOf(context);
-    _clock.breath = SkeletonLook.of(context).breath;
-    if (_breathing) {
-      _clock.start();
-    } else {
-      _clock.stop();
-    }
+    _clock
+      ..breath = SkeletonLook.of(context).breath
+      ..allowed = _breathing
+      ..visible = TickerMode.valuesOf(context).enabled;
     final rest = LaunchEntrance.maybeOf(context)?.rest;
     if (!identical(rest, _rest)) {
       _rest?._clocks.remove(_clock);
-      _rest = rest?.._clocks.add(_clock);
+      _rest = rest?.._add(_clock);
     }
   }
 
@@ -191,19 +189,32 @@ class _SkeletonState extends State<Skeleton>
 class SkeletonRest {
   final Set<_BreathClock> _clocks = {};
 
-  /// 收住現在登記著的骨架（等的期間才登記的也一起收），全部停在最深時完成。
+  /// 從 [settle] 到 [release] 之間：這段期間才出現的骨架一出現就停在最深，
+  /// 不再開始一口新的氣，收住的總時間不會被拉長。
+  bool _resting = false;
+
+  void _add(_BreathClock clock) {
+    _clocks.add(clock);
+    if (_resting) clock.restNow();
+  }
+
+  /// 收住登記著的骨架，全部停在最深時完成：最多再呼一輪
+  /// （[Skeleton.breathCycle]）。
   Future<void> settle() async {
-    final asked = <_BreathClock>{};
+    _resting = true;
     while (true) {
-      final fresh = _clocks.difference(asked);
-      if (fresh.isEmpty) return;
-      asked.addAll(fresh);
-      await Future.wait([for (final clock in fresh) clock.rest()]);
+      final pending = [
+        for (final clock in _clocks)
+          if (!clock.still) clock.rest(),
+      ];
+      if (pending.isEmpty) return;
+      await Future.wait(pending);
     }
   }
 
   /// 收住的骨架接著呼吸（換場播完後還留著的骨架）。
   void release() {
+    _resting = false;
     for (final clock in _clocks) {
       clock.resume();
     }
@@ -223,58 +234,98 @@ class _BreathClock extends ChangeNotifier {
   /// 這個骨架怎麼呼吸：收住要等多久看它（由左而右時右邊晚）。
   SkeletonBreath breath = SkeletonBreath.gentleSweep;
 
-  /// 從開始呼吸起經過的輪數；[_base] 是這次啟動前已經過的輪數。
+  /// 計時器經過的輪數；[_base] 是計時器這次啟動前已經過的輪數。
   double _cycles = 0;
   double _base = 0;
 
-  /// 開始收住時的 [_cycles]；null 是照常呼吸。
+  /// 呼吸從第幾輪算起：收住後接著呼吸時（[resume]）從那一刻重新算，
+  /// [_restarted] 時還沒輪到的位置先停在最深。
+  double _shift = 0;
+  bool _restarted = false;
+
+  /// 呼吸了幾輪（[Skeleton.breathAt] 的相位）。
+  double get _phase => _cycles - _shift;
+
+  /// 開始收住時的 [_phase]；null 是照常呼吸。
   double? _restFrom;
   Completer<void>? _rested;
 
-  /// 收住後整個骨架都停在最深了（畫面外的位置也是）。
+  /// 收住後整個骨架都停在最深了（畫面外的位置也是），計時器停著。
+  bool get still => _still;
   bool _still = false;
 
-  void start() {
-    if (_ticker.isActive || _restFrom != null) return;
-    _base = _cycles;
-    _ticker.start();
+  /// 可以呼吸（沒有要求減少動態）。不行時計時器停著，收住直接算停好。
+  bool _allowed = false;
+  set allowed(bool value) {
+    _allowed = value;
+    if (value) {
+      _start();
+    } else {
+      _ticker.stop();
+      _cycles = _base = _shift = 0;
+      _restarted = false;
+      if (_restFrom != null) _settle();
+    }
   }
 
-  /// 不呼吸（減少動態）：停在最深。
-  void stop() {
-    _ticker.stop();
-    _cycles = _base = 0;
-    _finishRest();
+  /// 畫面上看得到（[TickerMode]）。收住途中被藏起來時直接算停好：看不到
+  /// 就沒有跳動可言，也不會等一個不會來的下一格；之後再出現時照樣停在
+  /// 最深，等 [resume]。
+  set visible(bool value) {
+    if (!value && _restFrom != null && !_still) _settle();
+  }
+
+  void _start() {
+    if (!_allowed || _still || _ticker.isActive) return;
+    _base = _cycles;
+    _ticker.start();
   }
 
   void _tick(Duration elapsed) {
     _cycles =
         _base + elapsed.inMicroseconds / Skeleton.breathCycle.inMicroseconds;
     final from = _restFrom;
-    if (from != null && _cycles - from >= _restLength(from)) {
-      _still = true;
-      _ticker.stop();
-      _finishRest();
-    }
+    if (from != null && _phase - from >= _restLength(from)) _settle();
     notifyListeners();
   }
 
-  /// 收住呼吸，每個位置都停在最深時完成。畫面上看不到它在動時（沒在
-  /// 呼吸、在別的分頁）直接完成，不等不會來的下一格。
+  /// 收住呼吸，每個位置都停在最深時完成。計時器沒在走時（不呼吸、被
+  /// 藏起來）直接算停好。
   Future<void> rest() {
-    if (!_ticker.isTicking) return Future<void>.value();
-    _restFrom ??= _cycles;
+    _restFrom ??= _phase;
+    if (_still) return Future<void>.value();
+    if (!_ticker.isActive || _ticker.muted) {
+      _settle();
+      return Future<void>.value();
+    }
     return (_rested ??= Completer<void>()).future;
   }
 
-  /// 收住後接著呼吸。
+  /// 收住途中才出現的骨架：一出現就停在最深。
+  void restNow() {
+    _restFrom ??= _phase;
+    _settle();
+  }
+
+  /// 收住後接著呼吸：從整片最深重新開始，每個位置照由左而右的先後輪到
+  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗。
   void resume() {
     if (_restFrom == null) return;
     _restFrom = null;
-    _still = false;
     _finishRest();
     _rested = null;
-    start();
+    if (!_still) return;
+    _still = false;
+    _shift = _cycles;
+    _restarted = true;
+    _start();
+    notifyListeners();
+  }
+
+  void _settle() {
+    _still = true;
+    _ticker.stop();
+    _finishRest();
   }
 
   void _finishRest() {
@@ -291,14 +342,16 @@ class _BreathClock extends ChangeNotifier {
   }
 
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
-  /// 收住後已經呼到最深的位置停在 1。
+  /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
   double depthAt(double u, SkeletonBreath breath) {
+    final phase = _phase;
     final from = _restFrom;
     if (from != null &&
-        (_still || _cycles - from >= (breath.lag * u - from) % 1)) {
+        (_still || phase - from >= (breath.lag * u - from) % 1)) {
       return 1;
     }
-    return _breathTable.at(_cycles % 1, u, breath);
+    if (_restarted && phase < breath.lag * u) return 1;
+    return _breathTable.at(phase, u, breath);
   }
 
   @override
