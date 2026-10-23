@@ -183,19 +183,32 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_granted) return;
+    // 建好、也畫出來了（或不分步）就不再排隊。
+    if (_granted && (!_inSteps || _painted)) return;
     final reveal = widget.wait ? CoverRevealScope.waitingOf(context) : null;
+    if (reveal != null && identical(_queuedOn, reveal)) return;
+    // 換了一輪等待（重新載入）或等待結束：舊的那一輪不再等這一塊，它排著的
+    // 這一塊的步驟一律作廢（每一步執行前都核對還是不是這一輪的）。
+    _release();
     if (reveal == null) {
-      _release();
       _granted = true;
+      _painted = true;
       return;
     }
-    if (identical(_queuedOn, reveal)) return;
-    // 換了一輪等待（重新載入）：舊的那一輪不再等這一塊。
-    _release();
     _queuedOn = reveal;
+    void paint() {
+      if (mounted && identical(_queuedOn, reveal)) {
+        setState(() => _painted = true);
+      }
+    }
+
+    if (_granted) {
+      // 上一輪建好、還沒畫：畫的那一步改由這一輪排、這一輪等。
+      reveal._queueBuild(paint);
+      return;
+    }
     reveal._queueBuild(() {
-      if (!mounted || _granted) return;
+      if (!mounted || !identical(_queuedOn, reveal)) return;
       setState(() {
         _granted = true;
         _inSteps = reveal.inSteps;
@@ -204,13 +217,7 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
     // 建的那一步只建、只排版，緊接著的下一步才第一次畫。兩步一起排進去：
     // 這一塊的封面要等建好才開始解碼，換上封面的那一步一定排在畫之後，字和
     // 封面不會擠在同一幀第一次畫。
-    if (reveal.inSteps) {
-      reveal._queueStep(() {
-        if (mounted && identical(_queuedOn, reveal)) {
-          setState(() => _painted = true);
-        }
-      });
-    }
+    if (reveal.inSteps) reveal._queueStep(paint);
   }
 
   /// 告訴排隊的那一輪這一塊建好了，或不再需要。

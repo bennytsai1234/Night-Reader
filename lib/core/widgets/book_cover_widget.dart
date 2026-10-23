@@ -465,14 +465,18 @@ class _CoverImageState extends State<_CoverImage> {
   CoverReveal? _showGrantedBy;
   CoverReveal? _showQueuedOn;
 
-  /// 解碼好了，但 [reveal] 還沒輪到這一張換上：先排隊，輪到之前照樣只鋪
-  /// 載入底、換場照樣等它。
+  /// 解碼好了（或已經在記憶體快取裡），但 [reveal] 還沒輪到這一張換上：先
+  /// 排隊，輪到之前照樣只鋪載入底、換場照樣等它。圖已經解碼好不代表畫過，
+  /// 快取裡的也排隊，不跟書卡的字擠在同一幀第一次畫。
   bool _heldBy(CoverReveal reveal) {
     if (!reveal.inSteps || identical(_showGrantedBy, reveal)) return false;
     if (!identical(_showQueuedOn, reveal)) {
       _showQueuedOn = reveal;
       reveal.showCover(() {
-        if (mounted) setState(() => _showGrantedBy = reveal);
+        // 換了一輪等待後，上一輪排著的這一步作廢。
+        if (mounted && identical(_showQueuedOn, reveal)) {
+          setState(() => _showGrantedBy = reveal);
+        }
       });
     }
     return true;
@@ -497,18 +501,14 @@ class _CoverImageState extends State<_CoverImage> {
     bool network = false,
   }) {
     final reveal = CoverRevealScope.waitingOf(context);
-    final held =
-        frame != null &&
-        !wasSynchronouslyLoaded &&
-        reveal != null &&
-        _heldBy(reveal);
+    final held = frame != null && reveal != null && _heldBy(reveal);
     if (frame == null || held) {
       _register(reveal, network: network);
     } else {
       _unregister();
       onReady(source);
     }
-    if (wasSynchronouslyLoaded) return child;
+    if (wasSynchronouslyLoaded && !held) return child;
     return Stack(
       fit: StackFit.expand,
       children: [

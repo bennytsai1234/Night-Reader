@@ -114,6 +114,61 @@ void main() {
     expect(settled, isTrue);
   });
 
+  testWidgets('when the stepped wait is replaced by another round, the old '
+      'round steps nothing and a built card is painted by the new round', (
+    tester,
+  ) async {
+    final a = CoverReveal(CoverWait.onDevice, inSteps: true);
+    final b = CoverReveal(CoverWait.onDevice, inSteps: true);
+    addTearDown(a.dispose);
+    addTearDown(b.dispose);
+    // 只記第一次建、第一次畫（旁邊的書卡建好時，已經畫過的會跟著重畫）。
+    final seen = <String>{};
+    final log = <String>[];
+    void first(String event) {
+      if (seen.add(event)) log.add(event);
+    }
+
+    Widget page(CoverReveal reveal) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: CoverRevealScope(
+        notifier: reveal,
+        child: Column(
+          children: [
+            for (var i = 0; i < 2; i++)
+              CoverRevealSlot(
+                key: ValueKey(i),
+                child: Builder(
+                  builder: (_) {
+                    first('build$i');
+                    return SizedBox(
+                      height: 10,
+                      child: CustomPaint(
+                        painter: _PaintLog(() => first('paint$i')),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(page(a));
+    // 第一張在 a 已經放行、還沒建，就換成 b（書卡保留狀態）。
+    await tester.pumpWidget(page(b));
+    for (var i = 0; i < 8; i++) {
+      log.clear();
+      await tester.pump();
+      expect(log.length, lessThanOrEqualTo(1), reason: '第 ${i + 1} 格只走一步：$log');
+    }
+    expect(seen, {'build0', 'paint0', 'build1', 'paint1'});
+    var settled = false;
+    unawaited(b.settle().then((_) => settled = true));
+    await tester.pump();
+    expect(settled, isTrue, reason: '兩張都由 b 建好、畫出來');
+  });
+
   testWidgets('a single slot is still under the wait when it is built, so its '
       'cover holds the reveal', (tester) async {
     final reveal = CoverReveal(CoverWait.onDevice);
