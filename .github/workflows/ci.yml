@@ -62,6 +62,7 @@ jobs:
         # 提交的 *.g.dart 過時時，最後的 git diff 會擋下來。
         run: dart run build_runner build
       - name: Verify generated code matches the commit
+        if: always()
         run: git diff --exit-code
 
   test:
@@ -92,11 +93,25 @@ jobs:
         # --total-shards 是把每個檔裡的測試案例分給各台，每台仍要編譯全部的
         # 檔（一份 2 分 20 秒，四份加起來比不分還多），同一個檔的測試也會被
         # 拆散到不同台。測試用提交的 *.g.dart；過時與否由 codegen 那台檢查。
+        # 檔名全程以 NUL 分隔，含空白或中文的路徑也照原樣傳給 flutter test。
         run: |
-          git ls-files 'test/*_test.dart' 'test/**/*_test.dart' | sort -u \
-            | awk -v n=4 -v i=${{ matrix.shard }} 'NR % n == i % n' > shard.txt
-          echo "$(wc -l < shard.txt) test files"
-          xargs -a shard.txt flutter test --no-pub --reporter compact
+          mapfile -d '' -t files < <(git ls-files -z -- 'test/*_test.dart' 'test/**/*_test.dart' | sort -zu)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No test files found."
+            exit 1
+          fi
+          shard=()
+          for i in "${!files[@]}"; do
+            if [ $(( i % 4 + 1 )) -eq ${{ matrix.shard }} ]; then
+              shard+=("${files[$i]}")
+            fi
+          done
+          echo "${#shard[@]} of ${#files[@]} test files"
+          # 測試檔少於四個時這一份可能分不到；不帶檔名的 flutter test 會跑全套。
+          if [ ${#shard[@]} -eq 0 ]; then
+            exit 0
+          fi
+          flutter test --no-pub --reporter compact "${shard[@]}"
       - name: Verify tests did not modify tracked source
         if: always()
         run: git diff --exit-code
