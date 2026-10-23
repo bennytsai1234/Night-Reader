@@ -44,6 +44,51 @@ void main() {
     expect(reveal.waiting, isFalse);
   });
 
+  testWidgets('slots nested in a slot are waited for too: the outer slot '
+      'being built does not end the wait before the inner ones are', (
+    tester,
+  ) async {
+    final reveal = CoverReveal(CoverWait.onDevice);
+    // 和換場一樣，外層排進來的那一幀就開始等。
+    var settled = false;
+    unawaited(
+      reveal.settle().then((_) {
+        settled = true;
+      }),
+    );
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CoverRevealScope(
+          reveal: reveal,
+          child: CoverRevealSlot(
+            child: Column(
+              children: [
+                for (var i = 0; i < 2; i++)
+                  CoverRevealSlot(
+                    placeholder: const SizedBox(height: 10),
+                    child: SizedBox(height: 10, child: Text('書$i')),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 外層建好的那一幀，裡面的兩塊才排進來。
+    await tester.pump();
+    expect(find.textContaining('書'), findsNothing);
+    expect(settled, isFalse);
+    expect(reveal.waiting, isTrue);
+    for (var built = 1; built <= 2; built++) {
+      await tester.pump();
+      expect(find.textContaining('書'), findsNWidgets(built));
+    }
+    await tester.pump();
+    expect(settled, isTrue);
+  });
+
   testWidgets('in steps, each frame either builds a slot, paints one, or '
       'shows one decoded cover, and the wait ends after the last of them', (
     tester,

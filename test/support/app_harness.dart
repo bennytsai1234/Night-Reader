@@ -343,6 +343,10 @@ Future<void> pumpApp(WidgetTester tester) async {
     if (entrance == null) break;
     unawaited(entrance.finished.then((_) => finished = true));
   }
+  // 推到上限還沒播完是進場卡住了（換場一直不來），不能當成開好了。
+  if (entrance != null && !finished) {
+    fail('開 App 的進場推進 1000 格（16 秒）仍沒播完');
+  }
   await settle(tester, const Duration(milliseconds: 500));
 }
 

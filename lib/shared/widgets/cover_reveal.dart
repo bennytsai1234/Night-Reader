@@ -114,8 +114,11 @@ class CoverReveal {
     await SchedulerBinding.instance.endOfFrame;
     // 看的是「還沒建好」而不是「還在排隊」：最後一塊放行後下一幀才建，它的
     // 封面那時才登記。這一塊建好的那一幀，封面在同一個 build 裡登記，接下
-    // 來的封面等待照樣等它。
-    if (_unbuilt > 0) await (_allBuilt ??= Completer<void>()).future;
+    // 來的封面等待照樣等它。塊裡還有塊（清單裡的書卡）時，外層建好的瞬間
+    // 數到零，裡面的塊在同一個 build 裡才排進來：醒來再數一次。
+    while (_unbuilt > 0) {
+      await (_allBuilt ??= Completer<void>()).future;
+    }
     if (_pending.isNotEmpty) {
       final drained = (_drained = Completer<void>()).future;
       await switch (wait) {
