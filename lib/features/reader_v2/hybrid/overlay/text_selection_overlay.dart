@@ -278,8 +278,9 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
 /// 並排。
 ///
 /// Flutter 的 [TextSelectionToolbar] 只在寬度放不下時才把按鈕收進「⋮」，
-/// 指定不了哪些收起來；這裡照它的樣子（外框、按鈕、位置與展開的時間）
-/// 自己排。
+/// 指定不了哪些收起來；這裡照它的樣子（外框、按鈕、位置、展開的時間與
+/// 展開後靠尾端對齊）自己排。一排放不下時整排縮小，App 多到放不下時清單
+/// 捲動，按鈕都按得到。
 class _SelectionToolbarWithMore extends StatefulWidget {
   const _SelectionToolbarWithMore({
     super.key,
@@ -305,10 +306,26 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
   static const double _screenPadding = 8;
   static const Duration _expand = Duration(milliseconds: 140);
 
+  final GlobalKey _toolbarKey = GlobalKey();
   bool _open = false;
 
+  /// 收起時工具列的寬度：展開後的選單比它窄時靠尾端對齊，「⋮」那一側
+  /// 不動（Flutter 的 `_TextSelectionToolbarTrailingEdgeAlign`）。
+  double? _closedWidth;
+
+  void _toggle() {
+    setState(() {
+      _closedWidth = _open ? null : _toolbarKey.currentContext?.size?.width;
+      _open = !_open;
+    });
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _build(context, constraints.maxHeight),
+  );
+
+  Widget _build(BuildContext context, double maxHeight) {
     final localizations = MaterialLocalizations.of(context);
     final above =
         widget.anchors.primaryAnchor - const Offset(0, _contentDistance);
@@ -325,7 +342,14 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
       tooltip: _open
           ? localizations.backButtonTooltip
           : localizations.moreButtonTooltip,
-      onPressed: () => setState(() => _open = !_open),
+      onPressed: _toggle,
+    );
+    // 工具列能用的高度：在字上方時位置最高到頂（選單比上方的空間高就蓋過
+    // 選到的字），在字下方時從選取下緣到底。
+    final area = maxHeight - paddingAbove - _screenPadding;
+    final menuMaxHeight = math.max(
+      _toolbarHeight,
+      fitsAbove ? area : area - (below.dy - local.dy),
     );
     final Widget content;
     if (_open) {
@@ -344,37 +368,62 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
         alignment: AlignmentDirectional.centerStart,
         child: toggle,
       );
-      // 和 Flutter 一樣：選單在字上方時往上展開，返回鍵留在「⋮」原本那一排。
-      content = IntrinsicWidth(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: fitsAbove ? [...menu, back] : [back, ...menu],
+      // App 多到放不下時清單捲動，返回鍵固定在「⋮」原本那一排；和
+      // Flutter 一樣，選單在字上方時往上展開。
+      final list = Flexible(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: menu,
+          ),
+        ),
+      );
+      content = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: menuMaxHeight),
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: fitsAbove ? [list, back] : [back, list],
+          ),
         ),
       );
     } else {
       final count = widget.items.length + 1;
+      // 窄視窗或系統字級放大到一排放不下時整排等比縮小，每個按鈕都還按得到。
       content = SizedBox(
         height: _toolbarHeight,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < widget.items.length; i++)
-              TextSelectionToolbarTextButton(
-                padding: TextSelectionToolbarTextButton.getPadding(i, count),
-                onPressed: widget.items[i].onPressed,
-                child: Text(
-                  AdaptiveTextSelectionToolbar.getButtonLabel(
-                    context,
-                    widget.items[i],
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.items.length; i++)
+                TextSelectionToolbarTextButton(
+                  padding: TextSelectionToolbarTextButton.getPadding(i, count),
+                  onPressed: widget.items[i].onPressed,
+                  child: Text(
+                    AdaptiveTextSelectionToolbar.getButtonLabel(
+                      context,
+                      widget.items[i],
+                    ),
                   ),
                 ),
-              ),
-            toggle,
-          ],
+              toggle,
+            ],
+          ),
         ),
       );
     }
+    final toolbar = Material(
+      key: _toolbarKey,
+      borderRadius: const BorderRadius.all(Radius.circular(_toolbarHeight / 2)),
+      clipBehavior: Clip.antiAlias,
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 1,
+      type: MaterialType.card,
+      child: content,
+    );
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -393,16 +442,18 @@ class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
           duration: MediaQuery.disableAnimationsOf(context)
               ? Duration.zero
               : _expand,
-          child: Material(
-            borderRadius: const BorderRadius.all(
-              Radius.circular(_toolbarHeight / 2),
+          child: switch (_closedWidth) {
+            final width? => ConstrainedBox(
+              constraints: BoxConstraints(minWidth: width),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                widthFactor: 1,
+                heightFactor: 1,
+                child: toolbar,
+              ),
             ),
-            clipBehavior: Clip.antiAlias,
-            color: Theme.of(context).colorScheme.surface,
-            elevation: 1,
-            type: MaterialType.card,
-            child: content,
-          ),
+            null => toolbar,
+          },
         ),
       ),
     );
