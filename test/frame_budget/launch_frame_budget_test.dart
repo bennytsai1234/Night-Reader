@@ -102,7 +102,9 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       // 下載服務是單例，跨兩次開 App；等上一次開 App 排的下載跑完（測試
       // 沒有網路，立刻失敗），它結束時通知書架重新載入，不然會算進下一次。
-      await settle(tester, const Duration(seconds: 5));
+      // 30 本書時 5 秒不夠：第二次開 App 的骨架呼吸裡會多出兩格各約 3ms
+      // 的上一次剩下的工作（2026-10-23 量到，等 40 秒就沒有）。
+      await settle(tester, const Duration(seconds: 40));
     }
 
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。

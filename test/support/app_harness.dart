@@ -1,6 +1,7 @@
 // 整個 App 的截圖環境：記憶體資料庫＋真的 DAO＋假資料，畫出來的就是 App
 // 實際的頁面（閱讀器走真的排版引擎）。
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -34,6 +35,8 @@ import 'package:night_reader/core/services/check_source_service.dart';
 import 'package:night_reader/core/services/network_service.dart';
 import 'package:night_reader/core/services/reader_chapter_content_store.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/main.dart';
 import 'package:provider/provider.dart';
@@ -321,12 +324,26 @@ Future<Uint8List> _encodeCover(int seed) async {
 }
 
 /// 整個 App（同 `main.dart` 的 runApp），等開 App 的進場播完：骨架長出
-/// 0.6 秒、停 0.8 秒、換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。
+/// 0.6 秒、至少停 0.8 秒（書架在骨架底下一格一步準備好才換，書多時更久）、
+/// 換場 0.6 秒，換場播完前畫面不接點擊（ADR 0031）。準備是照格數走的，
+/// 一格一格推進（16ms）直到進場真的播完，不照固定的時間等。
 Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpWidget(
     MultiProvider(providers: AppProviders.providers, child: const ReaderApp()),
   );
-  await settle(tester, const Duration(seconds: 3));
+  LaunchEntranceMotion? entrance;
+  var finished = false;
+  for (var i = 0; i < 1000 && !finished; i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 16));
+    if (entrance != null) continue;
+    final shelf = find.byType(BookshelfPage).evaluate();
+    if (shelf.isEmpty) continue;
+    entrance = LaunchEntrance.maybeOf(shelf.first);
+    if (entrance == null) break;
+    unawaited(entrance.finished.then((_) => finished = true));
+  }
+  await settle(tester, const Duration(milliseconds: 500));
 }
 
 /// App 有常駐的計時器（時鐘、流光），`pumpAndSettle` 等不完；改成推進
