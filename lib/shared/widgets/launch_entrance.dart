@@ -13,11 +13,11 @@ import 'snapshot_sweep.dart';
 /// 開 App 的進場（ADR 0025）：系統啟動畫面只有底色，Flutter 第一幀也只畫
 /// 底色；接著整個畫面照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：
 /// 書架、頁首的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。
-/// 骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架換場時整個畫面
-/// 一起換成真的：呼吸先收住、停在最深，在靜止的畫面上把骨架畫面與換好的
-/// 畫面各畫成一張圖，換場的 0.6 秒
-/// 只把兩張圖照每個像素的橫向位置混合（[SnapshotSweep]，ADR 0029），頁首、
-/// 分頁列與書架照同一條曲線由左而右換過去。
+/// 骨架呼吸著等書讀出來（書、書名的繁簡轉換），呼吸時底下不做事；停頓滿、
+/// 書也讀到後呼吸收住、停在最深，在靜止的畫面上一次準備好書架與封面，把
+/// 骨架畫面與換好的畫面各畫成一張圖，書架換場時整個畫面一起換成真的：換場
+/// 的 0.6 秒只把兩張圖照每個像素的橫向位置混合（[SnapshotSweep]，ADR 0031），
+/// 頁首、分頁列與書架照同一條曲線由左而右換過去。
 ///
 /// 包在主頁面外面；底下的頁首（`GlassNavHeader`）、分頁列與書架用
 /// [maybeOf] 取得進場的狀態。從主頁面推出去的頁面不在底下，不受影響。
@@ -102,8 +102,7 @@ class LaunchEntranceMotion {
       return;
     }
     _revealStarted = true;
-    await _paused;
-    await rest.settle();
+    await settleBreath();
     // 等的期間整個進場被拆掉了（例如 App 換掉主頁面）：不再換場。
     if (_disposed) return;
     await screen.play(
@@ -116,6 +115,25 @@ class LaunchEntranceMotion {
       },
     );
     if (!_disposed) _finish();
+  }
+
+  /// 停頓滿了、呼吸也收住（[rest]），畫面靜止時完成。開 App 的書架等它才在
+  /// 骨架底下準備內容：準備的工作全落在靜止的畫面裡，呼吸的每一格底下都
+  /// 不做事（ADR 0031）。重複呼叫回傳同一個。
+  Future<void> settleBreath() => _breathSettling ??= _settleBreath();
+  Future<void>? _breathSettling;
+
+  /// [settleBreath] 已經完成。
+  bool get breathSettled => _breathSettled;
+  bool _breathSettled = false;
+
+  Future<void> _settleBreath() async {
+    await _paused;
+    await rest.settle();
+    // 最後一個位置是在某一格的動畫階段停好的，那一格還沒畫：等它畫完、畫面
+    // 真的靜止了，下一格才開始準備書架。不然建書架會擠進收住的最後一格。
+    await SchedulerBinding.instance.endOfFrame;
+    _breathSettled = true;
   }
 
   /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。
