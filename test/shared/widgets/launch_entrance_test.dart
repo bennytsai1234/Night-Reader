@@ -96,11 +96,12 @@ void main() {
       find.text('內容').evaluate().isNotEmpty &&
       paintedGlass(tester) == 0;
 
+  /// 停頓結束到換場開始最多幾格：先收住呼吸（最多再呼一輪），再拍圖。
+  final untilCrossfade = Skeleton.breathCycle.inMilliseconds ~/ 16 + 10;
+
   /// 一格一格推進，直到換場開始（最多 [frames] 格）；回傳推進了幾格。
-  Future<int> pumpUntilCrossfading(
-    WidgetTester tester, {
-    int frames = 10,
-  }) async {
+  Future<int> pumpUntilCrossfading(WidgetTester tester, {int? frames}) async {
+    frames ??= untilCrossfade;
     for (var i = 0; i < frames; i++) {
       if (crossfading(tester)) return i;
       await tester.pump(const Duration(milliseconds: 16));
@@ -184,10 +185,12 @@ void main() {
     expect(find.byType(SkeletonBox), findsWidgets, reason: '還在停頓，骨架照常呼吸');
     expect(crossfading(tester), isFalse);
 
-    // 停完：拍下骨架畫面、換成內容、拍下換好的畫面，之後只貼兩張圖。
+    // 停完：收住呼吸，拍下骨架畫面、換成內容、拍下換好的畫面，之後只貼兩張
+    // 圖；畫面先靜止至少 hold 才開始掃。
     await tester.pump(const Duration(milliseconds: 50));
-    expect(await pumpUntilCrossfading(tester), lessThan(10));
+    expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
     expect(find.text('內容'), findsOneWidget, reason: '底下已經換成內容');
+    await tester.pump(LaunchEntranceMotion.hold);
 
     await tester.pump(SkeletonReveal.defaultDuration ~/ 2);
     expect(crossfading(tester), isTrue, reason: '換場的 0.6 秒裡只貼兩張圖');
@@ -213,7 +216,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 620));
     await tester.pump(LaunchEntranceMotion.pause);
-    expect(await pumpUntilCrossfading(tester), lessThan(10));
+    expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
     await tester.pump(const Duration(milliseconds: 100));
     expect(crossfading(tester), isTrue);
 
@@ -257,7 +260,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 650));
     await tester.pump(LaunchEntranceMotion.pause);
-    expect(await pumpUntilCrossfading(tester), lessThan(10));
+    expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
     await tester.pump(const Duration(milliseconds: 200));
     expect(crossfading(tester), isTrue);
 
