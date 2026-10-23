@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/database/dao/book_dao.dart';
@@ -13,6 +15,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 
 class ReadingStatsPage extends StatefulWidget {
   const ReadingStatsPage({super.key});
@@ -107,13 +110,11 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
               GroupedSection(
                 children: [
                   GroupedContent(
-                    child: Row(
-                      children: [
-                        _StatTile(label: '今天', seconds: stats.today),
-                        _StatTile(label: '本週', seconds: stats.week),
-                        _StatTile(label: '總計', seconds: total),
-                      ],
-                    ),
+                    child: _StatTiles([
+                      _StatTile(label: '今天', seconds: stats.today),
+                      _StatTile(label: '本週', seconds: stats.week),
+                      _StatTile(label: '總計', seconds: total),
+                    ]),
                   ),
                 ],
               ),
@@ -150,6 +151,39 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
   }
 }
 
+/// 頂端並排的幾格，等寬。
+class _StatTiles extends StatelessWidget implements GroupedSkeletonItem {
+  const _StatTiles(this.tiles);
+
+  final List<_StatTile> tiles;
+
+  /// 每一格的數字與標籤照字置中排，整列取最高的一格、各格垂直置中。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final tileWidth = width / tiles.length;
+    final shapes = [
+      for (final tile in tiles) tile.skeletonShape(context, width: tileWidth),
+    ];
+    final height = shapes.map((shape) => shape.height).reduce(math.max);
+    return GroupedItemShape(
+      height,
+      marks: [
+        for (final (index, shape) in shapes.indexed)
+          ...shape.marksAt(
+            Offset(index * tileWidth, (height - shape.height) / 2),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Row(children: [for (final tile in tiles) Expanded(child: tile)]);
+}
+
 /// 頂端的一格：大數字配單位，下面一行標籤。一小時內寫分鐘，以上寫小時
 /// （一位小數），三格並排放得下。
 class _StatTile extends StatelessWidget {
@@ -157,6 +191,9 @@ class _StatTile extends StatelessWidget {
 
   final String label;
   final int seconds;
+
+  static const double _padding = AppSpacing.sm;
+  static const double _labelGap = AppSpacing.xs;
 
   (String, String) get _valueAndUnit {
     final minutes = (seconds < 0 ? 0 : seconds) ~/ 60;
@@ -168,48 +205,75 @@ class _StatTile extends StatelessWidget {
     return (text, '小時');
   }
 
+  /// 數字配單位；[scheme] 為 null 時不帶顏色（骨架只量字）。
+  TextSpan _valueSpan(ColorScheme? scheme) {
+    final (value, unit) = _valueAndUnit;
+    return TextSpan(
+      children: [
+        TextSpan(
+          text: value,
+          style: AppTextStyles.titleXl.copyWith(color: scheme?.onSurface),
+        ),
+        TextSpan(
+          text: ' $unit',
+          style: AppTextStyles.uiSm.copyWith(color: scheme?.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final value = GroupedItemShape.rich(
+      context,
+      _valueSpan(null),
+      width: width,
+      maxLines: 1,
+    ).centeredIn(width);
+    final label = GroupedItemShape.text(
+      context,
+      this.label,
+      style: AppTextStyles.uiSm,
+      width: width,
+    ).centeredIn(width);
+    const valueTop = _padding;
+    final labelTop = valueTop + value.height + _labelGap;
+    return GroupedItemShape(
+      labelTop + label.height + _padding,
+      marks: [
+        ...value.marksAt(const Offset(0, valueTop)),
+        ...label.marksAt(Offset(0, labelTop)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (value, unit) = _valueAndUnit;
-    return Expanded(
-      child: Semantics(
-        container: true,
-        label: '$label $value $unit',
-        excludeSemantics: true,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          child: Column(
-            children: [
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: value,
-                      style: AppTextStyles.titleXl.copyWith(
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    TextSpan(
-                      text: ' $unit',
-                      style: AppTextStyles.uiSm.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+    return Semantics(
+      container: true,
+      label: '$label $value $unit',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: _padding),
+        child: Column(
+          children: [
+            Text.rich(
+              _valueSpan(scheme),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: _labelGap),
+            Text(
+              label,
+              style: AppTextStyles.uiSm.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                label,
-                style: AppTextStyles.uiSm.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

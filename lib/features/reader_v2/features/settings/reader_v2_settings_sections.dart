@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 // 閱讀設定的各組：閱讀器內的外觀與排版面板與「閱讀偏好」頁共用，都透過
 // ReaderV2SettingsController 讀寫，兩處行為與資料一致。
@@ -241,7 +243,6 @@ class ReaderV2SettingsGroups {
           _paddingStepper(_PaddingField.bottom, '下邊距'),
           if (_footerShown.value)
             _StepperRow(
-              '頁尾位置',
               _Watch<double>(
                 listenable: settings,
                 select: () => settings.footerOffset,
@@ -318,7 +319,6 @@ class ReaderV2SettingsGroups {
     header: '自動翻頁',
     children: [
       _StepperRow(
-        '速度',
         _Watch<double>(
           listenable: settings,
           select: () => settings.autoPageSpeed,
@@ -531,41 +531,21 @@ const EdgeInsets _stepperPadding = EdgeInsets.symmetric(
   horizontal: AppGrouped.rowPadding,
 );
 
-/// 骨架裡步進列的高度：照補了左右內距之後的寬度與現在的數值算。
-GroupedItemShape _stepperShape(
-  BuildContext context,
-  String label,
-  NumberStepperRow? current,
-  double width,
-) => GroupedItemShape(
-  NumberStepperRow.heightOf(
-    context,
-    label: label,
-    valueText: current?.displayText,
-    width: width - _stepperPadding.horizontal,
-  ),
-);
+class _StepperRow extends StatelessWidget implements GroupedSkeletonItem {
+  const _StepperRow(this.stepper);
 
-class _StepperRow extends StatelessWidget
-    implements NumberStepperRowLike, GroupedSkeletonItem {
-  const _StepperRow(this.label, this.stepper);
-
-  @override
-  final String label;
   final Widget stepper;
 
-  /// 裡面只聽自己的值（[_Watch]），外面拿不到數值。
-  @override
-  NumberStepperRow? get current => switch (stepper) {
-    final NumberStepperRow row => row,
-    _ => null,
-  };
-
+  /// 骨架照補了左右內距之後的寬度與現在的數值算。
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
-  }) => _stepperShape(context, label, current, width);
+  }) => GroupedItemShape.of(
+    stepper,
+    context: context,
+    width: width - _stepperPadding.horizontal,
+  ).padded(_stepperPadding);
 
   @override
   Widget build(BuildContext context) =>
@@ -574,7 +554,7 @@ class _StepperRow extends StatelessWidget
 
 /// 暫存提交的步進列：顯示 [_StagedEdits] 裡的值，按了先暫存。
 class _StagedStepper<F extends Enum> extends StatelessWidget
-    implements NumberStepperRowLike, GroupedSkeletonItem {
+    implements GroupedSkeletonItem {
   const _StagedStepper({
     required this.edits,
     required this.field,
@@ -589,7 +569,6 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
 
   final _StagedEdits<F> edits;
   final F field;
-  @override
   final String label;
   final double min;
   final double max;
@@ -611,18 +590,17 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
   );
 
   @override
-  NumberStepperRow get current => _row(edits.listenableOf(field).value);
-
-  @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
-  }) => _stepperShape(context, label, current, width);
+  }) =>
+      _row(edits.listenableOf(field).value)
+          .skeletonShape(context, width: width - _stepperPadding.horizontal)
+          .padded(_stepperPadding);
 
   @override
   Widget build(BuildContext context) {
     return _StepperRow(
-      label,
       ValueListenableBuilder<double>(
         valueListenable: edits.listenableOf(field),
         builder: (context, value, _) => _row(value),
@@ -633,7 +611,7 @@ class _StagedStepper<F extends Enum> extends StatelessWidget
 
 /// 只在 [select] 取出的值變了才重建：設定的控制器任何一項變動都會通知，
 /// 每一列只看自己顯示的那一項。
-class _Watch<T> extends StatefulWidget {
+class _Watch<T> extends StatefulWidget implements GroupedSkeletonItem {
   const _Watch({
     required this.listenable,
     required this.select,
@@ -643,6 +621,17 @@ class _Watch<T> extends StatefulWidget {
   final Listenable listenable;
   final T Function() select;
   final Widget Function(BuildContext context, T value) builder;
+
+  /// 骨架照現在的值建出來的那一列。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => GroupedItemShape.of(
+    builder(context, select()),
+    context: context,
+    width: width,
+  );
 
   @override
   State<_Watch<T>> createState() => _WatchState<T>();
@@ -683,10 +672,27 @@ class _WatchState<T> extends State<_Watch<T>> {
 }
 
 /// 組標題右側的「恢復預設」。
-class _ResetButton extends StatelessWidget {
+class _ResetButton extends StatelessWidget implements GroupedSkeletonItem {
   const _ResetButton({required this.onPressed});
 
   final VoidCallback? onPressed;
+
+  static const String _label = '恢復預設';
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.xs,
+  );
+
+  /// 按鈕沒有底色，骨架只畫字；字樣同按鈕的 labelLarge。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => GroupedItemShape.text(
+    context,
+    _label,
+    style: Theme.of(context).textTheme.labelLarge!,
+    width: double.infinity,
+  ).padded(_padding);
 
   @override
   Widget build(BuildContext context) {
@@ -695,17 +701,18 @@ class _ResetButton extends StatelessWidget {
       style: TextButton.styleFrom(
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+        padding: _padding,
         minimumSize: Size.zero,
         // 字級沿用預設的 labelLarge（主題裡就是 uiSm），自己帶 textStyle
         // 會蓋掉主題的字族。
       ),
-      child: const Text('恢復預設'),
+      child: const Text(_label),
     );
   }
 }
 
-class _TextIndentSelector extends StatelessWidget {
+class _TextIndentSelector extends StatelessWidget
+    implements GroupedSkeletonItem {
   const _TextIndentSelector({required this.value, required this.onChanged});
 
   static const _options = [0, 1, 2, 4];
@@ -713,47 +720,96 @@ class _TextIndentSelector extends StatelessWidget {
   final int value;
   final ValueChanged<int> onChanged;
 
+  _LabeledRow get _row => _LabeledRow(
+    label: '首行縮排',
+    // 舊版或外部寫入的非選項值仍需顯示，GlassSegmented 此時不選取任何分段。
+    child: GlassSegmented<int>(
+      expand: false,
+      segments: [
+        for (final option in _options) GlassSegment(option, '$option 字'),
+      ],
+      selected: value,
+      onChanged: onChanged,
+    ),
+  );
+
   @override
-  Widget build(BuildContext context) {
-    return _LabeledRow(
-      label: '首行縮排',
-      // 舊版或外部寫入的非選項值仍需顯示，GlassSegmented 此時不選取任何分段。
-      child: GlassSegmented<int>(
-        expand: false,
-        segments: [
-          for (final option in _options) GlassSegment(option, '$option 字'),
-        ],
-        selected: value,
-        onChanged: onChanged,
-      ),
-    );
-  }
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row.skeletonShape(context, width: width);
+
+  @override
+  Widget build(BuildContext context) => _row;
 }
 
 /// 卡片內「左側標籤、右側控件」的一列。
-class _LabeledRow extends StatelessWidget {
+class _LabeledRow extends StatelessWidget implements GroupedSkeletonItem {
   const _LabeledRow({required this.label, required this.child});
 
   final String label;
   final Widget child;
 
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: AppGrouped.rowPadding,
+    vertical: AppSpacing.xs,
+  );
+  static const double _minHeight = AppGrouped.rowMinHeight - AppSpacing.xs * 2;
+  static final TextStyle _labelStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+  );
+
+  /// 標籤靠左；控件照它本身的大小靠右，放不下時和 build 一樣等比縮小。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final inner = width - _padding.horizontal;
+    final label = GroupedItemShape.text(
+      context,
+      this.label,
+      style: _labelStyle,
+      width: inner,
+    );
+    final control = groupedPartShape(child, context);
+    final room = inner - label.width! - AppSpacing.md;
+    final scale = math.min(1.0, room / control.width!);
+    final height = math.max(
+      _minHeight,
+      math.max(label.height, control.height * scale),
+    );
+    final controlLeft = inner - control.width! * scale;
+    final controlTop = (height - control.height * scale) / 2;
+    return GroupedItemShape(
+      height,
+      marks: [
+        ...label.marksAt(Offset(0, (height - label.height) / 2)),
+        for (final mark in control.marks)
+          SkeletonShape(
+            Rect.fromLTRB(
+              controlLeft + mark.rect.left * scale,
+              controlTop + mark.rect.top * scale,
+              controlLeft + mark.rect.right * scale,
+              controlTop + mark.rect.bottom * scale,
+            ),
+            radius: mark.radius * scale,
+          ),
+      ],
+    ).padded(_padding);
+  }
+
   @override
   Widget build(BuildContext context) {
     return GroupedContent(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppGrouped.rowPadding,
-        vertical: AppSpacing.xs,
-      ),
+      padding: _padding,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          minHeight: AppGrouped.rowMinHeight - AppSpacing.xs * 2,
-        ),
+        constraints: const BoxConstraints(minHeight: _minHeight),
         child: Row(
           children: [
             Text(
               label,
-              style: AppTextStyles.bodyBase.copyWith(
-                height: 1.3,
+              style: _labelStyle.copyWith(
                 color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
@@ -772,7 +828,8 @@ class _LabeledRow extends StatelessWidget {
   }
 }
 
-class _InfoItemPickerRow extends StatelessWidget {
+class _InfoItemPickerRow extends StatelessWidget
+    implements GroupedSkeletonItem {
   const _InfoItemPickerRow({
     required this.label,
     required this.value,
@@ -783,14 +840,20 @@ class _InfoItemPickerRow extends StatelessWidget {
   final ReaderV2InfoItem value;
   final ValueChanged<ReaderV2InfoItem> onChanged;
 
+  GroupedRow _row(BuildContext context) => GroupedRow(
+    title: label,
+    value: value.label,
+    onTap: () => _showPicker(context),
+  );
+
   @override
-  Widget build(BuildContext context) {
-    return GroupedRow(
-      title: label,
-      value: value.label,
-      onTap: () => _showPicker(context),
-    );
-  }
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row(context).skeletonShape(context, width: width);
+
+  @override
+  Widget build(BuildContext context) => _row(context);
 
   Future<void> _showPicker(BuildContext context) async {
     final picked = await showAppActionSheet<ReaderV2InfoItem>(
@@ -810,11 +873,41 @@ class _InfoItemPickerRow extends StatelessWidget {
 }
 
 /// 九宮格：每格是那一區點下去的功能，點一格換功能。
-class _ClickActionGrid extends StatelessWidget {
+class _ClickActionGrid extends StatelessWidget implements GroupedSkeletonItem {
   const _ClickActionGrid({required this.actions, required this.onChanged});
 
   final List<int> actions;
   final void Function(int zone, int action) onChanged;
+
+  static const int _columns = 3;
+  static const double _aspectRatio = 1.6;
+  static const double _gap = AppSpacing.sm;
+
+  /// 九格各畫一塊，和格子一樣大。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final cellWidth = (width - _gap * (_columns - 1)) / _columns;
+    final cellHeight = cellWidth / _aspectRatio;
+    const rows = 9 ~/ _columns;
+    return GroupedItemShape(
+      rows * cellHeight + (rows - 1) * _gap,
+      marks: [
+        for (var i = 0; i < 9; i++)
+          SkeletonShape(
+            Rect.fromLTWH(
+              (i % _columns) * (cellWidth + _gap),
+              (i ~/ _columns) * (cellHeight + _gap),
+              cellWidth,
+              cellHeight,
+            ),
+            radius: AppRadius.cardMd,
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -824,10 +917,10 @@ class _ClickActionGrid extends StatelessWidget {
       padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.6,
-        crossAxisSpacing: AppSpacing.sm,
-        mainAxisSpacing: AppSpacing.sm,
+        crossAxisCount: _columns,
+        childAspectRatio: _aspectRatio,
+        crossAxisSpacing: _gap,
+        mainAxisSpacing: _gap,
       ),
       itemCount: 9,
       itemBuilder: (context, index) {

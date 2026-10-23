@@ -1,42 +1,63 @@
-// 分組清單的進場骨架（ADR 0029）：換成內容時記下畫面上的樣子，下次照著畫，
-// 也存進偏好設定，重開 App 照樣用。
+// 分組清單的進場骨架（ADR 0029）：每一項照元件本身算，第一次進一頁、換了
+// 字級，骨架就和換上的內容一樣。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 每次都建新的列：版面紀錄只認結構，不認元件本身。
+import '../../support/skeleton_match.dart';
+
+/// 各種一般的列：列首圖示、數值、箭頭、副標、開關、勾選、步進、自由
+/// 內容、組標題與附註。
 List<Widget> _sections() => [
   GroupedSection(
     header: '一般',
     children: [
-      GroupedRow(title: '第一列', value: '值', onTap: () {}),
+      GroupedRow(
+        leading: const GroupedIconTile(Icons.tune_rounded),
+        title: '第一列',
+        value: '目前的值',
+        onTap: () {},
+      ),
       GroupedSwitchRow(title: '開關', value: true, onChanged: (_) {}),
+      GroupedCheckRow(title: '勾選', selected: true, onTap: () {}),
+      GroupedCheckRow(title: '沒勾選', selected: false, onTap: () {}),
     ],
   ),
   GroupedSection(
     header: '其他',
-    footer: '附註',
-    children: [GroupedRow(title: '帶副標', subtitle: '副標文字', onTap: () {})],
+    footer: '附註會照字排在卡片下面',
+    children: [
+      GroupedRow(title: '帶副標的列，標題長一點看會不會換行', subtitle: '副標文字', onTap: () {}),
+      GroupedContent(
+        child: NumberStepperRow(
+          label: '字號',
+          value: 18,
+          min: 12,
+          max: 40,
+          step: 1,
+          onChanged: (_) {},
+        ),
+      ),
+      const GroupedContent(child: Text('卡片裡的一段自由內容，長到要換行才放得下的那種說明文字。')),
+    ],
   ),
 ];
 
-class _Page extends StatelessWidget {
-  const _Page();
-
-  @override
-  Widget build(BuildContext context) =>
-      Scaffold(body: GroupedListView(children: _sections()));
-}
-
-Future<void> _pumpHost(WidgetTester tester) async {
+Future<void> _push(
+  WidgetTester tester,
+  Widget Function() page, {
+  double textScale = 1,
+}) async {
   tester.view.physicalSize = const Size(393, 852) * 3;
   tester.view.devicePixelRatio = 3;
+  tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
+  addTearDown(tester.platformDispatcher.clearAllTestValues);
   await tester.pumpWidget(
     MaterialApp(
       theme: buildAppTheme(AppStyle.paper, Brightness.light),
@@ -44,8 +65,9 @@ Future<void> _pumpHost(WidgetTester tester) async {
         builder: (context) => Scaffold(
           body: Center(
             child: TextButton(
-              onPressed: () => Navigator.of(context)
-                  .push(MaterialPageRoute<void>(builder: (_) => const _Page())),
+              onPressed: () =>
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => page())),
               child: const Text('開啟'),
             ),
           ),
@@ -53,95 +75,64 @@ Future<void> _pumpHost(WidgetTester tester) async {
       ),
     ),
   );
+  await tester.tap(find.text('開啟'));
+  await tester.pump();
 }
 
-String _keyFor(WidgetTester tester) => GroupedListLayouts.keyOf(
-  _sections(),
-  tester.view.physicalSize.width / tester.view.devicePixelRatio,
-  TextScaler.noScaling,
-);
+/// 換頁播完時畫的骨架，和換上內容後量到的每一塊比。
+Future<List<String>> _mismatches(WidgetTester tester) async {
+  final list = find.byType(GroupedListView);
+  final route = ModalRoute.of(
+    tester.element(find.byType(GroupedListView, skipOffstage: false)),
+  )!;
+  while (!route.animation!.isCompleted) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  final skeleton = skeletonLayoutOf(
+    tester,
+    find.descendant(of: list, matching: find.byType(SkeletonShapes)),
+  );
+  expect(skeleton.marks, isNotEmpty);
+  await tester.pumpAndSettle();
+  expect(find.byType(SkeletonShapes), findsNothing);
+  return skeletonMismatches(
+    skeleton,
+    contentLayoutOf(tester, list),
+    visible: tester.getRect(list),
+  );
+}
 
 void main() {
-  testWidgets('換成內容後記下卡片與每一行字的位置', (tester) async {
-    await _pumpHost(tester);
-    await tester.tap(find.text('開啟'));
-    await tester.pump();
-    // 推入的第一格頁面還在 offstage 排位置。
-    expect(find.byType(SkeletonShapes, skipOffstage: false), findsOneWidget);
-    await tester.pumpAndSettle();
-    expect(find.byType(SkeletonShapes), findsNothing);
-
-    final shapes = GroupedListLayouts.of(_keyFor(tester));
-    expect(shapes, isNotNull);
-    final first = shapes!.first!;
-    final slot = tester.getTopLeft(
-      find.ancestor(of: find.text('一般'), matching: find.byType(GroupedSection)),
-    );
-    // 卡片從第一列的上緣到最後一列的下緣。
-    final firstRow = tester.getRect(
-      find.ancestor(of: find.text('第一列'), matching: find.byType(GroupedRow)),
-    );
-    final lastRow = tester.getRect(find.byType(GroupedSwitchRow));
-    expect(first.card, isNotNull);
-    expect(first.card!.top + slot.dy, moreOrLessEquals(firstRow.top));
-    expect(first.card!.bottom + slot.dy, moreOrLessEquals(lastRow.bottom));
-    expect(first.rowHeights, [firstRow.height, lastRow.height]);
-    // 每一行字一條，和字一樣寬、對著字的中線。
-    final title = tester.getRect(find.text('第一列'));
-    expect(
-      first.marks.any(
-        (mark) =>
-            (mark.rect.left + slot.dx - title.left).abs() < 0.5 &&
-            (mark.rect.center.dy + slot.dy - title.center.dy).abs() < 0.5 &&
-            (mark.rect.width - title.width).abs() < 0.5,
-      ),
-      isTrue,
-    );
-    // 開關整塊畫。
-    final track = tester.getRect(find.byType(GroupedSwitch));
-    expect(
-      first.marks.any(
-        (mark) =>
-            (mark.rect.shift(slot).center - track.center).distance < 0.5 &&
-            (mark.rect.width - track.width).abs() < 0.5,
-      ),
-      isTrue,
-    );
-  });
+  for (final scale in [1.0, 1.6]) {
+    testWidgets('第一次進去的骨架就和換上的內容一樣（字級 $scale 倍）', (tester) async {
+      await _push(
+        tester,
+        () => Scaffold(body: GroupedListView(children: _sections())),
+        textScale: scale,
+      );
+      // 推入的第一格頁面還在 offstage 排位置。
+      expect(find.byType(SkeletonShapes, skipOffstage: false), findsOneWidget);
+      expect(await _mismatches(tester), isEmpty);
+    });
+  }
 
   testWidgets('上百列的組不等畫面外的列，換頁播完不久就換成內容', (tester) async {
-    tester.view.physicalSize = const Size(393, 852) * 3;
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(AppStyle.paper, Brightness.light),
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => Scaffold(
-                  body: GroupedListView(
-                    children: [
-                      GroupedSection(
-                        header: '規則',
-                        children: [
-                          for (var i = 0; i < 200; i++)
-                            GroupedRow(title: '規則 $i', onTap: () {}),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+    await _push(
+      tester,
+      () => Scaffold(
+        body: GroupedListView(
+          children: [
+            GroupedSection(
+              header: '規則',
+              children: [
+                for (var i = 0; i < 200; i++)
+                  GroupedRow(title: '規則 $i', onTap: () {}),
+              ],
             ),
-            child: const Text('開啟'),
-          ),
+          ],
         ),
       ),
     );
-    await tester.tap(find.text('開啟'));
-    await tester.pump();
     final route = ModalRoute.of(
       tester.element(find.byType(GroupedListView, skipOffstage: false)),
     )!;
@@ -158,39 +149,23 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  test('版面紀錄存進偏好設定，重新載入後一樣', () async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    GroupedListLayouts.load(prefs);
-    const shape = GroupedItemShape(
-      120.5,
-      card: Rect.fromLTRB(16, 30, 377, 120.5),
-      rowHeights: [44, 46.5],
-      marks: [
-        SkeletonShape(
-          Rect.fromLTRB(32, 10, 60, 23),
-          radius: BorderRadius.all(Radius.circular(3)),
+  testWidgets('算不出骨架的元件會被抓出來', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            expect(
+              () => GroupedItemShape.of(
+                const Placeholder(),
+                context: context,
+                width: 393,
+              ),
+              throwsAssertionError,
+            );
+            return const SizedBox();
+          },
         ),
-      ],
+      ),
     );
-    GroupedListLayouts.remember('頁面', [shape, null]);
-    await pumpEventQueue();
-
-    final restored = GroupedItemShape.fromJson(shape.toJson())!;
-    expect(restored.height, shape.height);
-    expect(restored.card, shape.card);
-    expect(restored.rowHeights, shape.rowHeights);
-    expect(restored.marks.single.rect, shape.marks.single.rect);
-    expect(restored.marks.single.radius, shape.marks.single.radius);
-
-    // 另一次啟動：只有偏好設定裡的資料。
-    SharedPreferences.setMockInitialValues({
-      for (final key in prefs.getKeys()) key: prefs.get(key)!,
-    });
-    GroupedListLayouts.load(await SharedPreferences.getInstance());
-    final loaded = GroupedListLayouts.of('頁面')!;
-    expect(loaded.length, 2);
-    expect(loaded.first!.card, shape.card);
-    expect(loaded.last, isNull);
   });
 }

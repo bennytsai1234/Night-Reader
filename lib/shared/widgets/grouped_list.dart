@@ -301,7 +301,7 @@ class _GroupedEntrance extends StatefulWidget {
 
 /// 閱讀器面板這類照內容收縮的底部面板的捲動內容：和 [GroupedListView]
 /// 一樣滑入時先只畫骨架，滑到位才逐列建立；骨架的高度照每一項的樣子算
-/// （[GroupedItemShape.estimate]），換成內容時面板高度不變。
+/// （[GroupedItemShape.of]），換成內容時面板高度不變。
 class GroupedSheetContent extends StatelessWidget {
   const GroupedSheetContent({
     super.key,
@@ -357,110 +357,32 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
   /// 換成內容的那一刻；之後骨架用不到，樣子不再重算。
   bool _revealed = false;
 
-  /// 上一次算好的 key 與樣子，以及算的時候的寬度、字級與項目。
-  (String, List<GroupedItemShape>)? _cached;
+  /// 上一次算好的樣子，以及算的時候的寬度、字級與項目。
+  List<GroupedItemShape>? _cached;
   (double, double, List<Widget>)? _cachedFor;
 
-  /// 這一頁的版面紀錄 key 與每一項的樣子。骨架還在時，寬度、字級或項目
+  /// 每一項的樣子（[GroupedItemShape.of]）。骨架還在時，寬度、字級或項目
   /// 變了才重算；換成內容後只有項目數變了（例如多出測試結果）才補算，
-  /// 鍵盤升降、面板重建都不再重排骨架的字。
-  (String, List<GroupedItemShape>) _shapes(double width) {
+  /// 鍵盤升降、面板重建都不再重排骨架的字。面板的高度就是骨架的高度，
+  /// 每一項照它本身算，第一次打開就是換上內容後的高度。
+  List<GroupedItemShape> _shapes(double width) {
     final items = widget.items;
     final scale = MediaQuery.textScalerOf(context).scale(100);
     final cached = _cached;
     if (cached != null) {
       final (cachedWidth, cachedScale, cachedItems) = _cachedFor!;
       final same = _revealed
-          ? cached.$2.length == items.length
+          ? cached.length == items.length
           : cachedWidth == width &&
                 cachedScale == scale &&
                 identical(cachedItems, items);
       if (same) return cached;
     }
     _cachedFor = (width, scale, items);
-    return _cached = _computeShapes(width);
-  }
-
-  (String, List<GroupedItemShape>) _computeShapes(double width) {
-    final items = widget.items;
-    final scaler = MediaQuery.textScalerOf(context);
-    final base = GroupedListLayouts.keyOf(items, width, scaler);
-    if (widget.fit != StackFit.loose) {
-      // 整頁撐滿畫面，高度差一點不會跳：有紀錄就照紀錄畫，沒有才估。
-      final known = GroupedListLayouts.of(base);
-      return (
-        base,
-        [
-          for (var i = 0; i < items.length; i++)
-            (known != null && i < known.length ? known[i] : null) ??
-                GroupedItemShape.estimate(
-                  items[i],
-                  context: context,
-                  width: width,
-                ),
-        ],
-      );
-    }
-    // 面板的高度就是骨架的高度：每一項的高度一律照它本身算，第一次打開就
-    // 是換上內容後的高度。紀錄只換掉字條、色塊的位置（照上次真的字寬畫），
-    // 不決定高度；同一種元件也會換高度（朗讀定時選了自訂分鐘多一列步進），
-    // key 連各項高度一起比，位置才對得上。
-    final estimated = [
+    return _cached = [
       for (final item in items)
-        GroupedItemShape.estimate(item, context: context, width: width),
+        GroupedItemShape.of(item, context: context, width: width),
     ];
-    final key = '$base|${estimated.map((shape) => shape.height).join(',')}';
-    final known = GroupedListLayouts.of(key);
-    return (
-      key,
-      [
-        for (var i = 0; i < items.length; i++)
-          switch (known != null && i < known.length ? known[i] : null) {
-            final record? => GroupedItemShape(
-              estimated[i].height,
-              card: record.card,
-              rowHeights: estimated[i].rowHeights,
-              marks: record.marks,
-            ),
-            null => estimated[i],
-          },
-      ],
-    );
-  }
-
-  /// 換成內容時記下畫面上各項排好的樣子，下次進這一頁的骨架照它畫。
-  void _remember(String key) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final shapes = List<GroupedItemShape?>.of(
-        GroupedListLayouts.of(key) ??
-            List<GroupedItemShape?>.filled(widget.items.length, null),
-      );
-      if (shapes.length != widget.items.length) return;
-      final viewport = context.findRenderObject()! as RenderBox;
-      final bottom =
-          viewport.localToGlobal(Offset.zero).dy + viewport.size.height;
-      void visit(Element element) {
-        if (element.widget case _GroupedListSlot(:final index, :final item)) {
-          final box = element.renderObject;
-          if (index < shapes.length && box is RenderBox && box.attached) {
-            final top = box.localToGlobal(Offset.zero).dy;
-            shapes[index] =
-                GroupedItemShape.measure(
-                  element,
-                  item,
-                  visible: bottom - top,
-                ) ??
-                shapes[index];
-          }
-          return;
-        }
-        element.visitChildren(visit);
-      }
-
-      (context as Element).visitChildren(visit);
-      GroupedListLayouts.remember(key, shapes);
-    });
   }
 
   @override
@@ -476,9 +398,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final padding = widget.padding;
-        final (key, shapes) = _shapes(
-          constraints.maxWidth - padding.horizontal,
-        );
+        final shapes = _shapes(constraints.maxWidth - padding.horizontal);
         // 只有實際視窗裡的列排隊；面板不能借用整個螢幕的高度。
         final visible = <double>[];
         var height = padding.top;
@@ -505,10 +425,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
             loading: _loading,
             waitForCovers: CoverWait.brief,
             backdrop: background,
-            onRevealed: () {
-              _revealed = true;
-              _remember(key);
-            },
+            onRevealed: () => _revealed = true,
             skeleton: skeleton,
             builder: (context) => widget.builder(context, [
               for (final (i, item) in widget.items.indexed)
@@ -527,7 +444,7 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
   }
 }
 
-/// 清單的一項：骨架底下輪到才建，之前佔著記下或估計的高度。一組分組卡片
+/// 清單的一項：骨架底下輪到才建，之前佔著骨架算好的高度。一組分組卡片
 /// 以列為單位排隊（組標題文字與卡片外框先建），一格建一列：像「排版」這樣一組
 /// 八列步進的組整組一起建，在電腦的 debug 模式要 50ms 以上。只有第一個畫面
 /// 裡的列排隊；畫面外的列（替換規則、下載佇列這類上百列的組）和組一起建、
@@ -697,80 +614,96 @@ class GroupedRow extends StatelessWidget
   static const double _subtitleGap = 2;
   static const double _chevronSize = 22;
 
-  /// 這一列放在 [width] 寬的卡片裡的高度：照 build 的同一份內距、字樣與
-  /// 元件尺寸，標題與副標照可用的寬度真的排（字大時標題會換行）。列首與
-  /// 右側控件認得 [GroupedIconTile]、[GroupedSwitch] 與定了大小的
-  /// [SizedBox]，其他的照列首圖示方塊的大小、右側控件不佔寬算。
+  /// 右側數值最寬佔螢幕的四成，再長以「…」截斷、靠右對齊。
+  static double _valueMaxWidth(BuildContext context) =>
+      MediaQuery.sizeOf(context).width * 0.4;
+
+  /// 這一列放在 [width] 寬的卡片裡的樣子：照 build 的同一份內距、字樣與
+  /// 元件尺寸，由右往左排箭頭、右側控件與數值，標題與副標照剩下的寬度真的
+  /// 排（字大時標題會換行），整列垂直置中。列首與右側控件見
+  /// [groupedPartShape]。
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
   }) {
-    var available = width - AppGrouped.rowPadding * 2;
-    var content = 0.0;
-    if (leading case final leading?) {
-      final size = _sizeOf(leading) ?? const Size.square(AppGrouped.iconTile);
-      available -= size.width + AppGrouped.iconGap;
-      content = math.max(content, size.height);
+    // 每一塊左緣的位置與樣子；垂直位置等列高算出來再置中。
+    final parts = <(double, GroupedItemShape)>[];
+    var right = width - AppGrouped.rowPadding;
+    if (showChevron ?? (onTap != null && trailing == null)) {
+      right -= _chevronSize;
+      parts.add((right, _glyphShape(_chevronSize)));
+      right -= AppSpacing.sm;
+    }
+    if (trailing case final trailing?) {
+      final shape = groupedPartShape(trailing, context);
+      right -= shape.width!;
+      parts.add((right, shape));
+      right -= AppSpacing.md;
     }
     if (value case final value?) {
-      final size = GroupedItemShape.textSize(
+      final shape = GroupedItemShape.text(
         context,
         value,
         style: _textStyle,
-        maxWidth: MediaQuery.sizeOf(context).width * 0.4,
+        width: _valueMaxWidth(context),
         maxLines: 1,
+        textAlign: TextAlign.end,
       );
-      available -= AppSpacing.md + size.width;
-      content = math.max(content, size.height);
+      right -= shape.width!;
+      parts.add((right, shape));
+      right -= AppSpacing.md;
     }
-    if (trailing case final trailing?) {
-      final size = _sizeOf(trailing) ?? Size.zero;
-      available -= AppSpacing.md + size.width;
-      content = math.max(content, size.height);
+    var textLeft = AppGrouped.rowPadding;
+    if (leading case final leading?) {
+      final shape = groupedPartShape(leading, context);
+      parts.add((textLeft, shape));
+      textLeft += shape.width! + AppGrouped.iconGap;
     }
-    if (showChevron ?? (onTap != null && trailing == null)) {
-      available -= AppSpacing.sm + _chevronSize;
-      content = math.max(content, _chevronSize);
-    }
-    var text = GroupedItemShape.textSize(
+    final title = GroupedItemShape.text(
       context,
-      title,
+      this.title,
       style: _textStyle.copyWith(
         fontWeight: accent ? FontWeight.w500 : FontWeight.w400,
       ),
-      maxWidth: available,
+      width: right - textLeft,
       maxLines: maxTitleLines,
-    ).height;
+    );
     final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
-    if (hasSubtitle) {
-      text +=
-          _subtitleGap +
-          GroupedItemShape.textSize(
+    final subtitleShape = hasSubtitle
+        ? GroupedItemShape.text(
             context,
             subtitle!,
             style: _subtitleStyle,
-            maxWidth: available,
+            width: right - textLeft,
             maxLines: maxSubtitleLines,
-          ).height;
-    }
+          )
+        : null;
+    final text = switch (subtitleShape) {
+      final subtitle? => title.height + _subtitleGap + subtitle.height,
+      null => title.height,
+    };
+    final content = parts.fold(
+      text,
+      (height, part) => math.max(height, part.$2.height),
+    );
+    final height = math.max(
+      hasSubtitle ? AppGrouped.rowTallMinHeight : AppGrouped.rowMinHeight,
+      content + AppSpacing.md * 2,
+    );
+    final textTop = (height - text) / 2;
     return GroupedItemShape(
-      math.max(
-        hasSubtitle ? AppGrouped.rowTallMinHeight : AppGrouped.rowMinHeight,
-        math.max(content, text) + AppSpacing.md * 2,
-      ),
+      height,
+      marks: [
+        for (final (left, part) in parts)
+          ...part.marksAt(Offset(left, (height - part.height) / 2)),
+        ...title.marksAt(Offset(textLeft, textTop)),
+        ...?subtitleShape?.marksAt(
+          Offset(textLeft, textTop + title.height + _subtitleGap),
+        ),
+      ],
     );
   }
-
-  static Size? _sizeOf(Widget widget) => switch (widget) {
-    GroupedIconTile() => const Size.square(AppGrouped.iconTile),
-    GroupedSwitch() => const Size(
-      GroupedSwitch.trackWidth,
-      GroupedSwitch.trackHeight,
-    ),
-    SizedBox(:final width?, :final height) => Size(width, height ?? 0),
-    _ => null,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -837,9 +770,7 @@ class GroupedRow extends StatelessWidget
             if (value != null) ...[
               const SizedBox(width: AppSpacing.md),
               ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.sizeOf(context).width * 0.4,
-                ),
+                constraints: BoxConstraints(maxWidth: _valueMaxWidth(context)),
                 child: Text(
                   value!,
                   maxLines: 1,
@@ -951,6 +882,112 @@ class GroupedSwitch extends StatelessWidget {
     );
   }
 }
+
+/// 列首、右側控件與組標題右側按鈕這類不撐滿的小元件的骨架，
+/// [GroupedItemShape.width] 是它佔的寬：圖示方塊、開關整塊，圖示是和字形
+/// 一樣大的方塊，定了大小的 [SizedBox] 照它的大小、裡面的圖示或色塊置中；
+/// 其他的元件實作 [GroupedSkeletonItem] 並給出寬度。
+GroupedItemShape groupedPartShape(Widget widget, BuildContext context) {
+  GroupedItemShape box(Size size, BorderRadius radius) => GroupedItemShape(
+    size.height,
+    width: size.width,
+    marks: [SkeletonShape(Offset.zero & size, radius: radius)],
+  );
+  switch (widget) {
+    case final GroupedSkeletonItem shaped:
+      final shape = shaped.skeletonShape(context, width: double.infinity);
+      if (shape.width != null) return shape;
+    case GroupedIconTile():
+      return box(
+        const Size.square(AppGrouped.iconTile),
+        BorderRadius.circular(AppGrouped.iconTileRadius),
+      );
+    case GroupedSwitch():
+      return box(
+        const Size(GroupedSwitch.trackWidth, GroupedSwitch.trackHeight),
+        AppRadius.pillShape,
+      );
+    case Icon(:final size):
+      return _glyphShape(size ?? IconTheme.of(context).size ?? 24);
+    case Text(:final data?, :final style, :final maxLines):
+      return GroupedItemShape.text(
+        context,
+        data,
+        style: style ?? const TextStyle(),
+        width: double.infinity,
+        maxLines: maxLines,
+      );
+    // 限寬的字（右側的狀態文字）照最寬的寬度排。
+    case ConstrainedBox(
+      :final constraints,
+      child: Text(:final data?, :final style, :final maxLines),
+    ):
+      return GroupedItemShape.text(
+        context,
+        data,
+        style: style ?? const TextStyle(),
+        width: constraints.maxWidth,
+        maxLines: maxLines,
+      );
+    case CircularProgressIndicator():
+      return box(
+        const Size.square(_spinnerSize),
+        BorderRadius.circular(_spinnerSize / 2),
+      );
+    case SizedBox(:final width?, :final height, :final child):
+      final inner = switch (child) {
+        null => null,
+        DecoratedBox(:final BoxDecoration decoration)
+            when decoration.color != null =>
+          box(
+            Size(width, height ?? 0),
+            decoration.shape == BoxShape.circle
+                ? BorderRadius.circular(math.min(width, height ?? 0) / 2)
+                : decoration.borderRadius?.resolve(
+                        Directionality.of(context),
+                      ) ??
+                      BorderRadius.zero,
+          ),
+        _ => groupedPartShape(child, context),
+      };
+      final size = Size(width, height ?? inner?.height ?? 0);
+      return GroupedItemShape(
+        size.height,
+        width: size.width,
+        marks: [
+          ...?inner?.marksAt(
+            Offset(
+              (size.width - inner.width!) / 2,
+              (size.height - inner.height) / 2,
+            ),
+          ),
+        ],
+      );
+    default:
+  }
+  assert(
+    false,
+    '${widget.runtimeType} 算不出骨架：讓它實作 GroupedSkeletonItem 並給出寬度'
+    '（ADR 0029）',
+  );
+  return const GroupedItemShape(0, width: 0);
+}
+
+/// [CircularProgressIndicator] 沒給大小時的直徑（Material 的最小尺寸）。
+const double _spinnerSize = 36;
+
+/// [Icon] 的骨架：字形撐滿 [size] 見方（[Icon] 的行高是 1），畫成和字條
+/// 一樣圓角的方塊。
+GroupedItemShape _glyphShape(double size) => GroupedItemShape(
+  size,
+  width: size,
+  marks: [
+    SkeletonShape(
+      Rect.fromLTWH(0, 0, size, size),
+      radius: BorderRadius.circular(size / 4),
+    ),
+  ],
+);
 
 /// 帶開關的列；點整列也會切換。
 class GroupedSwitchRow extends StatelessWidget
@@ -1079,6 +1116,88 @@ class GroupedContent extends StatelessWidget {
   }
 }
 
+/// [TextField] 實際用的字樣：先合併 Material 的輸入字體再套 [style]；骨架
+/// 也從這份字體量行高，不能只用字號乘行高（不同字體的 strut 會得到不同
+/// 整數行高）。
+TextStyle groupedInputStyle(BuildContext context, TextStyle style) {
+  final theme = Theme.of(context);
+  return (theme.useMaterial3
+          ? theme.textTheme.bodyLarge!
+          : theme.textTheme.titleMedium!)
+      .merge(style);
+}
+
+/// 輸入框裡字的那一塊（不含輸入框的內距）。行數固定（最少與最多一樣）的
+/// 框只看行數，每一行撐滿一條：字可能之後才填進來；行數會變的框照現在的
+/// 字 [text] 排，畫框裡會顯示的字（沒字時是提示字 [hint]）。[style] 是
+/// [groupedInputStyle] 合併過的字樣。
+GroupedItemShape groupedTextFieldShape(
+  BuildContext context, {
+  required TextStyle style,
+  required double width,
+  required String text,
+  String? hint,
+  TextStyle? hintStyle,
+  int? maxLines,
+  int? minLines,
+}) {
+  final scaler = MediaQuery.textScalerOf(context);
+  final fixed = maxLines != null && (minLines ?? 1) == maxLines;
+  final painter = TextPainter(
+    text: TextSpan(text: fixed ? '' : text, style: style),
+    strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+    textScaler: scaler,
+    textDirection: Directionality.of(context),
+  )..layout(maxWidth: math.max(0, width));
+  final line = painter.preferredLineHeight;
+  final fontSize = scaler.scale(
+    style.fontSize ?? AppTextStyles.bodyBase.fontSize!,
+  );
+  final lower = line * (minLines ?? maxLines ?? 1);
+  final upper = maxLines == null ? double.infinity : line * maxLines;
+  final height = fixed ? line * maxLines : painter.height.clamp(lower, upper);
+  painter.dispose();
+  if (fixed && minLines != null) {
+    // 指定了固定行數的框，字之後才填進來：每一行撐滿一條。
+    return GroupedItemShape(
+      height,
+      marks: [
+        for (var i = 0; i < maxLines; i++)
+          SkeletonShape(
+            Rect.fromLTWH(0, i * line + (line - fontSize) / 2, width, fontSize),
+          ),
+      ],
+    );
+  }
+  // 照框裡會顯示的字畫：有字畫字，沒字畫提示字（提示字的行高不同，置中在
+  // 輸入的那一行上）。
+  final shown = switch ((text, hint)) {
+    (final text, _) when text.isNotEmpty => GroupedItemShape.text(
+      context,
+      text,
+      style: style,
+      width: width,
+      maxLines: maxLines,
+      strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+    ),
+    (_, final hint?) when hint.isNotEmpty => () {
+      final shape = GroupedItemShape.text(
+        context,
+        hint,
+        style: style.merge(hintStyle),
+        width: width,
+        maxLines: maxLines,
+      );
+      return GroupedItemShape(
+        shape.height,
+        marks: shape.marksAt(Offset(0, (line - shape.height) / 2)),
+      );
+    }(),
+    _ => null,
+  };
+  return GroupedItemShape(height, marks: shown?.marks ?? const []);
+}
+
 /// 分組卡片內的單行輸入列（Telegram ItemListSingleLineInputItem）。
 class GroupedTextFieldRow extends StatelessWidget
     implements GroupedSkeletonItem {
@@ -1129,55 +1248,55 @@ class GroupedTextFieldRow extends StatelessWidget
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
 
+  static final TextStyle _labelStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+  );
+
+  static final TextStyle _hintStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+  );
+
+  /// 標籤照字排在左欄，輸入框見 [groupedTextFieldShape]。
   @override
   GroupedItemShape skeletonShape(
     BuildContext context, {
     required double width,
   }) {
-    final scaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    final textStyle = _textStyle(context);
-    final fieldWidth =
-        width - AppGrouped.rowPadding * 2 - (label == null ? 0 : labelWidth);
-    final maxLines = _maxLines;
-    // 行數固定（最少與最多一樣）的框，高度只看行數，不看裡面現在有什麼
-    // 字：字可能之後才填進來。行數會變的框照現在的字排。
-    final fixed = maxLines != null && (minLines ?? 1) == maxLines;
-    final painter = TextPainter(
-      text: TextSpan(
-        text: fixed ? '' : controller?.text ?? '',
-        style: textStyle,
-      ),
-      strutStyle: StrutStyle.fromTextStyle(textStyle, forceStrutHeight: true),
-      textScaler: scaler,
-      textDirection: direction,
-    )..layout(maxWidth: fieldWidth);
-    final line = painter.preferredLineHeight;
-    final fontSize = scaler.scale(
-      textStyle.fontSize ?? AppTextStyles.bodyBase.fontSize!,
+    final labelWidth = this.label == null ? 0.0 : this.labelWidth;
+    final field = groupedTextFieldShape(
+      context,
+      style: _textStyle(context),
+      width: width - AppGrouped.rowPadding * 2 - labelWidth,
+      text: controller?.text ?? '',
+      hint: hintText,
+      hintStyle: _hintStyle,
+      maxLines: _maxLines,
+      minLines: minLines,
     );
-    final lower = line * (minLines ?? maxLines ?? 1);
-    final upper = maxLines == null ? double.infinity : line * maxLines;
-    final fieldHeight = fixed
-        ? line * maxLines
-        : painter.height.clamp(lower, upper);
-    painter.dispose();
-    final height = (fieldHeight + AppSpacing.md * 2).clamp(
+    final label = switch (this.label) {
+      final text? => GroupedItemShape.text(
+        context,
+        text,
+        style: _labelStyle,
+        width: labelWidth,
+      ),
+      null => null,
+    };
+    // 標籤只有上方內距，輸入框上下都有。
+    final height = math.max(
       AppGrouped.rowMinHeight,
-      double.infinity,
+      math.max(
+        field.height + AppSpacing.md * 2,
+        AppSpacing.md + (label?.height ?? 0),
+      ),
     );
     return GroupedItemShape(
       height,
       marks: [
-        for (var i = 0; i < (fieldHeight / line).round(); i++)
-          SkeletonShape(
-            Rect.fromLTWH(
-              AppGrouped.rowPadding + (label == null ? 0 : labelWidth),
-              AppSpacing.md + i * line + (line - fontSize) / 2,
-              fieldWidth,
-              fontSize,
-            ),
-          ),
+        ...?label?.marksAt(const Offset(AppGrouped.rowPadding, AppSpacing.md)),
+        ...field.marksAt(
+          Offset(AppGrouped.rowPadding + labelWidth, AppSpacing.md),
+        ),
       ],
     );
   }
@@ -1185,21 +1304,14 @@ class GroupedTextFieldRow extends StatelessWidget
   /// 輸入框實際的最多行數（密碼只有一行）；骨架與 build 共用。
   int? get _maxLines => obscureText ? 1 : maxLines;
 
-  /// TextField 會先合併 Material 的輸入字體；骨架也從這份字體量行高，
-  /// 不能只用字號乘行高（不同字體的 strut 會得到不同整數行高）。
-  TextStyle _textStyle(BuildContext context) {
-    final theme = Theme.of(context);
-    return (theme.useMaterial3
-            ? theme.textTheme.bodyLarge!
-            : theme.textTheme.titleMedium!)
-        .merge(
-          style ??
-              AppTextStyles.bodyBase.copyWith(
-                height: 1.3,
-                color: theme.colorScheme.onSurface,
-              ),
-        );
-  }
+  TextStyle _textStyle(BuildContext context) => groupedInputStyle(
+    context,
+    style ??
+        AppTextStyles.bodyBase.copyWith(
+          height: 1.3,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1216,8 +1328,7 @@ class GroupedTextFieldRow extends StatelessWidget
       errorText: errorText,
       contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       hintText: hintText,
-      hintStyle: AppTextStyles.bodyBase.copyWith(
-        height: 1.3,
+      hintStyle: _hintStyle.copyWith(
         color: chrome.sectionText.withValues(alpha: 0.7),
       ),
       suffixIcon: suffix,
@@ -1273,10 +1384,7 @@ class GroupedTextFieldRow extends StatelessWidget
                       width: labelWidth,
                       child: Text(
                         label!,
-                        style: AppTextStyles.bodyBase.copyWith(
-                          height: 1.3,
-                          color: scheme.onSurface,
-                        ),
+                        style: _labelStyle.copyWith(color: scheme.onSurface),
                       ),
                     ),
                   ),

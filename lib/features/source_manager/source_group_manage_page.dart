@@ -9,6 +9,7 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/search_field.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
@@ -263,7 +264,8 @@ class SourceGroupManagePage extends StatelessWidget {
 }
 
 /// 分組列：不透明底讓滑動動作藏在列下方；選單錨點取列本身的範圍。
-class _GroupRow extends StatelessWidget implements GroupedRowLike {
+class _GroupRow extends StatelessWidget
+    implements GroupedRowLike, GroupedSkeletonItem {
   const _GroupRow({
     required this.group,
     required this.enabled,
@@ -277,21 +279,26 @@ class _GroupRow extends StatelessWidget implements GroupedRowLike {
   @override
   bool get hasLeading => true;
 
+  GroupedRow _row(BuildContext context) => GroupedRow(
+    title: group,
+    leading: const GroupedIconTile(Icons.folder_rounded, tint: AppTint.gold),
+    enabled: enabled,
+    showChevron: false,
+    onTap: () => onMenu(context),
+    onLongPress: () => onMenu(context),
+  );
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => _row(context).skeletonShape(context, width: width);
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: AppChrome.of(context).groupedSurface,
-      child: GroupedRow(
-        title: group,
-        leading: const GroupedIconTile(
-          Icons.folder_rounded,
-          tint: AppTint.gold,
-        ),
-        enabled: enabled,
-        showChevron: false,
-        onTap: () => onMenu(context),
-        onLongPress: () => onMenu(context),
-      ),
+      child: _row(context),
     );
   }
 }
