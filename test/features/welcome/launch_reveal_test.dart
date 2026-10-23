@@ -128,6 +128,11 @@ final int _span =
     (SkeletonReveal.defaultDuration.inMicroseconds / _frame.inMicroseconds)
         .ceil();
 
+/// 換場前靜止的格數：骨架在拍「之前」那一格就離開元件樹，之後畫面還靜止
+/// hold 才開始掃（[LaunchEntranceMotion.hold]）。
+final int _holdFrames =
+    (LaunchEntranceMotion.hold.inMicroseconds / _frame.inMicroseconds).ceil();
+
 /// 第 [k] 格（換場從第 [start] 格開始）每一行像素的理想濃度。
 List<double> _alphas(int width, int k, int start) {
   final progress =
@@ -175,7 +180,7 @@ void main() {
       LaunchEntranceMotion? entrance;
       var sawSkeleton = false;
       var tail = -1;
-      for (var i = 0; i < 600 && tail < _span + 12; i++) {
+      for (var i = 0; i < 600 && tail < _span + _holdFrames + 12; i++) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pump(_frame);
         final view = tester.binding.renderViews.first;
@@ -206,7 +211,11 @@ void main() {
           tail = 0;
         }
       }
-      expect(tail, greaterThanOrEqualTo(_span + 12), reason: '換場要播完');
+      expect(
+        tail,
+        greaterThanOrEqualTo(_span + _holdFrames + 12),
+        reason: '換場要播完',
+      );
 
       const width = 393, height = 852;
       final lastSkeleton = shots.lastIndexWhere((shot) => shot.skeleton);
@@ -236,7 +245,9 @@ void main() {
         return sum / count;
       }
 
-      // 起點那一格的書架還完全是骨架：和最後畫面的差距沒有開始縮小。
+      // 起點那一格的書架還完全是骨架，離最後畫面還遠；換場播完之後的靜止
+      // 畫面幾乎就是最後畫面。只拿來分這兩種：骨架停在最深時，深色比呼吸
+      // 最淺時更接近書架（2026-10-23 量到約 86%），不能抓太緊。
       final shelf = _regions['書架']!;
       double distanceToEnd(int k) {
         final a = shots[k].pixels, b = shots.last.pixels;
@@ -254,9 +265,26 @@ void main() {
         return sum / count;
       }
 
+      // 兩格畫面一模一樣：淺色的骨架呼吸一格只變 1/255，不能放寬。
+      bool same(int a, int b) {
+        final x = shots[a].pixels, y = shots[b].pixels;
+        for (var i = 0; i < x.length; i++) {
+          if (x[i] != y[i]) return false;
+        }
+        return true;
+      }
+
+      // 第 [s] 格是一段靜止畫面的最後一格：和上一格一樣、下一格就變了。
+      bool stillEnds(int s) =>
+          s > 0 && s + 1 < shots.length && same(s - 1, s) && !same(s, s + 1);
+
       // 骨架完全長出來之後才可能開始換成內容。
       final first = shots.indexWhere((shot) => shot.entered);
-      final last = math.min(lastSkeleton + 6, shots.length - _span - 1);
+      // 骨架在拍「之前」那一格就離開元件樹，之後還靜止一段才掃：起點在
+      // 骨架最後出現之後，一路找到錄影結束前一段換場；換場之後的靜止畫面
+      // 已經接近最後畫面，下面照距離排除。
+      final last = shots.length - _span - 1;
+      expect(last, greaterThan(lastSkeleton));
       expect(first, inInclusiveRange(0, last));
       final distances = {
         for (var s = first; s <= last; s++) s: distanceToEnd(s),
@@ -265,14 +293,56 @@ void main() {
       var start = -1;
       var best = double.infinity;
       for (var s = first; s <= last; s++) {
-        if (distances[s]! < farthest * 0.9) continue;
+        if (distances[s]! < farthest * 0.5) continue;
+        // 起點在換場前靜止那一段的尾端附近：換場一開始濃度從左緣慢慢
+        // 起步，頭兩三格的像素和靜止的畫面捨入成一樣，靜止段看起來會比
+        // 真正的起點晚一兩格結束，由吻合度挑。呼吸到一半就開始換的話
+        // 找不到起點。
+        if (![for (var e = s - 1; e <= s + 4; e++) e].any(stillEnds)) {
+          continue;
+        }
         final error = fitError(s);
         if (error < best) {
           best = error;
           start = s;
         }
       }
-      expect(start, greaterThanOrEqualTo(0));
+      expect(start, greaterThanOrEqualTo(0), reason: '換場前要有靜止的畫面');
+
+      // 換場前畫面靜止至少 hold：呼吸收住了才拍圖，拍圖那幾格落在靜止的
+      // 畫面裡（LaunchEntranceMotion.rest、hold）。
+      var stillFrom = start;
+      while (stillFrom > 0 && same(stillFrom - 1, start)) {
+        stillFrom--;
+      }
+      expect(
+        (start - stillFrom) * _frame.inMicroseconds,
+        greaterThanOrEqualTo(LaunchEntranceMotion.hold.inMicroseconds),
+        reason: '換場前靜止了 ${start - stillFrom} 格',
+      );
+
+      // 靜止前呼吸已經收住：左中右三本書的封面骨架都停在呼吸最深的那一刻
+      // （離底色最遠），不是呼吸到一半定住、只是多停一會兒。
+      int red(int k, Offset p) =>
+          shots[k].pixels[(p.dy.toInt() * width + p.dx.toInt()) * 4];
+      final paper = red(start, const Offset(196, 600));
+      for (final cover in const [
+        Offset(70, 180),
+        Offset(196, 180),
+        Offset(320, 180),
+      ]) {
+        var deepest = red(start, cover);
+        for (var k = first; k < stillFrom; k++) {
+          if ((red(k, cover) - paper).abs() > (deepest - paper).abs()) {
+            deepest = red(k, cover);
+          }
+        }
+        expect(
+          red(start, cover),
+          closeTo(deepest, 1),
+          reason: '$cover 停住時不在最深',
+        );
+      }
 
       // 同一個起點下，每一格、每個區域都要對得上。
       final from = shots[start].pixels;

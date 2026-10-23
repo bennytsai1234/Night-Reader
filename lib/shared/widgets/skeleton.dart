@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../theme/app_tokens.dart';
 
@@ -149,41 +150,223 @@ class Skeleton extends StatefulWidget {
 
 class _SkeletonState extends State<Skeleton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: Skeleton.breathCycle,
-  );
+  late final _BreathClock _clock = _BreathClock(this);
   bool _breathing = false;
+
+  /// 開 App 的進場收住呼吸時登記在這裡（[LaunchEntranceMotion.rest]）。
+  SkeletonRest? _rest;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _breathing = !MediaQuery.disableAnimationsOf(context);
-    if (!_breathing) {
-      _controller.value = 0;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
+    _clock
+      ..breath = SkeletonLook.of(context).breath
+      ..allowed = _breathing
+      ..visible = TickerMode.valuesOf(context).enabled;
+    final rest = LaunchEntrance.maybeOf(context)?.rest;
+    if (!identical(rest, _rest)) {
+      _rest?._clocks.remove(_clock);
+      _rest = rest?.._add(_clock);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _rest?._clocks.remove(_clock);
+    _clock.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => _SkeletonScope(
-    phase: _breathing ? _controller : null,
-    child: widget.child,
-  );
+  Widget build(BuildContext context) =>
+      _SkeletonScope(phase: _breathing ? _clock : null, child: widget.child);
+}
+
+/// 收住一群 [Skeleton] 的呼吸：每個位置把這一口氣呼完、停在最深，整個畫面
+/// 靜止下來。開 App 書架換場前用（[LaunchEntranceMotion.reveal]，ADR 0031）：
+/// 拍定格畫面的那幾格畫面一定停住，停在呼吸自然停下的地方才看不出來。
+class SkeletonRest {
+  final Set<_BreathClock> _clocks = {};
+
+  /// 從 [settle] 到 [release] 之間：這段期間才出現的骨架一出現就停在最深，
+  /// 不再開始一口新的氣，收住的總時間不會被拉長。
+  bool _resting = false;
+
+  void _add(_BreathClock clock) {
+    _clocks.add(clock);
+    if (_resting) clock.restNow();
+  }
+
+  /// 收住登記著的骨架，全部停在最深時完成：最多再呼一輪
+  /// （[Skeleton.breathCycle]）。
+  Future<void> settle() async {
+    _resting = true;
+    while (true) {
+      final pending = [
+        for (final clock in _clocks)
+          if (!clock.still) clock.rest(),
+      ];
+      if (pending.isEmpty) return;
+      await Future.wait(pending);
+    }
+  }
+
+  /// 收住的骨架接著呼吸（換場播完後還留著的骨架）。
+  void release() {
+    _resting = false;
+    for (final clock in _clocks) {
+      clock.resume();
+    }
+  }
+}
+
+/// 一個 [Skeleton] 的呼吸：從開始呼吸起經過了幾輪（不折回 0）。收住時
+/// （[rest]）每個位置等到下一次最深就停在那裡：呼吸曲線在最深處的變化是
+/// 零，停下來接得上，不是動到一半定住。
+class _BreathClock extends ChangeNotifier {
+  _BreathClock(TickerProvider vsync) {
+    _ticker = vsync.createTicker(_tick);
+  }
+
+  late final Ticker _ticker;
+
+  /// 這個骨架怎麼呼吸：收住要等多久看它（由左而右時右邊晚）。
+  SkeletonBreath breath = SkeletonBreath.gentleSweep;
+
+  /// 計時器經過的輪數；[_base] 是計時器這次啟動前已經過的輪數。
+  double _cycles = 0;
+  double _base = 0;
+
+  /// 呼吸從第幾輪算起：收住後接著呼吸時（[resume]）從那一刻重新算，
+  /// [_restarted] 時還沒輪到的位置先停在最深。
+  double _shift = 0;
+  bool _restarted = false;
+
+  /// 呼吸了幾輪（[Skeleton.breathAt] 的相位）。
+  double get _phase => _cycles - _shift;
+
+  /// 開始收住時的 [_phase]；null 是照常呼吸。
+  double? _restFrom;
+  Completer<void>? _rested;
+
+  /// 收住後整個骨架都停在最深了（畫面外的位置也是），計時器停著。
+  bool get still => _still;
+  bool _still = false;
+
+  /// 可以呼吸（沒有要求減少動態）。不行時計時器停著，收住直接算停好。
+  bool _allowed = false;
+  set allowed(bool value) {
+    _allowed = value;
+    if (value) {
+      _start();
+    } else {
+      _ticker.stop();
+      _cycles = _base = _shift = 0;
+      _restarted = false;
+      if (_restFrom != null) _settle();
+    }
+  }
+
+  /// 畫面上看得到（[TickerMode]）。收住途中被藏起來時直接算停好：看不到
+  /// 就沒有跳動可言，也不會等一個不會來的下一格；之後再出現時照樣停在
+  /// 最深，等 [resume]。
+  set visible(bool value) {
+    if (!value && _restFrom != null && !_still) _settle();
+  }
+
+  void _start() {
+    if (!_allowed || _still || _ticker.isActive) return;
+    _base = _cycles;
+    _ticker.start();
+  }
+
+  void _tick(Duration elapsed) {
+    _cycles =
+        _base + elapsed.inMicroseconds / Skeleton.breathCycle.inMicroseconds;
+    final from = _restFrom;
+    if (from != null && _phase - from >= _restLength(from)) _settle();
+    notifyListeners();
+  }
+
+  /// 收住呼吸，每個位置都停在最深時完成。計時器沒在走時（不呼吸、被
+  /// 藏起來）直接算停好。
+  Future<void> rest() {
+    _restFrom ??= _phase;
+    if (_still) return Future<void>.value();
+    if (!_ticker.isActive || _ticker.muted) {
+      _settle();
+      return Future<void>.value();
+    }
+    return (_rested ??= Completer<void>()).future;
+  }
+
+  /// 收住途中才出現的骨架：一出現就停在最深。
+  void restNow() {
+    _restFrom ??= _phase;
+    _settle();
+  }
+
+  /// 收住後接著呼吸：從整片最深重新開始，每個位置照由左而右的先後輪到
+  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗。
+  void resume() {
+    if (_restFrom == null) return;
+    _restFrom = null;
+    _finishRest();
+    _rested = null;
+    if (!_still) return;
+    _still = false;
+    _shift = _cycles;
+    _restarted = true;
+    _start();
+    notifyListeners();
+  }
+
+  void _settle() {
+    _still = true;
+    _ticker.stop();
+    _finishRest();
+  }
+
+  void _finishRest() {
+    final rested = _rested;
+    if (rested != null && !rested.isCompleted) rested.complete();
+  }
+
+  /// 從第 [from] 輪開始收住，到每個位置都停在最深要再過幾輪：位置 u 在
+  /// (lag·u − from) mod 1 輪後最深，u 從 0 到 1 取最晚的。
+  double _restLength(double from) {
+    final first = -from % 1;
+    final last = first + breath.lag;
+    return last < 1 ? last : 1;
+  }
+
+  /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
+  /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
+  double depthAt(double u, SkeletonBreath breath) {
+    final phase = _phase;
+    final from = _restFrom;
+    if (from != null &&
+        (_still || phase - from >= (breath.lag * u - from) % 1)) {
+      return 1;
+    }
+    if (_restarted && phase < breath.lag * u) return 1;
+    return _breathTable.at(phase, u, breath);
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _finishRest();
+    super.dispose();
+  }
 }
 
 class _SkeletonScope extends InheritedWidget {
   const _SkeletonScope({required this.phase, required super.child});
 
-  /// 呼吸一輪的進度；null 是不呼吸（減少動態）。
-  final Animation<double>? phase;
+  /// 呼吸；null 是不呼吸（減少動態）。
+  final _BreathClock? phase;
 
   /// 在 [Skeleton] 底下時回傳 scope 本身（不呼吸時 [phase] 為 null），不在
   /// 底下時回傳 null。
@@ -240,7 +423,7 @@ class _SkeletonBoxPaint extends LeafRenderObjectWidget {
 
   final Color color;
   final BorderRadius borderRadius;
-  final Animation<double>? phase;
+  final _BreathClock? phase;
   final SkeletonBreath breath;
   final double viewWidth;
 
@@ -291,8 +474,8 @@ class _RenderSkeletonBox extends RenderBox {
     markNeedsPaint();
   }
 
-  Animation<double>? _phase;
-  set phase(Animation<double>? value) {
+  _BreathClock? _phase;
+  set phase(_BreathClock? value) {
     if (identical(_phase, value)) return;
     if (attached) _phase?.removeListener(markNeedsPaint);
     _phase = value;
@@ -363,7 +546,7 @@ Paint _breathingPaint(
   Offset offset,
   Rect local, {
   required Color color,
-  required Animation<double>? phase,
+  required _BreathClock? phase,
   required SkeletonBreath breath,
   required double viewWidth,
   Matrix4? toScreen,
@@ -372,9 +555,7 @@ Paint _breathingPaint(
   if (phase == null) {
     paint.color = color;
   } else if (breath.lag == 0 || viewWidth <= 0) {
-    paint.color = color.withValues(
-      alpha: color.a * _breathTable.at(phase.value, 0, breath),
-    );
+    paint.color = color.withValues(alpha: color.a * phase.depthAt(0, breath));
   } else {
     // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
     // 骨架才會一樣深。
@@ -394,12 +575,7 @@ Paint _breathingPaint(
         for (var i = 0; i < count; i++)
           color.withValues(
             alpha:
-                color.a *
-                _breathTable.at(
-                  phase.value,
-                  left + span * i / (count - 1),
-                  breath,
-                ),
+                color.a * phase.depthAt(left + span * i / (count - 1), breath),
           ),
       ],
       [for (var i = 0; i < count; i++) i / (count - 1)],
