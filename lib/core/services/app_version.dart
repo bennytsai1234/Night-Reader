@@ -10,6 +10,10 @@ class AppVersion {
 
   static AppVersion? _cached;
 
+  /// 已經讀到的版本；App 啟動時就先讀好（`configureDependencies`），畫面
+  /// 第一次建時不必等。
+  static AppVersion? get cached => _cached;
+
   /// Returns the cached version, or fetches it if not yet loaded.
   static Future<AppVersion> current() async {
     if (_cached != null) return _cached!;

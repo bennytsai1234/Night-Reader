@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +7,8 @@ import '../theme/app_chrome.dart';
 import '../theme/app_haptics.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
+import 'grouped_list_skeleton.dart';
+import 'skeleton.dart';
 
 /// [GlassSegmented] 的單一分段。
 @immutable
@@ -23,9 +27,43 @@ class GlassSegment<T> {
 /// 點擊分段切換；按住選取塊可左右拖動，放開時對齊最近的分段。
 ///
 /// 為受控元件：只透過 [onChanged] 回報，選取塊最終位置以 [selected] 為準。
-class GlassSegmented<T> extends StatefulWidget {
+class GlassSegmented<T> extends StatefulWidget implements GroupedSkeletonItem {
   /// Telegram 分段控制的軌道高度，載入形狀與實際控制共用。
   static const double trackHeight = 36;
+
+  /// 骨架整條軌道畫一塊膠囊：撐滿時和 [width] 一樣寬；不撐滿時和 build
+  /// 一樣，每段照最寬的標籤（含左右留白）等寬。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final trackWidth = expand
+        ? width
+        : segments.length *
+                  segments.indexed
+                      .map(
+                        (entry) => _SegmentLabel.widthOf(
+                          context,
+                          entry.$2,
+                          emphasized: entry.$2.value == selected,
+                          dense: dense,
+                        ),
+                      )
+                      .reduce(math.max) +
+              _kThumbInset * 2;
+    return GroupedItemShape(
+      trackHeight,
+      width: expand ? null : trackWidth,
+      marks: [
+        SkeletonShape(
+          Rect.fromLTWH(0, 0, trackWidth, trackHeight),
+          radius: AppRadius.pillShape,
+        ),
+      ],
+    );
+  }
+
   const GlassSegmented({
     super.key,
     required this.segments,
@@ -266,12 +304,35 @@ class _SegmentLabel extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
+  static TextStyle _style({required bool emphasized}) => AppTextStyles.uiSm
+      .copyWith(fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500);
+
+  static double _padding({required bool dense}) =>
+      dense ? AppSpacing.xs : AppSpacing.md;
+
+  static const double _iconSize = 16;
+
+  /// 一段不被壓縮時的寬：標籤（與圖示）加左右留白。
+  static double widthOf(
+    BuildContext context,
+    GlassSegment<Object?> segment, {
+    required bool emphasized,
+    required bool dense,
+  }) {
+    final text = GroupedItemShape.textSize(
+      context,
+      segment.label,
+      style: _style(emphasized: emphasized),
+      maxWidth: double.infinity,
+      maxLines: 1,
+    ).width;
+    final icon = segment.icon == null ? 0 : _iconSize + AppSpacing.xs;
+    return text + icon + _padding(dense: dense) * 2;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final style = AppTextStyles.uiSm.copyWith(
-      color: color,
-      fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
-    );
+    final style = _style(emphasized: emphasized).copyWith(color: color);
     final text = Text(
       segment.label,
       maxLines: 1,
@@ -286,16 +347,14 @@ class _SegmentLabel extends StatelessWidget {
       inMutuallyExclusiveGroup: true,
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: dense ? AppSpacing.xs : AppSpacing.md,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: _padding(dense: dense)),
         child: Center(
           child: icon == null
               ? text
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 16, color: color),
+                    Icon(icon, size: _iconSize, color: color),
                     const SizedBox(width: AppSpacing.xs),
                     Flexible(child: text),
                   ],

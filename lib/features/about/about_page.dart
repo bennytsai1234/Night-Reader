@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/exception/user_error.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/app_version.dart';
 import 'package:night_reader/core/services/update_preferences.dart';
 import 'package:night_reader/core/services/webview_data_service.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
@@ -11,6 +13,8 @@ import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -40,11 +44,17 @@ class AboutPage extends StatefulWidget {
 class _AboutPageState extends State<AboutPage> {
   // 版號與更新偏好是進頁後才讀到的，各自是一個訊號，只有用到的那一列跟著
   // 重建：原本讀到時 setState，整頁在進場動畫途中重建一次（ADR 0029）。
-  // 載入前不顯示版號；讀不到時顯示「未知版本」，不會停在錯誤的預設值。
-  final _package = ValueNotifier<({String? version, String buildNumber})>((
-    version: null,
-    buildNumber: '',
-  ));
+  // 版號 App 啟動時就讀好了，進頁第一格（連同骨架）就畫得出來；還沒讀到時
+  // 先不顯示，讀不到時顯示「未知版本」，不會停在錯誤的預設值。
+  final _package = ValueNotifier<({String? version, String buildNumber})>(
+    switch (AppVersion.cached) {
+      final cached? => (
+        version: cached.versionName,
+        buildNumber: '${cached.buildNumber}',
+      ),
+      null => (version: null, buildNumber: ''),
+    },
+  );
   final _updatePreferences = UpdatePreferences();
   final _updatePrefs =
       ValueNotifier<({bool betaChannel, bool autoCheck, bool autoDownload})>((
@@ -56,7 +66,7 @@ class _AboutPageState extends State<AboutPage> {
   @override
   void initState() {
     super.initState();
-    _loadPackageInfo();
+    if (_package.value.version == null) _loadPackageInfo();
     _loadUpdatePreferences();
   }
 
@@ -202,7 +212,7 @@ class _AboutPageState extends State<AboutPage> {
       appBar: const GlassNavHeader(title: '關於夜讀'),
       body: GroupedListView(
         children: [
-          _buildAppLogo(context),
+          _AppLogo(package: _package),
           GroupedSection(
             header: '開源與法律',
             children: [
@@ -348,44 +358,6 @@ class _AboutPageState extends State<AboutPage> {
     );
   }
 
-  Widget _buildAppLogo(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: Column(
-        children: [
-          ClipRRect(
-            borderRadius: AppRadius.cardXl,
-            child: Image.asset(
-              'assets/ui/app_icon.webp',
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-              semanticLabel: '夜讀應用程式圖示',
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            '夜讀',
-            style: AppTextStyles.titleLg.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          ValueListenableBuilder(
-            valueListenable: _package,
-            builder: (context, package, _) => Text(
-              _versionLabel(package.version),
-              style: AppTextStyles.bodySm.copyWith(
-                height: 1.4,
-                color: AppChrome.of(context).sectionText,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showDisclaimer(BuildContext context) {
     showAppAlert<void>(
       context: context,
@@ -402,6 +374,101 @@ class _AboutPageState extends State<AboutPage> {
       actions: const [
         AppAlertAction(label: '我已閱讀並知曉', value: null, isDefault: true),
       ],
+    );
+  }
+}
+
+/// 頁頂的 App 圖示、名稱與版號。
+class _AppLogo extends StatelessWidget implements GroupedSkeletonItem {
+  const _AppLogo({required this.package});
+
+  final ValueListenable<({String? version, String buildNumber})> package;
+
+  static const double _iconSize = 80;
+  static const double _top = AppSpacing.md;
+  static const double _nameGap = AppSpacing.lg;
+  static const double _versionGap = AppSpacing.xs;
+  static const TextStyle _nameStyle = AppTextStyles.titleLg;
+  static final TextStyle _versionStyle = AppTextStyles.bodySm.copyWith(
+    height: 1.4,
+  );
+
+  /// 版號讀到前是空字串；行高照字樣固定，讀到時版面不跳。
+  static final StrutStyle _versionStrut = StrutStyle.fromTextStyle(
+    _versionStyle,
+    forceStrutHeight: true,
+  );
+
+  /// 圖示一塊，名稱與版號照字置中排；版號還沒讀到時只留它的行高。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final name = GroupedItemShape.text(
+      context,
+      '夜讀',
+      style: _nameStyle,
+      width: width,
+    ).centeredIn(width);
+    final version = GroupedItemShape.text(
+      context,
+      _AboutPageState._versionLabel(package.value.version),
+      style: _versionStyle,
+      width: width,
+      strutStyle: _versionStrut,
+    ).centeredIn(width);
+    const nameTop = _top + _iconSize + _nameGap;
+    final versionTop = nameTop + name.height + _versionGap;
+    return GroupedItemShape(
+      versionTop + version.height,
+      marks: [
+        SkeletonShape(
+          Rect.fromLTWH((width - _iconSize) / 2, _top, _iconSize, _iconSize),
+          radius: AppRadius.cardXl,
+        ),
+        ...name.marksAt(const Offset(0, nameTop)),
+        ...version.marksAt(Offset(0, versionTop)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: _top),
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: AppRadius.cardXl,
+            child: Image.asset(
+              'assets/ui/app_icon.webp',
+              width: _iconSize,
+              height: _iconSize,
+              fit: BoxFit.cover,
+              semanticLabel: '夜讀應用程式圖示',
+            ),
+          ),
+          const SizedBox(height: _nameGap),
+          Text(
+            '夜讀',
+            style: _nameStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: _versionGap),
+          ValueListenableBuilder(
+            valueListenable: package,
+            builder: (context, package, _) => Text(
+              _AboutPageState._versionLabel(package.version),
+              strutStyle: _versionStrut,
+              style: _versionStyle.copyWith(
+                color: AppChrome.of(context).sectionText,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

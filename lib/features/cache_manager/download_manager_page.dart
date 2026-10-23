@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:provider/provider.dart';
@@ -12,6 +14,8 @@ import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/swipe_actions.dart';
 
 typedef _QueueShape = ({
@@ -151,49 +155,23 @@ class DownloadManagerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildQueueSummary() => Selector<DownloadService, _QueueSummary>(
-    selector: (_, service) => _queueSummary(service),
-    builder: (context, summary, _) => GroupedSection(
+  Widget _buildQueueSummary() => _Subscribed<_QueueSummary>(
+    select: _queueSummary,
+    builder: (context, summary) => GroupedSection(
       topGap: AppSpacing.sm,
       footer: '最近任務更新：${_formatTimestamp(summary.latestUpdate)}',
       children: [
         GroupedContent(
-          child: Row(
-            children: [
-              _summaryStat(context, '等待', summary.waiting),
-              _summaryStat(context, '下載中', summary.running),
-              _summaryStat(context, '暫停', summary.paused),
-              _summaryStat(context, '失敗', summary.failed),
-            ],
-          ),
+          child: _SummaryStats([
+            ('等待', summary.waiting),
+            ('下載中', summary.running),
+            ('暫停', summary.paused),
+            ('失敗', summary.failed),
+          ]),
         ),
       ],
     ),
   );
-
-  Widget _summaryStat(BuildContext context, String label, int value) {
-    final scheme = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Semantics(
-        label: '$label $value',
-        excludeSemantics: true,
-        child: Column(
-          children: [
-            Text(
-              '$value',
-              style: AppTextStyles.titleMd.copyWith(color: scheme.onSurface),
-            ),
-            Text(
-              label,
-              style: AppTextStyles.uiXs.copyWith(
-                color: AppChrome.of(context).sectionText,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildTaskTile(
     BuildContext context,
@@ -201,11 +179,11 @@ class DownloadManagerPage extends StatelessWidget {
     DownloadTask task,
     int index,
     int taskCount,
-  ) => Selector<DownloadService, (bool, int, int, int, int, String?)>(
+  ) => _Subscribed<(bool, int, int, int, int, String?)>(
     // 列的狀態跟著書走，上移、下移時整列一起搬。
     key: ValueKey(task.bookUrl),
     // 任務是可變物件，取值而不是取物件本身，才能辨認哪一列有變。
-    selector: (_, service) => (
+    select: (service) => (
       service.isPaused,
       task.totalCount,
       task.successCount,
@@ -213,7 +191,7 @@ class DownloadManagerPage extends StatelessWidget {
       task.status,
       task.failureSummary,
     ),
-    builder: (context, _, _) =>
+    builder: (context, _) =>
         _buildTaskContent(context, service, task, index, taskCount),
   );
 
@@ -224,8 +202,6 @@ class DownloadManagerPage extends StatelessWidget {
     int index,
     int taskCount,
   ) {
-    final chrome = AppChrome.of(context);
-    final scheme = Theme.of(context).colorScheme;
     final rawProgress = task.totalCount <= 0
         ? 0.0
         : task.successCount / task.totalCount;
@@ -260,98 +236,6 @@ class DownloadManagerPage extends StatelessWidget {
       );
     }
 
-    final row = Builder(
-      builder: (rowContext) => InkWell(
-        onTap: () => _showTaskMenu(rowContext, service, task, index, taskCount),
-        onLongPress: () =>
-            _showTaskMenu(rowContext, service, task, index, taskCount),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppGrouped.rowPadding,
-            vertical: AppSpacing.md,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      task.bookName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.bodyBase.copyWith(
-                        height: 1.3,
-                        fontWeight: FontWeight.w500,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    ClipRRect(
-                      borderRadius: AppRadius.pillShape,
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: chrome.separator,
-                        minHeight: 4,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _statusText(task, globallyPaused: globallyPaused),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.bodySm.copyWith(
-                              height: 1.3,
-                              color: _statusColor(
-                                context,
-                                task,
-                                globallyPaused: globallyPaused,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (task.isDownloading && !globallyPaused) ...[
-                          const SizedBox(width: AppSpacing.md),
-                          Text(
-                            '正在下載…',
-                            style: AppTextStyles.bodySm.copyWith(
-                              height: 1.3,
-                              color: scheme.primary,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (failureSummary != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        failureSummary,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.bodySm.copyWith(
-                          height: 1.3,
-                          color: context.danger,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (control != null) ...[
-                const SizedBox(width: AppSpacing.md),
-                control,
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-
     return SwipeActions(
       key: ValueKey(task.bookUrl),
       trailing: [
@@ -363,7 +247,21 @@ class DownloadManagerPage extends StatelessWidget {
           onPressed: () => service.removeTask(task.bookUrl),
         ),
       ],
-      child: Material(color: chrome.groupedSurface, child: row),
+      child: _TaskRow(
+        title: task.bookName,
+        progress: progress,
+        status: _statusText(task, globallyPaused: globallyPaused),
+        statusColor: _statusColor(
+          context,
+          task,
+          globallyPaused: globallyPaused,
+        ),
+        downloading: task.isDownloading && !globallyPaused,
+        failure: failureSummary,
+        control: control,
+        onMenu: (rowContext) =>
+            _showTaskMenu(rowContext, service, task, index, taskCount),
+      ),
     );
   }
 
@@ -526,8 +424,320 @@ class DownloadManagerPage extends StatelessWidget {
   }
 }
 
+/// 只在 [select] 從下載服務取出的值變了才重建的一項（[Selector]）。骨架照
+/// 現在的值建出來的那一項算，只讀不訂閱。
+class _Subscribed<T> extends StatelessWidget implements GroupedSkeletonItem {
+  const _Subscribed({super.key, required this.select, required this.builder});
+
+  final T Function(DownloadService service) select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => GroupedItemShape.of(
+    builder(context, select(context.read<DownloadService>())),
+    context: context,
+    width: width,
+  );
+
+  @override
+  Widget build(BuildContext context) => Selector<DownloadService, T>(
+    selector: (_, service) => select(service),
+    builder: (context, value, _) => builder(context, value),
+  );
+}
+
+/// 佇列摘要：幾個狀態並排，等寬，數字下面一行標籤。
+class _SummaryStats extends StatelessWidget implements GroupedSkeletonItem {
+  const _SummaryStats(this.stats);
+
+  final List<(String, int)> stats;
+
+  static const TextStyle _valueStyle = AppTextStyles.titleMd;
+  static const TextStyle _labelStyle = AppTextStyles.uiXs;
+
+  /// 每一格的數字與標籤照字置中排，整列取最高的一格、各格垂直置中。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final cellWidth = width / stats.length;
+    final cells = [
+      for (final (label, value) in stats)
+        (
+          GroupedItemShape.text(
+            context,
+            '$value',
+            style: _valueStyle,
+            width: cellWidth,
+          ).centeredIn(cellWidth),
+          GroupedItemShape.text(
+            context,
+            label,
+            style: _labelStyle,
+            width: cellWidth,
+          ).centeredIn(cellWidth),
+        ),
+    ];
+    final height = cells
+        .map((cell) => cell.$1.height + cell.$2.height)
+        .reduce(math.max);
+    return GroupedItemShape(
+      height,
+      marks: [
+        for (final (index, (value, label)) in cells.indexed) ...[
+          ...value.marksAt(
+            Offset(
+              index * cellWidth,
+              (height - value.height - label.height) / 2,
+            ),
+          ),
+          ...label.marksAt(
+            Offset(
+              index * cellWidth,
+              (height + value.height - label.height) / 2,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final chrome = AppChrome.of(context);
+    return Row(
+      children: [
+        for (final (label, value) in stats)
+          Expanded(
+            child: Semantics(
+              label: '$label $value',
+              excludeSemantics: true,
+              child: Column(
+                children: [
+                  Text(
+                    '$value',
+                    style: _valueStyle.copyWith(color: scheme.onSurface),
+                  ),
+                  Text(
+                    label,
+                    style: _labelStyle.copyWith(color: chrome.sectionText),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 一個下載任務：書名、進度條、狀態與失敗原因，右側是控制鈕。
+class _TaskRow extends StatelessWidget implements GroupedSkeletonItem {
+  const _TaskRow({
+    required this.title,
+    required this.progress,
+    required this.status,
+    required this.statusColor,
+    required this.downloading,
+    required this.failure,
+    required this.control,
+    required this.onMenu,
+  });
+
+  final String title;
+  final double progress;
+  final String status;
+  final Color statusColor;
+
+  /// 狀態右側寫「正在下載…」。
+  final bool downloading;
+  final String? failure;
+  final Widget? control;
+  final ValueChanged<BuildContext> onMenu;
+
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: AppGrouped.rowPadding,
+    vertical: AppSpacing.md,
+  );
+  static const double _progressHeight = 4;
+  static const String _downloadingText = '正在下載…';
+  static final TextStyle _titleStyle = AppTextStyles.bodyBase.copyWith(
+    height: 1.3,
+    fontWeight: FontWeight.w500,
+  );
+  static final TextStyle _smallStyle = AppTextStyles.bodySm.copyWith(
+    height: 1.3,
+  );
+
+  /// 書名、狀態與失敗原因照字排（進度條很細，骨架不畫），控制鈕一塊；
+  /// 左邊一欄與控制鈕垂直置中。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final inner = width - _padding.horizontal;
+    final controlShape = switch (control) {
+      final control? => groupedPartShape(control, context),
+      null => null,
+    };
+    final textWidth = switch (controlShape) {
+      final shape? => inner - AppSpacing.md - shape.width!,
+      null => inner,
+    };
+    final title = GroupedItemShape.text(
+      context,
+      this.title,
+      style: _titleStyle,
+      width: textWidth,
+      maxLines: 2,
+    );
+    final downloading = this.downloading
+        ? GroupedItemShape.text(
+            context,
+            _downloadingText,
+            style: _smallStyle,
+            width: double.infinity,
+          )
+        : null;
+    final status = GroupedItemShape.text(
+      context,
+      this.status,
+      style: _smallStyle,
+      width: switch (downloading) {
+        final shape? => textWidth - AppSpacing.md - shape.width!,
+        null => textWidth,
+      },
+      maxLines: 2,
+    );
+    final failure = switch (this.failure) {
+      final text? => GroupedItemShape.text(
+        context,
+        text,
+        style: _smallStyle,
+        width: textWidth,
+        maxLines: 2,
+      ),
+      null => null,
+    };
+    final statusTop =
+        title.height + AppSpacing.sm + _progressHeight + AppSpacing.sm;
+    final statusHeight = math.max(status.height, downloading?.height ?? 0);
+    final failureTop = statusTop + statusHeight + AppSpacing.xs;
+    final column = switch (failure) {
+      final shape? => failureTop + shape.height,
+      null => statusTop + statusHeight,
+    };
+    final row = math.max(column, controlShape?.height ?? 0);
+    final columnTop = (row - column) / 2;
+    return GroupedItemShape(
+      row,
+      marks: [
+        ...title.marksAt(Offset(0, columnTop)),
+        ...status.marksAt(Offset(0, columnTop + statusTop)),
+        ...?downloading?.marksAt(
+          Offset(textWidth - downloading.width!, columnTop + statusTop),
+        ),
+        ...?failure?.marksAt(Offset(0, columnTop + failureTop)),
+        ...?controlShape?.marksAt(
+          Offset(inner - controlShape.width!, (row - controlShape.height) / 2),
+        ),
+      ],
+    ).padded(_padding);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = AppChrome.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final control = this.control;
+    final failure = this.failure;
+    return Material(
+      color: chrome.groupedSurface,
+      child: Builder(
+        builder: (rowContext) => InkWell(
+          onTap: () => onMenu(rowContext),
+          onLongPress: () => onMenu(rowContext),
+          child: Padding(
+            padding: _padding,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: _titleStyle.copyWith(color: scheme.onSurface),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ClipRRect(
+                        borderRadius: AppRadius.pillShape,
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: chrome.separator,
+                          minHeight: _progressHeight,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              status,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: _smallStyle.copyWith(color: statusColor),
+                            ),
+                          ),
+                          if (downloading) ...[
+                            const SizedBox(width: AppSpacing.md),
+                            Text(
+                              _downloadingText,
+                              style: _smallStyle.copyWith(
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (failure != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          failure,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: _smallStyle.copyWith(color: context.danger),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (control != null) ...[
+                  const SizedBox(width: AppSpacing.md),
+                  control,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 任務列右側的圓形控制鈕（暫停、繼續、重試）。
-class _TaskControlButton extends StatelessWidget {
+class _TaskControlButton extends StatelessWidget
+    implements GroupedSkeletonItem {
   const _TaskControlButton({
     required this.icon,
     required this.tooltip,
@@ -537,6 +747,27 @@ class _TaskControlButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
+
+  static const double _circle = 34;
+
+  /// 點擊範圍裡置中的圓鈕一塊。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    const inset = (AppGlass.buttonSize - _circle) / 2;
+    return GroupedItemShape(
+      AppGlass.buttonSize,
+      width: AppGlass.buttonSize,
+      marks: [
+        SkeletonShape(
+          const Rect.fromLTWH(inset, inset, _circle, _circle),
+          radius: BorderRadius.circular(_circle / 2),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -556,8 +787,8 @@ class _TaskControlButton extends StatelessWidget {
             dimension: AppGlass.buttonSize,
             child: Center(
               child: Container(
-                width: 34,
-                height: 34,
+                width: _circle,
+                height: _circle,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: scheme.primary.withValues(alpha: 0.12),
