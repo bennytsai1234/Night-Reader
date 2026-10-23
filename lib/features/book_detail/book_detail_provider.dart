@@ -341,12 +341,14 @@ class BookDetailProvider extends ChangeNotifier {
       final storedChapters = await _chapterDao.getByBook(_book.bookUrl);
       if (_book.isInBookshelf && storedChapters.isNotEmpty) {
         _allChapters = storedChapters;
+        _announceCover();
         _applyFilter();
       } else {
         await _loadBookInfo();
+        // 封面一拿到就告訴搜尋頁，不等目錄。
+        _announceCover();
         await _loadChapters();
       }
-      _announceCover();
       _worldState = BookDetailWorldState.ready;
       unawaited(_storeDisplayCover());
     } catch (error, stackTrace) {
