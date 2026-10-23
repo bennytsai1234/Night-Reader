@@ -9,7 +9,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 | `README.md` | 給讀者看的產品說明 |
 | `DESIGN.md` | 設計原則、否決過的方向、每個畫面與元件的規格 |
 | `GLOSSARY.md` | 和使用者討論時用的詞 |
-| `CODING_STANDARDS.md` | 寫碼規範，`code-review` 依它審 |
+| `CODING_STANDARDS.md` | 寫碼規範，`codex-review` 依它審 |
 | `docs/adr/` | 架構與產品決定：為什麼這樣定、否決過什麼；索引在 `docs/adr/README.md` |
 | `CHANGELOG.md` | 給讀者看的更新說明（ADR 0010） |
 | `HANDOFF.md` | 還沒收尾的事、等使用者決定的事 |

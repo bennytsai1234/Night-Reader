@@ -1,6 +1,6 @@
 # 寫碼規範
 
-`code-review` 審查時依這些規範判斷。格式、lint 與測試由 CI（`.github/workflows/ci.yml`）把關，不在這裡重複。
+合併前的審查（`codex-review`）依這些規範判斷。格式、lint 與測試由 CI（`.github/workflows/ci.yml`）把關，不在這裡重複。
 
 ## 測試
 
