@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// 頁面、卡片與浮動元件的分層規則，五種風格、淺色與深色共用。
+/// 頁面、卡片與浮動元件的分層規則，所有風格、淺色與深色共用。
 ///
 /// 差距以 CIELAB 明度差（ΔL*，人眼感受到的明暗差）表示。淺色卡片多已近白，
 /// 由頁面往文字色退；深色頁面已近黑，由卡片往文字色提亮。`StylePalette`

@@ -266,6 +266,12 @@ void main() {
     Future<SelectionService> pumpSelected(
       WidgetTester tester, {
       ValueChanged<ReaderTextSelection>? onHide,
+      HybridLineBox box = const HybridLineBox(
+        left: 100,
+        top: 300,
+        right: 140,
+        bottom: 320,
+      ),
     }) async {
       final chapter = _chapter();
       final start = chapter.displayText.indexOf('城門');
@@ -286,9 +292,7 @@ void main() {
           home: ReaderTextSelectionLayer(
             selection: service,
             repaint: service,
-            boxesFor: (_) => const <HybridLineBox>[
-              HybridLineBox(left: 100, top: 300, right: 140, bottom: 320),
-            ],
+            boxesFor: (_) => <HybridLineBox>[box],
             caretAt: (_, _) => null,
             onHide: onHide,
             highlightColor: Colors.amber,
@@ -299,13 +303,19 @@ void main() {
       return service;
     }
 
-    testWidgets('只有複製、搜尋與隱藏，不列出系統的文字處理 App', (tester) async {
+    testWidgets('列上只有複製、搜尋與隱藏，系統的文字處理 App 收在「⋮」裡', (tester) async {
       final calls = <MethodCall>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.processText,
         (call) async {
           calls.add(call);
-          return <String, String>{'translate': '翻譯'};
+          return switch (call.method) {
+            'ProcessText.queryTextActions' => <String, String>{
+              'translate': '翻譯',
+              'dict': '字典',
+            },
+            _ => null,
+          };
         },
       );
       addTearDown(
@@ -315,14 +325,152 @@ void main() {
         ),
       );
 
-      await pumpSelected(tester, onHide: (_) {});
+      final service = await pumpSelected(tester, onHide: (_) {});
       await tester.pump();
 
       expect(find.text('複製'), findsOneWidget);
       expect(find.text('搜尋'), findsOneWidget);
       expect(find.text('隱藏'), findsOneWidget);
       expect(find.text('翻譯'), findsNothing);
-      expect(calls, isEmpty);
+      expect(find.text('字典'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsNothing);
+      expect(find.text('翻譯'), findsOneWidget);
+      expect(find.text('字典'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('翻譯'), findsNothing);
+
+      // 展開後改選別的字，選單回到收起的樣子。
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      final current = service.selection!;
+      service.select(
+        ReaderTextSelection(
+          blocks: current.blocks,
+          epoch: current.epoch,
+          paragraph: current.paragraph,
+          range: HybridTextRange(current.range.start, current.range.end - 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('複製'), findsOneWidget);
+      expect(find.text('翻譯'), findsNothing);
+      service.select(current);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('翻譯'));
+      await tester.pump();
+
+      expect(calls.last.method, 'ProcessText.processTextAction');
+      expect(calls.last.arguments, <Object>['translate', '城門', true]);
+      expect(service.active, isFalse);
+    });
+
+    void mockApps(WidgetTester tester, Map<String, String> apps) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.processText,
+        (call) async =>
+            call.method == 'ProcessText.queryTextActions' ? apps : null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.processText,
+          null,
+        ),
+      );
+    }
+
+    void setView(WidgetTester tester, Size size) {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('窄視窗與放大字級時整排縮小，「⋮」仍在畫面內按得到', (tester) async {
+      mockApps(tester, const {'translate': '翻譯'});
+      setView(tester, const Size(200, 600));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await pumpSelected(
+        tester,
+        onHide: (_) {},
+        box: const HybridLineBox(left: 80, top: 300, right: 120, bottom: 320),
+      );
+      await tester.pumpAndSettle();
+
+      final more = tester.getRect(find.byIcon(Icons.more_vert));
+      expect(more.right, lessThanOrEqualTo(200));
+      expect(more.left, greaterThanOrEqualTo(0));
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('翻譯'), findsOneWidget);
+    });
+
+    testWidgets('App 多到放不下時清單捲動，最後一個與返回鍵都按得到', (tester) async {
+      mockApps(tester, {for (var i = 0; i < 10; i++) 'app$i': 'App $i'});
+      setView(tester, const Size(393, 300));
+      for (final (top, label) in const [(180.0, '選單在字上方'), (20.0, '選單在字下方')]) {
+        await pumpSelected(
+          tester,
+          onHide: (_) {},
+          box: HybridLineBox(left: 100, top: top, right: 140, bottom: top + 20),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull, reason: label);
+        final back = tester.getRect(find.byIcon(Icons.arrow_back));
+        expect(back.top, greaterThanOrEqualTo(0), reason: label);
+        expect(back.bottom, lessThanOrEqualTo(300), reason: label);
+        await tester.scrollUntilVisible(
+          find.text('App 9'),
+          40,
+          scrollable: find.byType(Scrollable).last,
+        );
+        final last = tester.getRect(find.text('App 9'));
+        expect(last.bottom, lessThanOrEqualTo(300), reason: label);
+        await tester.tap(find.byIcon(Icons.arrow_back));
+        await tester.pumpAndSettle();
+        expect(find.text('複製'), findsOneWidget, reason: label);
+      }
+    });
+
+    testWidgets('展開後比收起時窄的選單靠尾端對齊，「⋮」那一側不動', (tester) async {
+      mockApps(tester, const {'a': '譯'});
+      setView(tester, const Size(393, 852));
+      // 工具列的外框：圓角是工具列高的一半。
+      final toolbar = find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.borderRadius == const BorderRadius.all(Radius.circular(22)),
+      );
+      await pumpSelected(tester, onHide: (_) {});
+      await tester.pumpAndSettle();
+      final closed = tester.getRect(toolbar);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      final open = tester.getRect(toolbar);
+      expect(open.width, lessThan(closed.width));
+      expect(open.right, moreOrLessEquals(closed.right));
+    });
+
+    testWidgets('手機上沒有文字處理 App 時不顯示「⋮」', (tester) async {
+      await pumpSelected(tester, onHide: (_) {});
+      await tester.pump();
+
+      expect(find.text('隱藏'), findsOneWidget);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
     });
 
     testWidgets('按「隱藏」交出選到的字並收起選取', (tester) async {

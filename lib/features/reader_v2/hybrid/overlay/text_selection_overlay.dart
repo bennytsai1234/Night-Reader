@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/features/about/external_url_launcher.dart';
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_types.dart';
 import 'package:night_reader/features/reader_v2/hybrid/overlay/selection_service.dart';
@@ -52,8 +53,21 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
   static const double _selectionAlpha = 0.35;
   static const String _webSearchUrl = 'https://www.google.com/search?q=';
 
+  final ProcessTextService _processText = DefaultProcessTextService();
+  List<ProcessTextAction> _processTextActions = const <ProcessTextAction>[];
   SelectionEdge? _dragEdge;
   Offset? _dragPoint;
+
+  @override
+  void initState() {
+    super.initState();
+    // 與 EditableText 相同：系統可處理文字的 App（翻譯、字典…）只查一次。
+    unawaited(
+      _processText.queryTextActions().then((actions) {
+        if (mounted) setState(() => _processTextActions = actions);
+      }),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,18 +207,55 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
           },
         ),
     ];
+    final anchors = TextSelectionToolbarAnchors(
+      primaryAnchor: Offset(centerX, boxes.first.top),
+      secondaryAnchor: Offset(centerX, last.bottom + handleHeight),
+    );
     // 工具列以父層為座標系；正文區不在螢幕頂端，狀態列 padding 不適用。
     return MediaQuery.removePadding(
       context: context,
       removeTop: true,
       removeBottom: true,
-      child: AdaptiveTextSelectionToolbar.buttonItems(
-        anchors: TextSelectionToolbarAnchors(
-          primaryAnchor: Offset(centerX, boxes.first.top),
-          secondaryAnchor: Offset(centerX, last.bottom + handleHeight),
-        ),
-        buttonItems: items,
-      ),
+      child: _processTextActions.isEmpty
+          ? AdaptiveTextSelectionToolbar.buttonItems(
+              anchors: anchors,
+              buttonItems: items,
+            )
+          : _SelectionToolbarWithMore(
+              // 選了別的字就從收起的樣子開始。
+              key: ValueKey(selection.range),
+              anchors: anchors,
+              items: items,
+              moreItems: [
+                for (final action in _processTextActions)
+                  ContextMenuButtonItem(
+                    label: action.label,
+                    onPressed: () => _processTextAction(selection, action),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  void _processTextAction(
+    ReaderTextSelection selection,
+    ProcessTextAction action,
+  ) {
+    final text = selection.text;
+    widget.selection.clear();
+    // 正文唯讀；對方 App 回傳的文字不需要，結果要等使用者從對方 App 返回
+    // 才完成，所以不等待。
+    unawaited(
+      _processText
+          .processTextAction(action.id, text, true)
+          .then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stackTrace) => AppLog.e(
+              '文字處理動作失敗: ${action.label}',
+              error: error,
+              stackTrace: stackTrace,
+            ),
+          ),
     );
   }
 
@@ -218,6 +269,194 @@ class _ReaderTextSelectionLayerState extends State<ReaderTextSelectionLayer> {
     final query = Uri.encodeQueryComponent(selection.text.trim());
     widget.selection.clear();
     await launchExternalUrlWithFeedback(context, '$_webSearchUrl$query');
+  }
+}
+
+/// 有系統文字處理 App 時的選單：列上固定只有 [items]，[moreItems] 一律收
+/// 在「⋮」裡，按下展開成直式選單、左上（選單在字上方時是左下）的返回鍵
+/// 收回。對方 App 的名稱由它自己決定，會混進簡體字，所以不和自己的按鈕
+/// 並排。
+///
+/// Flutter 的 [TextSelectionToolbar] 只在寬度放不下時才把按鈕收進「⋮」，
+/// 指定不了哪些收起來；這裡照它的樣子（外框、按鈕、位置、展開的時間與
+/// 展開後靠尾端對齊）自己排。一排放不下時整排縮小，App 多到放不下時清單
+/// 捲動，按鈕都按得到。
+class _SelectionToolbarWithMore extends StatefulWidget {
+  const _SelectionToolbarWithMore({
+    super.key,
+    required this.anchors,
+    required this.items,
+    required this.moreItems,
+  });
+
+  final TextSelectionToolbarAnchors anchors;
+  final List<ContextMenuButtonItem> items;
+  final List<ContextMenuButtonItem> moreItems;
+
+  @override
+  State<_SelectionToolbarWithMore> createState() =>
+      _SelectionToolbarWithMoreState();
+}
+
+class _SelectionToolbarWithMoreState extends State<_SelectionToolbarWithMore> {
+  // 以下照 Flutter 的 TextSelectionToolbar：工具列高、和選取的距離、離螢幕
+  // 邊的距離與展開的時間。
+  static const double _toolbarHeight = 44;
+  static const double _contentDistance = 8;
+  static const double _screenPadding = 8;
+  static const Duration _expand = Duration(milliseconds: 140);
+
+  final GlobalKey _toolbarKey = GlobalKey();
+  bool _open = false;
+
+  /// 收起時工具列的寬度：展開後的選單比它窄時靠尾端對齊，「⋮」那一側
+  /// 不動（Flutter 的 `_TextSelectionToolbarTrailingEdgeAlign`）。
+  double? _closedWidth;
+
+  void _toggle() {
+    setState(() {
+      _closedWidth = _open ? null : _toolbarKey.currentContext?.size?.width;
+      _open = !_open;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _build(context, constraints.maxHeight),
+  );
+
+  Widget _build(BuildContext context, double maxHeight) {
+    final localizations = MaterialLocalizations.of(context);
+    final above =
+        widget.anchors.primaryAnchor - const Offset(0, _contentDistance);
+    final below =
+        (widget.anchors.secondaryAnchor ?? widget.anchors.primaryAnchor) +
+        const Offset(0, TextSelectionToolbar.kToolbarContentDistanceBelow);
+    final paddingAbove = MediaQuery.paddingOf(context).top + _screenPadding;
+    final fitsAbove =
+        _toolbarHeight <= above.dy - _contentDistance - paddingAbove;
+    final local = Offset(_screenPadding, paddingAbove);
+
+    final toggle = IconButton(
+      icon: Icon(_open ? Icons.arrow_back : Icons.more_vert),
+      tooltip: _open
+          ? localizations.backButtonTooltip
+          : localizations.moreButtonTooltip,
+      onPressed: _toggle,
+    );
+    // 工具列能用的高度：在字上方時位置最高到頂（選單比上方的空間高就蓋過
+    // 選到的字），在字下方時從選取下緣到底。
+    final area = maxHeight - paddingAbove - _screenPadding;
+    final menuMaxHeight = math.max(
+      _toolbarHeight,
+      fitsAbove ? area : area - (below.dy - local.dy),
+    );
+    final Widget content;
+    if (_open) {
+      final menu = [
+        for (final item in widget.moreItems)
+          TextSelectionToolbarTextButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: AlignmentDirectional.centerStart,
+            onPressed: item.onPressed,
+            child: Text(
+              AdaptiveTextSelectionToolbar.getButtonLabel(context, item),
+            ),
+          ),
+      ];
+      final back = Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: toggle,
+      );
+      // App 多到放不下時清單捲動，返回鍵固定在「⋮」原本那一排；和
+      // Flutter 一樣，選單在字上方時往上展開。
+      final list = Flexible(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: menu,
+          ),
+        ),
+      );
+      content = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: menuMaxHeight),
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: fitsAbove ? [list, back] : [back, list],
+          ),
+        ),
+      );
+    } else {
+      final count = widget.items.length + 1;
+      // 窄視窗或系統字級放大到一排放不下時整排等比縮小，每個按鈕都還按得到。
+      content = SizedBox(
+        height: _toolbarHeight,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.items.length; i++)
+                TextSelectionToolbarTextButton(
+                  padding: TextSelectionToolbarTextButton.getPadding(i, count),
+                  onPressed: widget.items[i].onPressed,
+                  child: Text(
+                    AdaptiveTextSelectionToolbar.getButtonLabel(
+                      context,
+                      widget.items[i],
+                    ),
+                  ),
+                ),
+              toggle,
+            ],
+          ),
+        ),
+      );
+    }
+    final toolbar = Material(
+      key: _toolbarKey,
+      borderRadius: const BorderRadius.all(Radius.circular(_toolbarHeight / 2)),
+      clipBehavior: Clip.antiAlias,
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 1,
+      type: MaterialType.card,
+      child: content,
+    );
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        _screenPadding,
+        paddingAbove,
+        _screenPadding,
+        _screenPadding,
+      ),
+      child: CustomSingleChildLayout(
+        delegate: TextSelectionToolbarLayoutDelegate(
+          anchorAbove: above - local,
+          anchorBelow: below - local,
+          fitsAbove: fitsAbove,
+        ),
+        child: AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : _expand,
+          child: switch (_closedWidth) {
+            final width? => ConstrainedBox(
+              constraints: BoxConstraints(minWidth: width),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                widthFactor: 1,
+                heightFactor: 1,
+                child: toolbar,
+              ),
+            ),
+            null => toolbar,
+          },
+        ),
+      ),
+    );
   }
 }
 
