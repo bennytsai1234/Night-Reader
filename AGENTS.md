@@ -51,7 +51,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試（只改說明文件，即任何 `.md` 與 `docs/`，的推送略過）。推送時看 hook 輸出的最後一行是 `pre-push: analyze 與全套測試通過`（只改說明文件時是略過的訊息）。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart`（Drift 產生的資料庫程式）一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。要給使用者看畫面時，用 `test/support/screenshot.dart` 把元件測試畫成 PNG（用法寫在檔頭）；改介面前後要對照整個 App 時，重拍 `test/screens/` 那組固定畫面（平常的全套測試會跳過）。
-- 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，前後各跑一次 `test/frame_budget/`，數字寫進 commit message（`CODING_STANDARDS.md`「動畫」）。
+- 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message（`CODING_STANDARDS.md`「動畫」）。
 - Android 實機與模擬器驗證（UI、手勢、滾動、動畫、生命週期、原生外掛、執行效能）是使用者的任務。Agent 不得主動要求、提及或承擔實機驗證，回報中也不列出實機行為相關的未驗證項目。
 
 ## Git 流程

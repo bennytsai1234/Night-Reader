@@ -85,6 +85,8 @@ jobs:
         run: git ls-files -z '*.dart' ':!:*.g.dart' | xargs -0 dart format --output=none --set-exit-if-changed
       - run: flutter analyze --no-pub
       - run: flutter test --no-pub --reporter compact
+      - name: Test frame budget compare tool
+        run: sh tool/frame_budget_compare_test.sh
       - name: Verify validation did not modify tracked source
         if: always()
         run: git diff --exit-code
