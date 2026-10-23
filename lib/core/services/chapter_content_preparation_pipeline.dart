@@ -77,6 +77,7 @@ class ChapterContentPreparationPipeline {
     bool forceRefresh = false,
     bool saveChapterMetadata = true,
     int maxAttempts = 1,
+    CancelToken? cancelToken,
   }) async {
     final store = contentStore;
     if (!forceRefresh && store != null) {
@@ -104,6 +105,7 @@ class ChapterContentPreparationPipeline {
       sourceOverride: sourceOverride,
       saveChapterMetadata: saveChapterMetadata,
       maxAttempts: maxAttempts,
+      cancelToken: cancelToken,
     );
     _inFlight[key] = fetch;
     return fetch.whenComplete(() {
@@ -123,6 +125,7 @@ class ChapterContentPreparationPipeline {
     required BookSource? sourceOverride,
     required bool saveChapterMetadata,
     required int maxAttempts,
+    required CancelToken? cancelToken,
   }) async {
     final attempts = maxAttempts < 1 ? 1 : maxAttempts;
     for (var attempt = 0; attempt < attempts; attempt++) {
@@ -130,6 +133,7 @@ class ChapterContentPreparationPipeline {
         chapterIndex: chapterIndex,
         chapter: chapter,
         sourceOverride: sourceOverride,
+        cancelToken: cancelToken,
       );
       if (result.isReady || attempt == attempts - 1) {
         await _storeResult(
@@ -139,7 +143,12 @@ class ChapterContentPreparationPipeline {
         );
         return result;
       }
-      await Future<void>.delayed(retryDelay(attempt));
+      // 等下一次重試期間取消了就不再試，什麼都不寫。
+      await Future.any<Object?>([
+        Future<void>.delayed(retryDelay(attempt)),
+        ?cancelToken?.whenCancel,
+      ]);
+      if (cancelToken?.cancelError case final cancelled?) throw cancelled;
     }
 
     final result = ChapterContentPreparationResult.failed('加載正文失敗');
@@ -155,6 +164,7 @@ class ChapterContentPreparationPipeline {
     required int chapterIndex,
     required BookChapter chapter,
     required BookSource? sourceOverride,
+    required CancelToken? cancelToken,
   }) async {
     try {
       if (book.origin == 'local') {
@@ -183,6 +193,7 @@ class ChapterContentPreparationPipeline {
         book,
         chapter,
         nextChapterUrl: nextChapterUrl,
+        cancelToken: cancelToken,
       );
       if (raw.trim().isNotEmpty) {
         return ChapterContentPreparationResult.ready(raw);

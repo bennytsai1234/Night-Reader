@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
 import 'download_base.dart';
 import 'download_scheduler.dart';
 
@@ -85,15 +87,25 @@ class DownloadPlan {
 /// 成功或失敗。原本在主 isolate 逐章查「下載過沒有」、更新進度，幾千章的
 /// 書一開跑就連續佔住主執行緒，疊到換場與骨架上（ADR 0018）。工作會送進
 /// 書源 isolate，所以在頂層函式裡建立，只捕捉任務與字串。
-Future<DownloadPlan> planDownloadInSourceIsolate(DownloadTask task) =>
-    SourceIsolate.run((_) => _planDownload(task));
+Future<DownloadPlan> planDownloadInSourceIsolate(
+  DownloadTask task, {
+  CancelToken? cancelToken,
+}) => SourceIsolate.run(
+  (cancelToken) => _planDownload(task, cancelToken),
+  cancelToken: cancelToken,
+);
 
-/// 抓第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。
+/// 抓第 [run] 輪的一章正文寫進資料庫；已經有正文就不抓。[cancelToken]
+/// 取消時請求與重試跟著停，什麼都不寫。
 Future<DownloadChapterResult> downloadChapterInSourceIsolate({
   required int run,
   required String chapterUrl,
   required int maxAttempts,
-}) => SourceIsolate.run((_) => _downloadChapter(run, chapterUrl, maxAttempts));
+  CancelToken? cancelToken,
+}) => SourceIsolate.run(
+  (cancelToken) => _downloadChapter(run, chapterUrl, maxAttempts, cancelToken),
+  cancelToken: cancelToken,
+);
 
 /// 第 [run] 輪下載結束（跑完、失敗、暫停或退役），放掉它的書與章節。
 Future<void> finishDownloadRunInSourceIsolate(int run) =>
@@ -110,7 +122,10 @@ final Map<
 _downloadRuns = {};
 int _nextDownloadRun = 0;
 
-Future<DownloadPlan> _planDownload(DownloadTask task) async {
+Future<DownloadPlan> _planDownload(
+  DownloadTask task,
+  CancelToken cancelToken,
+) async {
   final book = await getIt<BookDao>().getByUrl(task.bookUrl);
   if (book == null) {
     throw Exception('書籍不存在');
@@ -127,7 +142,11 @@ Future<DownloadPlan> _planDownload(DownloadTask task) async {
     if (source == null) {
       throw Exception('章節目錄不存在');
     }
-    chapters = await BookSourceService().getChapterList(source, book);
+    chapters = await BookSourceService().getChapterList(
+      source,
+      book,
+      cancelToken: cancelToken,
+    );
     // 抓不到目錄就記為失敗，書架自動下載照重試規則隔一天再試，不會
     // 每次開 App 都打一次書源（ADR 0008）。
     if (chapters.isEmpty) {
@@ -168,6 +187,7 @@ Future<DownloadChapterResult> _downloadChapter(
   int run,
   String chapterUrl,
   int maxAttempts,
+  CancelToken cancelToken,
 ) async {
   final state = _downloadRuns[run];
   if (state == null) return DownloadChapterResult.failed('下載已結束');
@@ -197,6 +217,7 @@ Future<DownloadChapterResult> _downloadChapter(
         sourceOverride: source,
         forceRefresh: true,
         maxAttempts: maxAttempts,
+        cancelToken: cancelToken,
       );
   if (result.isReady) return DownloadChapterResult.ready();
   return DownloadChapterResult.failed(result.failureMessage ?? result.content);
@@ -247,6 +268,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   Future<void> processTask(DownloadTask task) async {
     if (isTaskRetiring(task.bookUrl)) return;
     beginTaskActivity(task.bookUrl);
+    final cancelToken = beginRun(task.bookUrl);
     activeTaskUrls.add(task.bookUrl);
     task.status = DownloadTask.statusDownloading;
     task.successCount = 0;
@@ -263,7 +285,10 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
     var stoppedEarly = false;
     int? run;
     try {
-      final plan = await planDownloadInSourceIsolate(task);
+      final plan = await planDownloadInSourceIsolate(
+        task,
+        cancelToken: cancelToken,
+      );
       run = plan.run;
       // 進度是範圍裡每一章各算一次：已經有正文的直接算完成。總數照這次
       // 換算的範圍：排進來時可能還沒有目錄，排隊期間目錄也可能多了章節。
@@ -283,6 +308,16 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
       var poolCount = 0;
       var consecutiveFailures = 0;
+      // 有一章結束時叫醒等名額或等收尾的地方。
+      Completer<void>? chapterEnded;
+      void endChapter() {
+        poolCount--;
+        chapterEnded?.complete();
+        chapterEnded = null;
+      }
+
+      Future<void> nextChapterEnd() =>
+          (chapterEnded ??= Completer<void>()).future;
       for (final chapter in plan.missing) {
         // 連續好幾章都失敗多半是書源壞了：整個任務先記為失敗，不把剩下的
         // 章節一章章打完（書架自動下載何時再試見 ADR 0008）。
@@ -292,9 +327,8 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
           break;
         }
 
-        while (poolCount >= maxChapterConcurrent &&
-            !isTaskRetiring(task.bookUrl)) {
-          await Future.delayed(const Duration(milliseconds: 500));
+        while (poolCount >= maxChapterConcurrent && !cancelToken.isCancelled) {
+          await Future.any<Object?>([nextChapterEnd(), cancelToken.whenCancel]);
         }
         // 等名額期間可能被暫停或退役，開抓前再看一次。
         if (!await _mayContinue(task)) {
@@ -308,6 +342,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 run: plan.run,
                 chapterUrl: chapter.url,
                 maxAttempts: _maxRetries,
+                cancelToken: cancelToken,
               )
               .then((result) {
                 if (result.success) {
@@ -323,7 +358,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                     chapterIndex: chapter.index,
                   );
                 }
-                poolCount--;
+                endChapter();
                 task.currentChapterIndex = chapter.index;
                 task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
                 downloadDao.updateProgress(
@@ -335,6 +370,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                 update();
               })
               .catchError((Object error, StackTrace stack) {
+                // 退役取消的不是失敗：不記錯誤、不寫進度。
+                if (cancelToken.isCancelled) {
+                  endChapter();
+                  return;
+                }
                 AppLog.w('Download chapter failed ${chapter.title}: $error');
                 task.errorCount++;
                 consecutiveFailures++;
@@ -344,7 +384,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                   message: userErrorReason(error),
                   chapterIndex: chapter.index,
                 );
-                poolCount--;
+                endChapter();
                 task.currentChapterIndex = chapter.index;
                 task.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
                 downloadDao.updateProgress(
@@ -359,7 +399,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       }
 
       while (poolCount > 0) {
-        await Future.delayed(const Duration(seconds: 1));
+        await nextChapterEnd();
       }
 
       if (!stoppedEarly && task.status != DownloadTask.statusPaused) {
@@ -371,12 +411,16 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         AppEventBus().fire(AppEventBus.upBookshelf, data: task.bookUrl);
       }
     } catch (e, stack) {
-      AppLog.e(
-        'Download task failed for ${task.bookName}: $e',
-        error: e,
-        stackTrace: stack,
-      );
-      if (task.status != DownloadTask.statusPaused) {
+      // 退役取消的不是失敗：不記錯誤、不改狀態，交給退役的那一方處理。
+      if (!cancelToken.isCancelled) {
+        AppLog.e(
+          'Download task failed for ${task.bookName}: $e',
+          error: e,
+          stackTrace: stack,
+        );
+      }
+      if (!cancelToken.isCancelled &&
+          task.status != DownloadTask.statusPaused) {
         task.setFailure(
           reason: classifyDownloadFailureReason(e.toString()),
           message: userErrorReason(e),
@@ -398,6 +442,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         );
       }
       activeTaskUrls.remove(task.bookUrl);
+      endRun(task.bookUrl, cancelToken);
       completeTaskActivity(task.bookUrl);
     }
     update();
