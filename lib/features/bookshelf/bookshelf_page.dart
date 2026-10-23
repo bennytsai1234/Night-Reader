@@ -809,67 +809,74 @@ class _BookshelfPageState extends State<BookshelfPage>
     final selecting = _isMultiSelect;
     final card = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: CoverRevealSlot(
-        placeholder: const SizedBox(
-          height: BookshelfListCard.coverHeight + AppSpacing.md * 2,
-        ),
-        // 左滑出「檢查更新」「移出書架」。在書卡上橫拖一律滑出動作、不換
-        // 分頁（DESIGN.md「按壓回饋」）；滑出的按鈕裁在卡片圓角內。動作在
-        // 按下時才讀書架上現在的那本。
-        child: ClipRRect(
-          borderRadius: AppGrouped.cardRadius,
-          child: SwipeActions(
-            enabled: !selecting,
-            trailing: [
-              if (!shown.isLocal)
-                SwipeAction(
-                  label: '檢查更新',
-                  icon: Icons.update,
-                  color: AppTint.azurite.color,
-                  onPressed: () =>
-                      _checkUpdateOne(provider, provider.current(shown)),
-                ),
+      // 左滑出「檢查更新」「移出書架」。在書卡上橫拖一律滑出動作、不換分頁
+      // （DESIGN.md「按壓回饋」）；滑出的按鈕裁在卡片圓角內。動作在按下時才
+      // 讀書架上現在的那本。
+      child: ClipRRect(
+        borderRadius: AppGrouped.cardRadius,
+        child: SwipeActions(
+          enabled: !selecting,
+          trailing: [
+            if (!shown.isLocal)
               SwipeAction(
-                label: '移出書架',
-                icon: Icons.delete_outline,
-                color: AppTint.rust.color,
-                destructive: true,
+                label: '檢查更新',
+                icon: Icons.update,
+                color: AppTint.azurite.color,
                 onPressed: () =>
-                    _confirmRemoveOne(provider, provider.current(shown)),
+                    _checkUpdateOne(provider, provider.current(shown)),
               ),
-            ],
-            // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、
-            // 長按在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位
-            // 可能已經換過）。
-            child: ValueListenableBuilder<Book>(
-              valueListenable: provider.bookListenable(shown),
-              builder: (context, book, _) => _UpdateBadgeOf(
-                badges: provider.updateBadges,
-                bookUrl: book.bookUrl,
-                builder: (badge) => BookshelfListCard(
-                  book: book,
-                  updateBadge: selecting ? null : badge,
-                  selecting: selecting,
-                  selected: _selectedUrls.contains(book.bookUrl),
-                  onTap: () => selecting
-                      ? _toggleSelected(book)
-                      : _openBook(provider.current(book)),
-                  onLongPress: selecting || reorderable
-                      ? null
-                      : (rect) => _showBookMenu(
-                          provider,
-                          provider.current(book),
-                          rect,
-                          grid: false,
-                        ),
-                ),
+            SwipeAction(
+              label: '移出書架',
+              icon: Icons.delete_outline,
+              color: AppTint.rust.color,
+              destructive: true,
+              onPressed: () =>
+                  _confirmRemoveOne(provider, provider.current(shown)),
+            ),
+          ],
+          // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、
+          // 長按在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位
+          // 可能已經換過）。
+          child: ValueListenableBuilder<Book>(
+            valueListenable: provider.bookListenable(shown),
+            builder: (context, book, _) => _UpdateBadgeOf(
+              badges: provider.updateBadges,
+              bookUrl: book.bookUrl,
+              builder: (badge) => BookshelfListCard(
+                book: book,
+                updateBadge: selecting ? null : badge,
+                selecting: selecting,
+                selected: _selectedUrls.contains(book.bookUrl),
+                onTap: () => selecting
+                    ? _toggleSelected(book)
+                    : _openBook(provider.current(book)),
+                onLongPress: selecting || reorderable
+                    ? null
+                    : (rect) => _showBookMenu(
+                        provider,
+                        provider.current(book),
+                        rect,
+                        grid: false,
+                      ),
               ),
             ),
           ),
         ),
       ),
     );
-    return BookshelfMotionItem(id: shown.bookUrl, motion: _motion, child: card);
+    // 換位動畫的那一層也包在這一塊裡：開 App 骨架呼吸時書卡不會移動，建清單
+    // 那一格每一列只建佔位，跟書卡一起輪到時才建（[CoverReveal.inSteps]）。
+    return CoverRevealSlot(
+      placeholder: const SizedBox(
+        height:
+            BookshelfListCard.coverHeight + AppSpacing.md * 2 + AppSpacing.sm,
+      ),
+      child: BookshelfMotionItem(
+        id: shown.bookUrl,
+        motion: _motion,
+        child: card,
+      ),
+    );
   }
 
   Widget _buildGridView(
@@ -908,10 +915,13 @@ class _BookshelfPageState extends State<BookshelfPage>
       itemCount: books.length,
       itemBuilder: (context, index) {
         final shown = books[index];
-        return BookshelfMotionItem(
-          id: shown.bookUrl,
-          motion: _motion,
-          child: CoverRevealSlot(
+        // 換位動畫的那一層也包在這一塊裡：開 App 骨架呼吸時書卡不會移動，
+        // 建清單那一格每一格只建佔位，跟書卡一起輪到時才建
+        // （[CoverReveal.inSteps]）。
+        return CoverRevealSlot(
+          child: BookshelfMotionItem(
+            id: shown.bookUrl,
+            motion: _motion,
             // 書架重讀時只有這本書看得到的內容變了才重建這張書卡；點開、
             // 長按在按下時才讀書架上現在的那本（閱讀位置這些看不到的欄位
             // 可能已經換過）。

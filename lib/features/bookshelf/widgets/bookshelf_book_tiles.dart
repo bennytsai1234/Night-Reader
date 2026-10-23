@@ -513,23 +513,33 @@ class BookshelfGridTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: AppSpacing.xs,
-                      right: AppSpacing.xs,
-                      child: BookshelfUpdateBadge(
-                        result: selecting ? null : updateBadge,
-                      ),
-                    ),
-                    Positioned(
-                      top: AppSpacing.sm,
-                      right: AppSpacing.sm,
-                      child: AnimatedOpacity(
-                        duration: _motion(context, AppMotion.menu),
-                        opacity: selecting ? 1 : 0,
-                        child: BookshelfCheckMark(
-                          selected: selected,
-                          onCover: true,
-                        ),
+                    // 角標與勾選圈另外排一塊：開 App 時兩個都看不到（還沒
+                    // 檢查更新、不在選取中），和書卡外框分在不同幀建
+                    // （[CoverReveal.inSteps]）。
+                    CoverRevealSlot(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned(
+                            top: AppSpacing.xs,
+                            right: AppSpacing.xs,
+                            child: BookshelfUpdateBadge(
+                              result: selecting ? null : updateBadge,
+                            ),
+                          ),
+                          Positioned(
+                            top: AppSpacing.sm,
+                            right: AppSpacing.sm,
+                            child: AnimatedOpacity(
+                              duration: _motion(context, AppMotion.menu),
+                              opacity: selecting ? 1 : 0,
+                              child: BookshelfCheckMark(
+                                selected: selected,
+                                onCover: true,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

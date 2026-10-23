@@ -808,7 +808,11 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
           ? Builder(builder: widget.builder)
           : CoverRevealScope(
               reveal: reveal,
-              child: Builder(builder: widget.builder),
+              // 一步一步準備時，連內容最外層也排成一步：骨架進場結束的那一格
+              // 不同時建整頁內容（[CoverReveal.inSteps]）。
+              child: reveal.inSteps
+                  ? CoverRevealSlot(child: Builder(builder: widget.builder))
+                  : Builder(builder: widget.builder),
             );
     }
     final content = _lastContent;

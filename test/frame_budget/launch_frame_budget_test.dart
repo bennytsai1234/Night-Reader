@@ -103,8 +103,13 @@ void main() {
       // 下載服務是單例，跨兩次開 App；等上一次開 App 排的下載跑完（測試
       // 沒有網路，立刻失敗），它結束時通知書架重新載入，不然會算進下一次。
       // 30 本書時 5 秒不夠：第二次開 App 的骨架呼吸裡會多出兩格各約 3ms
-      // 的上一次剩下的工作（2026-10-23 量到，等 40 秒就沒有）。
-      await settle(tester, const Duration(seconds: 40));
+      // 的上一次剩下的工作（書架檢查與補下載沒有網路，一直重試；2026-10-23
+      // 量到，等 40 秒就沒有）。一次推 1 秒：等的是同樣的 40 秒，不用一格
+      // 一格推 800 次。
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump(const Duration(seconds: 1));
+      }
     }
 
     // 讓 App 留下的計時器（下載排程、重試）跑完，測試才能正常結束。

@@ -68,6 +68,11 @@ class FrameCost {
 /// 環境變數 `FRAME_ATTRIBUTE=1` 時列出尖峰幀裡耗時最多的區塊。
 final bool frameAttribution = Platform.environment['FRAME_ATTRIBUTE'] == '1';
 
+/// 環境變數 `FRAME_PHASES=1` 時只列尖峰幀各大階段（BUILD、LAYOUT、PAINT、
+/// COMPOSITING、SEMANTICS…）各花多久：不開逐個元件的紀錄，數字幾乎不變大，
+/// 看得出多出來的時間落在哪一段。
+final bool framePhases = Platform.environment['FRAME_PHASES'] == '1';
+
 /// 一幀一幀推進（每幀 [frameDuration]），直到 [until] 成立後再多 [tailFrames]
 /// 幀，記下每一幀的成本。[realAsync] 時每幀之間讓出真實時間，給跑在真的
 /// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
@@ -92,6 +97,7 @@ Future<List<FrameCost>> recordFrames(
     debugPrint,
   );
   var dirty = <String, int>{};
+  if (framePhases) FlutterTimeline.debugCollectionEnabled = true;
   if (frameAttribution) {
     FlutterTimeline.debugCollectionEnabled = true;
     debugProfileBuildsEnabled = true;
@@ -128,12 +134,12 @@ Future<List<FrameCost>> recordFrames(
       SchedulerBinding.instance.addPostFrameCallback((_) {
         end = clock.elapsedMicroseconds;
       });
-      if (frameAttribution) FlutterTimeline.debugReset();
+      if (frameAttribution || framePhases) FlutterTimeline.debugReset();
       final start = clock.elapsedMicroseconds;
       if (onFrame != null) await onFrame(index);
       await tester.pump(frameDuration);
       final stop = clock.elapsedMicroseconds;
-      final top = frameAttribution
+      final top = frameAttribution || framePhases
           ? _exclusive(FlutterTimeline.debugCollect().timedBlocks)
           : const <AggregatedTimedBlock>[];
       // 沒有排到幀（畫面靜止）時整段都算在幀前。
