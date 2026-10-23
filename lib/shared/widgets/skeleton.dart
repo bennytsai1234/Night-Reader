@@ -666,7 +666,13 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
   void _onLoaded({bool duringBuild = false}) {
     final wait = widget.waitForCovers;
     if (wait != null) {
-      final reveal = _reveal = CoverReveal(wait);
+      // 開 App 第一次換場前，內容在骨架呼吸時於底下準備：拆成一幀一小步，
+      // 呼吸不跟著頓（[CoverReveal.inSteps]）。
+      final entrance = widget.entrance;
+      final reveal = _reveal = CoverReveal(
+        wait,
+        inSteps: entrance != null && !entrance.revealStarted,
+      );
       // 淡回骨架途中又載入完成時，新內容也要從全透明開始等。建畫面途中歸零
       // 會在別人建構時通知聽換場進度的元件；先停住，這一幀畫完再歸零
       // （封面最快也要下一輪才等完）。

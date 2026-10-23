@@ -460,6 +460,24 @@ class _CoverImageState extends State<_CoverImage> {
     return ColoredBox(color: Skeleton.colorOf(context));
   }
 
+  /// 等待中解碼好、排到的那一輪（[CoverReveal.showCover]）；排隊中是
+  /// [_showQueuedOn]。
+  CoverReveal? _showGrantedBy;
+  CoverReveal? _showQueuedOn;
+
+  /// 解碼好了，但 [reveal] 還沒輪到這一張換上：先排隊，輪到之前照樣只鋪
+  /// 載入底、換場照樣等它。
+  bool _heldBy(CoverReveal reveal) {
+    if (!reveal.inSteps || identical(_showGrantedBy, reveal)) return false;
+    if (!identical(_showQueuedOn, reveal)) {
+      _showQueuedOn = reveal;
+      reveal.showCover(() {
+        if (mounted) setState(() => _showGrantedBy = reveal);
+      });
+    }
+    return true;
+  }
+
   /// 這次要不要直接出現：換封面中、在等一次淡入（[CoverRevealScope]，
   /// 跟著整頁一起出現），或系統關閉動畫。
   bool _instantIn(BuildContext context, CoverReveal? reveal) =>
@@ -468,7 +486,8 @@ class _CoverImageState extends State<_CoverImage> {
   /// 封面要非同步解碼，解碼好之前什麼都不畫，圖一到就突然跳出來；改成
   /// 先鋪 [_buildPlaceholder]，圖以 [AppMotion.fade] 淡入。已經在快取、同一
   /// 幀就畫得出來的不淡入；在等待一次淡入（[CoverRevealScope]）時解碼好的
-  /// 也不淡入，跟著整頁一起出現。
+  /// 也不淡入，跟著整頁一起出現（[CoverReveal.inSteps] 時排隊、一幀換上
+  /// 一張）。
   Widget _fadeInFrame(
     BuildContext context,
     String source,
@@ -478,7 +497,12 @@ class _CoverImageState extends State<_CoverImage> {
     bool network = false,
   }) {
     final reveal = CoverRevealScope.waitingOf(context);
-    if (frame == null) {
+    final held =
+        frame != null &&
+        !wasSynchronouslyLoaded &&
+        reveal != null &&
+        _heldBy(reveal);
+    if (frame == null || held) {
       _register(reveal, network: network);
     } else {
       _unregister();
@@ -490,7 +514,7 @@ class _CoverImageState extends State<_CoverImage> {
       children: [
         _buildPlaceholder(context),
         AnimatedOpacity(
-          opacity: frame == null ? 0 : 1,
+          opacity: frame == null || held ? 0 : 1,
           duration: _instantIn(context, reveal)
               ? Duration.zero
               : AppMotion.fade,

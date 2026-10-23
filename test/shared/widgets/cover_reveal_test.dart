@@ -45,6 +45,75 @@ void main() {
     expect(reveal.waiting, isFalse);
   });
 
+  testWidgets('in steps, each frame either builds a slot, paints one, or '
+      'shows one decoded cover, and the wait ends after the last of them', (
+    tester,
+  ) async {
+    final reveal = CoverReveal(CoverWait.onDevice, inSteps: true);
+    addTearDown(reveal.dispose);
+    final painted = <int>{};
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CoverRevealScope(
+          notifier: reveal,
+          child: Column(
+            children: [
+              for (var i = 0; i < 2; i++)
+                CoverRevealSlot(
+                  placeholder: const SizedBox(height: 10),
+                  child: SizedBox(
+                    height: 10,
+                    child: CustomPaint(
+                      key: ValueKey(i),
+                      painter: _PaintLog(() => painted.add(i)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    // 一張封面在這之後解碼好：排在兩張書卡的建與畫之後，換上之前換場等它。
+    reveal.add('cover');
+    var coverGranted = false;
+    reveal.showCover(() {
+      coverGranted = true;
+      reveal.remove('cover');
+    });
+    var settled = false;
+    unawaited(
+      reveal.settle().then((_) {
+        settled = true;
+      }),
+    );
+
+    int built() => find
+        .byType(CustomPaint)
+        .evaluate()
+        .where((element) => element.widget.key is ValueKey<int>)
+        .length;
+
+    // 每一格只走一步（放行在這一格畫完時，下一格才生效）：建第一張、畫
+    // 第一張、建第二張、畫第二張；畫第二張的那一格畫完才輪到封面。
+    final steps = [
+      (built: 1, painted: <int>{}, cover: false),
+      (built: 1, painted: {0}, cover: false),
+      (built: 2, painted: {0}, cover: false),
+      (built: 2, painted: {0, 1}, cover: true),
+    ];
+    for (final (i, step) in steps.indexed) {
+      await tester.pump();
+      expect(built(), step.built, reason: '第 ${i + 1} 格建好的書卡');
+      expect(painted, step.painted, reason: '第 ${i + 1} 格畫過的書卡');
+      expect(coverGranted, step.cover, reason: '第 ${i + 1} 格放行的封面');
+      if (!step.cover) expect(settled, isFalse);
+    }
+    await tester.pump();
+    expect(settled, isTrue);
+  });
+
   testWidgets('a single slot is still under the wait when it is built, so its '
       'cover holds the reveal', (tester) async {
     final reveal = CoverReveal(CoverWait.onDevice);
@@ -104,4 +173,17 @@ void main() {
     );
     expect(find.text('書'), findsOneWidget);
   });
+}
+
+/// 每畫一次就記一筆。
+class _PaintLog extends CustomPainter {
+  _PaintLog(this.onPaint);
+
+  final VoidCallback onPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_PaintLog oldDelegate) => false;
 }

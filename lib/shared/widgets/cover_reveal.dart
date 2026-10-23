@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/app_tokens.dart';
+import 'painted_when.dart';
 
 /// 換場前怎麼等封面（[SkeletonSwitcher.waitForCovers]）。
 enum CoverWait {
@@ -26,18 +27,28 @@ enum CoverWait {
 /// 都建好，再照 [wait] 等登記的封面，整頁連同封面一次換場。
 /// [CoverWait.onDevice] 不設時間上限：每一個登記都一定會以解碼好、失敗或
 /// 拆掉結束。等待中解碼好的封面直接顯示，不另外淡入。
+///
+/// [inSteps] 時每一塊再拆成更小的步驟，和建好的塊一起排隊、一幀只放行一步：
+/// 建好、排好版的那一幀先不畫，下一步才第一次畫出來（字第一次出現要先畫
+/// 進字形快取）；等待中解碼好的封面也排隊，一步只換上一張（[showCover]）。
+/// 開 App 的書架用：內容在骨架呼吸時於底下準備，呼吸的每一格只多一小步。
 class CoverReveal extends ChangeNotifier {
-  CoverReveal(this.wait);
+  CoverReveal(this.wait, {this.inSteps = false});
 
   final CoverWait wait;
+
+  /// 第一次畫與換上封面也拆成各自一步，見 [CoverReveal]。
+  final bool inSteps;
 
   final Set<Object> _pending = {};
   Completer<void>? _drained;
   bool _waiting = true;
 
-  final Queue<VoidCallback> _builds = Queue();
+  /// 排隊的步驟：建一塊、第一次畫一塊、換上一張封面。
+  final Queue<VoidCallback> _steps = Queue();
 
-  /// 排進來、還沒真的建好的塊數，包括已經放行、下一幀才建的。
+  /// 排進來、還沒真的建好（[inSteps] 時是還沒畫出來）的塊數，包括已經放行、
+  /// 下一幀才建的。
   int _unbuilt = 0;
   Completer<void>? _allBuilt;
 
@@ -61,8 +72,16 @@ class CoverReveal extends ChangeNotifier {
   /// 不再需要時由那一塊呼叫 [_slotDone]。
   void _queueBuild(VoidCallback build) {
     _unbuilt++;
-    _builds.add(build);
-    if (_builds.length == 1) _grantNext();
+    _queueStep(build);
+  }
+
+  /// [inSteps] 時，等待中解碼好的一張封面排隊換上去：輪到時呼叫 [show]
+  /// （之後那一幀才換上）。封面換上之前照樣登記著，換場等它。
+  void showCover(VoidCallback show) => _queueStep(show);
+
+  void _queueStep(VoidCallback step) {
+    _steps.add(step);
+    if (_steps.length == 1) _grantNext();
   }
 
   void _slotDone() {
@@ -73,13 +92,13 @@ class CoverReveal extends ChangeNotifier {
     _allBuilt = null;
   }
 
-  /// 每一幀畫完放行一塊：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
+  /// 每一幀畫完放行一步：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
   /// 下；整頁一起建要 40ms 以上（`test/frame_budget/`）。
   void _grantNext() {
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (_builds.isEmpty) return;
-      _builds.removeFirst()();
-      if (_builds.isNotEmpty) _grantNext();
+      if (_steps.isEmpty) return;
+      _steps.removeFirst()();
+      if (_steps.isNotEmpty) _grantNext();
     });
     SchedulerBinding.instance.ensureVisualUpdate();
   }
@@ -154,6 +173,13 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   bool _granted = false;
   CoverReveal? _queuedOn;
 
+  /// 建好時那一輪是 [CoverReveal.inSteps]：[child] 外面一直包著
+  /// [PaintedWhen]，元件樹的形狀不變。
+  bool _inSteps = false;
+
+  /// [_inSteps] 時，建好之後排到的下一步才畫出來。
+  bool _painted = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -169,8 +195,22 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
     _release();
     _queuedOn = reveal;
     reveal._queueBuild(() {
-      if (mounted && !_granted) setState(() => _granted = true);
+      if (!mounted || _granted) return;
+      setState(() {
+        _granted = true;
+        _inSteps = reveal.inSteps;
+      });
     });
+    // 建的那一步只建、只排版，緊接著的下一步才第一次畫。兩步一起排進去：
+    // 這一塊的封面要等建好才開始解碼，換上封面的那一步一定排在畫之後，字和
+    // 封面不會擠在同一幀第一次畫。
+    if (reveal.inSteps) {
+      reveal._queueStep(() {
+        if (mounted && identical(_queuedOn, reveal)) {
+          setState(() => _painted = true);
+        }
+      });
+    }
   }
 
   /// 告訴排隊的那一輪這一塊建好了，或不再需要。
@@ -189,7 +229,12 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   @override
   Widget build(BuildContext context) {
     if (!_granted) return widget.placeholder;
-    _release();
-    return widget.child;
+    if (!_inSteps) {
+      _release();
+      return widget.child;
+    }
+    // 畫出來了才算這一塊好了，換場等它。
+    if (_painted) _release();
+    return PaintedWhen(shown: _painted, child: widget.child);
   }
 }
