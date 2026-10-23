@@ -46,18 +46,22 @@ class SnapshotSweepController {
   /// [SkeletonReveal.incomingOpacityAt]），否則整片淡換。換場播完、換回真的
   /// 畫面時完成。
   ///
+  /// 拍圖的這幾格畫面停著不動；[hold] 是從呼叫起畫面至少停多久才開始換場
+  /// （拍得比這久就拍完才開始），讓停住像一次停頓、不像頓一下。
+  ///
   /// 不在 [SnapshotSweep] 底下，或系統要求減少動態時，直接 [change]。
   Future<void> play({
     required VoidCallback change,
     required Duration duration,
     bool sweep = true,
+    Duration hold = Duration.zero,
   }) {
     final state = _state;
     if (state == null || !state.mounted) {
       change();
       return Future<void>.value();
     }
-    return state._play(change, duration, sweep);
+    return state._play(change, duration, sweep, hold);
   }
 
   /// 換場還沒播完就換回真的畫面（底下已經換好），完成這一次換場。建畫面
@@ -144,7 +148,15 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     return !dirty;
   }
 
-  Future<void> _play(VoidCallback change, Duration duration, bool sweep) {
+  /// 換場前至少停到這個計時器結束（[SnapshotSweepController.play] 的 hold）。
+  Timer? _hold;
+
+  Future<void> _play(
+    VoidCallback change,
+    Duration duration,
+    bool sweep,
+    Duration hold,
+  ) {
     _end();
     if (MediaQuery.disableAnimationsOf(context)) {
       change();
@@ -153,6 +165,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     final run = _run = Completer<void>();
     _sweep = sweep;
     _progress.duration = duration;
+    _hold = Timer(hold, () => _start(run));
     _afterFrame(() => _captureBefore(run, change));
     return run.future;
   }
@@ -201,10 +214,25 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       return;
     }
     final after = boundary.toImageSync(pixelRatio: _pixelRatio);
+    // 停到換場開始前畫的是「之前」那張圖（換場進度 0），和停住的畫面一樣，
+    // 底下不再畫。
+    _progress.value = 0;
     setState(() {
       _after = after;
       _phase = _Phase.playing;
     });
+    _start(run);
+  }
+
+  /// 兩張圖都拍好、也停滿 hold 時開始換場。
+  void _start(Completer<void> run) {
+    if (!mounted ||
+        !identical(_run, run) ||
+        _phase != _Phase.playing ||
+        _hold!.isActive ||
+        _progress.isAnimating) {
+      return;
+    }
     // 從下一格開始計時：拍圖這幾格多花的時間不吃掉換場的開頭。
     unawaited(
       _progress.forward(from: 0).whenComplete(() {
@@ -217,6 +245,7 @@ class _SnapshotSweepState extends State<SnapshotSweep>
   void _end({bool rebuild = true}) {
     final run = _run;
     _run = null;
+    _hold?.cancel();
     _progress.stop();
     final before = _before, after = _after;
     void reset() {

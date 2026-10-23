@@ -70,8 +70,9 @@ void main() {
     final gate = dao.gate = Completer<void>();
     AppEventBus().fire(AppEventBus.upBookshelf, data: kBookUrl);
 
-    // 進場播完（骨架長出、停頓、換場），開 App 的背景工作開始等書架讀完。
-    await settle(tester, const Duration(seconds: 3));
+    // 進場播完（骨架長出、停頓、收住呼吸、換場），開 App 的背景工作開始等
+    // 書架讀完。
+    await settle(tester, const Duration(seconds: 5));
     expect(checked, isFalse, reason: '書架還沒讀完，先不檢查');
 
     // 讀完了，書架沒有變：不通知，但檢查照樣開始。

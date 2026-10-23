@@ -14,7 +14,8 @@ import 'snapshot_sweep.dart';
 /// 底色；接著整個畫面照骨架換場（[SkeletonReveal]）的方式與時長長出骨架：
 /// 書架、頁首的標題與兩側按鈕、底部分頁列（書架以外用 [LaunchSkeleton]）。
 /// 骨架呼吸著等書架準備好（書、封面、書名的繁簡轉換），書架換場時整個畫面
-/// 一起換成真的：換場前把骨架畫面與換好的畫面各畫成一張圖，換場的 0.6 秒
+/// 一起換成真的：呼吸先收住、停在最深，在靜止的畫面上把骨架畫面與換好的
+/// 畫面各畫成一張圖，換場的 0.6 秒
 /// 只把兩張圖照每個像素的橫向位置混合（[SnapshotSweep]，ADR 0029），頁首、
 /// 分頁列與書架照同一條曲線由左而右換過去。
 ///
@@ -69,6 +70,16 @@ class LaunchEntranceMotion {
   /// 動作中途頓住。
   static const Duration pause = AppMotion.skeletonPulse;
 
+  /// 換場前收住骨架的呼吸（[reveal]）：拍定格畫面的那幾格畫面一定停住，
+  /// 呼吸到一半定住就是頓一下（使用者 2026-10-23 在手機上看到的）；先讓
+  /// 每個位置把這一口氣呼完、停在最深，再在靜止的畫面上拍。
+  final SkeletonRest rest = SkeletonRest();
+
+  /// 呼吸停好後畫面至少靜止多久才開始換場；拍圖的那幾格（電腦上兩格合計
+  /// 約 180ms）落在這段裡，拍得比這久就拍完才換。取使用者提的 100–200ms
+  /// 的中間：太短時停住接著就掃，像同一個動作頓了一下。
+  static const Duration hold = Duration(milliseconds: 150);
+
   /// 骨架長完、停過 [pause] 時完成；系統要求減少動態時不停。
   Future<void> get _paused => _pauseOver.future;
   final Completer<void> _pauseOver = Completer<void>();
@@ -77,10 +88,10 @@ class LaunchEntranceMotion {
   Future<void> get finished => _finished.future;
   final Completer<void> _finished = Completer<void>();
 
-  /// 書架第一次換成內容：骨架長完停過 [pause] 後，[change] 把書架換成內容，
-  /// 頁首按鈕、標題與分頁列同時換成真的，整個畫面照 [screen] 換場（[sweep]
-  /// 時由左而右）；播完才算整段進場結束。之後再呼叫（書架重新載入）只做
-  /// [change]。
+  /// 書架第一次換成內容：骨架長完停過 [pause]、呼吸收住（[rest]）後，
+  /// [change] 把書架換成內容，頁首按鈕、標題與分頁列同時換成真的，整個畫面
+  /// 靜止至少 [hold] 再照 [screen] 換場（[sweep] 時由左而右）；播完才算整段
+  /// 進場結束。之後再呼叫（書架重新載入）只做 [change]。
   Future<void> reveal({
     required VoidCallback change,
     required Duration duration,
@@ -92,9 +103,11 @@ class LaunchEntranceMotion {
     }
     _revealStarted = true;
     await _paused;
+    await rest.settle();
     await screen.play(
       duration: duration,
       sweep: sweep,
+      hold: hold,
       change: () {
         change();
         _revealed.value = true;
@@ -112,6 +125,7 @@ class LaunchEntranceMotion {
   }
 
   void _finish() {
+    rest.release();
     if (!_finished.isCompleted) _finished.complete();
   }
 

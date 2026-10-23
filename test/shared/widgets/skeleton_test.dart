@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,7 @@ import 'package:night_reader/shared/theme/app_style.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/custom_app_theme.dart';
 import 'package:night_reader/shared/widgets/cover_reveal.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
@@ -158,6 +161,76 @@ void main() {
       Skeleton.breathAt(0, 1, SkeletonBreath.gentleSweep),
       closeTo(0.55, 1e-9),
     );
+  });
+
+  testWidgets('resting finishes each position\'s breath and stops it at the '
+      'deepest, without a jump', (tester) async {
+    tester.view.physicalSize = const Size(400, 40);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundary = GlobalKey();
+    const black = Color(0xFF000000);
+    late LaunchEntranceMotion motion;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LaunchEntrance(
+          child: Builder(
+            builder: (context) {
+              motion = LaunchEntrance.maybeOf(context)!;
+              return RepaintBoundary(
+                key: boundary,
+                child: const ColoredBox(
+                  color: Color(0xFFFFFFFF),
+                  child: Skeleton(
+                    child: SkeletonBox(width: 400, height: 40, color: black),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    // 呼吸到一半：左右兩端深淺不同，都還在變。
+    await tester.pump(const Duration(milliseconds: 300));
+
+    const xs = [5, 100, 200, 300, 395];
+    Future<List<int>> sample() async {
+      final bytes = await tester.runAsync(() async {
+        final image =
+            await (boundary.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary)
+                .toImage();
+        return image.toByteData();
+      });
+      // 黑色的骨架疊在白底上：紅色越小越深，最深是 0。
+      return [for (final x in xs) bytes!.getUint8((20 * 400 + x) * 4)];
+    }
+
+    var previous = await sample();
+    expect(previous.toSet(), hasLength(greaterThan(1)), reason: '由左而右呼吸');
+    var rested = false;
+    unawaited(motion.rest.settle().then((_) => rested = true));
+    final stopped = <int>{};
+    var frames = 0;
+    while (!rested) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(++frames, lessThan(110), reason: '最多再呼一輪（1.6 秒）就停好');
+      final now = await sample();
+      for (var i = 0; i < xs.length; i++) {
+        // 黑色骨架呼吸最快時一格變約 4/255（曲線最陡處）：收住時沒有比
+        // 這更大的跳動，不是一下跳到最深。
+        expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(5));
+        // 停在最深的位置不再動。
+        if (stopped.contains(i)) expect(now[i], 0, reason: 'x=${xs[i]}');
+        if (now[i] == 0) stopped.add(i);
+      }
+      previous = now;
+    }
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(await sample(), everyElement(0), reason: '整條都停在最深');
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(await sample(), everyElement(0), reason: '停住不再呼吸');
   });
 
   Widget host(Widget child, {bool disableAnimations = false}) => MaterialApp(
