@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -351,7 +352,12 @@ class _RenderSkeletonBox extends RenderBox {
 }
 
 /// 佔位形狀在呼吸這一刻的畫筆。[local] 是形狀在 [box] 裡的位置，[offset]
-/// 是 [box] 這次畫在圖層上的位置。
+/// 是 [box] 這次畫在圖層上的位置。[toScreen] 是 [box] 到螢幕的轉換，一次
+/// 畫好幾個形狀時由呼叫端算一次傳進來；null 時這裡算。
+///
+/// 骨架呼吸時每一格每個形狀都要重畫，這裡是骨架本身每一格的成本：到螢幕
+/// 的轉換要沿著元件樹一路往上乘，一個形狀只算一次；曲線查表（[_breathTable]）
+/// 不在每個停點重解一次（ADR 0029「用時間換流暢」，留空間給底下準備內容）。
 Paint _breathingPaint(
   RenderBox box,
   Offset offset,
@@ -360,19 +366,23 @@ Paint _breathingPaint(
   required Animation<double>? phase,
   required SkeletonBreath breath,
   required double viewWidth,
+  Matrix4? toScreen,
 }) {
   final paint = Paint();
   if (phase == null) {
     paint.color = color;
   } else if (breath.lag == 0 || viewWidth <= 0) {
     paint.color = color.withValues(
-      alpha: color.a * Skeleton.breathAt(phase.value, 0, breath),
+      alpha: color.a * _breathTable.at(phase.value, 0, breath),
     );
   } else {
     // 兩端都換成螢幕座標：換頁途中整頁在平移、縮放，同一個螢幕位置的
     // 骨架才會一樣深。
-    final left = box.localToGlobal(local.topLeft).dx / viewWidth;
-    final right = box.localToGlobal(local.topRight).dx / viewWidth;
+    final transform = toScreen ?? box.getTransformTo(null);
+    final left =
+        MatrixUtils.transformPoint(transform, local.topLeft).dx / viewWidth;
+    final right =
+        MatrixUtils.transformPoint(transform, local.topRight).dx / viewWidth;
     final span = right - left;
     final rect = local.shift(offset);
     // 呼吸沿橫向是平滑的曲線，每 1/32 個畫面寬取一個停點就看不出折角。
@@ -385,7 +395,7 @@ Paint _breathingPaint(
           color.withValues(
             alpha:
                 color.a *
-                Skeleton.breathAt(
+                _breathTable.at(
                   phase.value,
                   left + span * i / (count - 1),
                   breath,
@@ -396,6 +406,31 @@ Paint _breathingPaint(
     );
   }
   return paint;
+}
+
+/// [Skeleton.breathAt] 先算好的一張表：呼吸曲線只看一輪裡的位置，和相位、
+/// 橫向位置無關，開 App 時算一次（513 個點），畫骨架時查表內插，和直接算的
+/// 差距遠小於 1/255。
+final _BreathTable _breathTable = _BreathTable();
+
+class _BreathTable {
+  _BreathTable() {
+    for (var i = 0; i <= _steps; i++) {
+      _values[i] = Skeleton.breathAt(i / _steps, 0, SkeletonBreath.whole);
+    }
+  }
+
+  static const int _steps = 512;
+  final Float64List _values = Float64List(_steps + 1);
+
+  /// 同 [Skeleton.breathAt]。
+  double at(double phase, double u, SkeletonBreath breath) {
+    final x = (phase - breath.lag * u) % 1 * _steps;
+    // 非常接近 1 的位置乘出來可能剛好是 _steps：落在最後一段。
+    final i = math.min(x.floor(), _steps - 1);
+    final t = x - i;
+    return _values[i] + (_values[i + 1] - _values[i]) * t;
+  }
 }
 
 /// [SkeletonShapes] 畫的一個形狀：[fill] 為 null 時是跟著呼吸的佔位色，
@@ -483,6 +518,8 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
   void paint(PaintingContext context, Offset offset) {
     if (size.isEmpty) return;
     final canvas = context.canvas;
+    // 整塊到螢幕的轉換只算一次，每個形狀共用。
+    Matrix4? toScreen;
     for (final shape in _shapes(size)) {
       final rrect = shape.radius.toRRect(shape.rect.shift(offset));
       final fill = shape.fill;
@@ -498,6 +535,9 @@ class _RenderSkeletonShapes extends _RenderSkeletonBox {
                 phase: _phase,
                 breath: _breath,
                 viewWidth: _viewWidth,
+                toScreen: _phase == null || _breath.lag == 0
+                    ? null
+                    : toScreen ??= getTransformTo(null),
               ),
       );
     }

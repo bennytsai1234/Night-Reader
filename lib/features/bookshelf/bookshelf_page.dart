@@ -521,9 +521,14 @@ class _BookshelfPageState extends State<BookshelfPage>
             FadeTransition(opacity: animation, child: child),
         child: KeyedSubtree(
           key: ValueKey(grid),
-          child: grid
-              ? _buildGridView(provider, books, insets.top, bottom)
-              : _buildListView(provider, books, insets.top, bottom),
+          // 清單本身另外排一塊：開 App 骨架呼吸時，外層與清單（捲動、每一格
+          // 的位置）分在不同幀建，之後才一張張建書卡（[CoverReveal.inSteps]）。
+          child: CoverRevealSlot(
+            placeholder: const SizedBox.expand(),
+            child: grid
+                ? _buildGridView(provider, books, insets.top, bottom)
+                : _buildListView(provider, books, insets.top, bottom),
+          ),
         ),
       ),
     );
@@ -788,6 +793,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       child: ListView.builder(
         padding: padding,
         itemCount: books.length,
+        // 每張書卡外面的 BookshelfMotionItem 已經自成一個繪製層，清單不再
+        // 多包一層：少一層要合成，開 App 建清單那一格也少建一些。
+        addRepaintBoundaries: false,
         itemBuilder: (context, index) => _buildListCard(provider, books[index]),
       ),
     );
@@ -882,6 +890,11 @@ class _BookshelfPageState extends State<BookshelfPage>
         AppGrouped.margin,
         bottomInset,
       ),
+      // 每格外面的 BookshelfMotionItem 已經自成一個繪製層，不再多包一層；
+      // 格狀書卡沒有要捲出畫面也留著的狀態（按壓回饋是 PressScale，不是
+      // InkWell），不包保留狀態的那一層。開 App 建清單那一格少建一些。
+      addRepaintBoundaries: false,
+      addAutomaticKeepAlives: false,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         // 列高依格寬與系統字級算出，兩行書名放大時也放得下。

@@ -339,28 +339,33 @@ class BookshelfListCard extends StatelessWidget {
           cover,
           const SizedBox(width: AppSpacing.lg),
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: titleStyle.copyWith(color: scheme.onSurface),
-                ),
-                // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
-                // 載入骨架（不知道哪本沒有作者）才對得上。
-                const SizedBox(height: 2),
-                Text(
-                  author,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: authorStyle.copyWith(color: chrome.sectionText),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                BookshelfProgressLine(book: book),
-              ],
+            // 書名、作者與進度線另外排一塊：開 App 骨架呼吸時和書卡外框、
+            // 封面分在不同幀建（[CoverReveal.inSteps]）。卡片高度由封面撐，
+            // 還沒建時不佔高度也不會跳。
+            child: CoverRevealSlot(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle.copyWith(color: scheme.onSurface),
+                  ),
+                  // 沒有作者也留著這一行的高度：每張卡的文字位置一樣，
+                  // 載入骨架（不知道哪本沒有作者）才對得上。
+                  const SizedBox(height: 2),
+                  Text(
+                    author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: authorStyle.copyWith(color: chrome.sectionText),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  BookshelfProgressLine(book: book),
+                ],
+              ),
             ),
           ),
         ],
@@ -531,17 +536,34 @@ class BookshelfGridTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                height: titleHeightFor(MediaQuery.textScalerOf(context)),
-                child: Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: titleStyle.copyWith(color: scheme.onSurface),
+              // 書名與進度線另外排一塊：開 App 骨架呼吸時和書卡外框、封面
+              // 分在不同幀建（[CoverReveal.inSteps]）。還沒建時照樣佔住
+              // 同樣的高度。
+              CoverRevealSlot(
+                placeholder: SizedBox(
+                  height:
+                      titleHeightFor(MediaQuery.textScalerOf(context)) +
+                      AppSpacing.sm +
+                      BookshelfProgressLine.height,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: titleHeightFor(MediaQuery.textScalerOf(context)),
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle.copyWith(color: scheme.onSurface),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    BookshelfProgressLine(book: book),
+                  ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              BookshelfProgressLine(book: book),
             ],
           ),
         ),
