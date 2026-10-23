@@ -102,8 +102,7 @@ class LaunchEntranceMotion {
       return;
     }
     _revealStarted = true;
-    await _paused;
-    await rest.settle();
+    await settleBreath();
     // 等的期間整個進場被拆掉了（例如 App 換掉主頁面）：不再換場。
     if (_disposed) return;
     await screen.play(
@@ -116,6 +115,22 @@ class LaunchEntranceMotion {
       },
     );
     if (!_disposed) _finish();
+  }
+
+  /// 停頓滿了、呼吸也收住（[rest]），畫面靜止時完成。開 App 的書架等它才在
+  /// 骨架底下準備內容：準備的工作全落在靜止的畫面裡，呼吸的每一格底下都
+  /// 不做事（ADR 0031）。重複呼叫回傳同一個。
+  Future<void> settleBreath() => _breathSettling ??= _settleBreath();
+  Future<void>? _breathSettling;
+
+  /// [settleBreath] 已經完成。
+  bool get breathSettled => _breathSettled;
+  bool _breathSettled = false;
+
+  Future<void> _settleBreath() async {
+    await _paused;
+    await rest.settle();
+    _breathSettled = true;
   }
 
   /// 書架一開始就是內容（沒有骨架可換）：按鈕也直接到位。

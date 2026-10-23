@@ -5,7 +5,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/app_tokens.dart';
-import 'painted_when.dart';
 
 /// 換場前怎麼等封面（[SkeletonSwitcher.waitForCovers]）。
 enum CoverWait {
@@ -28,30 +27,28 @@ enum CoverWait {
 /// [CoverWait.onDevice] 不設時間上限：每一個登記都一定會以解碼好、失敗或
 /// 拆掉結束。等待中解碼好的封面直接顯示，不另外淡入。
 ///
-/// [inSteps] 時每一塊再拆成更小的步驟，和建好的塊一起排隊、一幀只放行一步：
-/// 建好、排好版的那一幀先不畫，下一步才第一次畫出來（字第一次出現要先畫
-/// 進字形快取）；等待中解碼好的封面也排隊，一步只換上一張（[showCover]）。
-/// 開 App 的書架用：內容在骨架呼吸時於底下準備，呼吸的每一格只多一小步。
+/// [paced] 為 false 時不排隊，每一塊一出現就建：畫面靜止時用（開 App 的
+/// 書架在骨架收住呼吸之後準備，ADR 0031），那幾格多重都看不出來，不必分到
+/// 動畫的每一格。
 ///
 /// 等待結束時不通知底下的元件：各自下次重建（例如封面解碼好）時才看到
 /// 已經不在等待中，結果一樣；一起通知會讓整頁的書卡與封面擠在同一幀重建。
 class CoverReveal {
-  CoverReveal(this.wait, {this.inSteps = false});
+  CoverReveal(this.wait, {this.paced = true});
 
   final CoverWait wait;
 
-  /// 第一次畫與換上封面也拆成各自一步，見 [CoverReveal]。
-  final bool inSteps;
+  /// 一幀只建一塊，見 [CoverReveal]。
+  final bool paced;
 
   final Set<Object> _pending = {};
   Completer<void>? _drained;
   bool _waiting = true;
 
-  /// 排隊的步驟：建一塊、第一次畫一塊、換上一張封面。
+  /// 排隊等著建的塊。
   final Queue<VoidCallback> _steps = Queue();
 
-  /// 排進來、還沒真的建好（[inSteps] 時是還沒畫出來）的塊數，包括已經放行、
-  /// 下一幀才建的。
+  /// 排進來、還沒真的建好的塊數，包括已經放行、下一幀才建的。
   int _unbuilt = 0;
   Completer<void>? _allBuilt;
 
@@ -75,15 +72,7 @@ class CoverReveal {
   /// 不再需要時由那一塊呼叫 [_slotDone]。
   void _queueBuild(VoidCallback build) {
     _unbuilt++;
-    _queueStep(build);
-  }
-
-  /// [inSteps] 時，等待中解碼好的一張封面排隊換上去：輪到時呼叫 [show]
-  /// （之後那一幀才換上）。封面換上之前照樣登記著，換場等它。
-  void showCover(VoidCallback show) => _queueStep(show);
-
-  void _queueStep(VoidCallback step) {
-    _steps.add(step);
+    _steps.add(build);
     if (_steps.length == 1) _grantNext();
   }
 
@@ -95,7 +84,7 @@ class CoverReveal {
     _allBuilt = null;
   }
 
-  /// 每一幀畫完放行一步：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
+  /// 每一幀畫完放行一塊：一塊書卡在電腦的 debug 模式約 3ms，一幀一塊放得
   /// 下；整頁一起建要 40ms 以上（`test/frame_budget/`）。
   void _grantNext() {
     SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -184,51 +173,25 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   bool _granted = false;
   CoverReveal? _queuedOn;
 
-  /// 建好時那一輪是 [CoverReveal.inSteps]：[child] 外面一直包著
-  /// [PaintedWhen]，元件樹的形狀不變。
-  bool _inSteps = false;
-
-  /// [_inSteps] 時，建好之後排到的下一步才畫出來。
-  bool _painted = false;
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 建好、也畫出來了（或不分步）就不再排隊。
-    if (_granted && (!_inSteps || _painted)) return;
+    if (_granted) return;
     final reveal = widget.wait ? CoverRevealScope.waitingOf(context) : null;
     if (reveal != null && identical(_queuedOn, reveal)) return;
     // 換了一輪等待（重新載入）或等待結束：舊的那一輪不再等這一塊，它排著的
-    // 這一塊的步驟一律作廢（每一步執行前都核對還是不是這一輪的）。
+    // 這一塊一律作廢（建之前都核對還是不是這一輪的）。
     _release();
-    if (reveal == null) {
+    if (reveal == null || !reveal.paced) {
       _granted = true;
-      _painted = true;
       return;
     }
     _queuedOn = reveal;
-    void paint() {
-      if (mounted && identical(_queuedOn, reveal)) {
-        setState(() => _painted = true);
-      }
-    }
-
-    if (_granted) {
-      // 上一輪建好、還沒畫：畫的那一步改由這一輪排、這一輪等。
-      reveal._queueBuild(paint);
-      return;
-    }
     reveal._queueBuild(() {
-      if (!mounted || !identical(_queuedOn, reveal)) return;
-      setState(() {
-        _granted = true;
-        _inSteps = reveal.inSteps;
-      });
+      if (mounted && identical(_queuedOn, reveal)) {
+        setState(() => _granted = true);
+      }
     });
-    // 建的那一步只建、只排版，緊接著的下一步才第一次畫。兩步一起排進去：
-    // 這一塊的封面要等建好才開始解碼，換上封面的那一步一定排在畫之後，字和
-    // 封面不會擠在同一幀第一次畫。
-    if (reveal.inSteps) reveal._queueStep(paint);
   }
 
   /// 告訴排隊的那一輪這一塊建好了，或不再需要。
@@ -247,12 +210,7 @@ class _CoverRevealSlotState extends State<CoverRevealSlot> {
   @override
   Widget build(BuildContext context) {
     if (!_granted) return widget.placeholder;
-    if (!_inSteps) {
-      _release();
-      return widget.child;
-    }
-    // 畫出來了才算這一塊好了，換場等它。
-    if (_painted) _release();
-    return PaintedWhen(shown: _painted, child: widget.child);
+    _release();
+    return widget.child;
   }
 }
