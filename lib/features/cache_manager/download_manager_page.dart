@@ -155,9 +155,9 @@ class DownloadManagerPage extends StatelessWidget {
     );
   }
 
-  Widget _buildQueueSummary() => Selector<DownloadService, _QueueSummary>(
-    selector: (_, service) => _queueSummary(service),
-    builder: (context, summary, _) => GroupedSection(
+  Widget _buildQueueSummary() => _Subscribed<_QueueSummary>(
+    select: _queueSummary,
+    builder: (context, summary) => GroupedSection(
       topGap: AppSpacing.sm,
       footer: '最近任務更新：${_formatTimestamp(summary.latestUpdate)}',
       children: [
@@ -179,11 +179,11 @@ class DownloadManagerPage extends StatelessWidget {
     DownloadTask task,
     int index,
     int taskCount,
-  ) => Selector<DownloadService, (bool, int, int, int, int, String?)>(
+  ) => _Subscribed<(bool, int, int, int, int, String?)>(
     // 列的狀態跟著書走，上移、下移時整列一起搬。
     key: ValueKey(task.bookUrl),
     // 任務是可變物件，取值而不是取物件本身，才能辨認哪一列有變。
-    selector: (_, service) => (
+    select: (service) => (
       service.isPaused,
       task.totalCount,
       task.successCount,
@@ -191,7 +191,7 @@ class DownloadManagerPage extends StatelessWidget {
       task.status,
       task.failureSummary,
     ),
-    builder: (context, _, _) =>
+    builder: (context, _) =>
         _buildTaskContent(context, service, task, index, taskCount),
   );
 
@@ -422,6 +422,31 @@ class DownloadManagerPage extends StatelessWidget {
     return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
         '${two(dt.hour)}:${two(dt.minute)}';
   }
+}
+
+/// 只在 [select] 從下載服務取出的值變了才重建的一項（[Selector]）。骨架照
+/// 現在的值建出來的那一項算，只讀不訂閱。
+class _Subscribed<T> extends StatelessWidget implements GroupedSkeletonItem {
+  const _Subscribed({super.key, required this.select, required this.builder});
+
+  final T Function(DownloadService service) select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) => GroupedItemShape.of(
+    builder(context, select(context.read<DownloadService>())),
+    context: context,
+    width: width,
+  );
+
+  @override
+  Widget build(BuildContext context) => Selector<DownloadService, T>(
+    selector: (_, service) => select(service),
+    builder: (context, value, _) => builder(context, value),
+  );
 }
 
 /// 佇列摘要：幾個狀態並排，等寬，數字下面一行標籤。

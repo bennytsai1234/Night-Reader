@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../theme/app_text_styles.dart';
 import '../theme/app_tokens.dart';
@@ -171,14 +170,18 @@ class GroupedItemShape {
 
   /// [item] 在 [width] 寬的清單（或卡片）裡的樣子：自己給樣子的元件
   /// （[GroupedSkeletonItem]：一般的列、步進列、頁面自己的區塊）照它給的，
-  /// 組照組標題、每一列與附註排，常見的外框（內距、[Builder]、[Selector]、
-  /// [ValueListenableBuilder]、滑動動作）穿過去找裡面的元件。
+  /// 組照組標題、每一列與附註排，常見的外框（內距、[Builder]、
+  /// [ValueListenableBuilder]、[FutureBuilder]、滑動動作）穿過去找裡面的
+  /// 元件。組的上緣往下超過 [until] 的列不算（高度記 0）。
   static GroupedItemShape of(
     Widget item, {
     required BuildContext context,
     required double width,
+    double until = double.infinity,
   }) {
-    final shape = maybeOf(item, context: context, width: width);
+    final shape = item is GroupedSection
+        ? _section(item, context, width, until: until)
+        : maybeOf(item, context: context, width: width);
     assert(
       shape != null,
       '${item.runtimeType} 算不出骨架：讓它實作 GroupedSkeletonItem（ADR 0029）',
@@ -243,7 +246,6 @@ class GroupedItemShape {
       // builder 的參數型別是 T，從 ValueListenableBuilder<Object?> 取用會被
       // 型別檢查擋下，改成動態呼叫。
       ValueListenableBuilder() => inner(_buildListenable(item, context)),
-      Selector0() => inner(_buildSelector(item, context)),
       KeyedSubtree(:final child) ||
       SwipeActions(:final child) ||
       Semantics(child: final child?) ||
@@ -266,19 +268,14 @@ class GroupedItemShape {
         as Widget;
   }
 
-  static Widget _buildSelector(Widget selector, BuildContext context) {
-    final dynamic widget = selector;
-    return widget.builder(context, widget.selector(context), widget.child)
-        as Widget;
-  }
-
   /// 組標題、卡片裡的每一列（列與列之間一條髮絲線）與附註，和
   /// [GroupedSection.build] 排的一樣。
   static GroupedItemShape _section(
     GroupedSection section,
     BuildContext context,
-    double width,
-  ) {
+    double width, {
+    double until = double.infinity,
+  }) {
     final margin = (section.margin ?? _defaultMargin).resolve(
       Directionality.of(context),
     );
@@ -291,12 +288,9 @@ class GroupedItemShape {
       // 組標題與右側按鈕在同一列、對齊下緣。
       final textLeft = left + AppGrouped.rowPadding;
       final textRight = right - AppGrouped.rowPadding;
+      // 右側照它本身的寬度排，標題用剩下的寬度。
       final trailing = switch (section.headerTrailing) {
-        final widget? => of(
-          widget,
-          context: context,
-          width: textRight - textLeft,
-        ),
+        final widget? => groupedPartShape(widget, context),
         null => null,
       };
       final trailingWidth = trailing?.width ?? 0;
@@ -322,6 +316,11 @@ class GroupedItemShape {
     final cardTop = top;
     final rowHeights = <double>[];
     for (final (index, child) in section.children.indexed) {
+      // 畫面底以下的列骨架畫不到，也不排隊等（和組一起建），不必算。
+      if (top >= until) {
+        rowHeights.add(0);
+        continue;
+      }
       if (index > 0) top += AppGlass.hairline;
       final row = of(child, context: context, width: right - left);
       rowHeights.add(row.height);
@@ -329,7 +328,7 @@ class GroupedItemShape {
       top += row.height;
     }
     final card = Rect.fromLTRB(left, cardTop, right, top);
-    if (section.footer case final text?) {
+    if (section.footer case final text? when top < until) {
       top += AppSpacing.sm;
       final footer = GroupedItemShape.text(
         context,

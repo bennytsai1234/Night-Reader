@@ -28,6 +28,12 @@ List<Widget> _sections() => [
       GroupedCheckRow(title: '沒勾選', selected: false, onTap: () {}),
     ],
   ),
+  // 組標題右側的字（更新紀錄的發布日期）照字的寬度靠右，標題用剩下的寬。
+  GroupedSection(
+    header: 'v1.0.0（目前版本）',
+    headerTrailing: const Text('2026-10-23'),
+    children: [GroupedRow(title: '內容')],
+  ),
   GroupedSection(
     header: '其他',
     footer: '附註會照字排在卡片下面',

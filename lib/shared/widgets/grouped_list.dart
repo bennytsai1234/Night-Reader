@@ -359,30 +359,47 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
 
   /// 上一次算好的樣子，以及算的時候的寬度、字級與項目。
   List<GroupedItemShape>? _cached;
-  (double, double, List<Widget>)? _cachedFor;
+  (double, double, double, List<Widget>)? _cachedFor;
 
-  /// 每一項的樣子（[GroupedItemShape.of]）。骨架還在時，寬度、字級或項目
-  /// 變了才重算；換成內容後只有項目數變了（例如多出測試結果）才補算，
+  /// 每一項的樣子（[GroupedItemShape.of]）。骨架還在時，寬度、高度、字級或
+  /// 項目變了才重算；換成內容後只有項目數變了（例如多出測試結果）才補算，
   /// 鍵盤升降、面板重建都不再重排骨架的字。面板的高度就是骨架的高度，
-  /// 每一項照它本身算，第一次打開就是換上內容後的高度。
-  List<GroupedItemShape> _shapes(double width) {
+  /// 每一項照它本身算，第一次打開就是換上內容後的高度。撐滿畫面的頁面只算
+  /// 到畫面底（[bottom]，從清單頂端算起）：再下面的骨架畫不到，那些項目也
+  /// 不排隊等，和第一個畫面一起建，高度記 0。
+  List<GroupedItemShape> _shapes(double width, double top, double bottom) {
     final items = widget.items;
     final scale = MediaQuery.textScalerOf(context).scale(100);
     final cached = _cached;
     if (cached != null) {
-      final (cachedWidth, cachedScale, cachedItems) = _cachedFor!;
+      final (cachedWidth, cachedBottom, cachedScale, cachedItems) = _cachedFor!;
       final same = _revealed
           ? cached.length == items.length
           : cachedWidth == width &&
+                cachedBottom == bottom &&
                 cachedScale == scale &&
                 identical(cachedItems, items);
       if (same) return cached;
     }
-    _cachedFor = (width, scale, items);
-    return _cached = [
-      for (final item in items)
-        GroupedItemShape.of(item, context: context, width: width),
-    ];
+    _cachedFor = (width, bottom, scale, items);
+    final fill = widget.fit != StackFit.loose;
+    final shapes = <GroupedItemShape>[];
+    var y = top;
+    for (final item in items) {
+      if (fill && y >= bottom) {
+        shapes.add(const GroupedItemShape(0));
+        continue;
+      }
+      final shape = GroupedItemShape.of(
+        item,
+        context: context,
+        width: width,
+        until: fill ? bottom - y : double.infinity,
+      );
+      shapes.add(shape);
+      y += shape.height;
+    }
+    return _cached = shapes;
   }
 
   @override
@@ -398,7 +415,11 @@ class _GroupedEntranceState extends State<_GroupedEntrance> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final padding = widget.padding;
-        final shapes = _shapes(constraints.maxWidth - padding.horizontal);
+        final shapes = _shapes(
+          constraints.maxWidth - padding.horizontal,
+          padding.top,
+          constraints.maxHeight,
+        );
         // 只有實際視窗裡的列排隊；面板不能借用整個螢幕的高度。
         final visible = <double>[];
         var height = padding.top;

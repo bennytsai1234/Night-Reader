@@ -3,13 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/core/services/app_version.dart';
+import 'package:night_reader/features/settings/settings_page.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/skeleton_match.dart';
 
-const _pages = ['閱讀偏好', '外觀與主題', '朗讀與語音', '備份與還原', '關於夜讀'];
+/// 「我的」本身是分頁，點分頁時直接建；從閱讀器的「更多 → 全域系統設定」
+/// 進來時是推入的頁面，同樣先畫骨架。
+const _mine = '「我的」（從閱讀器推入）';
+
+const _pages = [_mine, '閱讀偏好', '外觀與主題', '朗讀與語音', '備份與還原', '關於夜讀'];
 
 void main() {
   // App 的單例服務綁在第一個測試的非同步環境（見 app_screens_test），每一頁
@@ -25,9 +30,17 @@ void main() {
     for (final page in _pages) {
       await tester.runAsync(() => resetPrefs(const {}));
       await pumpApp(tester);
-      await tester.tap(find.text('我的').first);
-      await settle(tester, const Duration(milliseconds: 900));
-      await tester.tap(find.text(page).first);
+      if (page == _mine) {
+        tester
+            .state<NavigatorState>(find.byType(Navigator).first)
+            .push(
+              MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
+            );
+      } else {
+        await tester.tap(find.text('我的').first);
+        await settle(tester, const Duration(milliseconds: 900));
+        await tester.tap(find.text(page).first);
+      }
       await tester.pump();
       final list = find.byType(GroupedListView, skipOffstage: false).last;
       final route = ModalRoute.of(tester.element(list))!;
