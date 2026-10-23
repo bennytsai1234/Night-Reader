@@ -1,13 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
+import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 書源規則輸入列（Telegram ItemListMultilineInputItem 的紙墨版）：放在
 /// [GroupedSection] 內，上方小字標籤與小幫手按鈕，下方等寬字輸入框。
-class RuleTextField extends StatelessWidget {
+class RuleTextField extends StatelessWidget implements GroupedSkeletonItem {
   final TextEditingController controller;
   final String label;
   final String hint;
@@ -22,6 +27,60 @@ class RuleTextField extends StatelessWidget {
     this.maxLines = 1,
     this.isUrl = false,
   });
+
+  /// 標籤與輸入框的字樣、小幫手按鈕的大小；骨架照同一份排。
+  static final TextStyle _labelStyle = AppTextStyles.uiSm.copyWith(
+    fontWeight: FontWeight.w400,
+  );
+  static final TextStyle _fieldStyle = AppTextStyles.bodySm.copyWith(
+    fontFamily: 'monospace',
+  );
+  static const TextStyle _hintStyle = AppTextStyles.bodySm;
+  static const Size _helperSize = Size(AppGrouped.rowMinHeight, 36);
+  static const double _helperIconSize = 18;
+
+  /// 上方一列是標籤與小幫手圖示（垂直置中），下面是輸入框的每一行。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final inner = width - AppGrouped.rowPadding;
+    final label = GroupedItemShape.text(
+      context,
+      this.label,
+      style: _labelStyle,
+      width: inner - _helperSize.width,
+    );
+    final labelBlock = AppSpacing.sm + label.height;
+    final row = math.max(labelBlock, _helperSize.height);
+    final field = groupedTextFieldShape(
+      context,
+      style: groupedInputStyle(context, _fieldStyle),
+      width: inner - AppGrouped.rowPadding,
+      text: controller.text,
+      hint: hint,
+      hintStyle: _hintStyle,
+      maxLines: maxLines,
+    );
+    final iconInset = (_helperSize.width - _helperIconSize) / 2;
+    return GroupedItemShape(
+      row + field.height + AppSpacing.md,
+      marks: [
+        ...label.marksAt(Offset(0, (row - labelBlock) / 2 + AppSpacing.sm)),
+        SkeletonShape(
+          Rect.fromLTWH(
+            inner - _helperSize.width + iconInset,
+            (row - _helperIconSize) / 2,
+            _helperIconSize,
+            _helperIconSize,
+          ),
+          radius: BorderRadius.circular(_helperIconSize / 4),
+        ),
+        ...field.marksAt(Offset(0, row)),
+      ],
+    ).padded(const EdgeInsets.only(left: AppGrouped.rowPadding));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +99,7 @@ class RuleTextField extends StatelessWidget {
                   padding: const EdgeInsets.only(top: AppSpacing.sm),
                   child: Text(
                     label,
-                    style: AppTextStyles.uiSm.copyWith(
-                      color: chrome.sectionText,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: _labelStyle.copyWith(color: chrome.sectionText),
                   ),
                 ),
               ),
@@ -53,13 +109,10 @@ class RuleTextField extends StatelessWidget {
           TextField(
             controller: controller,
             maxLines: maxLines,
-            style: AppTextStyles.bodySm.copyWith(
-              fontFamily: 'monospace',
-              color: scheme.onSurface,
-            ),
+            style: _fieldStyle.copyWith(color: scheme.onSurface),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: AppTextStyles.bodySm.copyWith(
+              hintStyle: _hintStyle.copyWith(
                 color: chrome.sectionText.withValues(alpha: 0.7),
               ),
               isDense: true,
@@ -89,12 +142,11 @@ class RuleTextField extends StatelessWidget {
           message: semanticsLabel,
           child: PressScale(
             onTap: () => _showHelperMenu(context),
-            child: SizedBox(
-              width: AppGrouped.rowMinHeight,
-              height: 36,
+            child: SizedBox.fromSize(
+              size: _helperSize,
               child: Icon(
                 Icons.help_outline_rounded,
-                size: 18,
+                size: _helperIconSize,
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),

@@ -22,6 +22,7 @@ import 'package:night_reader/shared/widgets/skeleton.dart';
 import '../../support/app_harness.dart';
 import '../../support/glass_motion.dart';
 import '../../support/navigation_budget.dart';
+import '../../support/skeleton_match.dart';
 import '../../support/screenshot.dart';
 
 /// 閱讀器的三個面板（外觀與排版、朗讀、替換規則）滑入時先只畫骨架，滑到位
@@ -29,9 +30,7 @@ import '../../support/screenshot.dart';
 /// 第一幀到換成內容，面板的高度一格都不變。
 ///
 /// 畫面比手機高（393×1200），三個面板都放得下、不會頂到最大高度，高度
-/// 不對時面板真的會長高或縮短。換成內容時記下的樣子（`GroupedListLayouts`）
-/// 留在記憶體裡：先跑的深色是第一次打開、照估的畫，淺色照記下的畫；放大
-/// 字級與長段落的紀錄 key 不同，也是第一次打開。
+/// 不對時面板真的會長高或縮短。
 void main() {
   const screen = Size(393, 1200);
   final sheet = find.byType(BottomSheet);
@@ -104,10 +103,18 @@ void main() {
 
     var frames = 0;
     var tail = 0;
+    // 面板滑到位後骨架畫的樣子，換成內容後拿來和內容逐塊比。
+    SkeletonLayout? drawn;
+    double? lastTop;
     while (tail < 30) {
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump(const Duration(milliseconds: 16));
       frames++;
+      if (skeleton.evaluate().isNotEmpty) {
+        final top = tester.getRect(sheet).top;
+        if (top == lastTop) drawn ??= skeletonLayoutOf(tester, skeleton);
+        lastTop = top;
+      }
       if (frames == 8) expectNoGlassUnderFade(tester);
       expect(
         tester.getSize(sheet),
@@ -118,6 +125,21 @@ void main() {
       expect(frames, lessThan(600), reason: '$label 骨架一直沒換完');
     }
     expect(heavy, findsWidgets, reason: '$label 換場後沒有內容');
+    // 每一行字、色票與按鈕都畫在內容的位置。替換規則的規則數是打開後才
+    // 讀到的、測試框裡的字骨架畫成撐滿的行，不逐塊比。
+    if (label != '替換規則') {
+      final content = find.byType(GroupedSheetContent);
+      expect(drawn, isNotNull, reason: '$label 骨架沒停下來過');
+      expect(
+        skeletonMismatches(
+          drawn!,
+          contentLayoutOf(tester, content),
+          visible: tester.getRect(content),
+        ),
+        isEmpty,
+        reason: '$label 骨架和換上的內容對不上',
+      );
+    }
     final scrollable = find
         .descendant(
           of: find.byType(GroupedSheetContent),

@@ -10,6 +10,7 @@ import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_dialogs.dart';
 import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
 import 'package:night_reader/shared/widgets/press_ink.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 
 /// 數值設定列：`標籤 [−] 數值 [+]`。
 ///
@@ -21,18 +22,7 @@ import 'package:night_reader/shared/widgets/press_ink.dart';
 ///
 /// 本身不帶左右內距、高度約為分組清單單行列（44）；放進分組卡片時以
 /// `GroupedContent` 提供列內距。
-/// 一列數值步進：[NumberStepperRow] 本身，或包著它、在外面就知道標題的那一層
-/// （各頁的內距或只聽自己的值的包裝）。分組清單進場的骨架認得它，照步進列
-/// 的樣子估（「－」、數值膠囊與「＋」，ADR 0029）。
-abstract interface class NumberStepperRowLike {
-  String get label;
-
-  /// 現在畫出來的那一列；骨架照它的標題與數值算高度。外層拿不到數值
-  /// （只在裡面聽自己的值）時為 null，骨架照最窄的數值鈕算。
-  NumberStepperRow? get current;
-}
-
-class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
+class NumberStepperRow extends StatefulWidget implements GroupedSkeletonItem {
   const NumberStepperRow({
     super.key,
     required this.label,
@@ -49,7 +39,6 @@ class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
        assert(step > 0),
        assert(displayScale > 0);
 
-  @override
   final String label;
   final double value;
   final double min;
@@ -77,9 +66,6 @@ class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
-  @override
-  NumberStepperRow get current => this;
-
   /// 數值鈕上的字（對齊格點、換算顯示單位、接上單位）。
   String get displayText => displayTextOf(snap(value, min, max, step));
 
@@ -93,36 +79,62 @@ class NumberStepperRow extends StatefulWidget implements NumberStepperRowLike {
     return scaled.toStringAsFixed(fractionDigits);
   }
 
-  /// 一列放在 [width] 寬裡的高度（分組清單的骨架照它佔位）：步進鈕的點擊
-  /// 範圍、數值鈕與照可用寬度排的標題取最高，再加上下內距；用的是 build
-  /// 裡同一份字樣與尺寸。字大時標題會換行、數值鈕會變寬變高。[valueText]
-  /// 是數值鈕上的字，null 時照最窄的數值鈕算。
-  static double heightOf(
+  /// 一列放在 [width] 寬裡的骨架：標題照可用寬度排，「－」、數值膠囊與
+  /// 「＋」和 build 裡一樣大；步進鈕的點擊範圍、數值鈕與標題取最高，再加
+  /// 上下內距，整列垂直置中。字大時標題會換行、數值鈕會變寬變高。
+  @override
+  GroupedItemShape skeletonShape(
     BuildContext context, {
-    required String label,
-    required String? valueText,
     required double width,
   }) {
-    var valueWidth = _kValueMinWidth;
-    var valueHeight = _kStepperControlHeight;
-    if (valueText != null) {
-      final size = GroupedItemShape.textSize(
-        context,
-        valueText,
-        style: _valueStyle,
-        maxWidth: double.infinity,
-      );
-      valueWidth = math.max(valueWidth, size.width + _kValuePadding * 2);
-      valueHeight = math.max(valueHeight, size.height);
-    }
-    final labelHeight = GroupedItemShape.textSize(
+    final value = GroupedItemShape.text(
       context,
-      label,
+      displayText,
+      style: _valueStyle,
+      width: double.infinity,
+    );
+    final valueWidth = math.max(
+      _kValueMinWidth,
+      value.width! + _kValuePadding * 2,
+    );
+    final valueHeight = math.max(_kStepperControlHeight, value.height);
+    final label = GroupedItemShape.text(
+      context,
+      this.label,
       style: _labelStyle,
-      maxWidth: width - _kStepperTapTarget * 2 - valueWidth - _kValueMargin * 2,
-    ).height;
-    return math.max(_kStepperTapTarget, math.max(labelHeight, valueHeight)) +
-        _kRowPadding * 2;
+      width: width - _kStepperTapTarget * 2 - valueWidth - _kValueMargin * 2,
+    );
+    final row = math.max(
+      _kStepperTapTarget,
+      math.max(label.height, valueHeight),
+    );
+    final centre = _kRowPadding + row / 2;
+    final valueRight = width - _kStepperTapTarget - _kValueMargin;
+    final valueLeft = valueRight - valueWidth;
+    SkeletonShape circle(double x) => SkeletonShape(
+      Rect.fromCircle(
+        center: Offset(x, centre),
+        radius: _kStepperControlHeight / 2,
+      ),
+      radius: BorderRadius.circular(_kStepperControlHeight / 2),
+    );
+    return GroupedItemShape(
+      row + _kRowPadding * 2,
+      marks: [
+        ...label.marksAt(Offset(0, centre - label.height / 2)),
+        circle(valueLeft - _kValueMargin - _kStepperTapTarget / 2),
+        SkeletonShape(
+          Rect.fromLTRB(
+            valueLeft,
+            centre - valueHeight / 2,
+            valueRight,
+            centre + valueHeight / 2,
+          ),
+          radius: AppRadius.pillShape,
+        ),
+        circle(width - _kStepperTapTarget / 2),
+      ],
+    );
   }
 
   /// 數字接上單位：`%` 緊貼，其他單位隔一格（`1.5 倍`、`2 行`）。

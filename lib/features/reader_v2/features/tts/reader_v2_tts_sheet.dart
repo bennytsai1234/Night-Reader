@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:night_reader/core/services/tts_service.dart';
@@ -151,13 +152,10 @@ class _SleepTimerSection extends StatefulWidget implements GroupedSkeletonItem {
       ),
     ];
     if (timer.option == ReaderV2TtsSleepOption.custom) {
-      final stepper = _SleepTimerSectionState._customStepper(timer);
-      height += NumberStepperRow.heightOf(
-        context,
-        label: stepper.label,
-        valueText: stepper.displayText,
-        width: width,
-      );
+      final stepper = _SleepTimerSectionState._customStepper(timer)
+          .skeletonShape(context, width: width);
+      marks.addAll(stepper.marksAt(Offset(0, height)));
+      height += stepper.height;
     }
     final status = _SleepTimerSectionState._status(timer);
     if (status != null) {
@@ -276,51 +274,73 @@ class _HighlightSection extends StatefulWidget implements GroupedSkeletonItem {
     BuildContext context, {
     required double width,
   }) {
-    final text = GroupedItemShape.text(
+    // 預覽的字（底色太大，不畫）。
+    final text = GroupedItemShape.rich(
       context,
-      _HighlightPreview.before +
-          _HighlightPreview.sentence +
-          _HighlightPreview.after,
-      style: _HighlightPreview.textStyle,
+      _HighlightPreview.span(_HighlightPreview.textStyle),
       width: width - _HighlightPreview.padding.horizontal,
     ).padded(_HighlightPreview.padding);
-    final label = GroupedItemShape.text(
-      context,
-      ReaderV2HighlightColor.theme.label,
-      style: _HighlightColorRow.labelStyle,
-      width: double.infinity,
-    );
+    // 色票一格是色點與名稱置中疊起來、取較寬的那個，幾格頭尾對齊、平均分開。
     const swatch = _HighlightColorRow._swatchSize;
-    final colorHeight = swatch + _HighlightColorRow.labelGap + label.height;
+    final labels = [
+      for (final option in ReaderV2HighlightColor.values)
+        GroupedItemShape.text(
+          context,
+          option.label,
+          style: _HighlightColorRow.labelStyle,
+          width: double.infinity,
+        ),
+    ];
+    final cellWidths = [
+      for (final label in labels) math.max(swatch, label.width!),
+    ];
+    final gap =
+        (width - cellWidths.reduce((a, b) => a + b)) / (labels.length - 1);
     final colorTop = text.height + _previewGap;
-    final count = ReaderV2HighlightColor.values.length;
-    final stride = (width - swatch) / (count - 1);
-    return GroupedItemShape(
-      colorTop + colorHeight + _strengthRowHeight,
-      marks: [
-        ...text.marks,
-        for (var i = 0; i < count; i++) ...[
+    final colorHeight = labels
+        .map((label) => swatch + _HighlightColorRow.labelGap + label.height)
+        .reduce(math.max);
+    final marks = [...text.marks];
+    var left = 0.0;
+    for (final (index, label) in labels.indexed) {
+      final cell = cellWidths[index];
+      final cellHeight = swatch + _HighlightColorRow.labelGap + label.height;
+      final top = colorTop + (colorHeight - cellHeight) / 2;
+      marks
+        ..add(
           SkeletonShape(
-            Rect.fromLTWH(i * stride, colorTop, swatch, swatch),
+            Rect.fromLTWH(left + (cell - swatch) / 2, top, swatch, swatch),
             radius: AppRadius.pillShape,
           ),
-          for (final mark in label.marks)
-            SkeletonShape(
-              mark.rect.shift(
-                Offset(
-                  i * stride + (swatch - mark.rect.width) / 2,
-                  colorTop + swatch + _HighlightColorRow.labelGap,
-                ),
-              ),
+        )
+        ..addAll(
+          label.marksAt(
+            Offset(
+              left + (cell - label.width!) / 2,
+              top + swatch + _HighlightColorRow.labelGap,
             ),
-        ],
-        SkeletonShape(
-          Rect.fromLTWH(0, colorTop + colorHeight + 18, width, 12),
-          radius: AppRadius.pillShape,
-        ),
-      ],
+          ),
+        );
+      left += cell + gap;
+    }
+    // 「深淺」兩個字（拉桿很細，不畫）。
+    final strengthTop = colorTop + colorHeight;
+    final strength = GroupedItemShape.text(
+      context,
+      _strengthLabel,
+      style: _strengthStyle,
+      width: width,
     );
+    marks.addAll(
+      strength.marksAt(
+        Offset(0, strengthTop + (_strengthRowHeight - strength.height) / 2),
+      ),
+    );
+    return GroupedItemShape(strengthTop + _strengthRowHeight, marks: marks);
   }
+
+  static const String _strengthLabel = '深淺';
+  static const TextStyle _strengthStyle = AppTextStyles.uiMd;
 
   /// 預覽與色票之間的間距。
   static const double _previewGap = AppSpacing.md;
@@ -350,7 +370,10 @@ class _HighlightSectionState extends State<_HighlightSection> {
           child: Row(
             children: [
               const ExcludeSemantics(
-                child: Text('深淺', style: AppTextStyles.uiMd),
+                child: Text(
+                  _HighlightSection._strengthLabel,
+                  style: _HighlightSection._strengthStyle,
+                ),
               ),
               Expanded(
                 child: Semantics(
@@ -391,10 +414,19 @@ class _HighlightPreview extends StatelessWidget {
   static const textStyle = TextStyle(fontSize: 17, height: 1.6);
   static const padding = EdgeInsets.all(AppSpacing.lg);
 
+  /// 範例文字，中間那一句套 [highlight]；骨架照同一段排。
+  static TextSpan span(TextStyle style, {TextStyle? highlight}) => TextSpan(
+    style: style,
+    children: [
+      const TextSpan(text: before),
+      TextSpan(text: sentence, style: highlight),
+      const TextSpan(text: after),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final palette = StylePalette.of(context);
-    final style = textStyle.copyWith(color: palette.readerText);
     return Container(
       width: double.infinity,
       padding: padding,
@@ -403,21 +435,14 @@ class _HighlightPreview extends StatelessWidget {
         borderRadius: AppRadius.cardMd,
       ),
       child: Text.rich(
-        TextSpan(
-          style: style,
-          children: [
-            const TextSpan(text: before),
-            TextSpan(
-              text: sentence,
-              style: TextStyle(
-                background: Paint()
-                  ..color = settings.highlightColor
-                      .resolve(palette)
-                      .withValues(alpha: strength),
-              ),
-            ),
-            const TextSpan(text: after),
-          ],
+        span(
+          textStyle.copyWith(color: palette.readerText),
+          highlight: TextStyle(
+            background: Paint()
+              ..color = settings.highlightColor
+                  .resolve(palette)
+                  .withValues(alpha: strength),
+          ),
         ),
       ),
     );

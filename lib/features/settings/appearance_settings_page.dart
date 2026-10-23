@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:night_reader/features/settings/settings_provider.dart';
 import 'package:night_reader/features/settings/theme_settings_provider.dart';
@@ -10,6 +12,8 @@ import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 import 'package:night_reader/shared/widgets/glass_segmented.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
+import 'package:night_reader/shared/widgets/grouped_list_skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:night_reader/shared/widgets/theme_reveal_scope.dart';
 import 'package:provider/provider.dart';
 
@@ -53,8 +57,14 @@ class AppearanceSettingsPage extends StatelessWidget {
                 builder: (rowContext) => GroupedRow(
                   title: '強調色',
                   value: themeSettings.accent.label,
-                  trailing: _AccentDot(
-                    color: Theme.of(context).colorScheme.primary,
+                  trailing: SizedBox.square(
+                    dimension: 18,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
                   showChevron: false,
                   onTap: () => _pickAccent(rowContext, themeSettings),
@@ -168,23 +178,9 @@ Future<void> _pickAccent(
       .run(change: () => themeSettings.setAccent(accent));
 }
 
-class _AccentDot extends StatelessWidget {
-  const _AccentDot({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: 18,
-    child: DecoratedBox(
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    ),
-  );
-}
-
 /// 風格卡：每個風格一張直式小書頁，兩列、每列五張，一頁放得下全部風格與
 /// 下面的強調色、深淺與玻璃效果。顯示各風格在目前深淺下的樣子。
-class _StyleGrid extends StatelessWidget {
+class _StyleGrid extends StatelessWidget implements GroupedSkeletonItem {
   const _StyleGrid({
     required this.selected,
     required this.accent,
@@ -200,6 +196,50 @@ class _StyleGrid extends StatelessWidget {
   static const int _columns = 5;
   static const double _columnGap = AppSpacing.md;
   static const double _rowGap = AppSpacing.lg;
+
+  /// 每張書頁一塊（選中的那張和畫面上一樣浮起），名稱照字排在頁下。
+  @override
+  GroupedItemShape skeletonShape(
+    BuildContext context, {
+    required double width,
+  }) {
+    final cardWidth = (width - _columnGap * (_columns - 1)) / _columns;
+    final pageHeight = cardWidth / _StyleCard.aspectRatio;
+    final marks = <SkeletonShape>[];
+    var top = 0.0;
+    var runHeight = 0.0;
+    for (final (index, style) in AppStyle.values.indexed) {
+      final column = index % _columns;
+      if (index > 0 && column == 0) {
+        top += runHeight + _rowGap;
+        runHeight = 0;
+      }
+      final left = column * (cardWidth + _columnGap);
+      final isSelected = style == selected;
+      marks.add(
+        SkeletonShape(
+          Rect.fromLTWH(
+            left,
+            top - (isSelected ? _StyleCard.lift : 0),
+            cardWidth,
+            pageHeight,
+          ),
+          radius: BorderRadius.circular(6),
+        ),
+      );
+      final label = GroupedItemShape.text(
+        context,
+        style.label,
+        style: _StyleCard.labelStyle(selected: isSelected),
+        width: cardWidth,
+        textAlign: TextAlign.center,
+      ).centeredIn(cardWidth);
+      final labelTop = top + pageHeight + _StyleCard.labelGap;
+      marks.addAll(label.marksAt(Offset(left, labelTop)));
+      runHeight = math.max(runHeight, labelTop + label.height - top);
+    }
+    return GroupedItemShape(top + runHeight, marks: marks);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +285,14 @@ class _StyleCard extends StatelessWidget {
   final VoidCallback onTap;
 
   /// 選中時書頁往上浮起的距離。
-  static const double _lift = 2;
+  static const double lift = 2;
+
+  /// 書頁的寬高比與名稱的上方間距；骨架照同一份排。
+  static const double aspectRatio = 3 / 4;
+  static const double labelGap = AppSpacing.sm;
+
+  static TextStyle labelStyle({required bool selected}) => AppTextStyles.labelSm
+      .copyWith(fontWeight: selected ? FontWeight.w600 : FontWeight.w500);
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +331,7 @@ class _StyleCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             AspectRatio(
-              aspectRatio: 3 / 4,
+              aspectRatio: aspectRatio,
               // 浮起、外框與陰影隨選取一起漸變（0 未選、1 選中）。
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: selected ? 1 : 0),
@@ -292,7 +339,7 @@ class _StyleCard extends StatelessWidget {
                 curve: AppMotion.menuCurve,
                 child: page,
                 builder: (context, t, child) => Transform.translate(
-                  offset: Offset(0, -_lift * t),
+                  offset: Offset(0, -lift * t),
                   child: CustomPaint(
                     painter: _FoldedPagePainter(
                       paper: palette.readerBackground,
@@ -308,14 +355,13 @@ class _StyleCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: labelGap),
             Text(
               style.label,
               // 窄螢幕加大字級時換行，不省略成「…」。
               textAlign: TextAlign.center,
-              style: AppTextStyles.labelSm.copyWith(
+              style: labelStyle(selected: selected).copyWith(
                 color: selected ? scheme.onSurface : chrome.sectionText,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
