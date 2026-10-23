@@ -31,7 +31,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - **使用者說「(adr)」或「寫進 ADR」就當場寫**：這是使用者標記「這是定案、以後不要再提」的方式。
 - **修到根**：使用者分得出補丁和根治（「你這只是打補丁而已」）。追到最初出錯的地方，同一原因的問題一次修掉，不加 workaround。
 - **合併完就清**：合併後刪本機與遠端分支、`git worktree prune`，`%TEMP%` 裡自己的暫存檔刪掉。使用者每隔幾天就得自己來問一次 worktree 有沒有清，代表這件事常被漏掉。
-- **子代理最多同時 3 個**，開之前先說要開幾個。曾經一次開 85 個把額度燒光。
+- **子代理的數量照全域指示**（實作同時 1 個），開之前先說要開幾個。曾經一次開 85 個把額度燒光；2026-10-22 兩個實作子代理一起跑，78 分鐘燒完一個五小時額度。
 - **審查意見自己核對**：Codex 或子代理的審查結果逐條打開程式核對，屬實才修；使用者說 Codex 的前端意見不可靠；不照對比度這類工具意見調色。
 
 ## 維護範圍
@@ -47,7 +47,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機先跑受影響的測試，全套交給 pre-push hook。
+- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機先跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套交給 pre-push hook。
 - 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試（只改說明文件，即任何 `.md` 與 `docs/`，的推送略過）。推送時看 hook 輸出的最後一行是 `pre-push: analyze 與全套測試通過`（只改說明文件時是略過的訊息）。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart`（Drift 產生的資料庫程式）一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。要給使用者看畫面時，用 `test/support/screenshot.dart` 把元件測試畫成 PNG（用法寫在檔頭）；改介面前後要對照整個 App 時，重拍 `test/screens/` 那組固定畫面（平常的全套測試會跳過）。
