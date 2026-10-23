@@ -23,12 +23,13 @@ void main() {
 
   testWidgets('launch until the shelf has turned into content', (tester) async {
     setUpPhone(tester);
-    // 書架上的書帶手機裡已有的封面：骨架呼吸時底下建書卡、解碼封面，換場
-    // 前等它們畫得出來（ADR 0031）。
+    // 書架上 30 本書，超過一個畫面，都帶手機裡已有的封面：骨架呼吸時底下
+    // 建書卡、解碼封面，換場前等它們畫得出來（ADR 0031）。
     final covers = coverDirectory();
     await tester.runAsync(() async {
       await setUpApp();
       await seedLibrary();
+      await seedMoreBooks(24);
       await seedCovers(covers);
     });
     // 第一次開含 debug 模式第一次執行程式的編譯成本（手機上的正式版沒有），

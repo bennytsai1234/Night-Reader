@@ -8,12 +8,11 @@ void main() {
   testWidgets('slots under a waiting reveal are built one per frame, and '
       'the wait ends only after all of them are', (tester) async {
     final reveal = CoverReveal(CoverWait.onDevice);
-    addTearDown(reveal.dispose);
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: CoverRevealScope(
-          notifier: reveal,
+          reveal: reveal,
           child: Column(
             children: [
               for (var i = 0; i < 3; i++)
@@ -50,13 +49,12 @@ void main() {
     tester,
   ) async {
     final reveal = CoverReveal(CoverWait.onDevice, inSteps: true);
-    addTearDown(reveal.dispose);
     final painted = <int>{};
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: CoverRevealScope(
-          notifier: reveal,
+          reveal: reveal,
           child: Column(
             children: [
               for (var i = 0; i < 2; i++)
@@ -120,8 +118,6 @@ void main() {
   ) async {
     final a = CoverReveal(CoverWait.onDevice, inSteps: true);
     final b = CoverReveal(CoverWait.onDevice, inSteps: true);
-    addTearDown(a.dispose);
-    addTearDown(b.dispose);
     // 只記第一次建、第一次畫（旁邊的書卡建好時，已經畫過的會跟著重畫）。
     final seen = <String>{};
     final log = <String>[];
@@ -132,7 +128,7 @@ void main() {
     Widget page(CoverReveal reveal) => Directionality(
       textDirection: TextDirection.ltr,
       child: CoverRevealScope(
-        notifier: reveal,
+        reveal: reveal,
         child: Column(
           children: [
             for (var i = 0; i < 2; i++)
@@ -172,11 +168,10 @@ void main() {
   testWidgets('a single slot is still under the wait when it is built, so its '
       'cover holds the reveal', (tester) async {
     final reveal = CoverReveal(CoverWait.onDevice);
-    addTearDown(reveal.dispose);
     bool? waitingWhenBuilt;
     await tester.pumpWidget(
       CoverRevealScope(
-        notifier: reveal,
+        reveal: reveal,
         child: CoverRevealSlot(
           child: Builder(
             builder: (context) {
@@ -210,7 +205,6 @@ void main() {
     tester,
   ) async {
     final reveal = CoverReveal(CoverWait.onDevice);
-    addTearDown(reveal.dispose);
     // settle 要等一幀畫完。
     await tester.pumpWidget(const SizedBox.shrink());
     unawaited(reveal.settle());
@@ -221,7 +215,7 @@ void main() {
       Directionality(
         textDirection: TextDirection.ltr,
         child: CoverRevealScope(
-          notifier: reveal,
+          reveal: reveal,
           child: const CoverRevealSlot(child: Text('書')),
         ),
       ),

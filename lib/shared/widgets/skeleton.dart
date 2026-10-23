@@ -767,7 +767,7 @@ class _SkeletonSwitcherState extends State<SkeletonSwitcher>
       _lastContent = reveal == null
           ? Builder(builder: widget.builder)
           : CoverRevealScope(
-              notifier: reveal,
+              reveal: reveal,
               child: Builder(builder: widget.builder),
             );
     }

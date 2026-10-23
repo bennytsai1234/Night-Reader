@@ -245,6 +245,28 @@ Future<void> seedLibrary({bool withContent = true}) async {
   }
 }
 
+/// 書架上再多放 [count] 本書（書名、作者與進度各不相同），量一整個畫面的
+/// 書架用。在 `runAsync` 裡、[seedLibrary] 之後呼叫。
+Future<void> seedMoreBooks(int count) async {
+  final now = DateTime(2026, 10, 15, 21).millisecondsSinceEpoch;
+  await getIt<BookDao>().upsertAll([
+    for (var i = 0; i < count; i++)
+      Book(
+        bookUrl: 'https://www.example.com/book/${3000 + i}/',
+        origin: kOrigin,
+        originName: '筆趣閣',
+        name: '書架上的第${i + 7}本書${'長' * (i % 5)}',
+        author: '作者${String.fromCharCode(0x7532 + i)}',
+        latestChapterTitle: '第${100 + i}章',
+        totalChapterNum: 100 + i,
+        chapterIndex: i * 3,
+        durChapterTitle: '第${i * 3 + 1}章',
+        durChapterTime: now - (i + 10) * 3600000,
+        isInBookshelf: true,
+      ),
+  ]);
+}
+
 /// 放書架封面的暫存資料夾；測試結束時刪掉。
 Directory coverDirectory() {
   final covers = Directory.systemTemp.createTempSync('night-reader-covers-');

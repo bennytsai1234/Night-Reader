@@ -9,6 +9,7 @@ import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/theme/app_chrome.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/cover_reveal.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/glass_menu.dart';
 
@@ -275,15 +276,20 @@ class BookshelfListCard extends StatelessWidget {
     final name = context.zh(book.name);
     final author = context.zh(book.author).trim();
 
-    Widget cover = ValueListenableBuilder<bool>(
-      valueListenable: UnifiedCovers.enabled,
-      builder: (context, _, _) => BookCoverWidget(
-        bookName: name,
-        author: book.author,
-        coverUrl: UnifiedCovers.coverOf(book),
-        width: coverWidth,
-        height: coverHeight,
-        borderRadius: AppRadius.cardXs,
+    // 封面另外排一塊：開 App 骨架呼吸時書卡的字和封面分在不同幀建
+    // （[CoverReveal.inSteps]）。
+    Widget cover = CoverRevealSlot(
+      placeholder: const SizedBox(width: coverWidth, height: coverHeight),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: UnifiedCovers.enabled,
+        builder: (context, _, _) => BookCoverWidget(
+          bookName: name,
+          author: book.author,
+          coverUrl: UnifiedCovers.coverOf(book),
+          width: coverWidth,
+          height: coverHeight,
+          borderRadius: AppRadius.cardXs,
+        ),
       ),
     );
     cover = Stack(
@@ -486,15 +492,19 @@ class BookshelfGridTile extends StatelessWidget {
                       scale: selected ? 0.92 : 1,
                       duration: _motion(context, AppMotion.spring),
                       curve: AppMotion.springCurve,
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: UnifiedCovers.enabled,
-                        builder: (context, _, _) => BookCoverWidget(
-                          bookName: name,
-                          author: book.author,
-                          coverUrl: UnifiedCovers.coverOf(book),
-                          width: double.infinity,
-                          height: double.infinity,
-                          borderRadius: AppRadius.cardXs,
+                      // 封面另外排一塊：開 App 骨架呼吸時書卡的字和封面分在
+                      // 不同幀建（[CoverReveal.inSteps]）。
+                      child: CoverRevealSlot(
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: UnifiedCovers.enabled,
+                          builder: (context, _, _) => BookCoverWidget(
+                            bookName: name,
+                            author: book.author,
+                            coverUrl: UnifiedCovers.coverOf(book),
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: AppRadius.cardXs,
+                          ),
                         ),
                       ),
                     ),

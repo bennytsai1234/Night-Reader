@@ -406,7 +406,7 @@ void main() {
   group('a stepped reveal', () {
     Widget stepped(CoverReveal reveal, Widget child) => MaterialApp(
       home: CoverRevealScope(
-        notifier: reveal,
+        reveal: reveal,
         child: Center(child: child),
       ),
     );
@@ -418,7 +418,6 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
 
       final reveal = CoverReveal(CoverWait.onDevice, inSteps: true);
-      addTearDown(reveal.dispose);
       await tester.pumpWidget(
         stepped(
           reveal,
@@ -446,8 +445,6 @@ void main() {
         'current round, so the wait still ends', (tester) async {
       final a = CoverReveal(CoverWait.onDevice, inSteps: true);
       final b = CoverReveal(CoverWait.onDevice, inSteps: true)..add('另一張慢的封面');
-      addTearDown(a.dispose);
-      addTearDown(b.dispose);
       // a 的佇列前面塞滿別的步驟：這張封面在 a 的那一步很晚才輪到。
       for (var i = 0; i < 50; i++) {
         a.showCover(() {});

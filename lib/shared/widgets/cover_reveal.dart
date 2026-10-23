@@ -32,7 +32,10 @@ enum CoverWait {
 /// 建好、排好版的那一幀先不畫，下一步才第一次畫出來（字第一次出現要先畫
 /// 進字形快取）；等待中解碼好的封面也排隊，一步只換上一張（[showCover]）。
 /// 開 App 的書架用：內容在骨架呼吸時於底下準備，呼吸的每一格只多一小步。
-class CoverReveal extends ChangeNotifier {
+///
+/// 等待結束時不通知底下的元件：各自下次重建（例如封面解碼好）時才看到
+/// 已經不在等待中，結果一樣；一起通知會讓整頁的書卡與封面擠在同一幀重建。
+class CoverReveal {
   CoverReveal(this.wait, {this.inSteps = false});
 
   final CoverWait wait;
@@ -125,26 +128,31 @@ class CoverReveal extends ChangeNotifier {
     }
     _waiting = false;
     _pending.clear();
-    notifyListeners();
   }
 }
 
 /// 把 [CoverReveal] 交給底下的封面。
-class CoverRevealScope extends InheritedNotifier<CoverReveal> {
+class CoverRevealScope extends InheritedWidget {
   const CoverRevealScope({
     super.key,
-    required CoverReveal super.notifier,
+    required this.reveal,
     required super.child,
   });
 
-  /// 還在等待中的 [CoverReveal]；不在等待中或不在範圍內時為 null。等待結束
-  /// 時依賴的元件會重建。
+  final CoverReveal reveal;
+
+  /// 還在等待中的 [CoverReveal]；不在等待中或不在範圍內時為 null。換了一輪
+  /// 等待時依賴的元件會重建；等待結束不會（見 [CoverReveal]）。
   static CoverReveal? waitingOf(BuildContext context) {
     final reveal = context
         .dependOnInheritedWidgetOfExactType<CoverRevealScope>()
-        ?.notifier;
+        ?.reveal;
     return reveal != null && reveal.waiting ? reveal : null;
   }
+
+  @override
+  bool updateShouldNotify(CoverRevealScope oldWidget) =>
+      !identical(reveal, oldWidget.reveal);
 }
 
 /// 骨架底下等著換場的內容裡較重的一塊（一張書卡）：輪到才建 [child]，之前
