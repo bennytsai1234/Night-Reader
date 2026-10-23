@@ -11,17 +11,13 @@
 // 換場從哪一格開始不靠實作告訴我們：在骨架最後出現的那幾格附近找一個起點，
 // 讓整個畫面和理想的混合最接近；同一個起點下每個區域都要對得上。
 
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
-import 'package:night_reader/core/database/dao/book_dao.dart';
-import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
 import 'package:night_reader/shared/widgets/launch_entrance.dart';
@@ -145,29 +141,6 @@ List<double> _alphas(int width, int k, int start) {
   ];
 }
 
-Future<Uint8List> _encodeCover(int seed) async {
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-  final hue = seed * 57.0 % 360;
-  canvas.drawRect(
-    const Rect.fromLTWH(0, 0, 120, 168),
-    Paint()
-      ..shader = ui.Gradient.linear(Offset.zero, const Offset(0, 168), [
-        HSVColor.fromAHSV(1, hue, 0.6, 0.9).toColor(),
-        HSVColor.fromAHSV(1, (hue + 40) % 360, 0.7, 0.4).toColor(),
-      ]),
-  );
-  canvas.drawCircle(
-    const Offset(60, 70),
-    30,
-    Paint()..color = const Color(0xFFF0E6C8),
-  );
-  final image = await recorder.endRecording().toImage(120, 168);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  image.dispose();
-  return bytes!.buffer.asUint8List();
-}
-
 void main() {
   for (final mode in ['light', 'dark']) {
     testWidgets('the launch reveal crossfades the whole screen left to right '
@@ -184,29 +157,11 @@ void main() {
         devicePixelRatio: 1,
       );
 
-      final covers = Directory.systemTemp.createTempSync('launch-covers-');
-      addTearDown(() {
-        try {
-          covers.deleteSync(recursive: true);
-        } on FileSystemException {
-          // 還開著（Windows）就留給系統暫存區清理。
-        }
-      });
+      final covers = coverDirectory();
       await tester.runAsync(() async {
         await setUpApp(prefs: {'themeMode': mode});
         await seedLibrary(withContent: false);
-        final dao = getIt<BookDao>();
-        final books = await dao.getInBookshelf();
-        await dao.upsertAll([
-          for (final (i, book) in books.indexed)
-            book.copyWith(
-              coverUrl: 'local://${covers.path}${Platform.pathSeparator}$i.png',
-            ),
-        ]);
-        for (var i = 0; i < books.length; i++) {
-          File('${covers.path}${Platform.pathSeparator}$i.png')
-              .writeAsBytesSync(await _encodeCover(i));
-        }
+        await seedCovers(covers);
       });
 
       await tester.pumpWidget(

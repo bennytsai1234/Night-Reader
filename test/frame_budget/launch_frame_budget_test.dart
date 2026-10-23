@@ -8,7 +8,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_reader/app_providers.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/main.dart';
+import 'package:night_reader/shared/widgets/launch_entrance.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
 import 'package:provider/provider.dart';
 
@@ -21,9 +23,13 @@ void main() {
 
   testWidgets('launch until the shelf has turned into content', (tester) async {
     setUpPhone(tester);
+    // 書架上的書帶手機裡已有的封面：骨架呼吸時底下建書卡、解碼封面，換場
+    // 前等它們畫得出來（ADR 0031）。
+    final covers = coverDirectory();
     await tester.runAsync(() async {
       await setUpApp();
       await seedLibrary();
+      await seedCovers(covers);
     });
     // 第一次開含 debug 模式第一次執行程式的編譯成本（手機上的正式版沒有），
     // 開兩次，看第二次。
@@ -40,8 +46,16 @@ void main() {
         realAsync: true,
         // 書架換場（兩張定格畫面，ADR 0031）只貼兩張圖的那幾格：骨架已經
         // 換掉，頁面上有玻璃，但畫面上沒有在畫的背景模糊。
+        // 骨架還在時分成長出與呼吸：骨架長完、等換場的那段，底下在建書卡、
+        // 解碼封面。
         note: () {
-          if (find.byType(SkeletonBox).evaluate().isNotEmpty) return null;
+          if (find.byType(SkeletonBox).evaluate().isNotEmpty) {
+            final shelf = find.byType(BookshelfPage).evaluate();
+            final entrance = shelf.isEmpty
+                ? null
+                : LaunchEntrance.maybeOf(shelf.first);
+            return entrance?.skeleton.isCompleted ?? false ? '骨架呼吸' : '骨架長出';
+          }
           if (find.byType(BackdropFilter).evaluate().isEmpty) return null;
           return _paintsBlur(tester) ? null : '換場中';
         },
@@ -60,6 +74,17 @@ void main() {
       // 之後），與下一格（底下換成內容、畫好後拍下來；螢幕上蓋著骨架那張）。
       String ms(int us) => (us / 1000).toStringAsFixed(1);
       final first = costs.indexWhere((cost) => cost.note == '換場中');
+      // 骨架呼吸的每一格（不含拍下骨架畫面的那一格）單獨列一行，對照表
+      // 才看得到這一段。
+      final breathing = [
+        for (final cost in costs)
+          if (cost.note == '骨架呼吸' && (first < 2 || cost.index < first - 2))
+            cost,
+      ];
+      if (breathing.isNotEmpty) {
+        // ignore: avoid_print
+        print(describeFrames('$label：骨架呼吸', breathing));
+      }
       if (first >= 2) {
         final mixing = [
           for (final cost in costs.skip(first))

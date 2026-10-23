@@ -1,7 +1,11 @@
 // 整個 App 的截圖環境：記憶體資料庫＋真的 DAO＋假資料，畫出來的就是 App
 // 實際的頁面（閱讀器走真的排版引擎）。
 
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:drift/native.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
@@ -239,6 +243,59 @@ Future<void> seedLibrary({bool withContent = true}) async {
       saveChapterMetadata: false,
     );
   }
+}
+
+/// 放書架封面的暫存資料夾；測試結束時刪掉。
+Directory coverDirectory() {
+  final covers = Directory.systemTemp.createTempSync('night-reader-covers-');
+  addTearDown(() {
+    try {
+      covers.deleteSync(recursive: true);
+    } on FileSystemException {
+      // 還開著（Windows）就留給系統暫存區清理。
+    }
+  });
+  return covers;
+}
+
+/// 書架上的每一本書都換成 [covers] 裡的本機封面（手機裡已經有的封面，開
+/// App 換場前要等它們畫得出來，ADR 0031）。在 `runAsync` 裡呼叫。
+Future<void> seedCovers(Directory covers) async {
+  final dao = getIt<BookDao>();
+  final books = await dao.getInBookshelf();
+  await dao.upsertAll([
+    for (final (i, book) in books.indexed)
+      book.copyWith(
+        coverUrl: 'local://${covers.path}${Platform.pathSeparator}$i.png',
+      ),
+  ]);
+  for (var i = 0; i < books.length; i++) {
+    File('${covers.path}${Platform.pathSeparator}$i.png')
+        .writeAsBytesSync(await _encodeCover(i));
+  }
+}
+
+Future<Uint8List> _encodeCover(int seed) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final hue = seed * 57.0 % 360;
+  canvas.drawRect(
+    const Rect.fromLTWH(0, 0, 120, 168),
+    Paint()
+      ..shader = ui.Gradient.linear(Offset.zero, const Offset(0, 168), [
+        HSVColor.fromAHSV(1, hue, 0.6, 0.9).toColor(),
+        HSVColor.fromAHSV(1, (hue + 40) % 360, 0.7, 0.4).toColor(),
+      ]),
+  );
+  canvas.drawCircle(
+    const Offset(60, 70),
+    30,
+    Paint()..color = const Color(0xFFF0E6C8),
+  );
+  final image = await recorder.endRecording().toImage(120, 168);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
 }
 
 /// 整個 App（同 `main.dart` 的 runApp），等開 App 的進場播完：骨架長出
