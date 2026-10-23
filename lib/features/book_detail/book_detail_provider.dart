@@ -336,9 +336,19 @@ class BookDetailProvider extends ChangeNotifier {
         await _bookDao.upsert(_book);
       }
       await _loadSource();
-      await _loadBookInfo();
-      _announceCover();
-      await _loadChapters();
+      // 書架上的書目錄已經存在手機裡，書籍資訊由書架的檢查更新重抓；這裡
+      // 不再向書源要，網路差時才不會整頁停在骨架、什麼都不能按。
+      final storedChapters = await _chapterDao.getByBook(_book.bookUrl);
+      if (_book.isInBookshelf && storedChapters.isNotEmpty) {
+        _allChapters = storedChapters;
+        _announceCover();
+        _applyFilter();
+      } else {
+        await _loadBookInfo();
+        // 封面一拿到就告訴搜尋頁，不等目錄。
+        _announceCover();
+        await _loadChapters();
+      }
       _worldState = BookDetailWorldState.ready;
       unawaited(_storeDisplayCover());
     } catch (error, stackTrace) {
