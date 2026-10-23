@@ -14,6 +14,7 @@ import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import 'crash_log_page.dart';
 import 'external_url_launcher.dart';
 import 'privacy_pages.dart';
 import 'release_notes_page.dart';
@@ -268,7 +269,7 @@ class _AboutPageState extends State<AboutPage> {
           GroupedSection(
             header: '系統工具',
             children: [
-              // 「檢查更新」與「崩潰日誌」在「我的」第一層（ADR 0030）。
+              // 「檢查更新」在「我的」第一層（ADR 0030）。
               GroupedRow(
                 leading: const GroupedIconTile(
                   Icons.history_rounded,
@@ -278,6 +279,17 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ReleaseNotesPage()),
+                ),
+              ),
+              GroupedRow(
+                leading: const GroupedIconTile(
+                  Icons.report_problem_outlined,
+                  tint: AppTint.rust,
+                ),
+                title: '崩潰日誌',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CrashLogPage()),
                 ),
               ),
               ValueListenableBuilder(
