@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:night_reader/core/models/base_source.dart';
+import 'package:night_reader/core/network/cancellation.dart';
 
 /// ConcurrentRecord - 並發記錄
 class ConcurrentRecord {
@@ -34,15 +36,28 @@ class ConcurrentRateLimiter {
   /// 同一批網站，限流紀錄只能有一份，放在主 isolate（ADR 0028）。
   static ConcurrentRateDelegate? delegate;
 
-  /// 執行帶限制的區塊
-  Future<T> withLimit<T>(Future<T> Function() block) async {
+  /// 執行帶限制的區塊；[cancelToken] 取消時不再排隊等名額。
+  Future<T> withLimit<T>(
+    Future<T> Function() block, {
+    CancelToken? cancelToken,
+  }) async {
     final key = _key;
     final rate = _concurrentRate;
     if (key == null || !_limits(rate)) return await block();
 
     final delegate = ConcurrentRateLimiter.delegate;
     if (delegate != null) {
-      final ticket = await delegate.acquire(key, rate!);
+      final pending = delegate.acquire(key, rate!);
+      final int ticket;
+      try {
+        ticket = await untilCancelled(pending, cancelToken);
+      } on DioException catch (e) {
+        // 取消後名額可能之後才借到：借到就還，不佔著這個書源。
+        if (e.type == DioExceptionType.cancel) {
+          unawaited(pending.then(delegate.release, onError: (_) {}));
+        }
+        rethrow;
+      }
       try {
         return await block();
       } finally {
@@ -50,7 +65,7 @@ class ConcurrentRateLimiter {
       }
     }
 
-    final record = await acquire(key, rate!);
+    final record = await acquire(key, rate!, cancelToken: cancelToken);
     try {
       return await block();
     } finally {
@@ -64,16 +79,22 @@ class ConcurrentRateLimiter {
       concurrentRate != '0';
 
   /// 等到 [key] 這個書源可以再發一個請求，回傳要交給 [release] 的紀錄。
+  /// [cancelToken] 取消時不再等，丟出取消；還沒借到名額，不用交回。
   static Future<ConcurrentRecord?> acquire(
     String key,
-    String concurrentRate,
-  ) async {
+    String concurrentRate, {
+    CancelToken? cancelToken,
+  }) async {
     while (true) {
+      if (cancelToken?.cancelError case final cancelled?) throw cancelled;
       final waitTime = _checkFetchStart(key, concurrentRate);
       if (waitTime <= 0) {
         return _concurrentRecordMap[key];
       }
-      await Future.delayed(Duration(milliseconds: waitTime));
+      await Future.any<Object?>([
+        Future<void>.delayed(Duration(milliseconds: waitTime)),
+        ?cancelToken?.whenCancel,
+      ]);
     }
   }
 

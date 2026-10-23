@@ -519,8 +519,8 @@ class _BookshelfPageState extends State<BookshelfPage>
             FadeTransition(opacity: animation, child: child),
         child: KeyedSubtree(
           key: ValueKey(grid),
-          // 清單本身另外排一塊：開 App 骨架呼吸時，外層與清單（捲動、每一格
-          // 的位置）分在不同幀建，之後才一張張建書卡（[CoverReveal.inSteps]）。
+          // 清單本身另外排一塊：一幀建一塊時（[CoverReveal.paced]），外層與
+          // 清單（捲動、每一格的位置）分在不同幀建，之後才一張張建書卡。
           child: CoverRevealSlot(
             placeholder: const SizedBox.expand(),
             child: grid
@@ -833,8 +833,9 @@ class _BookshelfPageState extends State<BookshelfPage>
         ),
       ),
     );
-    // 換位動畫的那一層也包在這一塊裡：開 App 骨架呼吸時書卡不會移動，建清單
-    // 那一格每一列只建佔位，跟書卡一起輪到時才建（[CoverReveal.inSteps]）。
+    // 換位動畫的那一層也包在這一塊裡：書卡在骨架底下準備時不會移動，一幀
+    // 建一塊時（[CoverReveal.paced]）建清單那一格每一列只建佔位，跟書卡一起
+    // 輪到時才建。
     return CoverRevealSlot(
       placeholder: const SizedBox(
         height:
@@ -884,9 +885,9 @@ class _BookshelfPageState extends State<BookshelfPage>
       itemCount: books.length,
       itemBuilder: (context, index) {
         final shown = books[index];
-        // 換位動畫的那一層也包在這一塊裡：開 App 骨架呼吸時書卡不會移動，
-        // 建清單那一格每一格只建佔位，跟書卡一起輪到時才建
-        // （[CoverReveal.inSteps]）。
+        // 換位動畫的那一層也包在這一塊裡：書卡在骨架底下準備時不會移動，
+        // 一幀建一塊時（[CoverReveal.paced]）建清單那一格每一格只建佔位，
+        // 跟書卡一起輪到時才建。
         return CoverRevealSlot(
           child: BookshelfMotionItem(
             id: shown.bookUrl,

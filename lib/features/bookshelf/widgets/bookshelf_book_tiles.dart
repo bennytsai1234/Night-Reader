@@ -276,8 +276,8 @@ class BookshelfListCard extends StatelessWidget {
     final name = context.zh(book.name);
     final author = context.zh(book.author).trim();
 
-    // 封面另外排一塊：開 App 骨架呼吸時書卡的字和封面分在不同幀建
-    // （[CoverReveal.inSteps]）。
+    // 封面另外排一塊：一幀建一塊時（[CoverReveal.paced]）書卡的字和封面
+    // 分在不同幀建。
     Widget cover = CoverRevealSlot(
       placeholder: const SizedBox(width: coverWidth, height: coverHeight),
       child: ValueListenableBuilder<bool>(
@@ -339,8 +339,8 @@ class BookshelfListCard extends StatelessWidget {
           cover,
           const SizedBox(width: AppSpacing.lg),
           Expanded(
-            // 書名、作者與進度線另外排一塊：開 App 骨架呼吸時和書卡外框、
-            // 封面分在不同幀建（[CoverReveal.inSteps]）。卡片高度由封面撐，
+            // 書名、作者與進度線另外排一塊：一幀建一塊時（[CoverReveal.paced]）
+            // 和書卡外框、封面分在不同幀建。卡片高度由封面撐，
             // 還沒建時不佔高度也不會跳。
             child: CoverRevealSlot(
               child: Column(
@@ -497,8 +497,8 @@ class BookshelfGridTile extends StatelessWidget {
                       scale: selected ? 0.92 : 1,
                       duration: _motion(context, AppMotion.spring),
                       curve: AppMotion.springCurve,
-                      // 封面另外排一塊：開 App 骨架呼吸時書卡的字和封面分在
-                      // 不同幀建（[CoverReveal.inSteps]）。
+                      // 封面另外排一塊：一幀建一塊時（[CoverReveal.paced]）
+                      // 書卡的字和封面分在不同幀建。
                       child: CoverRevealSlot(
                         child: ValueListenableBuilder<bool>(
                           valueListenable: UnifiedCovers.enabled,
@@ -514,8 +514,8 @@ class BookshelfGridTile extends StatelessWidget {
                       ),
                     ),
                     // 角標與勾選圈另外排一塊：開 App 時兩個都看不到（還沒
-                    // 檢查更新、不在選取中），和書卡外框分在不同幀建
-                    // （[CoverReveal.inSteps]）。
+                    // 檢查更新、不在選取中），一幀建一塊時
+                    // （[CoverReveal.paced]）和書卡外框分在不同幀建。
                     CoverRevealSlot(
                       child: Stack(
                         fit: StackFit.expand,
@@ -546,8 +546,8 @@ class BookshelfGridTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              // 書名與進度線另外排一塊：開 App 骨架呼吸時和書卡外框、封面
-              // 分在不同幀建（[CoverReveal.inSteps]）。還沒建時照樣佔住
+              // 書名與進度線另外排一塊：一幀建一塊時（[CoverReveal.paced]）
+              // 和書卡外框、封面分在不同幀建。還沒建時照樣佔住
               // 同樣的高度。
               CoverRevealSlot(
                 placeholder: SizedBox(

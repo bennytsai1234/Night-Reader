@@ -8,6 +8,7 @@ import 'package:dio/dio.dart';
 import '../js_extensions_base.dart';
 import '../query_ttf.dart';
 
+import 'package:night_reader/core/engine/source_isolate/source_isolate.dart';
 import 'package:night_reader/core/services/http_client.dart';
 
 /// JsExtensions 的字體處理擴展
@@ -27,6 +28,7 @@ extension JsFontExtensions on JsExtensionsBase {
           final response = await HttpClient().client.get<List<int>>(
             dataStr,
             options: Options(responseType: ResponseType.bytes),
+            cancelToken: currentSourceCancelToken,
           );
           buffer = response.data != null
               ? Uint8List.fromList(response.data!)
