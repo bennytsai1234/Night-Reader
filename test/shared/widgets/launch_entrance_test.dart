@@ -369,8 +369,15 @@ void main() {
       await tester.pumpWidget(at(loading: false));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 620));
-      await tester.pump(LaunchEntranceMotion.pause);
-      await tester.pump(const Duration(milliseconds: 100));
+      // 停頓與收住的頭一段一格一格推進：骨架長完才開始呼吸，一次跳過整段
+      // 停頓的話，呼吸會在同一格走完半輪、收住一開始就算停好。
+      const frame = Duration(milliseconds: 16);
+      final frames =
+          (LaunchEntranceMotion.pause.inMilliseconds + 100) ~/
+          frame.inMilliseconds;
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(frame);
+      }
       expect(tester.hasRunningAnimations, isTrue, reason: '還在收住');
 
       await tester.pumpWidget(at(loading: true));

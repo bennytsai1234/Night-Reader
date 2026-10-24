@@ -246,6 +246,14 @@ void main() {
       addTearDown(tester.view.reset);
     }
 
+    /// 一格一格推進到開 App 的骨架長完，之後才開始呼吸。
+    Future<void> grow(WidgetTester tester) async {
+      for (var i = 0; i < 100 && !motion.skeleton.isCompleted; i++) {
+        await tester.pump(frame);
+      }
+      expect(motion.skeleton.isCompleted, isTrue);
+    }
+
     /// 一格一格推進 [frames] 格，每一格每個取樣點都和上一格接得上：黑色
     /// 骨架呼吸最快時一格變約 4/255（曲線最陡處），不能比這更大。
     Future<List<int>> pumpSmoothly(
@@ -268,10 +276,34 @@ void main() {
       return previous;
     }
 
+    testWidgets('grows in at the deepest and only then starts breathing, from '
+        'the left and without a jump', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await tester.pump();
+      // 長出期間不呼吸：每一格都停在最深。
+      var frames = 0;
+      while (!motion.skeleton.isCompleted) {
+        expect(await sample(tester), everyElement(0), reason: '長出第 $frames 格');
+        await tester.pump(frame);
+        frames++;
+      }
+      expect(frames, greaterThan(30), reason: '長出要播完一整段');
+      // 長完：從整片最深開始，左邊先變淺、右邊還沒輪到，一路接得上。
+      var previous = await sample(tester);
+      expect(previous, everyElement(0));
+      previous = await pumpSmoothly(tester, previous, 12);
+      expect(previous.first, greaterThan(0), reason: '左邊先開始變淺');
+      expect(previous.last, 0, reason: '右邊還沒輪到');
+      previous = await pumpSmoothly(tester, previous, cycleFrames);
+      expect(previous.toSet(), hasLength(greaterThan(1)), reason: '照常由左而右呼吸');
+    });
+
     testWidgets('finishes each position\'s breath and stops it at the '
         'deepest, without a jump', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      await grow(tester);
       // 呼吸到一半：左右兩端深淺不同，都還在變。
       await tester.pump(const Duration(milliseconds: 300));
       var previous = await sample(tester);
@@ -309,6 +341,7 @@ void main() {
         'holding the launch forever', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      await grow(tester);
       await tester.pump(const Duration(milliseconds: 300));
       var rested = false;
       unawaited(motion.rest.settle().then((_) => rested = true));
@@ -329,6 +362,7 @@ void main() {
         'the release', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      await grow(tester);
       await tester.pump(const Duration(milliseconds: 700));
       var rested = false;
       unawaited(motion.rest.settle().then((_) => rested = true));
@@ -346,6 +380,7 @@ void main() {
         'does not stretch the rest', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
+      await grow(tester);
       await tester.pump(const Duration(milliseconds: 300));
       var rested = false;
       unawaited(motion.rest.settle().then((_) => rested = true));
