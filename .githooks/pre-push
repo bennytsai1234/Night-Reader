@@ -9,9 +9,14 @@ set -e
 # 的推送也不檢查：測試不讀這些檔，推上去後 CI 照樣會跑。算不出改了哪些檔時
 # （遠端那一端本機沒有、新分支找不到和 beta 的分岔點、比對失敗）照跑。
 # 全是 0 用「沒有非 0 的字元」判斷，SHA-256 的 64 個 0 也認得。
+# 已經在 beta 上的提交推進 beta 時就檢查過，CI 也跑過，也不再跑：發正式版時把 main
+# 快轉到 beta 的提交，拿 main 舊的位置去比會看到整段發版間隔的改動，白跑一次全套測試。
 needs_check=0
 while read -r _ local_sha _ remote_sha; do
   case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+  if git merge-base --is-ancestor "$local_sha" origin/beta 2>/dev/null; then
+    continue
+  fi
   case "$remote_sha" in
     *[!0]*)
       if git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
@@ -28,11 +33,19 @@ while read -r _ local_sha _ remote_sha; do
   git diff --quiet "$base" "$local_sha" -- . ':(exclude,glob)**/*.md' ':(exclude)docs' || needs_check=1
 done
 if [ "$needs_check" -eq 0 ]; then
-  echo "pre-push: 沒有要推的提交，或只改了說明文件，略過 analyze 與測試。"
+  echo "pre-push: 沒有要推的新提交（已在 beta 上的不再跑），或只改了說明文件，略過 analyze 與測試。"
   exit 0
+fi
+
+# 下面用 --no-pub，不讓每次推送都去解析套件。新開的 worktree 還沒下載套件，或 pubspec
+# 改過之後，analyze 會把每個 import 都報成錯誤（新 worktree 一次三萬多個），所以這時先
+# 裝好：先從本機快取裝，快取缺套件才連網。判斷方式和 flutter 自己決定要不要 pub get 一樣。
+config=.dart_tool/package_config.json
+if [ ! -f "$config" ] || [ pubspec.yaml -nt "$config" ] || [ pubspec.lock -nt "$config" ]; then
+  flutter pub get --offline || flutter pub get
 fi
 
 flutter analyze --no-pub
 flutter test --no-pub --reporter compact
-# 推送的人只看最後一行（AGENTS.md）；set -e 下走到這裡就是兩項都過了。
+# 推送的人看 `pre-push:` 開頭那一行（AGENTS.md）；set -e 下走到這裡就是兩項都過了。
 echo "pre-push: analyze 與全套測試通過"
