@@ -1,6 +1,6 @@
 # 日常改動進 beta、合併就發測試版；main 只快轉到用過的 beta 發正式版
 
-新增長期分支 `beta`，GitHub 的預設分支是 `beta`。功能與維護在從 `beta` 開的分支上做，走 PR 合併進 `beta`（Codex 審查、審查摘要貼在 PR 上、squash 合併、交接跟著 PR，照 ADR 0014）；只改說明文件時直接在 `beta` 上改。
+新增長期分支 `beta`，GitHub 的預設分支是 `beta`。功能與維護在從 `beta` 開的分支上做，走 PR 合併進 `beta`（改到 App 內容的 PR 由 Codex 審查、squash 合併、交接跟著 PR，照 ADR 0014）；只改說明文件時直接在 `beta` 上改。
 
 推上 `beta` 時，`android-release.yml` 把上一個發布之後累積的 App 改動自動發成測試版（tag 與「接收測試版更新」照 ADR 0004）。沒有 App 改動（例如只改文件）就不發，照常結束；改了 App 卻沒寫 `CHANGELOG.md` 的「未發布」時這次執行失敗（ADR 0010）。手動以 `channel=beta` 執行只用在補發自動那次沒發出去的測試版。
 

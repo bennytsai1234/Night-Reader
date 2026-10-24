@@ -58,7 +58,7 @@
 | [0002](0002-build-and-release-only-in-github-actions.md) | 建置與發布只在 GitHub Actions，tag 只由 CI 建立 |
 | [0003](0003-android-arm64-only.md) | Android 只發布 arm64-v8a，iOS 只附未簽章 IPA |
 | [0027](0027-beta-branch-and-fast-forward-main.md) | 日常改動進 beta、合併就發測試版；main 只快轉發正式版 |
-| [0014](0014-manual-beta-and-squash-prs.md) | PR 的審查、squash 合併、交接與原型分支（分支與發版時機已由 0027 取代） |
+| [0014](0014-manual-beta-and-squash-prs.md) | PR 的審查（只審改到 App 內容的）、squash 合併、交接與原型分支；全套測試只在 CI 跑（分支與發版時機已由 0027 取代） |
 | [0010](0010-release-notes-from-chinese-changelog.md) | Release 說明由中文 CHANGELOG 提供，發版前檢查一定要寫 |
 
 ## 已取代
