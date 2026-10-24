@@ -65,7 +65,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - `HANDOFF.md` 只寫查不到的事：還沒合併的工作在哪、等使用者決定的事、還沒寫進其他文件的決定；合併了什麼看 PR，發版看 GitHub Actions，環境上的坑寫在本檔「環境」。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。
-- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴；寫的是和上一個正式版相比的最後結果，改到已經寫過的事就改原本那一條，不另外加（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 結尾的 trailer 寫 `Release-Notes: none`。
+- 改到 App 內容的 PR，在同一個 PR 裡把變化寫進 `CHANGELOG.md` 的 `## 未發布`：一般讀者看得懂的中文，一兩句介紹加條列，不寫內部實作與 commit 前綴；寫的是和上一個正式版相比的最後結果，改到已經寫過的事就改原本那一條，不另外加（ADR 0010）。App 行為沒變的提交（例如只改註解）不寫，改在 commit message 裡單獨一行寫 `Release-Notes: none`，這種提交也不會發測試版。
 - `beta` 與 `main` 的分支保護只禁止強制推送與刪除，不強制走 PR：versionCode 取發版那個提交的提交數，改寫歷史會讓它變小，已安裝的 App 就無法升級（ADR 0004、0027）。
 - 長期有效的內容依性質放：架構與產品決定寫成 `docs/adr/` 的 ADR（並加進 `docs/adr/README.md` 的索引），寫碼規範寫進 `CODING_STANDARDS.md`，用語寫進 `GLOSSARY.md`，畫面與元件規格寫進 `DESIGN.md`；本檔只放從 repo 查不到的事實。
 
