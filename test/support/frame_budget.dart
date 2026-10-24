@@ -140,7 +140,7 @@ Future<List<FrameCost>> recordFrames(
       }
       var begin = -1;
       var end = -1;
-      SchedulerBinding.instance.scheduleFrameCallback((_) {
+      final timing = SchedulerBinding.instance.scheduleFrameCallback((_) {
         begin = clock.elapsedMicroseconds;
       }, scheduleNewFrame: false);
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -155,8 +155,10 @@ Future<List<FrameCost>> recordFrames(
       final top = frameAttribution || framePhases
           ? _exclusive(FlutterTimeline.debugCollect().timedBlocks)
           : const <AggregatedTimedBlock>[];
-      // 沒有排到幀（畫面靜止）時整段都算在幀前。
+      // 沒有排到幀（畫面靜止）時整段都算在幀前。量時間的回呼沒跑到，先撤掉
+      // 再數 ticker，不然它自己會被當成還有動畫在走。
       if (begin < 0 || end < 0) {
+        SchedulerBinding.instance.cancelFrameCallbackWithId(timing);
         begin = end = stop;
         ticking = SchedulerBinding.instance.transientCallbackCount > 0;
       }
@@ -242,10 +244,10 @@ String describeFrames(
   // 動畫中與靜止時各自最忙的一幀：重活該落在靜止的時候。
   String peak(bool moving) {
     final frames = costs.where((c) => c.moving == moving);
-    if (frames.isEmpty) return '沒有';
+    if (frames.isEmpty) return ' 0 幀';
     final top = frames.reduce((a, b) => b.total > a.total ? b : a);
     final over8 = frames.where((c) => c.total > over.inMicroseconds).length;
-    return '最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
+    return ' ${frames.length} 幀，最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
         '超過 ${over.inMilliseconds}ms 的 $over8 幀';
   }
 
