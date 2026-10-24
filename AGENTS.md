@@ -23,7 +23,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - **做到好，不要問**：目標做完、驗證過、沒有要使用者決定的事，就直接合併並回報結果，不問「要不要合併」。途中看到的警告、同一原因的其他問題一起收掉。使用者的話：「幫我把事情做到好，像許願機一樣」。
 - **寫給使用者的字全是繁體中文**：對話、PR 標題與說明、審查摘要、commit 說明的本文都是。#93 的 PR 說明寫成英文，是失誤。
-- **結果寫在對話裡**：使用者不看 PR 頁面與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」；PR 留言是留給之後讀歷史的 agent 看的。
+- **結果寫在對話裡**：使用者不看 PR 頁面與 GitHub Actions。審查發現、修了什麼、CI 與合併結果都寫進回覆，不寫「見 PR」；PR 說明是留給之後讀歷史的 agent 看的。
 - **用使用者的詞，不丟代號**：用 `GLOSSARY.md` 的詞，第一次出現先解釋。不寫 P0／P2、`.g.dart`、pre-push 這類沒解釋的代號；不說「未驗證」「實機」。
 - **視覺由使用者在圖上選**：改外觀或動畫前用 `test/support/screenshot.dart` 畫出候選，淺色、深色各一組，使用者選了就寫進 `DESIGN.md` 固定下來，不做成設定讓使用者再選一次（ADR 0030）。使用者說過版型與動畫已經很好，只要小修，不要大改。
 - **淺色與深色一起看**：分析配色、框線、陰影與層次時兩邊都要寫、都要量，不只看淺色就假設深色一樣。
@@ -47,8 +47,8 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 ## 驗證
 
-- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機先跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套交給 pre-push hook。
-- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試（只改說明文件，即任何 `.md` 與 `docs/`，以及推的提交已經在本機記錄的 `origin/beta` 上時略過；套件設定檔不存在或比 `pubspec.yaml`、`pubspec.lock` 舊時先照 lock 檔裝好套件）。推送時看 hook 印的 `pre-push:` 開頭那一行是 `pre-push: analyze 與全套測試通過`（只改說明文件時是略過的訊息）；Git 會在它後面再印遠端的訊息，只看最後幾行會漏掉它。
+- 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機只跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套測試只在 CI 跑（ADR 0014）。
+- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze`（只改說明文件，即任何 `.md` 與 `docs/`，以及推的提交已經在本機記錄的 `origin/beta` 上時略過；套件設定檔不存在或比 `pubspec.yaml`、`pubspec.lock` 舊時先照 lock 檔裝好套件）。推送時看 hook 印的 `pre-push:` 開頭那一行是 `pre-push: analyze 通過（全套測試看 CI）`（只改說明文件時是略過的訊息）；Git 會在它後面再印遠端的訊息，只看最後幾行會漏掉它。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart`（Drift 產生的資料庫程式）一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。要給使用者看畫面時，用 `test/support/screenshot.dart` 把元件測試畫成 PNG（用法寫在檔頭）；改介面前後要對照整個 App 時，重拍 `test/screens/` 那組固定畫面（平常的全套測試會跳過）。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message（`CODING_STANDARDS.md`「動畫」）。
@@ -61,7 +61,11 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 - 兩條長期分支：`beta` 是預設分支，日常的改動都進這裡；`main` 只快轉到 `beta` 上使用者用過沒問題的提交，用來發正式版，不在 `main` 上提交。
 - 只改說明文件（`README.md`、`DESIGN.md`、`GLOSSARY.md`、`CODING_STANDARDS.md`、`AGENTS.md`、`HANDOFF.md`、`docs/`）時，先 `git pull --ff-only`，直接在 `beta` 上改、提交、推上去，不開分支、不審。
 - 新功能與維護（程式、測試、CI、hook、`pubspec.yaml`、`website/`）在從 `beta` 開的分支上做，照下面的流程開 PR 合併進 `beta`；跟著功能一起改的文件放在同一個 PR。
-- 交代的目標做完、驗證過，也沒有等使用者決定的事，就是告一段落：直接合併，不問使用者要不要合併。合併時把這次要合併的分支併成一條、推上去、開一個以 `beta` 為目標的 PR（PR 說明照 `pr` 技能寫，用繁體中文）。開 PR 後派 Codex 審整個 PR 一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審），核對屬實的問題修在同一個 PR，再用 `gh pr comment` 把審查摘要貼成 PR 留言（發現了什麼、核對結果、修了哪些、沒修的為什麼）；在同一個 PR 把 `HANDOFF.md` 改成合併後的狀態，合併後不另外補交接；合併前 `git fetch` 把最新的 `beta` 併進分支，有新提交就解完衝突推上去，讓 CI 在合併後的狀態重跑；CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，PR 的分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `beta`，刪掉本機分支，併進這個 PR 的其他分支也連同遠端一起刪掉，`git worktree prune`。
+- 交代的目標做完、驗證過，也沒有等使用者決定的事，就是告一段落：直接合併，不問使用者要不要合併。合併照這個順序走，讓 CI 盡量只等一次（ADR 0014）：
+  1. 把這次要合併的分支併成一條，`git fetch` 把最新的 `beta` 併進來、解完衝突，推上去，開一個以 `beta` 為目標的 PR（PR 說明照 `pr` 技能寫，用繁體中文）。
+  2. 改到 App 內容的 PR（`sh tool/changelog.sh app-files origin/beta HEAD` 有輸出）開 PR 就派 Codex 審整個 PR 一次（`codex-review` 技能；沒有 Codex 的環境改派另一個子代理審）。只改網站、CI、hook、工具腳本、測試，或只是還原（revert）先前提交的 PR 不審。
+  3. 等審查時把 `CHANGELOG.md`、`HANDOFF.md` 改成合併後的狀態（合併後不另外補交接）。核對屬實的問題修在同一個 PR，審查摘要（發現了什麼、核對結果、修了哪些、沒修的為什麼）用 `gh pr edit --body-file` 寫進 PR 說明的「審查」一段，不另貼留言。修正、交接一起推一次。
+  4. 合併前再 `git fetch`：`beta` 在這段時間有新提交才再併一次、推上去。CI 通過（`gh pr checks <PR> --watch` 等結果）後用 `gh pr merge <PR> --squash` 合併，squash commit 的標題與說明取 PR 的標題與說明，PR 的分支由 GitHub 自動刪除。合併後 `git pull --ff-only` 更新本機 `beta`，刪掉本機分支，併進這個 PR 的其他分支也連同遠端一起刪掉，`git worktree prune`。
 - `HANDOFF.md` 只寫查不到的事：還沒合併的工作在哪、等使用者決定的事、還沒寫進其他文件的決定；合併了什麼看 PR，發版看 GitHub Actions，環境上的坑寫在本檔「環境」。
 - 原型分支不合併；使用者選定、結果寫進 `DESIGN.md` 或 ADR 後就刪掉。
 - commit 與 PR 標題用 Conventional Commits 格式（`fix(reader): …`）。

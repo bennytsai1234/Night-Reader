@@ -2,7 +2,7 @@ name: CI
 
 on:
   # 每條分支都跑，結果也顯示在該分支的 PR 上，通過才合併（AGENTS.md「Git 流程」）。
-  # 本機 pre-push 在 Windows 上跑，只有 Linux 會出的錯要靠這裡在進 beta 之前擋下。
+  # 全套測試只在這裡跑：本機推送前只跑 analyze（.githooks/pre-push，ADR 0014）。
   push:
     branches: ["**"]
   workflow_dispatch:
