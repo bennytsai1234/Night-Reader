@@ -356,6 +356,34 @@ void main() {
       expect(previous.toSet(), hasLength(greaterThan(1)), reason: '又在呼吸');
     });
 
+    testWidgets('a rest that starts before the right edge\'s turn still lets '
+        'every position breathe once', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(host());
+      await grow(tester);
+      // 剛開始呼吸就收住：右邊還沒輪到，也要呼完第一口才停。
+      var rested = false;
+      unawaited(motion.rest.settle().then((_) => rested = true));
+      final lightest = List.filled(xs.length, 0);
+      var previous = await sample(tester);
+      var frames = 0;
+      while (!rested) {
+        await tester.pump(frame);
+        expect(++frames, lessThanOrEqualTo(cycleFrames * 3 ~/ 2 + 1));
+        final now = await sample(tester);
+        for (var i = 0; i < xs.length; i++) {
+          expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(maxStep));
+          if (now[i] > lightest[i]) lightest[i] = now[i];
+        }
+        previous = now;
+      }
+      for (var i = 0; i < xs.length; i++) {
+        expect(lightest[i], greaterThan(50), reason: 'x=${xs[i]} 要呼一口');
+      }
+      await tester.pump(frame);
+      expect(await sample(tester), everyElement(0), reason: '整條都停在最深');
+    });
+
     testWidgets('a skeleton hidden mid-rest counts as rested instead of '
         'holding the launch forever', (tester) async {
       await setUpView(tester);

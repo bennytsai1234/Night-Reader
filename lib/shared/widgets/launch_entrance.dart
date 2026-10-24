@@ -249,15 +249,19 @@ class _LaunchEntranceState extends State<LaunchEntrance>
       motion._pauseOver.complete();
       return;
     }
-    // 骨架長完，這一格整片重建；停 idle 才開始呼吸，開始呼吸才算停頓。
-    // 都用計時器，不靠哪一格畫完。
+    // 骨架長完，這一格整片重建：等它畫完再停 idle 才開始呼吸（長完的通知
+    // 在這一格建畫面之前，從那時就算的話，這一格越重、停得越短），開始呼吸
+    // 才算停頓。
     void onStatus(AnimationStatus status) {
       if (!status.isCompleted) return;
       _controller.removeStatusListener(onStatus);
-      _timer = Timer(LaunchEntranceMotion.idle, () {
-        motion._breathing.value = true;
-        _timer = Timer(LaunchEntranceMotion.pause, () {
-          if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
+      SchedulerBinding.instance.endOfFrame.then((_) {
+        if (!mounted) return;
+        _timer = Timer(LaunchEntranceMotion.idle, () {
+          motion._breathing.value = true;
+          _timer = Timer(LaunchEntranceMotion.pause, () {
+            if (!motion._pauseOver.isCompleted) motion._pauseOver.complete();
+          });
         });
       });
     }
@@ -266,7 +270,19 @@ class _LaunchEntranceState extends State<LaunchEntrance>
     // 第一幀只畫底色、和系統啟動畫面一樣；畫完、準備工作也做完，清掉開 App
     // 留下的記憶體，再隔 idle 才開始長骨架。
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await widget.prepared?.call();
+      try {
+        await widget.prepared?.call();
+      } catch (error, stackTrace) {
+        // 準備工作失敗也照常進場：書架自己會顯示讀不到，不能停在底色。
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'launch entrance',
+            context: ErrorDescription('開 App 的準備工作失敗'),
+          ),
+        );
+      }
       // 資料回來排的那次重建：等它畫完。
       await SchedulerBinding.instance.endOfFrame;
       if (!mounted) return;

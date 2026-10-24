@@ -196,6 +196,32 @@ void main() {
     expect(motion.skeleton.value, greaterThan(0));
   });
 
+  testWidgets('still grows when the startup work fails', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LaunchEntrance(
+          prepared: () => Future.error(StateError('讀不到')),
+          child: Builder(
+            builder: (context) => SkeletonSwitcher(
+              loading: true,
+              entrance: LaunchEntrance.maybeOf(context),
+              skeleton: const SkeletonBox(width: 40, height: 40),
+              builder: (_) => const SizedBox(),
+            ),
+          ),
+        ),
+      ),
+    );
+    final motion = LaunchEntrance.maybeOf(
+      tester.element(find.byType(SkeletonSwitcher)),
+    )!;
+    await tester.pump();
+    expect(tester.takeException(), isStateError, reason: '錯誤照樣回報');
+    await tester.pump(LaunchEntranceMotion.idle);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(motion.skeleton.value, greaterThan(0), reason: '不能停在底色');
+  });
+
   testWidgets('breathes only idle after the skeleton has grown', (
     tester,
   ) async {
@@ -288,6 +314,30 @@ void main() {
     expect(finished, 1, reason: '換場播完才開始背景工作');
     await tester.tap(find.byIcon(Icons.menu));
     expect(leftTaps, 1);
+  });
+
+  testWidgets('the sweep starts only idle after both pictures are taken', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(loading: false));
+    await startGrowing(tester);
+    await tester.pump(const Duration(milliseconds: 620));
+    await tester.pump(LaunchEntranceMotion.idle);
+    await tester.pump(LaunchEntranceMotion.pause);
+    // 兩張都拍好、只貼「之前」那張圖的第一格（玻璃不再畫）：間隔從拍好
+    // 「之後」那一格開始算，最多早這一格。
+    expect(await pumpUntilCrossfading(tester), lessThan(untilCrossfade));
+    expect(tester.hasRunningAnimations, isFalse, reason: '拍好後的間隔裡畫面不動');
+    await tester.pump(
+      LaunchEntranceMotion.idle - const Duration(milliseconds: 40),
+    );
+    expect(tester.hasRunningAnimations, isFalse, reason: '還沒滿 idle');
+    await tester.pump(const Duration(milliseconds: 56));
+    expect(tester.hasRunningAnimations, isTrue, reason: '滿 idle 才開始掃');
+    for (var i = 0; i < 100 && finished == 0; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(finished, 1);
   });
 
   testWidgets('a screen size change mid-crossfade ends it and shows the real '

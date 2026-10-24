@@ -206,7 +206,8 @@ class SkeletonRest {
     if (_resting) clock.restNow();
   }
 
-  /// 收住登記著的骨架，全部停在最深時完成：最多再呼一輪（開 App 進場是
+  /// 收住登記著的骨架，全部停在最深時完成：每個位置把這一口呼完，還沒
+  /// 輪到的位置呼完第一口，最多再一輪半（開 App 進場一輪是
   /// [LaunchEntranceMotion.breathCycle]）。
   Future<void> settle() async {
     _resting = true;
@@ -378,9 +379,24 @@ class _BreathClock extends ChangeNotifier {
     if (rested != null && !rested.isCompleted) rested.complete();
   }
 
-  /// 從第 [from] 輪開始收住，到每個位置都停在最深要再過幾輪：位置 u 在
-  /// (lag·u − from) mod 1 輪後最深，u 從 0 到 1 取最晚的。
+  /// 從第 [from] 輪開始收住，位置 u（延遲 [lag]）再過幾輪停在最深：照常
+  /// 呼吸的位置在 (lag·u − from) mod 1 輪後最深；從整片最深重新開始
+  /// （[_restarted]）、還沒輪到的位置，要等它呼完第一口（lag·u + 1）才停，
+  /// 不能把它開始變淺的那一刻當成呼完（收住的計時器比呼吸的第一格早一點
+  /// 時，右邊會整段沒呼吸）。
+  double _stopAfter(double from, double u, double lag) {
+    final start = lag * u;
+    if (_restarted && from < start) return start + 1 - from;
+    return (start - from) % 1;
+  }
+
+  /// 從第 [from] 輪開始收住，到每個位置都停在最深要再過幾輪（[_stopAfter]
+  /// 在 u 從 0 到 1 取最晚的）：最多一輪；還有位置沒輪到時最晚的是右緣，
+  /// 最多一輪半。
   double _restLength(double from) {
+    if (_restarted && from < breath.lag) {
+      return _stopAfter(from, 1, breath.lag);
+    }
     final first = -from % 1;
     final last = first + breath.lag;
     return last < 1 ? last : 1;
@@ -393,7 +409,7 @@ class _BreathClock extends ChangeNotifier {
     final phase = _phase;
     final from = _restFrom;
     if (from != null &&
-        (_still || phase - from >= (breath.lag * u - from) % 1)) {
+        (_still || phase - from >= _stopAfter(from, u, breath.lag))) {
       return 1;
     }
     if (_restarted && phase < breath.lag * u) return 1;
