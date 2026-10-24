@@ -35,6 +35,7 @@ class FrameCost {
     required this.top,
     required this.dirty,
     this.note,
+    this.moving = false,
   });
 
   final int index;
@@ -61,6 +62,12 @@ class FrameCost {
   /// 這一幀畫完時畫面在哪一段（[recordFrames] 的 `note`），例如換頁中、
   /// 骨架、換場。
   final String? note;
+
+  /// 這一幀有動畫在走（上一幀結束時排著 ticker，例如換頁、骨架呼吸、換場、
+  /// 淡入）：這一幀晚了，畫面上看得到動作頓一下。沒有的是靜止的一幀，晚了
+  /// 只是畫面晚一點變（ADR 0031：重活放在畫面靜止的時候）。被一張定格畫面
+  /// 蓋住的動畫也算在走（開 App 拍「之後」那一格），看尖峰時對照 [note]。
+  final bool moving;
 
   int get total => beforeFrame + frame + afterFrame + async;
 }
@@ -121,7 +128,10 @@ Future<List<FrameCost>> recordFrames(
   final clock = Stopwatch()..start();
   try {
     var tail = -1;
+    // 排著的 ticker 會在下一幀走一步（第一步只記下起點，畫面還沒動）。
+    var ticking = SchedulerBinding.instance.transientCallbackCount > 0;
     for (var index = 0; index < maxFrames; index++) {
+      final moving = ticking;
       var asyncCost = 0;
       if (realAsync) {
         final start = clock.elapsedMicroseconds;
@@ -135,6 +145,7 @@ Future<List<FrameCost>> recordFrames(
       }, scheduleNewFrame: false);
       SchedulerBinding.instance.addPostFrameCallback((_) {
         end = clock.elapsedMicroseconds;
+        ticking = SchedulerBinding.instance.transientCallbackCount > 0;
       });
       if (frameAttribution || framePhases) FlutterTimeline.debugReset();
       final start = clock.elapsedMicroseconds;
@@ -145,7 +156,10 @@ Future<List<FrameCost>> recordFrames(
           ? _exclusive(FlutterTimeline.debugCollect().timedBlocks)
           : const <AggregatedTimedBlock>[];
       // 沒有排到幀（畫面靜止）時整段都算在幀前。
-      if (begin < 0 || end < 0) begin = end = stop;
+      if (begin < 0 || end < 0) {
+        begin = end = stop;
+        ticking = SchedulerBinding.instance.transientCallbackCount > 0;
+      }
       costs.add(
         FrameCost(
           index: index,
@@ -156,6 +170,7 @@ Future<List<FrameCost>> recordFrames(
           top: top,
           dirty: dirty,
           note: note?.call(),
+          moving: moving,
         ),
       );
       dirty = <String, int>{};
@@ -224,11 +239,23 @@ String describeFrames(
   String ms(int us) => (us / 1000).toStringAsFixed(1);
   final totals = [for (final cost in costs) cost.total]..sort();
   final spikes = costs.where((c) => c.total > over.inMicroseconds);
+  // 動畫中與靜止時各自最忙的一幀：重活該落在靜止的時候。
+  String peak(bool moving) {
+    final frames = costs.where((c) => c.moving == moving);
+    if (frames.isEmpty) return '沒有';
+    final top = frames.reduce((a, b) => b.total > a.total ? b : a);
+    final over8 = frames.where((c) => c.total > over.inMicroseconds).length;
+    return '最大 ${ms(top.total)}ms（第 ${top.index} 幀）、'
+        '超過 ${over.inMilliseconds}ms 的 $over8 幀';
+  }
+
   final lines = [
     '$label：${costs.length} 幀，中位數 ${ms(totals[totals.length ~/ 2])}ms，'
         '最大 ${ms(totals.last)}ms，超過 ${over.inMilliseconds}ms 的 ${spikes.length} 幀',
+    '  動畫中${peak(true)}；靜止時${peak(false)}',
     for (final cost in spikes) ...[
-      '  第 ${cost.index} 幀${cost.note == null ? '' : '（${cost.note}）'} '
+      '  第 ${cost.index} 幀${cost.moving ? '［動］' : '［靜］'}'
+          '${cost.note == null ? '' : '（${cost.note}）'} '
           '${ms(cost.total)}ms：幀前 ${ms(cost.beforeFrame)}、'
           '幀 ${ms(cost.frame)}、幀後 ${ms(cost.afterFrame)}、'
           '非同步 ${ms(cost.async)}',
