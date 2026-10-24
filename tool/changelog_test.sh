@@ -105,6 +105,7 @@ commit() {
 
 changelog() { printf '# 更新說明\n\n## 未發布\n\n%s\n## 0.3.3\n\n- 上一版\n' "$1"; }
 check() { (cd "$repo" && sh "$tool" check "$@"); }
+app_files() { (cd "$repo" && sh "$tool" app-files "$@"); }
 
 base=$(commit init "pubspec.yaml=version: 0.3.3
 " "lib/main.dart=v1" "CHANGELOG.md=$(changelog '')")
@@ -112,8 +113,15 @@ base=$(commit init "pubspec.yaml=version: 0.3.3
 docs=$(commit docs "README.md=說明" "docs/adr/0001.md=x" "test/a_test.dart=x" "website/index.html=x")
 expect_success 'check: 只改文件、網站、測試不需要寫' check "$base" "$docs"
 
-ci=$(commit ci ".github/workflows/ci.yml=x" ".githooks/pre-push=x" "tool/x.sh=x")
+ci=$(commit ci ".github/workflows/ci.yml=x" ".github/workflows/website-deploy.yml=x" ".githooks/pre-push=x" "tool/x.sh=x")
 expect_success 'check: 只改 CI、hook、工具腳本不需要寫' check "$base" "$ci"
+expect_output 'app-files: 只改文件、測試、CI、hook、工具腳本時不印' '' app_files "$base" "$ci"
+
+g checkout -q -b build "$ci"
+build=$(commit build ".github/workflows/android-release.yml=x")
+expect_failure 'check: 改建置 APK 的 workflow 算 App 內容' check "$base" "$build"
+expect_output 'app-files: 印出改到的 App 內容檔案' '.github/workflows/android-release.yml' app_files "$base" "$build"
+g checkout -q -
 
 app=$(commit app "lib/main.dart=v2")
 expect_failure 'check: 改到 App 內容但沒寫更新說明時擋下' check "$base" "$app"
@@ -144,12 +152,15 @@ broken=$(commit broken "lib/main.dart=v4" "CHANGELOG.md=# 更新說明
 ")
 expect_failure 'check: CHANGELOG.md 沒有「未發布」標題時擋下' check "$bare_bump" "$broken"
 
-# App 行為沒變的提交在 trailer 標 Release-Notes: none。
+# App 行為沒變的提交單獨一行標 Release-Notes: none。
 g checkout -q -b exempt "$noted"
 comment=$(commit "$(printf 'docs: fix a comment\n\nRelease-Notes: none\nCo-Authored-By: x <x@example.com>')" "lib/main.dart=v2 // 註解")
 expect_success 'check: 標了 Release-Notes: none 的提交不需要寫' check "$noted" "$comment"
+expect_output 'app-files: 標了 Release-Notes: none 的提交不算' '' app_files "$noted" "$comment"
+squashed=$(commit "$(printf 'fix(ci): squash 合併\n\nApp 內容沒變。\n\nRelease-Notes: none\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)')" "lib/main.dart=v2 // 註解 2")
+expect_success 'check: Release-Notes: none 後面還有一段時照樣算' check "$comment" "$squashed"
 in_body=$(commit "$(printf 'fix: change\n\nRelease-Notes: none 寫在內文不算\n\nCo-Authored-By: x <x@example.com>')" "lib/main.dart=v5")
-expect_failure 'check: 不在 trailer 的 Release-Notes 不算' check "$comment" "$in_body"
+expect_failure 'check: 不是單獨一行的 Release-Notes 不算' check "$squashed" "$in_body"
 g checkout -q -b mixed "$comment"
 mixed=$(commit fix "lib/other.dart=x")
 expect_failure 'check: 同一次推送裡還有沒標的 App 提交時擋下' check "$noted" "$mixed"

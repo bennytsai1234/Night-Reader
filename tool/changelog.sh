@@ -11,10 +11,14 @@
 #     不含開頭的介紹段落。<base> 沒有這個段落時印出全部條列。
 #     android-release.yml 以上一個發布的 tag 為 base，取測試版的 Release 說明。
 #
+#   sh tool/changelog.sh app-files <base> <head>
+#     印出 base..head 改到的 App 內容檔案，一行一個；沒有時不印。
+#     commit message 裡單獨一行寫了 `Release-Notes: none` 的提交（App 行為沒變，例如只改註解）不算。
+#     android-release.yml 以上一個發布的 tag 為 base 呼叫，有輸出才發測試版。
+#
 #   sh tool/changelog.sh check <base> <head>
-#     base..head 改到 App 內容時，確認 CHANGELOG.md 有跟著寫：「## 未發布」改過且不是空的，
-#     或新增了正式版的「## X.Y.Z」段落。沒寫時結束碼為 1。
-#     commit message 的 trailer 寫了 `Release-Notes: none` 的提交（App 行為沒變，例如只改註解）不算。
+#     base..head 改到 App 內容（照 app-files）時，確認 CHANGELOG.md 有跟著寫：「## 未發布」
+#     改過且不是空的，或新增了正式版的「## X.Y.Z」段落。沒寫時結束碼為 1。
 #     android-release.yml 發測試版時以上一個發布的 tag 為 base 呼叫（ADR 0027）。
 #
 # 測試：sh tool/changelog_test.sh
@@ -22,13 +26,46 @@ set -eu
 
 UNRELEASED='未發布'
 
-# 不算 App 內容的路徑：android-release.yml 的 release_ignored（文件、網站、測試、ci.yml），
-# 加上不進 APK 的 CI 設定、Git hook 與這類工具腳本。改 release_ignored 時這裡一起改。
+# 不進 APK 的路徑：文件、網站、測試、Git hook、工具腳本，以及只跑測試的 ci.yml 與部署網站的
+# website-deploy.yml。android-release.yml 算 App 內容：APK 用它固定的 Flutter 版本與參數建置。
 is_app_path() {
   case $1 in
-    *.md | docs/* | website/* | test/* | .github/* | .githooks/* | tool/*) return 1 ;;
+    *.md | docs/* | website/* | test/* | .githooks/* | tool/* | \
+      .github/workflows/ci.yml | .github/workflows/website-deploy.yml) return 1 ;;
   esac
   return 0
+}
+
+# 不用 git 的 trailer 解析：squash 合併的說明最後一段是「Generated with」那行，
+# `Release-Notes: none` 寫在它前面一段就讀不到。
+exempt() {
+  git log -1 --format=%B "$1" | tr -d '\r' | grep -qxE 'Release-Notes:[[:space:]]*none[[:space:]]*'
+}
+
+app_files() {
+  changed=$(git -c core.quotePath=false diff --name-only "$1" "$2" |
+    while IFS= read -r path; do
+      if is_app_path "$path"; then printf '%s\n' "$path"; fi
+    done)
+  # 整段比起來沒改到 App 內容（例如改了又改回來）就不算。
+  [ -n "$changed" ] || return 0
+  git rev-list --no-merges "$1..$2" |
+    while IFS= read -r commit; do
+      exempt "$commit" && continue
+      git -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$commit"
+    done | sort -u |
+    while IFS= read -r path; do
+      if is_app_path "$path"; then printf '%s\n' "$path"; fi
+    done
+}
+
+require_commits() {
+  for commit in "$@"; do
+    if ! git rev-parse --verify --quiet "$commit^{commit}" >/dev/null; then
+      echo "changelog: 本機沒有提交 $commit，先 git fetch 再試。" >&2
+      return 1
+    fi
+  done
 }
 
 section() {
@@ -73,35 +110,11 @@ check() {
       return 0
       ;;
   esac
-  for commit in "$base" "$head"; do
-    if ! git rev-parse --verify --quiet "$commit^{commit}" >/dev/null; then
-      echo "changelog: 本機沒有提交 $commit，先 git fetch 再試。" >&2
-      return 1
-    fi
-  done
+  require_commits "$base" "$head" || return 1
 
-  app_files=$(git -c core.quotePath=false diff --name-only "$base" "$head" |
-    while IFS= read -r path; do
-      if is_app_path "$path"; then printf '%s\n' "$path"; fi
-    done)
+  app_files=$(app_files "$base" "$head")
   if [ -z "$app_files" ]; then
-    echo "changelog: 這次沒有改到 App 內容，不需要更新說明。"
-    return 0
-  fi
-
-  # 不影響 App 行為的提交（例如只改註解）在 commit message 結尾的 trailer 寫
-  # `Release-Notes: none`，不需要更新說明；只看其他提交改到的 App 檔案。
-  app_files=$(git rev-list --no-merges "$base..$head" |
-    while IFS= read -r commit; do
-      notes=$(git log -1 --format='%(trailers:key=Release-Notes,valueonly)' "$commit" | tr -d '[:space:]')
-      [ "$notes" = none ] && continue
-      git -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$commit"
-    done | sort -u |
-    while IFS= read -r path; do
-      if is_app_path "$path"; then printf '%s\n' "$path"; fi
-    done)
-  if [ -z "$app_files" ]; then
-    echo "changelog: 改到 App 內容的提交都標了 Release-Notes: none，不需要更新說明。"
+    echo "changelog: 這次沒有改到 App 內容，或改到的提交都標了 Release-Notes: none，不需要更新說明。"
     return 0
   fi
 
@@ -145,7 +158,7 @@ check() {
 }
 
 usage() {
-  echo "用法：sh tool/changelog.sh section <標題> [檔案] | added <base> [檔案] | check <base> <head>" >&2
+  echo "用法：sh tool/changelog.sh section <標題> [檔案] | added <base> [檔案] | app-files <base> <head> | check <base> <head>" >&2
   exit 2
 }
 
@@ -160,6 +173,11 @@ case $command in
   added)
     [ $# -ge 1 ] && [ $# -le 2 ] || usage
     added "$@"
+    ;;
+  app-files)
+    [ $# -eq 2 ] || usage
+    require_commits "$@"
+    app_files "$@"
     ;;
   check)
     [ $# -eq 2 ] || usage
