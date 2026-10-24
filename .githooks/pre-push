@@ -39,10 +39,12 @@ fi
 
 # 下面用 --no-pub，不讓每次推送都去解析套件。新開的 worktree 還沒下載套件，或 pubspec
 # 改過之後，analyze 會把每個 import 都報成錯誤（新 worktree 一次三萬多個），所以這時先
-# 裝好：先從本機快取裝，快取缺套件才連網。判斷方式和 flutter 自己決定要不要 pub get 一樣。
+# 裝好：套件設定檔不存在，或比 pubspec.yaml／pubspec.lock 舊時，先從本機快取裝，快取缺
+# 套件才連網。--enforce-lockfile 讓快取裡只有別的版本時離線那次失敗，不會改用別的版本、
+# 改寫 pubspec.lock，檢查到的套件就是推上去的那一份。
 config=.dart_tool/package_config.json
 if [ ! -f "$config" ] || [ pubspec.yaml -nt "$config" ] || [ pubspec.lock -nt "$config" ]; then
-  flutter pub get --offline || flutter pub get
+  flutter pub get --offline --enforce-lockfile || flutter pub get --enforce-lockfile
 fi
 
 flutter analyze --no-pub
