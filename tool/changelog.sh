@@ -36,27 +36,38 @@ is_app_path() {
   return 0
 }
 
-# 不用 git 的 trailer 解析：squash 合併的說明最後一段是「Generated with」那行，
-# `Release-Notes: none` 寫在它前面一段就讀不到。
-exempt() {
-  git log -1 --format=%B "$1" | tr -d '\r' | grep -qxE 'Release-Notes:[[:space:]]*none[[:space:]]*'
+app_paths() {
+  while IFS= read -r path; do
+    if [ -n "$path" ] && is_app_path "$path"; then printf '%s\n' "$path"; fi
+  done
 }
 
+# git 的輸出先存進變數再篩：sh 的管線只看最後一個指令的結束碼，git 失敗會被當成沒有改動，
+# 發版就默默略過。
 app_files() {
-  changed=$(git -c core.quotePath=false diff --name-only "$1" "$2" |
-    while IFS= read -r path; do
-      if is_app_path "$path"; then printf '%s\n' "$path"; fi
-    done)
-  # 整段比起來沒改到 App 內容（例如改了又改回來）就不算。
+  diff=$(git -c core.quotePath=false diff --name-only "$1" "$2") || return 1
+  changed=$(printf '%s\n' "$diff" | app_paths)
   [ -n "$changed" ] || return 0
-  git rev-list --no-merges "$1..$2" |
-    while IFS= read -r commit; do
-      exempt "$commit" && continue
-      git -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$commit"
-    done | sort -u |
-    while IFS= read -r path; do
-      if is_app_path "$path"; then printf '%s\n' "$path"; fi
-    done
+  commits=$(git rev-list "$1..$2") || return 1
+  touched=''
+  for commit in $commits; do
+    message=$(git log -1 --format=%B "$commit") || return 1
+    # 不用 git 的 trailer 解析：squash 合併的說明最後一段是「Generated with」那行，
+    # `Release-Notes: none` 寫在它前面一段就讀不到。
+    if printf '%s\n' "$message" | tr -d '\r' | grep -qxE 'Release-Notes:[[:space:]]*none[[:space:]]*'; then
+      continue
+    fi
+    # -c：合併提交只列和每個父提交都不同的檔案，也就是合併時另外改的；兩邊分支原本的改動
+    # 由分支上的提交各自算。
+    files=$(git -c core.quotePath=false diff-tree --no-commit-id --name-only -r -c "$commit") || return 1
+    touched="$touched
+$files"
+  done
+  # 只留整段比起來還有差異的檔案：改了又改回來的不算。
+  printf '%s\n' "$touched" | app_paths | sort -u | CHANGED=$changed awk '
+    BEGIN { n = split(ENVIRON["CHANGED"], lines, "\n"); for (i = 1; i <= n; i++) keep[lines[i]] = 1 }
+    $0 in keep
+  '
 }
 
 require_commits() {
@@ -112,7 +123,7 @@ check() {
   esac
   require_commits "$base" "$head" || return 1
 
-  app_files=$(app_files "$base" "$head")
+  app_files=$(app_files "$base" "$head") || return 1
   if [ -z "$app_files" ]; then
     echo "changelog: 這次沒有改到 App 內容，或改到的提交都標了 Release-Notes: none，不需要更新說明。"
     return 0

@@ -242,7 +242,7 @@ jobs:
               echo "::error::CHANGELOG.md 找不到「## $notes_heading」段落。正式版的版號 commit 要把「## 未發布」改成「## $notes_heading」，並在上面留一個空的「## 未發布」。"
               exit 1
             fi
-            # 測試版的「未發布」可以是空的（例如正式版之後只改了 CI），App 會顯示「沒有附更新說明」；正式版一定要有說明。
+            # 測試版的說明可以是空的，App 會顯示「沒有附更新說明」；正式版一定要有說明。
             if [[ "$prerelease" != "true" && -z "$notes" ]]; then
               echo "::error::CHANGELOG.md 的「## $notes_heading」段落是空的，請寫上這個正式版的更新說明。"
               exit 1
