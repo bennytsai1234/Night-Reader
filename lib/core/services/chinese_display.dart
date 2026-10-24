@@ -26,7 +26,18 @@ abstract final class ChineseDisplay {
   /// 載入字典。載入完成前轉換會原樣返回，所以要轉換時，書架這類第一次
   /// 顯示書名的畫面先看 [readyOf] 再換成內容，書名不會在畫面上從原文
   /// 一下子變成轉換後的字。
-  static Future<void> start(SharedPreferences prefs) async {
+  static Future<void> start(SharedPreferences prefs) =>
+      _loading = _start(prefs);
+
+  /// [start] 做完時完成：讀字典檔、送進背景 isolate 解析、要轉換時整個
+  /// App 重建一次，都在主執行緒上有工作。開 App 的進場等它做完才開始長
+  /// 骨架（`LaunchEntrance.prepared`）。沒呼叫 [start]（測試）時已完成：每次
+  /// 給一個新的，不留一個建好的 future 給之後的呼叫端（future 在建立它的
+  /// zone 裡通知等的人，測試一個接一個換 zone）。
+  static Future<void> get loaded => _loading ?? Future<void>.value();
+  static Future<void>? _loading;
+
+  static Future<void> _start(SharedPreferences prefs) async {
     mode.value = prefs.getInt(PreferKey.readerChineseConvert) ?? 0;
     try {
       await ChineseUtils.initialize();

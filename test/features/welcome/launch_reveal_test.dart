@@ -128,10 +128,10 @@ final int _span =
     (SkeletonReveal.defaultDuration.inMicroseconds / _frame.inMicroseconds)
         .ceil();
 
-/// 換場前靜止的格數：骨架在拍「之前」那一格就離開元件樹，之後畫面還靜止
-/// hold 才開始掃（[LaunchEntranceMotion.hold]）。
-final int _holdFrames =
-    (LaunchEntranceMotion.hold.inMicroseconds / _frame.inMicroseconds).ceil();
+/// 換場前靜止的格數：骨架在拍「之前」那一格就離開元件樹，兩張拍好後畫面
+/// 還靜止 idle 才開始掃（[LaunchEntranceMotion.idle]）。
+final int _idleFrames =
+    (LaunchEntranceMotion.idle.inMicroseconds / _frame.inMicroseconds).ceil();
 
 /// 第 [k] 格（換場從第 [start] 格開始）每一行像素的理想濃度。
 List<double> _alphas(int width, int k, int start) {
@@ -180,7 +180,7 @@ void main() {
       LaunchEntranceMotion? entrance;
       var sawSkeleton = false;
       var tail = -1;
-      for (var i = 0; i < 600 && tail < _span + _holdFrames + 12; i++) {
+      for (var i = 0; i < 600 && tail < _span + _idleFrames + 12; i++) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
         await tester.pump(_frame);
         final view = tester.binding.renderViews.first;
@@ -213,7 +213,7 @@ void main() {
       }
       expect(
         tail,
-        greaterThanOrEqualTo(_span + _holdFrames + 12),
+        greaterThanOrEqualTo(_span + _idleFrames + 12),
         reason: '換場要播完',
       );
 
@@ -309,15 +309,15 @@ void main() {
       }
       expect(start, greaterThanOrEqualTo(0), reason: '換場前要有靜止的畫面');
 
-      // 換場前畫面靜止至少 hold：呼吸收住了才拍圖，拍圖那幾格落在靜止的
-      // 畫面裡（LaunchEntranceMotion.rest、hold）。
+      // 換場前畫面靜止至少 idle：呼吸收住了才拍圖，拍圖那幾格與之後的間隔
+      // 都落在靜止的畫面裡（LaunchEntranceMotion.rest、idle）。
       var stillFrom = start;
       while (stillFrom > 0 && same(stillFrom - 1, start)) {
         stillFrom--;
       }
       expect(
         (start - stillFrom) * _frame.inMicroseconds,
-        greaterThanOrEqualTo(LaunchEntranceMotion.hold.inMicroseconds),
+        greaterThanOrEqualTo(LaunchEntranceMotion.idle.inMicroseconds),
         reason: '換場前靜止了 ${start - stillFrom} 格',
       );
 

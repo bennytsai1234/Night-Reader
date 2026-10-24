@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
+import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/default_data.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
@@ -282,9 +283,19 @@ class _MainPageState extends State<MainPage>
     );
     // 開 App 的進場只在真正的主頁面播（ADR 0025）。
     return widget.destinations == null
-        ? LaunchEntrance(onFinished: _onLaunchSettled, child: page)
+        ? LaunchEntrance(
+            onFinished: _onLaunchSettled,
+            prepared: _launchPrepared,
+            child: page,
+          )
         : page;
   }
+
+  /// 開 App 的準備工作：書架讀完、繁簡字典載入完（[LaunchEntrance.prepared]）。
+  Future<void> _launchPrepared() => Future.wait([
+    context.read<BookshelfProvider>().firstLoad,
+    ChineseDisplay.loaded,
+  ]);
 
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播
   /// 「外觀與主題 → 換頁動畫」選的那一種；往右邊的分頁像開新頁，往左像

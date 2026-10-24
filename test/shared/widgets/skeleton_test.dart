@@ -165,9 +165,19 @@ void main() {
 
   group('resting the breath (launch reveal)', () {
     const frame = Duration(milliseconds: 16);
-    // 一輪呼吸的格數，加一格捨入：收住最多再呼一輪。
+    // 開 App 進場一輪呼吸的格數，加一格捨入：收住最多再呼一輪。
     final cycleFrames =
-        (Skeleton.breathCycle.inMicroseconds / frame.inMicroseconds).ceil() + 1;
+        (LaunchEntranceMotion.breathCycle.inMicroseconds / frame.inMicroseconds)
+            .ceil() +
+        1;
+    // 黑色骨架照一般節奏呼吸時，一格最多變約 4/255（曲線最陡處）；開 App
+    // 的呼吸快幾倍，一格就多變幾倍，再加一的捨入。
+    final maxStep =
+        (4 *
+                Skeleton.breathCycle.inMicroseconds /
+                LaunchEntranceMotion.breathCycle.inMicroseconds)
+            .ceil() +
+        1;
     final boundary = GlobalKey();
     late LaunchEntranceMotion motion;
 
@@ -246,16 +256,17 @@ void main() {
       addTearDown(tester.view.reset);
     }
 
-    /// 一格一格推進到開 App 的骨架長完，之後才開始呼吸。
+    /// 一格一格推進到開 App 的骨架長完、停過 idle、開始呼吸的那一格。
     Future<void> grow(WidgetTester tester) async {
-      for (var i = 0; i < 100 && !motion.skeleton.isCompleted; i++) {
+      for (var i = 0; i < 100 && !motion.breathing.value; i++) {
         await tester.pump(frame);
       }
-      expect(motion.skeleton.isCompleted, isTrue);
+      expect(motion.breathing.value, isTrue);
+      await tester.pump(frame);
     }
 
-    /// 一格一格推進 [frames] 格，每一格每個取樣點都和上一格接得上：黑色
-    /// 骨架呼吸最快時一格變約 4/255（曲線最陡處），不能比這更大。
+    /// 一格一格推進 [frames] 格，每一格每個取樣點都和上一格接得上：一格
+    /// 最多變 [maxStep]。
     Future<List<int>> pumpSmoothly(
       WidgetTester tester,
       List<int> previous,
@@ -267,7 +278,7 @@ void main() {
         for (var j = 0; j < xs.length; j++) {
           expect(
             (now[j] - previous[j]).abs(),
-            lessThanOrEqualTo(5),
+            lessThanOrEqualTo(maxStep),
             reason: '第 $i 格 x=${xs[j]}',
           );
         }
@@ -289,9 +300,17 @@ void main() {
         frames++;
       }
       expect(frames, greaterThan(30), reason: '長出要播完一整段');
-      // 長完：從整片最深開始，左邊先變淺、右邊還沒輪到，一路接得上。
+      // 長完先停 idle（這一格整片重建），停的期間整片最深。
       var previous = await sample(tester);
       expect(previous, everyElement(0));
+      var still = 0;
+      while (!motion.breathing.value) {
+        await tester.pump(frame);
+        expect(await sample(tester), everyElement(0), reason: '長完停的第 $still 格');
+        still++;
+      }
+      expect(still, greaterThan(4), reason: '停滿 idle 才呼吸');
+      // 開始呼吸：從整片最深開始，左邊先變淺、右邊還沒輪到，一路接得上。
       previous = await pumpSmoothly(tester, previous, 12);
       expect(previous.first, greaterThan(0), reason: '左邊先開始變淺');
       expect(previous.last, 0, reason: '右邊還沒輪到');
@@ -318,7 +337,7 @@ void main() {
         expect(++frames, lessThanOrEqualTo(cycleFrames), reason: '最多再呼一輪');
         final now = await sample(tester);
         for (var i = 0; i < xs.length; i++) {
-          expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(5));
+          expect((now[i] - previous[i]).abs(), lessThanOrEqualTo(maxStep));
           // 停在最深的位置不再動。
           if (stopped.contains(i)) expect(now[i], 0, reason: 'x=${xs[i]}');
           if (now[i] == 0) stopped.add(i);
@@ -401,7 +420,7 @@ void main() {
     ) async {
       await setUpView(tester);
       await tester.pumpWidget(host());
-      // 骨架長完（0.6 秒）、停過一個呼吸（0.8 秒）後開始收住。
+      // 隔 idle 長出（0.6 秒）、停 idle、呼吸半輪後開始收住。
       unawaited(
         motion.reveal(
           change: () {},

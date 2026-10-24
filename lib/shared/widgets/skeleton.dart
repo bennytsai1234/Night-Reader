@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -156,7 +156,7 @@ class _SkeletonState extends State<Skeleton>
   /// 開 App 的進場收住呼吸時登記在這裡（[LaunchEntranceMotion.rest]）。
   SkeletonRest? _rest;
 
-  /// 所在的開 App 進場；骨架長出期間不呼吸（[_BreathClock.holdUntil]）。
+  /// 所在的開 App 進場；骨架開始呼吸前不呼吸（[_BreathClock.holdUntil]）。
   LaunchEntranceMotion? _entrance;
 
   @override
@@ -175,7 +175,7 @@ class _SkeletonState extends State<Skeleton>
     }
     if (!identical(entrance, _entrance)) {
       _entrance = entrance;
-      if (entrance != null) _clock.holdUntil(entrance.skeleton);
+      if (entrance != null) _clock.holdUntil(entrance);
     }
   }
 
@@ -206,8 +206,8 @@ class SkeletonRest {
     if (_resting) clock.restNow();
   }
 
-  /// 收住登記著的骨架，全部停在最深時完成：最多再呼一輪
-  /// （[Skeleton.breathCycle]）。
+  /// 收住登記著的骨架，全部停在最深時完成：最多再呼一輪（開 App 進場是
+  /// [LaunchEntranceMotion.breathCycle]）。
   Future<void> settle() async {
     _resting = true;
     while (true) {
@@ -284,42 +284,49 @@ class _BreathClock extends ChangeNotifier {
   }
 
   void _start() {
-    if (!_allowed || _still || _growth != null || _ticker.isActive) return;
+    if (!_allowed || _still || _hold != null || _ticker.isActive) return;
     _base = _cycles;
     _ticker.start();
   }
 
-  /// 開 App 的骨架長出中（[holdUntil]）：整片停在最深、計時器不走。
-  Animation<double>? _growth;
+  /// 呼吸一輪多長：開 App 進場中的骨架照進場的節奏
+  /// （[LaunchEntranceMotion.breathCycle]），其他照 [Skeleton.breathCycle]。
+  Duration _cycle = Skeleton.breathCycle;
 
-  /// 開 App 的骨架長出時不呼吸、每個位置長到最深；[growth] 長完才照由左而右
-  /// 的先後開始第一口氣，起法和收住後接著呼吸（[resume]）一樣。長出時就在
-  /// 呼吸的話，長出看起來像一口比之後快的氣，長完接到真正的呼吸時頓一下
-  /// （使用者 2026-10-24 在三種做法的逐格錄影上選的，ADR 0025）。
-  void holdUntil(Animation<double> growth) {
-    _releaseGrowth();
-    if (growth.isCompleted) return;
-    _growth = growth..addStatusListener(_onGrowthStatus);
+  /// 開 App 的骨架還沒開始呼吸（[holdUntil]）：整片停在最深、計時器不走。
+  ValueListenable<bool>? _hold;
+
+  /// 開 App 的骨架長出時與長完後停的那一下不呼吸、每個位置停在最深；
+  /// [LaunchEntranceMotion.breathing] 才照由左而右的先後開始第一口氣，起法
+  /// 和收住後接著呼吸（[resume]）一樣。長出時就在呼吸的話，長出看起來像
+  /// 一口比之後快的氣，長完接到真正的呼吸時頓一下（使用者 2026-10-24 在
+  /// 三種做法的逐格錄影上選的，ADR 0025）。進場結束後才建的骨架照一般的
+  /// 節奏呼吸。
+  void holdUntil(LaunchEntranceMotion entrance) {
+    _releaseHold();
+    if (entrance.isFinished) return;
+    _cycle = LaunchEntranceMotion.breathCycle;
+    if (entrance.breathing.value) return;
+    _hold = entrance.breathing..addListener(_onBreathing);
     _ticker.stop();
   }
 
-  void _onGrowthStatus(AnimationStatus status) {
-    if (!status.isCompleted) return;
-    _releaseGrowth();
+  void _onBreathing() {
+    if (!_hold!.value) return;
+    _releaseHold();
     _shift = _cycles;
     _restarted = true;
     _start();
     notifyListeners();
   }
 
-  void _releaseGrowth() {
-    _growth?.removeStatusListener(_onGrowthStatus);
-    _growth = null;
+  void _releaseHold() {
+    _hold?.removeListener(_onBreathing);
+    _hold = null;
   }
 
   void _tick(Duration elapsed) {
-    _cycles =
-        _base + elapsed.inMicroseconds / Skeleton.breathCycle.inMicroseconds;
+    _cycles = _base + elapsed.inMicroseconds / _cycle.inMicroseconds;
     final from = _restFrom;
     if (from != null && _phase - from >= _restLength(from)) _settle();
     notifyListeners();
@@ -344,12 +351,14 @@ class _BreathClock extends ChangeNotifier {
   }
 
   /// 收住後接著呼吸：從整片最深重新開始，每個位置照由左而右的先後輪到
-  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗。
+  /// 才開始變淺，和一開始呼吸一樣接得上，不跳回原本的明暗。開 App 的進場
+  /// 播完才會接著呼吸，之後照一般的節奏。
   void resume() {
     if (_restFrom == null) return;
     _restFrom = null;
     _finishRest();
     _rested = null;
+    _cycle = Skeleton.breathCycle;
     if (!_still) return;
     _still = false;
     _shift = _cycles;
@@ -380,7 +389,7 @@ class _BreathClock extends ChangeNotifier {
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
   double depthAt(double u, SkeletonBreath breath) {
-    if (_growth != null) return 1;
+    if (_hold != null) return 1;
     final phase = _phase;
     final from = _restFrom;
     if (from != null &&
@@ -393,7 +402,7 @@ class _BreathClock extends ChangeNotifier {
 
   @override
   void dispose() {
-    _releaseGrowth();
+    _releaseHold();
     _ticker.dispose();
     _finishRest();
     super.dispose();
