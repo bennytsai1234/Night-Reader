@@ -12,8 +12,10 @@ import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/services/network_service.dart';
+import 'package:night_reader/features/reader_v2/hybrid/overlay/loading_veil.dart';
 import 'package:night_reader/shared/navigation/app_page_transition.dart';
 import 'package:night_reader/shared/widgets/skeleton.dart';
+import 'package:night_reader/shared/widgets/skeleton_reveal.dart';
 
 import 'app_harness.dart';
 import 'frame_budget.dart';
@@ -22,6 +24,22 @@ import 'frame_budget.dart';
 bool skeletonShown() =>
     find.byType(SkeletonBox).evaluate().isNotEmpty ||
     find.byType(SkeletonShapes).evaluate().isNotEmpty;
+
+/// 骨架與內容正在換場（[SkeletonRevealLayer] 的進度在走）。
+bool _revealing() => find
+    .byType(SkeletonRevealLayer)
+    .evaluate()
+    .any((e) => (e.widget as SkeletonRevealLayer).presence.isAnimating);
+
+/// 閱讀器載入的紙：蓋著是「紙」，正在掀開是「掀紙」，沒有是 null。
+String? _veil() {
+  for (final e in find.byType(LoadingVeil).evaluate()) {
+    final veil = (e.widget as LoadingVeil).controller;
+    if (veil.isRevealing) return '掀紙';
+    if (veil.isVisible) return '紙';
+  }
+  return null;
+}
 
 /// [page] 在畫面上、所在的頁面進場播完，上面也沒有頁面蓋著或正在移走。
 ///
@@ -67,6 +85,8 @@ Future<List<FrameCost>> measureNavigation(
       final stage = [
         if (!done()) note?.call() ?? '換頁',
         if (skeletonShown()) '骨架',
+        if (_revealing()) '換場',
+        ?_veil(),
       ].join('、');
       return stage.isEmpty ? null : stage;
     },
