@@ -78,11 +78,13 @@ final bool framePhases = Platform.environment['FRAME_PHASES'] == '1';
 /// isolate 裡的資料庫回應（`app_harness.dart` 的整個 App 需要）。[note] 在
 /// 每一幀畫完時記下畫面在哪一段，摘要裡跟著尖峰幀列出。[onFrame] 在每一幀
 /// 開始前呼叫（帶幀序號），拖動這類手勢一幀送一步；它花的時間算在幀前。
+/// [afterFrame] 在每一幀量完之後呼叫，不算進任何一幀（逐格錄影存畫面用）。
 Future<List<FrameCost>> recordFrames(
   WidgetTester tester, {
   required bool Function() until,
   String? Function()? note,
   Future<void> Function(int frame)? onFrame,
+  Future<void> Function(int frame)? afterFrame,
   int tailFrames = 0,
   int maxFrames = 1200,
   Duration frameDuration = const Duration(milliseconds: 16),
@@ -157,6 +159,7 @@ Future<List<FrameCost>> recordFrames(
         ),
       );
       dirty = <String, int>{};
+      if (afterFrame != null) await afterFrame(index);
       if (tail < 0 && until()) tail = 0;
       if (tail >= 0 && tail++ >= tailFrames) break;
     }

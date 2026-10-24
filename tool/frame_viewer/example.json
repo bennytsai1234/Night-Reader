@@ -1,0 +1,45 @@
+{
+  "title": "開 App 逐格錄影：呼吸長度與間隔",
+  "designs": [
+    {"key": "beta", "name": "目前 beta", "fixed": true, "breath": "1.6"},
+    {"key": "b1600", "name": "呼吸 1.6 秒", "breath": "1.6"},
+    {"key": "b1200", "name": "呼吸 1.2 秒", "breath": "1.2"},
+    {"key": "b1000", "name": "呼吸 1.0 秒", "breath": "1.0"}
+  ],
+  "variants": [
+    {"key": "g100", "label": "隔 0.1 秒", "value": "0.1"},
+    {"key": "g50", "label": "隔 0.05 秒", "value": "0.05"}
+  ],
+  "phases": {
+    "底色": {"label": "底色"},
+    "長出": {"label": "骨架長出", "kind": "moving"},
+    "呼吸": {"label": "呼吸", "kind": "moving"},
+    "靜止：建書架": {"label": "靜止"},
+    "靜止：拍圖": {"label": "靜止"},
+    "靜止：等開始": {"label": "隔一段", "kind": "gap"},
+    "換場": {"label": "換場", "kind": "moving"},
+    "換場後": {"label": "書架"}
+  },
+  "notes": {
+    "底色": {"default": "<b>開頭等一段</b>：只畫底色。書架資料讀好、那一格畫完，再隔 {variant} 秒才開始長骨架。", "beta": "只畫底色；下一格就開始長骨架。"},
+    "骨架長出": "<b>長出</b>：骨架由左而右長出，不呼吸。",
+    "呼吸": "<b>呼吸</b>：每個位置呼一口氣 {breath} 秒。",
+    "隔一段": {"default": "<b>隔一段</b>：兩張圖都拍好後，再隔 {variant} 秒才開始掃。", "beta": "<b>等開始</b>：從開始拍起至少停 0.15 秒。"}
+  },
+  "spots": {
+    "label": "骨架深淺",
+    "until": "換場",
+    "background": [134, 182],
+    "points": [
+      {"label": "左邊封面骨架", "x": 71, "y": 182},
+      {"label": "中間", "x": 196, "y": 182},
+      {"label": "右邊", "x": 321, "y": 182}
+    ]
+  },
+  "jumps": [
+    {"label": "跳到開頭", "phase": "底色"},
+    {"label": "跳到換場前", "phase": "靜止", "offset": -6}
+  ],
+  "end": {"phase": "書架", "label": "換成書架"},
+  "limitMs": 8
+}

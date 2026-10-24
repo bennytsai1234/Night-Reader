@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/*TITLE*/</title>
+<style>
+  .viz-root {
+    --grid: color-mix(in srgb, var(--border) 75%, transparent);
+    --moving-soft: color-mix(in srgb, var(--chart-1) 26%, var(--background));
+    --still-soft: color-mix(in srgb, var(--muted-foreground) 16%, var(--background));
+    --gap-soft: color-mix(in srgb, var(--chart-4) 30%, var(--background));
+    --heavy: var(--warning);
+    color: var(--foreground); font-family: var(--font-sans); font-size: 13px;
+  }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .controls button { font: inherit; font-size: 13px; color: var(--foreground); background: var(--secondary);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; cursor: pointer; }
+  .controls button.on { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .controls .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .clock { margin-left: auto; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .phones { display: flex; gap: 12px; justify-content: space-between; }
+  .phone { flex: 1; min-width: 0; text-align: center; cursor: pointer; }
+  .phone .shot { margin: 0 auto; border-radius: 14px; border: 2px solid var(--border);
+    background-repeat: no-repeat; overflow: hidden; }
+  .phone.sel .shot { border-color: var(--primary); }
+  .phone .name { font-weight: 600; margin-top: 4px; }
+  .phone .end { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .phone .ph { color: var(--muted-foreground); font-size: 12px; min-height: 18px; }
+  .phone .ph.gap { color: var(--chart-4); font-weight: 600; }
+  .side { margin-top: 10px; line-height: 1.7; }
+  .side .row { color: var(--muted-foreground); }
+  .side .row b { color: var(--foreground); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .note { margin-top: 6px; padding: 10px 12px; border-radius: var(--radius); background: var(--still-soft); line-height: 1.65; }
+  .note:empty { display: none; }
+  .note b { font-weight: 600; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; margin-top: 12px; cursor: pointer; user-select: none; }
+  svg text { fill: var(--foreground); font-size: 11px; font-family: var(--font-sans); }
+  .t2 { fill: var(--muted-foreground); }
+  .halo { paint-order: stroke; stroke: var(--background); stroke-width: 4px; stroke-linejoin: round; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted-foreground); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+  .box { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="controls" id="controls">
+    <button id="play">▶ 播放</button>
+    <button id="sp1" class="on">原速</button>
+    <button id="sp4">慢 4 倍</button>
+    <button id="prev">◀ 一格</button>
+    <button id="next">一格 ▶</button>
+    <span class="clock" id="clock"></span>
+  </div>
+  <div class="phones" id="phones"></div>
+  <div class="side">
+    <div class="row"><b id="selname"></b>：這一格主執行緒花了 <b id="cost"></b>，畫面和上一格差 <b id="diff"></b></div>
+    <div class="note" id="note"></div>
+  </div>
+  <svg id="chart" viewBox="0 0 728 300" role="img" aria-label="所選候選每一格的畫面變化、深淺與主執行緒時間"></svg>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+// 由 tool/frame_viewer/build.py 填入：設定、每段候選的拼圖、每格量測（編在 PNG 裡）。
+const CONFIG = /*CONFIG*/;
+const SPRITES = /*SPRITES*/;
+const img = new Image();
+img.onload = () => {
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const px = g.getImageData(0, 0, c.width, c.height).data;
+  const bytes = new Uint8Array(px.length / 4 * 3);
+  for (let i = 0, j = 0; i < px.length; i += 4) { bytes[j++] = px[i]; bytes[j++] = px[i + 1]; bytes[j++] = px[i + 2]; }
+  const len = (bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]) >>> 0;
+  init(JSON.parse(new TextDecoder().decode(bytes.subarray(6, 6 + len))));
+};
+img.onerror = () => console.error('讀不到量測資料');
+img.src = /*DATA_PNG*/;
+
+function init(DATA) {
+const NS = 'http://www.w3.org/2000/svg';
+function el(parent, tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+function button(label, onclick, on) {
+  const b = document.createElement('button');
+  b.textContent = label; b.onclick = onclick; if (on) b.classList.add('on');
+  document.getElementById('controls').insertBefore(b, document.getElementById('clock'));
+  return b;
+}
+const FRAME_MS = 16, COLS = 16, [SW, SH] = CONFIG.tile, LIMIT = CONFIG.limitMs || 8;
+const PHASES = CONFIG.phases || {};
+const labelOf = raw => (PHASES[raw] && PHASES[raw].label) || raw;
+const kindOf = label => (Object.values(PHASES).find(p => p.label === label) || {}).kind || 'still';
+const VARIANTS = CONFIG.variants || [];
+const DESIGNS = CONFIG.designs.map(d => ({ ...d }));
+const SPOTS = CONFIG.spots;
+const SPOT_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-5)', 'var(--chart-6)'];
+let theme = 'light', variant = VARIANTS[0];
+const baseOf = d => d.key + (variant && !d.fixed ? `-${variant.key}` : '');
+const hasDark = DESIGNS.every(d => SPRITES[`${baseOf(d)}-dark`]);
+
+function prepare() {
+  for (const d of DESIGNS) {
+    const D = DATA[baseOf(d)];
+    d.n = D.n;
+    d.f = D.frames.map(([change, ...spots], i) => ({ change, spots, cost: D.costs[i] ?? 0 }));
+    d.phase = D.phases.map(labelOf);
+    d.segs = [];
+    d.phase.forEach((p, i) => {
+      const s = d.segs[d.segs.length - 1];
+      if (s && s[2] === p) s[1] = i + 1; else d.segs.push([i, i + 1, p]);
+    });
+    d.first = p => d.phase.indexOf(p);
+    d.endAt = CONFIG.end ? d.first(CONFIG.end.phase) : -1;
+  }
+}
+prepare();
+let N = Math.max(...DESIGNS.map(d => d.n));
+const frameOf = (d, i) => d.f[Math.min(i, d.n - 1)];
+const phaseOf = (d, i) => d.phase[Math.min(i, d.n - 1)];
+function fill(text, d) {
+  return text.replace(/\{(\w+)\}/g, (m, k) => k === 'variant' ? (variant ? (variant.value ?? variant.label) : '') : (d[k] ?? m));
+}
+function noteOf(d, label) {
+  const n = (CONFIG.notes || {})[label];
+  if (n == null) return '';
+  return fill(typeof n === 'string' ? n : (n[d.key] ?? n.default ?? ''), d);
+}
+
+const phones = DESIGNS.map((d, di) => {
+  const wrap = document.createElement('div'); wrap.className = 'phone';
+  const shot = document.createElement('div'); shot.className = 'shot';
+  shot.style.width = SW + 'px'; shot.style.height = SH + 'px'; wrap.appendChild(shot);
+  const name = document.createElement('div'); name.className = 'name'; name.textContent = d.name; wrap.appendChild(name);
+  const end = document.createElement('div'); end.className = 'end'; wrap.appendChild(end);
+  const ph = document.createElement('div'); ph.className = 'ph'; wrap.appendChild(ph);
+  wrap.onclick = () => select(di);
+  document.getElementById('phones').appendChild(wrap);
+  return { wrap, shot, ph, end };
+});
+function paintPhones(i) {
+  DESIGNS.forEach((d, di) => {
+    const p = phones[di], k = Math.min(i, d.n - 1);
+    p.shot.style.backgroundImage = `url("${SPRITES[`${baseOf(d)}-${theme}`]}")`;
+    p.shot.style.backgroundSize = `${COLS * SW}px auto`;
+    p.shot.style.backgroundPosition = `${-(k % COLS) * SW}px ${-Math.floor(k / COLS) * SH}px`;
+    p.end.textContent = d.endAt >= 0 ? `${CONFIG.end.label} ${(d.endAt * FRAME_MS / 1000).toFixed(2)} 秒` : '';
+    const ph = phaseOf(d, i);
+    p.ph.textContent = ph;
+    p.ph.className = 'ph' + (kindOf(ph) === 'gap' ? ' gap' : '');
+  });
+}
+
+const legend = document.getElementById('legend');
+legend.innerHTML = '<span><i class="sw" style="border-color:var(--foreground)"></i>畫面變化：點選的那支</span>'
+  + '<span><i class="sw" style="border-color:var(--muted-foreground);opacity:.45"></i>其他候選</span>'
+  + (SPOTS ? SPOTS.points.map((p, i) => `<span><i class="sw" style="border-color:${SPOT_COLORS[i]}"></i>${p.label}</span>`).join('') : '')
+  + `<span><i class="box" style="background:var(--heavy)"></i>一格超過 ${LIMIT}ms</span>`
+  + `<span><i class="box" style="background:var(--muted-foreground)"></i>一格在 ${LIMIT}ms 內</span>`;
+
+const svg = document.getElementById('chart');
+const X0 = 64, X1 = 724;
+const xs = i => X0 + (X1 - X0) * i / (N - 1);
+const band = { y: 0, h: 22 }, rowA = { y: 32, h: 56 }, rowB = { y: 100, h: 82 }, rowC = { y: 196, h: 70 };
+const fixed = el(svg, 'g', {});
+const dyn = el(svg, 'g', {});
+for (const [r, label] of [[rowA, '畫面變化'], [rowB, SPOTS ? SPOTS.label : ''], [rowC, '主執行緒']]) {
+  el(fixed, 'text', { x: 0, y: r.y + r.h / 2 + 4, class: 't2', style: 'font-size:12px' }, label);
+  el(fixed, 'line', { x1: X0, x2: X1, y1: r.y + r.h, y2: r.y + r.h, stroke: 'var(--grid)' });
+}
+if (SPOTS) {
+  el(fixed, 'text', { x: X0 - 6, y: rowB.y + 8, 'text-anchor': 'end', class: 't2' }, '深');
+  el(fixed, 'text', { x: X0 - 6, y: rowB.y + rowB.h, 'text-anchor': 'end', class: 't2' }, '淺');
+}
+const ticks = el(svg, 'g', {});
+const head = el(svg, 'line', { y1: band.y, y2: rowC.y + rowC.h, stroke: 'var(--foreground)', 'stroke-width': 1.5 });
+let sel = 0;
+function drawChart() {
+  dyn.innerHTML = ''; ticks.innerHTML = '';
+  for (let s = 0; s * 1000 / FRAME_MS < N; s++) el(ticks, 'text', { x: xs(s * 1000 / FRAME_MS), y: 284, 'text-anchor': 'middle', class: 't2' }, `${s} 秒`);
+  const d = DESIGNS[sel], L = d.f;
+  for (const [a, b, name] of d.segs) {
+    const kind = kindOf(name);
+    const fill = kind === 'gap' ? 'var(--gap-soft)' : kind === 'moving' ? 'var(--moving-soft)' : 'var(--still-soft)';
+    el(dyn, 'rect', { x: xs(a), y: band.y, width: Math.max(xs(b) - xs(a) - 1, 1), height: band.h, rx: 3, fill });
+    if (xs(b) - xs(a) > 34) el(dyn, 'text', { x: xs(a) + 4, y: band.y + 15 }, name);
+  }
+  const maxChange = Math.max(...DESIGNS.flatMap(D => D.f.map(f => f.change))) || 1;
+  for (const k of DESIGNS.map((_, k) => k).filter(k => k !== sel).concat(sel)) {
+    const F = DESIGNS[k].f;
+    const path = F.map((f, i) => (i ? 'L' : 'M') + xs(i).toFixed(1) + ',' + (rowA.y + rowA.h - Math.sqrt(f.change / maxChange) * rowA.h).toFixed(1)).join('');
+    el(dyn, 'path', { d: path, fill: 'none', stroke: k === sel ? 'var(--foreground)' : 'var(--muted-foreground)', 'stroke-width': k === sel ? 1.8 : 1.1, opacity: k === sel ? 1 : 0.45 });
+  }
+  if (SPOTS) {
+    const until = D => { const i = SPOTS.until ? D.first(SPOTS.until) : -1; return i < 0 ? D.n : i; };
+    let mx = 1;
+    for (const D of DESIGNS) for (let i = 0; i < until(D); i++) mx = Math.max(mx, ...D.f[i].spots);
+    const yB = v => rowB.y + rowB.h - Math.max(0, Math.min(1, v / mx)) * rowB.h;
+    SPOTS.points.forEach((_, s) => {
+      let path = '';
+      for (let i = 0; i < until(d); i++) path += (path ? 'L' : 'M') + xs(i).toFixed(1) + ',' + yB(L[i].spots[s]).toFixed(1);
+      el(dyn, 'path', { d: path, fill: 'none', stroke: SPOT_COLORS[s], 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    });
+  }
+  const cap = 100, yC = ms => rowC.y + rowC.h - Math.min(ms, cap) / cap * rowC.h;
+  const bw = Math.max(1.5, (X1 - X0) / N - 0.6);
+  L.forEach((f, i) => el(dyn, 'rect', { x: xs(i) - bw / 2, y: yC(f.cost), width: bw, height: rowC.y + rowC.h - yC(f.cost),
+    fill: f.cost > LIMIT ? 'var(--heavy)' : 'var(--muted-foreground)', opacity: f.cost > LIMIT ? 1 : 0.55 }));
+  el(dyn, 'line', { x1: X0, x2: X1, y1: yC(LIMIT), y2: yC(LIMIT), stroke: 'var(--muted-foreground)', 'stroke-dasharray': '3 3' });
+  el(dyn, 'text', { x: X1, y: yC(LIMIT) - 3, 'text-anchor': 'end', class: 't2 halo' }, `${LIMIT}ms`);
+  el(dyn, 'text', { x: X0 + 2, y: rowC.y + 10, class: 't2' }, '（電腦上，超過 100ms 截斷）');
+}
+function select(i) {
+  sel = i;
+  phones.forEach((p, k) => p.wrap.classList.toggle('sel', k === i));
+  drawChart(); show(frame);
+}
+
+let frame = 0, playing = false, speed = 1, last = 0, acc = 0;
+function show(i) {
+  frame = Math.max(0, Math.min(N - 1, i));
+  paintPhones(frame);
+  head.setAttribute('x1', xs(frame)); head.setAttribute('x2', xs(frame));
+  document.getElementById('clock').textContent = `第 ${frame} 格 · ${(frame * FRAME_MS / 1000).toFixed(2)} 秒`;
+  const d = DESIGNS[sel], f = frameOf(d, frame);
+  document.getElementById('selname').textContent = d.name;
+  document.getElementById('cost').textContent = `${f.cost.toFixed(1)} ms`;
+  document.getElementById('diff').textContent = f.change === 0 ? '0（完全靜止）' : `${f.change.toLocaleString()} 個像素`;
+  document.getElementById('note').innerHTML = noteOf(d, phaseOf(d, frame));
+}
+function tick(ts) {
+  if (!playing) return;
+  if (last) acc += (ts - last) * speed;
+  last = ts;
+  while (acc >= FRAME_MS) {
+    acc -= FRAME_MS;
+    if (frame >= N - 1) { setPlaying(false); return; }
+    show(frame + 1);
+  }
+  requestAnimationFrame(tick);
+}
+const playBtn = document.getElementById('play');
+function setPlaying(on) {
+  playing = on; playBtn.textContent = on ? '⏸ 暫停' : '▶ 播放';
+  if (on) { if (frame >= N - 1) show(0); last = 0; acc = 0; requestAnimationFrame(tick); }
+}
+playBtn.onclick = () => setPlaying(!playing);
+const sp1 = document.getElementById('sp1'), sp4 = document.getElementById('sp4');
+sp1.onclick = () => { speed = 1; sp1.classList.add('on'); sp4.classList.remove('on'); };
+sp4.onclick = () => { speed = 0.25; sp4.classList.add('on'); sp1.classList.remove('on'); };
+document.getElementById('prev').onclick = () => { setPlaying(false); show(frame - 1); };
+document.getElementById('next').onclick = () => { setPlaying(false); show(frame + 1); };
+const jumpTo = j => Math.max(0, DESIGNS[sel].first(j.phase) + (j.offset || 0));
+for (const j of CONFIG.jumps || []) button(j.label, () => { setPlaying(false); show(jumpTo(j)); });
+if (VARIANTS.length > 1 || hasDark) document.getElementById('controls').insertBefore(Object.assign(document.createElement('span'), { className: 'sep' }), document.getElementById('clock'));
+const variantButtons = VARIANTS.length > 1 ? VARIANTS.map((v, k) => button(v.label, () => {
+  variant = v; variantButtons.forEach((b, m) => b.classList.toggle('on', m === k));
+  prepare(); N = Math.max(...DESIGNS.map(d => d.n)); drawChart(); show(frame);
+}, k === 0)) : [];
+if (hasDark) {
+  const themeBtn = button('深色', () => {
+    theme = theme === 'light' ? 'dark' : 'light'; themeBtn.textContent = theme === 'light' ? '深色' : '淺色'; show(frame);
+  });
+}
+function seek(ev) {
+  const r = svg.getBoundingClientRect();
+  const vx = (ev.clientX - r.left) / r.width * 728;
+  show(Math.round((vx - X0) / (X1 - X0) * (N - 1)));
+}
+let dragging = false;
+svg.addEventListener('pointerdown', ev => { dragging = true; setPlaying(false); seek(ev); });
+window.addEventListener('pointermove', ev => { if (dragging) seek(ev); });
+window.addEventListener('pointerup', () => { dragging = false; });
+select(0);
+show(CONFIG.start ? jumpTo(CONFIG.start) : 0);
+}
+</script>
+</body>
+</html>
