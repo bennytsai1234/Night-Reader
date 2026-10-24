@@ -24,7 +24,7 @@ class BookshelfProvider extends BookshelfProviderBase
     super.startTimer,
   }) : _bookStorageService = bookStorageService ?? BookStorageService() {
     loadUiPreferences();
-    loadBooks();
+    firstLoad = loadBooks();
     _bookshelfSub = AppEventBus().onName(AppEventBus.upBookshelf).listen((_) {
       if (_covered) {
         _reloadWhenUncovered = true;
@@ -36,6 +36,11 @@ class BookshelfProvider extends BookshelfProviderBase
 
   final BookStorageService _bookStorageService;
   StreamSubscription<AppEvent>? _bookshelfSub;
+
+  /// 建立時的第一次讀取做完（讀不到也算）。開 App 的進場等它才開始長骨架
+  /// （`LaunchEntrance.prepared`）；不等 [loaded]：之後的重讀（例如背景下載
+  /// 完成）一直接著來時，[loaded] 可能一直不完成。
+  late final Future<void> firstLoad;
 
   /// 書架被別的頁面蓋著（[setCovered]）：背景下載完成要重讀時先記著，露出
   /// 來才讀。蓋著的書架仍在元件樹裡，重讀會整頁重建、書卡移位，正好疊在

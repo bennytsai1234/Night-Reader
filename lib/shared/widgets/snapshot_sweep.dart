@@ -46,22 +46,23 @@ class SnapshotSweepController {
   /// [SkeletonReveal.incomingOpacityAt]），否則整片淡換。換場播完、換回真的
   /// 畫面時完成。
   ///
-  /// 拍圖的這幾格畫面停著不動；[hold] 是從呼叫起畫面至少停多久才開始換場
-  /// （拍得比這久就拍完才開始），讓停住像一次停頓、不像頓一下。
+  /// 拍圖的這幾格畫面停著不動；兩張都拍好後再停 [gap] 才開始換場：拍圖是
+  /// 這段最重的主執行緒工作，手機拍得再慢，換場也不會緊接在拍完的那一格
+  /// 開始（ADR 0025）。
   ///
   /// 不在 [SnapshotSweep] 底下，或系統要求減少動態時，直接 [change]。
   Future<void> play({
     required VoidCallback change,
     required Duration duration,
     bool sweep = true,
-    Duration hold = Duration.zero,
+    Duration gap = Duration.zero,
   }) {
     final state = _state;
     if (state == null || !state.mounted) {
       change();
       return Future<void>.value();
     }
-    return state._play(change, duration, sweep, hold);
+    return state._play(change, duration, sweep, gap);
   }
 
   /// 換場還沒播完就換回真的畫面（底下已經換好），完成這一次換場。建畫面
@@ -148,14 +149,17 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     return !dirty;
   }
 
-  /// 換場前至少停到這個計時器結束（[SnapshotSweepController.play] 的 hold）。
+  /// 兩張都拍好後要再停多久（[SnapshotSweepController.play] 的 gap）。
+  Duration _gap = Duration.zero;
+
+  /// 拍好後停的計時器；結束才開始換場。
   Timer? _hold;
 
   Future<void> _play(
     VoidCallback change,
     Duration duration,
     bool sweep,
-    Duration hold,
+    Duration gap,
   ) {
     _end();
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -164,8 +168,8 @@ class _SnapshotSweepState extends State<SnapshotSweep>
     }
     final run = _run = Completer<void>();
     _sweep = sweep;
+    _gap = gap;
     _progress.duration = duration;
-    _hold = Timer(hold, () => _start(run));
     _afterFrame(() => _captureBefore(run, change));
     return run.future;
   }
@@ -221,15 +225,14 @@ class _SnapshotSweepState extends State<SnapshotSweep>
       _after = after;
       _phase = _Phase.playing;
     });
-    _start(run);
+    _hold = Timer(_gap, () => _start(run));
   }
 
-  /// 兩張圖都拍好、也停滿 hold 時開始換場。
+  /// 兩張圖都拍好、也停滿 gap 時開始換場。
   void _start(Completer<void> run) {
     if (!mounted ||
         !identical(_run, run) ||
         _phase != _Phase.playing ||
-        _hold!.isActive ||
         _progress.isAnimating) {
       return;
     }
