@@ -156,6 +156,9 @@ class _SkeletonState extends State<Skeleton>
   /// 開 App 的進場收住呼吸時登記在這裡（[LaunchEntranceMotion.rest]）。
   SkeletonRest? _rest;
 
+  /// 所在的開 App 進場；骨架長出期間不呼吸（[_BreathClock.holdUntil]）。
+  LaunchEntranceMotion? _entrance;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -164,10 +167,15 @@ class _SkeletonState extends State<Skeleton>
       ..breath = SkeletonLook.of(context).breath
       ..allowed = _breathing
       ..visible = TickerMode.valuesOf(context).enabled;
-    final rest = LaunchEntrance.maybeOf(context)?.rest;
+    final entrance = LaunchEntrance.maybeOf(context);
+    final rest = entrance?.rest;
     if (!identical(rest, _rest)) {
       _rest?._clocks.remove(_clock);
       _rest = rest?.._add(_clock);
+    }
+    if (!identical(entrance, _entrance)) {
+      _entrance = entrance;
+      if (entrance != null) _clock.holdUntil(entrance.skeleton);
     }
   }
 
@@ -276,9 +284,37 @@ class _BreathClock extends ChangeNotifier {
   }
 
   void _start() {
-    if (!_allowed || _still || _ticker.isActive) return;
+    if (!_allowed || _still || _growth != null || _ticker.isActive) return;
     _base = _cycles;
     _ticker.start();
+  }
+
+  /// 開 App 的骨架長出中（[holdUntil]）：整片停在最深、計時器不走。
+  Animation<double>? _growth;
+
+  /// 開 App 的骨架長出時不呼吸、每個位置長到最深；[growth] 長完才照由左而右
+  /// 的先後開始第一口氣，起法和收住後接著呼吸（[resume]）一樣。長出時就在
+  /// 呼吸的話，長出看起來像一口比之後快的氣，長完接到真正的呼吸時頓一下
+  /// （使用者 2026-10-24 在三種做法的逐格錄影上選的，ADR 0025）。
+  void holdUntil(Animation<double> growth) {
+    _releaseGrowth();
+    if (growth.isCompleted) return;
+    _growth = growth..addStatusListener(_onGrowthStatus);
+    _ticker.stop();
+  }
+
+  void _onGrowthStatus(AnimationStatus status) {
+    if (!status.isCompleted) return;
+    _releaseGrowth();
+    _shift = _cycles;
+    _restarted = true;
+    _start();
+    notifyListeners();
+  }
+
+  void _releaseGrowth() {
+    _growth?.removeStatusListener(_onGrowthStatus);
+    _growth = null;
   }
 
   void _tick(Duration elapsed) {
@@ -344,6 +380,7 @@ class _BreathClock extends ChangeNotifier {
   /// 位置 [u]（0 畫面左緣、1 右緣）現在的深淺比例（[Skeleton.breathAt]）；
   /// 收住後已經呼到最深的位置停在 1，接著呼吸時還沒輪到的位置也是。
   double depthAt(double u, SkeletonBreath breath) {
+    if (_growth != null) return 1;
     final phase = _phase;
     final from = _restFrom;
     if (from != null &&
@@ -356,6 +393,7 @@ class _BreathClock extends ChangeNotifier {
 
   @override
   void dispose() {
+    _releaseGrowth();
     _ticker.dispose();
     _finishRest();
     super.dispose();
