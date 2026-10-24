@@ -48,7 +48,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 ## 驗證
 
 - 自動化驗證就是 `.github/workflows/ci.yml`，推上任何分支都會在 Linux 上執行，結果顯示在 PR 上；發版前 Android Release 會再跑一次，沒通過就不發。本機先跑受影響的測試（加 `-r failures-only`，通過的不印，只印失敗的），全套交給 pre-push hook。
-- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試（只改說明文件，即任何 `.md` 與 `docs/`，的推送略過）。推送時看 hook 輸出的最後一行是 `pre-push: analyze 與全套測試通過`（只改說明文件時是略過的訊息）。
+- 本機 Git hook 在 `.githooks/`，clone 後執行 `git config core.hooksPath .githooks` 啟用：commit 前檢查暫存 Dart 檔的格式，push 前跑 `flutter analyze` 與全套測試（只改說明文件，即任何 `.md` 與 `docs/`，的推送略過）。推送時看 hook 印的 `pre-push:` 開頭那一行是 `pre-push: analyze 與全套測試通過`（只改說明文件時是略過的訊息）；Git 會在它後面再印遠端的訊息，只看最後幾行會漏掉它。
 - 修改 `lib/core/database/tables/`、DAO 或 Drift annotation 後執行 `dart run build_runner build`，產生的 `.g.dart`（Drift 產生的資料庫程式）一起提交；CI 會重跑並擋下過時的產物。
 - 軟體建置與正式發布一律由 GitHub Actions 負責，本機不進行軟體建置與本機除錯執行。要給使用者看畫面時，用 `test/support/screenshot.dart` 把元件測試畫成 PNG（用法寫在檔頭）；改介面前後要對照整個 App 時，重拍 `test/screens/` 那組固定畫面（平常的全套測試會跳過）。
 - 改到轉場、骨架換場、開 App 進場、跳章，或宣稱某段工作已離開主執行緒時，用 `tool/frame_budget_compare.sh` 量前後，表寫進 commit message（`CODING_STANDARDS.md`「動畫」）。
@@ -73,7 +73,7 @@ Flutter／Dart 專案 `night_reader`，App 名稱「夜讀」，發布 Android `
 
 - 發布由 `.github/workflows/android-release.yml` 全權處理（見 ADR 0002、0004、0027）。`pubspec.yaml` 的 `version` 只寫 `X.Y.Z`，build number（Android versionCode）由 CI 取發版那個提交的提交數。
 - 測試版：推上 `beta`（合併 PR 或直接推）時自動把上一個發布之後累積的 App 改動發成 GitHub 預發布版 `vX.Y.(Z+1)-beta.N`（`X.Y.Z` 是目前已發布的正式版，`N` 是之後的提交數），說明取 `CHANGELOG.md` 的 `## 未發布` 裡上一個發布之後新增或改寫的條列。沒有 App 改動就不發；改了 App 卻沒寫「未發布」時這次執行失敗。自動那次沒發出去時，補上原因後執行 `gh workflow run android-release.yml --ref beta -f channel=beta` 補發。日常改進不用升版號。
-- 正式版（使用者說要發才做）：在 `beta` 推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時把 `CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留一個空的 `## 未發布`；這個提交的 CI 通過後，`git push origin <這個提交>:main` 把 `main` 快轉過去。CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。`main` 收到不在 `beta` 上的提交時 CI 直接失敗。
+- 正式版（使用者說要發才做）：先用 `codex-review` 拿 `website/index.html` 逐段對照 `## 未發布` 與程式，不符的照一般流程開 PR 修好（網站隨 `main` 部署）。接著在 `beta` 推一個只改版號的 commit（`release: bump version to X.Y.Z`），把 `version` 升到尚未發布的版本，同時把 `CHANGELOG.md` 的 `## 未發布` 改成 `## X.Y.Z`、上面留一個空的 `## 未發布`；這個提交的 CI 通過後，`git push origin <這個提交>:main` 把 `main` 快轉過去。CI 會建置簽章 APK、建立 `vX.Y.Z` tag，並以 `## X.Y.Z` 段落當說明發布 GitHub Release。`main` 收到不在 `beta` 上的提交時 CI 直接失敗。
 - 切勿在本機建立或推送 `v*` tag；tag 的唯一擁有者是 CI。
 - 推上 `beta` 或快轉 `main` 後，檢查一次 GitHub Actions，確認 Android Release 已開始建置即可結束，不必等建置完成。
 - `channel=test` 的手動執行與 `internal-test/**` 分支只建置測試 APK artifact，不打 tag、不發布。
