@@ -5,17 +5,21 @@ import 'package:html_unescape/html_unescape.dart';
 import '../../parsers/css/analyze_by_css_support.dart';
 import '../../parsers/jsoup_text.dart';
 
+final HtmlUnescape _unescape = HtmlUnescape();
+
 /// 規則 JS 裡的 Jsoup（`org.jsoup.Jsoup`、`java.getElements` 傳回的元素）。
 ///
 /// 每個交給 JS 的節點在這裡記一個編號，JS 端的物件只帶編號，方法呼叫回來
 /// 照編號找到真正的節點操作；選取、走訪、修改都作用在同一棵樹上，和
-/// Legado 拿到真的 Jsoup 物件一樣。編號在引擎沒有規則在跑時清掉（見
-/// `JsEngine`），規則裡巢狀執行別的規則時不清。
-final HtmlUnescape _unescape = HtmlUnescape();
-
+/// Legado 拿到真的 Jsoup 物件一樣（行為對照 Jsoup 1.15.3）。編號在引擎沒有
+/// 規則在跑時清掉（見 `JsEngine`），規則裡巢狀執行別的規則時不清。
 class JsoupBridge {
   final Map<int, dom.Node> _nodes = {};
   final Map<dom.Node, int> _ids = Map.identity();
+
+  /// 節點與它底下的網址（`abs:` 屬性用）。查詢時往上找最近有記的祖先，
+  /// 所以設在文件上就整份文件適用；節點被移出文件前先記在它自己身上，
+  /// 拿出來之後照樣算得出完整網址（Jsoup 也是）。
   final Map<dom.Node, String> _baseUris = Map.identity();
   int _nextId = 1;
 
@@ -35,20 +39,26 @@ class JsoupBridge {
     return id;
   });
 
-  /// [node] 所在文件的網址，給 `abs:` 屬性與 `absUrl` 用。
+  /// [node] 與它底下的網址，給 `abs:` 屬性與 `absUrl` 用。
   void setBaseUri(dom.Node node, String? baseUri) {
     if (baseUri == null || baseUri.isEmpty) return;
-    _baseUris[_root(node)] = baseUri;
+    _baseUris[node] = baseUri;
   }
 
-  String baseUriOf(dom.Node node) => _baseUris[_root(node)] ?? '';
-
-  static dom.Node _root(dom.Node node) {
-    var current = node;
-    while (current.parentNode != null) {
-      current = current.parentNode!;
+  String baseUriOf(dom.Node node) {
+    dom.Node? current = node;
+    while (current != null) {
+      final uri = _baseUris[current];
+      if (uri != null) return uri;
+      current = current.parentNode;
     }
-    return current;
+    return '';
+  }
+
+  /// 節點要被移出文件：先把現在的網址記在它身上。
+  void _pinBaseUri(dom.Node node) {
+    final uri = baseUriOf(node);
+    if (uri.isNotEmpty) _baseUris.putIfAbsent(node, () => uri);
   }
 
   /// 交給 JS 的值：節點換成 `{__lrNode: 編號, k: 種類}`，節點清單包成
@@ -73,9 +83,26 @@ class JsoupBridge {
     _ => 'node',
   };
 
+  /// Jsoup.parse：網址先看頁面裡的 `<base href>`（相對於 [baseUri]）。
   dom.Document parse(String html, String? baseUri) {
     final document = html_parser.parse(html);
-    setBaseUri(document, baseUri);
+    final baseHref = document
+        .querySelector('base[href]')
+        ?.attributes['href']
+        ?.trim();
+    var effective = baseUri;
+    if (baseHref != null && baseHref.isNotEmpty) {
+      final base = Uri.tryParse(baseUri ?? '');
+      final href = Uri.tryParse(baseHref);
+      if (href != null) {
+        effective = href.hasScheme
+            ? href.toString()
+            : (base != null && base.hasScheme
+                  ? base.resolveUri(href).toString()
+                  : effective);
+      }
+    }
+    setBaseUri(document, effective);
     return document;
   }
 
@@ -89,9 +116,7 @@ class JsoupBridge {
       case 'parse':
         return toJs(parse(param(2) ?? '', param(3)));
       case 'parseBodyFragment':
-        final document = html_parser.parse('<body>${param(2) ?? ''}</body>');
-        setBaseUri(document, param(3));
-        return toJs(document);
+        return toJs(parse('<body>${param(2) ?? ''}</body>', param(3)));
       case 'unescapeEntities':
         return _unescape.convert(param(2) ?? '');
     }
@@ -99,14 +124,14 @@ class JsoupBridge {
     if (target == null) {
       throw StateError('這個 Jsoup 物件已經失效（規則執行完後不能再用）');
     }
-    final rest = args.sublist(2);
-    return toJs(_dispatch(op, target, rest));
+    return toJs(_dispatch(op, target, args.sublist(2)));
   }
 
   dynamic _dispatch(String op, dom.Node node, List args) {
     String arg(int i) => i < args.length ? '${args[i] ?? ''}' : '';
     final element = node is dom.Element ? node : null;
     final document = node is dom.Document ? node : null;
+    // 文件本身不會符合選擇器，從 <html> 開始選，和 Jsoup 一樣含 <html>。
     final container = document?.documentElement ?? element;
     switch (op) {
       // ── 文字與內容 ──
@@ -116,15 +141,17 @@ class JsoupBridge {
       case 'ownText':
         return jsoupOwnText(node);
       case 'wholeText':
-        return node.text ?? '';
+        return jsoupWholeText(node);
       case 'html':
         if (args.isNotEmpty) {
           _setHtml(node, arg(0));
           return node;
         }
-        return node is dom.Element
-            ? node.innerHtml
-            : (document?.documentElement?.outerHtml ?? node.text ?? '');
+        return switch (node) {
+          dom.Element() => node.innerHtml,
+          dom.Document() => node.documentElement?.outerHtml ?? '',
+          _ => node.text ?? '',
+        };
       case 'outerHtml':
         return switch (node) {
           dom.Element() => node.outerHtml,
@@ -135,30 +162,40 @@ class JsoupBridge {
         return _data(node);
       case 'val':
         if (element == null) return '';
+        final isTextarea = element.localName == 'textarea';
         if (args.isNotEmpty) {
-          element.attributes['value'] = arg(0);
+          if (isTextarea) {
+            _setText(element, arg(0));
+          } else {
+            element.attributes['value'] = arg(0);
+          }
           return element;
         }
-        return element.localName == 'textarea'
-            ? element.text
-            : element.attributes['value'] ?? '';
-      // ── 屬性 ──
+        return isTextarea ? element.text : _attributeValue(element, 'value');
+      // ── 屬性：名稱不分大小寫（Jsoup） ──
       case 'attr':
         if (element == null) return '';
         if (args.length > 1) {
-          element.attributes[arg(0)] = arg(1);
+          _setAttribute(element, arg(0), arg(1));
           return element;
         }
-        return _attr(element, arg(0));
+        final name = arg(0);
+        if (name.toLowerCase().startsWith('abs:')) {
+          return _absUrl(element, name.substring(4));
+        }
+        return _attributeValue(element, name);
       case 'hasAttr':
         if (element == null) return false;
         final name = arg(0);
-        if (name.startsWith('abs:')) {
+        if (name.toLowerCase().startsWith('abs:')) {
           return _absUrl(element, name.substring(4)).isNotEmpty;
         }
-        return element.attributes.containsKey(name);
+        return _attributeKey(element, name) != null;
       case 'removeAttr':
-        element?.attributes.remove(arg(0));
+        if (element != null) {
+          final key = _attributeKey(element, arg(0));
+          if (key != null) element.attributes.remove(key);
+        }
         return node;
       case 'absUrl':
         return element == null ? '' : _absUrl(element, arg(0));
@@ -200,43 +237,40 @@ class JsoupBridge {
       // ── 選取 ──
       case 'select':
         if (container == null) return const <dom.Element>[];
-        return jsoupSelect(container, arg(0));
+        return selectWithSelfCompat(container, arg(0));
       case 'selectFirst':
         if (container == null) return null;
-        final found = jsoupSelect(container, arg(0));
-        return found.isEmpty ? null : found.first;
+        return selectWithSelfCompat(container, arg(0)).firstOrNull;
       case 'is':
-        return element != null &&
-            element.parent != null &&
-            jsoupSelect(element.parent!, arg(0)).contains(element);
+        return element != null && elementMatchesSelectorCompat(element, arg(0));
       case 'getElementById':
         return container == null
             ? null
-            : jsoupSelect(container, '#${arg(0)}').firstOrNull;
+            : selectWithSelfCompat(container, '#${arg(0)}').firstOrNull;
       case 'getElementsByTag':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, arg(0));
+            : selectWithSelfCompat(container, arg(0));
       case 'getElementsByClass':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, '.${arg(0)}');
+            : selectWithSelfCompat(container, '.${arg(0)}');
       case 'getElementsByAttribute':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, '[${arg(0)}]');
+            : selectWithSelfCompat(container, '[${arg(0)}]');
       case 'getElementsByAttributeValue':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, '[${arg(0)}="${arg(1)}"]');
+            : selectWithSelfCompat(container, '[${arg(0)}="${arg(1)}"]');
       case 'getElementsContainingText':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, '*:contains(${arg(0)})');
+            : selectWithSelfCompat(container, '*:contains(${arg(0)})');
       case 'getElementsContainingOwnText':
         return container == null
             ? const <dom.Element>[]
-            : jsoupSelect(container, '*:containsOwn(${arg(0)})');
+            : selectWithSelfCompat(container, '*:containsOwn(${arg(0)})');
       case 'getAllElements':
         return container == null
             ? const <dom.Element>[]
@@ -247,18 +281,24 @@ class JsoupBridge {
       case 'head':
         return document?.head;
       case 'title':
-        return document == null
-            ? ''
-            : jsoupText(document.querySelector('title') ?? dom.Text(''));
+        final title = document?.querySelector('title');
+        return title == null ? '' : jsoupText(title);
       case 'location':
       case 'baseUri':
         return baseUriOf(node);
       case 'setBaseUri':
-        _baseUris[_root(node)] = arg(0);
+        setBaseUri(node, arg(0));
         return null;
-      // ── 走訪 ──
+      case 'ownerDocument':
+        var root = node;
+        while (root.parentNode != null) {
+          root = root.parentNode!;
+        }
+        return root is dom.Document ? root : null;
+      // ── 走訪：文件是 <html> 的父節點（Jsoup 的 Document 也是元素） ──
       case 'parent':
-        return node.parent;
+        final parent = node.parentNode;
+        return parent is dom.Element || parent is dom.Document ? parent : null;
       case 'parents':
         final parents = <dom.Element>[];
         var current = node.parent;
@@ -268,22 +308,20 @@ class JsoupBridge {
         }
         return parents;
       case 'children':
-        return element?.children ??
-            document?.documentElement?.children ??
-            const <dom.Element>[];
+        return _children(node);
       case 'child':
-        final children = element?.children ?? const <dom.Element>[];
+        final children = _children(node);
         final index = int.tryParse(arg(0)) ?? 0;
         if (index < 0 || index >= children.length) {
           throw RangeError.index(index, children, 'child');
         }
         return children[index];
       case 'childrenSize':
-        return element?.children.length ?? 0;
+        return _children(node).length;
       case 'firstElementChild':
-        return element?.children.firstOrNull;
+        return _children(node).firstOrNull;
       case 'lastElementChild':
-        return element?.children.lastOrNull;
+        return _children(node).lastOrNull;
       case 'nextElementSibling':
         return element?.nextElementSibling;
       case 'previousElementSibling':
@@ -310,14 +348,15 @@ class JsoupBridge {
         return element == null ? '' : _cssSelector(element);
       // ── 修改 ──
       case 'remove':
+        _pinBaseUri(node);
         node.remove();
         return null;
       case 'empty':
-        node.nodes.clear();
+        _detachChildren(node);
         return node;
       case 'clone':
         final copy = node.clone(true);
-        _baseUris[copy] = baseUriOf(node);
+        setBaseUri(copy, baseUriOf(node));
         return copy;
       case 'append':
         _insertHtml(node, arg(0), (parsed) => node.nodes.addAll(parsed));
@@ -339,16 +378,12 @@ class JsoupBridge {
         if (parent == null) return null;
         final children = node.nodes.toList();
         final index = parent.nodes.indexOf(node);
+        _pinBaseUri(node);
         node.remove();
         parent.nodes.insertAll(index, children);
         return children.firstOrNull;
       case 'tagNameSet':
-        if (element == null) return node;
-        final replacement = dom.Element.tag(arg(0))
-          ..attributes.addAll(element.attributes)
-          ..nodes.addAll(element.nodes.toList());
-        element.replaceWith(replacement);
-        return replacement;
+        return element == null ? node : _rename(element, arg(0));
       case 'isBlank':
         return (node.text ?? '').trim().isEmpty;
       case 'hasText':
@@ -357,18 +392,59 @@ class JsoupBridge {
     throw UnsupportedError('Jsoup 沒有這個方法：$op');
   }
 
-  String _attr(dom.Element element, String name) {
-    if (name.startsWith('abs:')) return _absUrl(element, name.substring(4));
-    return element.attributes[name] ?? '';
+  List<dom.Element> _children(dom.Node node) => switch (node) {
+    dom.Document() => [?node.documentElement],
+    dom.Element() => node.children,
+    _ => const <dom.Element>[],
+  };
+
+  /// Jsoup 原地改名、傳回自己。這裡的 DOM 不能改標籤名稱，只能換一個
+  /// 新元素：同一個編號改指向新元素，JS 手上的物件和之後拿到的都是它。
+  dom.Element _rename(dom.Element element, String tag) {
+    final replacement = dom.Element.tag(tag.toLowerCase())
+      ..attributes.addAll(element.attributes)
+      ..nodes.addAll(element.nodes.toList());
+    final uri = _baseUris.remove(element);
+    if (uri != null) _baseUris[replacement] = uri;
+    if (element.parentNode != null) {
+      element.replaceWith(replacement);
+    } else {
+      setBaseUri(replacement, baseUriOf(element));
+    }
+    final id = _ids.remove(element);
+    if (id != null) {
+      _ids[replacement] = id;
+      _nodes[id] = replacement;
+    }
+    return replacement;
+  }
+
+  /// HTML 屬性名稱不分大小寫：找出實際存的那個鍵。
+  static Object? _attributeKey(dom.Element element, String name) {
+    final lower = name.toLowerCase();
+    for (final key in element.attributes.keys) {
+      if ('$key'.toLowerCase() == lower) return key;
+    }
+    return null;
+  }
+
+  static String _attributeValue(dom.Element element, String name) {
+    final key = _attributeKey(element, name);
+    return key == null ? '' : element.attributes[key] ?? '';
+  }
+
+  static void _setAttribute(dom.Element element, String name, String value) {
+    element.attributes[_attributeKey(element, name) ?? name.toLowerCase()] =
+        value;
   }
 
   String _absUrl(dom.Element element, String name) {
-    final value = element.attributes[name];
-    if (value == null || value.isEmpty) return '';
-    final base = Uri.tryParse(baseUriOf(element));
+    final value = _attributeValue(element, name);
+    if (value.isEmpty) return '';
     final relative = Uri.tryParse(value.trim());
     if (relative == null) return '';
     if (relative.hasScheme) return relative.toString();
+    final base = Uri.tryParse(baseUriOf(element));
     if (base == null || !base.hasScheme) return '';
     return base.resolveUri(relative).toString();
   }
@@ -378,28 +454,31 @@ class JsoupBridge {
         (node.localName == 'script' || node.localName == 'style')) {
       return node.text;
     }
-    final buffer = StringBuffer();
-    if (node is dom.Element || node is dom.Document) {
-      for (final script
-          in (node is dom.Document
-              ? node.querySelectorAll('script, style')
-              : (node as dom.Element).querySelectorAll('script, style'))) {
-        buffer.write(script.text);
-      }
-    }
-    return buffer.toString();
+    final root = node is dom.Document ? node.documentElement : node;
+    if (root is! dom.Element) return '';
+    return root
+        .querySelectorAll('script, style')
+        .map((script) => script.text)
+        .join();
   }
 
   dom.Node _setText(dom.Node node, String text) {
-    node.nodes
-      ..clear()
-      ..add(dom.Text(text));
+    _detachChildren(node);
+    node.nodes.add(dom.Text(text));
     return node;
   }
 
   void _setHtml(dom.Node node, String html) {
-    node.nodes.clear();
+    _detachChildren(node);
     _insertHtml(node, html, (parsed) => node.nodes.addAll(parsed));
+  }
+
+  /// 清掉底下的節點；規則可能還拿著其中的元素，先把網址記在它們身上。
+  void _detachChildren(dom.Node node) {
+    for (final child in node.nodes) {
+      _pinBaseUri(child);
+    }
+    node.nodes.clear();
   }
 
   void _insertHtml(
@@ -449,8 +528,3 @@ class JsoupBridge {
     return parts.join(' > ');
   }
 }
-
-/// Jsoup 的 `select`：CSS 加上 Jsoup 的擴充（`:eq`、`:contains`、`:has`、
-/// `:lt`、`:gt`、`:matches` 等），找的範圍包含 [root] 自己。
-List<dom.Element> jsoupSelect(dom.Element root, String selector) =>
-    querySelectorAllCompat(root, selector);

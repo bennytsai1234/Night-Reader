@@ -114,6 +114,66 @@ void main() {
     );
   }, skip: skip);
 
+  // 每一項的答案是真的 Jsoup 1.15.3 跑出來的。
+  test('edge cases match Jsoup 1.15.3', () async {
+    expect(
+      await run(r'''
+        var J = org.jsoup.Jsoup, out = [];
+        out.push(J.parse('<div id=a> </div><div id=b></div>').select('div:empty').size());
+        var rows = J.parse('<div class=intro>i</div><div class=row>1</div><div class=row>2</div>');
+        out.push(rows.select('.row:eq(0)').size(), rows.select('.row:eq(1)').text());
+        var t = J.parse('<div class=author>作者：<br>張三</div><div class=x><p>甲</p><p>乙</p>丙<span>丁</span></div><script>var x=1;</script><p id=w>A<br>B</p>');
+        out.push(t.select('.author').text(), t.select('.author').first().ownText(),
+          t.select('.x').text(), t.select('script').first().text(),
+          t.select('script').first().data(), t.select('#w').first().wholeText());
+        var box = J.parse('<div class=box>x</div>').selectFirst('div');
+        out.push(box.select('.box:contains(x)').size(), box.select(':root').size(),
+          box.clone().is('div'));
+        out.push(J.parse('<a HREF=1>A</a>').selectFirst('a').attr('HREF'));
+        out.push(J.parse('<div id=a><section><p><a>X</a></p></section></div>').select('div:has(> p a)').size());
+        out.push(J.parse('<p>Alpha</p>').select('p:matches((?i)alpha)').size());
+        var doc = J.parse('<p>X</p>');
+        out.push(doc.children().first().tagName(), doc.childrenSize(),
+          doc.selectFirst('p').ownerDocument().equals(doc));
+        out.push(J.parse("<base href='https://cdn.test/books/'><a href='1'>A</a>", 'https://site.test/path/')
+          .selectFirst('a').attr('abs:href'));
+        var rm = J.parse("<div><a href='1'>A</a></div>", 'https://site.test/path/');
+        var link = rm.selectFirst('a');
+        rm.body().empty();
+        out.push(link.absUrl('href'));
+        var ren = J.parse('<div id=x>hello</div>').selectFirst('#x');
+        var ren2 = ren.tagName('p');
+        out.push((ren === ren2) + ' ' + ren.tagName() + ' ' + ren.text());
+        out.push(J.parse('<div><span>a</span><span>b</span></div>').text());
+        out.join('|')
+      '''),
+      [
+        1,
+        0,
+        '1',
+        '作者： 張三',
+        '作者： 張三',
+        '甲 乙 丙丁',
+        '',
+        'var x=1;',
+        'A\nB',
+        1,
+        1,
+        true,
+        '1',
+        0,
+        1,
+        'html',
+        1,
+        true,
+        'https://cdn.test/books/1',
+        'https://site.test/path/1',
+        'true p hello',
+        'ab',
+      ].join('|'),
+    );
+  }, skip: skip);
+
   test('errors from Jsoup can be caught like in Rhino', () async {
     expect(
       await run('''

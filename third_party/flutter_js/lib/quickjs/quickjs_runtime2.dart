@@ -217,6 +217,8 @@ class QuickJsRuntime2 extends JavascriptRuntime {
 
   @override
   void dispose() {
+    // Drop the channel handlers so their closures can be collected.
+    JavascriptRuntime.channelFunctionsRegistered.remove(getEngineInstanceId());
     try {
       port.close(); // stop dispatch loop
       close(); // close engine

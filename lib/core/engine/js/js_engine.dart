@@ -500,12 +500,12 @@ globalThis.__lrRunRule = function (run) {
     if (value == null) {
       return 'null';
     }
-    if (value is dom.Element) {
-      return _encodeElement(value);
+    if (value is dom.Element || value is dom.Document) {
+      return _encodeElement(value as dom.Node);
     }
     if (value is XPathNode) {
       final node = value.node;
-      if (node is dom.Element) {
+      if (node is dom.Element || node is dom.Document) {
         return _encodeElement(node);
       }
       return jsonEncode(value.text ?? '');
@@ -629,7 +629,7 @@ var __lrScopedObject = function(scope, seed) {
 
   /// 元素交給 JS 時是真的 Jsoup 元素（`JsoupBridge`），和 `java.getElements`
   /// 拿到的一樣。
-  String _encodeElement(dom.Element element) {
+  String _encodeElement(dom.Node element) {
     final jsoup = _extensions!.jsoup..setBaseUri(element, _contextBaseUrl);
     return '__lrJsoupDecode(${jsonEncode(jsoup.toJs(element))})';
   }
@@ -641,7 +641,10 @@ var __lrScopedObject = function(scope, seed) {
     if (value is Map) {
       final elementId = value['__lrElementId'];
       if (elementId is num) {
-        return _extensions?.jsoup.node(elementId.toInt()) ?? value;
+        final node = _extensions?.jsoup.node(elementId.toInt());
+        // Jsoup 的 Document 也是元素；後面的規則解析拿 <html> 接著選。
+        if (node is dom.Document) return node.documentElement ?? value;
+        return node ?? value;
       }
       final decoded = <dynamic, dynamic>{};
       value.forEach((key, entry) {

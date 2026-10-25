@@ -64,6 +64,14 @@ extension JsJavaObject on JsExtensionsBase {
         if (typeof value.html === 'function' && typeof value.select === 'function') {
           return { __html: String(value.html() || '') };
         }
+        if (Object.getPrototypeOf(value) === Object.prototype &&
+            value.toString === Object.prototype.toString) {
+          var normalizedObject = {};
+          Object.keys(value).forEach(function(key) {
+            normalizedObject[key] = __lrNormalizeRuleResult(value[key]);
+          });
+          return normalizedObject;
+        }
         if (typeof value.toString === 'function') {
           var text = String(value.toString());
           if (/<[a-z][\s\S]*>/i.test(text)) {

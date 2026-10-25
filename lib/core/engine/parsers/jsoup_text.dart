@@ -2,89 +2,128 @@ import 'package:html/dom.dart' as dom;
 
 /// Jsoup 的 `Element.text()`：空白縮成一格、頭尾去掉；區塊元素的前後與
 /// `<br>` 處補一個空格（`<p>甲</p><p>乙</p>` 是「甲 乙」）；`<pre>`、
-/// `<textarea>` 裡的空白照原樣；`<script>`、`<style>` 的內容不算文字。
+/// `<textarea>` 裡的空白照原樣；`<script>`、`<style>` 的內容是資料、不算
+/// 文字（取它們自己的 text 也是空的，內容用 `data()`）。對照 Jsoup 1.15.3。
 String jsoupText(dom.Node node) {
-  final buffer = StringBuffer();
-  void visit(dom.Node current) {
-    switch (current) {
+  if (_isDataElement(node)) return '';
+  final writer = _TextWriter();
+  if (node is dom.Text) {
+    writer.appendNormalised(node);
+  } else {
+    _visitChildren(node, writer);
+  }
+  return writer.toString().trim();
+}
+
+void _visitChildren(dom.Node parent, _TextWriter writer) {
+  final children = parent.nodes;
+  for (var i = 0; i < children.length; i++) {
+    final child = children[i];
+    switch (child) {
       case dom.Text():
-        _appendNormalised(buffer, current);
+        writer.appendNormalised(child);
       case dom.Element():
-        final tag = current.localName ?? '';
-        if (buffer.isNotEmpty &&
-            (_blockTags.contains(tag) || tag == 'br') &&
-            !_endsWithSpace(buffer)) {
-          buffer.write(' ');
-        }
-        if (_dataTags.contains(tag)) break;
-        for (final child in current.nodes) {
-          visit(child);
-        }
-        final next = _nextSibling(current);
-        if (_blockTags.contains(tag) &&
-            (next is dom.Text ||
-                (next is dom.Element &&
-                    !_blockTags.contains(next.localName))) &&
-            !_endsWithSpace(buffer)) {
-          buffer.write(' ');
+        final tag = child.localName ?? '';
+        final isBlock = _blockTags.contains(tag);
+        if (writer.isNotEmpty && (isBlock || tag == 'br')) writer.space();
+        if (!_dataTags.contains(tag)) _visitChildren(child, writer);
+        if (isBlock && i + 1 < children.length) {
+          final next = children[i + 1];
+          if (next is dom.Text ||
+              (next is dom.Element && !_blockTags.contains(next.localName))) {
+            writer.space();
+          }
         }
       default:
-        for (final child in current.nodes) {
-          visit(child);
-        }
+        _visitChildren(child, writer);
     }
   }
-
-  if (node is dom.Text) {
-    _appendNormalised(buffer, node);
-  } else {
-    for (final child in node.nodes) {
-      visit(child);
-    }
-  }
-  return buffer.toString().trim();
 }
 
 /// Jsoup 的 `Element.ownText()`：只有自己底下的文字，`<br>` 算一個空格。
 String jsoupOwnText(dom.Node node) {
-  final buffer = StringBuffer();
+  if (_isDataElement(node)) return '';
+  final writer = _TextWriter();
   for (final child in node.nodes) {
     if (child is dom.Text) {
-      _appendNormalised(buffer, child);
-    } else if (child is dom.Element &&
-        child.localName == 'br' &&
-        !_endsWithSpace(buffer)) {
-      buffer.write(' ');
+      writer.appendNormalised(child);
+    } else if (child is dom.Element && child.localName == 'br') {
+      writer.space();
     }
   }
-  return buffer.toString().trim();
+  return writer.toString().trim();
 }
 
-void _appendNormalised(StringBuffer buffer, dom.Text text) {
-  final value = text.data;
-  if (_preservesWhitespace(text.parentNode)) {
-    buffer.write(value);
-    return;
-  }
-  var lastWasSpace = _endsWithSpace(buffer);
-  for (final rune in value.runes) {
-    if (_isWhitespace(rune)) {
-      if (!lastWasSpace) {
-        buffer.write(' ');
-        lastWasSpace = true;
+/// Jsoup 的 `Element.wholeText()`：文字照原樣不整理空白，`<br>` 換成
+/// 換行；`<script>`、`<style>` 的內容不算。
+String jsoupWholeText(dom.Node node) {
+  if (_isDataElement(node)) return '';
+  final buffer = StringBuffer();
+  void visit(dom.Node current) {
+    for (final child in current.nodes) {
+      switch (child) {
+        case dom.Text():
+          buffer.write(child.data);
+        case dom.Element():
+          final tag = child.localName ?? '';
+          if (tag == 'br') {
+            buffer.write('\n');
+          } else if (!_dataTags.contains(tag)) {
+            visit(child);
+          }
+        default:
+          visit(child);
       }
-    } else if (rune != 0x200B && rune != 0xAD) {
-      buffer.writeCharCode(rune);
-      lastWasSpace = false;
     }
   }
+
+  if (node is dom.Text) return node.data;
+  visit(node);
+  return buffer.toString();
 }
 
-dom.Node? _nextSibling(dom.Node node) {
-  final siblings = node.parentNode?.nodes;
-  if (siblings == null) return null;
-  final index = siblings.indexOf(node) + 1;
-  return index < siblings.length ? siblings[index] : null;
+bool _isDataElement(dom.Node node) =>
+    node is dom.Element && _dataTags.contains(node.localName);
+
+/// 一路寫一路記最後一個字是不是空格，不必每次把整段轉成字串再看。
+class _TextWriter {
+  final StringBuffer _buffer = StringBuffer();
+  bool _endsWithSpace = false;
+
+  bool get isNotEmpty => _buffer.isNotEmpty;
+
+  void space() {
+    if (_buffer.isEmpty || _endsWithSpace) return;
+    _buffer.write(' ');
+    _endsWithSpace = true;
+  }
+
+  void appendNormalised(dom.Text text) {
+    final value = text.data;
+    if (value.isEmpty) return;
+    if (_preservesWhitespace(text.parentNode)) {
+      _buffer.write(value);
+      _endsWithSpace = value.codeUnitAt(value.length - 1) == 0x20;
+      return;
+    }
+    for (final rune in value.runes) {
+      if (_isWhitespace(rune)) {
+        if (!_endsWithSpace && _buffer.isNotEmpty) {
+          _buffer.write(' ');
+          _endsWithSpace = true;
+        } else if (_buffer.isEmpty) {
+          // 開頭的空白之後 trim 會去掉；先記成空白，避免頭上多寫一格。
+          _endsWithSpace = true;
+        }
+      } else if (rune != 0x200B && rune != 0xAD) {
+        _buffer.writeCharCode(rune);
+        _endsWithSpace = false;
+      }
+    }
+  }
+
+  @override
+  String toString() => _buffer.toString();
 }
 
 /// Jsoup 往上看六層，有 `<pre>` 這類保留空白的元素就照原樣。
@@ -97,12 +136,6 @@ bool _preservesWhitespace(dom.Node? node) {
     current = current.parentNode;
   }
   return false;
-}
-
-bool _endsWithSpace(StringBuffer buffer) {
-  if (buffer.isEmpty) return false;
-  final text = buffer.toString();
-  return text.codeUnitAt(text.length - 1) == 0x20;
 }
 
 bool _isWhitespace(int rune) =>

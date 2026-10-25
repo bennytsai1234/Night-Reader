@@ -177,6 +177,7 @@ abstract class JsExtensionsBase {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    jsoup.clear();
     final pending = _pendingRuleCalls.values.toList(growable: false);
     _pendingRuleCalls.clear();
     for (final completer in pending) {

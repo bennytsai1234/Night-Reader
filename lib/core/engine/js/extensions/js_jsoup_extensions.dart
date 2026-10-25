@@ -80,9 +80,7 @@ extension JsJsoupExtensions on JsExtensionsBase {
         LrNode.prototype.getWholeText = LrNode.prototype.wholeText;
         LrNode.prototype.parentNode = LrNode.prototype.parent;
         LrNode.prototype.ownerDocument = function() {
-          var current = this;
-          while (current.parent() != null) current = current.parent();
-          return current;
+          return call('ownerDocument', this.__lrElementId, []);
         };
         /// Java 的 List<String>（eachText、classNames 這類）：陣列加上 size/get。
         function javaList(items) {
@@ -156,13 +154,17 @@ extension JsJsoupExtensions on JsExtensionsBase {
           hide('first', function() { return list.length ? list[0] : null; });
           hide('last', function() { return list.length ? list[list.length - 1] : null; });
           hide('eq', function(i) { return elements(list[i] ? [list[i]] : []); });
-          hide('text', function() {
+          hide('text', function(value) {
+            if (arguments.length) return each(function(n) { n.text(value); });
             return list.map(function(n) { return n.text(); }).filter(function(t) { return t.length; }).join(' ');
           });
           hide('eachText', function() {
             return javaList(list.map(function(n) { return n.text(); }).filter(function(t) { return t.length; }));
           });
-          hide('html', function() { return list.map(function(n) { return n.html(); }).join('\n'); });
+          hide('html', function(value) {
+            if (arguments.length) return each(function(n) { n.html(value); });
+            return list.map(function(n) { return n.html(); }).join('\n');
+          });
           hide('outerHtml', function() { return list.map(function(n) { return n.outerHtml(); }).join('\n'); });
           hide('toString', function() { return list.outerHtml(); });
           hide('attr', function(name, value) {
@@ -195,7 +197,10 @@ extension JsJsoupExtensions on JsExtensionsBase {
           hide('after', function(h) { return each(function(n) { n.after(h); }); });
           hide('unwrap', function() { return each(function(n) { n.unwrap(); }); });
           hide('clone', function() { return elements(list.map(function(n) { return n.clone(); })); });
-          hide('val', function() { return list.length ? list[0].val() : ''; });
+          hide('val', function(value) {
+            if (arguments.length) return each(function(n) { n.val(value); });
+            return list.length ? list[0].val() : '';
+          });
           hide('toArray', function() { return list.slice(); });
           hide('asList', function() { return list.slice(); });
           hide('textNodes', function() { return union('textNodes', []); });

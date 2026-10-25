@@ -27,4 +27,13 @@ void main() {
     expect(rule().getString('li:contains(ALPHA)@text'), 'Alpha');
     expect(rule().getString('li:matches(^b)@text'), 'beta');
   });
+
+  test('@css: select includes the starting element like Jsoup', () {
+    final box = AnalyzeRule()
+      ..setContent('<div class="box"><a href="/1">一</a></div>');
+    final element = box.getElements('@css:.box').single;
+    final item = AnalyzeRule()..setContent(element);
+    expect(item.getString('@css:.box:contains(一)@class'), 'box');
+    expect(item.getString('@css:a@href'), '/1');
+  });
 }
