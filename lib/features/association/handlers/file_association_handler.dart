@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/local_book/local_book_formats.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
@@ -50,32 +49,18 @@ mixin FileAssociationHandler on AssociationBase {
 
   Future<void> handleSharedBook(BuildContext context, String path) async {
     try {
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final targetDir = Directory(p.join(appDocDir.path, 'InkpageBooks'));
-      if (!await targetDir.exists()) {
-        await targetDir.create(recursive: true);
-      }
-
       final fileName = p.basename(path);
-      final targetPath = p.join(targetDir.path, fileName);
-      if (!await File(targetPath).exists()) {
-        await File(path).copy(targetPath);
-      }
-
-      if (!context.mounted) return;
       final imported = await context
           .read<BookshelfProvider>()
-          .importLocalBookPath(targetPath);
+          .importLocalBookPath(path);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            imported ? '已將書籍加入書架：$fileName' : '檔案已複製，但加入書架失敗：$fileName',
-          ),
+          content: Text(imported ? '已將書籍加入書架：$fileName' : '加入書架失敗：$fileName'),
         ),
       );
     } catch (e) {
-      AppLog.e('搬移並匯入書籍失敗: $e', error: e);
+      AppLog.e('匯入分享的書籍失敗: $e', error: e);
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,

@@ -416,7 +416,9 @@ class ReaderV2ChapterRepository {
         book.bookUrl.startsWith('local://') &&
         localExtension.isNotEmpty &&
         !isSupportedLocalBookPath(book.bookUrl)) {
-      throw const ReaderV2ContentUnavailableException('本地書格式不受支援，請使用 TXT 檔案');
+      throw const ReaderV2ContentUnavailableException(
+        '本地書格式不受支援，請使用 TXT 或 EPUB 檔案',
+      );
     }
     final storage = _contentStorage(cacheGeneration);
     if (storage == null) return null;

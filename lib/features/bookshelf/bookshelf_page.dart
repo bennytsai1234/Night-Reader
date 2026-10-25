@@ -476,7 +476,7 @@ class _BookshelfPageState extends State<BookshelfPage>
               key: const ValueKey('no-sources'),
               icon: Icons.auto_stories_outlined,
               title: '書架還是空的',
-              description: '匯入書源後就能搜尋網路小說，手機裡的 TXT 也能直接加入。',
+              description: '匯入書源後就能搜尋網路小說，手機裡的 TXT、EPUB 也能直接加入。',
               primaryAction: AppStateAction(
                 label: '匯入書源',
                 icon: Icons.download_rounded,

@@ -8,7 +8,8 @@ import '../services/encoding_detect.dart';
 class TxtParser {
   final File file;
 
-  static const int _maxChapterChars = 50000;
+  /// 一章最多幾字，超過就再切開；EPUB 目錄太粗時也照這個切。
+  static const int maxChapterChars = 50000;
   static const int _fallbackChunkChars = 30000;
 
   static final RegExp defaultChapterPattern = RegExp(
@@ -23,105 +24,86 @@ class TxtParser {
   /// 掃描文件並獲取章節位移 (不讀取全量內容入記憶體)
   Future<({List<Map<String, dynamic>> chapters, String charset})>
   splitChapters({RegExp? customPattern}) async {
-    final pattern = customPattern ?? defaultChapterPattern;
     final bytes = await file.readAsBytes();
     final charsetName = EncodingDetect.getEncode(bytes);
     final content = EncodingDetect.decode(bytes);
     final bomLength = EncodingDetect.bomLength(bytes);
 
-    final result = <Map<String, dynamic>>[];
-    final matches = pattern.allMatches(content).toList();
-
+    final spans = splitText(content, pattern: customPattern);
     // 只映射章界與實際切塊端點，避免為大型書籍的每個 code unit 建立
     // 一筆位移資料。
-    final charOffsets = <int>{
-      0,
-      ...matches.map((m) => m.start),
-      content.length,
-    };
-    if (matches.isEmpty) {
-      _addChunkCharOffsets(
-        charOffsets,
-        content: content,
-        charStart: 0,
-        charEnd: content.length,
-        chunkChars: _fallbackChunkChars,
-      );
-    } else {
-      if (matches.first.start > 0) {
-        _addChunkCharOffsets(
-          charOffsets,
-          content: content,
-          charStart: 0,
-          charEnd: matches.first.start,
-          chunkChars: _fallbackChunkChars,
-        );
-      }
-      for (var i = 0; i < matches.length; i++) {
-        _addChunkCharOffsets(
-          charOffsets,
-          content: content,
-          charStart: matches[i].start,
-          charEnd: i + 1 < matches.length
-              ? matches[i + 1].start
-              : content.length,
-          chunkChars: _maxChapterChars,
-        );
-      }
-    }
     final byteOffsets = _buildByteOffsets(
       bytes: bytes,
       content: content,
       charsetName: charsetName,
-      charOffsets: charOffsets.toList(growable: false),
+      charOffsets: [
+        0,
+        content.length,
+        for (final span in spans) ...[span.start, span.end],
+      ],
       initialByteOffset: bomLength,
     );
 
-    if (matches.isEmpty) {
-      _appendChunkedRange(
-        result: result,
-        content: content,
-        titleBase: '正文',
-        charStart: 0,
-        charEnd: content.length,
-        byteOffsets: byteOffsets,
-        chunkChars: _fallbackChunkChars,
-      );
-      return (chapters: result, charset: charsetName);
+    final result = <Map<String, dynamic>>[];
+    for (final span in spans) {
+      final byteStart = byteOffsets[span.start];
+      final byteEnd = byteOffsets[span.end];
+      if (byteStart == null || byteEnd == null || byteEnd <= byteStart) {
+        continue;
+      }
+      result.add({'title': span.title, 'start': byteStart, 'end': byteEnd});
     }
-
-    // 處理前言
-    if (matches.first.start > 0) {
-      _appendChunkedRange(
-        result: result,
-        content: content,
-        titleBase: '前言',
-        charStart: 0,
-        charEnd: matches.first.start,
-        byteOffsets: byteOffsets,
-        chunkChars: _fallbackChunkChars,
-      );
-    }
-
-    for (var i = 0; i < matches.length; i++) {
-      final charStart = matches[i].start;
-      final charEnd = (i + 1 < matches.length)
-          ? matches[i + 1].start
-          : content.length;
-      final titleBase = matches[i].group(0)?.trim() ?? '第 ${i + 1} 章';
-
-      _appendChunkedRange(
-        result: result,
-        content: content,
-        titleBase: titleBase,
-        charStart: charStart,
-        charEnd: charEnd,
-        byteOffsets: byteOffsets,
-        chunkChars: _maxChapterChars,
-      );
-    }
-
     return (chapters: result, charset: charsetName);
+  }
+
+  /// 依章名規則切開 [content]，範圍以 UTF-16 code unit 計。
+  ///
+  /// 第一個章名之前的文字叫 [leadTitle]；整段都沒有章名時叫
+  /// [untitledTitle]。太長的章再切成「章名 (1)」「章名 (2)」…：有章名的
+  /// 每段最多 [maxChapterChars] 字，沒有章名的每段 3 萬字。
+  static List<({String title, int start, int end})> splitText(
+    String content, {
+    RegExp? pattern,
+    String leadTitle = '前言',
+    String untitledTitle = '正文',
+  }) {
+    final result = <({String title, int start, int end})>[];
+    final matches = (pattern ?? defaultChapterPattern)
+        .allMatches(content)
+        .toList();
+    if (matches.isEmpty) {
+      _appendChunks(
+        result,
+        content,
+        untitledTitle,
+        0,
+        content.length,
+        _fallbackChunkChars,
+      );
+      return result;
+    }
+
+    if (matches.first.start > 0) {
+      _appendChunks(
+        result,
+        content,
+        leadTitle,
+        0,
+        matches.first.start,
+        _fallbackChunkChars,
+      );
+    }
+    for (var i = 0; i < matches.length; i++) {
+      _appendChunks(
+        result,
+        content,
+        matches[i].group(0)?.trim() ?? '第 ${i + 1} 章',
+        matches[i].start,
+        i + 1 < matches.length ? matches[i + 1].start : content.length,
+        maxChapterChars,
+      );
+    }
+    return result;
   }
 
   Map<int, int> _buildByteOffsets({
@@ -280,69 +262,34 @@ class TxtParser {
     return index < bytes.length && bytes[index] >= 0x80 && bytes[index] <= 0xBF;
   }
 
-  void _appendChunkedRange({
-    required List<Map<String, dynamic>> result,
-    required String content,
-    required String titleBase,
-    required int charStart,
-    required int charEnd,
-    required Map<int, int> byteOffsets,
-    required int chunkChars,
-  }) {
-    final byteStart = byteOffsets[charStart];
-    final byteEnd = byteOffsets[charEnd];
-    if (byteStart == null || byteEnd == null) return;
-    if (charEnd <= charStart || byteEnd <= byteStart) return;
-
-    final totalChars = charEnd - charStart;
-    final needsSuffix = totalChars > chunkChars;
+  static void _appendChunks(
+    List<({String title, int start, int end})> result,
+    String content,
+    String titleBase,
+    int charStart,
+    int charEnd,
+    int chunkChars,
+  ) {
+    if (charEnd <= charStart) return;
+    final needsSuffix = charEnd - charStart > chunkChars;
     var part = 0;
     var currentChar = charStart;
-    var currentByte = byteStart;
-
     while (currentChar < charEnd) {
       part += 1;
-      var nextChar = (currentChar + chunkChars < charEnd)
-          ? currentChar + chunkChars
-          : charEnd;
-      nextChar = _safeChunkEnd(content, currentChar, nextChar, charEnd);
-      final nextByte = byteOffsets[nextChar];
-      if (nextByte == null) return;
-
-      result.add({
-        'title': needsSuffix ? '$titleBase ($part)' : titleBase,
-        'start': currentByte,
-        'end': nextByte,
-      });
-
-      currentChar = nextChar;
-      currentByte = nextByte;
-    }
-  }
-
-  void _addChunkCharOffsets(
-    Set<int> offsets, {
-    required String content,
-    required int charStart,
-    required int charEnd,
-    required int chunkChars,
-  }) {
-    if (charEnd <= charStart) return;
-    offsets
-      ..add(charStart)
-      ..add(charEnd);
-    var currentChar = charStart;
-    while (currentChar < charEnd) {
       var nextChar = currentChar + chunkChars < charEnd
           ? currentChar + chunkChars
           : charEnd;
       nextChar = _safeChunkEnd(content, currentChar, nextChar, charEnd);
-      offsets.add(nextChar);
+      result.add((
+        title: needsSuffix ? '$titleBase ($part)' : titleBase,
+        start: currentChar,
+        end: nextChar,
+      ));
       currentChar = nextChar;
     }
   }
 
-  int _safeChunkEnd(String text, int start, int end, int limit) {
+  static int _safeChunkEnd(String text, int start, int end, int limit) {
     if (end <= start || end >= limit) return end;
     final previous = text.codeUnitAt(end - 1);
     final next = text.codeUnitAt(end);
