@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/chinese_display.dart';
 import 'package:night_reader/core/services/default_data.dart';
+import 'package:night_reader/core/services/tts_service.dart';
 import 'package:night_reader/features/about/update_check_runner.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_page.dart';
 import 'package:night_reader/features/explore/explore_page.dart';
@@ -291,10 +292,12 @@ class _MainPageState extends State<MainPage>
         : page;
   }
 
-  /// 開 App 的準備工作：書架讀完、繁簡字典載入完（[LaunchEntrance.prepared]）。
+  /// 開 App 的準備工作：書架讀完、繁簡字典載入完、朗讀引擎開好
+  /// （[LaunchEntrance.prepared]、[TTSService.ready]）。
   Future<void> _launchPrepared() => Future.wait([
     context.read<BookshelfProvider>().firstLoad,
     ChineseDisplay.loaded,
+    TTSService().ready(),
   ]);
 
   /// 點分頁（或返回鍵回書架）換頁：不滑過中間的分頁，直接換過去，播

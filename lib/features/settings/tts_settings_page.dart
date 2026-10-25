@@ -3,12 +3,31 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/services/tts_service.dart';
+import 'package:night_reader/shared/navigation/transition_settled.dart';
 import 'package:night_reader/shared/widgets/glass.dart';
 import 'package:night_reader/shared/widgets/grouped_list.dart';
 import 'package:night_reader/shared/widgets/number_stepper_row.dart';
 
-class TtsSettingsPage extends StatelessWidget {
+class TtsSettingsPage extends StatefulWidget {
   const TtsSettingsPage({super.key});
+
+  @override
+  State<TtsSettingsPage> createState() => _TtsSettingsPageState();
+}
+
+class _TtsSettingsPageState extends State<TtsSettingsPage> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 朗讀引擎平常在開 App 時就開好了（TTSService.ready）；沒開好（開 App
+    // 時等超過上限、或開失敗）才在這裡再開一次，等換頁播完再開，不和換頁
+    // 擠在一起。init() 在已經開好時什麼都不做。
+    _opened ??= TransitionSettled.entered(context).then((_) {
+      if (mounted) return TTSService().init();
+    });
+  }
+
+  Future<void>? _opened;
 
   @override
   Widget build(BuildContext context) {

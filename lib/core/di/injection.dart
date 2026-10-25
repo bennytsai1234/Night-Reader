@@ -25,7 +25,6 @@ import '../services/tts_service.dart';
 import '../services/check_source_service.dart';
 import '../services/app_version.dart';
 import '../services/crash_handler.dart';
-import '../services/app_log_service.dart';
 import '../engine/source_isolate/source_isolate.dart';
 
 final getIt = GetIt.instance;
@@ -61,8 +60,6 @@ Future<void> configureDependencies() async {
   getIt.registerSingleton<SharedPreferences>(prefs);
 
   // 4. 初始化啟動所需服務。
-  // TTS / AudioService 是可選能力，某些 Android ROM 可能讓 platform
-  // channel 初始化延遲或失敗；不可讓它阻塞 runApp 與原生 Splash。
   await Future.wait([
     CrashHandler.init(),
     getIt<NetworkService>().init(),
@@ -73,7 +70,9 @@ Future<void> configureDependencies() async {
   // [SourceIsolate.enabled]）；不等它開好，第一個書源工作才會等。
   SourceIsolate.start();
 
-  unawaited(_initializeTtsInBackground(getIt<TTSService>()));
+  // 朗讀引擎現在就開始開，和讀書架、載字典同時進行；開 App 的進場在底色
+  // 時等它開好（[TTSService.ready]）。
+  unawaited(getIt<TTSService>().init());
 }
 
 /// 註冊資料庫與所有 DAO。主 isolate 與書源 isolate（連到同一個資料庫）共用。
@@ -116,17 +115,4 @@ void registerDatabase(AppDatabase database) {
   getIt.registerLazySingleton<ReaderChapterContentDao>(
     () => ReaderChapterContentDao(getIt<AppDatabase>()),
   );
-}
-
-Future<void> _initializeTtsInBackground(TTSService service) async {
-  try {
-    await service.init();
-  } catch (error, stackTrace) {
-    // TTS 不可用時仍應保留書架與閱讀功能。
-    AppLog.e(
-      'TTS background initialization failed; continuing without TTS: $error',
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
 }

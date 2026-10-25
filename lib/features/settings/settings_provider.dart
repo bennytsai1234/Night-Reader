@@ -4,32 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:night_reader/core/config/app_config.dart';
 import 'package:night_reader/core/constant/prefer_key.dart';
 import 'package:night_reader/core/di/injection.dart';
-import 'package:night_reader/core/services/app_log_service.dart';
-import 'package:night_reader/core/services/tts_service.dart';
 
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';
 
 const String _systemTtsSourceKey = 'system';
-
-Future<void> _applyTtsSettingSafely(
-  Future<void> operation,
-  String settingName,
-) async {
-  try {
-    await operation;
-  } catch (error, stackTrace) {
-    // Settings are persisted independently from the optional platform TTS
-    // engine.  A rejected platform call must not become an unhandled Future
-    // during startup or when the user changes a setting.
-    AppLog.e(
-      'TTS setting update failed ($settingName): $error',
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-}
 
 /// SettingsProvider - 設置提供者 (重構後)
 /// (原 Android help/config/AppConfig.kt)
@@ -155,10 +135,6 @@ class SettingsProvider extends SettingsProviderBase {
     readAloudByMediaButton =
         prefs.getBool(PreferKey.readAloudByMediaButton) ?? false;
     ttsSourceKey = _systemTtsSourceKey;
-
-    // 朗讀參數（語速／音調／音量）由 TTSService 自行保存與還原；
-    // 這裡只在啟動後觸發初始化，不阻塞首畫面。
-    unawaited(_applyTtsSettingSafely(TTSService().init(), 'init'));
   }
 
   /// 僅用於清理舊版非 system TTS 書源設定（migration），在建構後非同步執行，不影響 UI 渲染。
